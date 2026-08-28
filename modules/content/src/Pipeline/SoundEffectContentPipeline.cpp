@@ -28,9 +28,9 @@ namespace CNA::Content::Pipeline
         return {".wav"};
     }
 
-    std::string WavImporter::OutputType() const
+    std::vector<std::string> WavImporter::OutputTypes() const
     {
-        return ImportedSoundType;
+        return {ImportedSoundType};
     }
 
     ContentValue WavImporter::Import(ContentImporterContext& context) const

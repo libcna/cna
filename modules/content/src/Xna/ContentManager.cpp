@@ -1661,47 +1661,7 @@ namespace Microsoft::Xna::Framework::Content
         // rather than two copies that could drift out of sync.
         Graphics::AnimationClipEXT ReadAnimationClipFileEXT(const std::string& clipFilePath)
         {
-            const auto clipBytes = ReadBinaryFile(clipFilePath);
-            BinReaderEXT clipReader{clipBytes};
-
-            Graphics::AnimationClipEXT clip;
-            clip.Duration = System::TimeSpan::FromSeconds(clipReader.Read<double>());
-            const int trackCount = clipReader.Read<std::int32_t>();
-            clip.Tracks.reserve(static_cast<std::size_t>(trackCount));
-            for (int t = 0; t < trackCount; ++t)
-            {
-                Graphics::BoneTrackEXT track;
-                track.BoneIndex = clipReader.Read<std::int32_t>();
-                const int keyCount = clipReader.Read<std::int32_t>();
-                track.Keys.reserve(static_cast<std::size_t>(keyCount));
-                for (int k = 0; k < keyCount; ++k)
-                {
-                    Graphics::KeyframeEXT key;
-                    key.Time = System::TimeSpan::FromSeconds(clipReader.Read<double>());
-                    // C++ does not guarantee left-to-right evaluation order for a single
-                    // function call's arguments — reading each float into its own named
-                    // local first (separate statements, strictly sequential) before
-                    // constructing Vector3/Quaternion is required here, not stylistic — see
-                    // Task 11.11's own regression (a keyframe's rotation bytes were read back
-                    // scrambled under a right-to-left argument evaluation order).
-                    const float tx = clipReader.Read<float>();
-                    const float ty = clipReader.Read<float>();
-                    const float tz = clipReader.Read<float>();
-                    key.Translation = Vector3(tx, ty, tz);
-                    const float qx = clipReader.Read<float>();
-                    const float qy = clipReader.Read<float>();
-                    const float qz = clipReader.Read<float>();
-                    const float qw = clipReader.Read<float>();
-                    key.Rotation = Quaternion(qx, qy, qz, qw);
-                    const float sx = clipReader.Read<float>();
-                    const float sy = clipReader.Read<float>();
-                    const float sz = clipReader.Read<float>();
-                    key.Scale = Vector3(sx, sy, sz);
-                    track.Keys.push_back(key);
-                }
-                clip.Tracks.push_back(std::move(track));
-            }
-            return clip;
+            return CNA::Internal::ReadCnjAnimationClipSidecar(clipFilePath);
         }
 
         // plans/plan_cnj.md CNB-48: an "animations" entry's "clip" field may name either a raw
@@ -1775,151 +1735,19 @@ namespace Microsoft::Xna::Framework::Content
 
             Graphics::AnimationClipEXT Read(const std::string& path, ContentManager& cm) override
             {
-                using CNA::Internal::JsonType;
-                using CNA::Internal::JsonValue;
-
                 const std::string json = ReadTextFile(path);
-
                 const CNA::Internal::CnjEnvelope envelope = CNA::Internal::ParseCnjEnvelope(json);
                 CNA::Internal::ValidateCnjEnvelope(envelope, "AnimationClip", path);
                 RejectSourceFileForSelfContainedCnj(envelope, "AnimationClip", path);
-
-                const JsonValue root = CNA::Internal::ParseJson(json);
-                const JsonValue* clipFileField = root.FindMember("clipFile");
-                const JsonValue* tracksField   = root.FindMember("tracks");
-
-                if ((clipFileField != nullptr) == (tracksField != nullptr))
-                {
-                    throw ContentLoadException(
-                        "AnimationClip .cnj '" + path +
-                        "' must have exactly one of 'clipFile' or 'tracks'.");
-                }
-
-                if (clipFileField != nullptr)
-                {
-                    if (!clipFileField->IsString() || clipFileField->stringValue.empty())
+                return CNA::Internal::ReadCnjAnimationClip(
+                    CNA::Internal::ParseJson(json), path,
+                    [&](const std::string& authored)
                     {
-                        throw ContentLoadException(
-                            "AnimationClip .cnj '" + path + "' has a non-string or empty 'clipFile'.");
-                    }
-                    return ReadAnimationClipFileEXT(ResolveRootRelativeSidecarPath(
-                        cm, path, "clipFile", clipFileField->stringValue));
-                }
-
-                const JsonValue* durationField = root.FindMember("duration");
-                if (durationField == nullptr || !durationField->IsNumber())
-                {
-                    throw ContentLoadException(
-                        "AnimationClip .cnj '" + path + "' is missing a numeric 'duration' field.");
-                }
-
-                Graphics::AnimationClipEXT clip;
-                clip.Duration = System::TimeSpan::FromSeconds(durationField->numberValue);
-                // plans/plan_gltf.md GLTF-294: which index space this clip's track bone indices are in.
-                // Absent means JointPalette, which is what every clip written before this could
-                // only ever have been.
-                if (const JsonValue* space = root.FindMember("targetSpace");
-                    space != nullptr && space->IsString() && space->stringValue == "SceneNode")
-                {
-                    clip.TargetSpace = Graphics::ClipTargetSpaceEXT::SceneNode;
-                }
-
-                if (tracksField->type != JsonType::Array)
-                {
-                    throw ContentLoadException(
-                        "AnimationClip .cnj '" + path + "' has a 'tracks' field that is not an array.");
-                }
-
-                std::vector<float> arr;
-                for (const JsonValue& trackValue : tracksField->arrayValue)
-                {
-                    if (!trackValue.IsObject())
-                    {
-                        throw ContentLoadException(
-                            "AnimationClip .cnj '" + path + "' has a non-object entry in 'tracks'.");
-                    }
-
-                    Graphics::BoneTrackEXT track;
-
-                    const JsonValue* boneIndexField = trackValue.FindMember("boneIndex");
-                    if (boneIndexField == nullptr || !boneIndexField->IsNumber())
-                    {
-                        throw ContentLoadException(
-                            "AnimationClip .cnj '" + path + "' has a track missing a numeric 'boneIndex'.");
-                    }
-                    track.BoneIndex = static_cast<int>(boneIndexField->numberValue);
-
-                    const JsonValue* keysField = trackValue.FindMember("keys");
-                    if (keysField == nullptr || keysField->type != JsonType::Array)
-                    {
-                        throw ContentLoadException(
-                            "AnimationClip .cnj '" + path + "' has a track missing a 'keys' array.");
-                    }
-
-                    track.Keys.reserve(keysField->arrayValue.size());
-                    for (const JsonValue& keyValue : keysField->arrayValue)
-                    {
-                        if (!keyValue.IsObject())
-                        {
-                            throw ContentLoadException(
-                                "AnimationClip .cnj '" + path + "' has a non-object entry in a track's 'keys'.");
-                        }
-
-                        Graphics::KeyframeEXT key;
-
-                        const JsonValue* timeField = keyValue.FindMember("time");
-                        if (timeField == nullptr || !timeField->IsNumber())
-                        {
-                            throw ContentLoadException(
-                                "AnimationClip .cnj '" + path + "' has a keyframe missing a numeric 'time'.");
-                        }
-                        key.Time = System::TimeSpan::FromSeconds(timeField->numberValue);
-
-                        if (TryReadFloatArrayField(keyValue, "translation", 3, arr, path))
-                        {
-                            key.Translation = Vector3(arr[0], arr[1], arr[2]);
-                        }
-                        if (TryReadFloatArrayField(keyValue, "rotation", 4, arr, path))
-                        {
-                            key.Rotation = Quaternion(arr[0], arr[1], arr[2], arr[3]);
-                        }
-                        if (TryReadFloatArrayField(keyValue, "scale", 3, arr, path))
-                        {
-                            key.Scale = Vector3(arr[0], arr[1], arr[2]);
-                        }
-
-                        track.Keys.push_back(key);
-                    }
-
-                    clip.Tracks.push_back(std::move(track));
-                }
-
-                return clip;
+                        return std::filesystem::path(ResolveRootRelativeSidecarPath(
+                            cm, path, "clipFile", authored));
+                    });
             }
         };
-
-        Microsoft::Xna::Framework::CurveLoopType ParseCurveLoopTypeEXT(
-            const std::string& value, const std::string& path)
-        {
-            using Microsoft::Xna::Framework::CurveLoopType;
-            if (value.empty() || value == "Constant") { return CurveLoopType::Constant; }
-            if (value == "Cycle") { return CurveLoopType::Cycle; }
-            if (value == "CycleOffset") { return CurveLoopType::CycleOffset; }
-            if (value == "Oscillate") { return CurveLoopType::Oscillate; }
-            if (value == "Linear") { return CurveLoopType::Linear; }
-            throw ContentLoadException(
-                "Curve .cnj '" + path + "' has an unrecognized CurveLoopType '" + value + "'.");
-        }
-
-        Microsoft::Xna::Framework::CurveContinuity ParseCurveContinuityEXT(
-            const std::string& value, const std::string& path)
-        {
-            using Microsoft::Xna::Framework::CurveContinuity;
-            if (value.empty() || value == "Smooth") { return CurveContinuity::Smooth; }
-            if (value == "Step") { return CurveContinuity::Step; }
-            throw ContentLoadException(
-                "Curve .cnj '" + path + "' has an unrecognized CurveContinuity '" + value + "'.");
-        }
 
         // plans/plan_cnj.md CNB-44: self-contained JSON port of CurveContentTypeReader.hpp's already-
         // FNA-verified field order/shape -- "preLoop"/"postLoop" (CurveLoopType names, default
@@ -1935,96 +1763,11 @@ namespace Microsoft::Xna::Framework::Content
 
             Microsoft::Xna::Framework::Curve Read(const std::string& path, ContentManager& /*cm*/) override
             {
-                using CNA::Internal::JsonType;
-                using CNA::Internal::JsonValue;
-                using Microsoft::Xna::Framework::Curve;
-                using Microsoft::Xna::Framework::CurveKey;
-
                 const std::string json = ReadTextFile(path);
-
                 const CNA::Internal::CnjEnvelope envelope = CNA::Internal::ParseCnjEnvelope(json);
                 CNA::Internal::ValidateCnjEnvelope(envelope, "Curve", path);
                 RejectSourceFileForSelfContainedCnj(envelope, "Curve", path);
-
-                const JsonValue root = CNA::Internal::ParseJson(json);
-
-                Curve curve;
-
-                if (const JsonValue* preLoop = root.FindMember("preLoop"))
-                {
-                    if (!preLoop->IsString())
-                    {
-                        throw ContentLoadException("Curve .cnj '" + path + "': 'preLoop' must be a string.");
-                    }
-                    curve.setPreLoopProperty(ParseCurveLoopTypeEXT(preLoop->stringValue, path));
-                }
-                if (const JsonValue* postLoop = root.FindMember("postLoop"))
-                {
-                    if (!postLoop->IsString())
-                    {
-                        throw ContentLoadException("Curve .cnj '" + path + "': 'postLoop' must be a string.");
-                    }
-                    curve.setPostLoopProperty(ParseCurveLoopTypeEXT(postLoop->stringValue, path));
-                }
-
-                const JsonValue* keysField = root.FindMember("keys");
-                if (keysField == nullptr || keysField->type != JsonType::Array)
-                {
-                    throw ContentLoadException("Curve .cnj '" + path + "' is missing a 'keys' array.");
-                }
-
-                for (const JsonValue& keyValue : keysField->arrayValue)
-                {
-                    if (!keyValue.IsObject())
-                    {
-                        throw ContentLoadException(
-                            "Curve .cnj '" + path + "' has a non-object entry in 'keys'.");
-                    }
-
-                    const JsonValue* positionField = keyValue.FindMember("position");
-                    const JsonValue* valueField    = keyValue.FindMember("value");
-                    if (positionField == nullptr || !positionField->IsNumber() ||
-                        valueField == nullptr || !valueField->IsNumber())
-                    {
-                        throw ContentLoadException(
-                            "Curve .cnj '" + path + "' has a key missing numeric 'position'/'value'.");
-                    }
-
-                    float tangentIn = 0.0f;
-                    if (const JsonValue* t = keyValue.FindMember("tangentIn"))
-                    {
-                        if (!t->IsNumber())
-                        {
-                            throw ContentLoadException("Curve .cnj '" + path + "': 'tangentIn' must be numeric.");
-                        }
-                        tangentIn = static_cast<float>(t->numberValue);
-                    }
-                    float tangentOut = 0.0f;
-                    if (const JsonValue* t = keyValue.FindMember("tangentOut"))
-                    {
-                        if (!t->IsNumber())
-                        {
-                            throw ContentLoadException("Curve .cnj '" + path + "': 'tangentOut' must be numeric.");
-                        }
-                        tangentOut = static_cast<float>(t->numberValue);
-                    }
-                    auto continuity = Microsoft::Xna::Framework::CurveContinuity::Smooth;
-                    if (const JsonValue* c = keyValue.FindMember("continuity"))
-                    {
-                        if (!c->IsString())
-                        {
-                            throw ContentLoadException("Curve .cnj '" + path + "': 'continuity' must be a string.");
-                        }
-                        continuity = ParseCurveContinuityEXT(c->stringValue, path);
-                    }
-
-                    curve.getKeysProperty().Add(CurveKey(
-                        static_cast<float>(positionField->numberValue),
-                        static_cast<float>(valueField->numberValue),
-                        tangentIn, tangentOut, continuity));
-                }
-
-                return curve;
+                return CNA::Internal::ReadCnjCurve(CNA::Internal::ParseJson(json), path);
             }
         };
 

@@ -446,7 +446,23 @@ namespace CNA::Content::Pipeline
         }
         const ContentComponentIdentity identity = importer->Identity();
         ValidateIdentity(identity, "importer");
-        ValidateStableType(importer->OutputType(), identity.name, "output");
+        const std::vector<std::string> outputTypes = importer->OutputTypes();
+        if (outputTypes.empty())
+        {
+            throw std::invalid_argument("importer '" + identity.name +
+                                        "' must declare at least one output type.");
+        }
+        std::set<std::string> uniqueOutputTypes;
+        for (const std::string& outputType : outputTypes)
+        {
+            ValidateStableType(outputType, identity.name, "output");
+            if (!uniqueOutputTypes.insert(outputType).second)
+            {
+                throw std::invalid_argument("importer '" + identity.name +
+                                            "' declares duplicate output type '" + outputType +
+                                            "'.");
+            }
+        }
         const std::vector<std::string> extensions = importer->SourceExtensions();
         if (extensions.empty())
         {
@@ -653,10 +669,11 @@ namespace CNA::Content::Pipeline
             {
                 throw std::logic_error("importer returned an empty value.");
             }
-            if (imported.StableType() != importer->OutputType())
+            const std::vector<std::string> outputTypes = importer->OutputTypes();
+            if (std::find(outputTypes.begin(), outputTypes.end(), imported.StableType()) ==
+                outputTypes.end())
             {
-                throw std::logic_error("importer declared output type '" +
-                                       importer->OutputType() + "' but returned '" +
+                throw std::logic_error("importer returned undeclared output type '" +
                                        imported.StableType() + "'.");
             }
         }

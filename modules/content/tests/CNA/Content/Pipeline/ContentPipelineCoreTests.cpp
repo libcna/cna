@@ -80,10 +80,13 @@ namespace
         explicit NumberImporter(std::string name = "test.NumberImporter",
                                 std::string extension = ".num",
                                 std::string returnedType = kImportedType,
-                                std::filesystem::path dependency = {})
+                                std::filesystem::path dependency = {},
+                                std::vector<std::string> outputTypes = {})
             : name_(std::move(name)), extension_(std::move(extension)),
-              returnedType_(std::move(returnedType)), dependency_(std::move(dependency))
+              returnedType_(std::move(returnedType)), dependency_(std::move(dependency)),
+              outputTypes_(std::move(outputTypes))
         {
+            if (outputTypes_.empty()) { outputTypes_.push_back(kImportedType); }
         }
 
         [[nodiscard]] Pipeline::ContentComponentIdentity Identity() const override
@@ -96,9 +99,9 @@ namespace
             return {extension_};
         }
 
-        [[nodiscard]] std::string OutputType() const override
+        [[nodiscard]] std::vector<std::string> OutputTypes() const override
         {
-            return kImportedType;
+            return outputTypes_;
         }
 
         [[nodiscard]] Pipeline::ContentValue Import(
@@ -117,6 +120,7 @@ namespace
         std::string extension_;
         std::string returnedType_;
         std::filesystem::path dependency_;
+        std::vector<std::string> outputTypes_;
     };
 
     class NumberProcessor final : public Pipeline::ContentProcessor
@@ -244,6 +248,13 @@ TEST(ContentPipelineCoreTest, RegistryRejectsDuplicateStableComponentNames)
 
     registry.RegisterWriter(std::make_shared<NumberWriter>());
     EXPECT_THROW(registry.RegisterWriter(std::make_shared<NumberWriter>()), std::logic_error);
+
+    Pipeline::ContentPipelineRegistry malformed;
+    EXPECT_THROW(
+        malformed.RegisterImporter(std::make_shared<NumberImporter>(
+            "test.DuplicateOutputs", ".dup", kImportedType, std::filesystem::path{},
+            std::vector<std::string>{kImportedType, kImportedType})),
+        std::invalid_argument);
 }
 
 TEST(ContentPipelineCoreTest, RegistryNeverUsesRegistrationOrderToResolveAnAmbiguity)

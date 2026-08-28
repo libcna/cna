@@ -275,6 +275,36 @@ TEST(ContentPipelineCliTest, DirectoryBuildIgnoresUnregisteredSupportFiles)
     EXPECT_FALSE(std::filesystem::exists(output / "Models" / "geometry.cnb"));
 }
 
+TEST(ContentPipelineCliTest, DirectoryBuildCompilesSpriteFontCnjAndItsAtlas)
+{
+    ScratchDirectory scratch("font_cnj");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    WriteBytes(source / "Fonts" / "atlas.png", MakePng(8, 4));
+    const std::string font =
+        R"({"cnjVersion":1,"type":"SpriteFont","texture":"atlas.png",)"
+        R"("lineSpacing":12,"spacing":1.5,"defaultCharacter":"?","glyphs":[)"
+        R"({"char":63,"source":[0,0,3,4],"crop":[0,1,3,4],"kerning":[0,3,0.5]},)"
+        R"({"char":65,"source":[3,0,2,4],"crop":[1,0,2,4],"kerning":[-1,2,0]}]})";
+    WriteBytes(source / "Fonts" / "ui.cnj",
+               std::vector<std::uint8_t>(font.begin(), font.end()));
+
+    std::string log;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    EXPECT_NE(log.find("[BUILD] Fonts/atlas"), std::string::npos) << log;
+    EXPECT_NE(log.find("[BUILD] Fonts/ui"), std::string::npos) << log;
+
+    const Cnb::CnbDocument document =
+        Cnb::CnbDocument::ParseFile((output / "Fonts" / "ui.cnb").string());
+    EXPECT_EQ(document.Metadata().contentName, "Fonts/ui");
+    EXPECT_EQ(document.AssetTypeId(), Cnb::CnbAssetTypeId::SpriteFont);
+
+    std::string second;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, second), 0) << second;
+    EXPECT_NE(second.find("[SKIP] Fonts/atlas"), std::string::npos) << second;
+    EXPECT_NE(second.find("[SKIP] Fonts/ui"), std::string::npos) << second;
+}
+
 TEST(ContentPipelineCliTest, GltfImageDependencyInvalidatesOnlyItsRelevantAssets)
 {
     const std::filesystem::path fixture = FindGltfFixture("gltf-external-image.gltf");

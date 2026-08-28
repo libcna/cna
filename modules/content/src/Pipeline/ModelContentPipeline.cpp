@@ -78,9 +78,9 @@ namespace CNA::Content::Pipeline
         return {".gltf", ".glb"};
     }
 
-    std::string GltfImporter::OutputType() const
+    std::vector<std::string> GltfImporter::OutputTypes() const
     {
-        return ImportedModelDocumentType;
+        return {ImportedModelDocumentType};
     }
 
     ContentValue GltfImporter::Import(ContentImporterContext& context) const
@@ -124,6 +124,7 @@ namespace CNA::Content::Pipeline
         imported.document = modelDocument;
         imported.intermediateRoot = storage->Path();
         imported.intermediateLifetime = storage;
+        imported.recordAuthoredSidecars = false;
         return ContentValue::Create(ImportedModelDocumentType, std::move(imported));
     }
 
@@ -154,12 +155,15 @@ namespace CNA::Content::Pipeline
                                          ContentProcessorContext& context) const
     {
         const ImportedModelDocument& imported = input.Get<ImportedModelDocument>();
-        if (imported.intermediateLifetime == nullptr)
-        {
-            throw std::logic_error("imported Model intermediate lifetime is missing.");
-        }
         Cnb::CnbModelFromCnjResult processed = Cnb::BuildCnbModelFromCnj(
             imported.document.string(), imported.intermediateRoot.string());
+        if (imported.recordAuthoredSidecars)
+        {
+            for (const std::string& authoredPath : processed.absorbedFiles)
+            {
+                static_cast<void>(context.ResolveSourceDependency(authoredPath));
+            }
+        }
         for (const std::string& logicalName : processed.externalReferences)
         {
             context.AddRuntimeReference(logicalName);

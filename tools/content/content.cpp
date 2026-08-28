@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "CNA/Content/Pipeline/ContentBuildManifest.hpp"
+#include "CNA/Content/Pipeline/CnjContentPipeline.hpp"
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
 #include "CNA/Content/Pipeline/ModelContentPipeline.hpp"
 #include "CNA/Content/Pipeline/SoundEffectContentPipeline.hpp"
@@ -195,6 +196,7 @@ namespace
         Pipeline::RegisterTexture2DContentPipeline(*registry);
         Pipeline::RegisterSoundEffectContentPipeline(*registry);
         Pipeline::RegisterModelContentPipeline(*registry);
+        Pipeline::RegisterCnjContentPipeline(*registry);
         return registry;
     }
 
@@ -248,14 +250,30 @@ namespace
         {
             const std::shared_ptr<const Pipeline::ContentImporter> importer =
                 registry.ResolveImporter(item.source);
-            const std::shared_ptr<const Pipeline::ContentProcessor> processor =
-                registry.ResolveProcessor(importer->OutputType());
-            processor->ValidateParameters(parameters);
-            const std::shared_ptr<const Pipeline::ContentTypeWriter> writer =
-                registry.ResolveWriter(processor->OutputType());
-            return entry.importer == importer->Identity() &&
-                   entry.processor == processor->Identity() &&
-                   entry.writer == writer->Identity() && entry.parameters == parameters;
+            if (entry.importer != importer->Identity() || entry.parameters != parameters)
+            {
+                return false;
+            }
+            for (const std::string& outputType : importer->OutputTypes())
+            {
+                try
+                {
+                    const std::shared_ptr<const Pipeline::ContentProcessor> processor =
+                        registry.ResolveProcessor(outputType, entry.processor.name);
+                    processor->ValidateParameters(parameters);
+                    const std::shared_ptr<const Pipeline::ContentTypeWriter> writer =
+                        registry.ResolveWriter(processor->OutputType(), entry.writer.name);
+                    if (entry.processor == processor->Identity() &&
+                        entry.writer == writer->Identity())
+                    {
+                        return true;
+                    }
+                }
+                catch (...)
+                {
+                }
+            }
+            return false;
         }
         catch (...)
         {

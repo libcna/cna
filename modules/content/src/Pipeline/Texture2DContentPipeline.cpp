@@ -91,15 +91,23 @@ namespace CNA::Content::Pipeline
                 ".pic", ".pnm"};
     }
 
-    std::string ImageImporter::OutputType() const
+    std::vector<std::string> ImageImporter::OutputTypes() const
     {
-        return ImportedImageType;
+        return {ImportedImageType};
     }
 
     ContentValue ImageImporter::Import(ContentImporterContext& context) const
     {
+        ImportedImage imported = DecodeImportedImage(context.SourcePath());
+        context.LogInfo("decoded " + std::to_string(imported.width) + "x" +
+                        std::to_string(imported.height) + " Rgba8 image.");
+        return ContentValue::Create(ImportedImageType, std::move(imported));
+    }
+
+    ImportedImage DecodeImportedImage(const std::filesystem::path& source)
+    {
         CNA::Internal::Graphics::ImageData image =
-            CNA::Internal::Graphics::ImageLoader::Load(context.SourcePath().string());
+            CNA::Internal::Graphics::ImageLoader::Load(source.string());
         if (image.width <= 0 || image.height <= 0)
         {
             throw ContentLoadException(
@@ -127,9 +135,7 @@ namespace CNA::Content::Pipeline
         imported.width = static_cast<std::uint32_t>(image.width);
         imported.height = static_cast<std::uint32_t>(image.height);
         imported.rgbaPixels = std::move(image.pixels);
-        context.LogInfo("decoded " + std::to_string(imported.width) + "x" +
-                        std::to_string(imported.height) + " Rgba8 image.");
-        return ContentValue::Create(ImportedImageType, std::move(imported));
+        return imported;
     }
 
     ContentComponentIdentity TextureProcessor::Identity() const
@@ -167,7 +173,10 @@ namespace CNA::Content::Pipeline
     {
         const ImportedImage& image = input.Get<ImportedImage>();
         std::vector<std::uint8_t> pixels = image.rgbaPixels;
-        if (const auto colorKey = ReadColorKey(context.Parameters()); colorKey.has_value())
+        std::optional<std::array<std::uint8_t, 3>> colorKey =
+            ReadColorKey(context.Parameters());
+        if (!colorKey.has_value()) { colorKey = image.authoredColorKey; }
+        if (colorKey.has_value())
         {
             for (std::size_t index = 0u; index + 3u < pixels.size(); index += 4u)
             {

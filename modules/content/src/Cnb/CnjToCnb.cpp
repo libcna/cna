@@ -23,13 +23,11 @@
 #include "CNA/Internal/CnjEnvelope.hpp"
 #include "CNA/Internal/Json.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
-#include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Curve.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
 
 using Microsoft::Xna::Framework::Curve;
 using Microsoft::Xna::Framework::Content::ContentLoadException;
-using Microsoft::Xna::Framework::Content::ContentManager;
 using Microsoft::Xna::Framework::Graphics::AnimationClipEXT;
 
 namespace CNA::Content::Cnb
@@ -48,26 +46,6 @@ namespace CNA::Content::Cnb
             return ss.str();
         }
 
-        /// Loads through CNA's own .cnj readers by handing ContentManager the literal file name.
-        /// Naming the file rather than the logical asset matters: a bare logical name would send
-        /// Load<T>() through its own .xnb/.cnb tiers first, so a previously compiled sibling .cnb
-        /// would be recompiled from itself instead of from the .cnj the caller asked for.
-        template <typename T>
-        T LoadThroughCnjReader(const std::string& cnjPath, const std::string& contentRoot)
-        {
-            namespace fs = std::filesystem;
-            ContentManager cm(nullptr, contentRoot);
-            const std::string literalName =
-                fs::path(cnjPath).lexically_normal().filename().string();
-            const fs::path parent = fs::path(cnjPath).lexically_normal().parent_path();
-            const fs::path rootPath =
-                (contentRoot.empty() ? fs::path(".") : fs::path(contentRoot)).lexically_normal();
-            const fs::path relative = parent.lexically_relative(rootPath);
-            const std::string name = (relative.empty() || relative == fs::path("."))
-                                          ? literalName
-                                          : (relative / literalName).generic_string();
-            return cm.Load<T>(name);
-        }
     }
 
     namespace
@@ -298,7 +276,13 @@ namespace CNA::Content::Cnb
 
         if (envelope.type == "Curve")
         {
-            const Curve curve = LoadThroughCnjReader<Curve>(cnjPath, root);
+            if (envelope.hasSourceFile)
+            {
+                throw ContentLoadException(
+                    "cnj-to-cnb: Curve .cnj documents do not support 'sourceFile'.");
+            }
+            const Curve curve = CNA::Internal::ReadCnjCurve(
+                CNA::Internal::ParseJson(json), cnjPath);
             result.bytes = EncodeCurveToCnb(curve, name);
             result.assetTypeId = CnbAssetTypeId::Curve;
             result.assetTypeName = "Microsoft.Xna.Framework.Curve";
@@ -307,26 +291,29 @@ namespace CNA::Content::Cnb
 
         if (envelope.type == "AnimationClip")
         {
-            const AnimationClipEXT clip = LoadThroughCnjReader<AnimationClipEXT>(cnjPath, root);
+            if (envelope.hasSourceFile)
+            {
+                throw ContentLoadException(
+                    "cnj-to-cnb: AnimationClip .cnj documents do not support 'sourceFile'.");
+            }
+            const CNA::Internal::JsonValue rootValue = CNA::Internal::ParseJson(json);
+            const AnimationClipEXT clip = CNA::Internal::ReadCnjAnimationClip(
+                rootValue, cnjPath,
+                [&](const std::string& authored)
+                {
+                    return std::filesystem::path(
+                        ResolveSidecar(cnjPath, root, authored, "clipFile"));
+                });
             result.bytes = EncodeAnimationClipToCnb(clip, name);
             result.assetTypeId = CnbAssetTypeId::AnimationClip;
             result.assetTypeName = "Microsoft.Xna.Framework.Graphics.AnimationClipEXT";
 
             // A clipFile-form AnimationClip .cnj is a two-file asset; the compiled form is one
             // file, so record which sidecar stopped being needed.
-            try
+            if (const CNA::Internal::JsonValue* clipFile = rootValue.FindMember("clipFile");
+                clipFile != nullptr && clipFile->IsString() && !clipFile->stringValue.empty())
             {
-                const CNA::Internal::JsonValue rootValue = CNA::Internal::ParseJson(json);
-                if (const CNA::Internal::JsonValue* clipFile = rootValue.FindMember("clipFile");
-                    clipFile != nullptr && clipFile->IsString() && !clipFile->stringValue.empty())
-                {
-                    result.absorbedFiles.push_back(clipFile->stringValue);
-                }
-            }
-            catch (const CNA::Internal::JsonParseException&)
-            {
-                // Unreachable in practice -- the reader above already parsed this document -- and
-                // a reporting detail is not worth failing a successful compile over.
+                result.absorbedFiles.push_back(clipFile->stringValue);
             }
             return result;
         }

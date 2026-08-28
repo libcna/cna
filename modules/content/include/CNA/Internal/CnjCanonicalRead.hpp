@@ -3,17 +3,25 @@
 
 #include <array>
 #include <cstdint>
+#include <filesystem>
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
 
 #include "CNA/Internal/Json.hpp"
+#include "Microsoft/Xna/Framework/Curve.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 
 namespace CNA::Internal
 {
+    /** @brief Resolves one authored CNJ sidecar name under the caller's containment policy. */
+    using CnjSidecarResolver =
+        std::function<std::filesystem::path(const std::string& authoredName)>;
+
     /**
      * @brief The one canonical reading of the `.cnj` fragments more than one code path consumes
      *        (plans/plan_cnb.md `CNBF-118`).
@@ -161,6 +169,37 @@ namespace CNA::Internal
      */
     [[nodiscard]] CnjTexture3DDescription ReadCnjTexture3DDescription(const JsonValue& root,
                                                                        const std::string& what);
+
+    /**
+     * @brief Reads canonical Curve semantics from an already parsed CNJ document.
+     *
+     * @param root Parsed CNJ root object after envelope validation.
+     * @param path Source path used in diagnostics.
+     * @return The source curve represented by the document.
+     */
+    [[nodiscard]] Microsoft::Xna::Framework::Curve ReadCnjCurve(
+        const JsonValue& root, const std::string& path);
+
+    /**
+     * @brief Reads the established little-endian `.clip.bin` source representation.
+     *
+     * @param path Resolved native sidecar path.
+     * @return The decoded animation clip.
+     */
+    [[nodiscard]] Microsoft::Xna::Framework::Graphics::AnimationClipEXT
+    ReadCnjAnimationClipSidecar(const std::filesystem::path& path);
+
+    /**
+     * @brief Reads inline or sidecar-backed AnimationClip semantics from parsed CNJ.
+     *
+     * @param root Parsed CNJ root object after envelope validation.
+     * @param path Source path used in diagnostics.
+     * @param resolveSidecar Caller-owned resolver that enforces and records path containment.
+     * @return The source animation clip represented by the document.
+     */
+    [[nodiscard]] Microsoft::Xna::Framework::Graphics::AnimationClipEXT ReadCnjAnimationClip(
+        const JsonValue& root, const std::string& path,
+        const CnjSidecarResolver& resolveSidecar);
 
     /** @brief One glyph of a `SpriteFont` `.cnj` document. */
     struct CnjSpriteFontGlyph

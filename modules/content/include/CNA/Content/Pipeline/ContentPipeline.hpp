@@ -466,14 +466,22 @@ namespace CNA::Content::Pipeline
         /** @brief Returns supported lowercase source extensions including the leading dot. */
         [[nodiscard]] virtual std::vector<std::string> SourceExtensions() const = 0;
 
-        /** @brief Returns the stable identity of the imported value this component produces. */
-        [[nodiscard]] virtual std::string OutputType() const = 0;
+        /**
+         * @brief Returns the bounded stable type identities this importer may produce.
+         *
+         * Most source formats return one type. A self-describing container such as CNJ may return
+         * one of several explicitly declared types after validating its envelope. The list is a
+         * capability declaration, not a selection priority, and must contain no duplicates.
+         *
+         * @return Non-empty stable ABI-independent imported type identities.
+         */
+        [[nodiscard]] virtual std::vector<std::string> OutputTypes() const = 0;
 
         /**
          * @brief Imports the context's primary source into a source-oriented value.
          *
          * @param context Call-scoped importer services.
-         * @return Imported value whose stable type equals OutputType().
+         * @return Imported value whose stable type is declared by OutputTypes().
          */
         [[nodiscard]] virtual ContentValue Import(ContentImporterContext& context) const = 0;
     };

@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <array>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -30,7 +33,18 @@ namespace CNA::Content::Pipeline
 
         /** @brief Exact level-zero pixels in R, G, B, A byte order. */
         std::vector<std::uint8_t> rgbaPixels;
+
+        /** @brief Source-authored colour-key policy, or absent for ordinary image sources. */
+        std::optional<std::array<std::uint8_t, 3>> authoredColorKey;
     };
+
+    /**
+     * @brief Decodes one image through CNA's shared decoder into source-oriented data.
+     *
+     * @param source Native image path.
+     * @return Validated dimensions and exact Rgba8 pixels.
+     */
+    [[nodiscard]] ImportedImage DecodeImportedImage(const std::filesystem::path& source);
 
     /** @brief Headless source image importer backed by CNA's shared image decoder. */
     class ImageImporter final : public ContentImporter
@@ -42,8 +56,11 @@ namespace CNA::Content::Pipeline
         /** @brief Returns every source image extension supported by default routing. */
         [[nodiscard]] std::vector<std::string> SourceExtensions() const override;
 
-        /** @brief Returns ImportedImageType. */
-        [[nodiscard]] std::string OutputType() const override;
+        /**
+         * @brief Returns the only imported type this component can produce.
+         * @return A vector containing ImportedImageType.
+         */
+        [[nodiscard]] std::vector<std::string> OutputTypes() const override;
 
         /**
          * @brief Decodes the primary source through CNA's shared ImageLoader.

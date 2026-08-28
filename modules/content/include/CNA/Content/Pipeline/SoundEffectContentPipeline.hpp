@@ -24,8 +24,11 @@ namespace CNA::Content::Pipeline
         /** @brief Returns the `.wav` source route. */
         [[nodiscard]] std::vector<std::string> SourceExtensions() const override;
 
-        /** @brief Returns ImportedSoundType. */
-        [[nodiscard]] std::string OutputType() const override;
+        /**
+         * @brief Returns the only imported type this component can produce.
+         * @return A vector containing ImportedSoundType.
+         */
+        [[nodiscard]] std::vector<std::string> OutputTypes() const override;
 
         /**
          * @brief Parses a WAV into source-oriented PCM without opening an audio device.

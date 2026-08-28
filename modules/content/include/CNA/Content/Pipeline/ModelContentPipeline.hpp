@@ -33,8 +33,11 @@ namespace CNA::Content::Pipeline
         /** @brief Contained root for the generated CNJ sidecars. */
         std::filesystem::path intermediateRoot;
 
-        /** @brief Opaque shared lifetime for the temporary intermediate tree. */
+        /** @brief Opaque shared lifetime for a temporary intermediate tree, if one is used. */
         std::shared_ptr<const void> intermediateLifetime;
+
+        /** @brief Whether processor-read authored sidecars must be recorded as source inputs. */
+        bool recordAuthoredSidecars = false;
     };
 
     /** @brief Headless glTF importer backed by CNA's single shared glTF interpretation. */
@@ -47,8 +50,11 @@ namespace CNA::Content::Pipeline
         /** @brief Returns the `.gltf` and `.glb` source routes. */
         [[nodiscard]] std::vector<std::string> SourceExtensions() const override;
 
-        /** @brief Returns ImportedModelDocumentType. */
-        [[nodiscard]] std::string OutputType() const override;
+        /**
+         * @brief Returns the only imported type this component can produce.
+         * @return A vector containing ImportedModelDocumentType.
+         */
+        [[nodiscard]] std::vector<std::string> OutputTypes() const override;
 
         /**
          * @brief Imports glTF through the shared glTF-to-CNJ implementation.
