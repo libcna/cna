@@ -1464,6 +1464,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_easygl_basiceffect_world_scale_precision
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plans/plan_fx.md FX-125: a lit, vertex-coloured 36-byte vertex must be BOTH lit and
+        # coloured; it used to fall through to the unlit vertex-colour program.
+        cna_easygl_test(cna_test_easygl_basiceffect_lit_vertex_color
+                        easygl_basiceffect_lit_vertex_color_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_BasicEffectLitVertexColor
+            COMMAND cna_test_easygl_basiceffect_lit_vertex_color
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 247: draw quad with each supported VertexElementFormat via VertexBuffer
         cna_easygl_test(cna_test_easygl_vertex_formats
                         easygl_vertex_formats_test.cpp)

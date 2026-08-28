@@ -7219,6 +7219,17 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "layout(location=0) in vec3 aPos;\n"
 "layout(location=1) in vec3 aNormal;\n"
 "layout(location=2) in vec2 aUV;\n"
+// plans/plan_fx.md FX-125: BasicEffect.VertexColorEnabled has a "Vc" variant of every
+// lit family in XNA (VSBasicVertexLightingVc and friends), which multiplies the lit
+// diffuse by the per-vertex colour. These programs had no colour input at all, so a mesh
+// that is BOTH lit and vertex-coloured could not be drawn by them; selection fell through
+// to the unlit prog_colored_ and the model rendered flat, with no shading and no specular.
+// The location is the element's INDEX in this program's own input table
+// (ConfigureDeclarationForStockProgramEXT binds inputs[i] to location i), so kLitColor's
+// {aPos, aNormal, aUV, aColor} puts the colour at 3. When a draw has no colour
+// element the attribute is simply unbound and uVertexColorEnabled is 0, so vc is white and
+// every existing lit draw is byte-identical.
+"layout(location=3) in vec4 aColor;\n"
 CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform mat4 uWVP;\n"
 "uniform mat4 uWorld;\n"
@@ -7226,6 +7237,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform vec4 uFogVector;\n"
 "out vec3 vNormal;\n"
 "out vec2 vUV;\n"
+"out vec4 vColor;\n"
 "out float vFogFactor;\n"
 "out vec3 vWorldPos;\n"
 "void main(){\n"
@@ -7233,6 +7245,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "    gl_Position=uWVP*cnaPos;\n"
 "    vNormal=uNormalMatrix*cnaInstanceDirection(aNormal);\n"
 "    vUV=aUV;\n"
+"    vColor=aColor;\n"
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
@@ -7259,6 +7272,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "precision highp float;\n"
 "in vec3 vNormal;\n"
 "in vec2 vUV;\n"
+"in vec4 vColor;\n"
 "in float vFogFactor;\n"
 "in vec3 vWorldPos;\n"
 "uniform sampler2D uTexture;\n"
@@ -7279,6 +7293,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform vec3 uEyePosition;\n"
 "uniform vec3 uEmissiveColor;\n"
 "uniform vec4 uAlphaTest;\n"
+"uniform float uVertexColorEnabled;\n"
 "uniform vec3 uFogColor;\n"
 "out vec4 FragColor;\n"
 CNA_GL_RT_SAMPLE_UV_DECL
@@ -7306,7 +7321,11 @@ CNA_GL_PUNCTUAL_DECL
 "        vec3 h2=normalize(E-uLight2Dir); float spec2=pow(max(dot(h2,N),0.0)*zeroL2,uSpecularPower);\n"
 "        specularRGB=(spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor*shadow;\n"
 "    }\n"
-"    FragColor=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x))*vec4(litRGB,uDiffuseColor.a);\n"
+// FX-125: XNA's Vc variants multiply the vertex colour into the DIFFUSE result before the
+// specular term is added -- `vout.Diffuse *= vin.Color`, then `color.rgb += Specular * color.a`
+// -- so the highlight is scaled only through the resulting alpha, exactly as here.
+"    vec4 vc=(uVertexColorEnabled>0.5)?vColor:vec4(1.0,1.0,1.0,1.0);\n"
+"    FragColor=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x))*vec4(litRGB,uDiffuseColor.a)*vc;\n"
 "    FragColor.rgb*=cnaCascadeDebugTint(vWorldPos);\n"
 "    FragColor.rgb+=specularRGB*FragColor.a;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
@@ -7340,6 +7359,7 @@ CNA_GL_PUNCTUAL_DECL
         prog_lit_textured_.loc_alphatest   = prog_lit_textured_.prog.uniform_location("uAlphaTest");
         prog_lit_textured_.loc_fog_vector = prog_lit_textured_.prog.uniform_location("uFogVector");
         prog_lit_textured_.loc_fog_color   = prog_lit_textured_.prog.uniform_location("uFogColor");
+        prog_lit_textured_.loc_vertexcolor = prog_lit_textured_.prog.uniform_location("uVertexColorEnabled");
         prog_lit_textured_.ready           = true;
         CNA_RENDER_LOG("lit+textured3D ready loc_wvp=" << prog_lit_textured_.loc_wvp);
     }
@@ -7369,6 +7389,17 @@ CNA_GL_PUNCTUAL_DECL
 "layout(location=0) in vec3 aPos;\n"
 "layout(location=1) in vec3 aNormal;\n"
 "layout(location=2) in vec2 aUV;\n"
+// plans/plan_fx.md FX-125: BasicEffect.VertexColorEnabled has a "Vc" variant of every
+// lit family in XNA (VSBasicVertexLightingVc and friends), which multiplies the lit
+// diffuse by the per-vertex colour. These programs had no colour input at all, so a mesh
+// that is BOTH lit and vertex-coloured could not be drawn by them; selection fell through
+// to the unlit prog_colored_ and the model rendered flat, with no shading and no specular.
+// The location is the element's INDEX in this program's own input table
+// (ConfigureDeclarationForStockProgramEXT binds inputs[i] to location i), so kLitColor's
+// {aPos, aNormal, aUV, aColor} puts the colour at 3. When a draw has no colour
+// element the attribute is simply unbound and uVertexColorEnabled is 0, so vc is white and
+// every existing lit draw is byte-identical.
+"layout(location=3) in vec4 aColor;\n"
 CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform mat4 uWVP;\n"
 "uniform mat4 uWorld;\n"
@@ -7395,7 +7426,18 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform float uSpecularPower;\n"
 "uniform vec3 uEyePosition;\n"
 "uniform vec3 uEmissiveColor;\n"
+// Declared in THIS stage only. The fragment stage defaults to mediump while this one is
+// highp, and GLSL ES 3.00 refuses to link a uniform shared across stages with different
+// precision -- the same trap uDiffuseColor above documents. Since the multiply moved here,
+// the fragment stage does not need it.
+"uniform float uVertexColorEnabled;\n"
+// Declared in THIS stage only. The fragment stage below defaults to mediump while
+// this one is highp, and GLSL ES 3.00 refuses to link a uniform shared across stages
+// with different precision -- the same trap uDiffuseColor above documents. After the
+// multiply moved here the fragment stage no longer needs it at all.
+
 "out vec2 vUV;\n"
+"out float vVertexAlpha;\n"
 "out float vFogFactor;\n"
 "out vec3 vLitRGB;\n"
 "out vec3 vSpecularRGB;\n"
@@ -7403,6 +7445,8 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "    vec4 cnaPos=cnaInstancePosition(vec4(aPos,1.0));\n"
 "    gl_Position=uWVP*cnaPos;\n"
 "    vUV=aUV;\n"
+
+
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
@@ -7426,7 +7470,15 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 // to 99.99%% with any ONE of its three directional lights on and drops to 90.31%% with all
 // three. Saturating here is what oD0/oD1 do, not an approximation of them. FX-122 fixed the
 // same D3D9 semantic in MojoShader's compiled-effect path; this is the built-in effect path.
-"    vLitRGB=clamp(lightSum*uDiffuseColor.rgb+uEmissiveColor,0.0,1.0);\n"
+// FX-125 ordering: XNA's Vc variants apply `vout.Diffuse *= vin.Color` BEFORE the value reaches
+// oD0, and oD0 is what Direct3D 9 saturates (FX-123). Clamping first and scaling afterwards is a
+// DIFFERENT picture, not a rounding difference: with a lit sum of 1.8 and a vertex colour of 0.5
+// it yields 0.5 where D3D9 yields 0.9, so the model darkens exactly as the light grows. Measured
+// on SAMPLE-047: the sphere agreed on 99.76%% of pixels with the vertex colour switched off and
+// 46.94%% with it on, CNA being up to 84 levels too dark.
+"    vec4 vcv=(uVertexColorEnabled>0.5)?aColor:vec4(1.0,1.0,1.0,1.0);\n"
+"    vLitRGB=clamp((lightSum*uDiffuseColor.rgb+uEmissiveColor)*vcv.rgb,0.0,1.0);\n"
+"    vVertexAlpha=vcv.a;\n"
 "    vec3 h0=normalize(E-uLight0Dir); float spec0=pow(max(dot(h0,N),0.0)*zeroL0,uSpecularPower);\n"
 "    vec3 h1=normalize(E-uLight1Dir); float spec1=pow(max(dot(h1,N),0.0)*zeroL1,uSpecularPower);\n"
 "    vec3 h2=normalize(E-uLight2Dir); float spec2=pow(max(dot(h2,N),0.0)*zeroL2,uSpecularPower);\n"
@@ -7436,17 +7488,22 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "#version 300 es\n"
 "precision mediump float;\n"
 "in vec2 vUV;\n"
+"in float vVertexAlpha;\n"
 "in float vFogFactor;\n"
 "in vec3 vLitRGB;\n"
 "in vec3 vSpecularRGB;\n"
 "uniform sampler2D uTexture;\n"
 "uniform highp vec4 uDiffuseColor;\n"
 "uniform vec4 uAlphaTest;\n"
+
 "uniform vec3 uFogColor;\n"
 "out vec4 FragColor;\n"
 CNA_GL_RT_SAMPLE_UV_DECL
 "void main(){\n"
-"    FragColor=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x))*vec4(vLitRGB,uDiffuseColor.a);\n"
+// FX-125: XNA's Vc variants multiply the vertex colour into the DIFFUSE result before the
+// specular term is added -- `vout.Diffuse *= vin.Color`, then `color.rgb += Specular * color.a`
+// -- so the highlight is scaled only through the resulting alpha, exactly as here.
+"    FragColor=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x))*vec4(vLitRGB,uDiffuseColor.a*vVertexAlpha);\n"
 "    FragColor.rgb+=vSpecularRGB*FragColor.a;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
@@ -7477,6 +7534,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
         prog_lit_textured_vertexlit_.loc_alphatest   = prog_lit_textured_vertexlit_.prog.uniform_location("uAlphaTest");
         prog_lit_textured_vertexlit_.loc_fog_vector = prog_lit_textured_vertexlit_.prog.uniform_location("uFogVector");
         prog_lit_textured_vertexlit_.loc_fog_color   = prog_lit_textured_vertexlit_.prog.uniform_location("uFogColor");
+        prog_lit_textured_vertexlit_.loc_vertexcolor = prog_lit_textured_vertexlit_.prog.uniform_location("uVertexColorEnabled");
         prog_lit_textured_vertexlit_.ready           = true;
         CNA_RENDER_LOG("lit+textured3D (vertex-lit) ready loc_wvp=" << prog_lit_textured_vertexlit_.loc_wvp);
     }
@@ -8787,6 +8845,19 @@ CNA_GL_PUNCTUAL_DECL
                        ? StockProgramShape::LitVertexLitUntextured
                        : StockProgramShape::LitUntextured;
         }
+        // plans/plan_fx.md FX-125: Position+Normal+Color+TextureCoordinate is 36 bytes, which is
+        // what the stock ModelProcessor emits for a mesh that carries a colour channel -- and it
+        // then sets BasicEffect.VertexColorEnabled, exactly as XNA does. No case matched 36, so
+        // such a mesh fell through to the unlit prog_colored_ below and lost all its lighting:
+        // SAMPLE-047's Sphere01 rendered as a flat green disc where the original has a shaded
+        // sphere with a specular highlight. The lit programs now carry the colour attribute, so
+        // this routes to the same family a stride-32 lit vertex takes.
+        if (stride == 36 && params.lightingEnabled)
+        {
+            return (!params.preferPerPixelLighting && !receivesShadow)
+                       ? StockProgramShape::LitVertexLit
+                       : StockProgramShape::Lit;
+        }
         switch (stride)
         {
         case 20: return StockProgramShape::Textured;
@@ -8882,6 +8953,7 @@ CNA_GL_PUNCTUAL_DECL
         static constexpr StockProgramInput kColTextured[]    = {kPos, kColor, kUv};
         static constexpr StockProgramInput kLitUntextured[]  = {kPos, kNormal};
         static constexpr StockProgramInput kLit[]            = {kPos, kNormal, kUv};
+        static constexpr StockProgramInput kLitColor[]            = {kPos, kNormal, kUv, kColor};
         static constexpr StockProgramInput kSkinned[]        = {kPos, kNormal, kUv, kWeights,
                                                                 kIndices, kColor};
         static constexpr StockProgramInput kPbr[]            = {kPos, kNormal, kTangent, kUv};
@@ -8947,9 +9019,14 @@ CNA_GL_PUNCTUAL_DECL
             inputs = kLitUntextured; count = std::size(kLitUntextured);
             name = "lit_untextured3d"; break;
         case StockProgramShape::LitVertexLit:
-            inputs = kLit; count = std::size(kLit); name = "lit_textured3d_vertexlit"; break;
+            // FX-125: a stride-36 lit vertex carries a colour element as well.
+            if (stride == 36) { inputs = kLitColor; count = std::size(kLitColor); }
+            else              { inputs = kLit;      count = std::size(kLit); }
+            name = "lit_textured3d_vertexlit"; break;
         case StockProgramShape::Lit:
-            inputs = kLit; count = std::size(kLit); name = "lit_textured3d"; break;
+            if (stride == 36) { inputs = kLitColor; count = std::size(kLitColor); }
+            else              { inputs = kLit;      count = std::size(kLit); }
+            name = "lit_textured3d"; break;
         case StockProgramShape::Colored:
             break;
         }
@@ -8990,6 +9067,7 @@ CNA_GL_PUNCTUAL_DECL
         static constexpr StockProgramInput kColTextured[] = {kPos, kColor, kUv};
         static constexpr StockProgramInput kLitUntextured[] = {kPos, kNormal};
         static constexpr StockProgramInput kLit[] = {kPos, kNormal, kUv};
+        static constexpr StockProgramInput kLitColor[] = {kPos, kNormal, kUv, kColor};
         static constexpr StockProgramInput kSkinned[] = {
             kPos, kNormal, kUv, kWeights, kIndices, kColor};
         static constexpr StockProgramInput kPbr[] = {kPos, kNormal, kTangent, kUv};
@@ -9041,7 +9119,10 @@ CNA_GL_PUNCTUAL_DECL
         case StockProgramShape::EnvMapped:
         case StockProgramShape::LitVertexLit:
         case StockProgramShape::Lit:
-            inputs = kLit; count = std::size(kLit); break;
+            // FX-125: a stride-36 lit vertex carries a colour element as well.
+            if (stride == 36) { inputs = kLitColor; count = std::size(kLitColor); }
+            else              { inputs = kLit;      count = std::size(kLit); }
+            break;
         case StockProgramShape::DualTexturedColored:
             inputs = kColTextured; count = std::size(kColTextured); break;
         case StockProgramShape::DualTextured:

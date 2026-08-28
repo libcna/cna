@@ -48,6 +48,25 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Gets or sets whether per-vertex color is used for rendering. */
         bool VertexColorEnabled = false;
 
+        /**
+         * @brief Gets whether per-vertex color is used for rendering.
+         *
+         * XNA's `BasicEffect.VertexColorEnabled` is a property, and `AlphaTestEffect` and
+         * `DualTextureEffect` already expose it as one here; this class had only the public
+         * field, so the accessor pair a game written against the XNA API reaches for was
+         * missing. The field stays, unchanged, because `World`/`View`/`Projection` on this same
+         * class are spelled both ways too.
+         *
+         * @return True when per-vertex color is used.
+         */
+        [[nodiscard]] bool getVertexColorEnabledProperty() const { return VertexColorEnabled; }
+
+        /**
+         * @brief Sets whether per-vertex color is used for rendering.
+         * @param value True to use per-vertex color.
+         */
+        void setVertexColorEnabledProperty(bool value) { VertexColorEnabled = value; }
+
         /** @brief Returns the fully qualified .NET type name. */
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
