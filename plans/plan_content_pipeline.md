@@ -1,6 +1,7 @@
 # plan_content_pipeline.md — CNA Content Pipeline
 
-> **Status (2026-08-28):** `CP-001` through `CP-014` are complete. `CP-015` is current. The
+> **Status (2026-08-28):** `CP-001` through `CP-015` are complete. The implemented initial CNA
+> Content Pipeline project is at a clean architectural checkpoint. The
 > project starts from the existing `content-pipeline` branch at `0e6899f17017c03c0e23d575d25cd70c678e2781`.
 > That commit contains the completed CNB baseline through `CNBF-123`. Local `next` was actually
 > `4ab1859dc8a540af1bd326df0fa816579adf7027`, two unrelated platform/binding commits ahead; the
@@ -807,6 +808,51 @@ incremental and security behavior, XNA mapping, CNJ/CNB/XNB relationship, custom
 known limitations and stable/experimental/internal labels. `docs/README.md` links it from the main
 documentation index.
 
+### 11.2 Final verification (`CP-015`)
+
+The final review used the repository's existing HEADLESS Debug configuration and a separate fresh
+sanitizer configuration rather than inferring results from earlier task-local runs:
+
+* `cmake --build cmake-build-debug -j2` completed the whole configured tree successfully. Existing
+  warnings in renderer example sources did not fail the build.
+* The final normal selection ran 259 tests from 27 suites covering the pipeline core and CLI,
+  CMake integration, the custom extension, manifest/cache behavior, every vertical slice, legacy
+  producer oracles, typed codecs, runtime CNB dispatch and all 11 frozen golden vectors. All 259
+  passed.
+* Three unrelated runtime texture-upload tests were excluded from that selection because the
+  configured HEADLESS renderer explicitly has no complete TextureCube/Texture3D storage. Their
+  isolated failures report that renderer capability boundary; the corresponding CNB codecs,
+  producers and deterministic byte tests remain in the passing selection.
+* The broad run initially caught that the CNBF-123 source-level producer guard still expected only
+  the three legacy tools. Its expected set now includes `tools/content/content.cpp`; the guard also
+  proves all four front ends include and invoke the one `CnaToolAtomicWrite.hpp` implementation.
+* A fresh `/tmp/cna-content-pipeline-asan-ubsan` Debug build used
+  `-DCNA_GRAPHICS_RENDERER=HEADLESS`, `-DCNA_ENABLE_VIDEO=OFF`,
+  `-DCNA_SANITIZE=address,undefined`, and built `CnaTests`, `cna-content`, and all three legacy
+  producer executables. The same 259 tests passed with ASan and UBSan active and both configured to
+  halt on the first finding.
+* Leak detection alone was disabled for the successful sanitizer run because LeakSanitizer refuses
+  to operate under this runner's `ptrace` supervision. A preliminary `detect_leaks=1` run proved
+  that limitation directly: 218 in-process tests passed while sanitised child tools exited only on
+  LeakSanitizer's explicit `does not work under ptrace` guard. This is not reported as LSan
+  coverage. TSan was not run because v1 has no parallel scheduler or concurrently mutable
+  registry; the registry is explicitly configured before serial builds.
+* The final diff modifies no frozen CNB codec definition, asset ID, schema declaration, format
+  specification or existing golden-vector asset. All 11 byte-for-byte golden tests pass in both
+  normal and ASan+UBSan configurations. Therefore no frozen CNB definition or existing frozen CNB
+  byte changed.
+* Local `next` advanced independently during this work from the verified starting value
+  `4ab1859dc8a540af1bd326df0fa816579adf7027` to
+  `d5d66d8735e2aac8246246056d3ef4219c97623d`. No commit from it was merged or rebased; the final
+  merge base remains the intended CNB-complete starting commit
+  `0e6899f17017c03c0e23d575d25cd70c678e2781`.
+
+There is no active CP task at this checkpoint. Further work is deliberately the bounded future work
+listed under current risks and unresolved questions: multi-output build graphs, custom-component
+loading for the stock CLI, remaining Windows Model/glTF Unicode seams, optional configuration and
+profiles, and only then parallel scheduling. Song/Video source import routes can be added when
+their authoring semantics are specified; Effect remains outside this project.
+
 ---
 
 ## 12. Task ledger
@@ -827,7 +873,7 @@ documentation index.
 | `CP-012` | **completed** | Kept wide Windows argv and native filesystem paths through the CLI/core, added explicit generic-UTF-8 manifest/diagnostic conversion, added native image/WAV/DDS import overloads and Unicode CNJ sidecar resolution, and passed 43 focused tests including a real non-ASCII directory build/no-op. Windows execution was not available; glTF/Model's audited legacy narrow seam is recorded rather than hidden. |
 | `CP-013` | **completed** | Added the implementation-derived `docs/content-pipeline.md` and index entry, documenting the build/runtime boundary, XNA mapping, exact component/context/data APIs, built-in routes, dependencies versus XREF, CLI/cache/atomic/path behavior, migration limits and stable/experimental/internal status. The evidence-based architecture review above found no duplicate built-in codec/parser or runtime-device dependency; the remaining Windows Model and build-graph limits stay explicit. |
 | `CP-014` | **completed** | Added the minimal `cna_add_content(TARGET ... SOURCE_DIR ... OUTPUT_DIR ... [QUIET] [CONTENT_EXECUTABLE ...])` helper. It always delegates to the real CLI, leaving dependency/cache/publication semantics singular; native builds depend on the tool target and cross builds require an explicit host compiler. A generated nested Curve integration fixture and test prove CNB logical-name/manifest output through the helper. |
-| `CP-015` | **current** | Final sanitizer, golden-vector, compatibility, architecture and risk review; reconcile plan status with the tree. |
+| `CP-015` | **completed** | Completed the whole HEADLESS Debug build and a 259-test/27-suite compatibility selection, including all 11 frozen golden vectors. Fixed the CNBF-123 producer guard to recognize `cna-content` as the fourth atomic publisher. A fresh ASan+UBSan build of the tests, new CLI and legacy producers passed the same 259 tests with `halt_on_error`; LSan was explicitly unavailable under the runner's `ptrace`, and TSan is not applicable before concurrent scheduling. The final architecture review found no frozen CNB or byte change. |
 
 Tasks are intentionally vertical/coherent. The ledger is revised when implementation evidence makes
 the ordering wrong; it is not a promise to build speculative abstractions.

@@ -580,11 +580,12 @@ TEST(CnbProducerOutputTest, EveryCnbProducerPublishesThroughTheOneSharedHelper)
     // all-or-nothing, through the same helper.**
     //
     // The runtime half of that is already covered per executable -- CnbCompilerToolTest,
-    // CnbSourceToolTest and CnbGltfDirectToolTest each spawn their own tool and assert that a
-    // failing run preserves an existing output and leaves no temporary. What no runtime test can
-    // catch is a FOURTH producer being added later that never goes through the helper at all, or
-    // one of these three quietly regaining a `std::ofstream`. That is what this reads the sources
-    // for. It is deliberately a source check and not a framework: three call sites do not justify
+    // CnbSourceToolTest, CnbGltfDirectToolTest and ContentPipelineCliTest each spawn their own
+    // tool and assert that a failing run preserves an existing output and leaves no temporary.
+    // What no runtime test can catch is a FOURTH producer being added later that never goes
+    // through the helper at all, or one of these four quietly regaining a `std::ofstream`. That is
+    // what this reads the sources
+    // for. It is deliberately a source check and not a framework: four call sites do not justify
     // an inheritance hierarchy, and a base class nobody is obliged to derive from would not catch
     // the new-producer case either.
 #ifndef CNA_TOOLS_SOURCE_DIR
@@ -633,8 +634,8 @@ TEST(CnbProducerOutputTest, EveryCnbProducerPublishesThroughTheOneSharedHelper)
 
     // The expected producer set, asserted rather than assumed -- if this list ever grows, the
     // assertions below have to be looked at rather than silently skipped over.
-    EXPECT_EQ(producerNames, (std::vector<std::string>{"cnj_to_cnb.cpp", "gltf_to_cnb.cpp",
-                                                       "source_to_cnb.cpp"}))
+    EXPECT_EQ(producerNames, (std::vector<std::string>{"cnj_to_cnb.cpp", "content.cpp",
+                                                       "gltf_to_cnb.cpp", "source_to_cnb.cpp"}))
         << "the set of .cnb-producing tools changed; a new one must publish through "
            "CnaToolAtomicWrite.hpp like the others";
     EXPECT_NE(std::find(inspectorsOrNonProducers.begin(), inspectorsOrNonProducers.end(),
