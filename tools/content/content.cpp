@@ -13,6 +13,7 @@
 
 #include "CNA/Content/Pipeline/ContentBuildManifest.hpp"
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
+#include "CNA/Content/Pipeline/ModelContentPipeline.hpp"
 #include "CNA/Content/Pipeline/SoundEffectContentPipeline.hpp"
 #include "CNA/Content/Pipeline/Texture2DContentPipeline.hpp"
 #include "CnaToolAtomicWrite.hpp"
@@ -131,6 +132,7 @@ namespace
     }
 
     std::vector<BuildItem> DiscoverBuilds(const CommandLine& command,
+                                          const Pipeline::ContentPipelineRegistry& registry,
                                           std::filesystem::path& sourceRoot,
                                           std::filesystem::path& outputRoot,
                                           bool& directoryBuild)
@@ -173,6 +175,7 @@ namespace
              std::filesystem::recursive_directory_iterator(sourceRoot))
         {
             if (!entry.is_regular_file()) { continue; }
+            if (!registry.HasImporterForSource(entry.path())) { continue; }
             const std::filesystem::path relative =
                 std::filesystem::relative(entry.path(), sourceRoot);
             std::filesystem::path output = outputRoot / relative;
@@ -191,6 +194,7 @@ namespace
         auto registry = std::make_shared<Pipeline::ContentPipelineRegistry>();
         Pipeline::RegisterTexture2DContentPipeline(*registry);
         Pipeline::RegisterSoundEffectContentPipeline(*registry);
+        Pipeline::RegisterModelContentPipeline(*registry);
         return registry;
     }
 
@@ -302,13 +306,14 @@ namespace
             return 2;
         }
 
+        const std::shared_ptr<const Pipeline::ContentPipelineRegistry> registry = CreateRegistry();
         std::filesystem::path sourceRoot;
         std::filesystem::path outputRoot;
         bool directoryBuild = false;
         std::vector<BuildItem> builds;
         try
         {
-            builds = DiscoverBuilds(command, sourceRoot, outputRoot, directoryBuild);
+            builds = DiscoverBuilds(command, *registry, sourceRoot, outputRoot, directoryBuild);
         }
         catch (const std::exception& error)
         {
@@ -316,7 +321,6 @@ namespace
             return 1;
         }
 
-        const std::shared_ptr<const Pipeline::ContentPipelineRegistry> registry = CreateRegistry();
         const Pipeline::ContentPipeline pipeline(registry);
         const std::filesystem::path manifestPath =
             outputRoot / Pipeline::ContentBuildManifestFileName;

@@ -1,6 +1,6 @@
 # plan_content_pipeline.md — CNA Content Pipeline
 
-> **Status (2026-08-28):** `CP-001` through `CP-008` are complete. `CP-009` is current. The
+> **Status (2026-08-28):** `CP-001` through `CP-009` are complete. `CP-010` is current. The
 > project starts from the existing `content-pipeline` branch at `0e6899f17017c03c0e23d575d25cd70c678e2781`.
 > That commit contains the completed CNB baseline through `CNBF-123`. Local `next` was actually
 > `4ab1859dc8a540af1bd326df0fa816579adf7027`, two unrelated platform/binding commits ahead; the
@@ -154,7 +154,7 @@ stable asset IDs, schema versions, canonical custom names, XREF and typed codecs
 | WAV parse/PCM normalization | `DecodeWavAsCnbSoundEffect` / `ImportWavAsCnbSoundEffect` | yes | currently collapses Importer+Processor; split data ownership without a second RIFF parser |
 | DDS cube decode | `CNA::Internal::Graphics::DecodeDdsCube` | yes | shared decoder used by runtime and producer; future cube importer |
 | glTF semantic core | `CNA::Internal::GltfImport::GltfImportCore` | yes | proven reusable parser/builder core |
-| glTF orchestration | `tools/gltf_to_cnj/gltf_to_cnj.cpp::ConvertGltfToCnj` | yes | still partly trapped in a tool translation unit and writes CNJ staging sidecars |
+| glTF orchestration | `tools/gltf_to_cnj/gltf_to_cnj.cpp::ConvertGltfToCnj` | yes | one implementation is now linked into `cna_content` and shared by both front ends; it remains physically tool-owned and writes CNJ staging sidecars |
 | CNJ canonical reading | `CnjCanonicalRead`, `CnjEnvelope`, `ResolveCnjSourceFileSafely` | yes | reusable parsing/validation/containment pieces |
 | CNJ compilation | `CompileCnjToCnb` | mixed | headless for most assets; Curve/AnimationClip currently construct a null-device `ContentManager`; future pipeline work must remove that runtime shortcut |
 | Model CNJ -> canonical DTO | `BuildCnbModelFromCnj` | yes | reusable model-processor input path, with explicit XREF result |
@@ -214,10 +214,11 @@ this is an oracle to preserve while extracting an in-memory imported model later
   content references, not an incremental dependency database.
 * glTF URI containment is centralized in `GltfImportCore`; CNJ sidecars use
   `ResolveCnjSourceFileSafely`; CNB logical XREF names use `CnbLogicalNameProblem`.
-* The source tool has no build manifest and knows only the primary source. glTF dependencies are
-  read by the shared import core but not returned as a complete build result by the CLI.
-* Directory traversal exists in the glTF staging tool and is explicitly sorted before compilation;
-  no general content-root traversal exists yet.
+* `CollectExternalUriDependenciesEXT` now returns the same safely resolved buffer/image paths that
+  the glTF containment sweep validates. `GltfImporter` records them as source dependencies;
+  `ModelProcessor` reports the Model DTO's external references separately as runtime XREFs.
+* The legacy source tools still have no build manifest. `cna-content` now provides sorted general
+  content-root traversal and content-hashed dependency invalidation.
 
 ### 4.4 Duplication and runtime boundaries
 
@@ -255,8 +256,8 @@ The initial hybrid deliberately favors debugger clarity over template machinery:
 
 * virtual `ContentImporter`, `ContentProcessor` and `ContentTypeWriter` component contracts;
 * explicit `ContentComponentIdentity { name, version }` with stable UTF-8 names;
-* explicit stable input/output type identity strings; the first real route uses
-  `CNA.Content.Pipeline.ImportedImage` and `CNA.Content.Cnb.Texture2DData`;
+* explicit stable input/output type identity strings; implemented routes include imported image,
+  sound and canonical glTF Model-document values plus their corresponding `Cnb*Data` outputs;
 * an internal `ContentValue` carrying a shared immutable erased value, the stable type identity
   and an ephemeral `std::type_index` guard;
 * small templated helpers only for checked boxing/unboxing at component implementation boundaries;
@@ -279,6 +280,9 @@ component diagnostic.
   state and must not retain a transient context.
 * Imported/processed values are moved between stages and destroyed after the build result/bytes no
   longer require them.
+* `ImportedModelDocument` owns an opaque shared staging lifetime. Its generated canonical CNJ and
+  absorbed sidecars remain valid through `ModelProcessor`, then the temporary tree is removed;
+  neither component may retain its paths after that invocation.
 
 ### 5.4 Focused contexts
 
@@ -330,7 +334,7 @@ Extension matching is only routing. The selected importer must validate bytes/co
 ### 5.7 Error and logging model
 
 Use ordinary typed exceptions internally while preserving their original `what()` text. The build
-coordinator catches only at the outer stage boundary and throws/returns a `ContentBuildError` that
+coordinator catches only at the outer stage boundary and throws a `ContentPipelineError` that
 adds source, logical asset, stage and component without discarding the nested cause. A small scoped
 logger interface carries the same context and supports info/warning/error; tests may supply a
 collector. No process-global logger is introduced.
@@ -349,7 +353,8 @@ Paths are canonical native paths internally; manifest paths will be normalized r
 declared root. Runtime references remain logical forward-slash names. `ContentBuildResult` now
 records source, logical name, output, component identities, parameters, categorized
 dependencies/references, the ordered info/warning messages emitted by successful stages, and a
-built/skipped state. Fingerprint/cache fields will be added only with `CP-008`.
+built/skipped state. `CP-008` maps successful results into the separate persistent manifest record
+that owns fingerprint and output-digest fields.
 
 The coordinator places the primary source in the dependency set before importing. Context methods
 are the only component-facing way to add contained source, content-build, generated, and runtime
@@ -423,7 +428,7 @@ untouched as an oracle; sharing the new components from old front ends is a late
 ```text
 WAV
  -> WavImporter (the existing bounded RIFF parser)
- -> ImportedAudio
+ -> ImportedSound
  -> SoundEffectProcessor
  -> CnbSoundEffectData
  -> SoundEffectContentWriter
@@ -451,18 +456,53 @@ loading remains the existing typed decoder/loader responsibility.
 
 ### 6.3 Model/glTF (`CP-009`)
 
-Do not rewrite glTF while introducing the pipeline. First wrap the current same-interpretation
-staging path and pin direct glTF -> CNB == glTF -> CNJ -> CNB. Only then extract the remaining tool
-orchestration into an imported in-memory model if that extraction preserves every oracle.
+```text
+.gltf/.glb
+ -> GltfImporter (shared GltfImportCore + existing glTF-to-CNJ orchestration)
+ -> ImportedModelDocument { canonical CNJ, absorbed sidecars, owned staging lifetime }
+ -> ModelProcessor
+ -> existing BuildCnbModelFromCnj
+ -> CnbModelData
+ -> ModelContentWriter
+ -> existing EncodeModelToCnb
+```
+
+Implemented identities are `CNA.GltfImporter/1`, `CNA.ModelProcessor/1` and
+`CNA.ModelContentWriter/1`. The equivalence-hardened converter is compiled once into
+`cna_content`; `cna-content` and `cna_tool_gltf_to_cnb` link that same implementation. The
+standalone CNJ tool retains its CLI/oracle entry point. No new cgltf interpretation, CNJ reader or
+Model serializer was introduced.
+
+The importer returns a source-oriented canonical Model document rather than pretending that the
+wire-oriented `CnbModelData` is an import result. The processor is the only stage that invokes
+`BuildCnbModelFromCnj`, registers the returned runtime references, and produces `CnbModelData`.
+External glTF buffers/images are collected through the exact same URI resolver that enforces
+directory and symlink containment, then recorded as source dependencies through
+`ContentImporterContext`. Generated staging paths never enter output bytes or fingerprints.
+
+The output for `skin-four-weighted.gltf` was pinned before refactoring and remained byte-identical
+afterward: SHA-256
+`9f432dff5a02ee2092ffc4c04e72e91505d1365ebec6274b15cf6dbba7d0276b`. Tests also prove pipeline
+bytes equal the legacy direct producer, direct glTF -> CNB still equals glTF -> CNJ -> CNB, repeated
+builds are deterministic, typed Model decode succeeds, and the resulting CNB loads through the
+existing `ContentManager` Model path in the HEADLESS configuration. The final focused run passed
+73 pipeline, direct-tool, containment and CNB golden-vector cases.
+
+Two multi-output issues are deliberately not hidden. A glTF producing several Model documents is
+rejected with an explicit graph-scheduling diagnostic by the one-output `ContentPipeline::Build`
+API. Textured glTF currently preserves the legacy generated texture XREF names; producing those
+textures as child `.cnb` artifacts needs the content-build graph decision recorded in section 14.
+The dependency/XREF distinction is nevertheless real and tested now, rather than inferred later.
 
 ---
 
 ## 7. CLI and publication design
 
 `cna-content build <source-or-directory> -o <output>` is the intended user surface. Initial source
-extensions are exactly those the registered built-ins advertise; unsupported files produce useful
-diagnostics rather than being silently copied or skipped. Directory discovery is sorted by normalized
-relative generic path and produces `<relative stem>.cnb` while retaining the logical relative name.
+extensions are exactly those the registered built-ins advertise. An explicitly requested unsupported
+file produces a useful diagnostic; convention-based directory discovery ignores unregistered support
+files such as glTF `.bin` buffers. Directory discovery is sorted by normalized relative generic path
+and produces `<relative stem>.cnb` while retaining the logical relative name.
 
 Final publication remains all-or-nothing through the single implementation in
 `tools/common/CnaToolAtomicWrite.hpp`. The first CLI can own orchestration at the tool boundary and
@@ -479,19 +519,19 @@ cna-content build <source-file> -o <artifact.cnb>
 cna-content build <source-directory> -o <output-directory>
 ```
 
-The configured registry currently contains the completed image/Texture2D and WAV/SoundEffect
-routes. Single-file builds use the source stem as the logical name. Directory builds enumerate
-regular files, derive logical names and output paths from extensionless relative paths, sort by the
-UTF-8 generic logical name before building, and diagnose unsupported extensions. The output root is
+The configured registry currently contains the completed image/Texture2D, WAV/SoundEffect and
+glTF/Model routes. Single-file builds use the source stem as the logical name. Directory builds
+enumerate registered source files, derive logical names and output paths from extensionless relative
+paths, and sort by the UTF-8 generic logical name before building. The output root is
 forbidden inside the source root so generated artifacts cannot become new source discoveries; a
 single build cannot overwrite its source. Every artifact is fully imported/processed/encoded before
 its parent directory is created and its bytes are handed to the one existing atomic helper.
 
-Six real-process CLI tests pass: pipeline-byte equality, nested output creation, sorted two-asset
-directory compilation, logical path preservation, repeated byte determinism, unknown-extension
-failure, destructive-layout rejection, and old-output preservation/no temporary debris after a
-failed rebuild. The fresh HEADLESS Debug test executable rebuilt successfully; 38 combined core,
-Texture2D, SoundEffect, CLI and golden-vector cases passed in the final focused run.
+Eleven real-process CLI tests now cover pipeline-byte equality, nested output creation, sorted
+multi-asset directory compilation, logical path preservation, support-file filtering, glTF image
+dependency invalidation, repeated no-op skips, unknown explicit extensions, destructive-layout
+rejection, corrupt/tampered cache recovery, and old-output preservation/no temporary debris after a
+failed rebuild.
 
 ### Windows pathname strategy
 
@@ -623,8 +663,8 @@ Required before the corresponding task closes:
 | `CP-006` | **completed** | Added the `cna-content` executable with single/directory builds, deterministic discovery, relative logical/output preservation, explicit built-in selection diagnostics, wide Windows entry point, safe output layouts and the shared audited atomic publisher. Six subprocess tests prove the CLI contract and failed-rebuild preservation. |
 | `CP-007` | **completed** | Completed the observable build result: categorized build dependencies and separate runtime XREFs are returned with ordered contextual messages. The coordinator records while forwarding to an optional scoped logger; image/WAV importers and Texture/SoundEffect processors expose their actual stages. The fresh HEADLESS Debug targets built and the 38-case combined pipeline/CLI/golden selection passed. |
 | `CP-008` | **completed** | Added the version-1 inspectable JSON manifest, canonical SHA-256 effective-input fingerprints, output-integrity hashes, safe corruption fallback and atomic manifest publication. Nine real CLI tests and six manifest tests prove no-op skip, independent rebuilds, byte-not-mtime invalidation, component/parameter/dependency identities, output repair and path containment. Content-build dependency fingerprints are modeled but serial graph scheduling remains intentionally disabled until cycle rules exist. |
-| `CP-009` | **current** | Integrate glTF/Model without a second interpretation; retain direct-vs-CNJ byte oracle and report glTF dependencies. |
-| `CP-010` | future | Integrate CNJ as a front-end that converges on shared processors/writers; remove build-time ContentManager shortcut and preserve sidecar safety/equivalence. |
+| `CP-009` | **completed** | Linked the one existing glTF-to-CNJ implementation behind both front ends; added `ImportedModelDocument`, `GltfImporter`, `ModelProcessor` over `BuildCnbModelFromCnj`, and a writer over `EncodeModelToCnb`. External buffers/images are explicit source dependencies, Model XREFs remain separate, the manifest invalidates on dependency bytes, runtime loading succeeds, direct/two-step/pipeline bytes remain equal, and all focused/golden tests pass. Multi-Model and generated-texture child outputs remain explicit build-graph work rather than silent partial behavior. |
+| `CP-010` | **current** | Integrate CNJ as a front-end that converges on shared processors/writers; remove build-time ContentManager shortcut and preserve sidecar safety/equivalence. |
 | `CP-011` | future | Add realistic custom importer/processor/writer plus custom runtime loader end-to-end example/test; review experimental API. |
 | `CP-012` | future | Implement/audit Windows wide argv and non-ASCII pathname tests; document logical/native conversion. |
 | `CP-013` | future | Add `docs/content-pipeline.md`, stable/experimental/internal labels, compatibility/migration guidance and architectural review. |
@@ -643,8 +683,12 @@ the ordering wrong; it is not a promise to build speculative abstractions.
 * `cna_content` currently contains both build-friendly codecs and runtime `ContentManager`; physical
   co-location can obscure the boundary even when the dependency direction is correct. Tests and
   target linkage must prove the new CLI does not initialize runtime services.
-* glTF's last orchestration is still tool-owned and file-staged. An eager in-memory rewrite could
-  break the strongest existing equivalence oracle.
+* glTF's last orchestration is physically tool-owned and file-staged even though it is now one
+  linked library implementation. An eager in-memory rewrite could break the strongest existing
+  equivalence oracle; the staging seam should move only with pinned outputs.
+* The current one-output build API cannot publish glTF multi-skin Model groups, standalone clips or
+  generated texture child assets. It rejects multi-Model input rather than choosing silently;
+  graph identity/output ownership must be settled before those cases are advertised as complete.
 * `CompileCnjToCnb` uses ContentManager for two pure data types. Leaving it indefinitely would blur
   the new build/runtime boundary.
 * A string type ID and C++ type can disagree in a custom extension. Checked boxing/unboxing and

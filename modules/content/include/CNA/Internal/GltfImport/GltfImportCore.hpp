@@ -2073,6 +2073,27 @@ namespace CNA::Internal::GltfImport
      * @return The resolved path, guaranteed to be inside @p gltfDir.
      * @throws std::runtime_error if the URI is unsupported, absolute, or escapes @p gltfDir.
      */
+    std::filesystem::path ResolveExternalUriEXT(const std::filesystem::path& gltfDir,
+                                                const std::string& uri, const char* what);
+
+    /**
+     * @brief Resolves and returns every external source file declared by a parsed glTF.
+     *
+     * This is the dependency-reporting form of the same containment sweep used before
+     * `cgltf_load_buffers`. Buffers and images are returned in canonical deterministic order;
+     * absent and `data:` URIs are not filesystem dependencies.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. Call after `cgltf_parse_file` and before the
+     * parsed data is released.
+     *
+     * @param data The parsed glTF file.
+     * @param gltfDir The directory holding the `.gltf` file.
+     * @return Sorted unique contained paths for external buffers and images.
+     * @throws std::runtime_error naming any URI that is unsupported or escapes @p gltfDir.
+     */
+    std::vector<std::filesystem::path> CollectExternalUriDependenciesEXT(
+        const cgltf_data* data, const std::filesystem::path& gltfDir);
+
     /**
      * @brief Cross-checks every accessor's decoded values against its own declared `min`/`max`
      * (`GLTF-061`).
@@ -2099,9 +2120,6 @@ namespace CNA::Internal::GltfImport
      *                 naming the accessor, the component, and both numbers.
      */
     void CrossCheckAccessorBoundsEXT(const cgltf_data* data, std::vector<std::string>& warnings);
-
-    std::filesystem::path ResolveExternalUriEXT(const std::filesystem::path& gltfDir,
-                                                const std::string& uri, const char* what);
 
     /**
      * @brief Applies `ResolveExternalUriEXT` to every external URI a parsed file declares

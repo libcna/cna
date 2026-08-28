@@ -3,9 +3,9 @@
 // plans/plan_cnb.md CNBF-106: direct glTF -> .cnb compilation.
 //
 // The architectural requirement here is negative: this tool must NOT be a second interpretation of
-// glTF. It links tools/gltf_to_cnj/gltf_to_cnj.cpp and calls its orchestration directly, so the
-// two formats cannot disagree about what a glTF file means -- there is only one implementation to
-// disagree with. What this file adds is the .cnb writer on the end of that pipeline and a
+// glTF. It links the content library's shared glTF-to-CNJ orchestration, so the two formats cannot
+// disagree about what a glTF file means -- there is only one implementation to disagree with.
+// What this file adds is the .cnb writer on the end of that pipeline and a
 // single-command interface, so a project never has to keep .cnj files it does not want.
 //
 // The .cnj stage still exists as an internal staging step, written into a temporary directory this
@@ -188,6 +188,7 @@ int main(int argc, char** argv)
         }
 
         StagingDirectory staging(baseName);
+        std::vector<std::filesystem::path> documents;
         {
             // The .cnj stage announces the files it writes, which for this tool are inside a
             // temporary directory the caller never asked about and cannot use. Suppressed unless
@@ -198,7 +199,10 @@ int main(int argc, char** argv)
             if (keepCnjDir.empty()) { std::cout.rdbuf(swallowed.rdbuf()); }
             try
             {
-                CNA::Tools::Gltf::ConvertGltfToCnj(inputPath, staging.path(), baseName, unitScale);
+                const CNA::Tools::Gltf::GltfToCnjResult converted =
+                    CNA::Tools::Gltf::ConvertGltfToCnj(
+                        inputPath, staging.path(), baseName, unitScale);
+                documents = converted.documents;
             }
             catch (...)
             {
@@ -208,16 +212,8 @@ int main(int argc, char** argv)
             std::cout.rdbuf(saved);
         }
 
-        // Every .cnj the conversion produced becomes its own .cnb. A glTF file with several skins
+        // Every reported Model document becomes its own .cnb. A glTF file with several skins
         // yields several documents, so this compiles all of them rather than assuming one.
-        std::vector<std::filesystem::path> documents;
-        for (const auto& entry : std::filesystem::directory_iterator(staging.path()))
-        {
-            if (entry.is_regular_file() && entry.path().extension() == ".cnj")
-            {
-                documents.push_back(entry.path());
-            }
-        }
         if (documents.empty())
         {
             std::cerr << "error: the conversion produced no .cnj document to compile.\n";

@@ -309,6 +309,29 @@ TEST(GltfUriContainment, TheSweepAcceptsDataUrisAndContainedRelativeUris)
     EXPECT_NO_THROW(ValidateExternalUriContainmentEXT(relativeImage.data, scratch.AssetDir()));
 }
 
+TEST(GltfUriContainment, DependencyCollectionIsSortedUniqueAndExcludesInlineData)
+{
+    const ContainmentScratch scratch;
+    ParsedGltf parsed;
+    ASSERT_TRUE(ParseInto(parsed, scratch.AssetDir(), std::string(R"GLTF({
+  "asset": { "version": "2.0" },
+  "buffers": [
+    { "byteLength": 7, "uri": "textures/base.png" },
+    { "byteLength": 6, "uri": "data:application/octet-stream;base64,AAAAAA==" }
+  ],
+  "images": [
+    { "uri": "textures/base.png" },
+    { "uri": "textures/../textures/second.png" }
+  ]
+})GLTF")));
+
+    const std::vector<std::filesystem::path> dependencies =
+        CollectExternalUriDependenciesEXT(parsed.data, scratch.AssetDir());
+    ASSERT_EQ(dependencies.size(), 2u);
+    EXPECT_EQ(dependencies[0], scratch.AssetDir() / "textures" / "base.png");
+    EXPECT_EQ(dependencies[1], scratch.AssetDir() / "textures" / "second.png");
+}
+
 TEST(GltfUriContainment, TheSweepIsTotalOverBothUriBearingArrays)
 {
     // Buffers and images are the only two places a glTF 2.0 file can name an external file. If a

@@ -124,6 +124,20 @@ namespace
         return output;
     }
 
+    std::filesystem::path FindGltfFixture(const std::string& name)
+    {
+        for (const char* prefix : {"tests/assets/gltf/", "../tests/assets/gltf/",
+                                   "../../tests/assets/gltf/"})
+        {
+            const std::filesystem::path candidate = std::string(prefix) + name;
+            if (std::filesystem::exists(candidate))
+            {
+                return std::filesystem::weakly_canonical(candidate);
+            }
+        }
+        return {};
+    }
+
     int RunTool(const std::vector<std::string>& arguments, std::string& output)
     {
         const std::filesystem::path capture =
@@ -243,6 +257,51 @@ TEST(ContentPipelineCliTest, DirectoryBuildIsSortedAndPreservesLogicalRelativePa
     ASSERT_EQ(manifest.Entries().size(), 2u);
     EXPECT_NE(manifest.Find("Sounds/explosion"), nullptr);
     EXPECT_NE(manifest.Find("Textures/wall"), nullptr);
+}
+
+TEST(ContentPipelineCliTest, DirectoryBuildIgnoresUnregisteredSupportFiles)
+{
+    ScratchDirectory scratch("support_files");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    WriteBytes(source / "Textures" / "wall.png", MakePng(3, 2));
+    WriteBytes(source / "Models" / "geometry.bin", {1u, 2u, 3u, 4u});
+
+    std::string log;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    EXPECT_NE(log.find("[BUILD] Textures/wall"), std::string::npos) << log;
+    EXPECT_EQ(log.find("geometry.bin"), std::string::npos) << log;
+    EXPECT_TRUE(std::filesystem::is_regular_file(output / "Textures" / "wall.cnb"));
+    EXPECT_FALSE(std::filesystem::exists(output / "Models" / "geometry.cnb"));
+}
+
+TEST(ContentPipelineCliTest, GltfImageDependencyInvalidatesOnlyItsRelevantAssets)
+{
+    const std::filesystem::path fixture = FindGltfFixture("gltf-external-image.gltf");
+    const std::filesystem::path image =
+        FindGltfFixture("gltf-external-image.texture.png");
+    if (fixture.empty() || image.empty()) { GTEST_SKIP() << "glTF fixture not found"; }
+
+    ScratchDirectory scratch("gltf_dependency");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    std::filesystem::create_directories(source / "Models");
+    std::filesystem::copy_file(fixture, source / "Models" / "car.gltf");
+    std::filesystem::copy_file(image,
+                               source / "Models" / "gltf-external-image.texture.png");
+    WriteBytes(source / "Textures" / "independent.png", MakePng(2, 2));
+
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--quiet"}), 0);
+    const std::vector<std::uint8_t> independent =
+        ReadBytes(output / "Textures" / "independent.cnb");
+
+    WriteBytes(source / "Models" / "gltf-external-image.texture.png", MakePng(2, 2));
+    std::string log;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    EXPECT_NE(log.find("[BUILD] Models/car"), std::string::npos) << log;
+    EXPECT_NE(log.find("[BUILD] Models/gltf-external-image.texture"), std::string::npos) << log;
+    EXPECT_NE(log.find("[SKIP] Textures/independent"), std::string::npos) << log;
+    EXPECT_EQ(ReadBytes(output / "Textures" / "independent.cnb"), independent);
 }
 
 TEST(ContentPipelineCliTest, RepeatedBuildSkipsWithoutChangingOutputOrManifest)

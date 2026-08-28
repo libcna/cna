@@ -293,6 +293,8 @@ TEST(ContentPipelineCoreTest, UnknownExtensionsAndMissingRoutesAreNamedClearly)
 {
     Pipeline::ContentPipelineRegistry registry;
     registry.RegisterImporter(std::make_shared<NumberImporter>());
+    EXPECT_TRUE(registry.HasImporterForSource("ASSET.NUM"));
+    EXPECT_FALSE(registry.HasImporterForSource("asset.unknown"));
     EXPECT_THROW((void)registry.ResolveImporter("asset.unknown"), std::logic_error);
     EXPECT_THROW((void)registry.ResolveProcessor("unknown.imported.type"), std::logic_error);
     EXPECT_THROW((void)registry.ResolveWriter("unknown.processed.type"), std::logic_error);

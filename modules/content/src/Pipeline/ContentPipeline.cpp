@@ -517,6 +517,13 @@ namespace CNA::Content::Pipeline
                               explicitName, "importer", "source extension");
     }
 
+    bool ContentPipelineRegistry::HasImporterForSource(
+        const std::filesystem::path& source) const
+    {
+        const auto route = importersByExtension_.find(LowerExtension(source));
+        return route != importersByExtension_.end() && !route->second.empty();
+    }
+
     std::shared_ptr<const ContentProcessor> ContentPipelineRegistry::ResolveProcessor(
         const std::string& inputType, const std::string& explicitName) const
     {

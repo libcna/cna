@@ -4829,10 +4829,11 @@ namespace CNA::Internal::GltfImport
         return lexical;
     }
 
-    void ValidateExternalUriContainmentEXT(const cgltf_data* data,
-                                           const std::filesystem::path& gltfDir)
+    std::vector<std::filesystem::path> CollectExternalUriDependenciesEXT(
+        const cgltf_data* data, const std::filesystem::path& gltfDir)
     {
-        if (data == nullptr) { return; }
+        std::vector<std::filesystem::path> dependencies;
+        if (data == nullptr) { return dependencies; }
 
         // An absent uri is a GLB's own BIN chunk or a bufferView-backed image -- no path involved.
         // A data: URI carries its bytes inline, so there is nothing to resolve or contain.
@@ -4844,16 +4845,28 @@ namespace CNA::Internal::GltfImport
         {
             if (isExternal(data->buffers[i].uri))
             {
-                ResolveExternalUriEXT(gltfDir, data->buffers[i].uri, "buffer");
+                dependencies.push_back(
+                    ResolveExternalUriEXT(gltfDir, data->buffers[i].uri, "buffer"));
             }
         }
         for (cgltf_size i = 0; i < data->images_count; ++i)
         {
             if (isExternal(data->images[i].uri))
             {
-                ResolveExternalUriEXT(gltfDir, data->images[i].uri, "image");
+                dependencies.push_back(
+                    ResolveExternalUriEXT(gltfDir, data->images[i].uri, "image"));
             }
         }
+        std::sort(dependencies.begin(), dependencies.end());
+        dependencies.erase(std::unique(dependencies.begin(), dependencies.end()),
+                           dependencies.end());
+        return dependencies;
+    }
+
+    void ValidateExternalUriContainmentEXT(const cgltf_data* data,
+                                           const std::filesystem::path& gltfDir)
+    {
+        static_cast<void>(CollectExternalUriDependenciesEXT(data, gltfDir));
     }
 
     void ValidateGltfEXT(const cgltf_data* data, const std::string& sourceName,

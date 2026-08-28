@@ -598,6 +598,18 @@ namespace CNA::Content::Pipeline
             const std::filesystem::path& source, const std::string& explicitName = {}) const;
 
         /**
+         * @brief Returns whether any importer declares the source extension.
+         *
+         * This is used by convention-based directory discovery to ignore support files such as
+         * glTF `.bin` buffers. It does not promise unambiguous resolution; ResolveImporter()
+         * remains authoritative and diagnoses duplicate routes.
+         *
+         * @param source Source path whose extension is queried case-insensitively.
+         * @return True when at least one importer declares the extension.
+         */
+        [[nodiscard]] bool HasImporterForSource(const std::filesystem::path& source) const;
+
+        /**
          * @brief Resolves a processor by stable imported type and optional explicit name.
          *
          * @param inputType Stable imported type identity.

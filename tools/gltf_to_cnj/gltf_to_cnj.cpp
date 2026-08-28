@@ -33,7 +33,9 @@
 
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
 #include "CNA/Internal/CnjMorphSidecarEXT.hpp"
+#ifndef CNA_GLTF_TO_CNJ_NO_MAIN
 #include "GltfOracleEXT.hpp"
+#endif
 
 #include <algorithm>
 #include <cctype>
@@ -65,7 +67,9 @@ using namespace CNA::Internal::GltfImport;
 
 namespace
 {
+#ifndef CNA_GLTF_TO_CNJ_NO_MAIN
     namespace Oracle = CnaTest::GltfOracle;
+#endif
 
     // ---------------------------------------------------------------------------
     // Small helpers: binary writers, JSON string escaping.
@@ -223,6 +227,7 @@ namespace
         return out;
     }
 
+#ifndef CNA_GLTF_TO_CNJ_NO_MAIN
     std::string HexBytes(const std::vector<std::uint8_t>& bytes)
     {
         constexpr char digits[] = "0123456789abcdef";
@@ -235,6 +240,7 @@ namespace
         }
         return result;
     }
+#endif
 
     const char* DiagnosticSeverityNameEXT(GltfImportDiagnosticSeverityEXT severity)
     {
@@ -329,7 +335,8 @@ namespace
                        std::unordered_map<const cgltf_image*, std::string>& writtenTextures,
                        std::unordered_map<const cgltf_image*, std::string>& remappedOcclusionTextures,
                        float unitScale, const std::vector<std::string>& validationWarnings,
-                       std::vector<std::string>& warnings)
+                       std::vector<std::string>& warnings,
+                       std::vector<std::filesystem::path>& documents, bool emitMessages)
     {
         const bool hasSkin = group.skin != nullptr;
         GltfImportReportEXT importReport;
@@ -865,6 +872,7 @@ namespace
 
             const std::string cnjFile = outName + "_" + SanitizeForFilename(clip.name) + ".cnj";
             WriteTextFile(outputDir / cnjFile, json.str());
+            documents.push_back(outputDir / cnjFile);
             return cnjFile;
         };
 
@@ -1239,11 +1247,16 @@ namespace
         json << "  ]\n}\n";
 
         WriteTextFile(outputDir / (outName + ".cnj"), json.str());
+        documents.push_back(outputDir / (outName + ".cnj"));
 
-        std::cout << "Wrote " << outputDir / (outName + ".cnj") << " ("
-                  << meshCounter << " mesh part(s), "
-                  << (hasSkin ? std::to_string(skeleton.bones.size()) + " bones, " : std::string("no skeleton, "))
-                  << clipEntries.size() << " clip(s)).\n";
+        if (emitMessages)
+        {
+            std::cout << "Wrote " << outputDir / (outName + ".cnj") << " ("
+                      << meshCounter << " mesh part(s), "
+                      << (hasSkin ? std::to_string(skeleton.bones.size()) + " bones, "
+                                  : std::string("no skeleton, "))
+                      << clipEntries.size() << " clip(s)).\n";
+        }
     }
 
     // ---------------------------------------------------------------------------
@@ -1259,9 +1272,10 @@ namespace
         // don't) can be corrected with an explicit multiplier applied uniformly to every position
         // and bone translation (see gltf.md's own quality checklist, "Unit/coordinate convention").
         float unitScale = 1.0f;
+        bool emitMessages = true;
     };
 
-    void Convert(const ConvertOptions& opts)
+    CNA::Tools::Gltf::GltfToCnjResult Convert(const ConvertOptions& opts)
     {
         cgltf_options parseOptions{};
         cgltf_data* data = nullptr;
@@ -1277,7 +1291,9 @@ namespace
         // directory, before cgltf_load_buffers resolves those URIs itself. The offline tool is if
         // anything the more exposed of the two entry points -- it is what a build pipeline points
         // at unattended assets with.
-        ValidateExternalUriContainmentEXT(data, opts.inputPath.parent_path());
+        CNA::Tools::Gltf::GltfToCnjResult converted;
+        converted.sourceDependencies =
+            CollectExternalUriDependenciesEXT(data, opts.inputPath.parent_path());
 
         result = cgltf_load_buffers(&parseOptions, data, opts.inputPath.string().c_str());
         if (result != cgltf_result_success)
@@ -1326,17 +1342,28 @@ namespace
                 }
             }
             ConvertGroup(data, sceneGraph, groups[g], outName, gltfDir, opts.outputDir, writtenTextures,
-                         remappedOcclusionTextures, opts.unitScale, validationWarnings, warnings);
+                         remappedOcclusionTextures, opts.unitScale, validationWarnings, warnings,
+                         converted.documents, opts.emitMessages);
         }
+        std::sort(converted.documents.begin(), converted.documents.end());
+        converted.documents.erase(
+            std::unique(converted.documents.begin(), converted.documents.end()),
+            converted.documents.end());
 
-        if (groups.size() > 1)
+        if (opts.emitMessages && groups.size() > 1)
         {
             std::cout << "File had " << groups.size() << " mesh groups (by skin) -- wrote "
                       << groups.size() << " separate Model .cnj files.\n";
         }
-        for (const std::string& w : warnings) { std::cout << "warning: " << w << "\n"; }
+        if (opts.emitMessages)
+        {
+            for (const std::string& w : warnings) { std::cout << "warning: " << w << "\n"; }
+        }
+        converted.warnings = std::move(warnings);
+        return converted;
     }
 
+#ifndef CNA_GLTF_TO_CNJ_NO_MAIN
     void DumpOracle(const std::filesystem::path& inputPath,
                     const std::filesystem::path& outputDir)
     {
@@ -1471,24 +1498,27 @@ namespace
         WriteTextFile(output, json.str());
         std::cout << "Wrote glTF L2-L5 oracle dump to " << output << ".\n";
     }
+#endif
 }
 
 namespace CNA::Tools::Gltf
 {
     // plans/plan_cnb.md CNBF-106. The one named entry point into this file's orchestration, so
     // cna_tool_gltf_to_cnb can run EXACTLY this code rather than a second interpretation of glTF.
-    // The two front-ends share the translation unit, not merely a library, which is what makes
-    // "both formats read glTF the same way" true by construction instead of by testing.
-    void ConvertGltfToCnj(const std::filesystem::path& inputPath,
-                          const std::filesystem::path& outputDir, const std::string& baseName,
-                          float unitScale)
+    // Both CNB front ends call this one linked implementation, which makes "both formats read glTF
+    // the same way" true by construction instead of by testing.
+    GltfToCnjResult ConvertGltfToCnj(const std::filesystem::path& inputPath,
+                                     const std::filesystem::path& outputDir,
+                                     const std::string& baseName, float unitScale,
+                                     bool emitMessages)
     {
         ConvertOptions opts;
         opts.inputPath = inputPath;
         opts.outputDir = outputDir;
         opts.baseName = baseName;
         opts.unitScale = unitScale;
-        Convert(opts);
+        opts.emitMessages = emitMessages;
+        return Convert(opts);
     }
 }
 
@@ -1543,7 +1573,7 @@ int main(int argc, char** argv)
 
     try
     {
-        Convert(opts);
+        static_cast<void>(Convert(opts));
     }
     catch (const std::exception& e)
     {
