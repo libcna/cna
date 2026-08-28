@@ -236,9 +236,10 @@ sound effects, media, curves, animation clips and models, its own compiler front
 **The container is bound; nothing that turns a chunk into an asset is.** `CBIND-106` published the
 format's identities, byte-level constants, checksums, whole-file arithmetic, read limits and chunk
 compression, `CBIND-107` published the parsed document, its bounded cursor and both writers, and
-`CBIND-108` published the texture pixel formats and the three texture schemas — see
-[`CNB.md`](CNB.md). What still has no C route is the loader registry, the remaining asset schemas,
-and `ContentManager::RegisterCnbLoaderEXT` — the hook a game uses to teach a manager about a `.cnb`
+`CBIND-108` published the texture pixel formats and the three texture schemas, and `CBIND-109` the
+model schema with its codec and `.cnj` compile path — see [`CNB.md`](CNB.md). What still has no C
+route is the loader registry, the sprite-font, sound-effect, media, curve and animation schemas, and
+`ContentManager::RegisterCnbLoaderEXT` — the hook a game uses to teach a manager about a `.cnb`
 asset type.
 
 So a C application can load `.xnb` assets, loose files and `.cnj` descriptors through the routes

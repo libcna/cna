@@ -8,7 +8,7 @@
 
 #include <cstddef>
 
-static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 12, 0));
+static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 13, 0));
 static_assert(sizeof(CNA_Result) == sizeof(uint32_t));
 static_assert(sizeof(CNA_Handle) == sizeof(uint64_t));
 static_assert(sizeof(CNA_GraphicsResourceTag) == sizeof(uint64_t));
@@ -1118,3 +1118,29 @@ static_assert(CNA_CNB_TEXTURE_CUBE_FACE_COUNT == UINT32_C(6));
 static_assert(sizeof(CNA_CnbTextureInfo) == 32U);
 static_assert(alignof(CNA_CnbTextureInfo) == 4U);
 static_assert(offsetof(CNA_CnbTextureInfo, representation_count) == 28U);
+
+// CBIND-109: the model schema.
+static_assert(CNA_CNB_EFFECT_KIND_MAXIMUM == UINT32_C(5));
+static_assert(CNA_CNB_MATERIAL_TEXTURE_MAXIMUM == UINT32_C(7));
+static_assert(CNA_CNB_MORPH_DELTA_MAXIMUM == UINT32_C(2));
+static_assert(CNA_CNB_MORPH_KEY_MAXIMUM == UINT32_C(2));
+static_assert(CNA_CNB_SKELETON_MATRIX_MAXIMUM == UINT32_C(2));
+static_assert(CNA_CNB_MODEL_CHUNK_HEADER == UINT32_C(0x484C444D));
+static_assert(CNA_CNB_MODEL_MATERIAL_STRIDE == UINT32_C(368));
+static_assert(CNA_CNB_TEXTURE_SLOT_COUNT == UINT32_C(7));
+static_assert(CNA_CNB_NO_INDEX == UINT32_C(0xFFFFFFFF));
+static_assert(sizeof(CNA_CnbTextureTransform) == 20U);
+static_assert(alignof(CNA_CnbTextureTransform) == 4U);
+static_assert(sizeof(CNA_CnbSamplerState) == 16U);
+static_assert(sizeof(CNA_CnbModelLight) == 24U);
+static_assert(sizeof(CNA_CnbModelInfo) == 56U);
+static_assert(alignof(CNA_CnbModelInfo) == 8U);
+static_assert(sizeof(CNA_CnbModelBone) == 80U);
+static_assert(offsetof(CNA_CnbModelBone, transform) == 16U);
+static_assert(sizeof(CNA_CnbModelPartInfo) == 40U);
+static_assert(sizeof(CNA_CnbMaterialInfo) == 84U);
+static_assert(offsetof(CNA_CnbMaterialInfo, double_sided) == 80U);
+static_assert(sizeof(CNA_CnbMorphInfo) == 48U);
+static_assert(sizeof(CNA_CnbMeshInfo) == 24U);
+static_assert(sizeof(CNA_CnbSkeletonInfo) == 24U);
+static_assert(sizeof(CNA_CnbMorphWeightKeyInfo) == 40U);

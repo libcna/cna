@@ -2,8 +2,15 @@
 
 ## ABI identity
 
-The ABI is `0.12.0`. It adds the `.cnb` texture pixel formats and the `Texture2D`, `TextureCube`
-and `Texture3D` schemas from `plans/plan_binding.md` `CBIND-108`: twenty-eight `cna_cnb_*` routes,
+The ABI is `0.13.0`. It adds the `.cnb` **model** schema from `plans/plan_binding.md` `CBIND-109`:
+seventy-one `cna_cnb_*` routes over two new handle kinds (`CNA_CnbModelDataHandle` and
+`CNA_CnbModelFromCnjHandle`), the `CNA_CnbEffectKind` identity with its six frozen wire values, four
+more selector identities (`CNA_CnbMaterialTextureSlot`, `CNA_CnbMorphDeltaStream`,
+`CNA_CnbMorphKeyStream`, `CNA_CnbSkeletonMatrixSet`), three unversioned value structures
+(`CNA_CnbTextureTransform`, `CNA_CnbSamplerState`, `CNA_CnbModelLight`) and eight versioned ones.
+
+`0.12.0` added the `.cnb` texture pixel formats and the `Texture2D`, `TextureCube`
+and `Texture3D` schemas from `CBIND-108`: twenty-eight `cna_cnb_*` routes,
 the `CNA_CnbTextureFormat` identity with its 27 frozen wire values, the `CNA_CnbTextureDataHandle`
 and the versioned `CNA_CnbTextureInfo`.
 
@@ -17,15 +24,15 @@ checksums, whole-file arithmetic, read limits and chunk compression, the `CNA_Cn
 `CNA_CnbCompression` identities, the versioned `CNA_CnbReadLimits` structure, and the format's
 byte-level constants.
 
-**All three generations are purely additive** -- no existing route, constant, structure field or error
+**All four generations are purely additive** -- no existing route, constant, structure field or error
 rule changed, and the four evolution paths below are the ones taken. The minor moves anyway,
 because that is what this project has done for every additive generation since `0.4.0`: a consumer
-needs a number it can require, and `find_package(CNA 0.12 CONFIG)` is what asks for these routes.
+needs a number it can require, and `find_package(CNA 0.13 CONFIG)` is what asks for these routes.
 
 A C application can now build and parse a `.cnb` container, read its chunks, and encode and decode
-the three texture asset types. It still cannot load a `.cnb` **asset** through a `ContentManager`:
-the remaining schemas and the loader registry are not bound, and `docs/c-api/CNB.md` says exactly
-where that line falls.
+the three texture asset types and the model. It still cannot load a `.cnb` **asset** through a
+`ContentManager`: the font, audio, media, curve and animation schemas and the loader registry are
+not bound, and `docs/c-api/CNB.md` says exactly where that line falls.
 
 `0.9.0` added the owned-`GraphicsDevice` routes
 (`cna_graphics_device_create`/`_destroy`), the render-target ContentLost subscription
@@ -231,7 +238,7 @@ Recording the baseline needs the library:
 python3 tools/c-api/generate_abi_baseline.py --write --library <build>/modules/c-api/libcna_c_api.so
 ```
 
-All four build configurations export the same 3,878 symbols. That is itself part of the contract:
+All four build configurations export the same 3,949 symbols. That is itself part of the contract:
 the ABI **surface** does not vary with the renderer, with `CNA_DEVICES`, or with `CNA_CNAEXT` —
 only the answers do. A route whose backend or layer is absent exists and refuses, rather than
 disappearing from the library. `CNA_CNAEXT` is the newest member of that list and the one with the

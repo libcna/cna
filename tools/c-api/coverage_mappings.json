@@ -18044,6 +18044,274 @@
         "CPP-D5BDAAAE1C5C",
         "CPP-DD4F7E4F97DC"
       ]
+    },
+    {
+      "id": "cnb-model-schema-constants",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnbModelChunk::[A-Za-z0-9_]+|CnbModelSchemaVersion|CnbModelBoneStride|CnbModelMeshStride|CnbModelPartStride|CnbModelMaterialStride|CnbNoIndex|CnbTextureSlotCount|CnbMaxEffectKind)$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "The eleven chunk identifiers as `CNA_CNB_MODEL_CHUNK_HEADER`, `_STRINGS`, `_BONES`, `_MESHES`, `_MATERIALS`, `_VERTEX_DATA`, `_INDEX_DATA`, `_MORPH_DATA`, `_SKELETON`, `_ANIMATIONS` and `_LIGHTS`, plus `CNA_CNB_MODEL_SCHEMA_VERSION`, the four record strides, `CNA_CNB_NO_INDEX`, `CNA_CNB_TEXTURE_SLOT_COUNT` and `CNA_CNB_EFFECT_KIND_MAXIMUM` for `CnbMaxEffectKind`.\n\nThe strides are published for the same reason the texture ones are: a caller that walks a chunk itself needs the number the encoder used, and a schema change that moved one silently would otherwise be invisible until a file failed to load.",
+      "tests": "`CnbModelSmoke.c` `validate_identities` asserts the schema version, all four strides and the no-index sentinel; `validate_round_trip` looks up three of the chunk identifiers in a file the encoder actually produced, so a constant that drifted from what is written would be a missing chunk rather than a silent mismatch. `AbiHeaderC.c` freezes all eighteen.",
+      "status": "implemented",
+      "task": "CBIND-109",
+      "approved_symbols": [
+        "CPP-08E73092C1CF",
+        "CPP-0D528A0657AE",
+        "CPP-22B44F9A943E",
+        "CPP-2C05A63C74FE",
+        "CPP-3E6C727B60AA",
+        "CPP-46683F7ED7AA",
+        "CPP-4CB02227B146",
+        "CPP-768337A9BB2A",
+        "CPP-84768B5547D0",
+        "CPP-8CC86A86AD3A",
+        "CPP-A3A7D45A0297",
+        "CPP-A4147A0C2CEA",
+        "CPP-AD6B158EDD3C",
+        "CPP-C6D08948C396",
+        "CPP-C7B535BD99E9",
+        "CPP-D2238E8FA27A",
+        "CPP-EB18A7FB7321",
+        "CPP-F3D8BB632896",
+        "CPP-F7416266E985"
+      ]
+    },
+    {
+      "id": "cnb-model-effect-kind",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbEffectKind(::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "`CNA_CnbEffectKind`, a `uint32_t` identity with `CNA_CNB_EFFECT_KIND_BASIC`, `_SKINNED`, `_DUAL_TEXTURE`, `_PBR`, `_SKINNED_PBR` and `_EXTERNAL` at their canonical ordinals, and `_MAXIMUM` naming the highest.\n\nThe ordinals are wire format -- they are written into the material chunk -- so they are frozen rather than merely documented, and a value above `_MAXIMUM` is refused when a part is added or replaced rather than stored and written out.",
+      "tests": "`CnbModelSmoke.c` `validate_identities` pins each ordinal and the maximum; `validate_refusals` shows `_MAXIMUM + 1` refused by both `cna_cnb_model_add_part` and `cna_cnb_model_set_part`, so an unknown kind cannot reach a file through either door. `AbiHeaderC.c` freezes the numbering.",
+      "status": "implemented",
+      "task": "CBIND-109",
+      "approved_symbols": [
+        "CPP-0A654B72C373",
+        "CPP-30D4929654B5",
+        "CPP-67F58CA28991",
+        "CPP-6AE30B53840E",
+        "CPP-E9681E40C851",
+        "CPP-F4567ED17436",
+        "CPP-FCB45366BA0F"
+      ]
+    },
+    {
+      "id": "cnb-model-graph",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnbModelData(::[A-Za-z0-9_]+)?|CnbModelBone(::[A-Za-z0-9_]+)?|CnbModelMesh(::[A-Za-z0-9_]+)?)$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "`CNA_CnbModelDataHandle` -- **one handle for the whole graph, whose nodes are reached by index.** The canonical description is a graph of nested vectors, so C cannot hold it by value; the choice that remained was a handle per node or indexed accessors, and this ABI takes the second. A bone, part, mesh, animation or light has no lifetime of its own, a handle each would multiply the registry by the size of the model and leave a caller with one release per node to get right, and every cross-reference the format itself writes -- a mesh's part indices, a bone's parent, the skeleton's hierarchy -- is already an index.\n\nThe model's counts and its two content flags are read through `CNA_CnbModelInfo` and set through `cna_cnb_model_set_flags`; `bones` and `meshes` become `cna_cnb_model_add_bone` / `_get_bone` / `_get_bone_name_size` / `_copy_bone_name` and the matching mesh five, with `partIndices` copied out by `cna_cnb_model_copy_mesh_part_indices`.\n\n`appliesGltfLightingPolicy` and `hasBoneHierarchy` are carried rather than inferred, because each selects a real behavioural fork -- which lighting defaults apply, and whether meshes attach to named bones -- and a reader that guessed would be right most of the time and silently wrong the rest.",
+      "tests": "`CnbModelSmoke.c` builds a two-bone hierarchy with a mesh parented to the child and reads every field back both before and after an encode/decode cycle, so a level dropped by either half of the codec is visible; `validate_refusals` drives an out-of-range index at the bone, part, mesh, animation and light levels.",
+      "status": "implemented",
+      "task": "CBIND-109",
+      "approved_symbols": [
+        "CPP-22C775B9710A",
+        "CPP-2A0EA7BF5ABF",
+        "CPP-36F678C7DEAE",
+        "CPP-3DE6041F34B6",
+        "CPP-48507319A2B6",
+        "CPP-574DEB3D77BA",
+        "CPP-5C389C4BFB5D",
+        "CPP-5D0F3B93AB31",
+        "CPP-6552C76FB152",
+        "CPP-6810AD5A5432",
+        "CPP-76CE78B036BF",
+        "CPP-94E5324C9875",
+        "CPP-A67FD7631128",
+        "CPP-B670D4457D24",
+        "CPP-C9D1EAEE0A7B",
+        "CPP-CD97973EA689",
+        "CPP-E1123037B59D"
+      ]
+    },
+    {
+      "id": "cnb-model-part",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelPart(::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "`CNA_CnbModelPartInfo` for the numeric half, added with `cna_cnb_model_add_part` and replaced with `_set_part`; the two names through count/copy pairs; `vertexBytes` and `indexBytes` through `cna_cnb_model_set_part_vertex_bytes` / `_copy_part_vertex_bytes` and the index pair; `material` and `morph` through the routes in their own rules.\n\n`indexElementSize` and `primitiveCount` are stored rather than derived. The `.cnj` pipeline infers the first from the vertex count, which makes a truncated sidecar decode as a shorter mesh instead of failing; the compiled form states both, and the encoder is what checks them against the bytes actually supplied -- so a partially built part may be inconsistent right up until it is encoded, which is what lets a caller fill it in any order.",
+      "tests": "`CnbModelSmoke.c` round-trips a part with real vertex and index bytes and reads the indices back as `uint16_t` to prove the element size travelled; `validate_mutation` shows `set_part` replacing the numbers while the name, the external effect name and the material stay where they were.",
+      "status": "implemented",
+      "task": "CBIND-109",
+      "approved_symbols": [
+        "CPP-072C682D594A",
+        "CPP-1237CF03F2F4",
+        "CPP-2FC675B7F995",
+        "CPP-341234D3264B",
+        "CPP-4AB7635E9AF2",
+        "CPP-4D06E13FE01F",
+        "CPP-4DEA197E54EE",
+        "CPP-5C62BC11C7A0",
+        "CPP-636BA9B6E9CA",
+        "CPP-7322249EB6FB",
+        "CPP-A6ECF9F1BC28",
+        "CPP-B749274B4851",
+        "CPP-E0BB6040794D",
+        "CPP-ED542DC5B9B0",
+        "CPP-F2B4F8BA87E8",
+        "CPP-FA12DD35580A"
+      ]
+    },
+    {
+      "id": "cnb-model-material",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnbMaterial(::[A-Za-z0-9_]+)?|CnbTextureTransform(::[A-Za-z0-9_]+)?|CnbSamplerState(::[A-Za-z0-9_]+)?)$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "`CNA_CnbMaterialInfo` for the factors and modes, and **two deliberately separate index spaces for the textures**, because the canonical material carries two different orderings and confusing them is the one mistake here a round trip cannot catch -- both halves would be wrong together.\n\nThe eight texture **names** are one operation selected by `CNA_CnbMaterialTextureSlot`, which runs base colour, second layer, normal, metallic-roughness, emissive, occlusion, specular, specular colour. They are eight separate fields canonically, and they are collapsed for the same reason eleven named gamepad button getters were: sixteen count/copy routes would be the same call written out eight times.\n\nThe per-slot arrays -- `textureCoordinateSets`, `textureTransforms`, `samplers` -- keep the importer's own seven-slot order and are addressed by a plain index below `CNA_CNB_TEXTURE_SLOT_COUNT`. `CNA_CnbTextureTransform` and `CNA_CnbSamplerState` are unversioned values, like a thumbstick pair, because each is a fixed mathematical or wire quantity rather than a descriptor that grows.\n\n`CnbSamplerState::declared` is preserved rather than dropped as redundant: the values are the defaults either way, and what it records is whether the author chose them.",
+      "tests": "`CnbModelSmoke.c` writes a **distinguishable value into every one of the eight names and every one of the seven per-slot entries**, then reads all fifteen back after an encode/decode cycle -- so a binding that had crossed the two orderings would surface as a mismatch rather than round-tripping quietly. `validate_refusals` shows a slot above `CNA_CNB_MATERIAL_TEXTURE_MAXIMUM` and an index at `CNA_CNB_TEXTURE_SLOT_COUNT` both refused.",
+      "status": "implemented",
+      "task": "CBIND-109",
+      "approved_symbols": [
+        "CPP-018DEDF3A7A0",
+        "CPP-032D618917B5",
+        "CPP-0DEC44C4FC2C",
+        "CPP-1C5CE6A2D840",
+        "CPP-1DF21868617E",
+        "CPP-202FDD1CF860",
+        "CPP-2477AD2A2117",
+        "CPP-367CEB23B37F",
+        "CPP-401F2FE5E1AC",
+        "CPP-49CF0C5F81EA",
+        "CPP-4EF628B20655",
+        "CPP-626061DEFD6D",
+        "CPP-7A18FA9AA345",
+        "CPP-8C8E98885DEC",
+        "CPP-9BA0C6501801",
+        "CPP-A1702FA2EF1E",
+        "CPP-A968B825C4A1",
+        "CPP-AC7054BBBE38",
+        "CPP-AED269184A65",
+        "CPP-B520DD2DD0F1",
+        "CPP-BB6DBCF0B8F5",
+        "CPP-BEB43916DB3C",
+        "CPP-C430124738C4",
+        "CPP-C5ED088D9922",
+        "CPP-D42ECBA315CB",
+        "CPP-D70F430B03CA",
+        "CPP-D77418FD190D",
+        "CPP-D8502B1AE87D",
+        "CPP-D8A92CB9C07B",
+        "CPP-E5C41C25AAF6",
+        "CPP-E87A2ECF9483",
+        "CPP-E913B7A80CCC",
+        "CPP-EE1BBA5C4733",
+        "CPP-F76E26F83E69",
+        "CPP-FD708EDD46D9"
+      ]
+    },
+    {
+      "id": "cnb-model-morph",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnbMorphData(::[A-Za-z0-9_]+)?|CnbMorphTarget(::[A-Za-z0-9_]+)?|CnbMorphWeightKey(::[A-Za-z0-9_]+)?)$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "`CNA_CnbMorphInfo` for the flags and counts, with `cna_cnb_model_has_morph`, `_set_morph` and `_clear_morph` standing in for the canonical `std::optional` -- presence is an ordinary answer rather than a failed read, which is what an optional means to a C caller.\n\n`CnbMorphTarget`'s three delta vectors and `CnbMorphWeightKey`'s three float vectors each become one count/copy pair selected by `CNA_CnbMorphDeltaStream` and `CNA_CnbMorphKeyStream`, for the same reason the texture names collapsed: three identical operations differing only in which vector they name.\n\nThe counts in `CNA_CnbMorphInfo` are outputs of the routes that build the streams and are ignored on the way in, so a caller cannot declare a target count the targets do not have.",
+      "tests": "`CnbModelSmoke.c` round-trips a morph target with position deltas, a default weight and a weight-track key, and reads an *empty* stream back as a zero count rather than a refusal; `validate_mutation` adds morph data, clears it, and shows every morph route refusing again afterwards -- and clearing what is already absent still succeeding.",
+      "status": "implemented",
+      "task": "CBIND-109",
+      "approved_symbols": [
+        "CPP-1A0A806514CC",
+        "CPP-266AE6575850",
+        "CPP-27DCCCF2BED9",
+        "CPP-2DE4138487D5",
+        "CPP-334C2E25541D",
+        "CPP-6AFB17976B2D",
+        "CPP-9638DF7C7D4C",
+        "CPP-AEAEF5F662E5",
+        "CPP-AF8C194ACB57",
+        "CPP-BC0CDCA37BC4",
+        "CPP-CB028E873BC3",
+        "CPP-D534E921E6A9",
+        "CPP-DA2F89E37984",
+        "CPP-E06EC8B9D35E",
+        "CPP-E865F97C5BD1",
+        "CPP-EAC8B20313CE",
+        "CPP-EDCF5E1AFD73"
+      ]
+    },
+    {
+      "id": "cnb-model-skeleton",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelSkeleton(::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "`cna_cnb_model_set_skeleton` takes the hierarchy and both pose arrays at once, because a skeleton whose three arrays disagree is not a state worth being able to reach; `_clear_skeleton` removes it, `CNA_CnbSkeletonInfo` reports its shape, and the three matrix arrays come out through one `cna_cnb_model_copy_skeleton_matrices` selected by `CNA_CnbSkeletonMatrixSet`.\n\n`rootPrefix` is optional and its absence is reported by `has_root_prefix` rather than by a zero length alone. The `.skeleton.bin` sidecar signalled it by whether bytes were left over, which made \"deliberately absent\" and \"file truncated\" the same observation; the compiled form states it, and so does this ABI.",
+      "tests": "`CnbModelSmoke.c` round-trips a two-joint skeleton whose bind, inverse-bind and root-prefix matrices carry different diagonals, so a route reading the wrong array is a value mismatch rather than a plausible-looking pass; `validate_mutation` sets a skeleton with no prefix and reads `has_root_prefix` false, then clears it and shows the read refusing while `cna_cnb_model_get_info` still answers. `validate_refusals` shows pose arrays that disagree with the joint count refused.",
+      "status": "implemented",
+      "task": "CBIND-109",
+      "approved_symbols": [
+        "CPP-0946724E9581",
+        "CPP-270A2992E4E9",
+        "CPP-37C054BC3F44",
+        "CPP-3A8DC28200AE",
+        "CPP-CCF9673F7F3E"
+      ]
+    },
+    {
+      "id": "cnb-model-animations-lights",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnbModelAnimation(::[A-Za-z0-9_]+)?|CnbModelLight(::[A-Za-z0-9_]+)?)$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "An animation is added with `cna_cnb_model_add_animation`, which takes the **`CNA_AnimationClipEXTDescriptor` this ABI already publishes** for `SkinnedModelEXT` rather than a second clip shape, and read back through `_get_animation`, `_get_animation_track` and `_copy_animation_keyframes` -- the indexed counterpart, since a decoded clip is owned by the model and cannot be handed out as a borrowed descriptor.\n\nThe target space is a separate argument because the descriptor does not carry one: a `SkinnedModelEXT` clip is always a joint palette, while a compiled model may hold either, and applying one as the other is a silent corruption rather than a visible error.\n\n`CNA_CnbModelLight` is a plain value: three floats of direction and three of colour, already reduced to XNA's directional form by the importer.",
+      "tests": "`CnbModelSmoke.c` round-trips a two-keyframe track on bone 1 with a scene-node target space and checks the space survives -- the default is the *other* value, so a dropped field would read as joint palette and fail. `validate_refusals` shows a target space above the maximum, a non-finite duration and a null descriptor each refused.",
+      "status": "implemented",
+      "task": "CBIND-109",
+      "approved_symbols": [
+        "CPP-1A7F4B8C1955",
+        "CPP-3997A337FBA7",
+        "CPP-9EEB27A1B914",
+        "CPP-B541AAA8813D",
+        "CPP-FE67A92509D2",
+        "CPP-FF9F842C6459"
+      ]
+    },
+    {
+      "id": "cnb-model-codec",
+      "qualified_name_regex": "^CNA::Content::Cnb::(EncodeModelToCnb|DecodeModelFromCnb)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "`cna_cnb_encode_model` follows the count/copy shape for bytes whose size is only known by producing them; `cna_cnb_decode_model` takes an open document and hands back a new model handle the caller releases.\n\nA model whose parts, meshes or skeleton do not agree with each other is refused as `CNA_RESULT_IO`, which is where the canonical `ContentLoadException` lands -- the same answer a malformed file gets, because an inconsistent model and an inconsistent file are the same defect seen from two sides.",
+      "tests": "`CnbModelSmoke.c` `validate_round_trip` encodes a model with every level occupied, parses the bytes as a document, checks its asset type and schema version, and decodes it back -- then re-runs the *entire* field-by-field comparison against the decoded handle. A short destination writes nothing and still reports the size needed, and `validate_wrong_asset_type` shows a sprite-font document refused by the model decoder with the output handle left invalid.",
+      "status": "implemented",
+      "task": "CBIND-109",
+      "approved_symbols": [
+        "CPP-6793C6C45D44",
+        "CPP-875DABB69370"
+      ]
+    },
+    {
+      "id": "cnb-model-from-cnj",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnbModelFromCnjResult(::[A-Za-z0-9_]+)?|BuildCnbModelFromCnj)$",
+      "kinds": [
+        "struct",
+        "field",
+        "function"
+      ],
+      "mapping": "`cna_cnb_build_model_from_cnj` produces a `CNA_CnbModelFromCnjHandle` holding the whole result, and the two file lists come out through count/size/copy triples. The model is reached with `cna_cnb_model_from_cnj_take_model`, which **transfers** it into its own handle rather than lending it: a borrowed model would outlive nothing safely, and a caller could otherwise be left holding one that releasing the result had already destroyed. Taking twice is refused.\n\nThe two lists are kept apart because they answer different questions for a build system -- `absorbedFiles` is what to watch for changes, `externalReferences` is what else must be compiled -- and collapsing them would lose that.",
+      "tests": "`CnbModelSmoke.c` `validate_cnj_compile` shows a missing document answering `CNA_RESULT_IO` with the output handle left invalid, and every accessor on that never-created handle refusing rather than reading through it.",
+      "status": "implemented",
+      "task": "CBIND-109",
+      "approved_symbols": [
+        "CPP-0DA59000D954",
+        "CPP-23C849FF710C",
+        "CPP-9267E69B1C18",
+        "CPP-C15803CD266A",
+        "CPP-CF25B89FD73F"
+      ]
     }
   ]
 }

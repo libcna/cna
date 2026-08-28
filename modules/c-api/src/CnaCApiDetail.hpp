@@ -277,6 +277,11 @@ enum class ObjectKind : uint32_t {
     // CBIND-108: the decoded texture description, which the canonical layer expresses as nested
     // vectors and C therefore reaches through a handle rather than a POD.
     CnbTextureData = 172,
+
+    // CBIND-109: the model graph, one handle for the whole of it, and the compile result that
+    // carries a model plus the two file lists a build system needs alongside it.
+    CnbModelData = 173,
+    CnbModelFromCnj = 174,
     Test = UINT32_MAX
 };
 

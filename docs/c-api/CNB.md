@@ -13,15 +13,16 @@ Everything here is declared in `CNA/C/cnb.h` and reachable through the umbrella 
 identifiers, external-reference name validation, the whole-file arithmetic a reader does on
 file-declared numbers, CRC-32C, the read limits, and chunk compression (`CBIND-106`); the parsed
 document, its bounded cursor, the primitive writer and the container writer (`CBIND-107`); and the
-texture pixel formats with the `Texture2D`, `TextureCube` and `Texture3D` schemas (`CBIND-108`).
+texture pixel formats with the `Texture2D`, `TextureCube` and `Texture3D` schemas (`CBIND-108`);
+and the model schema, with its codec and the `.cnj` compile path (`CBIND-109`).
 
-**Not bound.** The loader registry, and the remaining asset schemas — sprite fonts, models, sound
-effects, media, curves and animation clips.
+**Not bound.** The loader registry, and the remaining asset schemas — sprite fonts, sound effects,
+media, curves and animation clips.
 
 So a C application can **build a `.cnb` file and parse one back**, walk its table of contents, read
-any chunk's bytes, check its metadata and external references, and encode or decode a texture. It
-still cannot load a `.cnb` asset through a `ContentManager`. `plans/plan_binding.md` Phase B10 is
-the backlog for the rest, and `docs/c-api/CONTENT.md` records the consequence from the
+any chunk's bytes, check its metadata and external references, and encode or decode a texture or a
+model. It still cannot load a `.cnb` asset through a `ContentManager`. `plans/plan_binding.md`
+Phase B10 is the backlog for the rest, and `docs/c-api/CONTENT.md` records the consequence from the
 `ContentManager` side.
 
 ## Handles, and the parts that have none
@@ -30,9 +31,11 @@ The container primitives — identities, constants, checksums, arithmetic, name 
 compression — are pure functions over caller-owned bytes plus one versioned value structure. There
 is no lifetime to manage there, no thread affinity and no `_destroy`.
 
-The document and the writers do own something, so they are handles: `CNA_CnbDocumentHandle`,
-`CNA_CnbReaderHandle`, `CNA_CnbByteWriterHandle` and `CNA_CnbWriterHandle`. One borrow relationship
-exists and it is the one to know about — see *Documents, cursors and who owns the bytes* below.
+The document, the writers and the two decoded descriptions do own something, so they are handles:
+`CNA_CnbDocumentHandle`, `CNA_CnbReaderHandle`, `CNA_CnbByteWriterHandle`, `CNA_CnbWriterHandle`,
+`CNA_CnbTextureDataHandle`, `CNA_CnbModelDataHandle` and `CNA_CnbModelFromCnjHandle`. One borrow
+relationship exists and it is the one to know about — see *Documents, cursors and who owns the
+bytes* below.
 
 Every route in the family is named `cna_cnb_*` and none carries an `_ext` suffix. The whole of
 `CNA::Content::Cnb` is CNA-namespace surface with no XNA 4.0 counterpart, so — following
@@ -202,6 +205,107 @@ a *different* asset type — that is how a sprite font carries its glyph atlas, 
 chunks, strides, alignment and validation a standalone texture would use. An atlas normally belongs
 to one font, so embedding is right there; a model's textures are shared and are referenced through
 `XREF` instead.
+
+## Models
+
+A model is the largest schema in the format and the one whose C shape is a decision rather than a
+transcription. The canonical description is a graph of nested vectors — bones, parts each with a
+material and optional morph data, meshes, an optional skeleton, animations, lights — and C cannot
+hold one by value.
+
+**One handle for the whole graph; its nodes are reached by index.** The alternative was a borrowed
+handle per node, and it was rejected for three reasons: a bone or a part has no lifetime of its own,
+a handle each would multiply the registry by the size of the model and leave a caller with one
+release per node to get right, and every cross-reference the *format itself* writes is already an
+index — a mesh's part indices, a bone's parent, the skeleton's hierarchy.
+
+```c
+CNA_CnbModelDataHandle model;
+cna_cnb_model_create(&model);
+
+float transform[16] = { 1,0,0,0,  0,1,0,0,  0,0,1,0,  0,0,0,1 };
+uint64_t root = 0;
+cna_cnb_model_add_bone(model, name, -1, transform, &root);
+
+CNA_CnbModelPartInfo part = { .struct_size = sizeof part,
+                              .struct_version = CNA_CNB_MODEL_PART_INFO_STRUCT_VERSION };
+/* fill in strides and counts */
+cna_cnb_model_add_part(model, &part, part_name, no_external_effect, NULL);
+cna_cnb_model_set_part_vertex_bytes(model, 0, vertices, vertex_byte_count);
+```
+
+A part's bytes and its declared counts are **not checked against each other until the model is
+encoded**, which is what lets a caller fill a part in any order. `cna_cnb_encode_model` is where an
+inconsistency becomes `CNA_RESULT_IO`.
+
+### The material carries two texture orderings, and they are different
+
+This is the one trap on this page. A material names **eight** textures — CNA's own effect slots,
+including `DualTextureEffect`'s second layer, which glTF has no counterpart for — and carries
+**seven** per-slot arrays for coordinate sets, UV transforms and samplers, in the *importer's* slot
+order. The two are addressed differently on purpose:
+
+| What | Addressed by | Range |
+|---|---|---|
+| Texture asset names | `CNA_CnbMaterialTextureSlot` | 0 … `CNA_CNB_MATERIAL_TEXTURE_MAXIMUM` (8 values) |
+| Coordinate sets, transforms, samplers | a plain index | 0 … `CNA_CNB_TEXTURE_SLOT_COUNT - 1` (7 values) |
+
+A binding that crossed them would still round-trip, because both halves would be wrong together.
+`CnbModelSmoke.c` writes a distinguishable value into all fifteen and reads them all back for
+exactly that reason.
+
+One canonical limit to know: a coordinate set must be **0 or 1**. CNA's vertex layouts carry two UV
+sets, and the encoder refuses a model naming anything else — the setter stores what you give it and
+the encode is where it is checked.
+
+### Optional parts are absences, not failures
+
+Morph data and the skeleton are `std::optional` canonically. In C, presence is asked for rather
+than discovered from a refusal:
+
+```c
+CNA_Bool has_morph = CNA_FALSE;
+cna_cnb_model_has_morph(model, part_index, &has_morph);
+```
+
+`cna_cnb_model_get_info` reports `has_skeleton` the same way. Reading either when it is absent is
+`CNA_RESULT_INVALID_ARGUMENT` — a caller's mistake, since the presence query answers first — and
+clearing something already absent is still a success.
+
+The skeleton's three matrix arrays and a morph target's three delta streams are each one route
+selected by an identity (`CNA_CnbSkeletonMatrixSet`, `CNA_CnbMorphDeltaStream`,
+`CNA_CnbMorphKeyStream`) rather than three near-identical routes.
+
+`has_root_prefix` deserves its own note: the old `.skeleton.bin` sidecar signalled the per-joint
+scene-ancestry prefix by whether any bytes were left over, which made *deliberately absent* and
+*file truncated* the same observation. The compiled form states it, and so does this ABI.
+
+### Animations reuse the clip shape the ABI already has
+
+`cna_cnb_model_add_animation` takes the same `CNA_AnimationClipEXTDescriptor` the `SkinnedModelEXT`
+routes take, rather than a second clip shape. Reading a clip back is indexed instead, because a
+decoded clip belongs to the model and cannot be lent out as a borrowed descriptor.
+
+The **target space is a separate argument**, because the descriptor does not carry one: a
+`SkinnedModelEXT` clip is always a joint palette, while a compiled model may hold either a joint
+palette or a scene node. Applying one as the other is a silent corruption rather than a visible
+error, which is why it is stated rather than defaulted.
+
+### Compiling a `.cnj`
+
+```c
+CNA_CnbModelFromCnjHandle compiled;
+cna_cnb_build_model_from_cnj(cnj_path, content_root, &compiled);
+
+CNA_CnbModelDataHandle model;
+cna_cnb_model_from_cnj_take_model(compiled, &model);   /* transferred, not borrowed */
+```
+
+The result also carries two file lists a build system needs and that are deliberately kept apart:
+`absorbed_file` is what the compile consumed, so a dependency graph knows when to rebuild, and
+`external_reference` is what it left external, so the same graph knows those assets must also be
+compiled. The model is **taken** rather than borrowed so that releasing the result cannot destroy a
+model a caller is still holding; taking it twice is refused.
 
 ## Which failure means what
 

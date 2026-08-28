@@ -845,6 +845,21 @@ if(CNA_BUILD_TESTS)
     cna_c_api_enable_strict_warnings(cna_c_api_cnb_texture_smoke)
     add_test(NAME CApi_CnbTextureSmoke COMMAND cna_c_api_cnb_texture_smoke)
 
+    # CBIND-109: the model schema. Its own suite because the model is the one asset whose C shape
+    # is a decision -- one handle for a graph reached by index -- and because its material carries
+    # two different texture orderings that a round trip alone would let stay confused.
+    add_executable(cna_c_api_cnb_model_smoke
+        tests/pure_c/CnbModelSmoke.c
+    )
+    set_target_properties(cna_c_api_cnb_model_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_cnb_model_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_cnb_model_smoke)
+    add_test(NAME CApi_CnbModelSmoke COMMAND cna_c_api_cnb_model_smoke)
+
     add_executable(cna_c_api_packed_vector_smoke
         tests/pure_c/PackedVectorSmoke.c
     )

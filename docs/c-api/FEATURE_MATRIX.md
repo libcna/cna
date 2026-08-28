@@ -279,11 +279,11 @@ thread.
 The following families are planned work, not implicitly supported and not permanent exclusions:
 
 - the remaining typed content asset routes;
-- the parts of the **CNB content format** (`CNA::Content::Cnb`) above its container, document and
-  texture schemas: the sprite-font, model, sound-effect, media, curve and animation schemas, the
+- the parts of the **CNB content format** (`CNA::Content::Cnb`) above its container, document,
+  texture and model schemas: the sprite-font, sound-effect, media, curve and animation schemas, the
   loader registry and `ContentManager::RegisterCnbLoaderEXT`. A C application can build and parse a
-  `.cnb` container, read its chunks and encode or decode a texture — `CBIND-106`, `CBIND-107` and
-  `CBIND-108` bound that much, see [`CNB.md`](CNB.md) — and cannot load a `.cnb` asset through a
+  `.cnb` container, read its chunks and encode or decode a texture or a model — `CBIND-106` through
+  `CBIND-109` bound that much, see [`CNB.md`](CNB.md) — and cannot load a `.cnb` asset through a
   `ContentManager`. Backlogged as `plans/plan_binding.md` Phase B10;
 - remaining audio (file/content loading, fire-and-forget, globals/3D, streaming, microphone and
   XACT), plus media and video;

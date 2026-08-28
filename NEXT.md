@@ -109,9 +109,19 @@ serialized safely, and publishing the C constants at anything but the canonical 
 reintroduce that hazard one layer out. The mapping between the two is round-tripped over all 27,
 which is the check that finds drift.
 
-**Where it stands:** 536 headers / 8,812 symbols — 8,053 implemented, 15 approved partial, 285
-planned, 459 not applicable. ABI `0.12.0`, 3,878 exported symbols, the same set with `CNA_CNAEXT` on
-and off. 100/100 `CApi` tests in all three arms: `cmake-build-debug` (HEADLESS, `CNA_CNAEXT=OFF`),
+**`CBIND-109` then bound the model schema** — 71 routes, 129 rows, the biggest single type in the
+format. Its lasting decision is the shape one: **one handle for the whole graph, its nodes reached
+by index**, rather than a borrowed handle per bone, part, mesh, animation and light. A node has no
+lifetime of its own, a handle each would multiply the registry by the size of the model, and every
+cross-reference the format writes is already an index. Its lasting *trap* is the material's two
+texture orderings — eight named CNA effect slots against seven importer-ordered per-slot arrays —
+which are given two separate index spaces on purpose, because a binding that crossed them would
+round-trip perfectly with both halves wrong together. The suite writes a distinguishable value into
+all fifteen for exactly that reason.
+
+**Where it stands:** 536 headers / 8,812 symbols — 8,182 implemented, 15 approved partial, 156
+planned, 459 not applicable. ABI `0.13.0`, 3,949 exported symbols, the same set with `CNA_CNAEXT` on
+and off. 101/101 `CApi` tests in all three arms: `cmake-build-debug` (HEADLESS, `CNA_CNAEXT=OFF`),
 `cmake-build-cnaext` (OPENGLES3/EasyGL, `CNA_CNAEXT=ON`) and `build-probe` (HEADLESS,
 `CNA_CNAEXT=ON`).
 

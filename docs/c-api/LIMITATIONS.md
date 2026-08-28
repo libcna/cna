@@ -15,7 +15,7 @@ the C ABI is only repeating them.
 
 | | Symbols | What it means for a caller |
 |---|---:|---|
-| Fully mapped | 8,053 | A C route exists and is tested. |
+| Fully mapped | 8,182 | A C route exists and is tested. |
 | **Partially mapped** | 15 | A route exists but covers a stated subset. Read the next section before relying on one. |
 | **No C form** | 459 | Nothing callable was omitted; see the reasons below. |
 
@@ -126,7 +126,7 @@ promise rather than of any declaration.
 | Subject | What it means | Status |
 |---|---|---|
 | **Enabled FFmpeg stays a system dependency** | `CNA_ENABLE_VIDEO=OFF` omits FFmpeg entirely while preserving the C video ABI with deterministic `CNA_RESULT_NOT_SUPPORTED` playback. When `AUTO/ON` selects video, libavcodec, libavformat, libavutil and libswresample come from the distribution rather than being copied into the package: copying them would take on their redistribution terms, freeze their soname against security updates and drag in their transitive libraries. | by design (CONSUMING.md) |
-| **The static archive keeps a few dozen C++ statics visible** | A static CNA exists and exports exactly the same 3,878 `cna_*` names the shared library does: the whole closure is partially linked into one object and every other global symbol is localized. What cannot be localized is the handful GCC emits as `STB_GNU_UNIQUE` -- function-local statics in inline and template code, whose uniqueness is what makes them correct. They are mangled C++ names, no C program can collide with them, and none is callable API. How many there are depends on what the configuration links -- 154 with the engine layer off, 164 and 165 with it on, measured on 2026-08-28 -- which is why no single number is written here. The build **fails** if a symbol of any other binding survives, so the exception cannot widen quietly. | by design (CONSUMING.md) |
+| **The static archive keeps a few dozen C++ statics visible** | A static CNA exists and exports exactly the same 3,949 `cna_*` names the shared library does: the whole closure is partially linked into one object and every other global symbol is localized. What cannot be localized is the handful GCC emits as `STB_GNU_UNIQUE` -- function-local statics in inline and template code, whose uniqueness is what makes them correct. They are mangled C++ names, no C program can collide with them, and none is callable API. How many there are depends on what the configuration links -- 154 with the engine layer off, 164 and 165 with it on, measured on 2026-08-28 -- which is why no single number is written here. The build **fails** if a symbol of any other binding survives, so the exception cannot widen quietly. | by design (CONSUMING.md) |
 | **One active CNA runtime per process** | A second `cna_game_create` while a game is alive returns `CNA_RESULT_INVALID_STATE`. This makes the interaction with CNA's process-level graphics and input state explicit; simultaneous runtimes are an ABI-semantic change requiring a reviewed design. | by design (HANDLES.md) |
 | **Handles are thread-affine and never leave their process** | A handle used from a thread other than its creator's answers `CNA_RESULT_THREAD`. Handles are not pointers, not serializable and not stable across processes. | by design (HANDLES.md) |
 | **The ABI is 0.x and experimental** | An incompatible change requires only a minor-version increment, release notes and a regenerated baseline. The additive-only guarantee begins at 1.0, which is a separate, later decision. | by design (ABI_VERSIONING.md) |

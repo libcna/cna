@@ -5,6 +5,7 @@
 
 #include "CNA/C/core.h"
 #include "CNA/C/graphics.h"
+#include "CNA/C/models.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -2420,6 +2421,1503 @@ CNA_C_API CNA_Result cna_cnb_document_read_embedded_texture2d(
     CNA_CnbDocumentHandle document,
     CNA_StringView label,
     CNA_CnbTextureDataHandle* out_texture);
+
+/* --- CBIND-109: the model schema ---------------------------------------------------------------- */
+
+/**
+ * @brief The neutral, fully decoded description of a compiled `.cnb` `Model`.
+ *
+ * This is the seam between the three pieces of the model pipeline, and it exists so none of them
+ * has to know about the others' representations: a compiler front end produces one, the codec turns
+ * it into `.cnb` bytes and back, and a `ContentManager` turns it into a real `Model`. Everything in
+ * it is plain data -- no pointers into a source file, no GPU objects, no graphics device -- which is
+ * what lets the whole encode/decode half be exercised with no display and no renderer at all.
+ *
+ * External assets, meaning textures and an effect named by asset path, are held as **logical asset
+ * names** rather than embedded bytes. A texture shared by a hundred models stays one shared asset a
+ * content manager loads once; embedding a copy per model would defeat its cache.
+ *
+ * **One handle for the whole graph, and its nodes are reached by index.** A bone, part, mesh,
+ * animation or light has no lifetime of its own -- it lives exactly as long as the model -- so a
+ * handle per node would multiply the registry by the size of the model and leave a caller with
+ * hundreds of releases to get right. Every cross-reference in the format is already an index
+ * (`parent_bone`, a mesh's part indices, the skeleton's hierarchy), so indexed accessors keep the C
+ * shape and the file's shape the same.
+ */
+typedef CNA_Handle CNA_CnbModelDataHandle;
+
+/** @brief Which effect a compiled mesh part is drawn with. */
+typedef uint32_t CNA_CnbEffectKind;
+
+/** @brief `BasicEffect`. */
+#define CNA_CNB_EFFECT_KIND_BASIC UINT32_C(0)
+/** @brief `SkinnedEffect`. */
+#define CNA_CNB_EFFECT_KIND_SKINNED UINT32_C(1)
+/** @brief `DualTextureEffect`. */
+#define CNA_CNB_EFFECT_KIND_DUAL_TEXTURE UINT32_C(2)
+/** @brief `PbrEffect`. */
+#define CNA_CNB_EFFECT_KIND_PBR UINT32_C(3)
+/** @brief `SkinnedPbrEffect`. */
+#define CNA_CNB_EFFECT_KIND_SKINNED_PBR UINT32_C(4)
+/** @brief An `Effect` asset named by the part's external-effect name. */
+#define CNA_CNB_EFFECT_KIND_EXTERNAL UINT32_C(5)
+/** @brief Highest effect kind this ABI version names. */
+#define CNA_CNB_EFFECT_KIND_MAXIMUM CNA_CNB_EFFECT_KIND_EXTERNAL
+
+/** @brief Sentinel for "no index", as the format writes it. */
+#define CNA_CNB_NO_INDEX UINT32_C(0xFFFFFFFF)
+
+/** @brief Number of texture slots a compiled material carries per-slot state for. */
+#define CNA_CNB_TEXTURE_SLOT_COUNT UINT32_C(7)
+
+/**
+ * @brief Which of a material's eight texture **names** a route is addressing.
+ *
+ * **These are not the same eight slots as the per-slot state arrays, and the difference is a real
+ * trap.** The names below are CNA's own effect slots and include `DualTextureEffect`'s second
+ * layer, which glTF has no counterpart for -- eight of them. The coordinate sets, transforms and
+ * samplers are seven-element arrays in the importer's own slot order: base colour, normal,
+ * metallic-roughness, occlusion, emissive, specular, specular colour. The two index spaces are
+ * deliberately kept apart: a name is addressed with this identity, and a per-slot array with a
+ * plain index below `CNA_CNB_TEXTURE_SLOT_COUNT`.
+ *
+ * The canonical material declares the eight as eight separate string fields. They are one operation
+ * selected by a slot here, the way eleven named gamepad button getters became one masked test:
+ * sixteen routes for one operation would be the same call written out eight times.
+ */
+typedef uint32_t CNA_CnbMaterialTextureSlot;
+
+/** @brief The base-colour texture. */
+#define CNA_CNB_MATERIAL_TEXTURE_BASE_COLOR UINT32_C(0)
+/** @brief The second (`DualTextureEffect`) texture. */
+#define CNA_CNB_MATERIAL_TEXTURE_SECOND UINT32_C(1)
+/** @brief The normal map. */
+#define CNA_CNB_MATERIAL_TEXTURE_NORMAL UINT32_C(2)
+/** @brief The metallic-roughness map. */
+#define CNA_CNB_MATERIAL_TEXTURE_METALLIC_ROUGHNESS UINT32_C(3)
+/** @brief The emissive map. */
+#define CNA_CNB_MATERIAL_TEXTURE_EMISSIVE UINT32_C(4)
+/** @brief The occlusion map. */
+#define CNA_CNB_MATERIAL_TEXTURE_OCCLUSION UINT32_C(5)
+/** @brief The specular map. */
+#define CNA_CNB_MATERIAL_TEXTURE_SPECULAR UINT32_C(6)
+/** @brief The specular-colour map. */
+#define CNA_CNB_MATERIAL_TEXTURE_SPECULAR_COLOR UINT32_C(7)
+/** @brief Highest material texture slot this ABI version names. */
+#define CNA_CNB_MATERIAL_TEXTURE_MAXIMUM CNA_CNB_MATERIAL_TEXTURE_SPECULAR_COLOR
+
+/** @brief Which of a morph target's three delta streams a route is addressing. */
+typedef uint32_t CNA_CnbMorphDeltaStream;
+
+/** @brief Position deltas, XYZ per vertex. */
+#define CNA_CNB_MORPH_DELTA_POSITION UINT32_C(0)
+/** @brief Normal deltas, XYZ per vertex. */
+#define CNA_CNB_MORPH_DELTA_NORMAL UINT32_C(1)
+/** @brief Tangent deltas, XYZ per vertex. */
+#define CNA_CNB_MORPH_DELTA_TANGENT UINT32_C(2)
+/** @brief Highest morph delta stream this ABI version names. */
+#define CNA_CNB_MORPH_DELTA_MAXIMUM CNA_CNB_MORPH_DELTA_TANGENT
+
+/** @brief Which of a morph weight key's three float streams a route is addressing. */
+typedef uint32_t CNA_CnbMorphKeyStream;
+
+/** @brief One weight per morph target. */
+#define CNA_CNB_MORPH_KEY_WEIGHTS UINT32_C(0)
+/** @brief Cubic-spline in-tangents, or empty. */
+#define CNA_CNB_MORPH_KEY_IN_TANGENT UINT32_C(1)
+/** @brief Cubic-spline out-tangents, or empty. */
+#define CNA_CNB_MORPH_KEY_OUT_TANGENT UINT32_C(2)
+/** @brief Highest morph key stream this ABI version names. */
+#define CNA_CNB_MORPH_KEY_MAXIMUM CNA_CNB_MORPH_KEY_OUT_TANGENT
+
+/** @brief Which of a skeleton's three matrix arrays a route is addressing. */
+typedef uint32_t CNA_CnbSkeletonMatrixSet;
+
+/** @brief Joint-local bind pose per joint. */
+#define CNA_CNB_SKELETON_MATRIX_BIND_POSE UINT32_C(0)
+/** @brief Inverse global bind pose per joint. */
+#define CNA_CNB_SKELETON_MATRIX_INVERSE_BIND_POSE UINT32_C(1)
+/** @brief Per-joint scene-ancestry prefix, or empty when the source carried none. */
+#define CNA_CNB_SKELETON_MATRIX_ROOT_PREFIX UINT32_C(2)
+/** @brief Highest skeleton matrix set this ABI version names. */
+#define CNA_CNB_SKELETON_MATRIX_MAXIMUM CNA_CNB_SKELETON_MATRIX_ROOT_PREFIX
+
+/** @brief `MDLH` -- counts and flags. */
+#define CNA_CNB_MODEL_CHUNK_HEADER UINT32_C(0x484C444D)
+/** @brief `MSTR` -- the string table every name indexes into. */
+#define CNA_CNB_MODEL_CHUNK_STRINGS UINT32_C(0x5254534D)
+/** @brief `MBON` -- the scene graph. */
+#define CNA_CNB_MODEL_CHUNK_BONES UINT32_C(0x4E4F424D)
+/** @brief `MMSH` -- the mesh table. */
+#define CNA_CNB_MODEL_CHUNK_MESHES UINT32_C(0x48534D4D)
+/** @brief `MMAT` -- the material table. */
+#define CNA_CNB_MODEL_CHUNK_MATERIALS UINT32_C(0x54414D4D)
+/** @brief `MVTX` -- one part's interleaved vertex bytes. */
+#define CNA_CNB_MODEL_CHUNK_VERTEX_DATA UINT32_C(0x5854564D)
+/** @brief `MIDX` -- one part's index bytes. */
+#define CNA_CNB_MODEL_CHUNK_INDEX_DATA UINT32_C(0x5844494D)
+/** @brief `MMRP` -- one part's morph-target data. */
+#define CNA_CNB_MODEL_CHUNK_MORPH_DATA UINT32_C(0x50524D4D)
+/** @brief `MSKL` -- the skinning skeleton. */
+#define CNA_CNB_MODEL_CHUNK_SKELETON UINT32_C(0x4C4B534D)
+/** @brief `MANM` -- the embedded animation clips. */
+#define CNA_CNB_MODEL_CHUNK_ANIMATIONS UINT32_C(0x4D4E414D)
+/** @brief `MLIT` -- the punctual lights. */
+#define CNA_CNB_MODEL_CHUNK_LIGHTS UINT32_C(0x54494C4D)
+
+/** @brief Highest model schema version this build understands. */
+#define CNA_CNB_MODEL_SCHEMA_VERSION UINT32_C(1)
+/** @brief Bytes one bone record occupies. */
+#define CNA_CNB_MODEL_BONE_STRIDE UINT32_C(72)
+/** @brief Bytes one mesh record occupies, before its part-index list. */
+#define CNA_CNB_MODEL_MESH_STRIDE UINT32_C(16)
+/** @brief Bytes one part record occupies. */
+#define CNA_CNB_MODEL_PART_STRIDE UINT32_C(56)
+/** @brief Bytes one material record occupies. */
+#define CNA_CNB_MODEL_MATERIAL_STRIDE UINT32_C(368)
+
+/**
+ * @brief One texture slot's `KHR_texture_transform`-shaped UV transform.
+ *
+ * Unversioned on purpose: this is a fixed mathematical value like a thumbstick pair, not a
+ * descriptor that grows with the schema.
+ */
+typedef struct CNA_CnbTextureTransform {
+    /** @brief Translation applied after scale and rotation. */
+    float offset_x;
+    /** @brief Translation applied after scale and rotation. */
+    float offset_y;
+    /** @brief Per-axis scale, applied first. */
+    float scale_x;
+    /** @brief Per-axis scale, applied first. */
+    float scale_y;
+    /** @brief Counter-clockwise rotation in radians, applied after scale. */
+    float rotation;
+} CNA_CnbTextureTransform;
+
+/** @brief One texture slot's sampler state. Unversioned, for the same reason as the transform. */
+typedef struct CNA_CnbSamplerState {
+    /** @brief `TextureFilter`, as its numeric value. */
+    uint32_t filter;
+    /** @brief `TextureAddressMode` for U. */
+    uint32_t address_u;
+    /** @brief `TextureAddressMode` for V. */
+    uint32_t address_v;
+    /**
+     * @brief Whether the source asset declared this sampler, rather than these being defaults.
+     *
+     * The values are identical either way, so this records *why* -- which is what a source that
+     * distinguishes "the author chose repeat" from "the author said nothing" needs.
+     */
+    CNA_Bool declared;
+    /** @brief Reserved; always written as zero. */
+    uint8_t reserved[3];
+} CNA_CnbSamplerState;
+
+/** @brief One `KHR_lights_punctual` light, already reduced to XNA's directional form. */
+typedef struct CNA_CnbModelLight {
+    /** @brief World-space direction the light travels in. */
+    float direction[3];
+    /** @brief Diffuse colour, clamped to 0..1 per channel. */
+    float diffuse_color[3];
+} CNA_CnbModelLight;
+
+/** @brief Version of @ref CNA_CnbModelInfo this header declares. */
+#define CNA_CNB_MODEL_INFO_STRUCT_VERSION UINT32_C(1)
+
+/** @brief A model's counts and the two flags that are content rather than inference. */
+typedef struct CNA_CnbModelInfo {
+    /** @brief Size of this structure, in bytes. */
+    uint32_t struct_size;
+    /** @brief Structure version; `CNA_CNB_MODEL_INFO_STRUCT_VERSION`. */
+    uint32_t struct_version;
+    /** @brief Number of bones in the scene graph. */
+    uint64_t bone_count;
+    /** @brief Number of renderable parts. */
+    uint64_t part_count;
+    /** @brief Number of meshes. */
+    uint64_t mesh_count;
+    /** @brief Number of embedded animation clips. */
+    uint64_t animation_count;
+    /** @brief Number of punctual lights. */
+    uint64_t light_count;
+    /** @brief Whether the model carries a skinning skeleton. */
+    CNA_Bool has_skeleton;
+    /**
+     * @brief Whether this model's materials were authored under glTF's lighting conventions.
+     *
+     * A glTF-imported model expects the importer's own lighting rig, including its "no light was
+     * declared, so light it by default" fallback; a hand-authored model expects XNA's defaults,
+     * where `BasicEffect` starts unlit. The two look different, so which applies is a property of
+     * the content and travels with it rather than being guessed from the presence of lights.
+     */
+    CNA_Bool applies_gltf_lighting_policy;
+    /**
+     * @brief Whether the source document carried a real scene-node hierarchy.
+     *
+     * Equivalent to more than one bone, but stated rather than inferred, because the runtime
+     * behaviour it selects is a real semantic fork: attach meshes to their named bone, or give
+     * every mesh its own child of the root.
+     */
+    CNA_Bool has_bone_hierarchy;
+    /** @brief Reserved; always written as zero. */
+    uint8_t reserved;
+} CNA_CnbModelInfo;
+
+/** @brief Version of @ref CNA_CnbModelBone this header declares. */
+#define CNA_CNB_MODEL_BONE_STRUCT_VERSION UINT32_C(1)
+
+/** @brief One node of a compiled model's scene graph, without its name. */
+typedef struct CNA_CnbModelBone {
+    /** @brief Size of this structure, in bytes. */
+    uint32_t struct_size;
+    /** @brief Structure version; `CNA_CNB_MODEL_BONE_STRUCT_VERSION`. */
+    uint32_t struct_version;
+    /** @brief Index of this bone's parent, or -1 for the root. */
+    int32_t parent;
+    /** @brief Reserved; always written as zero. */
+    uint32_t reserved;
+    /** @brief The bone-local transform, in XNA row-major field order `M11`..`M44`. */
+    float transform[16];
+} CNA_CnbModelBone;
+
+/** @brief Version of @ref CNA_CnbModelPartInfo this header declares. */
+#define CNA_CNB_MODEL_PART_INFO_STRUCT_VERSION UINT32_C(1)
+
+/** @brief One renderable part's numeric state, without its names, bytes or material. */
+typedef struct CNA_CnbModelPartInfo {
+    /** @brief Size of this structure, in bytes. */
+    uint32_t struct_size;
+    /** @brief Structure version; `CNA_CNB_MODEL_PART_INFO_STRUCT_VERSION`. */
+    uint32_t struct_version;
+    /** @brief Bytes per vertex in the part's vertex bytes. */
+    uint32_t vertex_stride;
+    /** @brief Number of vertices; stride times count must equal the vertex byte count. */
+    uint32_t vertex_count;
+    /** @brief Number of indices; element size times count must equal the index byte count. */
+    uint32_t index_count;
+    /**
+     * @brief Bytes per index: 2 or 4.
+     *
+     * Declared rather than inferred. The `.cnj` pipeline derives it from the vertex count, which
+     * means a truncated sidecar silently decodes as a shorter mesh; storing it removes that guess.
+     */
+    uint32_t index_element_size;
+    /** @brief Primitive topology, as its numeric value. 4 is triangles, also glTF's default. */
+    uint32_t primitive_topology;
+    /** @brief Number of primitives the index buffer describes, for the chosen topology. */
+    uint32_t primitive_count;
+    /** @brief Which effect this part draws with. */
+    CNA_CnbEffectKind effect_kind;
+    /** @brief Whether the effect samples the part's per-vertex colour. */
+    CNA_Bool vertex_color_enabled;
+    /** @brief Whether the material is `KHR_materials_unlit`. */
+    CNA_Bool unlit;
+    /** @brief Reserved; always written as zero. */
+    uint8_t reserved[2];
+} CNA_CnbModelPartInfo;
+
+/** @brief Version of @ref CNA_CnbMaterialInfo this header declares. */
+#define CNA_CNB_MATERIAL_INFO_STRUCT_VERSION UINT32_C(1)
+
+/** @brief A material's numeric state, without its eight texture names or its per-slot arrays. */
+typedef struct CNA_CnbMaterialInfo {
+    /** @brief Size of this structure, in bytes. */
+    uint32_t struct_size;
+    /** @brief Structure version; `CNA_CNB_MATERIAL_INFO_STRUCT_VERSION`. */
+    uint32_t struct_version;
+    /** @brief `baseColorFactor`, RGBA. */
+    float base_color_factor[4];
+    /** @brief `emissiveFactor`, RGB. */
+    float emissive_factor[3];
+    /** @brief `KHR_materials_specular.specularColorFactor`, linear RGB. */
+    float specular_color_factor[3];
+    /** @brief `pbrMetallicRoughness.metallicFactor`. */
+    float metallic_factor;
+    /** @brief `pbrMetallicRoughness.roughnessFactor`. */
+    float roughness_factor;
+    /** @brief `KHR_materials_ior.ior`. */
+    float ior;
+    /** @brief `KHR_materials_specular.specularFactor`. */
+    float specular_factor;
+    /** @brief `normalTexture.scale`. */
+    float normal_scale;
+    /** @brief `occlusionTexture.strength`. */
+    float occlusion_strength;
+    /** @brief `alphaCutoff`. */
+    float alpha_cutoff;
+    /** @brief `AlphaModeEXT`, as its numeric value. */
+    uint32_t alpha_mode;
+    /** @brief `doubleSided`. */
+    CNA_Bool double_sided;
+    /** @brief Reserved; always written as zero. */
+    uint8_t reserved[3];
+} CNA_CnbMaterialInfo;
+
+/** @brief Version of @ref CNA_CnbMorphInfo this header declares. */
+#define CNA_CNB_MORPH_INFO_STRUCT_VERSION UINT32_C(1)
+
+/** @brief A part's morph-target state, without its delta streams, weights or keys. */
+typedef struct CNA_CnbMorphInfo {
+    /** @brief Size of this structure, in bytes. */
+    uint32_t struct_size;
+    /** @brief Structure version; `CNA_CNB_MORPH_INFO_STRUCT_VERSION`. */
+    uint32_t struct_version;
+    /** @brief Vertex count each non-empty delta stream covers. */
+    uint32_t vertex_count;
+    /** @brief Reserved; always written as zero. */
+    uint32_t reserved;
+    /** @brief Number of morph targets. */
+    uint64_t target_count;
+    /** @brief Number of default blend weights, one per target. */
+    uint64_t weight_count;
+    /** @brief Number of weight-track keys, zero when there is no track. */
+    uint64_t weight_track_key_count;
+    /** @brief Whether the blend must recompute flat normals from the morphed positions. */
+    CNA_Bool recompute_flat_normals;
+    /** @brief Whether the weight track uses step interpolation. */
+    CNA_Bool weight_track_step_interpolation;
+    /** @brief Whether the weight track is cubic-spline interpolated. */
+    CNA_Bool weight_track_cubic_spline;
+    /** @brief Reserved; always written as zero. */
+    uint8_t reserved2[5];
+} CNA_CnbMorphInfo;
+
+/** @brief Version of @ref CNA_CnbMeshInfo this header declares. */
+#define CNA_CNB_MESH_INFO_STRUCT_VERSION UINT32_C(1)
+
+/** @brief One mesh's state, without its name or its part-index list. */
+typedef struct CNA_CnbMeshInfo {
+    /** @brief Size of this structure, in bytes. */
+    uint32_t struct_size;
+    /** @brief Structure version; `CNA_CNB_MESH_INFO_STRUCT_VERSION`. */
+    uint32_t struct_version;
+    /** @brief Index into the model's bones, or -1 when the model carries no hierarchy. */
+    int32_t parent_bone;
+    /** @brief Reserved; always written as zero. */
+    uint32_t reserved;
+    /** @brief Number of part indices, in draw order. */
+    uint64_t part_index_count;
+} CNA_CnbMeshInfo;
+
+/** @brief Version of @ref CNA_CnbSkeletonInfo this header declares. */
+#define CNA_CNB_SKELETON_INFO_STRUCT_VERSION UINT32_C(1)
+
+/** @brief The skinning skeleton's shape. */
+typedef struct CNA_CnbSkeletonInfo {
+    /** @brief Size of this structure, in bytes. */
+    uint32_t struct_size;
+    /** @brief Structure version; `CNA_CNB_SKELETON_INFO_STRUCT_VERSION`. */
+    uint32_t struct_version;
+    /** @brief Number of joints; the hierarchy and both pose arrays are this long. */
+    uint64_t joint_count;
+    /**
+     * @brief Whether the source carried a per-joint scene-ancestry prefix.
+     *
+     * The `.skeleton.bin` sidecar signalled it by whether any bytes were left over, which made
+     * "deliberately absent" and "file truncated" the same observation. The compiled form states it.
+     */
+    CNA_Bool has_root_prefix;
+    /** @brief Reserved; always written as zero. */
+    uint8_t reserved[7];
+} CNA_CnbSkeletonInfo;
+
+/** @brief Version of @ref CNA_CnbMorphWeightKeyInfo this header declares. */
+#define CNA_CNB_MORPH_WEIGHT_KEY_INFO_STRUCT_VERSION UINT32_C(1)
+
+/** @brief One morph weight key's time and stream lengths. */
+typedef struct CNA_CnbMorphWeightKeyInfo {
+    /** @brief Size of this structure, in bytes. */
+    uint32_t struct_size;
+    /** @brief Structure version; `CNA_CNB_MORPH_WEIGHT_KEY_INFO_STRUCT_VERSION`. */
+    uint32_t struct_version;
+    /** @brief Time of this key, in seconds. */
+    double time_seconds;
+    /** @brief Number of weights, one per morph target. */
+    uint64_t weight_count;
+    /** @brief Number of cubic-spline in-tangents, or zero. */
+    uint64_t in_tangent_count;
+    /** @brief Number of cubic-spline out-tangents, or zero. */
+    uint64_t out_tangent_count;
+} CNA_CnbMorphWeightKeyInfo;
+
+/**
+ * @brief Creates an empty model description.
+ *
+ * @param out_model Receives the new handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_create(CNA_CnbModelDataHandle* out_model);
+
+/**
+ * @brief Releases a model description.
+ *
+ * @param model The description to release.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_destroy(CNA_CnbModelDataHandle model);
+
+/**
+ * @brief Reads a model's counts and content flags.
+ *
+ * @param model The model.
+ * @param out_info Receives the counts; `struct_size` and `struct_version` must be set on input.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_get_info(
+    CNA_CnbModelDataHandle model,
+    CNA_CnbModelInfo* out_info);
+
+/**
+ * @brief Sets the two content flags reported by @ref cna_cnb_model_get_info.
+ *
+ * @param model The model.
+ * @param applies_gltf_lighting_policy Whether the materials follow glTF's lighting conventions.
+ * @param has_bone_hierarchy Whether the source carried a real scene-node hierarchy.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_set_flags(
+    CNA_CnbModelDataHandle model,
+    CNA_Bool applies_gltf_lighting_policy,
+    CNA_Bool has_bone_hierarchy);
+
+/**
+ * @brief Appends one bone to the scene graph.
+ *
+ * @param model The model.
+ * @param name The bone's name; may be empty.
+ * @param parent Index of the parent bone, or -1 for a root.
+ * @param transform The 16 floats of the bone-local transform, `M11`..`M44`.
+ * @param out_index Receives the new bone's index; may be null.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_add_bone(
+    CNA_CnbModelDataHandle model,
+    CNA_StringView name,
+    int32_t parent,
+    const float* transform,
+    uint64_t* out_index);
+
+/**
+ * @brief Reads one bone's parent and transform.
+ *
+ * @param model The model.
+ * @param index Index into the model's bones.
+ * @param out_bone Receives the bone; `struct_size` and `struct_version` must be set on input.
+ * @return A CNA result code; an out-of-range index is `CNA_RESULT_INVALID_ARGUMENT`.
+ */
+CNA_C_API CNA_Result cna_cnb_model_get_bone(
+    CNA_CnbModelDataHandle model,
+    uint64_t index,
+    CNA_CnbModelBone* out_bone);
+
+/**
+ * @brief Reports the byte length of one bone's name.
+ *
+ * @param model The model.
+ * @param index Index into the model's bones.
+ * @param out_byte_count Receives the length, without a terminator.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_get_bone_name_size(
+    CNA_CnbModelDataHandle model,
+    uint64_t index,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies one bone's name.
+ *
+ * @param model The model.
+ * @param index Index into the model's bones.
+ * @param destination Destination bytes, or null only for zero capacity. Not terminated.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_cnb_model_copy_bone_name(
+    CNA_CnbModelDataHandle model,
+    uint64_t index,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Appends one renderable part.
+ *
+ * The part starts with empty vertex and index bytes and a default material; set them with
+ * @ref cna_cnb_model_set_part_vertex_bytes, @ref cna_cnb_model_set_part_index_bytes and
+ * @ref cna_cnb_model_set_material.
+ *
+ * @param model The model.
+ * @param info The part's numeric state; `struct_size` and `struct_version` must be set.
+ * @param name The part's name; may be empty.
+ * @param external_effect The effect asset name, used only by `CNA_CNB_EFFECT_KIND_EXTERNAL`.
+ * @param out_index Receives the new part's index; may be null.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_add_part(
+    CNA_CnbModelDataHandle model,
+    const CNA_CnbModelPartInfo* info,
+    CNA_StringView name,
+    CNA_StringView external_effect,
+    uint64_t* out_index);
+
+/**
+ * @brief Reads one part's numeric state.
+ *
+ * @param model The model.
+ * @param index Index into the model's parts.
+ * @param out_info Receives the state; `struct_size` and `struct_version` must be set on input.
+ * @return A CNA result code; an out-of-range index is `CNA_RESULT_INVALID_ARGUMENT`.
+ */
+CNA_C_API CNA_Result cna_cnb_model_get_part(
+    CNA_CnbModelDataHandle model,
+    uint64_t index,
+    CNA_CnbModelPartInfo* out_info);
+
+/**
+ * @brief Replaces one part's numeric state, leaving its names, bytes and material alone.
+ *
+ * @param model The model.
+ * @param index Index into the model's parts.
+ * @param info The new state; `struct_size` and `struct_version` must be set.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_set_part(
+    CNA_CnbModelDataHandle model,
+    uint64_t index,
+    const CNA_CnbModelPartInfo* info);
+
+/**
+ * @brief Reports the byte length of one part's name.
+ *
+ * @param model The model.
+ * @param index Index into the model's parts.
+ * @param out_byte_count Receives the length, without a terminator.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_get_part_name_size(
+    CNA_CnbModelDataHandle model,
+    uint64_t index,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies one part's name.
+ *
+ * @param model The model.
+ * @param index Index into the model's parts.
+ * @param destination Destination bytes, or null only for zero capacity. Not terminated.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_cnb_model_copy_part_name(
+    CNA_CnbModelDataHandle model,
+    uint64_t index,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Reports the byte length of one part's external effect asset name.
+ *
+ * @param model The model.
+ * @param index Index into the model's parts.
+ * @param out_byte_count Receives the length, without a terminator.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_get_part_external_effect_size(
+    CNA_CnbModelDataHandle model,
+    uint64_t index,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies one part's external effect asset name.
+ *
+ * @param model The model.
+ * @param index Index into the model's parts.
+ * @param destination Destination bytes, or null only for zero capacity. Not terminated.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_cnb_model_copy_part_external_effect(
+    CNA_CnbModelDataHandle model,
+    uint64_t index,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Sets one part's interleaved vertex bytes.
+ *
+ * The bytes are stored as given; the encoder is what checks them against the part's stride and
+ * vertex count, so a partially built part is allowed to be inconsistent until it is encoded.
+ *
+ * @param model The model.
+ * @param index Index into the model's parts.
+ * @param bytes The vertex bytes, or null only for a zero count. Copied.
+ * @param byte_count Number of bytes.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_set_part_vertex_bytes(
+    CNA_CnbModelDataHandle model,
+    uint64_t index,
+    const uint8_t* bytes,
+    uint64_t byte_count);
+
+/**
+ * @brief Copies one part's interleaved vertex bytes.
+ *
+ * @param model The model.
+ * @param index Index into the model's parts.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_cnb_model_copy_part_vertex_bytes(
+    CNA_CnbModelDataHandle model,
+    uint64_t index,
+    uint8_t* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Sets one part's index bytes.
+ *
+ * @param model The model.
+ * @param index Index into the model's parts.
+ * @param bytes The index bytes, or null only for a zero count. Copied.
+ * @param byte_count Number of bytes.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_set_part_index_bytes(
+    CNA_CnbModelDataHandle model,
+    uint64_t index,
+    const uint8_t* bytes,
+    uint64_t byte_count);
+
+/**
+ * @brief Copies one part's index bytes.
+ *
+ * @param model The model.
+ * @param index Index into the model's parts.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_cnb_model_copy_part_index_bytes(
+    CNA_CnbModelDataHandle model,
+    uint64_t index,
+    uint8_t* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Reads one part's material state.
+ *
+ * @param model The model.
+ * @param part Index into the model's parts.
+ * @param out_info Receives the state; `struct_size` and `struct_version` must be set on input.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_get_material(
+    CNA_CnbModelDataHandle model,
+    uint64_t part,
+    CNA_CnbMaterialInfo* out_info);
+
+/**
+ * @brief Replaces one part's material state, leaving its textures and per-slot arrays alone.
+ *
+ * @param model The model.
+ * @param part Index into the model's parts.
+ * @param info The new state; `struct_size` and `struct_version` must be set.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_set_material(
+    CNA_CnbModelDataHandle model,
+    uint64_t part,
+    const CNA_CnbMaterialInfo* info);
+
+/**
+ * @brief Reports the byte length of one material texture slot's asset name.
+ *
+ * @param model The model.
+ * @param part Index into the model's parts.
+ * @param slot Which of the eight named slots.
+ * @param out_byte_count Receives the length, without a terminator. Zero means the slot is unused.
+ * @return A CNA result code; an unknown slot is `CNA_RESULT_INVALID_ARGUMENT`.
+ */
+CNA_C_API CNA_Result cna_cnb_model_get_material_texture_size(
+    CNA_CnbModelDataHandle model,
+    uint64_t part,
+    CNA_CnbMaterialTextureSlot slot,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies one material texture slot's asset name.
+ *
+ * @param model The model.
+ * @param part Index into the model's parts.
+ * @param slot Which of the eight named slots.
+ * @param destination Destination bytes, or null only for zero capacity. Not terminated.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_cnb_model_copy_material_texture(
+    CNA_CnbModelDataHandle model,
+    uint64_t part,
+    CNA_CnbMaterialTextureSlot slot,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Sets one material texture slot's asset name.
+ *
+ * @param model The model.
+ * @param part Index into the model's parts.
+ * @param slot Which of the eight named slots.
+ * @param asset_name The logical asset name; empty leaves the slot unused.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_set_material_texture(
+    CNA_CnbModelDataHandle model,
+    uint64_t part,
+    CNA_CnbMaterialTextureSlot slot,
+    CNA_StringView asset_name);
+
+/**
+ * @brief Reads one importer slot's texture coordinate set index.
+ *
+ * @param model The model.
+ * @param part Index into the model's parts.
+ * @param slot Importer slot index, below `CNA_CNB_TEXTURE_SLOT_COUNT`. **Not** a
+ *             `CNA_CnbMaterialTextureSlot`; see that identity for why the two differ.
+ * @param out_set Receives the `TEXCOORD_n` index.
+ * @return A CNA result code; an out-of-range slot is `CNA_RESULT_INVALID_ARGUMENT`.
+ */
+CNA_C_API CNA_Result cna_cnb_model_get_material_texture_coordinate_set(
+    CNA_CnbModelDataHandle model,
+    uint64_t part,
+    uint64_t slot,
+    uint8_t* out_set);
+
+/**
+ * @brief Sets one importer slot's texture coordinate set index.
+ *
+ * @param model The model.
+ * @param part Index into the model's parts.
+ * @param slot Importer slot index, below `CNA_CNB_TEXTURE_SLOT_COUNT`.
+ * @param coordinate_set The `TEXCOORD_n` index. CNA's vertex layouts carry two UV sets, so the
+ *                       encoder refuses a compiled model that names anything but 0 or 1; the value
+ *                       is stored as given here and checked when the model is encoded.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_set_material_texture_coordinate_set(
+    CNA_CnbModelDataHandle model,
+    uint64_t part,
+    uint64_t slot,
+    uint8_t coordinate_set);
+
+/**
+ * @brief Reads one importer slot's UV transform.
+ *
+ * @param model The model.
+ * @param part Index into the model's parts.
+ * @param slot Importer slot index, below `CNA_CNB_TEXTURE_SLOT_COUNT`.
+ * @param out_transform Receives the transform.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_get_material_texture_transform(
+    CNA_CnbModelDataHandle model,
+    uint64_t part,
+    uint64_t slot,
+    CNA_CnbTextureTransform* out_transform);
+
+/**
+ * @brief Sets one importer slot's UV transform.
+ *
+ * @param model The model.
+ * @param part Index into the model's parts.
+ * @param slot Importer slot index, below `CNA_CNB_TEXTURE_SLOT_COUNT`.
+ * @param transform The transform.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_set_material_texture_transform(
+    CNA_CnbModelDataHandle model,
+    uint64_t part,
+    uint64_t slot,
+    const CNA_CnbTextureTransform* transform);
+
+/**
+ * @brief Reads one importer slot's sampler state.
+ *
+ * @param model The model.
+ * @param part Index into the model's parts.
+ * @param slot Importer slot index, below `CNA_CNB_TEXTURE_SLOT_COUNT`.
+ * @param out_sampler Receives the sampler state.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_get_material_sampler(
+    CNA_CnbModelDataHandle model,
+    uint64_t part,
+    uint64_t slot,
+    CNA_CnbSamplerState* out_sampler);
+
+/**
+ * @brief Sets one importer slot's sampler state.
+ *
+ * @param model The model.
+ * @param part Index into the model's parts.
+ * @param slot Importer slot index, below `CNA_CNB_TEXTURE_SLOT_COUNT`.
+ * @param sampler The sampler state.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_set_material_sampler(
+    CNA_CnbModelDataHandle model,
+    uint64_t part,
+    uint64_t slot,
+    const CNA_CnbSamplerState* sampler);
+
+/**
+ * @brief Reports whether a part carries morph-target data.
+ *
+ * @param model The model.
+ * @param part Index into the model's parts.
+ * @param out_present Receives whether the part has morph data.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_has_morph(
+    CNA_CnbModelDataHandle model,
+    uint64_t part,
+    CNA_Bool* out_present);
+
+/**
+ * @brief Reads a part's morph state.
+ *
+ * @param model The model.
+ * @param part Index into the model's parts.
+ * @param out_info Receives the state; `struct_size` and `struct_version` must be set on input.
+ * @return A CNA result code; a part with no morph data is `CNA_RESULT_INVALID_ARGUMENT`.
+ */
+CNA_C_API CNA_Result cna_cnb_model_get_morph(
+    CNA_CnbModelDataHandle model,
+    uint64_t part,
+    CNA_CnbMorphInfo* out_info);
+
+/**
+ * @brief Gives a part morph data, or replaces the flags and vertex count of what it has.
+ *
+ * The counts in @p info are outputs of the routes that build the streams and are ignored here.
+ *
+ * @param model The model.
+ * @param part Index into the model's parts.
+ * @param info The state to apply; `struct_size` and `struct_version` must be set.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_set_morph(
+    CNA_CnbModelDataHandle model,
+    uint64_t part,
+    const CNA_CnbMorphInfo* info);
+
+/**
+ * @brief Removes a part's morph data.
+ *
+ * @param model The model.
+ * @param part Index into the model's parts.
+ * @return A CNA result code; a part that has none is still a success.
+ */
+CNA_C_API CNA_Result cna_cnb_model_clear_morph(
+    CNA_CnbModelDataHandle model,
+    uint64_t part);
+
+/**
+ * @brief Appends one empty morph target to a part that already has morph data.
+ *
+ * @param model The model.
+ * @param part Index into the model's parts.
+ * @param out_index Receives the new target's index; may be null.
+ * @return A CNA result code; a part with no morph data is `CNA_RESULT_INVALID_ARGUMENT`.
+ */
+CNA_C_API CNA_Result cna_cnb_model_add_morph_target(
+    CNA_CnbModelDataHandle model,
+    uint64_t part,
+    uint64_t* out_index);
+
+/**
+ * @brief Sets one morph target's delta stream.
+ *
+ * @param model The model.
+ * @param part Index into the model's parts.
+ * @param target Index into that part's morph targets.
+ * @param stream Which stream.
+ * @param values Three floats per vertex, or null only for a zero count. Copied.
+ * @param value_count Number of floats, three times the vertex count when the stream is present.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_set_morph_target_deltas(
+    CNA_CnbModelDataHandle model,
+    uint64_t part,
+    uint64_t target,
+    CNA_CnbMorphDeltaStream stream,
+    const float* values,
+    uint64_t value_count);
+
+/**
+ * @brief Copies one morph target's delta stream.
+ *
+ * @param model The model.
+ * @param part Index into the model's parts.
+ * @param target Index into that part's morph targets.
+ * @param stream Which stream.
+ * @param destination Destination floats, or null only for zero capacity.
+ * @param capacity Destination capacity in floats.
+ * @param out_value_count Receives the required float count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_cnb_model_copy_morph_target_deltas(
+    CNA_CnbModelDataHandle model,
+    uint64_t part,
+    uint64_t target,
+    CNA_CnbMorphDeltaStream stream,
+    float* destination,
+    uint64_t capacity,
+    uint64_t* out_value_count);
+
+/**
+ * @brief Sets a part's default blend weights, one per morph target.
+ *
+ * @param model The model.
+ * @param part Index into the model's parts.
+ * @param values The weights, or null only for a zero count. Copied.
+ * @param value_count Number of weights.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_set_morph_weights(
+    CNA_CnbModelDataHandle model,
+    uint64_t part,
+    const float* values,
+    uint64_t value_count);
+
+/**
+ * @brief Copies a part's default blend weights.
+ *
+ * @param model The model.
+ * @param part Index into the model's parts.
+ * @param destination Destination floats, or null only for zero capacity.
+ * @param capacity Destination capacity in floats.
+ * @param out_value_count Receives the required float count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_cnb_model_copy_morph_weights(
+    CNA_CnbModelDataHandle model,
+    uint64_t part,
+    float* destination,
+    uint64_t capacity,
+    uint64_t* out_value_count);
+
+/**
+ * @brief Appends one key to a part's morph weight track.
+ *
+ * @param model The model.
+ * @param part Index into the model's parts.
+ * @param time_seconds Time of the key.
+ * @param weights One weight per morph target, or null only for a zero count. Copied.
+ * @param weight_count Number of weights.
+ * @param in_tangents Cubic-spline in-tangents, or null when the track is not cubic-spline.
+ * @param in_tangent_count Number of in-tangents.
+ * @param out_tangents Cubic-spline out-tangents, or null when the track is not cubic-spline.
+ * @param out_tangent_count Number of out-tangents.
+ * @param out_index Receives the new key's index; may be null.
+ * @return A CNA result code; a part with no morph data is `CNA_RESULT_INVALID_ARGUMENT`.
+ */
+CNA_C_API CNA_Result cna_cnb_model_add_morph_weight_key(
+    CNA_CnbModelDataHandle model,
+    uint64_t part,
+    double time_seconds,
+    const float* weights,
+    uint64_t weight_count,
+    const float* in_tangents,
+    uint64_t in_tangent_count,
+    const float* out_tangents,
+    uint64_t out_tangent_count,
+    uint64_t* out_index);
+
+/**
+ * @brief Reads one morph weight key's time and stream lengths.
+ *
+ * @param model The model.
+ * @param part Index into the model's parts.
+ * @param key Index into that part's weight track.
+ * @param out_info Receives the key; `struct_size` and `struct_version` must be set on input.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_get_morph_weight_key(
+    CNA_CnbModelDataHandle model,
+    uint64_t part,
+    uint64_t key,
+    CNA_CnbMorphWeightKeyInfo* out_info);
+
+/**
+ * @brief Copies one morph weight key's floats from the chosen stream.
+ *
+ * @param model The model.
+ * @param part Index into the model's parts.
+ * @param key Index into that part's weight track.
+ * @param stream Which of the key's three streams.
+ * @param destination Destination floats, or null only for zero capacity.
+ * @param capacity Destination capacity in floats.
+ * @param out_value_count Receives the required float count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_cnb_model_copy_morph_weight_key_values(
+    CNA_CnbModelDataHandle model,
+    uint64_t part,
+    uint64_t key,
+    CNA_CnbMorphKeyStream stream,
+    float* destination,
+    uint64_t capacity,
+    uint64_t* out_value_count);
+
+/**
+ * @brief Appends one mesh.
+ *
+ * @param model The model.
+ * @param name The mesh's name; may be empty.
+ * @param parent_bone Index into the model's bones, or -1 when the model carries no hierarchy.
+ * @param part_indices Indices into the model's parts, in draw order; null only for a zero count.
+ * @param part_index_count Number of part indices.
+ * @param out_index Receives the new mesh's index; may be null.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_add_mesh(
+    CNA_CnbModelDataHandle model,
+    CNA_StringView name,
+    int32_t parent_bone,
+    const uint32_t* part_indices,
+    uint64_t part_index_count,
+    uint64_t* out_index);
+
+/**
+ * @brief Reads one mesh's parent bone and part count.
+ *
+ * @param model The model.
+ * @param index Index into the model's meshes.
+ * @param out_info Receives the mesh; `struct_size` and `struct_version` must be set on input.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_get_mesh(
+    CNA_CnbModelDataHandle model,
+    uint64_t index,
+    CNA_CnbMeshInfo* out_info);
+
+/**
+ * @brief Reports the byte length of one mesh's name.
+ *
+ * @param model The model.
+ * @param index Index into the model's meshes.
+ * @param out_byte_count Receives the length, without a terminator.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_get_mesh_name_size(
+    CNA_CnbModelDataHandle model,
+    uint64_t index,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies one mesh's name.
+ *
+ * @param model The model.
+ * @param index Index into the model's meshes.
+ * @param destination Destination bytes, or null only for zero capacity. Not terminated.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_cnb_model_copy_mesh_name(
+    CNA_CnbModelDataHandle model,
+    uint64_t index,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies one mesh's part indices, in draw order.
+ *
+ * @param model The model.
+ * @param index Index into the model's meshes.
+ * @param destination Destination indices, or null only for zero capacity.
+ * @param capacity Destination capacity in indices.
+ * @param out_index_count Receives the required index count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_cnb_model_copy_mesh_part_indices(
+    CNA_CnbModelDataHandle model,
+    uint64_t index,
+    uint32_t* destination,
+    uint64_t capacity,
+    uint64_t* out_index_count);
+
+/**
+ * @brief Gives the model a skinning skeleton, replacing any it had.
+ *
+ * @param model The model.
+ * @param hierarchy One parent index per joint, or -1 for a root; null only for a zero count.
+ * @param joint_count Number of joints.
+ * @param bind_pose 16 floats per joint, joint-local; null only for a zero joint count.
+ * @param inverse_bind_pose 16 floats per joint; null only for a zero joint count.
+ * @param root_prefix 16 floats per joint, or null when the source carried no prefix.
+ * @return A CNA result code; arrays that disagree with @p joint_count are
+ *         `CNA_RESULT_INVALID_ARGUMENT`.
+ */
+CNA_C_API CNA_Result cna_cnb_model_set_skeleton(
+    CNA_CnbModelDataHandle model,
+    const int32_t* hierarchy,
+    uint64_t joint_count,
+    const float* bind_pose,
+    const float* inverse_bind_pose,
+    const float* root_prefix);
+
+/**
+ * @brief Removes the model's skinning skeleton.
+ *
+ * @param model The model.
+ * @return A CNA result code; a model that has none is still a success.
+ */
+CNA_C_API CNA_Result cna_cnb_model_clear_skeleton(CNA_CnbModelDataHandle model);
+
+/**
+ * @brief Reads the skinning skeleton's shape.
+ *
+ * @param model The model.
+ * @param out_info Receives the shape; `struct_size` and `struct_version` must be set on input.
+ * @return A CNA result code; a model with no skeleton is `CNA_RESULT_INVALID_ARGUMENT`, which
+ *         @ref cna_cnb_model_get_info distinguishes in advance.
+ */
+CNA_C_API CNA_Result cna_cnb_model_get_skeleton(
+    CNA_CnbModelDataHandle model,
+    CNA_CnbSkeletonInfo* out_info);
+
+/**
+ * @brief Copies the skeleton's parent index per joint.
+ *
+ * @param model The model.
+ * @param destination Destination indices, or null only for zero capacity.
+ * @param capacity Destination capacity in indices.
+ * @param out_index_count Receives the required index count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_cnb_model_copy_skeleton_hierarchy(
+    CNA_CnbModelDataHandle model,
+    int32_t* destination,
+    uint64_t capacity,
+    uint64_t* out_index_count);
+
+/**
+ * @brief Copies one of the skeleton's three matrix arrays, 16 floats per joint.
+ *
+ * @param model The model.
+ * @param set Which array.
+ * @param destination Destination floats, or null only for zero capacity.
+ * @param capacity Destination capacity in floats.
+ * @param out_value_count Receives the required float count; always written on a valid output. The
+ *                        root prefix reports zero when the source carried none.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_cnb_model_copy_skeleton_matrices(
+    CNA_CnbModelDataHandle model,
+    CNA_CnbSkeletonMatrixSet set,
+    float* destination,
+    uint64_t capacity,
+    uint64_t* out_value_count);
+
+/**
+ * @brief Appends one embedded animation clip.
+ *
+ * @param model The model.
+ * @param name The clip's name; may be empty.
+ * @param clip The clip, in the borrowed descriptor form the skinned-model routes already use.
+ * @param target_space Which index space the tracks' bone indices live in. The descriptor does not
+ *                     carry it -- a `SkinnedModelEXT` clip is always a joint palette -- but a
+ *                     compiled model may hold either, and the two must never be interchanged.
+ * @param out_index Receives the new clip's index; may be null.
+ * @return A CNA result code; an unknown target space is `CNA_RESULT_INVALID_ARGUMENT`.
+ */
+CNA_C_API CNA_Result cna_cnb_model_add_animation(
+    CNA_CnbModelDataHandle model,
+    CNA_StringView name,
+    const CNA_AnimationClipEXTDescriptor* clip,
+    CNA_ClipTargetSpaceEXT target_space,
+    uint64_t* out_index);
+
+/**
+ * @brief Reports the byte length of one clip's name.
+ *
+ * @param model The model.
+ * @param index Index into the model's animations.
+ * @param out_byte_count Receives the length, without a terminator.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_get_animation_name_size(
+    CNA_CnbModelDataHandle model,
+    uint64_t index,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies one clip's name.
+ *
+ * @param model The model.
+ * @param index Index into the model's animations.
+ * @param destination Destination bytes, or null only for zero capacity. Not terminated.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_cnb_model_copy_animation_name(
+    CNA_CnbModelDataHandle model,
+    uint64_t index,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Reads one clip's duration in seconds and its track count.
+ *
+ * @param model The model.
+ * @param index Index into the model's animations.
+ * @param out_duration_seconds Receives the duration; may be null.
+ * @param out_track_count Receives the number of bone tracks; may be null.
+ * @param out_target_space Receives one `CNA_CLIP_TARGET_SPACE_*_EXT` identity; may be null.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_get_animation(
+    CNA_CnbModelDataHandle model,
+    uint64_t index,
+    double* out_duration_seconds,
+    uint64_t* out_track_count,
+    CNA_ClipTargetSpaceEXT* out_target_space);
+
+/**
+ * @brief Reads one animation track's bone index and keyframe count.
+ *
+ * @param model The model.
+ * @param index Index into the model's animations.
+ * @param track Index into that clip's tracks.
+ * @param out_bone_index Receives the bone index; may be null.
+ * @param out_keyframe_count Receives the number of keyframes; may be null.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_get_animation_track(
+    CNA_CnbModelDataHandle model,
+    uint64_t index,
+    uint64_t track,
+    int32_t* out_bone_index,
+    uint64_t* out_keyframe_count);
+
+/**
+ * @brief Copies one animation track's keyframes.
+ *
+ * @param model The model.
+ * @param index Index into the model's animations.
+ * @param track Index into that clip's tracks.
+ * @param destination Destination keyframes, or null only for zero capacity.
+ * @param capacity Destination capacity in keyframes.
+ * @param out_keyframe_count Receives the required count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_cnb_model_copy_animation_keyframes(
+    CNA_CnbModelDataHandle model,
+    uint64_t index,
+    uint64_t track,
+    CNA_KeyframeEXT* destination,
+    uint64_t capacity,
+    uint64_t* out_keyframe_count);
+
+/**
+ * @brief Appends one punctual light.
+ *
+ * @param model The model.
+ * @param light The light.
+ * @param out_index Receives the new light's index; may be null.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_add_light(
+    CNA_CnbModelDataHandle model,
+    const CNA_CnbModelLight* light,
+    uint64_t* out_index);
+
+/**
+ * @brief Reads one punctual light.
+ *
+ * @param model The model.
+ * @param index Index into the model's lights.
+ * @param out_light Receives the light.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_get_light(
+    CNA_CnbModelDataHandle model,
+    uint64_t index,
+    CNA_CnbModelLight* out_light);
+
+/**
+ * @brief Encodes a model as a complete `.cnb` byte image.
+ *
+ * @param model The model to encode.
+ * @param content_name Logical content name recorded in the `CMET` chunk; may be empty.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write, and a model whose
+ *         parts, meshes or skeleton do not agree with each other is `CNA_RESULT_IO`.
+ */
+CNA_C_API CNA_Result cna_cnb_encode_model(
+    CNA_CnbModelDataHandle model,
+    CNA_StringView content_name,
+    uint8_t* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Decodes a model from an open document.
+ *
+ * @param document The document; its asset type must be `CNA_CNB_ASSET_TYPE_MODEL`.
+ * @param out_model Receives a new model handle the caller releases.
+ * @return A CNA result code; a document that is not a model, or one whose chunks disagree, is
+ *         `CNA_RESULT_IO`.
+ */
+CNA_C_API CNA_Result cna_cnb_decode_model(
+    CNA_CnbDocumentHandle document,
+    CNA_CnbModelDataHandle* out_model);
+
+/**
+ * @brief The result of compiling a `.cnj` model, held together so nothing has to be copied twice.
+ *
+ * It owns the model and the two file lists the build system needs: what the compile absorbed, so a
+ * dependency graph knows to rebuild when any of them changes, and what it left external, so the
+ * same graph knows those assets must also be compiled.
+ */
+typedef CNA_Handle CNA_CnbModelFromCnjHandle;
+
+/**
+ * @brief Compiles a `.cnj` model and its sidecars into a model description.
+ *
+ * @param cnj_path Path to the `.cnj` document.
+ * @param content_root Root the document's relative paths resolve against.
+ * @param out_result Receives a new result handle the caller releases.
+ * @return A CNA result code; a missing or malformed document is `CNA_RESULT_IO`.
+ */
+CNA_C_API CNA_Result cna_cnb_build_model_from_cnj(
+    CNA_StringView cnj_path,
+    CNA_StringView content_root,
+    CNA_CnbModelFromCnjHandle* out_result);
+
+/**
+ * @brief Releases a compile result.
+ *
+ * @param result The compile result to release.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_from_cnj_destroy(CNA_CnbModelFromCnjHandle result);
+
+/**
+ * @brief Moves the compiled model out of the result and into its own handle.
+ *
+ * The model is transferred rather than borrowed, so the result may be released immediately after,
+ * and a caller cannot end up holding a model that a released result had been keeping alive.
+ *
+ * @param result The compile result.
+ * @param out_model Receives a new model handle the caller releases.
+ * @return A CNA result code; taking the model twice is `CNA_RESULT_INVALID_ARGUMENT`.
+ */
+CNA_C_API CNA_Result cna_cnb_model_from_cnj_take_model(
+    CNA_CnbModelFromCnjHandle result,
+    CNA_CnbModelDataHandle* out_model);
+
+/**
+ * @brief Reports how many source files the compile absorbed.
+ *
+ * @param result The compile result.
+ * @param out_count Receives the count.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_from_cnj_get_absorbed_file_count(
+    CNA_CnbModelFromCnjHandle result,
+    uint64_t* out_count);
+
+/**
+ * @brief Reports the byte length of one absorbed source file's path.
+ *
+ * @param result The compile result.
+ * @param index Index into the absorbed files.
+ * @param out_byte_count Receives the length, without a terminator.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_from_cnj_get_absorbed_file_size(
+    CNA_CnbModelFromCnjHandle result,
+    uint64_t index,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies one absorbed source file's path.
+ *
+ * @param result The compile result.
+ * @param index Index into the absorbed files.
+ * @param destination Destination bytes, or null only for zero capacity. Not terminated.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_cnb_model_from_cnj_copy_absorbed_file(
+    CNA_CnbModelFromCnjHandle result,
+    uint64_t index,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Reports how many assets the compile left external.
+ *
+ * @param result The compile result.
+ * @param out_count Receives the count.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_from_cnj_get_external_reference_count(
+    CNA_CnbModelFromCnjHandle result,
+    uint64_t* out_count);
+
+/**
+ * @brief Reports the byte length of one external asset name.
+ *
+ * @param result The compile result.
+ * @param index Index into the external references.
+ * @param out_byte_count Receives the length, without a terminator.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_from_cnj_get_external_reference_size(
+    CNA_CnbModelFromCnjHandle result,
+    uint64_t index,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies one external asset name.
+ *
+ * @param result The compile result.
+ * @param index Index into the external references.
+ * @param destination Destination bytes, or null only for zero capacity. Not terminated.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_cnb_model_from_cnj_copy_external_reference(
+    CNA_CnbModelFromCnjHandle result,
+    uint64_t index,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
 
 #ifdef __cplusplus
 }

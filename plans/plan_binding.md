@@ -1270,7 +1270,29 @@ applies unchanged. Three things are specific to this phase:
 **Every throw is a contract again; the grep found no clamps at all** across both sources — 34 refusal sites, zero `clamp`/`min`/`max`. The one place a C caller could have been given a softer answer is an out-of-range representation or level index, and that follows `CBIND-107`'s rule: an index is an argument (`CNA_RESULT_INVALID_ARGUMENT`), a malformed file is content (`CNA_RESULT_IO`), checked at both levels of nesting.
 
 **ABI `0.11.0` → `0.12.0`, exports 3,850 → 3,878**, purely additive. Verified in all three arms, each built whole and then run serially: 100/100 `CApi` tests in `cmake-build-debug`, `cmake-build-cnaext` and `build-probe`; all eight build-free gates green; declared and exported routes agreeing exactly at 3,878 in each tree; and the same 3,878 names with the engine layer on and off, compared symbol by symbol. |
-| CBIND-109 | Bind the CNB model schema | 129 | ⬜ | `CnbModelData` (105) is the biggest single type in the phase: bones, meshes, mesh parts, materials, morph targets and the animation payload. It is a POD graph, so the shape question is whether a caller walks it through borrowed handles per node or reads a flattened descriptor per level; answer it once, at the start, because 105 rows will follow whichever is chosen. `CnbModelCodec` (19) encodes and decodes it and `CnbModelFromCnj` (5) builds one from a `.cnj`. |
+| CBIND-109 | Bind the CNB model schema | 129 | ✅ | **Done 2026-08-28.** 71 routes, five identities, two new handle kinds (`CnbModelData` = 173, `CnbModelFromCnj` = 174), three unversioned value structures and eight versioned ones close all 129 rows: implemented 8,053 → 8,182 and planned 285 → 156.
+
+**The shape question this row demanded was answered first, and it went to indexed accessors rather than a handle per node.** Three reasons, and the third is the one that decided it: a bone or a part has no lifetime of its own, so a handle for each would be a lifetime invented by the binding; a handle per node multiplies the registry by the size of the model and hands a caller one release per node to get right; and every cross-reference the *format itself* writes is already an index — a mesh's `partIndices`, a bone's `parent`, the skeleton's `hierarchy`. Indexed accessors keep the C shape and the file's shape the same. 105 rows then followed it without a second decision.
+
+**The material carries two different texture orderings, and confusing them is the one defect a round trip cannot catch — both halves would be wrong together.** Eight *named* slots (CNA's own effect slots, including `DualTextureEffect`'s second layer, which glTF has no counterpart for) against seven per-slot arrays in the importer's order. They are given two deliberately separate index spaces: `CNA_CnbMaterialTextureSlot` for the names, a plain index below `CNA_CNB_TEXTURE_SLOT_COUNT` for `textureCoordinateSets`, `textureTransforms` and `samplers`. `CnbModelSmoke.c` writes a distinguishable value into **all fifteen** and reads all fifteen back after an encode/decode cycle, which is what makes a crossed binding a mismatch instead of a quiet pass.
+
+**Collapsing eight named string fields into one slot-selected route is the `CBIND-035` judgement, applied twice more.** Sixteen count/copy routes would be the same call written out eight times; the same reasoning turns a morph target's three delta vectors, a weight key's three float vectors and the skeleton's three matrix arrays into one route each with a selector identity. What was *not* collapsed is the pair of file lists `BuildCnbModelFromCnj` returns: `absorbedFiles` and `externalReferences` answer different questions for a build system, and merging them would lose that.
+
+**`std::optional` becomes an availability query, not a failed read.** `cna_cnb_model_has_morph` and `CNA_CnbModelInfo::has_skeleton` answer first; reading an absent one is `CNA_RESULT_INVALID_ARGUMENT` — the caller's mistake, since the query was there — and clearing what is already absent is still a success. `has_root_prefix` gets the same treatment for a reason worth keeping: the `.skeleton.bin` sidecar signalled the prefix by whether bytes were left over, which made *deliberately absent* and *file truncated* the same observation.
+
+**The animation reuses the clip descriptor the ABI already publishes, and adds the one thing it cannot carry.** `cna_cnb_model_add_animation` takes `CNA_AnimationClipEXTDescriptor` rather than a second clip shape; the target space is a separate argument because a `SkinnedModelEXT` clip is always a joint palette while a compiled model may hold either, and applying one as the other is a silent corruption. The test uses `SCENE_NODE` precisely because the default is the other value, so a dropped field fails rather than passing.
+
+**`cna_cnb_model_from_cnj_take_model` transfers rather than lends.** A borrowed model would let a caller hold one that releasing the result had already destroyed; taking twice is refused.
+
+**The throw/clamp survey found one real correction, and it is not in the C layer's gift.** `CnbModelData.cpp` has no throws and no clamps; `CnbModelCodec.cpp` has 73 throws and one `std::min` that is a `reserve` hint; `CnbModelFromCnj.cpp` has 44 throws, two `reserve` hints and one genuine `std::max` at line 715 — `primitiveCount` is floored at 0 when a topology and index count cannot produce a primitive. That is the compiler's own decision about malformed source geometry, upstream of any C caller, and is left where it is.
+
+**Two things the C layer refuses that the canonical layer only refuses later.** An effect kind above `CNA_CNB_EFFECT_KIND_MAXIMUM` is refused when a part is added or replaced rather than stored and written into a file; a non-canonical `CNA_Bool` on `cna_cnb_model_set_flags` is refused **before** the handle is resolved, which is `CBIND-067`'s discipline and which `CApiBoolContractSmoke` caught the first ordering of — with an invalid handle the route answered a handle error, and that reads as "accepted the byte".
+
+**One canonical limit surfaced by the round trip and now documented rather than worked around:** a texture coordinate set must be 0 or 1, because CNA's vertex layouts carry two UV sets. The setter stores what it is given and the encoder is what refuses — the same lateness that lets a part be filled in any order — so the header says where the check lands.
+
+**ABI `0.12.0` → `0.13.0`, exports 3,878 → 3,949**, purely additive. `AbiHeaderC.c` freezes every new structure's size, alignment and offsets and each identity value individually rather than only its maximum; `AbiHeaderCpp.cpp` mirrors the sizes. `--approve-rule-symbols` was again unusable for the reason `CBIND-106` recorded, so the ten new rules' approvals were derived with the tool's own matcher over those ten patterns only, with the same two assertions in the deriving script — and the derived total was 129, matching the row count exactly before anything was written.
+
+**Verified in all three arms**, each built whole and then run serially: 101/101 `CApi` tests in `cmake-build-debug`, `cmake-build-cnaext` and `build-probe`; all eight build-free gates green; declared and exported routes agreeing exactly at 3,949 in each tree. `docs/c-api/CNB.md` gains a `## Models` section built around the two-orderings trap, the absence-is-an-answer rule and the take-not-borrow transfer. |
 | CBIND-110 | Bind the CNB font, audio, media, curve and animation schemas | 85 | ⬜ | `CnbSpriteFontCodec` (22), `CnbSoundEffectCodec` (25), `CnbMediaCodec` (21), `CnbCurveCodec` (6) and `CnbAnimationClipCodec` (11). Each has a runtime counterpart already bound — `cna_sprite_font_*`, `cna_sound_effect_*`, `cna_song_*`/`cna_video_*`, `cna_curve_*` — so the codec routes produce and consume the *same* C values those families already publish rather than parallel ones. The sprite-font schema carries the strictly-ascending character-map rule the `.cnj` reader enforces; a C route that writes one must refuse an unsorted map for the same reason. |
 | CBIND-111 | Bind the CNB loader registry and the two compilation front ends | 25 | ⬜ | `CnbLoaderRegistry` (11) is what a `ContentManager` resolves an asset through, so it lands after `CBIND-105`'s hook rather than before it. `CnbSourceImport` (7) and `CnjToCnb` (7) are the headless import paths — image, WAV, glTF and `.cnj` in, `.cnb` out — which makes them the one part of this phase a C application would use as a *tool* rather than as a runtime, and their error reporting deserves the same care the runtime routes get. |
 | CBIND-113 | Make an exit-code-only C API suite say which stage failed | — | ⬜ | `CBIND-101` closed on fifteen runs that produced one occurrence, and the complete capture of that occurrence was the renderer banner and nothing else — `RuntimeComponentsSmoke.c` contains no `printf` or `fprintf` at all and reports only through exit codes. A `--output-on-failure` capture of such a suite cannot say more than "it failed", which is why an intermittent one costs a whole session to place. Give every suite that reports only through exit codes the diagnostic `TextureVolumeSmoke.c`'s `VOL` and `EffectSmoke.c`'s `REQUIRE` already have: the file, the line and the expression. Audit which suites lack it rather than assuming; the useful measure of done is that a failure identifies its own stage without a rerun. |
@@ -1336,9 +1358,9 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-**Snapshot (2026-08-28, after `CBIND-108`):** 536 headers / 8,812 symbols —
-**8,053 implemented, 15 approved partial, 285 planned, 459 not applicable.** ABI `0.12.0`, 3,878
-exported symbols — the same 3,746 with `CNA_CNAEXT` on and off (measured symbol by symbol: zero
+**Snapshot (2026-08-28, after `CBIND-109`):** 536 headers / 8,812 symbols —
+**8,182 implemented, 15 approved partial, 156 planned, 459 not applicable.** ABI `0.13.0`, 3,949
+exported symbols — the same 3,949 with `CNA_CNAEXT` on and off (measured symbol by symbol: zero
 differ), which is the engine layer's ABI promise measured rather than asserted.
 Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.
 
@@ -1347,8 +1369,8 @@ reads **Not ready**, on exactly one criterion — *No public C++ symbol is unacc
 no other. That is not a regression and not a document going stale: the sixth merge of `next`
 brought in 506 public symbols, 460 of them the `CNA::Content::Cnb` content format, and the owner
 ruled on 2026-08-28 that binding them belongs to a later pass — then asked for `CBIND-106`,
-`CBIND-107` and `CBIND-108`, the container, the document and the texture schemas, which closed 221
-of them and left 285. The gate says so out loud because
+`CBIND-107`, `CBIND-108` and `CBIND-109` — the container, the document, the texture schemas and the
+model — which closed 350 of them and left 156. The gate says so out loud because
 `CBIND-042B` built it to fail in both directions, and a deferral that only lives in somebody's
 memory is the thing it exists to prevent.
 
@@ -1378,7 +1400,7 @@ CNAEXT engine layer and the fifth merge's tail opened, and `CBIND-095` verified 
 
 ### What remains
 
-**Phase B10 — 285 rows left of 506, in six slices. `CBIND-106`–`CBIND-108` are closed; `CBIND-103`–`CBIND-105` and `CBIND-109`–`CBIND-111` remain, with `CBIND-113` beside them and `CBIND-112` to close it.** The
+**Phase B10 — 156 rows left of 506, in five slices. `CBIND-106`–`CBIND-109` are closed; `CBIND-103`–`CBIND-105`, `CBIND-110` and `CBIND-111` remain, with `CBIND-113` beside them and `CBIND-112` to close it.** The
 sixth reopening. `origin/next` merged on 2026-08-28 and brought in the **CNB content format**
 (`CNA::Content::Cnb`, 23 public headers, `plans/plan_cnb.md`'s `CNBF-002`–`CNBF-123`) — 460 of the
 506 rows — plus 46 ordinary XNA symbols: the math types' compound-assignment operators,
@@ -2092,7 +2114,7 @@ than owned by this campaign:
 | `cmake-build-cnaext` | `OPENGLES3`/EasyGL, `CNA_CNAEXT=ON` | the only renderer here that advertises compute, so the only arm where an engine-layer success path executes at all |
 | `build-probe` | `HEADLESS`, `CNA_CNAEXT=ON` | the layer present on a renderer that cannot do the work — `CBIND-097` is the record of what only this arm finds |
 
-All three run the same 97 `CApi` tests. Every tree needs `-DCNA_BUILD_C_API=ON`, which defaults to
+All three run the same 101 `CApi` tests. Every tree needs `-DCNA_BUILD_C_API=ON`, which defaults to
 OFF: a freshly configured tree silently has no `modules/c-api` build directory at all without it.
 Parallelism is not capped (the `-j3` the paragraphs below assume was for a cooling fault repaired
 on 2026-08-22); memory is the constraint that remains, so drop the job count for one target that

@@ -179,14 +179,15 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > 3,746 exported symbols, and the release gate reads **not ready** on exactly one criterion. That is
 > recorded rather than smoothed over: not one of the 506 rows is dispositioned `not-applicable`,
 > because deferring work and deciding it has no C form are different claims. `plans/plan_binding.md`
-> Phase B10 is the backlog. `CBIND-106`, `CBIND-107` and `CBIND-108` have since bound its first
-> three slices -- the `.cnb` container, then the parsed document with its bounded cursor and both
-> writers, then the texture pixel formats and the `Texture2D`/`TextureCube`/`Texture3D` schemas: 221
-> rows and 132 routes over five owned handle kinds, taking the ABI to `0.12.0` and 3,878 exports and
-> leaving 285 planned. `docs/c-api/CNB.md` and `CONTENT.md` state the consumer-facing consequence,
-> which is that a C application can build a `.cnb` file, parse one back and encode or decode a
-> texture, and still cannot load a `.cnb` asset through a `ContentManager` because the remaining
-> schemas and the loader registry are not bound.
+> Phase B10 is the backlog. `CBIND-106`, `CBIND-107`, `CBIND-108` and `CBIND-109` have since bound
+> its first four slices -- the `.cnb` container, then the parsed document with its bounded cursor and
+> both writers, then the texture pixel formats and the `Texture2D`/`TextureCube`/`Texture3D` schemas,
+> then the model schema with its codec and `.cnj` compile path: 350 rows and 203 routes over seven
+> owned handle kinds, taking the ABI to `0.13.0` and 3,949 exports and leaving 156 planned.
+> `docs/c-api/CNB.md` and `CONTENT.md` state the consumer-facing consequence, which is that a C
+> application can build a `.cnb` file, parse one back and encode or decode a texture or a model, and
+> still cannot load a `.cnb` asset through a `ContentManager` because the font, audio, media, curve
+> and animation schemas and the loader registry are not bound.
 
 ---
 
