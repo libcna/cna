@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <math.h>
 #include <string.h>
 
@@ -744,11 +746,11 @@ static int validate_vector3_compound_assignment(void)
 
 int main(void)
 {
-    return validate_construction_and_members() &&
-        validate_arithmetic() && validate_transforms() &&
-        validate_vector3_construction_and_members() &&
-        validate_vector3_arithmetic() && validate_vector3_transforms() &&
-        validate_vector3_compound_assignment() &&
-        validate_vector4_construction_and_members() &&
-        validate_vector4_arithmetic() && validate_vector4_transforms() ? 0 : 1;
+    return CNA_TEST_STAGE(validate_construction_and_members()) &&
+        CNA_TEST_STAGE(validate_arithmetic()) && CNA_TEST_STAGE(validate_transforms()) &&
+        CNA_TEST_STAGE(validate_vector3_construction_and_members()) &&
+        CNA_TEST_STAGE(validate_vector3_arithmetic()) && CNA_TEST_STAGE(validate_vector3_transforms()) &&
+        CNA_TEST_STAGE(validate_vector3_compound_assignment()) &&
+        CNA_TEST_STAGE(validate_vector4_construction_and_members()) &&
+        CNA_TEST_STAGE(validate_vector4_arithmetic()) && CNA_TEST_STAGE(validate_vector4_transforms()) ? 0 : 1;
 }

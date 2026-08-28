@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
@@ -1392,7 +1394,7 @@ int main(void)
 {
     if (!write_fixture() || !write_font_fixture() || !write_foreign_asset() ||
         !write_effect_fixture() || !write_cnj_fixture()) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
 
     ContentState state = {CNA_INVALID_HANDLE, CNA_INVALID_HANDLE, 0};
@@ -1413,17 +1415,17 @@ int main(void)
         cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS || state.load_validated != 1 ||
         state.content_manager == CNA_INVALID_HANDLE || state.texture == CNA_INVALID_HANDLE) {
         (void)remove(FixturePath);
-        return 2;
+        return CNA_TEST_FAIL(2);
     }
     if (cna_game_destroy(game) != CNA_RESULT_INVALID_STATE) {
-        return 3;
+        return CNA_TEST_FAIL(3);
     }
 
     WrongThreadState wrong_thread = {state.content_manager, CNA_RESULT_SUCCESS};
     thrd_t thread;
     if (thrd_create(&thread, call_unload_on_wrong_thread, &wrong_thread) != thrd_success ||
         thrd_join(thread, 0) != thrd_success || wrong_thread.result != CNA_RESULT_THREAD) {
-        return 4;
+        return CNA_TEST_FAIL(4);
     }
 
     (void)remove(FontAtlasPath);
@@ -1440,7 +1442,7 @@ int main(void)
         cna_game_destroy(game) != CNA_RESULT_INVALID_STATE ||
         cna_texture2d_destroy(state.texture) != CNA_RESULT_SUCCESS ||
         cna_game_destroy(game) != CNA_RESULT_SUCCESS) {
-        return 5;
+        return CNA_TEST_FAIL(5);
     }
     return 0;
 }

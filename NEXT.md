@@ -190,9 +190,25 @@ planned**, 460 not applicable. ABI `0.17.0`, 4,033 exported symbols, the same se
 on and off. 103/103 `CApi` tests in all three arms: `cmake-build-debug` (HEADLESS, `CNA_CNAEXT=OFF`),
 `cmake-build-cnaext` (OPENGLES3/EasyGL, `CNA_CNAEXT=ON`) and `build-probe` (HEADLESS,
 `CNA_CNAEXT=ON`). The not-applicable count moved for the first time this phase, by exactly one row —
-a `friend` declaration Doxygen reports as a member, named in `CBIND-111`. What remains in Phase B10
-is `CBIND-113` alone — a diagnostics task rather than a binding one: give every C API suite that
-reports only through exit codes the file, line and expression the others already print.
+a `friend` declaration Doxygen reports as a member, named in `CBIND-111`.
+
+**`CBIND-113` closed the phase by making every C API suite able to say which stage failed.** Its
+audit found far more than the one suite `CBIND-101` named: of 83 pure-C suites, 1 is a compile-time
+wall, 29 printed something identifying the failure, **38 identified their stage by exit code alone**
+and **15 said nothing at all**. Two macros at 344 sites across those 53 — `CNA_TEST_FAIL(code)`
+evaluating to the code and `CNA_TEST_STAGE(call)` evaluating to what the call returned, so nothing a
+suite does changes. Demonstrated rather than claimed: breaking one assertion inside
+`RuntimeComponentsSmoke.c` now prints `RuntimeComponentsSmoke.c:592: main: FAILED, exit code 8`,
+where `CBIND-101`'s complete capture had been the renderer banner. **0 of 83 suites can still fail
+silently.**
+
+A process failure is recorded with it, because it is the class of mistake the task exists to
+prevent: the transform script was run twice and double-wrapped 10 stage calls. It was caught by
+auditing the diff rather than trusting the run, the files were restored from `HEAD`, and the script
+was given a guard that refuses a file already carrying the header — with a second run reporting all
+52 refused, which is the proof the guard works.
+
+**Phase B10 is complete.** All twelve tasks are closed.
 
 ## `SAMPLE-005` official XNA content fidelity (`ReachGraphicsDemo_4_0`, 2026-08-23)
 

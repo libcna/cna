@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <math.h>
 #include <stdint.h>
 #include <string.h>
@@ -428,13 +430,13 @@ static int validate_effects(void)
 int main(void)
 {
     if (!validate_identities()) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
     if (!validate_values()) {
-        return 2;
+        return CNA_TEST_FAIL(2);
     }
     if (!validate_effects()) {
-        return 3;
+        return CNA_TEST_FAIL(3);
     }
     return 0;
 }

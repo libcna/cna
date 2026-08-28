@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <math.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -330,6 +332,6 @@ static int validate_named_colors(void)
 
 int main(void)
 {
-    return validate_construction() && validate_properties_and_strings() &&
-            validate_value_operations() && validate_named_colors() ? 0 : 1;
+    return CNA_TEST_STAGE(validate_construction()) && CNA_TEST_STAGE(validate_properties_and_strings()) &&
+            CNA_TEST_STAGE(validate_value_operations()) && CNA_TEST_STAGE(validate_named_colors()) ? 0 : 1;
 }

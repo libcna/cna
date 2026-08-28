@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #define COUNT_OF(array) (sizeof(array) / sizeof((array)[0]))
 
 /* Every gamer and guide identity, written out in canonical order. An entry that does not sit at
@@ -151,43 +153,43 @@ int main(void)
 {
     if (!ordinals_are_canonical(gamerPresenceMode, COUNT_OF(gamerPresenceMode),
                                 CNA_GAMER_PRESENCE_MODE_MAXIMUM)) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
     if (!ordinals_are_canonical(notificationPosition, COUNT_OF(notificationPosition),
                                 CNA_NOTIFICATION_POSITION_MAXIMUM)) {
-        return 2;
+        return CNA_TEST_FAIL(2);
     }
     if (!ordinals_are_canonical(gamerZone, COUNT_OF(gamerZone),
                                 CNA_GAMER_ZONE_MAXIMUM)) {
-        return 3;
+        return CNA_TEST_FAIL(3);
     }
     if (!ordinals_are_canonical(leaderboardKey, COUNT_OF(leaderboardKey),
                                 CNA_LEADERBOARD_KEY_MAXIMUM)) {
-        return 4;
+        return CNA_TEST_FAIL(4);
     }
     if (!ordinals_are_canonical(leaderboardOutcome, COUNT_OF(leaderboardOutcome),
                                 CNA_LEADERBOARD_OUTCOME_MAXIMUM)) {
-        return 5;
+        return CNA_TEST_FAIL(5);
     }
     if (!ordinals_are_canonical(messageBoxIcon, COUNT_OF(messageBoxIcon),
                                 CNA_MESSAGE_BOX_ICON_MAXIMUM)) {
-        return 6;
+        return CNA_TEST_FAIL(6);
     }
     if (!ordinals_are_canonical(controllerSensitivity, COUNT_OF(controllerSensitivity),
                                 CNA_CONTROLLER_SENSITIVITY_MAXIMUM)) {
-        return 7;
+        return CNA_TEST_FAIL(7);
     }
     if (!ordinals_are_canonical(gameDifficulty, COUNT_OF(gameDifficulty),
                                 CNA_GAME_DIFFICULTY_MAXIMUM)) {
-        return 8;
+        return CNA_TEST_FAIL(8);
     }
     if (!ordinals_are_canonical(gamerPrivilegeSetting, COUNT_OF(gamerPrivilegeSetting),
                                 CNA_GAMER_PRIVILEGE_SETTING_MAXIMUM)) {
-        return 9;
+        return CNA_TEST_FAIL(9);
     }
     if (!ordinals_are_canonical(racingCameraAngle, COUNT_OF(racingCameraAngle),
                                 CNA_RACING_CAMERA_ANGLE_MAXIMUM)) {
-        return 10;
+        return CNA_TEST_FAIL(10);
     }
 
     /* Two spot checks that the table cannot make on its own: the identity is fixed-width, and
@@ -204,7 +206,7 @@ int main(void)
         CNA_RACING_CAMERA_ANGLE_INSIDE != UINT32_C(2) ||
         CNA_CONTROLLER_SENSITIVITY_HIGH != UINT32_C(2) ||
         CNA_LEADERBOARD_OUTCOME_TIE != UINT32_C(3)) {
-        return 11;
+        return CNA_TEST_FAIL(11);
     }
     return 0;
 }

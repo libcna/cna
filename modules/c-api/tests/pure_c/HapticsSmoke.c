@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <string.h>
 #include <threads.h>
 
@@ -517,13 +519,13 @@ int main(void)
 {
     /* One code per validator, so a failure names the family it came from. */
     if (!validate_pure_direction()) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
     if (!validate_pure_effect()) {
-        return 2;
+        return CNA_TEST_FAIL(2);
     }
     if (!validate_pure_capabilities()) {
-        return 3;
+        return CNA_TEST_FAIL(3);
     }
 
     HapticsState haptics_state = {0};
@@ -543,13 +545,13 @@ int main(void)
     if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
         cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS ||
         haptics_state.validated != 1) {
-        return 4;
+        return CNA_TEST_FAIL(4);
     }
 
     /* Both the facade and a device handle are thread-affine. */
     CNA_HapticDeviceHandle device = CNA_INVALID_HANDLE;
     if (cna_haptics_open(game, UINT32_C(0), &device) != CNA_RESULT_SUCCESS) {
-        return 5;
+        return CNA_TEST_FAIL(5);
     }
     WrongThreadState wrong_thread = {game, device, CNA_RESULT_SUCCESS, CNA_RESULT_SUCCESS};
     thrd_t thread;
@@ -557,14 +559,14 @@ int main(void)
         thrd_join(thread, 0) != thrd_success ||
         wrong_thread.count_result != CNA_RESULT_THREAD ||
         wrong_thread.device_result != CNA_RESULT_THREAD) {
-        return 6;
+        return CNA_TEST_FAIL(6);
     }
     if (cna_haptic_device_destroy(device) != CNA_RESULT_SUCCESS) {
-        return 7;
+        return CNA_TEST_FAIL(7);
     }
 
     if (cna_game_destroy(game) != CNA_RESULT_SUCCESS) {
-        return 8;
+        return CNA_TEST_FAIL(8);
     }
     return 0;
 }

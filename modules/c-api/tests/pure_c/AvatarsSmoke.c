@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <math.h>
 #include <string.h>
 
@@ -313,23 +315,23 @@ int main(void)
     CNA_SignedInGamerHandle gamer = CNA_INVALID_HANDLE;
     CNA_Handle registration = CNA_INVALID_HANDLE;
     CNA_Handle rejected = CNA_INVALID_HANDLE;
-    int status = 0;
+    int status = CNA_TEST_FAIL(0);
 
     if (!validate_values()) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
     if (cna_signed_in_gamer_create_ext(view("CnaCApiAvatar"), CNA_FALSE, CNA_FALSE,
                                        CNA_PLAYER_INDEX_ONE, &gamer) != CNA_RESULT_SUCCESS) {
-        return 2;
+        return CNA_TEST_FAIL(2);
     }
     if (!validate_description(gamer)) {
-        status = 3;
+        status = CNA_TEST_FAIL(3);
     }
     if (status == 0 && !validate_animation()) {
-        status = 4;
+        status = CNA_TEST_FAIL(4);
     }
     if (status == 0 && !validate_renderer()) {
-        status = 5;
+        status = CNA_TEST_FAIL(5);
     }
     /* The change notification is static: it is about descriptions in general, not about one. */
     if (status == 0 &&
@@ -339,16 +341,16 @@ int main(void)
          cna_avatar_description_subscribe_changed_ext(0, &completions, &rejected) !=
              CNA_RESULT_INVALID_ARGUMENT ||
          rejected != CNA_INVALID_HANDLE)) {
-        status = 6;
+        status = CNA_TEST_FAIL(6);
     }
     /* One unsubscribe route releases every gamer-services registration, this one included. */
     if (status == 0 &&
         (cna_gamer_unsubscribe_ext(registration) != CNA_RESULT_SUCCESS ||
          cna_gamer_unsubscribe_ext(registration) != CNA_RESULT_INVALID_HANDLE)) {
-        status = 7;
+        status = CNA_TEST_FAIL(7);
     }
     if (status == 0 && cna_signed_in_gamer_destroy(gamer) != CNA_RESULT_SUCCESS) {
-        status = 8;
+        status = CNA_TEST_FAIL(8);
     }
     return status;
 }

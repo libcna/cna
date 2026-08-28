@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <math.h>
 #include <string.h>
 
@@ -180,6 +182,6 @@ static int validate_default_value(void)
 
 int main(void)
 {
-    return validate_construction_and_members() && validate_operations() &&
-        validate_default_value() ? 0 : 1;
+    return CNA_TEST_STAGE(validate_construction_and_members()) && CNA_TEST_STAGE(validate_operations()) &&
+        CNA_TEST_STAGE(validate_default_value()) ? 0 : 1;
 }

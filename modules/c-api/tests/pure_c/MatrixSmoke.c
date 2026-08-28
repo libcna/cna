@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <math.h>
 #include <string.h>
 
@@ -409,7 +411,7 @@ static int validate_compound_assignment(void)
 
 int main(void)
 {
-    return validate_construction_properties_and_members() &&
-        validate_factories() && validate_operations() &&
-        validate_compound_assignment() ? 0 : 1;
+    return CNA_TEST_STAGE(validate_construction_properties_and_members()) &&
+        CNA_TEST_STAGE(validate_factories()) && CNA_TEST_STAGE(validate_operations()) &&
+        CNA_TEST_STAGE(validate_compound_assignment()) ? 0 : 1;
 }

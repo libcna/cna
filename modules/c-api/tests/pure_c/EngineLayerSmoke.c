@@ -10,6 +10,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <stdint.h>
 #include <string.h>
 
@@ -8584,15 +8586,15 @@ int main(void)
 {
     /* One code per validator, so a failure names the family it came from. */
     if (!validate_identities()) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
     if (!validate_barrier_containment()) {
-        return 2;
+        return CNA_TEST_FAIL(2);
     }
     /* 30+ is reserved for checks made outside the game callback, so it can never collide with
        a `3 + stage` code from inside it. */
     if (!validate_light_values()) {
-        return 30;
+        return CNA_TEST_FAIL(30);
     }
     {
         int stage = 0;

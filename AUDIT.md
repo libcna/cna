@@ -189,7 +189,10 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > reflective-reader tails beside them. The release gate reads **Ready** on all ten criteria again,
 > and `CBIND-112` has verified that by name rather than by a green `--check` -- finding one real
 > defect in the process, a rule citing a route that does not exist. 505 rows were bound, exactly one
-> was dispositioned `not-applicable` and named, none was made `partial`. **Every
+> was dispositioned `not-applicable` and named, none was made `partial`. `CBIND-113` then closed the
+> phase by giving the 53 suites that reported only through exit codes a shared diagnostic, at 344
+> sites: **0 of 83 C API suites can now fail silently**, where 38 had identified their stage by exit
+> code alone and 15 had said nothing at all. **Every
 > asset schema the format defines is bound, and a C application can compile source files into
 > `.cnb`.** Exactly one of those 460 rows was dispositioned `not-applicable` and it
 > is named in its task row -- a `friend` declaration Doxygen reports as a member. `docs/c-api/CNB.md`

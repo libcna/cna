@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <string.h>
 
 static CNA_StringView view(const char* const text)
@@ -246,23 +248,23 @@ static int validate_reader(const CNA_SignedInGamerHandle gamer)
 int main(void)
 {
     CNA_SignedInGamerHandle gamer = CNA_INVALID_HANDLE;
-    int status = 0;
+    int status = CNA_TEST_FAIL(0);
 
     if (!validate_identity()) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
     if (cna_signed_in_gamer_create_ext(view("CnaCApiRacer"), CNA_FALSE, CNA_FALSE,
                                        CNA_PLAYER_INDEX_ONE, &gamer) != CNA_RESULT_SUCCESS) {
-        return 2;
+        return CNA_TEST_FAIL(2);
     }
     if (!validate_entry(gamer)) {
-        status = 3;
+        status = CNA_TEST_FAIL(3);
     }
     if (status == 0 && !validate_reader(gamer)) {
-        status = 4;
+        status = CNA_TEST_FAIL(4);
     }
     if (status == 0 && cna_signed_in_gamer_destroy(gamer) != CNA_RESULT_SUCCESS) {
-        status = 5;
+        status = CNA_TEST_FAIL(5);
     }
     return status;
 }

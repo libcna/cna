@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <string.h>
 
 static CNA_StringView view(const char* const text)
@@ -356,28 +358,28 @@ int main(void)
     if (cna_signed_in_gamer_create_ext(view("CnaCApiGamer"), CNA_TRUE, CNA_FALSE,
                                        CNA_PLAYER_INDEX_TWO, &gamer) != CNA_RESULT_SUCCESS ||
         gamer == CNA_INVALID_HANDLE) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
     if (!validate_base_surface(gamer, "CnaCApiGamer")) {
-        return 2;
+        return CNA_TEST_FAIL(2);
     }
     if (!validate_profile(gamer)) {
-        return 3;
+        return CNA_TEST_FAIL(3);
     }
     if (!validate_unsupported_lookups()) {
-        return 4;
+        return CNA_TEST_FAIL(4);
     }
     if (!validate_signed_in_surface(gamer)) {
-        return 5;
+        return CNA_TEST_FAIL(5);
     }
     if (!validate_friends(gamer)) {
-        return 6;
+        return CNA_TEST_FAIL(6);
     }
 
     /* No friend list exists to consult, so the answer is always negative rather than a refusal. */
     if (cna_signed_in_gamer_is_friend(gamer, gamer, &is_friend) != CNA_RESULT_SUCCESS ||
         is_friend != CNA_FALSE) {
-        return 7;
+        return CNA_TEST_FAIL(7);
     }
 
     /* Availability is separate from the answer: no gamer at an index is an ordinary success. */
@@ -386,13 +388,13 @@ int main(void)
         has_gamer != CNA_FALSE || borrowed != CNA_INVALID_HANDLE ||
         cna_gamer_get_signed_in_gamer_at_player_index(UINT32_C(99), &has_gamer, &borrowed) !=
             CNA_RESULT_INVALID_ARGUMENT) {
-        return 8;
+        return CNA_TEST_FAIL(8);
     }
 
     published[0] = gamer;
     if (cna_gamer_set_signed_in_gamers_ext(published, UINT64_C(1)) != CNA_RESULT_SUCCESS ||
         cna_gamer_get_signed_in_gamer_count(&count) != CNA_RESULT_SUCCESS || count != 1) {
-        return 9;
+        return CNA_TEST_FAIL(9);
     }
     /* The canonical indexer is **positional**: it reads the collection at the player index rather
        than searching for the gamer whose own player index matches. One published gamer therefore
@@ -400,12 +402,12 @@ int main(void)
     if (cna_gamer_get_signed_in_gamer_at_player_index(CNA_PLAYER_INDEX_ONE, &has_gamer,
                                                       &borrowed) != CNA_RESULT_SUCCESS ||
         has_gamer != CNA_TRUE || borrowed == CNA_INVALID_HANDLE) {
-        return 10;
+        return CNA_TEST_FAIL(10);
     }
     /* A borrowed view is a handle of its own, and releasing it does not touch the gamer. */
     if (cna_signed_in_gamer_destroy(borrowed) != CNA_RESULT_SUCCESS ||
         cna_gamer_get_signed_in_gamer_count(&count) != CNA_RESULT_SUCCESS || count != 1) {
-        return 11;
+        return CNA_TEST_FAIL(11);
     }
     /* A player index past the published gamers is still an ordinary success with the flag clear. */
     if (cna_gamer_get_signed_in_gamer_at_player_index(CNA_PLAYER_INDEX_TWO, &has_gamer,
@@ -414,7 +416,7 @@ int main(void)
         cna_gamer_get_signed_in_gamer_at_player_index(CNA_PLAYER_INDEX_FOUR, &has_gamer,
                                                       &borrowed) != CNA_RESULT_SUCCESS ||
         has_gamer != CNA_FALSE) {
-        return 12;
+        return CNA_TEST_FAIL(12);
     }
 
     /* CBIND-044C: the collection's remaining operations. The canonical property returns a
@@ -427,13 +429,13 @@ int main(void)
         CNA_Bool contains = CNA_FALSE;
         if (cna_gamer_get_signed_in_gamer_at(0, &positional) != CNA_RESULT_SUCCESS ||
             positional == CNA_INVALID_HANDLE) {
-            return 13;
+            return CNA_TEST_FAIL(13);
         }
         if (cna_gamer_signed_in_index_of(positional, &position) != CNA_RESULT_SUCCESS ||
             position != 0 ||
             cna_gamer_signed_in_contains(positional, &contains) != CNA_RESULT_SUCCESS ||
             contains != CNA_TRUE) {
-            return 14;
+            return CNA_TEST_FAIL(14);
         }
         /* Not being in the collection is an answer, not a failure. */
         CNA_SignedInGamerHandle outsider = CNA_INVALID_HANDLE;
@@ -445,7 +447,7 @@ int main(void)
             cna_gamer_signed_in_contains(outsider, &contains) != CNA_RESULT_SUCCESS ||
             contains != CNA_FALSE ||
             cna_signed_in_gamer_destroy(outsider) != CNA_RESULT_SUCCESS) {
-            return 15;
+            return CNA_TEST_FAIL(15);
         }
         /* A refused lookup clears its output first, so the refusal probes take a handle of their
            own rather than the live one -- reusing it would destroy the handle under test. */
@@ -456,15 +458,15 @@ int main(void)
             cna_gamer_get_signed_in_gamer_at(0, 0) != CNA_RESULT_INVALID_ARGUMENT ||
             cna_gamer_signed_in_index_of(positional, 0) != CNA_RESULT_INVALID_ARGUMENT ||
             cna_gamer_signed_in_contains(positional, 0) != CNA_RESULT_INVALID_ARGUMENT) {
-            return 16;
+            return CNA_TEST_FAIL(16);
         }
         /* A handle of the wrong family is refused rather than searched for. */
         if (cna_gamer_signed_in_index_of(CNA_INVALID_HANDLE, &position) !=
             CNA_RESULT_INVALID_HANDLE) {
-            return 17;
+            return CNA_TEST_FAIL(17);
         }
         if (cna_signed_in_gamer_destroy(positional) != CNA_RESULT_SUCCESS) {
-            return 18;
+            return CNA_TEST_FAIL(18);
         }
     }
 
@@ -475,20 +477,20 @@ int main(void)
         cna_signed_in_gamer_subscribe_signed_in_ext(0, &sign_ins, &rejected) !=
             CNA_RESULT_INVALID_ARGUMENT ||
         rejected != CNA_INVALID_HANDLE) {
-        return 13;
+        return CNA_TEST_FAIL(13);
     }
     if (cna_gamer_unsubscribe_ext(registration) != CNA_RESULT_SUCCESS ||
         cna_gamer_unsubscribe_ext(registration) != CNA_RESULT_INVALID_HANDLE) {
-        return 14;
+        return CNA_TEST_FAIL(14);
     }
     if (cna_signed_in_gamer_subscribe_signed_out_ext(&on_signed_in, &sign_ins, &registration) !=
             CNA_RESULT_SUCCESS ||
         cna_gamer_unsubscribe_ext(registration) != CNA_RESULT_SUCCESS) {
-        return 15;
+        return CNA_TEST_FAIL(15);
     }
 
     if (cna_gamer_set_signed_in_gamers_ext(0, UINT64_C(0)) != CNA_RESULT_SUCCESS) {
-        return 16;
+        return CNA_TEST_FAIL(16);
     }
     return cna_signed_in_gamer_destroy(gamer) == CNA_RESULT_SUCCESS ? 0 : 17;
 }

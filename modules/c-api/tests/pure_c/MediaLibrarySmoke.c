@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <stdio.h>
 #include <string.h>
 #include <threads.h>
@@ -1059,7 +1061,7 @@ static int query_on_wrong_thread(void* const context)
 int main(void)
 {
     if (!create_fixture()) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
 
     LibrarySmokeState smoke_state = {0};
@@ -1079,26 +1081,26 @@ int main(void)
     if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
         cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS ||
         smoke_state.validated != 1) {
-        return 2;
+        return CNA_TEST_FAIL(2);
     }
 
     CNA_MediaLibraryHandle library = CNA_INVALID_HANDLE;
     if (cna_media_library_create(game, &library) != CNA_RESULT_SUCCESS) {
-        return 3;
+        return CNA_TEST_FAIL(3);
     }
     WrongThreadState wrong_thread = {library, CNA_RESULT_SUCCESS};
     thrd_t thread;
     if (thrd_create(&thread, query_on_wrong_thread, &wrong_thread) != thrd_success ||
         thrd_join(thread, 0) != thrd_success ||
         wrong_thread.result != CNA_RESULT_THREAD) {
-        return 4;
+        return CNA_TEST_FAIL(4);
     }
     if (cna_media_library_destroy(library) != CNA_RESULT_SUCCESS) {
-        return 5;
+        return CNA_TEST_FAIL(5);
     }
 
     if (cna_game_destroy(game) != CNA_RESULT_SUCCESS) {
-        return 6;
+        return CNA_TEST_FAIL(6);
     }
     return 0;
 }

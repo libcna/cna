@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <string.h>
 
 typedef struct ComponentsSmokeState {
@@ -533,7 +535,7 @@ int main(void)
     if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
         cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS ||
         smoke_state.validated != 1) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
 
     /* CBIND-068: a component in the game's collection actually ticks, once per frame.
@@ -560,53 +562,53 @@ int main(void)
         int draws_after_first = 0;
 
         if (cna_game_component_callbacks_init(&ticker_callbacks) != CNA_RESULT_SUCCESS) {
-            return 3;
+            return CNA_TEST_FAIL(3);
         }
         fill_callbacks(&ticker_callbacks, &ticker);
         if (cna_drawable_game_component_create(game, &ticker_callbacks, &component) !=
                 CNA_RESULT_SUCCESS ||
             cna_game_components_add(game, component) != CNA_RESULT_SUCCESS) {
-            return 3;
+            return CNA_TEST_FAIL(3);
         }
         /* Adding initializes it, which is the canonical add path and not the frame loop. */
         if (ticker.initialize_calls != 1 || ticker.update_calls != 0) {
-            return 4;
+            return CNA_TEST_FAIL(4);
         }
         if (cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS) {
-            return 5;
+            return CNA_TEST_FAIL(5);
         }
         updates_after_first = ticker.update_calls;
         draws_after_first = ticker.draw_calls;
         if (updates_after_first < 1) {
-            return 6;
+            return CNA_TEST_FAIL(6);
         }
         for (frame = 0; frame < 3; ++frame) {
             if (cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS) {
-                return 7;
+                return CNA_TEST_FAIL(7);
             }
         }
         /* One update per frame, exactly -- a fixed-timestep frame runs Update once. */
         if (ticker.update_calls != updates_after_first + 3) {
-            return 8;
+            return CNA_TEST_FAIL(8);
         }
         /* And drawing reaches it too, which is Game::Draw's own pass over visible components. A
            frame may legitimately suppress its draw, so this asserts growth rather than a count. */
         if (ticker.draw_calls <= draws_after_first - 1 || ticker.draw_calls < 1) {
-            return 9;
+            return CNA_TEST_FAIL(9);
         }
         /* Disabling it stops the ticks without removing it, which is what Enabled is for. */
         if (cna_game_component_set_enabled(component, CNA_FALSE) != CNA_RESULT_SUCCESS) {
-            return 10;
+            return CNA_TEST_FAIL(10);
         }
         {
             const int before = ticker.update_calls;
             if (cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS ||
                 ticker.update_calls != before) {
-                return 11;
+                return CNA_TEST_FAIL(11);
             }
         }
         if (cna_game_component_destroy(component) != CNA_RESULT_SUCCESS) {
-            return 12;
+            return CNA_TEST_FAIL(12);
         }
     }
 

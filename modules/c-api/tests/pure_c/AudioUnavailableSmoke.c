@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 int main(void)
 {
     CNA_GameCreateInfo game_info = {
@@ -15,7 +17,7 @@ int main(void)
     };
     CNA_Handle game = CNA_INVALID_HANDLE;
     if (cna_game_create(&game_info, &game) != CNA_RESULT_SUCCESS) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
 
     CNA_AudioCapabilities capabilities = {
@@ -27,7 +29,7 @@ int main(void)
             capabilities.is_playback_available != CNA_FALSE ||
             capabilities.reserved0[0] != 0U || capabilities.reserved0[1] != 0U ||
             capabilities.reserved0[2] != 0U || capabilities.reserved1 != 0U) {
-            return 2;
+            return CNA_TEST_FAIL(2);
         }
     }
 
@@ -48,7 +50,7 @@ int main(void)
                 sizeof(silence),
                 &sound_effect) != CNA_RESULT_NOT_SUPPORTED ||
             sound_effect != CNA_INVALID_HANDLE) {
-            return 3;
+            return CNA_TEST_FAIL(3);
         }
         CNA_ErrorInfo error = {
             sizeof(CNA_ErrorInfo), UINT32_C(1), CNA_RESULT_SUCCESS, CNA_ERROR_CATEGORY_NONE, 0U
@@ -57,12 +59,12 @@ int main(void)
             error.result != CNA_RESULT_NOT_SUPPORTED ||
             error.category != CNA_ERROR_CATEGORY_NOT_SUPPORTED ||
             error.message_byte_length == 0U) {
-            return 4;
+            return CNA_TEST_FAIL(4);
         }
     }
 
     if (cna_game_destroy(game) != CNA_RESULT_SUCCESS) {
-        return 5;
+        return CNA_TEST_FAIL(5);
     }
     return 0;
 }

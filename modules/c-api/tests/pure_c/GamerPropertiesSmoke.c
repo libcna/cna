@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <string.h>
 
 static CNA_StringView view(const char* const text)
@@ -212,34 +214,34 @@ int main(void)
 {
     CNA_SignedInGamerHandle gamer = CNA_INVALID_HANDLE;
     CNA_PropertyDictionaryHandle dictionary = CNA_INVALID_HANDLE;
-    int status = 0;
+    int status = CNA_TEST_FAIL(0);
 
     if (cna_signed_in_gamer_create_ext(view("CnaCApiProperties"), CNA_FALSE, CNA_FALSE,
                                        CNA_PLAYER_INDEX_ONE, &gamer) != CNA_RESULT_SUCCESS) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
     if (!validate_game_defaults(gamer)) {
-        status = 2;
+        status = CNA_TEST_FAIL(2);
     }
     if (status == 0 &&
         (cna_property_dictionary_create_ext(&dictionary) != CNA_RESULT_SUCCESS ||
          dictionary == CNA_INVALID_HANDLE ||
          cna_property_dictionary_create_ext(0) != CNA_RESULT_INVALID_ARGUMENT)) {
-        status = 3;
+        status = CNA_TEST_FAIL(3);
     }
     if (status == 0 && !validate_typed_values(dictionary)) {
-        status = 4;
+        status = CNA_TEST_FAIL(4);
     }
     if (status == 0 && !validate_enumeration(dictionary)) {
-        status = 5;
+        status = CNA_TEST_FAIL(5);
     }
     if (status == 0 &&
         (cna_property_dictionary_destroy(dictionary) != CNA_RESULT_SUCCESS ||
          cna_property_dictionary_get_count(dictionary, 0) != CNA_RESULT_INVALID_ARGUMENT)) {
-        status = 6;
+        status = CNA_TEST_FAIL(6);
     }
     if (status == 0 && cna_signed_in_gamer_destroy(gamer) != CNA_RESULT_SUCCESS) {
-        status = 7;
+        status = CNA_TEST_FAIL(7);
     }
     return status;
 }

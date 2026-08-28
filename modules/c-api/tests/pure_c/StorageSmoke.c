@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <stdint.h>
 #include <string.h>
 
@@ -839,16 +841,16 @@ static int validate_storage(void)
 int main(void)
 {
     if (!validate_identities()) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
     if (!validate_root()) {
-        return 2;
+        return CNA_TEST_FAIL(2);
     }
     if (!validate_selectors()) {
-        return 3;
+        return CNA_TEST_FAIL(3);
     }
     if (!validate_storage()) {
-        return 4;
+        return CNA_TEST_FAIL(4);
     }
     return 0;
 }

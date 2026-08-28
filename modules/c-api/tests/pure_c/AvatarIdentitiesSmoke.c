@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <string.h>
 
 #define COUNT_OF(array) (sizeof(array) / sizeof((array)[0]))
@@ -236,33 +238,33 @@ int main(void)
 {
     if (!ordinals_are_canonical(avatarBodyType, COUNT_OF(avatarBodyType),
                                 CNA_AVATAR_BODY_TYPE_MAXIMUM)) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
     if (!ordinals_are_canonical(avatarRendererState, COUNT_OF(avatarRendererState),
                                 CNA_AVATAR_RENDERER_STATE_MAXIMUM)) {
-        return 2;
+        return CNA_TEST_FAIL(2);
     }
     if (!ordinals_are_canonical(avatarEyebrow, COUNT_OF(avatarEyebrow),
                                 CNA_AVATAR_EYEBROW_MAXIMUM)) {
-        return 3;
+        return CNA_TEST_FAIL(3);
     }
     if (!ordinals_are_canonical(avatarEye, COUNT_OF(avatarEye),
                                 CNA_AVATAR_EYE_MAXIMUM)) {
-        return 4;
+        return CNA_TEST_FAIL(4);
     }
     if (!ordinals_are_canonical(avatarMouth, COUNT_OF(avatarMouth),
                                 CNA_AVATAR_MOUTH_MAXIMUM)) {
-        return 5;
+        return CNA_TEST_FAIL(5);
     }
     if (!ordinals_are_canonical(avatarAnimationPreset, COUNT_OF(avatarAnimationPreset),
                                 CNA_AVATAR_ANIMATION_PRESET_MAXIMUM)) {
-        return 6;
+        return CNA_TEST_FAIL(6);
     }
     if (!bones_are_canonical()) {
-        return 7;
+        return CNA_TEST_FAIL(7);
     }
     if (!names_are_canonical()) {
-        return 8;
+        return CNA_TEST_FAIL(8);
     }
     return sizeof(CNA_AvatarBone) == sizeof(uint32_t) &&
             sizeof(CNA_AvatarAnimationPreset) == sizeof(uint32_t)

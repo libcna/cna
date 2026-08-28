@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <string.h>
 #include <threads.h>
 
@@ -608,10 +610,10 @@ int main(void)
 {
     /* One code per validator, so a failure names the family it came from. */
     if (!validate_pure_sensor_info()) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
     if (!validate_pure_device_info()) {
-        return 2;
+        return CNA_TEST_FAIL(2);
     }
 
     DevicesSmokeState smoke_state = {0};
@@ -631,7 +633,7 @@ int main(void)
     if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
         cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS ||
         smoke_state.validated != 1) {
-        return 3;
+        return CNA_TEST_FAIL(3);
     }
 
     /* Every host query is thread-affine, exactly like the device captures. */
@@ -644,11 +646,11 @@ int main(void)
         wrong_thread.sensor_result != CNA_RESULT_THREAD ||
         wrong_thread.clipboard_result != CNA_RESULT_THREAD ||
         wrong_thread.power_result != CNA_RESULT_THREAD) {
-        return 4;
+        return CNA_TEST_FAIL(4);
     }
 
     if (cna_game_destroy(game) != CNA_RESULT_SUCCESS) {
-        return 5;
+        return CNA_TEST_FAIL(5);
     }
     return 0;
 }

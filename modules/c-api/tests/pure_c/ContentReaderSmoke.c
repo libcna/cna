@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <stdint.h>
 #include <string.h>
 
@@ -711,25 +713,25 @@ int main(void)
     ReaderFixture fixture;
 
     if (!validate_identities()) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
     if (!create_fixture(&fixture)) {
-        return 2;
+        return CNA_TEST_FAIL(2);
     }
     if (!validate_reader(&fixture)) {
         (void)destroy_fixture(&fixture);
-        return 3;
+        return CNA_TEST_FAIL(3);
     }
     if (!validate_type_readers(&fixture)) {
         (void)destroy_fixture(&fixture);
-        return 4;
+        return CNA_TEST_FAIL(4);
     }
     if (!validate_foreign_reader(&fixture)) {
         (void)destroy_fixture(&fixture);
-        return 5;
+        return CNA_TEST_FAIL(5);
     }
     if (!destroy_fixture(&fixture)) {
-        return 6;
+        return CNA_TEST_FAIL(6);
     }
     return 0;
 }

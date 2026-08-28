@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <stdlib.h>
 #include <string.h>
 #include <threads.h>
@@ -689,14 +691,14 @@ int main(void)
         state.render_target_2d == CNA_INVALID_HANDLE ||
         state.render_target_cube == CNA_INVALID_HANDLE ||
         cna_game_destroy(game) != CNA_RESULT_INVALID_STATE) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
 
     WrongThreadState wrong_thread = {state.sprite_font, CNA_RESULT_SUCCESS};
     thrd_t thread;
     if (thrd_create(&thread, query_font_on_wrong_thread, &wrong_thread) != thrd_success ||
         thrd_join(thread, 0) != thrd_success || wrong_thread.result != CNA_RESULT_THREAD) {
-        return 2;
+        return CNA_TEST_FAIL(2);
     }
 
     if (cna_sprite_font_destroy(state.sprite_font) != CNA_RESULT_SUCCESS ||
@@ -706,7 +708,7 @@ int main(void)
         cna_render_target_destroy(state.render_target_cube) != CNA_RESULT_SUCCESS ||
         cna_render_target_destroy(state.render_target_cube) != CNA_RESULT_INVALID_HANDLE ||
         cna_game_destroy(game) != CNA_RESULT_SUCCESS) {
-        return 3;
+        return CNA_TEST_FAIL(3);
     }
     return 0;
 }
