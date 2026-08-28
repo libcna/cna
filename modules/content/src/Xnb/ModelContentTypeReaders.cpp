@@ -1,4 +1,9 @@
 // SPDX-License-Identifier: MS-PL
+#include "CNA/Content/ObjectDictionaryEXT.hpp"
+
+#include <any>
+#include <map>
+
 #include "CNA/Internal/Xnb/ModelContentTypeReaders.hpp"
 
 #include <limits>
@@ -89,11 +94,29 @@ namespace CNA::Internal::Xnb
                 return nullptr;
             }
 
+            // A `Dictionary<string, object>` is what a custom ContentProcessor attaches to
+            // Model.Tag -- XNA's own TrianglePickingSample does exactly that -- and it is the one
+            // shape the stock pipeline can write there without a custom reader on the game side.
+            // `DictionaryReader<String, Object>` produces a std::map<std::string, std::any>, which
+            // is not a System::Object, so it was refused: before this, the ONLY value this
+            // function accepted came from a test-only reader, and no production reader in the tree
+            // produced one. Boxing it in ObjectDictionaryEXT is what makes `model.Tag` reachable
+            // from a game, and it keeps each entry's own reader-produced type intact.
+            if (value.type() == typeid(std::map<std::string, std::any>))
+            {
+                auto boxed = std::make_shared<CNA::Content::ObjectDictionaryEXT>(
+                    std::any_cast<std::map<std::string, std::any>>(std::move(value)));
+                System::Object* boxedTag = boxed.get();
+                resources.tagOwners.push_back(std::move(boxed));
+                return boxedTag;
+            }
+
             if (value.type() != typeid(std::shared_ptr<System::Object>))
             {
                 throw ContentLoadException(
                     std::string("ModelReader: non-null ") + fieldContext +
-                    " Tag must deserialize as std::shared_ptr<System::Object>.");
+                    " Tag must deserialize as std::shared_ptr<System::Object> or as a "
+                    "Dictionary<string, object>.");
             }
 
             auto owner = std::any_cast<std::shared_ptr<System::Object>>(std::move(value));

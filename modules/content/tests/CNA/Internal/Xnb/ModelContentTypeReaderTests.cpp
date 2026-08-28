@@ -13,11 +13,17 @@
 #include <gtest/gtest.h>
 
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/Content/ObjectDictionaryEXT.hpp"
+#include "CNA/Internal/Xnb/EffectMaterialContentTypeReaders.hpp"
+#include "CNA/Internal/Xnb/MathContentTypeReaders.hpp"
 #include "CNA/Internal/Xnb/ModelContentTypeReaders.hpp"
 #include "CNA/Internal/Xnb/PrimitiveContentTypeReaders.hpp"
 #include "CNA/Internal/Xnb/StockEffectContentTypeReaders.hpp"
+#include "Microsoft/Xna/Framework/BoundingSphere.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
+#include "System/Collections/Generic/KeyNotFoundException.hpp"
+#include "System/InvalidCastException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
@@ -125,6 +131,79 @@ namespace
         writer.Write(static_cast<int32_t>(0));  // no meshes
         writer.Write(static_cast<uint8_t>(1));  // root bone reference
         writer.Write7BitEncodedInt(3);           // model Tag
+        writer.Flush();
+
+        const auto body = bodyStream.ToArray();
+        System::IO::MemoryStream fileStream;
+        System::IO::BinaryWriter fileWriter(&fileStream, true);
+        fileWriter.Write(static_cast<uint8_t>('X'));
+        fileWriter.Write(static_cast<uint8_t>('N'));
+        fileWriter.Write(static_cast<uint8_t>('B'));
+        fileWriter.Write(static_cast<uint8_t>('w'));
+        fileWriter.Write(static_cast<uint8_t>(5));
+        fileWriter.Write(static_cast<uint8_t>(0));
+        fileWriter.Write(static_cast<int32_t>(10 + static_cast<int32_t>(body.size())));
+        fileWriter.Write(body.data(), 0, static_cast<int32_t>(body.size()));
+        fileWriter.Flush();
+        const auto file = fileStream.ToArray();
+        return {file.begin(), file.end()};
+    }
+
+    /// The shape a custom ContentProcessor produces: Model.Tag holds a Dictionary<string,object>
+    /// carrying a Vector3[] and a BoundingSphere. XNA's own TrianglePickingSample writes exactly
+    /// this, and it is what cna-samples SAMPLE-048 loads.
+    std::vector<std::uint8_t> BuildDictionaryTaggedModelXnb()
+    {
+        System::IO::MemoryStream bodyStream;
+        System::IO::BinaryWriter writer(&bodyStream, true);
+
+        writer.Write7BitEncodedInt(6);
+        writer.Write(std::string("Microsoft.Xna.Framework.Content.ModelReader"));
+        writer.Write(static_cast<int32_t>(0));
+        writer.Write(std::string("Microsoft.Xna.Framework.Content.StringReader"));
+        writer.Write(static_cast<int32_t>(0));
+        writer.Write(std::string(
+            "Microsoft.Xna.Framework.Content.DictionaryReader`2[[System.String],[System.Object]]"));
+        writer.Write(static_cast<int32_t>(0));
+        writer.Write(std::string(
+            "Microsoft.Xna.Framework.Content.ArrayReader`1[[Microsoft.Xna.Framework.Vector3]]"));
+        writer.Write(static_cast<int32_t>(0));
+        writer.Write(std::string("Microsoft.Xna.Framework.Content.Vector3Reader"));
+        writer.Write(static_cast<int32_t>(0));
+        writer.Write(std::string("Microsoft.Xna.Framework.Content.BoundingSphereReader"));
+        writer.Write(static_cast<int32_t>(0));
+        writer.Write7BitEncodedInt(0); // shared resources
+        writer.Write7BitEncodedInt(1); // root ModelReader
+
+        writer.Write(static_cast<uint32_t>(1)); // one root bone
+        writer.Write7BitEncodedInt(2);          // bone name StringReader
+        writer.Write(std::string("Root"));
+        const float identity[16] = {
+            1, 0, 0, 0,
+            0, 1, 0, 0,
+            0, 0, 1, 0,
+            0, 0, 0, 1,
+        };
+        for (float value : identity) writer.Write(value);
+        writer.Write(static_cast<uint8_t>(0));  // no parent
+        writer.Write(static_cast<uint32_t>(0)); // no children
+        writer.Write(static_cast<int32_t>(0));  // no meshes
+        writer.Write(static_cast<uint8_t>(1));  // root bone reference
+
+        writer.Write7BitEncodedInt(3);           // Tag: DictionaryReader<String, Object>
+        writer.Write(static_cast<int32_t>(2));   // two entries
+        writer.Write7BitEncodedInt(2);           // key: StringReader
+        writer.Write(std::string("BoundingSphere"));
+        writer.Write7BitEncodedInt(6);           // BoundingSphereReader
+        writer.Write(1.0f); writer.Write(2.0f); writer.Write(3.0f);  // centre
+        writer.Write(4.0f);                                          // radius
+        writer.Write7BitEncodedInt(2);           // key: StringReader
+        writer.Write(std::string("Vertices"));
+        writer.Write7BitEncodedInt(4);           // ArrayReader<Vector3>
+        writer.Write(static_cast<uint32_t>(3));  // three vertices
+        writer.Write(0.0f); writer.Write(0.0f); writer.Write(0.0f);
+        writer.Write(1.0f); writer.Write(0.0f); writer.Write(0.0f);
+        writer.Write(0.0f); writer.Write(1.0f); writer.Write(0.0f);
         writer.Flush();
 
         const auto body = bodyStream.ToArray();
@@ -281,4 +360,52 @@ TEST_F(ModelContentTypeReaderTest, CustomReferenceTypeModelTagIsRetainedAndOwned
 
     ASSERT_NE(model.getTagProperty(), nullptr);
     EXPECT_EQ(model.getTagProperty()->GetTypeName(), "CNA.Test.ModelTag");
+}
+
+TEST_F(ModelContentTypeReaderTest, DictionaryModelTagLoadsAndKeepsEachEntrysOwnType)
+{
+    // The shape every custom ContentProcessor uses to hand a game data the stock pipeline has no
+    // type for. Before this, two separate things stopped it: ArrayReader<Vector3> was never
+    // registered, so the reader TABLE could not resolve and the whole asset failed; and
+    // ModelReader::ReadTag accepted only a std::shared_ptr<System::Object>, which no production
+    // reader produced -- the sole such reader was the test fixture above. Found by cna-samples
+    // SAMPLE-048 (TrianglePickingSample).
+    CNA::Internal::Xnb::RegisterMathXnbReaders();
+    CNA::Internal::Xnb::RegisterEffectMaterialXnbReaders();
+
+    ScratchModelContentRoot root;
+    const auto bytes = BuildDictionaryTaggedModelXnb();
+    std::ofstream file(root.path() / "dicttag.xnb", std::ios::binary);
+    file.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+    file.close();
+
+    ContentManager taggedContent(nullptr, root.path().string());
+    taggedContent.setGraphicsDevice(gd);
+    Model model = taggedContent.Load<Model>("dicttag");
+
+    auto* tag = dynamic_cast<CNA::Content::ObjectDictionaryEXT*>(model.getTagProperty());
+    ASSERT_NE(tag, nullptr) << "a Dictionary<string,object> Tag must arrive as ObjectDictionaryEXT";
+
+    EXPECT_TRUE(tag->ContainsKey("BoundingSphere"));
+    EXPECT_TRUE(tag->ContainsKey("Vertices"));
+    EXPECT_FALSE(tag->ContainsKey("NotThere"));
+
+    // Each entry keeps the type ITS OWN reader produced, which is what makes the dictionary
+    // useful: a Vector3[] is a std::vector<Vector3>, a BoundingSphere is a BoundingSphere.
+    const auto& sphere = tag->Get<Microsoft::Xna::Framework::BoundingSphere>("BoundingSphere");
+    EXPECT_FLOAT_EQ(sphere.Center.X, 1.0f);
+    EXPECT_FLOAT_EQ(sphere.Center.Y, 2.0f);
+    EXPECT_FLOAT_EQ(sphere.Center.Z, 3.0f);
+    EXPECT_FLOAT_EQ(sphere.Radius, 4.0f);
+
+    const auto& vertices =
+        tag->Get<std::vector<Microsoft::Xna::Framework::Vector3>>("Vertices");
+    ASSERT_EQ(vertices.size(), 3u);
+    EXPECT_FLOAT_EQ(vertices[1].X, 1.0f);
+    EXPECT_FLOAT_EQ(vertices[2].Y, 1.0f);
+
+    // Naming the wrong type is the C# cast failing, and it raises the same exception.
+    EXPECT_THROW(tag->Get<float>("Vertices"), System::InvalidCastException);
+    EXPECT_THROW(tag->Get<int>("NotThere"),
+                 System::Collections::Generic::KeyNotFoundException);
 }
