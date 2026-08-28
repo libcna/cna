@@ -18,8 +18,8 @@
 #include "CNA/Content/Pipeline/ModelContentPipeline.hpp"
 #include "CNA/Content/Pipeline/SoundEffectContentPipeline.hpp"
 #include "CNA/Internal/CnjCanonicalRead.hpp"
+#include "CNA/Internal/ContentPath.hpp"
 #include "CNA/Internal/CnjEnvelope.hpp"
-#include "CNA/Internal/CnjSourceFile.hpp"
 #include "CNA/Internal/Json.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 
@@ -46,7 +46,8 @@ namespace CNA::Content::Pipeline
             std::ifstream stream(path, std::ios::binary);
             if (!stream)
             {
-                throw ContentLoadException("cannot open CNJ document '" + path.string() + "'.");
+                throw ContentLoadException("cannot open CNJ document '" +
+                                           CNA::Internal::ContentPathToUtf8(path) + "'.");
             }
             std::ostringstream text;
             text << stream.rdbuf();
@@ -58,7 +59,8 @@ namespace CNA::Content::Pipeline
             std::ifstream stream(path, std::ios::binary);
             if (!stream)
             {
-                throw ContentLoadException("cannot open CNJ sidecar '" + path.string() + "'.");
+                throw ContentLoadException("cannot open CNJ sidecar '" +
+                                           CNA::Internal::ContentPathToUtf8(path) + "'.");
             }
             return {std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
         }
@@ -80,7 +82,9 @@ namespace CNA::Content::Pipeline
             const CNA::Internal::JsonValue* value = root.FindMember(member);
             if (value == nullptr || !value->IsString() || value->stringValue.empty())
             {
-                throw ContentLoadException("CNJ document '" + source.string() + "' type member '" +
+                throw ContentLoadException("CNJ document '" +
+                                           CNA::Internal::ContentPathToUtf8(source) +
+                                           "' type member '" +
                                            member + "' must be a non-empty string.");
             }
             return value->stringValue;
@@ -89,14 +93,21 @@ namespace CNA::Content::Pipeline
         std::filesystem::path ResolveSidecar(ContentImporterContext& context,
                                              const std::string& authored)
         {
-            const CNA::Internal::CnjSourceFileResult safe =
-                CNA::Internal::ResolveCnjSourceFileSafely(
-                    context.SourcePath().string(), context.SourceRoot().string(), authored);
-            const std::filesystem::path recorded = context.ResolveSourceDependency(authored);
-            if (std::filesystem::weakly_canonical(recorded) !=
-                std::filesystem::path(safe.resolvedNativePath))
+            const std::filesystem::path recorded = context.ResolveSourceDependency(
+                CNA::Internal::ContentPathFromUtf8(authored));
+            if (recorded.extension() == ".cnj")
             {
-                throw std::logic_error("CNJ sidecar resolvers disagreed for '" + authored + "'.");
+                throw ContentLoadException("CNJ sourceFile '" + authored +
+                                           "' names another .cnj file; chaining is not allowed.");
+            }
+            std::filesystem::path cnjSibling = recorded;
+            cnjSibling += ".cnj";
+            std::error_code siblingError;
+            if (std::filesystem::exists(cnjSibling, siblingError) && !siblingError)
+            {
+                throw ContentLoadException("CNJ sourceFile '" + authored +
+                                           "' would resolve to another .cnj file; chaining is "
+                                           "not allowed.");
             }
             return recorded;
         }
@@ -106,7 +117,8 @@ namespace CNA::Content::Pipeline
         {
             const CNA::Internal::CnjSpriteFontDescription description =
                 CNA::Internal::ReadCnjSpriteFontDescription(
-                    root, "SpriteFont .cnj '" + context.SourcePath().string() + "'");
+                    root, "SpriteFont .cnj '" +
+                              CNA::Internal::ContentPathToUtf8(context.SourcePath()) + "'");
             ImportedSpriteFont imported;
             imported.atlas = DecodeImportedImage(
                 ResolveSidecar(context, description.textureName));
@@ -146,7 +158,8 @@ namespace CNA::Content::Pipeline
         const CNA::Internal::CnjEnvelope envelope = CNA::Internal::ParseCnjEnvelope(json);
         const std::uint32_t maxVersion = envelope.type == "Model" ? 2u : 1u;
         CNA::Internal::ValidateCnjEnvelopeBaseline(
-            envelope, context.SourcePath().string(), static_cast<int>(maxVersion));
+            envelope, CNA::Internal::ContentPathToUtf8(context.SourcePath()),
+            static_cast<int>(maxVersion));
         const CNA::Internal::JsonValue root = CNA::Internal::ParseJson(json);
         if (envelope.hasSourceFile &&
             (envelope.type == "Model" || envelope.type == "SpriteFont" ||
@@ -163,7 +176,8 @@ namespace CNA::Content::Pipeline
                 RequireStringMember(root, "sourceFile", context.SourcePath());
             ImportedImage imported = DecodeImportedImage(ResolveSidecar(context, authored));
             imported.authoredColorKey = CNA::Internal::ReadCnjColorKey(
-                root, "Texture2D .cnj '" + context.SourcePath().string() + "'");
+                root, "Texture2D .cnj '" +
+                          CNA::Internal::ContentPathToUtf8(context.SourcePath()) + "'");
             context.LogInfo("imported Texture2D CNJ through the shared image front end.");
             return ContentValue::Create(ImportedImageType, std::move(imported));
         }
@@ -172,7 +186,7 @@ namespace CNA::Content::Pipeline
             const std::string authored =
                 RequireStringMember(root, "sourceFile", context.SourcePath());
             CNA::Content::Import::ImportedSound imported =
-                Cnb::ImportWavAsImportedSound(ResolveSidecar(context, authored).string());
+                Cnb::ImportWavAsImportedSound(ResolveSidecar(context, authored));
             context.LogInfo("imported SoundEffect CNJ through the shared WAV front end.");
             return ContentValue::Create(ImportedSoundType, std::move(imported));
         }
@@ -196,7 +210,8 @@ namespace CNA::Content::Pipeline
         {
             const CNA::Internal::CnjTexture3DDescription description =
                 CNA::Internal::ReadCnjTexture3DDescription(
-                    root, "Texture3D .cnj '" + context.SourcePath().string() + "'");
+                    root, "Texture3D .cnj '" +
+                              CNA::Internal::ContentPathToUtf8(context.SourcePath()) + "'");
             ImportedTexture3D imported;
             imported.width = description.width;
             imported.height = description.height;
@@ -205,7 +220,8 @@ namespace CNA::Content::Pipeline
             if (imported.rgbaPixels.size() != description.expectedByteCount)
             {
                 throw ContentLoadException(
-                    "Texture3D .cnj '" + context.SourcePath().string() + "' declares " +
+                    "Texture3D .cnj '" +
+                    CNA::Internal::ContentPathToUtf8(context.SourcePath()) + "' declares " +
                     std::to_string(description.width) + "x" +
                     std::to_string(description.height) + "x" +
                     std::to_string(description.depth) + ", which needs " +
@@ -222,21 +238,21 @@ namespace CNA::Content::Pipeline
                 RequireStringMember(root, "sourceFile", context.SourcePath());
             ImportedTextureCube imported;
             imported.sourceData = Cnb::ImportDdsAsCnbTextureCube(
-                ResolveSidecar(context, authored).string());
+                ResolveSidecar(context, authored));
             context.LogInfo("imported TextureCube CNJ through the shared DDS front end.");
             return ContentValue::Create(ImportedTextureCubeType, std::move(imported));
         }
         if (envelope.type == "Curve")
         {
             ImportedCurve imported{CNA::Internal::ReadCnjCurve(
-                root, context.SourcePath().string())};
+                root, CNA::Internal::ContentPathToUtf8(context.SourcePath()))};
             context.LogInfo("imported canonical Curve CNJ semantics.");
             return ContentValue::Create(ImportedCurveType, std::move(imported));
         }
         if (envelope.type == "AnimationClip")
         {
             ImportedAnimationClip imported{CNA::Internal::ReadCnjAnimationClip(
-                root, context.SourcePath().string(),
+                root, CNA::Internal::ContentPathToUtf8(context.SourcePath()),
                 [&](const std::string& authored) { return ResolveSidecar(context, authored); })};
             context.LogInfo("imported canonical AnimationClip CNJ semantics.");
             return ContentValue::Create(ImportedAnimationClipType, std::move(imported));

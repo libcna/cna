@@ -21,6 +21,7 @@ extern char** environ;
 #include "CNA/Content/Cnb/CnbSourceImport.hpp"
 #include "CNA/Content/Cnb/CnbTextureCodec.hpp"
 #include "CNA/Content/Pipeline/Texture2DContentPipeline.hpp"
+#include "CNA/Internal/ContentPath.hpp"
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -172,6 +173,34 @@ TEST(Texture2DContentPipelineTest, BuildsHeadlesslyThroughDistinctImporterProces
     ASSERT_EQ(decoded.representations.size(), 1u);
     ASSERT_EQ(decoded.representations[0].levels.size(), 1u);
     EXPECT_EQ(decoded.representations[0].levels[0], sourcePixels);
+}
+
+TEST(Texture2DContentPipelineTest, ReadsANativeNonAsciiFilesystemPathWithoutNarrowing)
+{
+    ScratchDirectory scratch("unicode");
+    const std::filesystem::path relative =
+        std::filesystem::path(u8"Textury") / std::filesystem::path(u8"žluťoučký_壁.png");
+    const std::filesystem::path source = scratch.Path() / relative;
+    const std::vector<std::uint8_t> pixels = DistinctPixels(3, 2);
+    WriteBytes(source, MakePng(pixels, 3, 2));
+
+    const Pipeline::ContentPipeline pipeline(MakeRegistry());
+    Pipeline::ContentBuildRequest request;
+    request.sourceRoot = scratch.Path();
+    request.source = source;
+    request.logicalName = "Textury/žluťoučký_壁";
+    const Pipeline::ContentBuildResult result = pipeline.Build(request);
+
+    ASSERT_EQ(result.dependencies.size(), 1u);
+    EXPECT_EQ(result.dependencies.front().identity,
+              CNA::Internal::ContentPathToUtf8(std::filesystem::weakly_canonical(source)));
+    const Cnb::CnbDocument document =
+        Cnb::CnbDocument::Parse(result.output.bytes, "unicode path pipeline output");
+    EXPECT_EQ(document.Metadata().contentName, "Textury/žluťoučký_壁");
+    EXPECT_EQ(Cnb::DecodeTexture2DFromCnb(document).representations[0].levels[0], pixels);
+
+    const Cnb::CnbTextureData compatibility = Cnb::ImportImageAsCnbTexture2D(source);
+    EXPECT_EQ(Cnb::EncodeTexture2DToCnb(compatibility, request.logicalName), result.output.bytes);
 }
 
 TEST(Texture2DContentPipelineTest, IsByteIdenticalToTheUnchangedSourceProducer)

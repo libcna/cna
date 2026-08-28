@@ -9,6 +9,7 @@
 #include <sstream>
 
 #include "CNA/Content/Cnb/CnbFormat.hpp"
+#include "CNA/Internal/ContentPath.hpp"
 
 namespace CNA::Content::Pipeline
 {
@@ -57,7 +58,8 @@ namespace CNA::Content::Pipeline
             if (!ec) { return canonical; }
             canonical = std::filesystem::absolute(path, ec);
             if (!ec) { return canonical.lexically_normal(); }
-            throw std::invalid_argument("cannot resolve path '" + path.string() + "': " +
+            throw std::invalid_argument("cannot resolve path '" +
+                                        CNA::Internal::ContentPathToUtf8(path) + "': " +
                                         ec.message() + ".");
         }
 
@@ -82,9 +84,10 @@ namespace CNA::Content::Pipeline
             const std::filesystem::path canonicalPath = WeaklyCanonicalOrAbsolute(path);
             if (!PathIsWithin(canonicalRoot, canonicalPath))
             {
-                throw std::invalid_argument(std::string(what) + " '" + path.string() +
+                throw std::invalid_argument(std::string(what) + " '" +
+                                            CNA::Internal::ContentPathToUtf8(path) +
                                             "' resolves outside source root '" +
-                                            canonicalRoot.string() + "'.");
+                                            CNA::Internal::ContentPathToUtf8(canonicalRoot) + "'.");
             }
             return canonicalPath;
         }
@@ -99,7 +102,8 @@ namespace CNA::Content::Pipeline
             }
             if (authored.is_absolute() || authored.has_root_name() || authored.has_root_directory())
             {
-                throw std::invalid_argument("source dependency '" + authored.string() +
+                throw std::invalid_argument("source dependency '" +
+                                            CNA::Internal::ContentPathToUtf8(authored) +
                                             "' must be relative to its source asset.");
             }
             return RequireContained(root, source.parent_path() / authored, "source dependency");
@@ -350,7 +354,8 @@ namespace CNA::Content::Pipeline
         const std::filesystem::path resolved =
             ResolveDependency(sourceRoot_, source_, authoredPath);
         dependencies_->Add(
-            ContentDependency{ContentDependencyKind::SourceFile, resolved.generic_string()});
+            ContentDependency{ContentDependencyKind::SourceFile,
+                              CNA::Internal::ContentPathToUtf8(resolved)});
         return resolved;
     }
 
@@ -392,7 +397,8 @@ namespace CNA::Content::Pipeline
         const std::filesystem::path resolved =
             ResolveDependency(sourceRoot_, source_, authoredPath);
         dependencies_->Add(
-            ContentDependency{ContentDependencyKind::SourceFile, resolved.generic_string()});
+            ContentDependency{ContentDependencyKind::SourceFile,
+                              CNA::Internal::ContentPathToUtf8(resolved)});
         return resolved;
     }
 
@@ -416,7 +422,8 @@ namespace CNA::Content::Pipeline
         const std::filesystem::path resolved =
             RequireContained(sourceRoot_, candidate, "generated dependency");
         dependencies_->Add(
-            ContentDependency{ContentDependencyKind::Generated, resolved.generic_string()});
+            ContentDependency{ContentDependencyKind::Generated,
+                              CNA::Internal::ContentPathToUtf8(resolved)});
     }
 
     void ContentProcessorContext::AddRuntimeReference(std::string logicalName,
@@ -563,7 +570,7 @@ namespace CNA::Content::Pipeline
                                       const std::string& reason)
         {
             std::ostringstream message;
-            message << source.string();
+            message << CNA::Internal::ContentPathToUtf8(source);
             if (!logicalName.empty()) { message << " [" << logicalName << ']'; }
             message << "\n  " << ContentPipelineStageName(stage);
             if (!component.empty()) { message << " (" << component << ')'; }
@@ -629,7 +636,8 @@ namespace CNA::Content::Pipeline
             source = RequireContained(root, source, "primary source");
             if (!std::filesystem::is_regular_file(source))
             {
-                throw std::invalid_argument("primary source '" + source.string() +
+                throw std::invalid_argument("primary source '" +
+                                            CNA::Internal::ContentPathToUtf8(source) +
                                             "' is not a regular file.");
             }
             const std::string logicalProblem = Cnb::CnbLogicalNameProblem(logicalName);
@@ -656,7 +664,7 @@ namespace CNA::Content::Pipeline
 
         ContentDependencyCollector dependencies;
         dependencies.Add(ContentDependency{ContentDependencyKind::PrimarySource,
-                                           source.generic_string()});
+                                           CNA::Internal::ContentPathToUtf8(source)});
 
         ContentValue imported;
         const ContentComponentIdentity importerIdentity = importer->Identity();

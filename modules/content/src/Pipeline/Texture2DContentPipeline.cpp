@@ -4,6 +4,7 @@
 
 #include <array>
 #include <charconv>
+#include <fstream>
 #include <limits>
 #include <optional>
 #include <stdexcept>
@@ -106,8 +107,15 @@ namespace CNA::Content::Pipeline
 
     ImportedImage DecodeImportedImage(const std::filesystem::path& source)
     {
+        std::ifstream stream(source, std::ios::binary);
+        if (!stream)
+        {
+            throw ContentLoadException("cannot open image source.");
+        }
+        const std::vector<std::uint8_t> bytes{std::istreambuf_iterator<char>(stream),
+                                              std::istreambuf_iterator<char>()};
         CNA::Internal::Graphics::ImageData image =
-            CNA::Internal::Graphics::ImageLoader::Load(source.string());
+            CNA::Internal::Graphics::ImageLoader::LoadFromMemory(bytes.data(), bytes.size());
         if (image.width <= 0 || image.height <= 0)
         {
             throw ContentLoadException(

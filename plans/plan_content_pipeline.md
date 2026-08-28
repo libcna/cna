@@ -1,6 +1,6 @@
 # plan_content_pipeline.md — CNA Content Pipeline
 
-> **Status (2026-08-28):** `CP-001` through `CP-011` are complete. `CP-012` is current. The
+> **Status (2026-08-28):** `CP-001` through `CP-012` are complete. `CP-013` is current. The
 > project starts from the existing `content-pipeline` branch at `0e6899f17017c03c0e23d575d25cd70c678e2781`.
 > That commit contains the completed CNB baseline through `CNBF-123`. Local `next` was actually
 > `4ab1859dc8a540af1bd326df0fa816579adf7027`, two unrelated platform/binding commits ahead; the
@@ -601,25 +601,41 @@ forbidden inside the source root so generated artifacts cannot become new source
 single build cannot overwrite its source. Every artifact is fully imported/processed/encoded before
 its parent directory is created and its bytes are handed to the one existing atomic helper.
 
-Twelve real-process CLI tests now cover pipeline-byte equality, nested output creation, sorted
+Thirteen real-process CLI tests now cover pipeline-byte equality, nested output creation, sorted
 multi-asset directory compilation, logical path preservation, support-file filtering, glTF image
 dependency invalidation, repeated no-op skips, unknown explicit extensions, destructive-layout
-rejection, corrupt/tampered cache recovery, and old-output preservation/no temporary debris after a
-failed rebuild.
+rejection, corrupt/tampered cache recovery, old-output preservation/no temporary debris after a
+failed rebuild, and non-ASCII source/output paths with an unchanged incremental skip.
 
 ### Windows pathname strategy
 
-The new CLI will use `wmain(int, wchar_t**)` on Windows and construct `std::filesystem::path` from
+The new CLI uses `wmain(int, wchar_t**)` on Windows and constructs `std::filesystem::path` from
 wide arguments. POSIX uses `main(int, char**)`, treating argv as the locale-independent byte spelling
 accepted by `std::filesystem`. Logical content names are UTF-8 with `/` separators and are converted
 explicitly at the native/logical boundary; native paths are never serialized as logical names.
 Narrow `main` on Windows is rejected for the new CLI because it cannot represent every filesystem
 path. Old tools are not refactored as part of this decision.
 
-The CLI entry point and logical-name conversion now implement that decision. End-to-end Windows
-non-ASCII source paths remain `CP-012`: the current shared image/WAV importer APIs still accept
-`std::string` paths, so the build cannot claim complete Windows Unicode support until that lower
-boundary accepts native `std::filesystem::path` (or an explicitly audited UTF-8 conversion).
+`CNA::Internal::ContentPathToUtf8` and `ContentPathFromUtf8` are the one explicit conversion seam.
+The pipeline keeps source/output paths native, diagnostics and dependency identities use generic
+UTF-8, and manifest reads reconstruct native paths from UTF-8 rather than feeding bytes to the
+Windows active code page. Shared image, WAV and DDS imports now accept native filesystem paths;
+their legacy narrow-string overloads retain their existing behavior. Image import opens
+the file natively and feeds bytes to the same `ImageLoader::LoadFromMemory`, so this did not create
+a decoder. CNJ image/WAV/DDS/raw/clip sidecars pass authored JSON UTF-8 through the same conversion
+and then through the context's existing containment checks.
+
+Cross-platform unit tests exercise native non-ASCII image and WAV paths, authored CNJ sidecars, and
+native <-> persistent UTF-8 round trips. A real POSIX `cna-content` process test builds and then
+skips `Textury/žluťoučký_壁.png` beneath non-ASCII source/output roots, verifying the CNB logical name
+and manifest paths. The Windows entry point and lower native-path APIs compile in the normal target,
+but this Linux run is not reported as a Windows execution result.
+
+One audited limitation remains explicit: the shared glTF orchestration ultimately passes
+`path.string()` to cgltf, and `BuildCnbModelFromCnj` remains a legacy narrow-path compiler seam.
+Consequently CP-012 does not advertise Windows non-ASCII paths for glTF or Model CNJ input. Fixing
+that requires a shared native cgltf file callback/path refactor while preserving the pinned direct
+glTF/CNJ/CNB byte oracles; it is not papered over with a locale conversion or second glTF parser.
 
 ---
 
@@ -740,8 +756,8 @@ Required before the corresponding task closes:
 | `CP-009` | **completed** | Linked the one existing glTF-to-CNJ implementation behind both front ends; added `ImportedModelDocument`, `GltfImporter`, `ModelProcessor` over `BuildCnbModelFromCnj`, and a writer over `EncodeModelToCnb`. External buffers/images are explicit source dependencies, Model XREFs remain separate, the manifest invalidates on dependency bytes, runtime loading succeeds, direct/two-step/pipeline bytes remain equal, and all focused/golden tests pass. Multi-Model and generated-texture child outputs remain explicit build-graph work rather than silent partial behavior. |
 | `CP-010` | **completed** | Added a bounded multi-output `CnjImporter` and integrated all eight compiler-supported CNJ types with explicit intermediate values, processors and writer adapters over the existing codecs. Image/WAV/DDS/Model implementations are reused; canonical Curve/AnimationClip readers are now shared by runtime and both build paths, eliminating the build-time `ContentManager` shortcut. Sidecars are contained source dependencies, XREF stays separate, every type is byte-equivalent to the old compiler, and the final broad selection passed 241/243 tests (two environment-gated large glTF fixtures skipped). |
 | `CP-011` | **completed** | Added a realistic custom `.level` importer, parameterized processor, custom codec/writer and `ContentManager` loader end-to-end test. It proves deterministic output, source dependency versus runtime XREF behavior, stable component identities, custom CMET/XREF data, configuration diagnostics and runtime loading. The C++ API remains explicitly experimental because one custom schema does not settle source/ABI stability or multi-output/plugin requirements. |
-| `CP-012` | **current** | Implement/audit Windows wide argv and non-ASCII pathname tests; document logical/native conversion. |
-| `CP-013` | future | Add `docs/content-pipeline.md`, stable/experimental/internal labels, compatibility/migration guidance and architectural review. |
+| `CP-012` | **completed** | Kept wide Windows argv and native filesystem paths through the CLI/core, added explicit generic-UTF-8 manifest/diagnostic conversion, added native image/WAV/DDS import overloads and Unicode CNJ sidecar resolution, and passed 43 focused tests including a real non-ASCII directory build/no-op. Windows execution was not available; glTF/Model's audited legacy narrow seam is recorded rather than hidden. |
+| `CP-013` | **current** | Add `docs/content-pipeline.md`, stable/experimental/internal labels, compatibility/migration guidance and architectural review. |
 | `CP-014` | future | Evaluate and, only if justified, implement CNA-convention CMake orchestration over the same CLI/library. |
 | `CP-015` | future | Final sanitizer, golden-vector, compatibility, architecture and risk review; reconcile plan status with the tree. |
 
@@ -773,6 +789,10 @@ the ordering wrong; it is not a promise to build speculative abstractions.
   advertised as supported by the cache.
 * Content-to-content dependency records have deterministic fingerprint semantics, but the serial
   CLI intentionally forces/refuses that route until graph ordering and cycles are implemented.
+* Windows Unicode paths are native through CLI discovery, manifests, image/WAV/DDS and non-Model
+  CNJ flows. The existing glTF/canonical-Model seam still narrows paths for cgltf and
+  `BuildCnbModelFromCnj`; non-ASCII Windows Model sources are not advertised until that shared
+  implementation is converted and all existing model byte oracles remain pinned.
 
 ### Rejected alternatives
 

@@ -7,6 +7,7 @@
 #include <limits>
 
 #include "CNA/Content/Cnb/CnbArithmetic.hpp"
+#include "CNA/Internal/ContentPath.hpp"
 #include "CNA/Internal/Graphics/DdsCubeDecoder.hpp"
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
@@ -17,13 +18,13 @@ namespace CNA::Content::Cnb
 {
     namespace
     {
-        std::vector<std::uint8_t> ReadWholeFile(const std::string& path, const char* what)
+        std::vector<std::uint8_t> ReadWholeFile(const std::filesystem::path& path, const char* what)
         {
             std::ifstream file(path, std::ios::binary);
             if (!file.is_open())
             {
-                throw ContentLoadException(std::string("CNB ") + what + ": cannot open '" + path +
-                                           "'.");
+                throw ContentLoadException(std::string("CNB ") + what + ": cannot open '" +
+                                           CNA::Internal::ContentPathToUtf8(path) + "'.");
             }
             return std::vector<std::uint8_t>(std::istreambuf_iterator<char>(file),
                                               std::istreambuf_iterator<char>());
@@ -81,14 +82,22 @@ namespace CNA::Content::Cnb
     CnbTextureData ImportImageAsCnbTexture2D(const std::string& imagePath,
                                               const CnbImageImportOptions& options)
     {
+        return ImportImageAsCnbTexture2D(std::filesystem::path(imagePath), options);
+    }
+
+    CnbTextureData ImportImageAsCnbTexture2D(const std::filesystem::path& imagePath,
+                                              const CnbImageImportOptions& options)
+    {
         // Through CNA's own decoder, so the compiled pixels are the pixels the runtime would have
         // loaded. A second image decoder here would be a second answer to "what does this PNG
         // contain", which is the failure mode this whole layer exists to avoid.
-        CNA::Internal::Graphics::ImageData image =
-            CNA::Internal::Graphics::ImageLoader::Load(imagePath);
+        const std::vector<std::uint8_t> bytes = ReadWholeFile(imagePath, "image import");
+        CNA::Internal::Graphics::ImageData image = CNA::Internal::Graphics::ImageLoader::LoadFromMemory(
+            bytes.data(), bytes.size());
+        const std::string origin = CNA::Internal::ContentPathToUtf8(imagePath);
         if (image.width <= 0 || image.height <= 0)
         {
-            throw ContentLoadException("CNB image import: '" + imagePath + "' decoded to " +
+            throw ContentLoadException("CNB image import: '" + origin + "' decoded to " +
                                        std::to_string(image.width) + "x" +
                                        std::to_string(image.height) + ".");
         }
@@ -97,7 +106,7 @@ namespace CNA::Content::Cnb
         if (image.pixels.size() != expected)
         {
             throw ContentLoadException(
-                "CNB image import: '" + imagePath + "' decoded to " +
+                "CNB image import: '" + origin + "' decoded to " +
                 std::to_string(image.pixels.size()) + " bytes, but " + std::to_string(image.width) +
                 "x" + std::to_string(image.height) + " Rgba8 needs " + std::to_string(expected) +
                 ".");
@@ -161,8 +170,13 @@ namespace CNA::Content::Cnb
 
     CnbTextureData ImportDdsAsCnbTextureCube(const std::string& ddsPath)
     {
+        return ImportDdsAsCnbTextureCube(std::filesystem::path(ddsPath));
+    }
+
+    CnbTextureData ImportDdsAsCnbTextureCube(const std::filesystem::path& ddsPath)
+    {
         const std::vector<std::uint8_t> bytes = ReadWholeFile(ddsPath, "TextureCube import");
-        return DecodeDdsAsCnbTextureCube(bytes, ddsPath);
+        return DecodeDdsAsCnbTextureCube(bytes, CNA::Internal::ContentPathToUtf8(ddsPath));
     }
 
     CNA::Content::Import::ImportedSound DecodeWavAsImportedSound(
@@ -544,11 +558,22 @@ namespace CNA::Content::Cnb
 
     CNA::Content::Import::ImportedSound ImportWavAsImportedSound(const std::string& wavPath)
     {
+        return ImportWavAsImportedSound(std::filesystem::path(wavPath));
+    }
+
+    CNA::Content::Import::ImportedSound ImportWavAsImportedSound(
+        const std::filesystem::path& wavPath)
+    {
         const std::vector<std::uint8_t> bytes = ReadWholeFile(wavPath, "WAV import");
-        return DecodeWavAsImportedSound(bytes, wavPath);
+        return DecodeWavAsImportedSound(bytes, CNA::Internal::ContentPathToUtf8(wavPath));
     }
 
     CnbSoundEffectData ImportWavAsCnbSoundEffect(const std::string& wavPath)
+    {
+        return ImportWavAsCnbSoundEffect(std::filesystem::path(wavPath));
+    }
+
+    CnbSoundEffectData ImportWavAsCnbSoundEffect(const std::filesystem::path& wavPath)
     {
         return ProcessImportedSoundEffect(ImportWavAsImportedSound(wavPath));
     }

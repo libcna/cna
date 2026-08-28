@@ -20,6 +20,7 @@ extern char** environ;
 #include "CNA/Content/Cnb/CnbSourceImport.hpp"
 #include "CNA/Content/Import/ImportedSound.hpp"
 #include "CNA/Content/Pipeline/SoundEffectContentPipeline.hpp"
+#include "CNA/Internal/ContentPath.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 
 namespace Pipeline = CNA::Content::Pipeline;
@@ -268,6 +269,35 @@ TEST(SoundEffectContentPipelineTest, IsDeterministicAndByteIdenticalToTheExistin
     EXPECT_EQ(decoded.loopStart, 20u);
     EXPECT_EQ(decoded.loopLength, 80u);
     EXPECT_EQ(decoded.samples, pcm);
+}
+
+TEST(SoundEffectContentPipelineTest, ReadsANativeNonAsciiFilesystemPathWithoutNarrowing)
+{
+    ScratchDirectory scratch("unicode");
+    const std::filesystem::path directory =
+        scratch.Path() / std::filesystem::path(u8"Zvuky");
+    std::filesystem::create_directories(directory);
+    const std::filesystem::path source =
+        directory / std::filesystem::path(u8"výbuch_音.wav");
+    WriteBytes(source, MakeWav(1u, 22050u, 16u, MakePcm16(20u, 1u)));
+
+    const Pipeline::ContentPipeline pipeline(MakeRegistry());
+    Pipeline::ContentBuildRequest request;
+    request.sourceRoot = scratch.Path();
+    request.source = source;
+    request.logicalName = "Zvuky/výbuch_音";
+    const Pipeline::ContentBuildResult result = pipeline.Build(request);
+
+    ASSERT_EQ(result.dependencies.size(), 1u);
+    EXPECT_EQ(result.dependencies.front().identity,
+              CNA::Internal::ContentPathToUtf8(std::filesystem::weakly_canonical(source)));
+    const Cnb::CnbDocument document =
+        Cnb::CnbDocument::Parse(result.output.bytes, "unicode WAV pipeline output");
+    EXPECT_EQ(document.Metadata().contentName, "Zvuky/výbuch_音");
+    EXPECT_EQ(Cnb::DecodeSoundEffectFromCnb(document).frameCount, 20u);
+
+    const Cnb::CnbSoundEffectData compatibility = Cnb::ImportWavAsCnbSoundEffect(source);
+    EXPECT_EQ(Cnb::EncodeSoundEffectToCnb(compatibility, request.logicalName), result.output.bytes);
 }
 
 TEST(SoundEffectContentPipelineTest, EightBitPipelineBytesMatchTheExistingProducer)

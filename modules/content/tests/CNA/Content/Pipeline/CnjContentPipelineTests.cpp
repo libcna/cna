@@ -21,6 +21,7 @@
 #include "CNA/Content/Pipeline/SoundEffectContentPipeline.hpp"
 #include "CNA/Content/Pipeline/Texture2DContentPipeline.hpp"
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
+#include "CNA/Internal/ContentPath.hpp"
 #include "CNA/DdsCubeFixtureEXT.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 
@@ -151,7 +152,7 @@ namespace
     }
 
     Pipeline::ContentBuildResult Build(const std::filesystem::path& root,
-                                       const std::string& source,
+                                       const std::filesystem::path& source,
                                        const std::string& logicalName)
     {
         const Pipeline::ContentPipeline pipeline(MakeRegistry());
@@ -195,6 +196,31 @@ TEST(CnjContentPipelineTest, Texture2DConvergesOnTheExistingTextureProcessorAndW
     const Cnb::CnjToCnbResult oracle = Cnb::CompileCnjToCnb(
         (scratch.Path() / "wall.cnj").string(), scratch.Path().string(), "Textures/wall");
     EXPECT_EQ(result.output.bytes, oracle.bytes);
+}
+
+TEST(CnjContentPipelineTest, ResolvesUtf8AuthoredSidecarsThroughNativePaths)
+{
+    ScratchDirectory scratch("unicode_sidecar");
+    const std::filesystem::path directory =
+        scratch.Path() / std::filesystem::path(u8"Textury");
+    std::filesystem::create_directories(directory);
+    const std::filesystem::path image =
+        directory / std::filesystem::path(u8"žluťoučký_壁.png");
+    const std::filesystem::path document =
+        directory / std::filesystem::path(u8"popis_壁.cnj");
+    WriteBytes(image, MakePng(4u, 3u));
+    WriteText(document,
+              R"({"cnjVersion":1,"type":"Texture2D","sourceFile":"žluťoučký_壁.png"})");
+
+    const Pipeline::ContentBuildResult result = Build(
+        scratch.Path(), document, "Textury/žluťoučký_壁");
+    ASSERT_EQ(result.dependencies.size(), 2u);
+    EXPECT_EQ(CNA::Internal::ContentPathFromUtf8(result.dependencies[1].identity),
+              std::filesystem::weakly_canonical(image));
+    const Cnb::CnbDocument output =
+        Cnb::CnbDocument::Parse(result.output.bytes, "unicode CNJ pipeline output");
+    EXPECT_EQ(output.Metadata().contentName, "Textury/žluťoučký_壁");
+    EXPECT_EQ(Cnb::DecodeTexture2DFromCnb(output).width, 4u);
 }
 
 TEST(CnjContentPipelineTest, SoundEffectConvergesOnTheExistingSoundProcessorAndWriter)

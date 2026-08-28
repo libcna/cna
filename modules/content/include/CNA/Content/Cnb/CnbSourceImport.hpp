@@ -3,6 +3,7 @@
 
 #include <array>
 #include <cstdint>
+#include <filesystem>
 #include <optional>
 #include <span>
 #include <string>
@@ -68,6 +69,19 @@ namespace CNA::Content::Cnb
         const std::string& imagePath, const CnbImageImportOptions& options = {});
 
     /**
+     * @brief Decodes an image from a native filesystem path into a `Texture2D` description.
+     *
+     * This overload preserves Windows Unicode paths. It uses the same image decoder and import
+     * policy as the legacy narrow-string overload.
+     *
+     * @param imagePath Native filesystem path to the image.
+     * @param options Import options; see CnbImageImportOptions.
+     * @return The texture description, ready for EncodeTexture2DToCnb().
+     */
+    [[nodiscard]] CnbTextureData ImportImageAsCnbTexture2D(
+        const std::filesystem::path& imagePath, const CnbImageImportOptions& options = {});
+
+    /**
      * @brief Decodes a DDS cube map into a `TextureCube` description
      *        (plans/plan_cnb.md `CNBF-113`).
      *
@@ -89,6 +103,15 @@ namespace CNA::Content::Cnb
      *         meanings, the runtime raises.
      */
     [[nodiscard]] CnbTextureData ImportDdsAsCnbTextureCube(const std::string& ddsPath);
+
+    /**
+     * @brief Decodes a DDS cube map from a native filesystem path.
+     *
+     * @param ddsPath Native filesystem path to the `.dds`.
+     * @return The cube description, ready for EncodeTextureCubeToCnb().
+     */
+    [[nodiscard]] CnbTextureData ImportDdsAsCnbTextureCube(
+        const std::filesystem::path& ddsPath);
 
     /**
      * @brief Decodes DDS bytes already in memory into a `TextureCube` description.
@@ -174,6 +197,15 @@ namespace CNA::Content::Cnb
     [[nodiscard]] CnbSoundEffectData ImportWavAsCnbSoundEffect(const std::string& wavPath);
 
     /**
+     * @brief Reads and decodes a WAV file from a native filesystem path.
+     *
+     * @param wavPath Native filesystem path to the `.wav`.
+     * @return The sound description.
+     */
+    [[nodiscard]] CnbSoundEffectData ImportWavAsCnbSoundEffect(
+        const std::filesystem::path& wavPath);
+
+    /**
      * @brief Reads and parses a WAV file without applying SoundEffect processing policy.
      *
      * @param wavPath Filesystem path to the WAV source.
@@ -182,4 +214,13 @@ namespace CNA::Content::Cnb
      */
     [[nodiscard]] CNA::Content::Import::ImportedSound ImportWavAsImportedSound(
         const std::string& wavPath);
+
+    /**
+     * @brief Reads source-oriented WAV data from a native filesystem path.
+     *
+     * @param wavPath Native filesystem path to the WAV source.
+     * @return Validated source-oriented sound data.
+     */
+    [[nodiscard]] CNA::Content::Import::ImportedSound ImportWavAsImportedSound(
+        const std::filesystem::path& wavPath);
 }

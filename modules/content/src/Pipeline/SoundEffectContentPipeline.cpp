@@ -36,7 +36,7 @@ namespace CNA::Content::Pipeline
     ContentValue WavImporter::Import(ContentImporterContext& context) const
     {
         CNA::Content::Import::ImportedSound imported =
-            Cnb::ImportWavAsImportedSound(context.SourcePath().string());
+            Cnb::ImportWavAsImportedSound(context.SourcePath());
         context.LogInfo("decoded WAV with " + std::to_string(imported.frameCount) +
                         " frames, " + std::to_string(imported.channels) + " channel(s), and " +
                         std::to_string(imported.sampleRate) + " Hz sample rate.");

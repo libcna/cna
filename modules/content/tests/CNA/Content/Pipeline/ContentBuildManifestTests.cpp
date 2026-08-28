@@ -10,6 +10,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Content/Pipeline/ContentBuildManifest.hpp"
+#include "CNA/Internal/ContentPath.hpp"
 
 namespace Pipeline = CNA::Content::Pipeline;
 
@@ -85,6 +86,16 @@ TEST(ContentBuildManifestTest, UsesTheKnownSha256Digest)
 {
     EXPECT_EQ(Pipeline::ContentSha256({'a', 'b', 'c'}),
               "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+}
+
+TEST(ContentBuildManifestTest, PersistentPathTextRoundTripsNativeNonAsciiNamesAsUtf8)
+{
+    const std::filesystem::path native =
+        std::filesystem::path(u8"Textury") / std::filesystem::path(u8"žluťoučký_壁.png");
+    const std::string persistent = CNA::Internal::ContentPathToUtf8(native);
+
+    EXPECT_EQ(persistent, "Textury/žluťoučký_壁.png");
+    EXPECT_EQ(CNA::Internal::ContentPathFromUtf8(persistent), native);
 }
 
 TEST(ContentBuildManifestTest, RoundTripsEveryStableFieldDeterministically)

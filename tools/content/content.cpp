@@ -17,6 +17,7 @@
 #include "CNA/Content/Pipeline/ModelContentPipeline.hpp"
 #include "CNA/Content/Pipeline/SoundEffectContentPipeline.hpp"
 #include "CNA/Content/Pipeline/Texture2DContentPipeline.hpp"
+#include "CNA/Internal/ContentPath.hpp"
 #include "CnaToolAtomicWrite.hpp"
 
 namespace Pipeline = CNA::Content::Pipeline;
@@ -83,7 +84,8 @@ namespace
             else if (!argument.empty() && argument.native().front() ==
                                               std::filesystem::path("-").native().front())
             {
-                throw std::invalid_argument("unknown option '" + argument.string() + "'.");
+                throw std::invalid_argument("unknown option '" +
+                                            CNA::Internal::ContentPathToUtf8(argument) + "'.");
             }
             else if (command.source.empty())
             {
@@ -105,7 +107,8 @@ namespace
         std::filesystem::path result = std::filesystem::weakly_canonical(path, error);
         if (error)
         {
-            throw std::runtime_error("cannot resolve path '" + path.string() + "': " +
+            throw std::runtime_error("cannot resolve path '" +
+                                     CNA::Internal::ContentPathToUtf8(path) + "': " +
                                      error.message() + ".");
         }
         return result;
@@ -128,8 +131,7 @@ namespace
     {
         std::filesystem::path withoutExtension = relativeSource;
         withoutExtension.replace_extension();
-        const std::u8string utf8 = withoutExtension.generic_u8string();
-        return {reinterpret_cast<const char*>(utf8.data()), utf8.size()};
+        return CNA::Internal::ContentPathToUtf8(withoutExtension);
     }
 
     std::vector<BuildItem> DiscoverBuilds(const CommandLine& command,
@@ -158,7 +160,8 @@ namespace
         }
         if (!std::filesystem::is_directory(source))
         {
-            throw std::invalid_argument("source '" + source.string() +
+            throw std::invalid_argument("source '" +
+                                        CNA::Internal::ContentPathToUtf8(source) +
                                         "' is neither a regular file nor a directory.");
         }
 
@@ -205,7 +208,8 @@ namespace
         std::ifstream stream(path, std::ios::binary);
         if (!stream)
         {
-            throw std::runtime_error("cannot open '" + path.string() + "'.");
+            throw std::runtime_error("cannot open '" +
+                                     CNA::Internal::ContentPathToUtf8(path) + "'.");
         }
         return {std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
     }
@@ -226,7 +230,8 @@ namespace
             if (!quiet)
             {
                 std::cout << "[WARN] Ignoring incompatible or corrupt manifest '"
-                          << path.string() << "': " << error.what() << "\n";
+                          << CNA::Internal::ContentPathToUtf8(path) << "': " << error.what()
+                          << "\n";
             }
             return {};
         }
@@ -290,8 +295,12 @@ namespace
         try
         {
             if (HasContentBuildDependency(entry)) { return false; }
-            if (WeaklyCanonical(sourceRoot / entry.source) != WeaklyCanonical(item.source) ||
-                WeaklyCanonical(outputRoot / entry.output) != WeaklyCanonical(item.output) ||
+            if (WeaklyCanonical(sourceRoot /
+                                CNA::Internal::ContentPathFromUtf8(entry.source)) !=
+                    WeaklyCanonical(item.source) ||
+                WeaklyCanonical(outputRoot /
+                                CNA::Internal::ContentPathFromUtf8(entry.output)) !=
+                    WeaklyCanonical(item.output) ||
                 !IsCurrentRoute(entry, registry, item, parameters))
             {
                 return false;
@@ -366,7 +375,7 @@ namespace
                     if (!command.quiet)
                     {
                         std::cout << "[SKIP] " << item.logicalName << " -> "
-                                  << item.output.string() << "\n";
+                                  << CNA::Internal::ContentPathToUtf8(item.output) << "\n";
                     }
                     continue;
                 }
@@ -411,7 +420,8 @@ namespace
                 ++built;
                 if (!command.quiet)
                 {
-                    std::cout << "[BUILD] " << item.logicalName << " -> " << item.output.string()
+                    std::cout << "[BUILD] " << item.logicalName << " -> "
+                              << CNA::Internal::ContentPathToUtf8(item.output)
                               << " (" << result.output.bytes.size() << " bytes; "
                               << result.importer.name << " -> " << result.processor.name << " -> "
                               << result.writer.name << ")\n";

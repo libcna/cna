@@ -19,6 +19,7 @@
 #include "CNA/Content/Pipeline/ContentBuildManifest.hpp"
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
 #include "CNA/Content/Pipeline/Texture2DContentPipeline.hpp"
+#include "CNA/Internal/ContentPath.hpp"
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
 
 extern char** environ;
@@ -257,6 +258,51 @@ TEST(ContentPipelineCliTest, DirectoryBuildIsSortedAndPreservesLogicalRelativePa
     ASSERT_EQ(manifest.Entries().size(), 2u);
     EXPECT_NE(manifest.Find("Sounds/explosion"), nullptr);
     EXPECT_NE(manifest.Find("Textures/wall"), nullptr);
+}
+
+TEST(ContentPipelineCliTest, NonAsciiDirectoryBuildPreservesUtf8LogicalNamesAndSkips)
+{
+    ScratchDirectory scratch("unicode");
+    const std::filesystem::path source =
+        scratch.Path() / std::filesystem::path(u8"Zdrojový obsah");
+    const std::filesystem::path output =
+        scratch.Path() / std::filesystem::path(u8"Přeložený obsah");
+    const std::filesystem::path relative =
+        std::filesystem::path(u8"Textury") / std::filesystem::path(u8"žluťoučký_壁.png");
+    WriteBytes(source / relative, MakePng(3, 2));
+
+    std::string first;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::ContentPathToUtf8(source), "-o",
+                       CNA::Internal::ContentPathToUtf8(output)},
+                      first),
+              0)
+        << first;
+    EXPECT_NE(first.find("[BUILD] Textury/žluťoučký_壁"), std::string::npos) << first;
+
+    std::filesystem::path artifact = output / relative;
+    artifact.replace_extension(".cnb");
+    const Cnb::CnbDocument document =
+        Cnb::CnbDocument::Parse(ReadBytes(artifact), "non-ASCII CLI output");
+    EXPECT_EQ(document.Metadata().contentName, "Textury/žluťoučký_壁");
+
+    const std::filesystem::path manifestPath =
+        output / Pipeline::ContentBuildManifestFileName;
+    const std::vector<std::uint8_t> manifestBytes = ReadBytes(manifestPath);
+    const Pipeline::ContentBuildManifest manifest = Pipeline::ContentBuildManifest::Parse(
+        std::string(manifestBytes.begin(), manifestBytes.end()));
+    const Pipeline::ContentBuildManifestEntry* entry =
+        manifest.Find("Textury/žluťoučký_壁");
+    ASSERT_NE(entry, nullptr);
+    EXPECT_EQ(entry->source, "Textury/žluťoučký_壁.png");
+    EXPECT_EQ(entry->output, "Textury/žluťoučký_壁.cnb");
+
+    std::string second;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::ContentPathToUtf8(source), "-o",
+                       CNA::Internal::ContentPathToUtf8(output)},
+                      second),
+              0)
+        << second;
+    EXPECT_NE(second.find("[SKIP] Textury/žluťoučký_壁"), std::string::npos) << second;
 }
 
 TEST(ContentPipelineCliTest, DirectoryBuildIgnoresUnregisteredSupportFiles)

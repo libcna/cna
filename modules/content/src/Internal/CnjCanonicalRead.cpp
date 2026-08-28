@@ -9,6 +9,7 @@
 #include <limits>
 
 #include "CNA/Content/Cnb/CnbByteReader.hpp"
+#include "CNA/Internal/ContentPath.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/CurveKey.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
@@ -371,12 +372,13 @@ namespace CNA::Internal
         std::ifstream stream(path, std::ios::binary);
         if (!stream)
         {
-            throw ContentLoadException("Cannot open binary file: " + path.string());
+            throw ContentLoadException("Cannot open binary file: " +
+                                       CNA::Internal::ContentPathToUtf8(path));
         }
         const std::vector<std::uint8_t> bytes{
             std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
         CNA::Content::Cnb::CnbByteReader reader(
-            bytes, "AnimationClip sidecar '" + path.string() + "'");
+            bytes, "AnimationClip sidecar '" + CNA::Internal::ContentPathToUtf8(path) + "'");
 
         using namespace Microsoft::Xna::Framework;
         using namespace Microsoft::Xna::Framework::Graphics;

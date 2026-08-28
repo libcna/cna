@@ -13,6 +13,7 @@
 #include <type_traits>
 
 #include "CNA/Content/Cnb/CnbFormat.hpp"
+#include "CNA/Internal/ContentPath.hpp"
 #include "CNA/Internal/Json.hpp"
 #include "System/Security/Cryptography/SHA256.hpp"
 
@@ -248,7 +249,7 @@ namespace CNA::Content::Pipeline
 
         void RequireSafeRelativePath(const std::string& value, const char* field)
         {
-            const std::filesystem::path path(value);
+            const std::filesystem::path path = CNA::Internal::ContentPathFromUtf8(value);
             if (value.empty() || path.is_absolute())
             {
                 throw std::invalid_argument(std::string("content manifest ") + field +
@@ -270,7 +271,8 @@ namespace CNA::Content::Pipeline
             std::filesystem::path result = std::filesystem::weakly_canonical(path, error);
             if (error)
             {
-                throw std::runtime_error("cannot resolve '" + path.string() +
+                throw std::runtime_error("cannot resolve '" +
+                                         CNA::Internal::ContentPathToUtf8(path) +
                                          "': " + error.message() + ".");
             }
             return result;
@@ -292,12 +294,6 @@ namespace CNA::Content::Pipeline
             return rootPart == root.end();
         }
 
-        std::string GenericUtf8(const std::filesystem::path& path)
-        {
-            const std::u8string text = path.generic_u8string();
-            return {reinterpret_cast<const char*>(text.data()), text.size()};
-        }
-
         std::string RelativeContained(const std::filesystem::path& root,
                                       const std::filesystem::path& path, const char* description)
         {
@@ -305,10 +301,13 @@ namespace CNA::Content::Pipeline
             const std::filesystem::path canonicalPath = WeaklyCanonical(path);
             if (!IsWithin(canonicalRoot, canonicalPath))
             {
-                throw std::runtime_error(std::string(description) + " '" + path.string() +
-                                         "' escapes root '" + root.string() + "'.");
+                throw std::runtime_error(
+                    std::string(description) + " '" +
+                    CNA::Internal::ContentPathToUtf8(path) + "' escapes root '" +
+                    CNA::Internal::ContentPathToUtf8(root) + "'.");
             }
-            return GenericUtf8(std::filesystem::relative(canonicalPath, canonicalRoot));
+            return CNA::Internal::ContentPathToUtf8(
+                std::filesystem::relative(canonicalPath, canonicalRoot));
         }
 
         std::filesystem::path ResolveContained(const std::filesystem::path& root,
@@ -316,7 +315,8 @@ namespace CNA::Content::Pipeline
         {
             RequireSafeRelativePath(relative, description);
             const std::filesystem::path canonicalRoot = WeaklyCanonical(root);
-            const std::filesystem::path resolved = WeaklyCanonical(canonicalRoot / relative);
+            const std::filesystem::path resolved = WeaklyCanonical(
+                canonicalRoot / CNA::Internal::ContentPathFromUtf8(relative));
             if (!IsWithin(canonicalRoot, resolved))
             {
                 throw std::runtime_error(std::string(description) + " '" + relative +
@@ -330,14 +330,16 @@ namespace CNA::Content::Pipeline
             std::ifstream stream(path, std::ios::binary | std::ios::ate);
             if (!stream)
             {
-                throw std::runtime_error("cannot open '" + path.string() + "' for hashing.");
+                throw std::runtime_error("cannot open '" +
+                                         CNA::Internal::ContentPathToUtf8(path) +
+                                         "' for hashing.");
             }
             const std::streamoff size = stream.tellg();
             if (size < 0 ||
                 static_cast<std::uint64_t>(size) >
                     static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max()))
             {
-                throw std::runtime_error("file '" + path.string() +
+                throw std::runtime_error("file '" + CNA::Internal::ContentPathToUtf8(path) +
                                          "' is too large for the current SHA-256 API.");
             }
             stream.seekg(0, std::ios::beg);
@@ -347,7 +349,8 @@ namespace CNA::Content::Pipeline
                 stream.read(reinterpret_cast<char*>(bytes.data()), size);
                 if (!stream)
                 {
-                    throw std::runtime_error("cannot read '" + path.string() +
+                    throw std::runtime_error("cannot read '" +
+                                             CNA::Internal::ContentPathToUtf8(path) +
                                              "' completely for hashing.");
                 }
             }
@@ -719,7 +722,8 @@ namespace CNA::Content::Pipeline
             if (dependency.kind != ContentDependencyKind::ContentBuild)
             {
                 normalized.identity = RelativeContained(
-                    sourceRoot, std::filesystem::path(dependency.identity), "dependency");
+                    sourceRoot, CNA::Internal::ContentPathFromUtf8(dependency.identity),
+                    "dependency");
             }
             entry.dependencies.push_back(std::move(normalized));
         }
