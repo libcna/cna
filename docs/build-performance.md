@@ -371,6 +371,50 @@ Start local parallelism experiments at 8, 12, and 16 jobs on a 16-logical-CPU ho
 largest value that does not cause memory pressure. `CNA_MAX_VENDORED_BUILD_JOBS` controls the nested
 configure-time SDL build separately; it is not the main Ninja parallelism limit.
 
+### Reproducible GCC versus Clang clean build
+
+`tools/build/benchmark_clean_build.py` runs one clean benchmark in a new directory and writes the
+full evidence to `benchmark-result.json`. An explicit directory must not exist and its basename
+must start with `cmake-build-benchmark-`; the script never deletes a build directory. With
+`--ccache isolated`, the cache and temporary directory are private to that build, so an empty
+directory is a verifiable cold-cache start.
+
+The 2026-08-29 comparison at commit `28056b129` used Debug, full debug information, the STUB
+renderer, Mold, 12 jobs, and the default `cna_tool_cnb_info` target. Tests, examples, C API,
+networking, video, Draco, PCH, unity, and IPO were disabled in both configurations:
+
+```sh
+python3 tools/build/benchmark_clean_build.py \
+  --label gcc-14.2.0 --cxx-compiler /usr/bin/g++ --c-compiler /usr/bin/gcc \
+  --parallel 12 --linker MOLD --ccache isolated \
+  --build-dir /tmp/cmake-build-benchmark-gcc14
+
+python3 tools/build/benchmark_clean_build.py \
+  --label clang-19.1.7 --cxx-compiler /usr/bin/clang++ --c-compiler /usr/bin/clang \
+  --parallel 12 --linker MOLD --ccache isolated \
+  --build-dir /tmp/cmake-build-benchmark-clang19
+```
+
+| Metric | GCC 14.2.0 | Clang 19.1.7 |
+| --- | ---: | ---: |
+| Configure wall time | 4.27 s | 4.67 s |
+| Clean target build | **83.45 s** | 90.02 s |
+| Peak build RSS | 864 MiB | **486 MiB** |
+| No-op build | 0.12 s | 0.12 s |
+| Ninja commands / compilations | 508 / 483 | 508 / 483 |
+| Artifact size | 1,299,360 B | **999,752 B** |
+| Build tree excluding ccache | 590,767,494 B | **382,313,116 B** |
+| Isolated ccache size | 71,246,162 B | **49,074,291 B** |
+| ccache misses / hits | 483 / 0 | 483 / 0 |
+
+GCC was 7.3% faster for this clean workload. Clang used 43.8% less peak memory, produced a 35.3%
+smaller build tree and a 23.1% smaller executable. The zero direct and preprocessed hits are
+expected here: both isolated caches began empty, and the measured second invocation was a no-op
+with no compiler calls. On this machine GCC is therefore the faster default for clean development
+builds, while Clang remains valuable for its lower resource use, diagnostics, `-ftime-trace`, and
+independent CI coverage. This single target is not evidence that either compiler wins every CNA
+configuration.
+
 ## Deferred techniques
 
 Precompiled headers, unity builds, PGO, source partitioning, `-march=native`, `-Ofast`, and

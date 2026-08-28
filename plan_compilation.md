@@ -101,8 +101,25 @@ builds can hide include hygiene and alter which translation units appear expensi
   state advanced the direct counter from zero to one.
 - No unsafe `sloppiness`, timestamp relaxation, or project override was added. Documentation now
   requires per-workload counter deltas from a writable environment and shows the exact debug-log
-  procedure. The broader GCC/Clang cold-build baseline in this task remains pending until COMP-001's
-  benchmark driver is completed.
+  procedure.
+
+### GCC/Clang clean-build evidence (2026-08-29)
+
+- `tools/build/benchmark_clean_build.py` now creates or accepts only a new
+  `cmake-build-benchmark-*` directory, never removes it, captures the exact commands and tool
+  versions, and writes configure/build/no-op timing, peak RSS, graph size, artifacts, tree size,
+  and machine-readable ccache counters to `benchmark-result.json`.
+- An equal Debug/STUB/FULL-DWARF/Mold comparison at `--parallel 12`, with tests, examples, C API,
+  optional backends, PCH, unity, and IPO disabled, produced the same 508-command graph containing
+  483 compilations. Both compiler runs started with their own empty cache and reported exactly 483
+  misses and zero hits.
+- GCC 14.2.0 built `cna_tool_cnb_info` in 83.45 s; Clang 19.1.7 took 90.02 s. GCC was therefore
+  7.3% faster for this workload. Clang's 486 MiB peak RSS was 43.8% below GCC's 864 MiB, and its
+  365 MiB build tree was 35.3% smaller than GCC's 563 MiB. Both no-op builds took 0.12 s, and both
+  resulting tools produced the expected usage output.
+- This closes the requested like-for-like compiler comparison and provides the reusable driver.
+  The wider `dev`/`unit`/legacy and 8/12/16-job matrix required to mark all of COMP-001 complete
+  remains pending; the task therefore deliberately stays open.
 
 ## 5. COMP-002 — split the monolithic unit-test iteration path
 
