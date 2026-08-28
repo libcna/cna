@@ -53,5 +53,18 @@ namespace CNA::Internal::Xnb
                     "Microsoft.Xna.Framework.Vector3[]",
                     "Microsoft.Xna.Framework.Content.Vector3Reader");
             });
+
+        // A `List<Matrix>`, which is how a skeleton's bind pose and inverse bind pose reach a
+        // game -- XNA's own CustomModelAnimation and SkinnedModel samples both write exactly this
+        // on `Model.Tag`. Same gap as the `Vector3[]` above: the template existed, no
+        // instantiation of it was registered, and a table that names it cannot resolve at all.
+        // Found by cna-samples SAMPLE-051.
+        ContentTypeReaderManager::AddTypeCreator(
+            "Microsoft.Xna.Framework.Content.ListReader`1[[Microsoft.Xna.Framework.Matrix]]",
+            [] {
+                return std::make_unique<ListReader<Matrix>>(
+                    "System.Collections.Generic.List`1[[Microsoft.Xna.Framework.Matrix]]",
+                    "Microsoft.Xna.Framework.Content.MatrixReader");
+            });
     }
 }

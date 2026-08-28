@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Xnb/PrimitiveContentTypeReaders.hpp"
 
+#include <cstdint>
+
+#include "CNA/Internal/Xnb/CollectionContentTypeReaders.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 
 namespace CNA::Internal::Xnb
@@ -35,5 +38,17 @@ namespace CNA::Internal::Xnb
             "Microsoft.Xna.Framework.Content.CharReader", [] { return std::make_unique<CharReader>(); });
         ContentTypeReaderManager::AddTypeCreator(
             "Microsoft.Xna.Framework.Content.StringReader", [] { return std::make_unique<StringReader>(); });
+
+        // A `List<int>`, which is how a skeleton hierarchy -- one parent index per bone -- reaches
+        // a game from a custom model processor. The template existed but no instantiation of it
+        // was registered, and an .xnb's type-reader table must resolve IN FULL before a single
+        // object is read, so the whole asset failed. Found by cna-samples SAMPLE-051.
+        ContentTypeReaderManager::AddTypeCreator(
+            "Microsoft.Xna.Framework.Content.ListReader`1[[System.Int32]]",
+            [] {
+                return std::make_unique<ListReader<std::int32_t>>(
+                    "System.Collections.Generic.List`1[[System.Int32]]",
+                    "Microsoft.Xna.Framework.Content.Int32Reader");
+            });
     }
 }

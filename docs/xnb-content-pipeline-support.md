@@ -71,6 +71,13 @@ closed combinations exist (e.g. `SpriteFontReader` registers exactly the 3 combi
 collection-of-`T` combination nothing has registered fails with a clear "unregistered reader"
 `ContentLoadException`, the same as any other unsupported reader name.
 
+Registered so far, over and above `SpriteFont`'s three: `ArrayReader<Vector3>` (SAMPLE-048, a
+processor tagging a model with its world-space triangle vertices), and `ListReader<Matrix>` plus
+`ListReader<int>` (SAMPLE-051, a skinned model's bind pose, inverse bind pose and skeleton
+hierarchy). A combination over a **game's own** type -- `List<MyKeyframe>`, say -- is the game's to
+register, because only the game has the C++ type; see the `RegisterShared()` note below for the
+shape such an element reader has to have.
+
 ### Custom readers (XNB-42)
 
 A CNA game can register its own custom, non-built-in `.xnb` reader — no CNA-side involvement or
@@ -137,6 +144,30 @@ ReflectiveTypeReaderBuilder<ParticleSystemSettings>("ParticlesSettings.ParticleS
     .EnumField(&ParticleSystemSettings::AccelerationMode, "ParticlesSettings.AccelerationMode")
     .Register();
 ```
+
+`Register()` is the right call when the type is read **directly** -- as an `.xnb`'s root asset, or
+inline as a value type. When the type is a C# `class` that something *dispatches* to -- a list
+element, a dictionary value, or a `Model.Tag` -- call **`RegisterShared()`** instead, which
+registers a reader handing the object back as a `std::shared_ptr`:
+
+```cpp
+ReflectiveTypeReaderBuilder<ModelKeyframe>("CustomModelAnimation.ModelKeyframe")
+    .Field(&ModelKeyframe::bone)
+    .Field(&ModelKeyframe::time)
+    .Field(&ModelKeyframe::transform)
+    .RegisterShared();
+
+ReflectiveTypeReaderBuilder<ModelData>("CustomModelAnimation.ModelData")
+    /* ... */
+    .RegisterShared<System::Object>();   // Model.Tag is stored as a System::Object*
+```
+
+The two are not interchangeable. XNA writes a reference type with its own 1-based type-reader
+index in front, and `ListReader<T>`, `DictionaryReader<TKey, TValue>` and `ModelReader::ReadTag`
+all decide between the inline and the dispatched form by whether `T` is `shared_ptr`-shaped --
+so the value-shaped reader reads the payload one index short and desynchronises everything after
+it. The registry key is the same either way: the `.xnb` names the serialized type, not the C++
+representation.
 
 The list must be in the type's **declaration order**, because that is the order
 `IntermediateSerializer` wrote the fields in. Each member is dispatched by its C++ type:

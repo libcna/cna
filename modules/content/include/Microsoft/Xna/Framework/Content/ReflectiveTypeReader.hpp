@@ -109,6 +109,87 @@ namespace Microsoft::Xna::Framework::Content
     };
 
     /**
+     * @brief Reads a reflectively-serialized type that XNA treats as a **reference type**, and
+     *        hands it back as a `std::shared_ptr`.
+     *
+     * Every C# `class` is a reference type, and XNA writes one differently depending on where it
+     * sits. As an `.xnb`'s root asset it is read directly, which is what @ref ReflectiveTypeReader
+     * covers. Nested inside a collection, or attached to a `Model.Tag`, it is written with its own
+     * 1-based type-reader index in front and the reader that answers that index has to produce a
+     * *reference*: `ListReader<T>`, `DictionaryReader<TKey, TValue>` and `ModelReader::ReadTag`
+     * all decide between the inline and the dispatched form by whether `T` is `shared_ptr`-shaped.
+     * Registering the value-shaped reader for such a type therefore reads the payload one index
+     * short and desynchronises everything after it.
+     *
+     * @tparam T       The type being read.
+     * @tparam TStored The pointee the reader hands back, `T` itself or a base of it. A `Model.Tag`
+     *                 wants `System::Object`, because that is what `ModelReader` stores.
+     */
+    template <typename T, typename TStored = T>
+    class CNAEXT ReflectiveSharedTypeReader : public ContentTypeReader<std::shared_ptr<TStored>>
+    {
+        static_assert(std::is_base_of_v<TStored, T> || std::is_same_v<TStored, T>,
+                      "TStored must be T itself or a base class of T.");
+
+    public:
+        /** @brief One field's reader, the same shape @ref ReflectiveTypeReader uses. */
+        using FieldReader = typename ReflectiveTypeReader<T>::FieldReader;
+
+        /**
+         * @brief Constructs the reader.
+         * @param targetTypeName The .NET name of the type, as the `.xnb` spells it.
+         * @param fields         One entry per field, in wire order.
+         */
+        ReflectiveSharedTypeReader(std::string targetTypeName, std::vector<FieldReader> fields)
+            : ContentTypeReader<std::shared_ptr<TStored>>(std::move(targetTypeName))
+            , fields_(std::move(fields))
+        {
+        }
+
+        /**
+         * @brief The canonical reader name an implicitly reflected type is written under.
+         * @param targetTypeName The .NET name of the serialized type.
+         * @return The canonical reflective reader name, which is the same whichever shape the
+         *         reader hands back -- the `.xnb` names the type, not the C++ representation.
+         */
+        [[nodiscard]] static std::string CanonicalReaderName(const std::string& targetTypeName)
+        {
+            return ReflectiveTypeReader<T>::CanonicalReaderName(targetTypeName);
+        }
+
+    protected:
+        /**
+         * @brief Reads one object by running every field reader in order.
+         * @param input            The reader, positioned at the object's first field.
+         * @param existingInstance An instance to deserialize into, when the caller supplied one
+         *                         and it really is a @p T.
+         * @return The populated object.
+         */
+        std::shared_ptr<TStored> Read(
+            ContentReader& input, std::optional<std::shared_ptr<TStored>> existingInstance) override
+        {
+            std::shared_ptr<T> value;
+            if (existingInstance.has_value() && *existingInstance)
+            {
+                if constexpr (std::is_same_v<TStored, T>)
+                    value = *existingInstance;
+                else if constexpr (std::is_polymorphic_v<TStored>)
+                    value = std::dynamic_pointer_cast<T>(*existingInstance);
+                else
+                    value = std::static_pointer_cast<T>(*existingInstance);
+            }
+            if (!value) value = std::make_shared<T>();
+
+            for (const FieldReader& field : fields_)
+                field(*value, input);
+            return value;
+        }
+
+    private:
+        std::vector<FieldReader> fields_;
+    };
+
+    /**
      * @brief Reads an enum written by XNA's `EnumReader<T>`, which stores it as an `Int32`.
      *
      * Exists so that a reflectively-read type's enum fields can satisfy the `.xnb`'s type-reader
@@ -239,6 +320,39 @@ namespace Microsoft::Xna::Framework::Content
         {
             fields_.push_back(std::move(action));
             return *this;
+        }
+
+        /**
+         * @brief Registers the reader as a **reference type**, handing the object back as a
+         *        `std::shared_ptr`, and registers every enum reader the type needs.
+         *
+         * Use this instead of @ref Register whenever the type is a C# `class` that the `.xnb`
+         * dispatches to rather than reading inline -- a list element, a dictionary value, or a
+         * `Model.Tag`. See @ref ReflectiveSharedTypeReader for why the shape decides the wire
+         * format. For a `Model.Tag`, name the stored type explicitly:
+         *
+         * ```cpp
+         * ReflectiveTypeReaderBuilder<ModelData>("CustomModelAnimation.ModelData")
+         *     .Field(&ModelData::rootAnimationClips)
+         *     .RegisterShared<System::Object>();
+         * ```
+         *
+         * Safe to call more than once: `AddTypeCreator` replaces an entry of the same name.
+         *
+         * @tparam TStored The pointee the reader hands back: `T` itself, or a base of it.
+         */
+        template <typename TStored = T>
+        void RegisterShared()
+        {
+            for (auto& registration : enumRegistrations_)
+                ContentTypeReaderManager::AddTypeCreator(registration.first, registration.second);
+
+            ContentTypeReaderManager::AddTypeCreator(
+                ReflectiveSharedTypeReader<T, TStored>::CanonicalReaderName(targetTypeName_),
+                [name = targetTypeName_, fields = fields_] {
+                    return std::unique_ptr<ContentTypeReaderBase>(
+                        std::make_unique<ReflectiveSharedTypeReader<T, TStored>>(name, fields));
+                });
         }
 
         /**

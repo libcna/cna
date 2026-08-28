@@ -6,21 +6,29 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 #include <gtest/gtest.h>
 
+#include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ReflectiveTypeReader.hpp"
+#include "CNA/Internal/Xnb/CollectionContentTypeReaders.hpp"
+#include "CNA/Internal/Xnb/MathContentTypeReaders.hpp"
 #include "CNA/Internal/Xnb/PrimitiveContentTypeReaders.hpp"
 #include "System/IO/BinaryWriter.hpp"
+#include "System/Object.hpp"
 #include "System/IO/MemoryStream.hpp"
 
+using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Vector2;
 using Microsoft::Xna::Framework::Content::ContentManager;
 using Microsoft::Xna::Framework::Content::ContentTypeReaderManager;
+using Microsoft::Xna::Framework::Content::ReflectiveSharedTypeReader;
 using Microsoft::Xna::Framework::Content::ReflectiveTypeReader;
 using Microsoft::Xna::Framework::Content::ReflectiveTypeReaderBuilder;
 
@@ -192,6 +200,217 @@ namespace
     // EnumReader the file names has to be registered even though the reflective payload writes
     // the enum inline and never dispatches to it. EnumField registers it; without that the load
     // fails on the table rather than on the data.
+    // --- A reflectively-serialized type that is a REFERENCE type ------------------------------
+    //
+    // Every C# class is one, and where it sits decides how XNA writes it: read directly as an
+    // asset's root, but preceded by its own 1-based reader index when a collection or a Model.Tag
+    // dispatches to it. RegisterShared() is the registration for the second case, and it is not
+    // interchangeable with Register(): the value-shaped reader would leave the index unconsumed
+    // and desynchronise the rest of the payload.
+
+    class Creature : public System::Object
+    {
+    public:
+        std::int32_t Legs = 0;
+        std::string Name;
+
+        [[nodiscard]] const std::string& GetTypeName() const override
+        {
+            static const std::string name = "Bestiary.Creature";
+            return name;
+        }
+    };
+
+    struct Herd
+    {
+        std::vector<std::shared_ptr<Creature>> Members;
+        std::vector<Matrix> Poses;
+        std::vector<std::int32_t> Parents;
+    };
+
+    // The three collection shapes a custom model processor writes on a Model.Tag: a list of its
+    // own class, a list of Matrix (a bind pose) and a list of int (a skeleton hierarchy).
+    std::vector<std::uint8_t> BuildHerdXnb()
+    {
+        System::IO::MemoryStream body;
+        System::IO::BinaryWriter w(&body, true);
+
+        w.Write7BitEncodedInt(8);
+        w.Write(std::string("Microsoft.Xna.Framework.Content.ReflectiveReader`1"
+                            "[[Bestiary.Herd, Bestiary, Version=1.0.0.0, Culture=neutral, "
+                            "PublicKeyToken=null]]"));
+        w.Write(static_cast<std::int32_t>(0));
+        w.Write(std::string("Microsoft.Xna.Framework.Content.ListReader`1"
+                            "[[Bestiary.Creature, Bestiary, Version=1.0.0.0, Culture=neutral, "
+                            "PublicKeyToken=null]]"));
+        w.Write(static_cast<std::int32_t>(0));
+        w.Write(std::string("Microsoft.Xna.Framework.Content.ReflectiveReader`1"
+                            "[[Bestiary.Creature, Bestiary, Version=1.0.0.0, Culture=neutral, "
+                            "PublicKeyToken=null]]"));
+        w.Write(static_cast<std::int32_t>(0));
+        w.Write(std::string("Microsoft.Xna.Framework.Content.StringReader"));
+        w.Write(static_cast<std::int32_t>(0));
+        w.Write(std::string("Microsoft.Xna.Framework.Content.Int32Reader"));
+        w.Write(static_cast<std::int32_t>(0));
+        w.Write(std::string("Microsoft.Xna.Framework.Content.ListReader`1"
+                            "[[Microsoft.Xna.Framework.Matrix, Microsoft.Xna.Framework, "
+                            "Version=4.0.0.0, Culture=neutral, PublicKeyToken=842cf8be1de50553]]"));
+        w.Write(static_cast<std::int32_t>(0));
+        w.Write(std::string("Microsoft.Xna.Framework.Content.MatrixReader"));
+        w.Write(static_cast<std::int32_t>(0));
+        w.Write(std::string("Microsoft.Xna.Framework.Content.ListReader`1"
+                            "[[System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, "
+                            "PublicKeyToken=b77a5c561934e089]]"));
+        w.Write(static_cast<std::int32_t>(0));
+
+        w.Write7BitEncodedInt(0);
+        w.Write7BitEncodedInt(1); // root -> the Herd reader
+
+        w.Write7BitEncodedInt(2);                 // Members: the ListReader's index
+        w.Write(static_cast<std::int32_t>(2));    // two of them
+        for (const auto& creature : {std::pair<std::int32_t, std::string>{4, "Bear"},
+                                     std::pair<std::int32_t, std::string>{2, "Crane"}})
+        {
+            w.Write7BitEncodedInt(3);             // each element carries the Creature reader index
+            w.Write(creature.first);
+            w.Write7BitEncodedInt(4);             // Name: StringReader's index
+            w.Write(creature.second);
+        }
+
+        w.Write7BitEncodedInt(6);                 // Poses: the ListReader<Matrix> index
+        w.Write(static_cast<std::int32_t>(2));
+        for (float first : {1.0f, 100.0f})
+        {
+            for (int i = 0; i < 16; ++i) w.Write(first + static_cast<float>(i));
+        }
+
+        w.Write7BitEncodedInt(8);                 // Parents: the ListReader<Int32> index
+        w.Write(static_cast<std::int32_t>(3));
+        w.Write(static_cast<std::int32_t>(-1));
+        w.Write(static_cast<std::int32_t>(0));
+        w.Write(static_cast<std::int32_t>(1));
+        w.Flush();
+        const auto bodyBytes = body.ToArray();
+
+        System::IO::MemoryStream file;
+        System::IO::BinaryWriter fw(&file, true);
+        fw.Write(static_cast<std::uint8_t>('X'));
+        fw.Write(static_cast<std::uint8_t>('N'));
+        fw.Write(static_cast<std::uint8_t>('B'));
+        fw.Write(static_cast<std::uint8_t>('w'));
+        fw.Write(static_cast<std::uint8_t>(5));
+        fw.Write(static_cast<std::uint8_t>(0));
+        fw.Write(static_cast<std::int32_t>(10 + static_cast<std::int32_t>(bodyBytes.size())));
+        fw.Write(bodyBytes.data(), 0, static_cast<std::int32_t>(bodyBytes.size()));
+        fw.Flush();
+
+        const auto fileBytes = file.ToArray();
+        return std::vector<std::uint8_t>(fileBytes.begin(), fileBytes.end());
+    }
+
+    class ReflectiveSharedTypeReaderTest : public ::testing::Test
+    {
+    protected:
+        void SetUp() override
+        {
+            CNA::Internal::Xnb::RegisterPrimitiveXnbReaders();
+            CNA::Internal::Xnb::RegisterMathXnbReaders();
+
+            ReflectiveTypeReaderBuilder<Creature>("Bestiary.Creature")
+                .Field(&Creature::Legs)
+                .Field(&Creature::Name)
+                .RegisterShared();
+
+            ContentTypeReaderManager::AddTypeCreator(
+                "Microsoft.Xna.Framework.Content.ListReader`1[[Bestiary.Creature]]",
+                [] {
+                    return std::make_unique<
+                        CNA::Internal::Xnb::ListReader<std::shared_ptr<Creature>>>(
+                        "System.Collections.Generic.List`1[[Bestiary.Creature]]",
+                        ReflectiveTypeReader<Creature>::CanonicalReaderName("Bestiary.Creature"));
+                });
+
+            ReflectiveTypeReaderBuilder<Herd>("Bestiary.Herd")
+                .Field(&Herd::Members)
+                .Field(&Herd::Poses)
+                .Field(&Herd::Parents)
+                .Register();
+        }
+
+        void TearDown() override
+        {
+            ContentTypeReaderManager::RemoveTypeCreatorEXT(
+                ReflectiveTypeReader<Herd>::CanonicalReaderName("Bestiary.Herd"));
+            ContentTypeReaderManager::RemoveTypeCreatorEXT(
+                ReflectiveTypeReader<Creature>::CanonicalReaderName("Bestiary.Creature"));
+            ContentTypeReaderManager::RemoveTypeCreatorEXT(
+                "Microsoft.Xna.Framework.Content.ListReader`1[[Bestiary.Creature]]");
+        }
+    };
+
+    TEST_F(ReflectiveSharedTypeReaderTest, ReadsAReflectiveClassDispatchedFromInsideAList)
+    {
+        ScratchContentRoot root;
+        WriteBytes(root.path() / "herd.xnb", BuildHerdXnb());
+
+        ContentManager content;
+        content.setRootDirectoryProperty(root.path().string());
+
+        const Herd loaded = content.Load<Herd>("herd");
+
+        ASSERT_EQ(2u, loaded.Members.size());
+        ASSERT_NE(nullptr, loaded.Members[0]);
+        EXPECT_EQ(4, loaded.Members[0]->Legs);
+        EXPECT_EQ("Bear", loaded.Members[0]->Name);
+        EXPECT_EQ(2, loaded.Members[1]->Legs);
+        EXPECT_EQ("Crane", loaded.Members[1]->Name)
+            << "each element consumed its own reader index; a value-shaped registration would "
+               "have read the index as data and desynchronised everything after it";
+    }
+
+    // The two closed generics a custom model processor's Tag needs, neither of which had an
+    // instantiation registered anywhere before -- and an .xnb's table must resolve IN FULL, so a
+    // file naming either failed as a whole rather than in the part that used it.
+    TEST_F(ReflectiveSharedTypeReaderTest, ReadsListOfMatrixAndListOfInt32)
+    {
+        ScratchContentRoot root;
+        WriteBytes(root.path() / "herd.xnb", BuildHerdXnb());
+
+        ContentManager content;
+        content.setRootDirectoryProperty(root.path().string());
+
+        const Herd loaded = content.Load<Herd>("herd");
+
+        ASSERT_EQ(2u, loaded.Poses.size());
+        EXPECT_FLOAT_EQ(1.0f, loaded.Poses[0].M11);
+        EXPECT_FLOAT_EQ(16.0f, loaded.Poses[0].M44);
+        EXPECT_FLOAT_EQ(100.0f, loaded.Poses[1].M11);
+        EXPECT_FLOAT_EQ(115.0f, loaded.Poses[1].M44);
+
+        EXPECT_EQ(std::vector<std::int32_t>({-1, 0, 1}), loaded.Parents);
+    }
+
+    // A Model.Tag is stored as a System::Object*, so the reader for a type attached to one has to
+    // hand back a shared_ptr to THAT base, not to the concrete type. RegisterShared<TStored>()
+    // names it.
+    TEST_F(ReflectiveSharedTypeReaderTest, RegisterSharedCanHandBackAPointerToABase)
+    {
+        EXPECT_EQ("Microsoft.Xna.Framework.Content.ReflectiveReader`1[[Bestiary.Creature]]",
+                  (ReflectiveSharedTypeReader<Creature, System::Object>::CanonicalReaderName(
+                      "Bestiary.Creature")))
+            << "the .xnb names the serialized type, so the key does not depend on the C++ shape";
+
+        ReflectiveTypeReaderBuilder<Creature>("Bestiary.Creature")
+            .Field(&Creature::Legs)
+            .Field(&Creature::Name)
+            .RegisterShared<System::Object>();
+
+        auto reader = ContentTypeReaderManager::CreateReader(
+            ReflectiveTypeReader<Creature>::CanonicalReaderName("Bestiary.Creature"));
+        ASSERT_NE(nullptr, reader);
+        EXPECT_EQ("Bestiary.Creature", reader->getTargetTypeNameProperty());
+    }
+
     TEST_F(ReflectiveTypeReaderTest, EnumFieldAlsoRegistersTheEnumReaderTheTableNames)
     {
         DescribeCreature();
