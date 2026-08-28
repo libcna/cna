@@ -10,6 +10,7 @@
 
 #include "CNA/Content/Cnb/CnbSoundEffectCodec.hpp"
 #include "CNA/Content/Cnb/CnbTextureCodec.hpp"
+#include "CNA/Content/Import/ImportedSound.hpp"
 
 namespace CNA::Content::Cnb
 {
@@ -22,11 +23,14 @@ namespace CNA::Content::Cnb
      * the import path is
      *
      * ```text
-     * source bytes -> canonical CPU representation -> CnbTextureData / CnbSoundEffectData
+     * source bytes -> source-oriented CPU representation -> processor policy
+     *              -> CnbTextureData / CnbSoundEffectData
      * ```
      *
-     * and the CNB codecs take it from there. Nothing in this header constructs a runtime object,
-     * reads pixels back from a GPU, or opens a mixer.
+     * and the CNB codecs take it from there. The WAV path exposes its source-oriented result so
+     * both the CNA Content Pipeline and the compatibility wrapper use the same RIFF parser and
+     * PCM conversion. Nothing in this header constructs a runtime object, reads pixels back from
+     * a GPU, or opens a mixer.
      *
      * Determinism is a requirement, not a happy accident: no clock, no randomness, no filesystem
      * enumeration order, no absolute paths in the output. Identical source bytes and options
@@ -135,6 +139,31 @@ namespace CNA::Content::Cnb
                                                                 const std::string& origin);
 
     /**
+     * @brief Parses WAV bytes into source-oriented PCM without choosing CNB output policy.
+     *
+     * This is the same bounded RIFF parser used by DecodeWavAsCnbSoundEffect(). It preserves
+     * whether samples were unsigned 8-bit or signed 16-bit so a Content Processor, rather than
+     * the importer, owns conversion to CNB's runtime-oriented Pcm16 representation.
+     *
+     * @param wavBytes Complete WAV file bytes.
+     * @param origin Text naming the source in diagnostics.
+     * @return Validated source-oriented sound data.
+     * @throws Microsoft::Xna::Framework::Content::ContentLoadException on malformed or unsupported
+     *         WAV input.
+     */
+    [[nodiscard]] CNA::Content::Import::ImportedSound DecodeWavAsImportedSound(
+        std::span<const std::uint8_t> wavBytes, const std::string& origin);
+
+    /**
+     * @brief Converts validated imported PCM into the canonical SoundEffect codec DTO.
+     *
+     * @param imported Source-oriented PCM from DecodeWavAsImportedSound().
+     * @return Runtime-oriented Pcm16 SoundEffect data.
+     */
+    [[nodiscard]] CnbSoundEffectData ProcessImportedSoundEffect(
+        const CNA::Content::Import::ImportedSound& imported);
+
+    /**
      * @brief Reads and decodes a WAV file as a `SoundEffect` description.
      *
      * @param wavPath Filesystem path to the `.wav`.
@@ -143,4 +172,14 @@ namespace CNA::Content::Cnb
      *         failure; see DecodeWavAsCnbSoundEffect().
      */
     [[nodiscard]] CnbSoundEffectData ImportWavAsCnbSoundEffect(const std::string& wavPath);
+
+    /**
+     * @brief Reads and parses a WAV file without applying SoundEffect processing policy.
+     *
+     * @param wavPath Filesystem path to the WAV source.
+     * @return Validated source-oriented sound data.
+     * @throws Microsoft::Xna::Framework::Content::ContentLoadException on read or parse failure.
+     */
+    [[nodiscard]] CNA::Content::Import::ImportedSound ImportWavAsImportedSound(
+        const std::string& wavPath);
 }

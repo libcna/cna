@@ -165,8 +165,8 @@ namespace CNA::Content::Cnb
         return DecodeDdsAsCnbTextureCube(bytes, ddsPath);
     }
 
-    CnbSoundEffectData DecodeWavAsCnbSoundEffect(std::span<const std::uint8_t> wavBytes,
-                                                  const std::string& origin)
+    CNA::Content::Import::ImportedSound DecodeWavAsImportedSound(
+        std::span<const std::uint8_t> wavBytes, const std::string& origin)
     {
         if (wavBytes.size() < 12u)
         {
@@ -420,8 +420,10 @@ namespace CNA::Content::Cnb
                                 std::to_string(expectedByteRate) + ".");
         }
 
-        CnbSoundEffectData sound;
-        sound.format = CnbAudioFormat::Pcm16;
+        CNA::Content::Import::ImportedSound sound;
+        sound.encoding = bitsPerSample == 16u
+                             ? CNA::Content::Import::ImportedPcmEncoding::Signed16LittleEndian
+                             : CNA::Content::Import::ImportedPcmEncoding::Unsigned8;
         sound.sampleRate = sampleRate;
         sound.channels = channels;
 
@@ -439,24 +441,7 @@ namespace CNA::Content::Cnb
         }
         sound.frameCount = static_cast<std::uint32_t>(frames);
 
-        if (bitsPerSample == 16u)
-        {
-            sound.samples.assign(data.begin(), data.end());
-        }
-        else
-        {
-            // 8-bit WAV samples are UNSIGNED with a bias of 128; 16-bit are signed. (s - 128) << 8
-            // is the exact widening, and it is exact -- nothing is rounded or clipped.
-            sound.samples.resize(data.size() * 2u);
-            for (std::size_t i = 0; i < data.size(); ++i)
-            {
-                const auto widened =
-                    static_cast<std::int16_t>((static_cast<int>(data[i]) - 128) * 256);
-                const auto value = static_cast<std::uint16_t>(widened);
-                sound.samples[i * 2u] = static_cast<std::uint8_t>(value & 0xFFu);
-                sound.samples[i * 2u + 1u] = static_cast<std::uint8_t>(value >> 8);
-            }
-        }
+        sound.samples.assign(data.begin(), data.end());
 
         // A loop region past the end is a broken file, and the schema would refuse it anyway --
         // but saying so here names the WAV rather than the .cnb that was never written.
@@ -472,9 +457,99 @@ namespace CNA::Content::Cnb
         return sound;
     }
 
-    CnbSoundEffectData ImportWavAsCnbSoundEffect(const std::string& wavPath)
+    CnbSoundEffectData ProcessImportedSoundEffect(
+        const CNA::Content::Import::ImportedSound& imported)
+    {
+        if (imported.channels != 1u && imported.channels != 2u)
+        {
+            throw ContentLoadException(
+                "CNB SoundEffect processing: imported PCM must be mono or stereo.");
+        }
+        if (imported.sampleRate == 0u || imported.sampleRate > CnbMaxAudioSampleRate)
+        {
+            throw ContentLoadException(
+                "CNB SoundEffect processing: imported PCM sample rate is outside 1.." +
+                std::to_string(CnbMaxAudioSampleRate) + " Hz.");
+        }
+        if (static_cast<std::uint64_t>(imported.loopStart) + imported.loopLength >
+            imported.frameCount)
+        {
+            throw ContentLoadException(
+                "CNB SoundEffect processing: imported loop region exceeds the frame count.");
+        }
+        const std::uint64_t sourceBytesPerSample =
+            imported.encoding == CNA::Content::Import::ImportedPcmEncoding::Unsigned8
+                ? 1u
+                : imported.encoding ==
+                          CNA::Content::Import::ImportedPcmEncoding::Signed16LittleEndian
+                      ? 2u
+                      : 0u;
+        if (sourceBytesPerSample == 0u)
+        {
+            throw ContentLoadException("CNB SoundEffect processing: unknown imported PCM encoding.");
+        }
+        const std::uint64_t expectedSourceBytes =
+            static_cast<std::uint64_t>(imported.frameCount) * imported.channels *
+            sourceBytesPerSample;
+        if (imported.samples.size() != expectedSourceBytes)
+        {
+            throw ContentLoadException(
+                "CNB SoundEffect processing: imported PCM holds " +
+                std::to_string(imported.samples.size()) + " bytes, but " +
+                std::to_string(imported.frameCount) + " frame(s) x " +
+                std::to_string(imported.channels) + " channel(s) need " +
+                std::to_string(expectedSourceBytes) + ".");
+        }
+
+        CnbSoundEffectData sound;
+        sound.format = CnbAudioFormat::Pcm16;
+        sound.sampleRate = imported.sampleRate;
+        sound.channels = imported.channels;
+        sound.frameCount = imported.frameCount;
+        sound.loopStart = imported.loopStart;
+        sound.loopLength = imported.loopLength;
+
+        if (imported.encoding ==
+            CNA::Content::Import::ImportedPcmEncoding::Signed16LittleEndian)
+        {
+            sound.samples = imported.samples;
+        }
+        else
+        {
+            // 8-bit WAV samples are UNSIGNED with a bias of 128; 16-bit are signed. (s - 128) << 8
+            // is the exact widening, and it is exact -- nothing is rounded or clipped.
+            if (imported.samples.size() > std::numeric_limits<std::size_t>::max() / 2u)
+            {
+                throw ContentLoadException(
+                    "CNB SoundEffect processing: widened PCM exceeds addressable memory.");
+            }
+            sound.samples.resize(imported.samples.size() * 2u);
+            for (std::size_t i = 0; i < imported.samples.size(); ++i)
+            {
+                const auto widened = static_cast<std::int16_t>(
+                    (static_cast<int>(imported.samples[i]) - 128) * 256);
+                const auto value = static_cast<std::uint16_t>(widened);
+                sound.samples[i * 2u] = static_cast<std::uint8_t>(value & 0xFFu);
+                sound.samples[i * 2u + 1u] = static_cast<std::uint8_t>(value >> 8);
+            }
+        }
+        return sound;
+    }
+
+    CnbSoundEffectData DecodeWavAsCnbSoundEffect(std::span<const std::uint8_t> wavBytes,
+                                                  const std::string& origin)
+    {
+        return ProcessImportedSoundEffect(DecodeWavAsImportedSound(wavBytes, origin));
+    }
+
+    CNA::Content::Import::ImportedSound ImportWavAsImportedSound(const std::string& wavPath)
     {
         const std::vector<std::uint8_t> bytes = ReadWholeFile(wavPath, "WAV import");
-        return DecodeWavAsCnbSoundEffect(bytes, wavPath);
+        return DecodeWavAsImportedSound(bytes, wavPath);
+    }
+
+    CnbSoundEffectData ImportWavAsCnbSoundEffect(const std::string& wavPath)
+    {
+        return ProcessImportedSoundEffect(ImportWavAsImportedSound(wavPath));
     }
 }

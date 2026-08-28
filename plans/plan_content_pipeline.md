@@ -1,6 +1,6 @@
 # plan_content_pipeline.md — CNA Content Pipeline
 
-> **Status (2026-08-28):** `CP-001` through `CP-004` are complete. `CP-005` is current. The
+> **Status (2026-08-28):** `CP-001` through `CP-005` are complete. `CP-006` is current. The
 > project starts from the existing `content-pipeline` branch at `0e6899f17017c03c0e23d575d25cd70c678e2781`.
 > That commit contains the completed CNB baseline through `CNBF-123`. Local `next` was actually
 > `4ab1859dc8a540af1bd326df0fa816579adf7027`, two unrelated platform/binding commits ahead; the
@@ -424,6 +424,22 @@ WAV
 The split must move/reuse the parser, not copy it. Existing WAV parser tests remain the malformed
 input oracle. New tests compare old and pipeline bytes.
 
+Implemented identities are `CNA.WavImporter/1`, `CNA.SoundEffectProcessor/1` and
+`CNA.SoundEffectContentWriter/1`. The existing bounded RIFF parser now returns experimental
+source-oriented `ImportedSound`, preserving accepted unsigned 8-bit versus signed 16-bit PCM.
+`SoundEffectProcessor` owns exact unsigned-8-to-signed-16 widening and constructs
+`CnbSoundEffectData`; the compatibility `DecodeWavAsCnbSoundEffect()` wrapper composes the same
+parser and processing helper. The writer calls only `EncodeSoundEffectToCnb()`.
+
+This extraction was pinned against the pre-refactor `cna_tool_source_to_cnb` binary using the real
+`tone.wav` example: both full files matched, with SHA-256
+`bd5b30f756e661b9f1f7dddb623922c15213fb0492f233c5b1096b23c71da8ff`. Six new tests prove the
+stage split, exact 8-bit widening, malformed imported-data validation, component/error context,
+repeated determinism, typed decode and byte equality with the producer library/executable paths.
+The complete original WAV producer, source tool, SoundEffect codec/runtime-load and CNB golden
+regression selection passed (66 focused cases). The build path opens no audio device; runtime
+loading remains the existing typed decoder/loader responsibility.
+
 ### 6.3 Model/glTF (`CP-009`)
 
 Do not rewrite glTF while introducing the pipeline. First wrap the current same-interpretation
@@ -545,8 +561,8 @@ Required before the corresponding task closes:
 | `CP-002` | **completed** | Trace real CNA image/WAV/DDS/glTF/CNJ imports, canonical DTO construction, encoders, runtime loaders, path rules, XREFs, tool publication and duplication; record the build/runtime map. |
 | `CP-003` | **completed** | Implemented experimental component identities, checked type-erased values, focused importer/processor contexts, categorized dependency and separate runtime-reference collectors, scoped logging, component contracts, a serial build-to-bytes coordinator, and an explicit deterministic registry. Ten focused tests prove duplicate/ambiguous/missing route diagnostics, explicit selection, parameter errors, persistent-type/RTTI separation, dependency/XREF reporting, traversal and symlink containment, and the complete abstract stage flow. `cna_content` and `CnaTests` built in a fresh HEADLESS Debug configuration; all 10 `ContentPipelineCoreTest` cases passed. |
 | `CP-004` | **completed** | Added `ImportedImage`, `ImageImporter`, `TextureProcessor`, and `Texture2DContentWriter`; the writer calls the existing encoder. Five slice tests prove strict parameter validation, stage identities/dependencies, repeated determinism, typed decode, runtime loading, and default/color-key byte equality against both the unchanged producer library path and real `cna_tool_source_to_cnb` subprocess. The focused original producer/tool/codec and all golden-vector regressions passed. |
-| `CP-005` | **current** | Complete WAV/SoundEffect vertical slice by splitting/reusing the existing parser; prove byte equivalence and no audio initialization. |
-| `CP-006` | future | Add `cna-content build` single/directory CLI, sorted traversal, logical relative names, atomic publication and failure preservation tests. |
+| `CP-005` | **completed** | Split the existing bounded RIFF parser to source-oriented `ImportedSound`, shared its one exact PCM processing helper with the compatibility API, and added `WavImporter`, `SoundEffectProcessor`, and a writer that calls the existing encoder. Six new tests and 66 focused old/new regressions pass; pre/post-refactor real-tool bytes also match exactly. No build component initializes audio. |
+| `CP-006` | **current** | Add `cna-content build` single/directory CLI, sorted traversal, logical relative names, atomic publication and failure preservation tests. |
 | `CP-007` | future | Make categorized dependency collection and the build result complete/observable for built-in flows. |
 | `CP-008` | future | Add deterministic inspectable manifest and content fingerprints; prove no-op and precise invalidation behavior. |
 | `CP-009` | future | Integrate glTF/Model without a second interpretation; retain direct-vs-CNJ byte oracle and report glTF dependencies. |
