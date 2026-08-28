@@ -778,10 +778,11 @@ CNA_C_API CNA_Result cna_reflective_type_reader_builder_add_custom(
  * @param builder The builder.
  * @return A CNA result code.
  *
- * **No registration handle, because the canonical `Register()` has no undo either.** Registering
- * the same canonical name again replaces the entry, which is what both sides rely on, and a
- * withdrawal route here would be surface the canonical layer does not have. Safe to call more than
- * once.
+ * **No registration handle, because the canonical `Register()` has no undo either.** A withdrawal
+ * route here would be surface the canonical layer does not have. Safe to call more than once, but
+ * **the first registration for a canonical name is the one that stays** -- the canonical table
+ * keeps an existing entry rather than replacing it, so a later registration under the same name is
+ * silently ignored.
  */
 CNA_C_API CNA_Result cna_reflective_type_reader_builder_register(
     CNA_ReflectiveTypeReaderBuilderHandle builder);
@@ -840,6 +841,351 @@ CNA_C_API CNA_Result cna_enum_type_reader_copy_canonical_name(
     char* destination,
     uint64_t capacity,
     uint64_t* out_byte_count);
+
+/**
+ * @brief Registers the reflective reader in its **reference-shaped** form.
+ *
+ * @param builder The builder.
+ * @return A CNA result code.
+ *
+ * XNA writes a reflectively-serialized class two different ways depending on where it sits. As an
+ * `.xnb`'s root asset it is read directly, which is what
+ * @ref cna_reflective_type_reader_builder_register produces. Nested inside a collection, or
+ * attached to a `Model.Tag`, it is written **with its own 1-based type-reader index in front**, and
+ * a container that knows the C++ type it expects chooses how to read the payload by whether that
+ * type is reference-shaped. This route registers the reference-shaped reader for those places.
+ *
+ * **Measured boundary, because the two are closer together here than in C++.** A
+ * `Dictionary<string, object>` value reaches its reader through type-erased dispatch that consumes
+ * the reader index whichever shape the reader produces, so on that path both registrations read the
+ * payload correctly and differ only in the C++ type the entry ends up holding. The container that
+ * does refuse the wrong shape is `ModelReader`'s tag path, and no route in this ABI loads a `Model`
+ * from content, so that refusal is not reachable from C today. Register the shape that matches
+ * where the payload sits; do not expect a wrong choice to fail loudly on the paths C can reach.
+ *
+ * Both forms register under the **same canonical name**, and the canonical table keeps the **first**
+ * entry registered under a name, so a second call in the other shape is silently ignored.
+ *
+ * The object still comes from @ref CNA_ReflectiveObjectCreateCallback and is still the caller's:
+ * what changes is the wire form, not the ownership. An object read this way is reachable through
+ * @ref cna_object_dictionary_ext_get_foreign_object when it arrived as a dictionary entry.
+ */
+CNA_C_API CNA_Result cna_reflective_type_reader_builder_register_shared(
+    CNA_ReflectiveTypeReaderBuilderHandle builder);
+
+/* --- CBIND-116: the Dictionary<string, object> a content processor attaches to Model.Tag ------- */
+
+/**
+ * @brief Owned handle for a `Dictionary<string, object>` read out of an `.xnb`.
+ *
+ * This is the shape a custom `ContentProcessor` uses to hand a game data the stock pipeline has no
+ * type for -- XNA's own `TrianglePickingSample` tags every model with its world-space triangle
+ * vertices and a `BoundingSphere` that way, and the game casts the tag back to read them.
+ *
+ * **Where the C surface stops today.** In C++ such a dictionary is reached through `Model.Tag`,
+ * and this ABI has no route that loads a `Model` from content at all -- every `CNA_ModelHandle`
+ * is built by hand from `cna_model_create_*`. So the tag path is not reachable from C, and this
+ * ABI reaches the same data the other way: @ref cna_content_manager_load_object_dictionary_ext
+ * loads an asset whose root object *is* the dictionary. Binding `Model` loading is separate work,
+ * and until it lands a C caller reads a processor's side data from its own `.xnb` rather than
+ * from the model's tag.
+ *
+ * Its .NET type is always
+ * `System.Collections.Generic.Dictionary`2[System.String,System.Object]`, which is why no route
+ * reports it: the answer is the same for every instance, so the header can simply say it.
+ */
+typedef CNA_Handle CNA_ObjectDictionaryHandle;
+
+/**
+ * @brief Loads an asset whose root object is a `Dictionary<string, object>`.
+ *
+ * @param content_manager The content manager.
+ * @param asset_name The asset name, without extension.
+ * @param out_dictionary Receives the new dictionary handle.
+ * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_IO` for a missing or malformed asset and for one whose
+ *         root object is something else; or a documented argument/handle failure.
+ *
+ * Each entry keeps whatever type its own content type reader produced -- a `Vector3[]` stays a
+ * `Vector3[]`, a `BoundingSphere` a `BoundingSphere` -- which is what makes the dictionary worth
+ * having rather than a bag of bytes. Ask what an entry holds with
+ * @ref cna_object_dictionary_ext_get_entry before reading it.
+ *
+ * The handle is **owned**: release it with @ref cna_object_dictionary_ext_destroy. Two calls for the
+ * same name produce two independent handles over two copies -- but the *asset* behind them is
+ * cached by the content manager exactly as every other load is, so the second call does not re-read
+ * the file and does not re-run the entry readers. `cna_content_manager_unload` drops that cache.
+ */
+CNA_C_API CNA_Result cna_content_manager_load_object_dictionary_ext(
+    CNA_Handle content_manager,
+    CNA_StringView asset_name,
+    CNA_ObjectDictionaryHandle* out_dictionary);
+
+/**
+ * @brief Releases a dictionary handle.
+ * @param dictionary The dictionary to release.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_object_dictionary_ext_destroy(
+    CNA_ObjectDictionaryHandle dictionary);
+
+/**
+ * @brief Which value one dictionary entry holds.
+ *
+ * Each entry keeps whatever type its own content type reader produced -- that is what makes the
+ * dictionary useful, and it is why the kind is reported rather than assumed. These name the types
+ * this ABI can hand to C; anything else is @ref CNA_OBJECT_DICTIONARY_VALUE_UNKNOWN, whose C++ type
+ * name is still readable so a caller can say what it found.
+ */
+typedef uint32_t CNA_ObjectDictionaryValueKind;
+
+/** @brief A type this ABI does not express; read its name with the type-name routes. */
+#define CNA_OBJECT_DICTIONARY_VALUE_UNKNOWN UINT32_C(0)
+/** @brief A `bool`, read as `CNA_Bool`. */
+#define CNA_OBJECT_DICTIONARY_VALUE_BOOLEAN UINT32_C(1)
+/** @brief A signed 32-bit integer. */
+#define CNA_OBJECT_DICTIONARY_VALUE_INT32 UINT32_C(2)
+/** @brief A 32-bit float. */
+#define CNA_OBJECT_DICTIONARY_VALUE_SINGLE UINT32_C(3)
+/** @brief A 64-bit float. */
+#define CNA_OBJECT_DICTIONARY_VALUE_DOUBLE UINT32_C(4)
+/** @brief A `System.String`, read with the string routes. */
+#define CNA_OBJECT_DICTIONARY_VALUE_STRING UINT32_C(5)
+/** @brief A `CNA_Vector2`. */
+#define CNA_OBJECT_DICTIONARY_VALUE_VECTOR2 UINT32_C(6)
+/** @brief A `CNA_Vector3`. */
+#define CNA_OBJECT_DICTIONARY_VALUE_VECTOR3 UINT32_C(7)
+/** @brief A `CNA_Vector4`. */
+#define CNA_OBJECT_DICTIONARY_VALUE_VECTOR4 UINT32_C(8)
+/** @brief A `CNA_Matrix`. */
+#define CNA_OBJECT_DICTIONARY_VALUE_MATRIX UINT32_C(9)
+/** @brief A `CNA_Quaternion`. */
+#define CNA_OBJECT_DICTIONARY_VALUE_QUATERNION UINT32_C(10)
+/** @brief A `CNA_Color`. */
+#define CNA_OBJECT_DICTIONARY_VALUE_COLOR UINT32_C(11)
+/** @brief A `CNA_BoundingSphere`. */
+#define CNA_OBJECT_DICTIONARY_VALUE_BOUNDING_SPHERE UINT32_C(12)
+/** @brief A `CNA_BoundingBox`. */
+#define CNA_OBJECT_DICTIONARY_VALUE_BOUNDING_BOX UINT32_C(13)
+/** @brief An object a caller's own reflective reader produced, read as its opaque pointer. */
+#define CNA_OBJECT_DICTIONARY_VALUE_FOREIGN_OBJECT UINT32_C(14)
+/** @brief Highest entry kind this ABI names. */
+#define CNA_OBJECT_DICTIONARY_VALUE_MAXIMUM CNA_OBJECT_DICTIONARY_VALUE_FOREIGN_OBJECT
+
+/**
+ * @brief Describes one dictionary entry without reading it.
+ *
+ * An **array** entry -- a `Vector3[]`, which is the shape `TrianglePickingSample` stores -- reports
+ * the element's @ref kind with @ref is_array true and @ref element_count set; read it with
+ * @ref cna_object_dictionary_ext_copy_array. A scalar reports @ref is_array false and an
+ * @ref element_count of 1.
+ */
+typedef struct CNA_ObjectDictionaryEntry {
+    /** @brief Size of this structure in bytes, for forward compatibility. */
+    uint32_t struct_size;
+    /** @brief Version of this structure's layout. */
+    uint32_t struct_version;
+    /** @brief Which value the entry holds, or its element type when @ref is_array is true. */
+    CNA_ObjectDictionaryValueKind kind;
+    /** @brief True when the entry holds an array of @ref kind rather than one value. */
+    CNA_Bool is_array;
+    /** @brief Element count: the array length, or 1 for a scalar. */
+    uint64_t element_count;
+} CNA_ObjectDictionaryEntry;
+
+/**
+ * @brief Reports how many entries the dictionary holds.
+ * @param dictionary The dictionary.
+ * @param out_count Receives the entry count.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_object_dictionary_ext_get_count(
+    CNA_ObjectDictionaryHandle dictionary,
+    uint64_t* out_count);
+
+/**
+ * @brief Gets whether an entry with this key exists.
+ * @param dictionary The dictionary.
+ * @param key The entry's name, as the processor wrote it.
+ * @param out_contains Receives whether the entry is present.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_object_dictionary_ext_contains_key(
+    CNA_ObjectDictionaryHandle dictionary,
+    CNA_StringView key,
+    CNA_Bool* out_contains);
+
+/**
+ * @brief Reports the byte length of the key at an index.
+ *
+ * @param dictionary The dictionary.
+ * @param index Zero-based index, in the dictionary's own ordering.
+ * @param out_byte_count Receives the length, without a terminator.
+ * @return A CNA result code; an index at or past the count is `CNA_RESULT_INVALID_ARGUMENT`.
+ *
+ * The canonical container is an ordered map, so the order is the keys' own and stable across calls
+ * -- which is what makes indexed enumeration meaningful rather than a snapshot.
+ */
+CNA_C_API CNA_Result cna_object_dictionary_ext_get_key_size_at(
+    CNA_ObjectDictionaryHandle dictionary,
+    uint64_t index,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies the key at an index.
+ * @param dictionary The dictionary.
+ * @param index Zero-based index, in the dictionary's own ordering.
+ * @param destination Destination bytes, or null only for zero capacity. Not terminated.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_object_dictionary_ext_copy_key_at(
+    CNA_ObjectDictionaryHandle dictionary,
+    uint64_t index,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Describes one entry: what it holds, and how many of them.
+ * @param dictionary The dictionary.
+ * @param key The entry's name.
+ * @param out_entry Receives the description; `struct_size` must be set by the caller.
+ * @return A CNA result code; an absent key is `CNA_RESULT_INVALID_ARGUMENT`.
+ */
+CNA_C_API CNA_Result cna_object_dictionary_ext_get_entry(
+    CNA_ObjectDictionaryHandle dictionary,
+    CNA_StringView key,
+    CNA_ObjectDictionaryEntry* out_entry);
+
+/**
+ * @brief Reports the byte length of an entry's C++ type name.
+ *
+ * @param dictionary The dictionary.
+ * @param key The entry's name.
+ * @param out_byte_count Receives the length, without a terminator.
+ * @return A CNA result code; an absent key is `CNA_RESULT_INVALID_ARGUMENT`.
+ *
+ * This is the implementation's own name for the stored type, which is what makes an
+ * @ref CNA_OBJECT_DICTIONARY_VALUE_UNKNOWN entry reportable rather than merely unreadable. It is a
+ * **diagnostic, not an identity**: the spelling is the C++ toolchain's and is not part of this ABI's
+ * compatibility promise, so print it, do not branch on it.
+ */
+CNA_C_API CNA_Result cna_object_dictionary_ext_get_type_name_size(
+    CNA_ObjectDictionaryHandle dictionary,
+    CNA_StringView key,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies an entry's C++ type name.
+ * @param dictionary The dictionary.
+ * @param key The entry's name.
+ * @param destination Destination bytes, or null only for zero capacity. Not terminated.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_object_dictionary_ext_copy_type_name(
+    CNA_ObjectDictionaryHandle dictionary,
+    CNA_StringView key,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Reads a scalar entry into a caller buffer.
+ *
+ * @param dictionary The dictionary.
+ * @param key The entry's name.
+ * @param kind The kind the caller expects, from @ref cna_object_dictionary_ext_get_entry.
+ * @param destination Receives the value; must be the size @p kind names.
+ * @param capacity Destination capacity in bytes.
+ * @return A CNA result code.
+ *
+ * **Naming the kind is the cast, and a wrong one is refused rather than reinterpreted** --
+ * `CNA_RESULT_INVALID_ARGUMENT`, which is the C form of the `InvalidCastException` the canonical
+ * `Get<T>` throws. An absent key is `CNA_RESULT_INVALID_ARGUMENT` too -- the canonical
+ * `KeyNotFoundException` and `InvalidCastException` are one result code here, and the message
+ * `cna_get_last_error_message` returns is what separates them. An array entry is refused (use
+ * @ref cna_object_dictionary_ext_copy_array), and a destination too small for the kind is
+ * `CNA_RESULT_BUFFER_TOO_SMALL` with no partial write.
+ * @ref CNA_OBJECT_DICTIONARY_VALUE_STRING and
+ * @ref CNA_OBJECT_DICTIONARY_VALUE_FOREIGN_OBJECT have their own routes and are refused here.
+ */
+CNA_C_API CNA_Result cna_object_dictionary_ext_copy_value(
+    CNA_ObjectDictionaryHandle dictionary,
+    CNA_StringView key,
+    CNA_ObjectDictionaryValueKind kind,
+    void* destination,
+    uint64_t capacity);
+
+/**
+ * @brief Reads an array entry into a caller buffer.
+ *
+ * @param dictionary The dictionary.
+ * @param key The entry's name.
+ * @param kind The element kind the caller expects.
+ * @param destination Receives the elements, tightly packed.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the byte count the entry needs; always written on a valid output.
+ * @return A CNA result code; insufficient capacity is `CNA_RESULT_BUFFER_TOO_SMALL`, performs no
+ *         partial write and still reports the size needed, so a caller can size once and read once.
+ *
+ * Only the fixed-layout element kinds are readable as an array; a string or foreign-object array is
+ * `CNA_RESULT_INVALID_ARGUMENT`, because those have no packed C form to copy into.
+ */
+CNA_C_API CNA_Result cna_object_dictionary_ext_copy_array(
+    CNA_ObjectDictionaryHandle dictionary,
+    CNA_StringView key,
+    CNA_ObjectDictionaryValueKind kind,
+    void* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Reports the byte length of a string entry.
+ * @param dictionary The dictionary.
+ * @param key The entry's name.
+ * @param out_byte_count Receives the length, without a terminator.
+ * @return A CNA result code; an entry that is not a string is `CNA_RESULT_INVALID_ARGUMENT`.
+ */
+CNA_C_API CNA_Result cna_object_dictionary_ext_get_string_size(
+    CNA_ObjectDictionaryHandle dictionary,
+    CNA_StringView key,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies a string entry.
+ * @param dictionary The dictionary.
+ * @param key The entry's name.
+ * @param destination Destination bytes, or null only for zero capacity. Not terminated.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_object_dictionary_ext_copy_string(
+    CNA_ObjectDictionaryHandle dictionary,
+    CNA_StringView key,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Reads an entry a caller's own reflective reader produced.
+ *
+ * @param dictionary The dictionary.
+ * @param key The entry's name.
+ * @param out_object Receives the pointer the caller's object factory returned.
+ * @return A CNA result code; an entry that is not a foreign object is
+ *         `CNA_RESULT_INVALID_ARGUMENT`.
+ *
+ * The pointer is the caller's own, from @ref CNA_ReflectiveObjectCreateCallback: CNA never
+ * dereferences it, never copies what it points at and never frees it.
+ */
+CNA_C_API CNA_Result cna_object_dictionary_ext_get_foreign_object(
+    CNA_ObjectDictionaryHandle dictionary,
+    CNA_StringView key,
+    void** out_object);
 
 #ifdef __cplusplus
 }

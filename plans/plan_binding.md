@@ -1,13 +1,12 @@
 # CNA Native C Binding / Stable C ABI — Implementation Plan
 
-> **Status (2026-08-28, after `CBIND-114`): B0–B10 complete; B11 open and unstarted.** Phase B10
-> bound all 506 rows the sixth merge reopened, the CNB content format included. The seventh merge —
-> `feature/bindings` into `next` — then reopened the matrix by **15 rows**, none of them from the
-> bindings branch: all 15 come from three `next`-only commits the branch never saw. Coverage on the
-> merged tree: **537 headers / 8,827 symbols — 8,337 implemented, 15 approved partial, 15 planned,
-> 460 not applicable.** ABI `0.17.0`, 4,033 exported symbols, the same set with `CNA_CNAEXT` on and
-> off. `docs/c-api/RELEASE_GATE.md` reads **Not ready**, on the one criterion those 15 rows fail and
-> on no other — see *Current status* and Phase B11. This document is
+> **Status (2026-08-28, after `CBIND-116`): B0–B11 complete.** Phase B10 bound all 506 rows the
+> sixth merge reopened, the CNB content format included; the seventh merge — `feature/bindings` into
+> `next` — reopened 15 more from three `next`-only commits the bindings branch never saw, and Phase
+> B11 bound those. Coverage: **537 headers / 8,827 symbols — 8,352 implemented, 15 approved partial,
+> 0 planned, 460 not applicable.** ABI `0.18.0`, 4,048 exported symbols, the same set with
+> `CNA_CNAEXT` on and off. `docs/c-api/RELEASE_GATE.md` reads **Ready** on all ten criteria — see
+> *Current status* and Phase B11. This document is
 > the plan for a native C API, implemented inside the main CNA repository. It is intentionally
 > not a plan for C#, .NET, JavaScript/TypeScript, Rust, Python, Java, Zig, Go, Swift, or any other
 > language-specific binding. Such work must not begin, nor be planned here, without a new explicit
@@ -150,7 +149,7 @@ task. Do not start a later broad API phase merely because an earlier skeleton co
 | B8 | Reconciling with the platform separation | `next` merged into `feature/binding` |
 | B9 | The CNAEXT engine layer and the post-merge tail | Owner put the layer in scope, 2026-08-26 |
 | B10 | The CNB content format and the sixth merge's tail | `origin/next` merged 2026-08-28; owner deferred the binding itself |
-| B11 | The seventh merge's tail | `feature/bindings` merged into `next` 2026-08-28; three `next`-only commits reopened the matrix |
+| B11 | The seventh merge's tail | `feature/bindings` merged into `next` 2026-08-28; three `next`-only commits reopened the matrix; closed by `CBIND-116` |
 
 ## Planning baseline
 
@@ -1452,7 +1451,18 @@ exactly as long as they are open.
 
 | # | Task | Rows | Status | Acceptance criteria |
 |---|---|---:|---|---|
-| CBIND-114 | Give the seventh merge's tail an owner, and make the published state say what the tree holds | 15 | ⬜ | `B11_SLICE_OWNERS` in `tools/c-api/generate_coverage_inventory.py` partitions all 15 rows onto this task by module and header stem, consulted before `B10_SLICE_OWNERS` so a closed slice stops answering for symbols that did not exist when it closed. Only the *unmapped* rows move: `content/ReflectiveTypeReader`'s other 17 rows stay `CBIND-105`'s and stay bound, because `owner_task()` is consulted only where no rule matched. `COVERAGE.md` and `RELEASE_GATE.md` are regenerated from the merged tree, and `release_gate.json`'s `coverage-matrix` criterion returns to `not met` with the reopening recorded in its note. Acceptance: `generate_coverage_inventory.py --check` and `check_release_gate.py --check` both pass; `CApiCoverageMatrix` passes; the snapshot reads **15 planned** and the verdict **Not ready** on that one criterion and no other; no row is reclassified `partial` or `not-applicable` to shrink the count, and no rule is re-approved to absorb the new symbols. Binding the 15 is deliberately **not** in scope — the routes, their tests and the ABI bump belong to a later task. |
+| CBIND-114 | Give the seventh merge's tail an owner, and make the published state say what the tree holds | 15 | ✅ | `B11_SLICE_OWNERS` in `tools/c-api/generate_coverage_inventory.py` partitions all 15 rows onto this task by module and header stem, consulted before `B10_SLICE_OWNERS` so a closed slice stops answering for symbols that did not exist when it closed. Only the *unmapped* rows move: `content/ReflectiveTypeReader`'s other 17 rows stay `CBIND-105`'s and stay bound, because `owner_task()` is consulted only where no rule matched. `COVERAGE.md` and `RELEASE_GATE.md` are regenerated from the merged tree, and `release_gate.json`'s `coverage-matrix` criterion returns to `not met` with the reopening recorded in its note. Acceptance: `generate_coverage_inventory.py --check` and `check_release_gate.py --check` both pass; `CApiCoverageMatrix` passes; the snapshot reads **15 planned** and the verdict **Not ready** on that one criterion and no other; no row is reclassified `partial` or `not-applicable` to shrink the count, and no rule is re-approved to absorb the new symbols. Binding the 15 is deliberately **not** in scope — the routes, their tests and the ABI bump belong to a later task. **Done 2026-08-28**, and `CBIND-116` has since bound all 15, which is why this row no longer owns a planned one. |
+| CBIND-116 | Bind the seventh merge's tail | 15 | ✅ | **Done 2026-08-28.** All 15 bound, none reclassified: `partial` stays 15 and `not-applicable` stays 460. 15 new routes, exports 4,033 → **4,048**, ABI `0.17.0` → **`0.18.0`**, and the release gate reads **Ready** again.
+
+**`BasicEffect::VertexColorEnabled` (2 rows) needed no new route.** FX-125 added the property pair beside the public field the C API already bound, and both spellings are one storage, so the answer was the mapping rule rather than the ABI — the third time in two phases that the right answer was that the surface already existed. What was missing was a test: `BasicEffectSmoke.c` moved the flag only into the state the effect did not start in, so the setter is now seen moving it back as well.
+
+**`ReflectiveSharedTypeReader` and `RegisterShared` (6 rows)** become `cna_reflective_type_reader_builder_register_shared`, the reference-shaped twin of the existing registration; the field walk both readers run is extracted rather than duplicated, so the two cannot drift.
+
+**`ObjectDictionaryEXT` (7 rows)** becomes an owned handle with a loader and eleven reading routes. `Get<T>` and `operator[]` are one kind-tagged pair, because C has no `T`; a wrong kind is refused rather than reinterpreted. **A boundary this task had to discover rather than assume:** in C++ this dictionary is reached through `Model.Tag`, and **no route in this ABI loads a `Model` from content at all** — every `CNA_ModelHandle` is built by hand. Two routes written against the tag path were deleted rather than shipped, because they could only ever answer "no tag"; the dictionary is reached from an asset whose root object is one instead, and the header says where the surface stops. Binding `Model` loading is separate work.
+
+**Two documentation defects found by measuring instead of quoting.** The canonical `ReflectiveTypeReader` header and `CBIND-105`'s own C text both said a second registration under a canonical name *replaces* the entry; `ContentTypeReaderManager::AddTypeCreator` **keeps the first** and ignores the rest. All three statements are corrected. And the C++ warning that registering the value-shaped reader for a dispatched payload "reads it one index short" does not hold on any path C can reach: a `Dictionary<string, object>` value is read through type-erased dispatch that consumes the reader index either way. Both facts were measured — the first by a mutation that swaps registration order and fails the suite, the second by registering the value-shaped reader and watching the read succeed — and the header states the narrower truth rather than repeating a warning a C caller cannot observe.
+
+Tests: a hand-written five-entry `.xnb` in `ContentSmoke.c`, every route and every refusal, mutation-checked three ways (expected `magic`, expected vertex, registration order). 103/103 `CApi` ctests pass. |
 | CBIND-115 | Stop the release gate carrying the ABI version as a literal | — | ✅ | **Done 2026-08-28.** `release_gate.json`'s release line read `CNA C ABI 0.9.0, experimental` while `abi.h` had moved through `0.11` to `0.17`, so the published gate announced a release eight minor versions behind the header it governs. Nothing checked it, because nothing measured it — the one line of this tool's output that was remembered rather than derived, in a tool whose own docstring argues that a gate written as prose is a list of things somebody once believed. `release.name` becomes `release.name_template`, `check_release_gate.py` reads `CNA_ABI_VERSION_MAJOR/MINOR/PATCH` from `abi.h` on every run, and a template without `{abi_version}` is refused rather than rendered — proven by substituting the old literal back, which now fails with *a literal version goes stale* instead of publishing. A missing or unparsable `abi.h` is a hard error for the same reason. The rendered line now reads `CNA C ABI 0.17.0, experimental` and will follow the header without anyone remembering to edit it. |
 
 ## Mandatory test layers
@@ -1515,9 +1525,9 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-**Snapshot (2026-08-28, after `CBIND-114`):** 537 headers / 8,827 symbols —
-**8,337 implemented, 15 approved partial, 15 planned, 460 not applicable.** ABI `0.17.0`, 4,033
-exported symbols — the same 4,033 with `CNA_CNAEXT` on and off (measured symbol by symbol: zero
+**Snapshot (2026-08-28, after `CBIND-116`):** 537 headers / 8,827 symbols —
+**8,352 implemented, 15 approved partial, 0 planned, 460 not applicable.** ABI `0.18.0`, 4,048
+exported symbols — the same 4,048 with `CNA_CNAEXT` on and off (measured symbol by symbol: zero
 differ), which is the engine layer's ABI promise measured rather than asserted.
 
 The not-applicable count moved 459 → 460 for the first time in this phase, and the one row is named
@@ -1547,8 +1557,12 @@ and `BasicEffect`'s `VertexColorEnabled` pair (2). Each landed in a header a clo
 all 15 were attributed to finished tasks until `CBIND-114` partitioned them onto `B11_SLICE_OWNERS`.
 Until that task the published `COVERAGE.md` and `RELEASE_GATE.md` asserted **0 planned** and
 **Ready** on a tree holding 15 planned rows, because both had been generated on the bindings branch
-before it saw those commits. The gate now reads **Not ready** on that one criterion, and stays there
-until the 15 are bound — which is a later task, not `CBIND-114`.
+before it saw those commits. `CBIND-116` then bound all 15 and the gate reads **Ready**
+again. Two of its three surfaces cost no new ABI at all or corrected documentation rather than code:
+the `BasicEffect` pair was already reachable through the routes that bound the public field beside
+it, and the work measured two claims the canonical headers made — that a second registration under a
+canonical name replaces the first, and that the value-shaped reflective reader misreads a dispatched
+payload — and found both false on every path C can reach.
 
 **`CBIND-112` has since checked that, by name rather than by `--check`, and found one real defect
 doing it** — a rule citing a route that does not exist, written two commits earlier. Its six checks

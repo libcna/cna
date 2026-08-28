@@ -956,6 +956,433 @@ static CNA_Result on_level_load(
     return CNA_RESULT_SUCCESS;
 }
 
+/*
+ * CBIND-116: the Dictionary<string, object> a custom ContentProcessor writes.
+ *
+ * The shape XNA's own TrianglePickingSample uses -- a BoundingSphere and a Vector3[] of triangle
+ * vertices, handed to the game as side data the stock pipeline has no type for. In C++ it arrives
+ * on Model.Tag; this ABI has no route that loads a Model from content, so it is reached here as an
+ * asset whose root object is the dictionary, which is the same reader producing the same map.
+ *
+ * The fixture is a hand-written .xnb so the entries are proved against a real file, and one of its
+ * four entries is a type declared from C through the reflective builder -- which is what makes
+ * cna_reflective_type_reader_builder_register_shared testable at all.
+ */
+
+static const char DictionaryAssetPath[] = "cna_c_api_content_dictionary.xnb";
+static const char DictionaryAssetName[] = "cna_c_api_content_dictionary";
+/* Two declared types, because one canonical name can only ever hold one reader: see
+   compare_registration_shapes for the measurement that forced this shape on the fixture. */
+static const char DictionarySharedTypeName[] = "CNA.Test.DictionaryEntry";
+static const char DictionaryValueTypeName[] = "CNA.Test.DictionaryEntryValue";
+
+typedef struct DictionaryCustom {
+    int32_t magic;
+    float weight;
+} DictionaryCustom;
+
+static DictionaryCustom g_dictionary_shared;
+static DictionaryCustom g_dictionary_value;
+
+static CNA_Result dictionary_shared_create(void* const context, void** const out_object)
+{
+    DictionaryCustom* const entry = (DictionaryCustom*)context;
+    memset(entry, 0, sizeof(*entry));
+    *out_object = entry;
+    return CNA_RESULT_SUCCESS;
+}
+
+static size_t push_f32_le(uint8_t* const data, const size_t offset, const float value)
+{
+    uint32_t bits = 0U;
+    memcpy(&bits, &value, sizeof(bits));
+    return push_u32_le(data, offset, bits);
+}
+
+static size_t push_utf8(uint8_t* const data, size_t offset, const char* const text)
+{
+    const size_t length = strlen(text);
+    offset = push_seven_bit(data, offset, (uint32_t)length);
+    memcpy(data + offset, text, length);
+    return offset + length;
+}
+
+static int write_dictionary_asset(void)
+{
+    uint8_t asset[1024];
+    char shared_name[256];
+    char value_name[256];
+    uint64_t shared_bytes = 0U;
+    uint64_t value_bytes = 0U;
+    size_t offset = 10U;
+    uint32_t total = 0U;
+
+    if (cna_reflective_type_reader_copy_canonical_name(
+            view(DictionarySharedTypeName), shared_name, sizeof(shared_name) - 1U,
+            &shared_bytes) != CNA_RESULT_SUCCESS ||
+        cna_reflective_type_reader_copy_canonical_name(
+            view(DictionaryValueTypeName), value_name, sizeof(value_name) - 1U,
+            &value_bytes) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    shared_name[shared_bytes] = '\0';
+    value_name[value_bytes] = '\0';
+
+    offset = push_seven_bit(asset, offset, UINT32_C(7));   /* seven type readers */
+    offset = push_reader_name(
+        asset, offset,
+        "Microsoft.Xna.Framework.Content.DictionaryReader`2[[System.String],[System.Object]]");
+    offset = push_reader_name(asset, offset, "Microsoft.Xna.Framework.Content.StringReader");
+    offset = push_reader_name(
+        asset, offset, "Microsoft.Xna.Framework.Content.BoundingSphereReader");
+    offset = push_reader_name(
+        asset, offset,
+        "Microsoft.Xna.Framework.Content.ArrayReader`1[[Microsoft.Xna.Framework.Vector3]]");
+    offset = push_reader_name(asset, offset, "Microsoft.Xna.Framework.Content.Vector3Reader");
+    offset = push_reader_name(asset, offset, shared_name);
+    offset = push_reader_name(asset, offset, value_name);
+    offset = push_seven_bit(asset, offset, UINT32_C(0));   /* no shared resources */
+    offset = push_seven_bit(asset, offset, UINT32_C(1));   /* root object: the dictionary */
+
+    offset = push_u32_le(asset, offset, UINT32_C(5));      /* five entries */
+
+    offset = push_seven_bit(asset, offset, UINT32_C(2));   /* key: StringReader */
+    offset = push_utf8(asset, offset, "BoundingSphere");
+    offset = push_seven_bit(asset, offset, UINT32_C(3));   /* BoundingSphereReader */
+    offset = push_f32_le(asset, offset, 1.0f);
+    offset = push_f32_le(asset, offset, 2.0f);
+    offset = push_f32_le(asset, offset, 3.0f);
+    offset = push_f32_le(asset, offset, 4.0f);
+
+    offset = push_seven_bit(asset, offset, UINT32_C(2));
+    offset = push_utf8(asset, offset, "Custom");
+    offset = push_seven_bit(asset, offset, UINT32_C(6));   /* reference-shaped, from C */
+    offset = push_u32_le(asset, offset, UINT32_C(1234));
+    offset = push_f32_le(asset, offset, 0.5f);
+
+    offset = push_seven_bit(asset, offset, UINT32_C(2));
+    offset = push_utf8(asset, offset, "CustomValue");
+    offset = push_seven_bit(asset, offset, UINT32_C(7));   /* value-shaped, from C */
+    offset = push_u32_le(asset, offset, UINT32_C(4321));
+    offset = push_f32_le(asset, offset, 1.5f);
+
+    offset = push_seven_bit(asset, offset, UINT32_C(2));
+    offset = push_utf8(asset, offset, "Name");
+    offset = push_seven_bit(asset, offset, UINT32_C(2));   /* StringReader */
+    offset = push_utf8(asset, offset, "triangles");
+
+    offset = push_seven_bit(asset, offset, UINT32_C(2));
+    offset = push_utf8(asset, offset, "Vertices");
+    offset = push_seven_bit(asset, offset, UINT32_C(4));   /* ArrayReader<Vector3> */
+    offset = push_u32_le(asset, offset, UINT32_C(3));
+    offset = push_f32_le(asset, offset, 0.0f);
+    offset = push_f32_le(asset, offset, 0.0f);
+    offset = push_f32_le(asset, offset, 0.0f);
+    offset = push_f32_le(asset, offset, 1.0f);
+    offset = push_f32_le(asset, offset, 0.0f);
+    offset = push_f32_le(asset, offset, 0.0f);
+    offset = push_f32_le(asset, offset, 0.0f);
+    offset = push_f32_le(asset, offset, 1.0f);
+    offset = push_f32_le(asset, offset, 0.0f);
+
+    total = (uint32_t)offset;
+    asset[0] = (uint8_t)'X';
+    asset[1] = (uint8_t)'N';
+    asset[2] = (uint8_t)'B';
+    asset[3] = (uint8_t)'w';
+    asset[4] = 5U;
+    asset[5] = 0U;
+    (void)push_u32_le(asset, 6U, total);
+    return write_binary_file(DictionaryAssetPath, asset, offset);
+}
+
+/* Declares the two-field type and registers it in one of the two shapes. */
+static int register_dictionary_reader(
+    const char* const type_name,
+    DictionaryCustom* const storage,
+    const int shared)
+{
+    CNA_ReflectiveTypeReaderBuilderHandle builder = CNA_INVALID_HANDLE;
+    CNA_Result registered = CNA_RESULT_INVALID_STATE;
+
+    if (cna_reflective_type_reader_builder_create(
+            view(type_name), dictionary_shared_create, storage, &builder) !=
+            CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_reflective_type_reader_builder_add_field(
+            builder, CNA_CONTENT_FIELD_INT32, offsetof(DictionaryCustom, magic)) !=
+            CNA_RESULT_SUCCESS ||
+        cna_reflective_type_reader_builder_add_field(
+            builder, CNA_CONTENT_FIELD_SINGLE, offsetof(DictionaryCustom, weight)) !=
+            CNA_RESULT_SUCCESS) {
+        (void)cna_reflective_type_reader_builder_destroy(builder);
+        return 0;
+    }
+    registered = shared
+        ? cna_reflective_type_reader_builder_register_shared(builder)
+        : cna_reflective_type_reader_builder_register(builder);
+    if (registered != CNA_RESULT_SUCCESS) {
+        (void)cna_reflective_type_reader_builder_destroy(builder);
+        return 0;
+    }
+    /* A released builder does not withdraw the registration it made, and refuses further use. */
+    return cna_reflective_type_reader_builder_destroy(builder) == CNA_RESULT_SUCCESS &&
+        cna_reflective_type_reader_builder_register_shared(builder) == CNA_RESULT_INVALID_HANDLE;
+}
+
+/*
+ * What the two registration routes actually change, measured rather than assumed.
+ *
+ * Both entries carry the same two fields and both come back as the caller's own object, so a C
+ * caller reads either one the same way. What differs is the C++ type the entry holds --
+ * `shared_ptr<System::Object>` for the reference-shaped registration, the value carrier for the
+ * other -- and that is the difference this asserts, because it is the one this ABI can observe.
+ *
+ * The wire consequence the canonical layer warns about needs a container that dispatches on that
+ * shape, and the one that does -- ModelReader's tag path, which takes a `shared_ptr<System::Object>`
+ * and refuses anything else -- is not reachable from C, because no route loads a Model from
+ * content. A dictionary value is read through type-erased dispatch that consumes the reader index
+ * either way, which is why both are readable here and why this asserts an inequality of types
+ * rather than a failure this ABI cannot produce.
+ *
+ * **A second registration under a name already in the table is ignored**, which is measured here
+ * too: registering the value-shaped reader over the reference-shaped one leaves the first in place.
+ */
+static int compare_registration_shapes(const CNA_Handle manager)
+{
+    CNA_ObjectDictionaryHandle dictionary = CNA_INVALID_HANDLE;
+    char shared_name[128];
+    char value_name[128];
+    uint64_t shared_bytes = 0U;
+    uint64_t value_bytes = 0U;
+    void* object = 0;
+
+    /* The second registration for the shared name must not take: first registered wins. */
+    if (!register_dictionary_reader(DictionarySharedTypeName, &g_dictionary_shared, 1) ||
+        !register_dictionary_reader(DictionarySharedTypeName, &g_dictionary_shared, 0) ||
+        !register_dictionary_reader(DictionaryValueTypeName, &g_dictionary_value, 0) ||
+        !write_dictionary_asset() ||
+        cna_content_manager_load_object_dictionary_ext(
+            manager, view(DictionaryAssetName), &dictionary) != CNA_RESULT_SUCCESS) {
+        (void)cna_object_dictionary_ext_destroy(dictionary);
+        return 0;
+    }
+
+    if (cna_object_dictionary_ext_copy_type_name(
+            dictionary, view("Custom"), shared_name, sizeof(shared_name), &shared_bytes) !=
+            CNA_RESULT_SUCCESS ||
+        cna_object_dictionary_ext_copy_type_name(
+            dictionary, view("CustomValue"), value_name, sizeof(value_name), &value_bytes) !=
+            CNA_RESULT_SUCCESS ||
+        /* Two shapes, two stored C++ types. */
+        (shared_bytes == value_bytes &&
+         memcmp(shared_name, value_name, (size_t)shared_bytes) == 0) ||
+        /* Both are the caller's own object, with the fields the file declared. */
+        cna_object_dictionary_ext_get_foreign_object(dictionary, view("Custom"), &object) !=
+            CNA_RESULT_SUCCESS ||
+        object != (void*)&g_dictionary_shared ||
+        g_dictionary_shared.magic != 1234 || g_dictionary_shared.weight != 0.5f ||
+        cna_object_dictionary_ext_get_foreign_object(dictionary, view("CustomValue"), &object) !=
+            CNA_RESULT_SUCCESS ||
+        object != (void*)&g_dictionary_value ||
+        g_dictionary_value.magic != 4321 || g_dictionary_value.weight != 1.5f) {
+        (void)cna_object_dictionary_ext_destroy(dictionary);
+        return 0;
+    }
+    return cna_object_dictionary_ext_destroy(dictionary) == CNA_RESULT_SUCCESS;
+}
+
+static int validate_object_dictionary(const CNA_Handle manager)
+{
+    CNA_ObjectDictionaryHandle dictionary = CNA_INVALID_HANDLE;
+    CNA_ObjectDictionaryEntry entry;
+    CNA_BoundingSphere sphere;
+    CNA_Vector3 vertices[3];
+    CNA_Bool present = CNA_FALSE;
+    uint64_t count = 0U;
+    uint64_t bytes = 0U;
+    char text[64];
+    void* custom = 0;
+
+    if (!compare_registration_shapes(manager)) {
+        return 0;
+    }
+
+    /* A missing asset is an IO failure, and the output handle stays invalid. */
+    if (cna_content_manager_load_object_dictionary_ext(
+            manager, view("cna_c_api_content_absent"), &dictionary) != CNA_RESULT_IO ||
+        dictionary != CNA_INVALID_HANDLE ||
+        cna_content_manager_load_object_dictionary_ext(manager, view(""), &dictionary) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_content_manager_load_object_dictionary_ext(
+            manager, view(DictionaryAssetName), 0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    if (cna_content_manager_load_object_dictionary_ext(
+            manager, view(DictionaryAssetName), &dictionary) != CNA_RESULT_SUCCESS ||
+        dictionary == CNA_INVALID_HANDLE) {
+        return 0;
+    }
+
+    /* Four entries, and the keys come back in the container's own order, which is sorted. */
+    if (cna_object_dictionary_ext_get_count(dictionary, &count) != CNA_RESULT_SUCCESS ||
+        count != UINT64_C(5) ||
+        cna_object_dictionary_ext_contains_key(
+            dictionary, view("BoundingSphere"), &present) != CNA_RESULT_SUCCESS ||
+        present != CNA_TRUE ||
+        cna_object_dictionary_ext_contains_key(
+            dictionary, view("NotThere"), &present) != CNA_RESULT_SUCCESS ||
+        present != CNA_FALSE ||
+        cna_object_dictionary_ext_get_key_size_at(dictionary, UINT64_C(0), &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        bytes != strlen("BoundingSphere") ||
+        cna_object_dictionary_ext_copy_key_at(
+            dictionary, UINT64_C(1), text, sizeof(text), &bytes) != CNA_RESULT_SUCCESS ||
+        bytes != strlen("Custom") || memcmp(text, "Custom", (size_t)bytes) != 0 ||
+        /* A short destination writes nothing and still reports the size needed. */
+        cna_object_dictionary_ext_copy_key_at(dictionary, UINT64_C(4), text, 2U, &bytes) !=
+            CNA_RESULT_BUFFER_TOO_SMALL ||
+        bytes != strlen("Vertices") ||
+        cna_object_dictionary_ext_get_key_size_at(dictionary, UINT64_C(5), &bytes) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        (void)cna_object_dictionary_ext_destroy(dictionary);
+        return 0;
+    }
+
+    /* Each entry reports the type ITS OWN reader produced, which is the whole point. */
+    entry.struct_size = (uint32_t)sizeof(entry);
+    if (cna_object_dictionary_ext_get_entry(dictionary, view("BoundingSphere"), &entry) !=
+            CNA_RESULT_SUCCESS ||
+        entry.kind != CNA_OBJECT_DICTIONARY_VALUE_BOUNDING_SPHERE ||
+        entry.is_array != CNA_FALSE || entry.element_count != UINT64_C(1)) {
+        (void)cna_object_dictionary_ext_destroy(dictionary);
+        return 0;
+    }
+    entry.struct_size = (uint32_t)sizeof(entry);
+    if (cna_object_dictionary_ext_get_entry(dictionary, view("Vertices"), &entry) !=
+            CNA_RESULT_SUCCESS ||
+        entry.kind != CNA_OBJECT_DICTIONARY_VALUE_VECTOR3 ||
+        entry.is_array != CNA_TRUE || entry.element_count != UINT64_C(3)) {
+        (void)cna_object_dictionary_ext_destroy(dictionary);
+        return 0;
+    }
+    entry.struct_size = (uint32_t)sizeof(entry);
+    if (cna_object_dictionary_ext_get_entry(dictionary, view("Custom"), &entry) !=
+            CNA_RESULT_SUCCESS ||
+        entry.kind != CNA_OBJECT_DICTIONARY_VALUE_FOREIGN_OBJECT ||
+        entry.is_array != CNA_FALSE ||
+        /* An absent key and an undersized structure are both refused. */
+        cna_object_dictionary_ext_get_entry(dictionary, view("NotThere"), &entry) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        (void)cna_object_dictionary_ext_destroy(dictionary);
+        return 0;
+    }
+    {
+        CNA_ObjectDictionaryEntry small;
+        small.struct_size = 1U;
+        if (cna_object_dictionary_ext_get_entry(dictionary, view("Name"), &small) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+            (void)cna_object_dictionary_ext_destroy(dictionary);
+            return 0;
+        }
+    }
+
+    /* The values themselves. */
+    if (cna_object_dictionary_ext_copy_value(
+            dictionary, view("BoundingSphere"), CNA_OBJECT_DICTIONARY_VALUE_BOUNDING_SPHERE,
+            &sphere, sizeof(sphere)) != CNA_RESULT_SUCCESS ||
+        sphere.center.x != 1.0f || sphere.center.y != 2.0f || sphere.center.z != 3.0f ||
+        sphere.radius != 4.0f ||
+        /* Naming the wrong kind is the C form of an InvalidCastException, not a reinterpret. */
+        cna_object_dictionary_ext_copy_value(
+            dictionary, view("BoundingSphere"), CNA_OBJECT_DICTIONARY_VALUE_MATRIX,
+            &sphere, sizeof(sphere)) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_object_dictionary_ext_copy_value(
+            dictionary, view("BoundingSphere"), CNA_OBJECT_DICTIONARY_VALUE_BOUNDING_SPHERE,
+            &sphere, sizeof(sphere) - 1U) != CNA_RESULT_BUFFER_TOO_SMALL ||
+        /* An array is not read through the scalar route, and an absent key is refused. */
+        cna_object_dictionary_ext_copy_value(
+            dictionary, view("Vertices"), CNA_OBJECT_DICTIONARY_VALUE_VECTOR3,
+            vertices, sizeof(vertices)) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_object_dictionary_ext_copy_value(
+            dictionary, view("NotThere"), CNA_OBJECT_DICTIONARY_VALUE_VECTOR3,
+            vertices, sizeof(vertices)) != CNA_RESULT_INVALID_ARGUMENT) {
+        (void)cna_object_dictionary_ext_destroy(dictionary);
+        return 0;
+    }
+
+    if (cna_object_dictionary_ext_copy_array(
+            dictionary, view("Vertices"), CNA_OBJECT_DICTIONARY_VALUE_VECTOR3,
+            vertices, sizeof(vertices), &bytes) != CNA_RESULT_SUCCESS ||
+        bytes != sizeof(vertices) ||
+        vertices[0].x != 0.0f || vertices[0].y != 0.0f || vertices[0].z != 0.0f ||
+        vertices[1].x != 1.0f || vertices[1].y != 0.0f || vertices[1].z != 0.0f ||
+        vertices[2].x != 0.0f || vertices[2].y != 1.0f || vertices[2].z != 0.0f ||
+        /* Sizing first is a supported call, not an error to avoid. */
+        cna_object_dictionary_ext_copy_array(
+            dictionary, view("Vertices"), CNA_OBJECT_DICTIONARY_VALUE_VECTOR3, 0, 0U, &bytes) !=
+            CNA_RESULT_BUFFER_TOO_SMALL ||
+        bytes != sizeof(vertices) ||
+        cna_object_dictionary_ext_copy_array(
+            dictionary, view("Vertices"), CNA_OBJECT_DICTIONARY_VALUE_VECTOR4,
+            vertices, sizeof(vertices), &bytes) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_object_dictionary_ext_copy_array(
+            dictionary, view("BoundingSphere"), CNA_OBJECT_DICTIONARY_VALUE_BOUNDING_SPHERE,
+            vertices, sizeof(vertices), &bytes) != CNA_RESULT_INVALID_ARGUMENT) {
+        (void)cna_object_dictionary_ext_destroy(dictionary);
+        return 0;
+    }
+
+    if (cna_object_dictionary_ext_get_string_size(dictionary, view("Name"), &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        bytes != strlen("triangles") ||
+        cna_object_dictionary_ext_copy_string(
+            dictionary, view("Name"), text, sizeof(text), &bytes) != CNA_RESULT_SUCCESS ||
+        memcmp(text, "triangles", (size_t)bytes) != 0 ||
+        cna_object_dictionary_ext_copy_string(dictionary, view("Name"), text, 3U, &bytes) !=
+            CNA_RESULT_BUFFER_TOO_SMALL ||
+        cna_object_dictionary_ext_get_string_size(dictionary, view("Vertices"), &bytes) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        (void)cna_object_dictionary_ext_destroy(dictionary);
+        return 0;
+    }
+
+    /* The entry the caller's own reflective reader produced: the pointer is the one its factory
+       returned, and the fields it declared were filled from the file. */
+    if (cna_object_dictionary_ext_get_foreign_object(dictionary, view("Custom"), &custom) !=
+            CNA_RESULT_SUCCESS ||
+        custom != (void*)&g_dictionary_shared ||
+        g_dictionary_shared.magic != 1234 || g_dictionary_shared.weight != 0.5f ||
+        cna_object_dictionary_ext_get_foreign_object(dictionary, view("Name"), &custom) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        (void)cna_object_dictionary_ext_destroy(dictionary);
+        return 0;
+    }
+
+    /* The C++ type name is a diagnostic: it is present and non-empty, and its spelling is not
+       asserted, because it is the toolchain's rather than this ABI's. */
+    if (cna_object_dictionary_ext_get_type_name_size(dictionary, view("Vertices"), &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        bytes == UINT64_C(0) ||
+        cna_object_dictionary_ext_copy_type_name(
+            dictionary, view("Vertices"), text, sizeof(text), &bytes) != CNA_RESULT_SUCCESS ||
+        cna_object_dictionary_ext_copy_type_name(
+            dictionary, view("Vertices"), text, 1U, &bytes) != CNA_RESULT_BUFFER_TOO_SMALL) {
+        (void)cna_object_dictionary_ext_destroy(dictionary);
+        return 0;
+    }
+
+    /* A released handle is gone, and releasing it twice is refused rather than repeated. */
+    if (cna_object_dictionary_ext_destroy(dictionary) != CNA_RESULT_SUCCESS ||
+        cna_object_dictionary_ext_destroy(dictionary) != CNA_RESULT_INVALID_HANDLE ||
+        cna_object_dictionary_ext_get_count(dictionary, &count) != CNA_RESULT_INVALID_HANDLE) {
+        return 0;
+    }
+    return 1;
+}
+
 static int validate_cnb_loader_through_manager(const CNA_Handle manager)
 {
     CNA_CnbWriterHandle writer = CNA_INVALID_HANDLE;
@@ -1339,6 +1766,7 @@ static CNA_Result on_load(
         !validate_font_load(state->content_manager) ||
         !validate_foreign_load(state->content_manager) ||
         !validate_reflective_reader(state->content_manager) ||
+        !validate_object_dictionary(state->content_manager) ||
         !validate_cnb_loader_through_manager(state->content_manager) ||
         !validate_effect_load(state->content_manager) ||
         !validate_cnj_loader(state->content_manager)) {

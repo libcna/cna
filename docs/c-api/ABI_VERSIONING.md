@@ -2,7 +2,23 @@
 
 ## ABI identity
 
-The ABI is `0.17.0`. It adds the **reflective content readers** from `plans/plan_binding.md`
+The ABI is `0.18.0`. It adds the **`Dictionary<string, object>` a content processor writes** and
+the **reference-shaped reflective reader**, from `plans/plan_binding.md` `CBIND-116`: fifteen routes
+over one new handle kind (`CNA_ObjectDictionaryHandle`), the `CNA_ObjectDictionaryValueKind`
+identity and one versioned structure (`CNA_ObjectDictionaryEntry`). With it a C application reads
+the side data a custom `ContentProcessor` ships beside an asset -- a `BoundingSphere`, a
+`Vector3[]`, or a type the application itself declared -- each entry keeping the type its own reader
+produced.
+
+Two boundaries this version states rather than implies. In C++ such a dictionary is reached through
+`Model.Tag`, and **no route in this ABI loads a `Model` from content**; it is reached here from an
+asset whose root object is the dictionary instead. And
+`cna_reflective_type_reader_builder_register_shared` differs from its value-shaped twin only in the
+C++ type an entry ends up holding on the paths C can reach, because a dictionary value is read
+through type-erased dispatch either way -- the container that refuses the wrong shape is
+`ModelReader`'s tag path, which C cannot reach.
+
+`0.17.0` added the **reflective content readers** from `plans/plan_binding.md`
 `CBIND-105`: ten routes over one new handle kind (`CNA_ReflectiveTypeReaderBuilderHandle`), the
 `CNA_ContentFieldKind` identity and two callback types. With it a game can declare a reflectively
 serialized `.xnb` type's field list from C and have CNA read it.
@@ -263,7 +279,7 @@ Recording the baseline needs the library:
 python3 tools/c-api/generate_abi_baseline.py --write --library <build>/modules/c-api/libcna_c_api.so
 ```
 
-All four build configurations export the same 4,033 symbols. That is itself part of the contract:
+All four build configurations export the same 4,048 symbols. That is itself part of the contract:
 the ABI **surface** does not vary with the renderer, with `CNA_DEVICES`, or with `CNA_CNAEXT` —
 only the answers do. A route whose backend or layer is absent exists and refuses, rather than
 disappearing from the library. `CNA_CNAEXT` is the newest member of that list and the one with the
