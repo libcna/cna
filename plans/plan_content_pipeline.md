@@ -1,6 +1,6 @@
 # plan_content_pipeline.md — CNA Content Pipeline
 
-> **Status (2026-08-28):** `CP-001` through `CP-013` are complete. `CP-014` is current. The
+> **Status (2026-08-28):** `CP-001` through `CP-014` are complete. `CP-015` is current. The
 > project starts from the existing `content-pipeline` branch at `0e6899f17017c03c0e23d575d25cd70c678e2781`.
 > That commit contains the completed CNB baseline through `CNBF-123`. Local `next` was actually
 > `4ab1859dc8a540af1bd326df0fa816579adf7027`, two unrelated platform/binding commits ahead; the
@@ -712,8 +712,15 @@ expected to be reentrant so later parallel scheduling does not require an API re
   will be designed from implemented semantics.
 * No platform-specific CNB variants or platform IDs. A future profile remains a stable string only
   after a processor has demonstrated the need.
-* CMake integration is deferred until the CLI and incremental dependency behavior are stable. It
-  must call the same CLI/library rather than duplicate pipeline logic in CMake script.
+* `cna_add_content(TARGET ... SOURCE_DIR ... OUTPUT_DIR ...)` now adds one explicit custom target
+  that invokes the same `cna-content` executable. The target intentionally runs whenever requested;
+  the content-hashed manifest, not a second CMake dependency model, decides per-asset skips.
+* Relative source/output roots follow the caller's source/binary directories. `QUIET` is optional.
+  A cross build must supply a host `CONTENT_EXECUTABLE`; attempting to execute CNA's target binary
+  on the host is rejected at configure time.
+* A generated Curve fixture proves the helper creates the logical nested CNB and versioned manifest
+  through the actual CLI. No `cna_add_game()` convenience wrapper is added before game-helper UX is
+  understood.
 
 ---
 
@@ -819,8 +826,8 @@ documentation index.
 | `CP-011` | **completed** | Added a realistic custom `.level` importer, parameterized processor, custom codec/writer and `ContentManager` loader end-to-end test. It proves deterministic output, source dependency versus runtime XREF behavior, stable component identities, custom CMET/XREF data, configuration diagnostics and runtime loading. The C++ API remains explicitly experimental because one custom schema does not settle source/ABI stability or multi-output/plugin requirements. |
 | `CP-012` | **completed** | Kept wide Windows argv and native filesystem paths through the CLI/core, added explicit generic-UTF-8 manifest/diagnostic conversion, added native image/WAV/DDS import overloads and Unicode CNJ sidecar resolution, and passed 43 focused tests including a real non-ASCII directory build/no-op. Windows execution was not available; glTF/Model's audited legacy narrow seam is recorded rather than hidden. |
 | `CP-013` | **completed** | Added the implementation-derived `docs/content-pipeline.md` and index entry, documenting the build/runtime boundary, XNA mapping, exact component/context/data APIs, built-in routes, dependencies versus XREF, CLI/cache/atomic/path behavior, migration limits and stable/experimental/internal status. The evidence-based architecture review above found no duplicate built-in codec/parser or runtime-device dependency; the remaining Windows Model and build-graph limits stay explicit. |
-| `CP-014` | **current** | Evaluate and, only if justified, implement CNA-convention CMake orchestration over the same CLI/library. |
-| `CP-015` | future | Final sanitizer, golden-vector, compatibility, architecture and risk review; reconcile plan status with the tree. |
+| `CP-014` | **completed** | Added the minimal `cna_add_content(TARGET ... SOURCE_DIR ... OUTPUT_DIR ... [QUIET] [CONTENT_EXECUTABLE ...])` helper. It always delegates to the real CLI, leaving dependency/cache/publication semantics singular; native builds depend on the tool target and cross builds require an explicit host compiler. A generated nested Curve integration fixture and test prove CNB logical-name/manifest output through the helper. |
+| `CP-015` | **current** | Final sanitizer, golden-vector, compatibility, architecture and risk review; reconcile plan status with the tree. |
 
 Tasks are intentionally vertical/coherent. The ledger is revised when implementation evidence makes
 the ordering wrong; it is not a promise to build speculative abstractions.

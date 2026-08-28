@@ -134,7 +134,7 @@ data and temporary authoring intermediates, not runtime Model objects.
 | `ContentTypeReader<T>` | existing typed CNB decoder plus `CnbLoaderRegistry` |
 | `ExternalReference<T>` | CNB XREF for runtime references; separate records for build inputs |
 | XNB | CNB for CNA-native compiled content; XNB remains the compatibility path |
-| MGCB/MSBuild | `cna-content`; CMake orchestration is not yet implemented |
+| MGCB/MSBuild | `cna-content` plus the thin `cna_add_content()` CMake helper |
 
 CNA deliberately does not copy assembly discovery, reflection-driven processor properties,
 assembly-qualified type names, CLR generic names, XNB reader tables, XNA platform bytes, or
@@ -439,9 +439,38 @@ it must participate in fingerprints.
 Build scheduling is serial. Registries are configured explicitly and components are intended to be
 reentrant, leaving room for later parallel scheduling without committing to thread complexity now.
 
-CMake integration has not yet been added. The intended direction is for CMake to invoke the same
-`cna-content` command/library, not duplicate import, dependency, cache, or publication logic in CMake
-scripts.
+CMake can create a content target with the helper defined alongside the CNA tool:
+
+```cmake
+cna_add_content(
+    TARGET MyGameContent
+    SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ContentSource"
+    OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/Content"
+)
+
+add_dependencies(MyGame MyGameContent)
+```
+
+`SOURCE_DIR` is resolved relative to the caller's source directory and `OUTPUT_DIR` relative to its
+binary directory. The custom target intentionally invokes `cna-content` whenever the target is
+requested; the pipeline's byte-hashed manifest performs the correct per-asset no-op decisions. CMake
+therefore does not duplicate source discovery, dependency hashing, cache logic, or publication.
+`QUIET` forwards quiet output.
+
+For a cross-compiling CMake build, a target-platform `cna-content` executable cannot run on the
+host. Such a call must provide an already-built host tool explicitly:
+
+```cmake
+cna_add_content(
+    TARGET MyGameContent
+    SOURCE_DIR ContentSource
+    OUTPUT_DIR Content
+    CONTENT_EXECUTABLE "/path/to/host/cna-content"
+)
+```
+
+Without `CONTENT_EXECUTABLE`, cross-compiling fails at configure time with a specific diagnostic.
+No `cna_add_game()` convenience layer is defined yet.
 
 ## Stability summary
 

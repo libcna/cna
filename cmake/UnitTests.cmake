@@ -565,6 +565,31 @@ if(CNA_BUILD_TESTS)
         target_compile_definitions(CnaTests PRIVATE
             CNA_CONTENT_TOOL_PATH="$<TARGET_FILE:cna_content_tool>"
         )
+
+        # plans/plan_content_pipeline.md CP-014: prove the public CMake helper itself delegates to
+        # the real CLI and preserves its logical/output tree and manifest. A target-platform tool
+        # cannot execute on the host, so cross configurations compile the guarded test but do not
+        # instantiate this native build fixture.
+        if(COMMAND cna_add_content AND NOT CMAKE_CROSSCOMPILING)
+            set(_cna_content_cmake_fixture_output
+                "${CMAKE_CURRENT_BINARY_DIR}/content-pipeline-cmake-fixture")
+            cna_add_content(
+                TARGET cna_content_cmake_fixture
+                SOURCE_DIR "${CNA_SOURCE_DIR}/tests/assets/content_pipeline_cmake"
+                OUTPUT_DIR "${_cna_content_cmake_fixture_output}"
+                QUIET
+            )
+            add_dependencies(CnaTests cna_content_cmake_fixture)
+            file(TO_CMAKE_PATH "${_cna_content_cmake_fixture_output}"
+                _cna_content_cmake_fixture_output_definition)
+            set_source_files_properties(
+                "${CNA_SOURCE_DIR}/modules/content/tests/CNA/Content/Pipeline/ContentPipelineCMakeIntegrationTests.cpp"
+                PROPERTIES COMPILE_DEFINITIONS
+                    "CNA_CONTENT_CMAKE_FIXTURE_OUTPUT=\"${_cna_content_cmake_fixture_output_definition}\""
+            )
+            unset(_cna_content_cmake_fixture_output_definition)
+            unset(_cna_content_cmake_fixture_output)
+        endif()
     endif()
 
     if(TARGET cna_tool_cnb_info)
