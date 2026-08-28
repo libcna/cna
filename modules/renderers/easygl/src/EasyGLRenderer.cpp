@@ -1033,6 +1033,21 @@ namespace CNA::Internal::Renderers::EasyGL
                 const std::string trimmed = (firstNonSpace == std::string::npos)
                     ? std::string() : line.substr(firstNonSpace);
 
+                // plans/plan_fx.md FX-124: GLSL ES 3.00 REQUIRES fragment highp, so the shaders in
+                // this file ask for it unconditionally. GLSL ES 1.00 makes it optional, and an
+                // implementation that lacks it fails to compile a shader that demands it -- so
+                // down here the request becomes a guarded one, exactly as FX-121 did for
+                // MojoShader's own GLSL ES 1.00 output. A fragment shader that only ever handles
+                // [0,1] colours is left at mediump by its own source and is untouched by this.
+                if (stage == GlShaderStageKind::Fragment && trimmed == "precision highp float;")
+                {
+                    out += "#ifdef GL_FRAGMENT_PRECISION_HIGH\n"
+                           "precision highp float;\n"
+                           "#else\n"
+                           "precision mediump float;\n"
+                           "#endif\n";
+                    continue;
+                }
                 if (trimmed.rfind("layout(location", 0) == 0)
                 {
                     // "layout(location=N) in TYPE NAME;" or "layout(location = N) in TYPE NAME;"
@@ -7229,7 +7244,19 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
-"precision mediump float;\n"
+// plans/plan_fx.md FX-124: this fragment stage normalizes a WORLD-SPACE vector --
+// normalize(uEyePosition - vWorldPos) -- and `mediump` guarantees only fp16 RANGE (~65504).
+// dot(v, v) is computed first, so an eye a few thousand units from the geometry overflows,
+// inversesqrt returns 0, the view direction collapses to the zero vector, and the specular term
+// is wrong everywhere while the frame still reads as a plausible lit render. Measured, not
+// assumed: SAMPLE-046 puts its camera 3500 units out, and with one directional light and
+// PreferPerPixelLighting the frame agreed with real XNA on 90.62% of pixels within 8 levels at
+// mediump and 99.99% at highp, the signed error over the model going from -20 levels to -0.01.
+// Mesa does honour the qualifier here. GLSL ES 3.00 requires fragment highp, so it is asked for
+// unconditionally; the GLSL ES 1.00 profiles get the GL_FRAGMENT_PRECISION_HIGH guard from
+// TransformGlslEs300BodyToEs100, where 1.00 makes highp optional. FX-121 is the same defect in
+// MojoShader's compiled-effect path; this is the built-in effect path.
+"precision highp float;\n"
 "in vec3 vNormal;\n"
 "in vec2 vUV;\n"
 "in float vFogFactor;\n"
@@ -7390,11 +7417,20 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "    float dotL1=dot(N,-uLight1Dir); float zeroL1=step(0.0,dotL1); float NdotL1=max(dotL1,0.0);\n"
 "    float dotL2=dot(N,-uLight2Dir); float zeroL2=step(0.0,dotL2); float NdotL2=max(dotL2,0.0);\n"
 "    vec3 lightSum=uAmbientColor+uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2;\n"
-"    vLitRGB=lightSum*uDiffuseColor.rgb+uEmissiveColor;\n"
+// plans/plan_fx.md FX-123: Direct3D 9 clamps a vertex shader's colour output registers
+// (oD0/oD1) to [0,1] BEFORE interpolating them, so XNA's own VSBasicVertexLighting /
+// VSSkinnedVertexLighting hand a saturated colour to the rasterizer even though the .fx
+// source never writes a saturate(). These are plain varyings, which nothing clamps, so an
+// unclamped sum interpolates high between vertices and the triangle comes out BRIGHTER than
+// D3D9's. It only shows once the lights accumulate past 1: SAMPLE-046 agrees with real XNA
+// to 99.99%% with any ONE of its three directional lights on and drops to 90.31%% with all
+// three. Saturating here is what oD0/oD1 do, not an approximation of them. FX-122 fixed the
+// same D3D9 semantic in MojoShader's compiled-effect path; this is the built-in effect path.
+"    vLitRGB=clamp(lightSum*uDiffuseColor.rgb+uEmissiveColor,0.0,1.0);\n"
 "    vec3 h0=normalize(E-uLight0Dir); float spec0=pow(max(dot(h0,N),0.0)*zeroL0,uSpecularPower);\n"
 "    vec3 h1=normalize(E-uLight1Dir); float spec1=pow(max(dot(h1,N),0.0)*zeroL1,uSpecularPower);\n"
 "    vec3 h2=normalize(E-uLight2Dir); float spec2=pow(max(dot(h2,N),0.0)*zeroL2,uSpecularPower);\n"
-"    vSpecularRGB=(spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor;\n"
+"    vSpecularRGB=clamp((spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor,0.0,1.0);\n"
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
@@ -7783,7 +7819,19 @@ CNA_GL_SKIN_NORMAL_DECL
 
         static const char* fsrc =
 "#version 300 es\n"
-"precision mediump float;\n"
+// plans/plan_fx.md FX-124: this fragment stage normalizes a WORLD-SPACE vector --
+// normalize(uEyePosition - vWorldPos) -- and `mediump` guarantees only fp16 RANGE (~65504).
+// dot(v, v) is computed first, so an eye a few thousand units from the geometry overflows,
+// inversesqrt returns 0, the view direction collapses to the zero vector, and the specular term
+// is wrong everywhere while the frame still reads as a plausible lit render. Measured, not
+// assumed: SAMPLE-046 puts its camera 3500 units out, and with one directional light and
+// PreferPerPixelLighting the frame agreed with real XNA on 90.62% of pixels within 8 levels at
+// mediump and 99.99% at highp, the signed error over the model going from -20 levels to -0.01.
+// Mesa does honour the qualifier here. GLSL ES 3.00 requires fragment highp, so it is asked for
+// unconditionally; the GLSL ES 1.00 profiles get the GL_FRAGMENT_PRECISION_HIGH guard from
+// TransformGlslEs300BodyToEs100, where 1.00 makes highp optional. FX-121 is the same defect in
+// MojoShader's compiled-effect path; this is the built-in effect path.
+"precision highp float;\n"
 "in vec3 vNormal;\n"
 "in vec2 vUV;\n"
 "in float vFogFactor;\n"
@@ -7981,11 +8029,20 @@ CNA_GL_SKIN_NORMAL_DECL
 "    vec3 lightSum=uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2;\n"
 // Same FNA-fidelity fix as EnsureSkinnedProgram above - see its own comment for the full
 // reasoning; this vertex-lit sibling had the identical emissive-multiplied-twice bug.
-"    vLitRGB=lightSum*uDiffuseColor.rgb+uEmissiveColor;\n"
+// plans/plan_fx.md FX-123: Direct3D 9 clamps a vertex shader's colour output registers
+// (oD0/oD1) to [0,1] BEFORE interpolating them, so XNA's own VSBasicVertexLighting /
+// VSSkinnedVertexLighting hand a saturated colour to the rasterizer even though the .fx
+// source never writes a saturate(). These are plain varyings, which nothing clamps, so an
+// unclamped sum interpolates high between vertices and the triangle comes out BRIGHTER than
+// D3D9's. It only shows once the lights accumulate past 1: SAMPLE-046 agrees with real XNA
+// to 99.99%% with any ONE of its three directional lights on and drops to 90.31%% with all
+// three. Saturating here is what oD0/oD1 do, not an approximation of them. FX-122 fixed the
+// same D3D9 semantic in MojoShader's compiled-effect path; this is the built-in effect path.
+"    vLitRGB=clamp(lightSum*uDiffuseColor.rgb+uEmissiveColor,0.0,1.0);\n"
 "    vec3 h0=normalize(E-uLight0Dir); float spec0=pow(max(dot(h0,N),0.0)*zeroL0,uSpecularPower);\n"
 "    vec3 h1=normalize(E-uLight1Dir); float spec1=pow(max(dot(h1,N),0.0)*zeroL1,uSpecularPower);\n"
 "    vec3 h2=normalize(E-uLight2Dir); float spec2=pow(max(dot(h2,N),0.0)*zeroL2,uSpecularPower);\n"
-"    vSpecularRGB=(spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor;\n"
+"    vSpecularRGB=clamp((spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor,0.0,1.0);\n"
 "}\n";
 
         static const char* fsrc =
@@ -8124,7 +8181,19 @@ CNA_GL_DIRECTION_HANDEDNESS_DECL
             dualUv ? "cnaPbrUV(uSpecularTextureCoordinateSets.y)" : "vUV";
         const std::string fsrc =
 std::string("#version 300 es\n") +
-"precision mediump float;\n"
+// plans/plan_fx.md FX-124: this fragment stage normalizes a WORLD-SPACE vector --
+// normalize(uEyePosition - vWorldPos) -- and `mediump` guarantees only fp16 RANGE (~65504).
+// dot(v, v) is computed first, so an eye a few thousand units from the geometry overflows,
+// inversesqrt returns 0, the view direction collapses to the zero vector, and the specular term
+// is wrong everywhere while the frame still reads as a plausible lit render. Measured, not
+// assumed: SAMPLE-046 puts its camera 3500 units out, and with one directional light and
+// PreferPerPixelLighting the frame agreed with real XNA on 90.62% of pixels within 8 levels at
+// mediump and 99.99% at highp, the signed error over the model going from -20 levels to -0.01.
+// Mesa does honour the qualifier here. GLSL ES 3.00 requires fragment highp, so it is asked for
+// unconditionally; the GLSL ES 1.00 profiles get the GL_FRAGMENT_PRECISION_HIGH guard from
+// TransformGlslEs300BodyToEs100, where 1.00 makes highp optional. FX-121 is the same defect in
+// MojoShader's compiled-effect path; this is the built-in effect path.
+"precision highp float;\n"
 "in vec3 vNormal;\n"
 "in vec3 vTangent;\n"
 "in float vBitangentSign;\n"
@@ -8422,7 +8491,19 @@ CNA_GL_SKIN_NORMAL_DECL
             dualUv ? "cnaPbrUV(uSpecularTextureCoordinateSets.y)" : "vUV";
         const std::string fsrc =
 std::string("#version 300 es\n") +
-"precision mediump float;\n"
+// plans/plan_fx.md FX-124: this fragment stage normalizes a WORLD-SPACE vector --
+// normalize(uEyePosition - vWorldPos) -- and `mediump` guarantees only fp16 RANGE (~65504).
+// dot(v, v) is computed first, so an eye a few thousand units from the geometry overflows,
+// inversesqrt returns 0, the view direction collapses to the zero vector, and the specular term
+// is wrong everywhere while the frame still reads as a plausible lit render. Measured, not
+// assumed: SAMPLE-046 puts its camera 3500 units out, and with one directional light and
+// PreferPerPixelLighting the frame agreed with real XNA on 90.62% of pixels within 8 levels at
+// mediump and 99.99% at highp, the signed error over the model going from -20 levels to -0.01.
+// Mesa does honour the qualifier here. GLSL ES 3.00 requires fragment highp, so it is asked for
+// unconditionally; the GLSL ES 1.00 profiles get the GL_FRAGMENT_PRECISION_HIGH guard from
+// TransformGlslEs300BodyToEs100, where 1.00 makes highp optional. FX-121 is the same defect in
+// MojoShader's compiled-effect path; this is the built-in effect path.
+"precision highp float;\n"
 "in vec3 vNormal;\n"
 "in vec3 vTangent;\n"
 "in float vBitangentSign;\n"
