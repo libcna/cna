@@ -2,9 +2,11 @@
 
 ## Status summary (2026-08-27)
 
-**144 rows — ✅ 138 · 🟨 4 · ⬜ 2** (counted from the row tables by `tools/count_webgpu_plan_status.sh`,
-not by hand). The **6 open rows** are the only WebGPU work not at ✅:
-`WEBGPU-1, 12, 28, 29, 59, 107`. (Closed 2026-08-27: `WEBGPU-114` RenderTargetCube per-face MSAA
+**144 rows — ✅ 139 · 🟨 4 · ⬜ 1** (counted from the row tables by `tools/count_webgpu_plan_status.sh`,
+not by hand). The **5 open rows** are the only WebGPU work not at ✅:
+`WEBGPU-1, 12, 29, 59, 107`. (Closed 2026-08-28: `WEBGPU-28` all WGSL extracted to
+`webgpu_shaders.hpp` + `ValidateAllShadersEXT()` whole-set validation + `WebGPU_ShaderValidation`
+test + `CNA_WEBGPU_VALIDATE_SHADERS` startup gate. Closed 2026-08-27: `WEBGPU-114` RenderTargetCube per-face MSAA
 resolve + `mipMap=true` mip-chain regeneration + `WebGPU_RenderTargetCube` Checks E/F; `WEBGPU-39`
 exact per-value `DepthFormat`
 mapping (None/Depth16/Depth24/Depth24Stencil8) + `WebGPU_DepthFormat` test; `WEBGPU-70` reachable
@@ -19,8 +21,6 @@ build/link/runtime verification.)
   Windows/macOS/linux-aarch64 packages have pinned hashes but no build/link/runtime verification here.
 - **`WEBGPU-12` 🟨** — one fresh per-*draw* uniform `WGPUBuffer` (correct, GPU-validated), not the
   per-frame/ring-buffer design this row describes.
-- **`WEBGPU-28` ⬜** — no shared `webgpu_shaders.hpp` extraction and no startup WGSL pre-validation
-  pass; every shader is still verified lazily at its effect's first pipeline creation (and in-browser).
 - **`WEBGPU-29` 🟨** — no single reusable `WGPURenderPipelineDescriptor` builder for the 3D families
   (blend/cull/depth-bias are already shared via `Make3DPipelineKey`, but vertex/fragment/multisample
   assembly is still per-function).
@@ -99,9 +99,9 @@ Phase 64.1.
 > - **Misc small items — mostly closed (2026-08-26):** `WEBGPU-106` (debug-marker no-op, inherited +
 >   documented), `WEBGPU-109` (`IsFullScreen`, platform-level), `WEBGPU-116` (vertex-format helper,
 >   now single-sourcing all pipeline formats), `WEBGPU-118` (the `docs/webgpu-vs-vulkan-deviations.md`
->   doc), and `WEBGPU-63` (SpriteBatch sort-mode verification) are all ✅. Still `⬜`: `WEBGPU-28`
->   (a startup WGSL pre-validation pass + `webgpu_shaders.hpp` extraction -- the shaders are already
->   verified-compiling, only the early-startup mechanism is deferred) and `WEBGPU-107`
+>   doc), and `WEBGPU-63` (SpriteBatch sort-mode verification) are all ✅. `WEBGPU-28` (WGSL
+>   extraction to `webgpu_shaders.hpp` + `ValidateAllShadersEXT()` whole-set validation + the
+>   `CNA_WEBGPU_VALIDATE_SHADERS` startup gate) closed 2026-08-28. Still `⬜`: `WEBGPU-107`
 >   (`DebugSimulateContextLoss`, an inherited no-op; a real device destroy+recreate is a large,
 >   GL-flavoured feature Vulkan also does not implement). (`WEBGPU-115` — the wireframe refusal + its
 >   doc + its contract test — is ✅, see its row; it is no longer open.)
@@ -184,22 +184,20 @@ Phase 64.1.
 
 ## Active execution order — do this one task at a time
 
-**Current open tasks (2026-08-27)** — only these **6** rows are not ✅
-(`WEBGPU-1, 12, 28, 29, 59, 107`); do one at a time, each its own commit, never mark ✅ from
+**Current open tasks (2026-08-28)** — only these **5** rows are not ✅
+(`WEBGPU-1, 12, 29, 59, 107`); do one at a time, each its own commit, never mark ✅ from
 source inspection.
 
 1. **`WEBGPU-1`** — build/link/run the Windows/macOS/aarch64 packages (whose hashes are now pinned) on
    an appropriate CI/platform, so package integrity becomes a full non-Linux verification.
-2. **`WEBGPU-28`** — extract WGSL to a shared source and add a startup/test-time validation pass for
-   every module (including shaders a normal scene never draws). (Cross-cutting refactor.)
-3. **`WEBGPU-29`** — a shared pipeline descriptor/key builder, behaviour-preserving; land it as its own
+2. **`WEBGPU-29`** — a shared pipeline descriptor/key builder, behaviour-preserving; land it as its own
    commit, never mixed with a functional fix. (Refactor.)
-4. **`WEBGPU-12` / `WEBGPU-59`** — bounded, aligned ring-buffer uniform/vertex allocation with safe
+3. **`WEBGPU-12` / `WEBGPU-59`** — bounded, aligned ring-buffer uniform/vertex allocation with safe
    lifetime across in-flight frames + a stress test. (Larger, separate task.)
-5. **`WEBGPU-107`** — real device/context loss recovery + resource re-init, or keep it open with the
+4. **`WEBGPU-107`** — real device/context loss recovery + resource re-init, or keep it open with the
    exact lifetime contract (a no-op must not be marked as an implementation).
 
-(Six open rows: `WEBGPU-1, 12, 28, 29, 59, 107`; `12` and `59` share item 4. Matches the
+(Five open rows: `WEBGPU-1, 12, 29, 59, 107`; `12` and `59` share item 3. Matches the
 "Status summary" and "Current limitations" at the top.)
 
 The dated chronology of completed 2D/3D work below is **archival** — read the "Status summary" and
@@ -500,7 +498,7 @@ mark it ✅ from source inspection alone.
 | WEBGPU-25 | Write `env_map3d.wgsl` — cube map sampler + reflection vector from normal | ✅ | Verified 2026-07-18: embedded WGSL in `CreateEnvMapResources()`, ported from `VulkanGraphicsBackend`'s `env_map3d.{vert,frag}.glsl` (cross-checked against `EasyGLGraphicsBackend::EnsureEnvMapped3DProgram()`'s identical GLSL blend formula before porting — both references already agreed field-for-field). Group 0 binding 0 is a new `Transform` UBO (mvp+world, 128 bytes — stands in for Vulkan's push-constant range, WebGPU has none); binding 1 is `EnvMapParams` (240 bytes: eye position, diffuse, emissive+envMapAmount, all 3 directional lights, envMapSpecular+fresnelFactor/fresnelEnabled, fog, plus a CPU-precomputed 3×3 normal matrix — WGSL has no `inverse()`, same reason `CreateLitTexturedResources()`'s own `LitLightParams` precomputes one). Group 1 is a new 3-binding shape (sampler + `texture_2d` + `texture_cube`), mirroring `dualTextureBindGroupLayout_`'s own 3-binding group 1 with the second `texture_2d` swapped for a `texture_cube`. `WebGPU_EnvMap3D` CTest (4/4). |
 | WEBGPU-26 | Write `skinned3d.wgsl` — bone palette as uniform array (max 72 mat4); blend 4 weights+indices | ✅ | plan_cnj.md Phase 14J: four shader-module variants (per-pixel-lit/per-vertex-lit × without/with vertex colour, strides 52/56) plus `skinned_pbr3d.wgsl` (stride 68, PBR+skinning combo), ported from `EasyGLGraphicsBackend::EnsureSkinnedProgram()`/`EnsureSkinnedVertexLitProgram()`/`EnsurePbrSkinnedProgram()`. Bone-palette blend matches Task 895 (only the first `WeightsPerVertex` 1/2/4 weight/index pairs summed). `WebGPU_Skinned3D` (9/9) and `WebGPU_SkinnedPbr3D` (5/5) CTests. See `docs/webgpu-renderer.md`'s "SkinnedEffect and SkinnedPbrEffect" section. |
 | WEBGPU-27 | Write `instanced3d.wgsl` — per-instance mat4 world transform in second vertex buffer binding | ✅ | Verified 2026-07-18: embedded WGSL in `CreateInstancedResources()`, ported from `VulkanGraphicsBackend`'s `instanced3d.{vert,frag}.glsl` (position-only per-vertex input; a flat, unlit `diffuseColor` fragment output; `[0..15]` of the reused 128-byte Uniforms block is View×Projection, not a full MVP — world comes from the per-instance stream, matching `FillInstancedPushConst()`'s own deliberate choice to ignore the caller's own World matrix entirely rather than combine it). Unlike every bind-group-shaped "new" family (env-map/dual-texture), a second per-instance vertex stream needs **no new `WGPUBindGroupLayout` at all** — WebGPU vertex buffers are set via `wgpuRenderPassEncoderSetVertexBuffer()`, entirely separate from bind groups — so this reuses `coloredBindGroupLayout_`/`coloredPipelineLayout_` unchanged. `WebGPU_Instanced3D` CTest (5/5). |
-| WEBGPU-28 | Compile-time validation: embed all WGSL as `constexpr const char*` in `webgpu_shaders.hpp`; validate via `wgpuDeviceCreateShaderModule` at startup | ⬜ | Re-audited 2026-08-26 (stays ⬜, with the true state recorded). The underlying goal -- catch WGSL errors -- is already substantially met: every WGSL shader compiles and is exercised, verified in a real browser (`WEBGPU-121`, all 9 pairs) and lazily on the real GPU across the whole native `WebGPU_*` suite (a broken shader fails at that effect's first pipeline creation). What the row's literal deliverable asks is NOT done and is a genuine refactor: the ~20 shader sources are `static constexpr char[]` locals inside their own `GetOrCreate*` pipeline builders, not extracted into a shared `webgpu_shaders.hpp`, and there is no dedicated startup pass that pre-compiles all of them so an *unused* effect's shader error would surface at device init rather than at that effect's first draw. Deferred as a cross-cutting refactor, not undertaken unsupervised. |
+| WEBGPU-28 | Compile-time validation: embed all WGSL as `constexpr const char*` in `webgpu_shaders.hpp`; validate via `wgpuDeviceCreateShaderModule` at startup | ✅ | **DONE 2026-08-28.** All 20 WGSL sources are extracted byte-for-byte into `webgpu_shaders.hpp` as `inline constexpr char k*[]` (each former inline literal in `WebGPURenderer.cpp` is now a `const char*` alias to the header constant, so the compiled shader bytes are unchanged -- the full pixel suite still passes). A shared `kDirectShaders` registry lists the 18 directly-compiled sources; the two marked templates (`kPbr`/`kSkinnedPbr`, expanded at runtime by `ExpandPbrVertexColourWgslEXT`) are handled by their expanded variants. `WebGPURenderer::ValidateAllShadersEXT()` compiles the WHOLE set (22 modules: 18 + 4 Pbr/SkinnedPbr variants) through the device inside a `WGPUErrorFilter_Validation` error scope and returns the failure count -- so an error in a shader a scene never draws (the lazy mipBlit shader, an unused effect) surfaces as a counted failure rather than only at that effect's first pipeline creation. Reachable at device init via the `CNA_WEBGPU_VALIDATE_SHADERS` env var (off by default) and exercised by the registered `WebGPU_ShaderValidation` test (2/2: zero failures over the whole set + the registry covers all 18 non-template sources). |
 
 ---
 

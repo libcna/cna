@@ -576,6 +576,24 @@ destination pixel actually exists) proves the genuine linear blend above for bot
 level 0, proving the per-level loop chains correctly) has real, plausible, non-garbage content; and
 `mipMap=false` construction with non-empty pixel data does not crash.
 
+## Shader sources and whole-set validation (WEBGPU-28)
+
+Every WGSL shader source lives in one place -- `include/CNA/Internal/Renderers/WebGPU/webgpu_shaders.hpp`
+-- as `inline constexpr char k*[]` constants (`kSprite`, `kColored`, `kPbr`, `kSkinnedPbr`, `kMipBlit`,
+…). `WebGPURenderer.cpp` references them by a `const char*` alias where each literal used to be inline,
+so the compiled shader bytes are unchanged (the whole pixel suite still passes). A `kDirectShaders`
+registry lists the 18 directly-compiled sources; `kPbr`/`kSkinnedPbr` are marked templates expanded at
+runtime by `ExpandPbrVertexColourWgslEXT` into a bare and a vertex-colour variant.
+
+`WebGPURenderer::ValidateAllShadersEXT()` compiles the WHOLE set (22 modules: the 18 direct sources plus
+the 4 Pbr/SkinnedPbr variants) through the device inside a `WGPUErrorFilter_Validation` error scope and
+returns the number that failed. Because most stock shaders are already compiled at device init
+(`ConfigureSurface`), the value this adds is catching an error in a shader a given scene never draws --
+the lazy mipBlit shader, or any unused effect -- as a single deterministic failure rather than at that
+effect's first pipeline creation. It runs at device init when `CNA_WEBGPU_VALIDATE_SHADERS` is set (off
+by default -- compiling ~24 modules is not free), and is exercised unconditionally by the
+`WebGPU_ShaderValidation` CTest.
+
 ## Implemented baseline
 
 The initial renderer is deliberately useful rather than an empty scaffold. It currently provides:

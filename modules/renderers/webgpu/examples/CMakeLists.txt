@@ -162,6 +162,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_DepthFormat COMMAND cna_test_webgpu_depthformat
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # WEBGPU-28: every WGSL source is extracted into webgpu_shaders.hpp and compilable through one
+    # entry point (ValidateAllShadersEXT); this drives it on a real device and asserts the whole set
+    # -- including shaders a scene never draws (mipBlit, the Pbr/SkinnedPbr variants) -- compiles.
+    cna_webgpu_test(cna_test_webgpu_shader_validation webgpu_shader_validation_test.cpp)
+    # ValidateAllShadersEXT lives on the concrete WebGPURenderer, so this test includes
+    # WebGPURenderer.hpp and needs webgpu.h on its include path (via the WebGPU::WebGPU target).
+    target_link_libraries(cna_test_webgpu_shader_validation PRIVATE WebGPU::WebGPU)
+    cna_register_renderer_test(NAME WebGPU_ShaderValidation COMMAND cna_test_webgpu_shader_validation
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 1105 (plans/plan_graphics.md Phase 80): GetOrCreatePipelineLitTextured3DVertexLit /
     # BasicEffect.PreferPerPixelLighting real dispatch.
     cna_webgpu_test(cna_test_webgpu_basiceffect_preferperpixellighting webgpu_basiceffect_preferperpixellighting_test.cpp)

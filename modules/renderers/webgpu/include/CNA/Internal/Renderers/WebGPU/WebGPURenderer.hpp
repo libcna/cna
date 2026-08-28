@@ -1118,6 +1118,20 @@ namespace CNA::Internal::Renderers::WebGPU
         }
 
         /**
+         * @brief WEBGPU-28: compiles every WGSL shader source (webgpu_shaders.hpp) through this
+         *        device inside a validation error scope, including shaders a scene never draws (the
+         *        lazy mipBlit shader and the Pbr/SkinnedPbr expanded variants), so a WGSL error is
+         *        caught deterministically rather than only at that effect's first pipeline creation.
+         *        Also reachable at device init via the CNA_WEBGPU_VALIDATE_SHADERS environment
+         *        variable, and exercised by the WebGPU_ShaderValidation test.
+         *
+         * @param failedLabels Optional; on return holds the label of every shader that failed.
+         * @return The number of shaders that failed to compile cleanly (0 on a healthy renderer).
+         */
+        CNAEXT [[nodiscard]] int ValidateAllShadersEXT(
+            std::vector<std::string>* failedLabels = nullptr) const;
+
+        /**
          * @brief Reports whether @p capability is genuinely available on this renderer.
          *
          * WEBGPU-115: `GraphicsCapability::WireFrame` answers **false** here. wgpu-native exposes
