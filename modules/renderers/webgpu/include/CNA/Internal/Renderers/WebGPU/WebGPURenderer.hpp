@@ -1116,6 +1116,18 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             return nativeDrawIssueCount_;
         }
+        /// WEBGPU-12/59: lifetime count of real wgpuDeviceCreateBuffer calls for transient per-draw
+        /// buffers. Bounded once the pool warms up -- a repeating scene stops allocating. The stress
+        /// test asserts this plateaus while GetTransientBufferReuseCountEXT keeps climbing.
+        [[nodiscard]] std::size_t GetTransientBufferCreateCountEXT() const noexcept
+        {
+            return transientBuffersCreatedEXT_;
+        }
+        /// WEBGPU-12/59: lifetime count of transient per-draw buffers served from the pool (reuses).
+        [[nodiscard]] std::size_t GetTransientBufferReuseCountEXT() const noexcept
+        {
+            return transientBuffersReusedEXT_;
+        }
 
         /**
          * @brief WEBGPU-28: compiles every WGSL shader source (webgpu_shaders.hpp) through this
@@ -1994,8 +2006,20 @@ namespace CNA::Internal::Renderers::WebGPU
         WGPUPipelineLayout spritePipelineLayout_ = nullptr;
         std::unordered_map<SpritePipelineKey, WGPURenderPipeline, SpritePipelineKeyHash>
             spritePipelines_;
-        WGPUBuffer spriteVertexBuffer_ = nullptr;
-        std::uint64_t spriteVertexCapacityBytes_ = 0;
+        // WEBGPU-59: the SpriteBatch dynamic vertex buffer is a THREE-slot ring. Each bind cycle's
+        // UploadSpriteVertices() rotates to the next slot before writing, so the buffer being
+        // written for this cycle is never the one the previous two submissions are still reading --
+        // the classic dynamic-vertex-buffer ring. (Uploads use wgpuQueueWriteBuffer, which the queue
+        // already serialises, so the ring is defensive rather than fixing a live stall; it also
+        // matches the reference renderers' 3-frame ring.) Each slot grows in place when a cycle needs
+        // more than it holds. spriteVertexBuffer_ is a NON-owning alias of the active slot so the
+        // write/bind sites are unchanged; the ring owns the buffers.
+        static constexpr std::size_t kSpriteVertexRing = 3;
+        std::array<WGPUBuffer, kSpriteVertexRing> spriteVertexRing_{};
+        std::array<std::uint64_t, kSpriteVertexRing> spriteVertexRingCapacity_{};
+        std::size_t spriteVertexRingIndex_ = 0;
+        WGPUBuffer spriteVertexBuffer_ = nullptr;        ///< Non-owning alias of the active ring slot.
+        std::uint64_t spriteVertexCapacityBytes_ = 0;    ///< Active slot's capacity.
         /// REMED-GFX-159: bytes UploadSpriteVertices() wrote for the cycle being replayed. The
         /// sprite vertex buffer used to be bound once for the whole sprite run; interleaved 3D
         /// draws bind their own into the same slot, so it is rebound per sprite run and the bind
@@ -2394,6 +2418,29 @@ namespace CNA::Internal::Renderers::WebGPU
         // executed commands.
         std::vector<WGPUBuffer> pendingBufferReleases_;
         std::vector<WGPUBindGroup> pendingBindGroupReleases_;
+
+        // WEBGPU-12/59: transient per-draw buffer pool. Every 3D draw used to create a fresh
+        // WGPUBuffer for its vertices/uniforms/indices and release it once the frame's command
+        // buffer was submitted -- correct, but churning wgpuDeviceCreateBuffer/wgpuBufferRelease
+        // every draw, every frame. Instead, buffers are ACQUIRED from a pool keyed by
+        // (usage, power-of-two size class) and RECYCLED back into it after submit rather than
+        // released, so a warmed-up scene reuses a bounded working set and allocates nothing new.
+        // This is safe WITHOUT explicit fencing because every write (wgpuQueueWriteBuffer) and read
+        // (the recorded draw) goes through the single device queue in FIFO order, and wgpu-native
+        // keeps a buffer alive internally until the submission that references it completes -- so a
+        // recycled buffer reused in a later cycle is written only after the prior cycle's reads.
+        std::unordered_map<std::uint64_t, std::vector<WGPUBuffer>> transientBufferPool_;
+        std::size_t transientBuffersCreatedEXT_ = 0;   ///< Lifetime count of real wgpuDeviceCreateBuffer calls.
+        std::size_t transientBuffersReusedEXT_ = 0;     ///< Lifetime count of pool hits (reuses).
+        static constexpr std::size_t kTransientPoolPerClassCap = 128;  ///< Free buffers kept per size class.
+        /// Round @p size up to this pool's power-of-two size class (min 256 covers 128/160B UBOs).
+        [[nodiscard]] static std::uint64_t TransientSizeClassEXT(std::uint64_t size);
+        /// Acquire a pooled buffer of at least @p size with exactly @p usage (reused or freshly made).
+        [[nodiscard]] WGPUBuffer AcquireTransientBuffer(WGPUBufferUsage usage, std::uint64_t size);
+        /// Return @p buffer to the pool for reuse (or release it if the class cap is reached).
+        void RecycleTransientBuffer(WGPUBuffer buffer);
+        /// Release every pooled buffer (teardown).
+        void DestroyTransientBufferPool();
 
         // WEBGPU-22: lit_textured3d (stride 32, VertexPositionNormalTexture). Real Blinn-Phong
         // lighting (FNA's Lighting.fxh ComputeLights(): 3 directional lights, ambient, specular,

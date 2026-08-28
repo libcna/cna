@@ -785,7 +785,12 @@ line-by-line Vulkan translation:
 
 - WebGPU uses WGSL shader modules rather than CNA's Vulkan SPIR-V modules.
 - Resource bindings use bind-group layouts and bind groups rather than Vulkan descriptor sets.
-- WebGPU has no push constants, so future 3D effect data will use uniform buffers.
+- WebGPU has no push constants, so 3D effect data uses uniform buffers.
+- Per-draw vertex/uniform buffers are pooled, not churned (`WEBGPU-12`): `AcquireTransientBuffer`
+  serves them from a bounded pool keyed by `(usage, power-of-two size class)` and `RecycleTransient-
+  Buffer` returns them after submit instead of releasing, so a warmed scene stops allocating.
+  Recycling is fence-free -- the single device queue orders every `wgpuQueueWriteBuffer` write after
+  the prior cycle's reads. The SpriteBatch vertex buffer is a 3-slot ring (`WEBGPU-59`).
 - Pipeline state is largely immutable and cached per family. All 12 3D pipeline families
   (`GetOrCreatePipeline*3D`) share ONE `WGPURenderPipelineDescriptor` assembly,
   `Build3DPipelineEXT(Pipeline3DDescEXT)` (`WEBGPU-29`): each family passes only its vertex layout,

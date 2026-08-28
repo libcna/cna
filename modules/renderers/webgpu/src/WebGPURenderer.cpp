@@ -2705,6 +2705,80 @@ namespace CNA::Internal::Renderers::WebGPU
         }
     }
 
+    // WEBGPU-12/59: transient per-draw buffer pool -- see the transientBufferPool_ member's doc
+    // comment (WebGPURenderer.hpp) for why recycling is safe without an explicit fence.
+    std::uint64_t WebGPURenderer::TransientSizeClassEXT(std::uint64_t size)
+    {
+        std::uint64_t cls = 256;  // covers the 128/160-byte stock UBOs without over-classing
+        while (cls < size)
+            cls <<= 1;
+        return cls;
+    }
+
+    namespace
+    {
+        // usage is a small bitset; the size class is a power of two >= 256. Pack both into one key.
+        [[nodiscard]] std::uint64_t TransientPoolKeyEXT(WGPUBufferUsage usage, std::uint64_t sizeClass)
+        {
+            return (static_cast<std::uint64_t>(usage) << 40) ^ sizeClass;
+        }
+    }
+
+    WGPUBuffer WebGPURenderer::AcquireTransientBuffer(WGPUBufferUsage usage, std::uint64_t size)
+    {
+        const std::uint64_t sizeClass = TransientSizeClassEXT(size);
+        const std::uint64_t key = TransientPoolKeyEXT(usage, sizeClass);
+        auto it = transientBufferPool_.find(key);
+        if (it != transientBufferPool_.end() && !it->second.empty())
+        {
+            WGPUBuffer reused = it->second.back();
+            it->second.pop_back();
+            ++transientBuffersReusedEXT_;
+            return reused;
+        }
+        WGPUBufferDescriptor descriptor{};
+        descriptor.label = StringView("CNA WebGPU Transient Pool Buffer");
+        descriptor.usage = usage;
+        descriptor.size = sizeClass;  // the class size, so recycled buffers slot back by the same key
+        WGPUBuffer created = wgpuDeviceCreateBuffer(device_, &descriptor);
+        if (created == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create transient buffer");
+        ++transientBuffersCreatedEXT_;
+        return created;
+    }
+
+    void WebGPURenderer::RecycleTransientBuffer(WGPUBuffer buffer)
+    {
+        if (buffer == nullptr)
+            return;
+        // Only buffers created by AcquireTransientBuffer -- whose size IS a power-of-two class --
+        // may be pooled: recycling an exact-size buffer (e.g. a per-draw index buffer, still made
+        // directly at Align4(dataBytes)) would seed a bucket AcquireTransientBuffer's class lookup
+        // never queries, so such buffers are released here instead of pooled.
+        const std::uint64_t size = wgpuBufferGetSize(buffer);
+        const bool isClassSize = (size >= 256) && ((size & (size - 1)) == 0);
+        if (!isClassSize)
+        {
+            wgpuBufferRelease(buffer);
+            return;
+        }
+        // The buffer was created at its size class, so GetSize/GetUsage rebuild the exact acquire key.
+        const std::uint64_t key = TransientPoolKeyEXT(wgpuBufferGetUsage(buffer), size);
+        std::vector<WGPUBuffer>& freeList = transientBufferPool_[key];
+        if (freeList.size() < kTransientPoolPerClassCap)
+            freeList.push_back(buffer);  // keep for reuse
+        else
+            wgpuBufferRelease(buffer);   // bound the pool: past the cap, let it go
+    }
+
+    void WebGPURenderer::DestroyTransientBufferPool()
+    {
+        for (auto& [key, freeList] : transientBufferPool_)
+            for (WGPUBuffer buffer : freeList)
+                if (buffer != nullptr) wgpuBufferRelease(buffer);
+        transientBufferPool_.clear();
+    }
+
     WebGPURenderer::~WebGPURenderer()
     {
         IGraphicsRenderer::UnregisterForWindow(surfaceState_.GetWindowId());
@@ -2729,7 +2803,8 @@ namespace CNA::Internal::Renderers::WebGPU
         envMapDefaultWhiteTexture_.reset();
         envMapDefaultWhiteCube_.reset();
         for (WGPUBindGroup bg : pendingBindGroupReleases_) wgpuBindGroupRelease(bg);
-        for (WGPUBuffer buf : pendingBufferReleases_) wgpuBufferRelease(buf);
+        for (WGPUBuffer buf : pendingBufferReleases_) wgpuBufferRelease(buf);  // any not yet recycled
+        DestroyTransientBufferPool();  // WEBGPU-12/59
         ReleaseSamplerCache();
         // WEBGPU-52: mip-blit resources -- see EnsureMipBlitPipeline()'s own doc comment.
         for (const auto& [format, pipe] : mipBlitPipelines_)  // WEBGPU-114: one pipeline per format
@@ -3099,7 +3174,14 @@ namespace CNA::Internal::Renderers::WebGPU
 
     void WebGPURenderer::DestroySpriteResources()
     {
-        if (spriteVertexBuffer_ != nullptr) wgpuBufferRelease(spriteVertexBuffer_);
+        // WEBGPU-59: the ring owns the buffers; spriteVertexBuffer_ only aliases the active slot.
+        for (std::size_t s = 0; s < kSpriteVertexRing; ++s)
+        {
+            if (spriteVertexRing_[s] != nullptr) wgpuBufferRelease(spriteVertexRing_[s]);
+            spriteVertexRing_[s] = nullptr;
+            spriteVertexRingCapacity_[s] = 0;
+        }
+        spriteVertexRingIndex_ = 0;
         for (auto& [key, pipeline] : spritePipelines_)
         {
             (void) key;
@@ -4500,14 +4582,14 @@ namespace CNA::Internal::Renderers::WebGPU
         vbDescriptor.label = StringView("CNA WebGPU EnvMap3D VertexBuffer");
         vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
         vbDescriptor.size = Align4(command.vertexData.size());
-        WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
+        WGPUBuffer vertexBuffer = AcquireTransientBuffer(vbDescriptor.usage, vbDescriptor.size);
         wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
 
         WGPUBufferDescriptor transformDescriptor{};
         transformDescriptor.label = StringView("CNA WebGPU EnvMap3D Transform UBO");
         transformDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
         transformDescriptor.size = sizeof(command.transformUniforms);
-        WGPUBuffer transformBuffer = wgpuDeviceCreateBuffer(device_, &transformDescriptor);
+        WGPUBuffer transformBuffer = AcquireTransientBuffer(transformDescriptor.usage, transformDescriptor.size);
         wgpuQueueWriteBuffer(queue_, transformBuffer, 0, command.transformUniforms.data(),
                             sizeof(command.transformUniforms));
 
@@ -4515,7 +4597,7 @@ namespace CNA::Internal::Renderers::WebGPU
         paramsDescriptor.label = StringView("CNA WebGPU EnvMap3D Params UBO");
         paramsDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
         paramsDescriptor.size = sizeof(command.envMapUniforms);
-        WGPUBuffer paramsBuffer = wgpuDeviceCreateBuffer(device_, &paramsDescriptor);
+        WGPUBuffer paramsBuffer = AcquireTransientBuffer(paramsDescriptor.usage, paramsDescriptor.size);
         wgpuQueueWriteBuffer(queue_, paramsBuffer, 0, command.envMapUniforms.data(),
                             sizeof(command.envMapUniforms));
 
@@ -4783,21 +4865,21 @@ namespace CNA::Internal::Renderers::WebGPU
         vbDescriptor.label = StringView("CNA WebGPU Instanced3D VertexBuffer");
         vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
         vbDescriptor.size = Align4(command.vertexData.size());
-        WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
+        WGPUBuffer vertexBuffer = AcquireTransientBuffer(vbDescriptor.usage, vbDescriptor.size);
         wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
 
         WGPUBufferDescriptor instVbDescriptor{};
         instVbDescriptor.label = StringView("CNA WebGPU Instanced3D InstanceBuffer");
         instVbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
         instVbDescriptor.size = Align4(command.instVbData.size());
-        WGPUBuffer instVertexBuffer = wgpuDeviceCreateBuffer(device_, &instVbDescriptor);
+        WGPUBuffer instVertexBuffer = AcquireTransientBuffer(instVbDescriptor.usage, instVbDescriptor.size);
         wgpuQueueWriteBuffer(queue_, instVertexBuffer, 0, command.instVbData.data(), command.instVbData.size());
 
         WGPUBufferDescriptor uboDescriptor{};
         uboDescriptor.label = StringView("CNA WebGPU Instanced3D UBO");
         uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
         uboDescriptor.size = sizeof(command.uniforms);
-        WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
+        WGPUBuffer uniformBuffer = AcquireTransientBuffer(uboDescriptor.usage, uboDescriptor.size);
         wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
 
         WGPUBindGroupEntry bindEntry{};
@@ -5293,17 +5375,25 @@ namespace CNA::Internal::Renderers::WebGPU
         if (spriteCommands_.empty())
             return;
         const std::uint64_t required = Align4(spriteCommands_.size() * 6u * sizeof(SpriteVertex));
-        if (spriteVertexBuffer_ == nullptr || required > spriteVertexCapacityBytes_)
+        // WEBGPU-59: rotate to the next ring slot BEFORE writing, so this cycle never writes the
+        // buffer the previous two submissions are still reading. Grow the chosen slot in place when
+        // it is too small. spriteVertexBuffer_/spriteVertexCapacityBytes_ alias the active slot.
+        spriteVertexRingIndex_ = (spriteVertexRingIndex_ + 1u) % kSpriteVertexRing;
+        WGPUBuffer& slot = spriteVertexRing_[spriteVertexRingIndex_];
+        std::uint64_t& slotCapacity = spriteVertexRingCapacity_[spriteVertexRingIndex_];
+        if (slot == nullptr || required > slotCapacity)
         {
-            if (spriteVertexBuffer_ != nullptr)
-                wgpuBufferRelease(spriteVertexBuffer_);
+            if (slot != nullptr)
+                wgpuBufferRelease(slot);
             WGPUBufferDescriptor descriptor{};
             descriptor.label = StringView("CNA WebGPU SpriteBatch Vertex Buffer");
             descriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
             descriptor.size = std::max<std::uint64_t>(required, 64u * 1024u);
-            spriteVertexBuffer_ = wgpuDeviceCreateBuffer(device_, &descriptor);
-            spriteVertexCapacityBytes_ = descriptor.size;
+            slot = wgpuDeviceCreateBuffer(device_, &descriptor);
+            slotCapacity = descriptor.size;
         }
+        spriteVertexBuffer_ = slot;
+        spriteVertexCapacityBytes_ = slotCapacity;
 
         // REMED-GFX-159: every sprite of the cycle still goes into ONE buffer in ONE write, exactly
         // as before -- interleaving changes when each sprite is DRAWN, not how its vertices are
@@ -5339,7 +5429,7 @@ namespace CNA::Internal::Renderers::WebGPU
         uboDescriptor.label = StringView("CNA WebGPU SpriteBatch ShaderEffect UBO");
         uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
         uboDescriptor.size = uboSize;
-        WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
+        WGPUBuffer uniformBuffer = AcquireTransientBuffer(uboDescriptor.usage, uboDescriptor.size);
         if (!command.customUniforms.empty())
             wgpuQueueWriteBuffer(queue_, uniformBuffer, 0,
                                  command.customUniforms.data(), command.customUniforms.size());
@@ -6377,7 +6467,7 @@ namespace CNA::Internal::Renderers::WebGPU
         vbDescriptor.label = StringView("CNA WebGPU ShaderEffect VertexBuffer");
         vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
         vbDescriptor.size = Align4(command.vertexData.size());
-        WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
+        WGPUBuffer vertexBuffer = AcquireTransientBuffer(vbDescriptor.usage, vbDescriptor.size);
         wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
 
         // Uniform buffer (the block captured at queue time); min 16 bytes so an effect with no
@@ -6388,7 +6478,7 @@ namespace CNA::Internal::Renderers::WebGPU
         uboDescriptor.label = StringView("CNA WebGPU ShaderEffect UBO");
         uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
         uboDescriptor.size = uboSize;
-        WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
+        WGPUBuffer uniformBuffer = AcquireTransientBuffer(uboDescriptor.usage, uboDescriptor.size);
         if (!command.uniforms.empty())
             wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), command.uniforms.size());
 
@@ -7241,7 +7331,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // buffer referencing them has actually been submitted -- see pendingBufferReleases_'s
         // own doc comment in the header.
         for (WGPUBindGroup bg : pendingBindGroupReleases_) wgpuBindGroupRelease(bg);
-        for (WGPUBuffer buf : pendingBufferReleases_) wgpuBufferRelease(buf);
+        for (WGPUBuffer buf : pendingBufferReleases_) RecycleTransientBuffer(buf);  // WEBGPU-12/59: pool, don't release
         pendingBindGroupReleases_.clear();
         pendingBufferReleases_.clear();
 
@@ -7324,7 +7414,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // Same "only release after the referencing command buffer is submitted" rule as
         // EnsureFrameRendered() -- see pendingBufferReleases_'s own doc comment in the header.
         for (WGPUBindGroup bg : pendingBindGroupReleases_) wgpuBindGroupRelease(bg);
-        for (WGPUBuffer buf : pendingBufferReleases_) wgpuBufferRelease(buf);
+        for (WGPUBuffer buf : pendingBufferReleases_) RecycleTransientBuffer(buf);  // WEBGPU-12/59: pool, don't release
         pendingBindGroupReleases_.clear();
         pendingBufferReleases_.clear();
 
@@ -7407,7 +7497,7 @@ namespace CNA::Internal::Renderers::WebGPU
         wgpuCommandBufferRelease(commandBuffer);
 
         for (WGPUBindGroup bg : pendingBindGroupReleases_) wgpuBindGroupRelease(bg);
-        for (WGPUBuffer buf : pendingBufferReleases_) wgpuBufferRelease(buf);
+        for (WGPUBuffer buf : pendingBufferReleases_) RecycleTransientBuffer(buf);  // WEBGPU-12/59: pool, don't release
         pendingBindGroupReleases_.clear();
         pendingBufferReleases_.clear();
 
@@ -8531,14 +8621,14 @@ namespace CNA::Internal::Renderers::WebGPU
         vbDescriptor.label = StringView("CNA WebGPU Colored3D VertexBuffer");
         vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
         vbDescriptor.size = Align4(command.vertexData.size());
-        WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
+        WGPUBuffer vertexBuffer = AcquireTransientBuffer(vbDescriptor.usage, vbDescriptor.size);
         wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
 
         WGPUBufferDescriptor uboDescriptor{};
         uboDescriptor.label = StringView("CNA WebGPU Colored3D UBO");
         uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
         uboDescriptor.size = sizeof(command.uniforms);
-        WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
+        WGPUBuffer uniformBuffer = AcquireTransientBuffer(uboDescriptor.usage, uboDescriptor.size);
         wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
 
         WGPUBindGroupEntry bindEntry{};
@@ -8605,14 +8695,14 @@ namespace CNA::Internal::Renderers::WebGPU
         vbDescriptor.label = StringView("CNA WebGPU Textured3D VertexBuffer");
         vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
         vbDescriptor.size = Align4(command.vertexData.size());
-        WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
+        WGPUBuffer vertexBuffer = AcquireTransientBuffer(vbDescriptor.usage, vbDescriptor.size);
         wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
 
         WGPUBufferDescriptor uboDescriptor{};
         uboDescriptor.label = StringView("CNA WebGPU Textured3D UBO");
         uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
         uboDescriptor.size = sizeof(command.uniforms);
-        WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
+        WGPUBuffer uniformBuffer = AcquireTransientBuffer(uboDescriptor.usage, uboDescriptor.size);
         wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
 
         WGPUBindGroupEntry uboEntry{};
@@ -8704,21 +8794,21 @@ namespace CNA::Internal::Renderers::WebGPU
         vbDescriptor.label = StringView("CNA WebGPU LitTextured3D VertexBuffer");
         vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
         vbDescriptor.size = Align4(command.vertexData.size());
-        WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
+        WGPUBuffer vertexBuffer = AcquireTransientBuffer(vbDescriptor.usage, vbDescriptor.size);
         wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
 
         WGPUBufferDescriptor uboDescriptor{};
         uboDescriptor.label = StringView("CNA WebGPU LitTextured3D UBO");
         uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
         uboDescriptor.size = sizeof(command.uniforms);
-        WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
+        WGPUBuffer uniformBuffer = AcquireTransientBuffer(uboDescriptor.usage, uboDescriptor.size);
         wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
 
         WGPUBufferDescriptor lightUboDescriptor{};
         lightUboDescriptor.label = StringView("CNA WebGPU LitTextured3D LightUBO");
         lightUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
         lightUboDescriptor.size = sizeof(command.lightUniforms);
-        WGPUBuffer lightUniformBuffer = wgpuDeviceCreateBuffer(device_, &lightUboDescriptor);
+        WGPUBuffer lightUniformBuffer = AcquireTransientBuffer(lightUboDescriptor.usage, lightUboDescriptor.size);
         wgpuQueueWriteBuffer(queue_, lightUniformBuffer, 0, command.lightUniforms.data(), sizeof(command.lightUniforms));
 
         std::array<WGPUBindGroupEntry, 2> uboEntries{};
@@ -8898,14 +8988,14 @@ namespace CNA::Internal::Renderers::WebGPU
         vbDescriptor.label = StringView("CNA WebGPU AlphaTest3D VertexBuffer");
         vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
         vbDescriptor.size = Align4(command.vertexData.size());
-        WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
+        WGPUBuffer vertexBuffer = AcquireTransientBuffer(vbDescriptor.usage, vbDescriptor.size);
         wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
 
         WGPUBufferDescriptor uboDescriptor{};
         uboDescriptor.label = StringView("CNA WebGPU AlphaTest3D UBO");
         uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
         uboDescriptor.size = sizeof(command.uniforms);
-        WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
+        WGPUBuffer uniformBuffer = AcquireTransientBuffer(uboDescriptor.usage, uboDescriptor.size);
         wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
 
         WGPUBindGroupEntry uboEntry{};
@@ -9073,14 +9163,14 @@ namespace CNA::Internal::Renderers::WebGPU
         vbDescriptor.label = StringView("CNA WebGPU DualTexture3D VertexBuffer");
         vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
         vbDescriptor.size = Align4(command.vertexData.size());
-        WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
+        WGPUBuffer vertexBuffer = AcquireTransientBuffer(vbDescriptor.usage, vbDescriptor.size);
         wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
 
         WGPUBufferDescriptor uboDescriptor{};
         uboDescriptor.label = StringView("CNA WebGPU DualTexture3D UBO");
         uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
         uboDescriptor.size = sizeof(command.uniforms);
-        WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
+        WGPUBuffer uniformBuffer = AcquireTransientBuffer(uboDescriptor.usage, uboDescriptor.size);
         wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
 
         WGPUBindGroupEntry uboEntry{};
@@ -9777,28 +9867,28 @@ namespace
         vbDescriptor.label = StringView("CNA WebGPU Pbr3D VertexBuffer");
         vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
         vbDescriptor.size = Align4(command.vertexData.size());
-        WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
+        WGPUBuffer vertexBuffer = AcquireTransientBuffer(vbDescriptor.usage, vbDescriptor.size);
         wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
 
         WGPUBufferDescriptor uboDescriptor{};
         uboDescriptor.label = StringView("CNA WebGPU Pbr3D UBO");
         uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
         uboDescriptor.size = sizeof(command.uniforms);
-        WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
+        WGPUBuffer uniformBuffer = AcquireTransientBuffer(uboDescriptor.usage, uboDescriptor.size);
         wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
 
         WGPUBufferDescriptor lightUboDescriptor{};
         lightUboDescriptor.label = StringView("CNA WebGPU Pbr3D LightUBO");
         lightUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
         lightUboDescriptor.size = sizeof(command.lightUniforms);
-        WGPUBuffer lightUniformBuffer = wgpuDeviceCreateBuffer(device_, &lightUboDescriptor);
+        WGPUBuffer lightUniformBuffer = AcquireTransientBuffer(lightUboDescriptor.usage, lightUboDescriptor.size);
         wgpuQueueWriteBuffer(queue_, lightUniformBuffer, 0, command.lightUniforms.data(), sizeof(command.lightUniforms));
 
         WGPUBufferDescriptor factorsUboDescriptor{};
         factorsUboDescriptor.label = StringView("CNA WebGPU Pbr3D FactorsUBO");
         factorsUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
         factorsUboDescriptor.size = sizeof(command.pbrFactors);
-        WGPUBuffer factorsUniformBuffer = wgpuDeviceCreateBuffer(device_, &factorsUboDescriptor);
+        WGPUBuffer factorsUniformBuffer = AcquireTransientBuffer(factorsUboDescriptor.usage, factorsUboDescriptor.size);
         wgpuQueueWriteBuffer(queue_, factorsUniformBuffer, 0, command.pbrFactors.data(), sizeof(command.pbrFactors));
 
         std::array<WGPUBindGroupEntry, 3> uboEntries{};
@@ -10217,28 +10307,28 @@ namespace
         vbDescriptor.label = StringView("CNA WebGPU Skinned3D VertexBuffer");
         vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
         vbDescriptor.size = Align4(command.vertexData.size());
-        WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
+        WGPUBuffer vertexBuffer = AcquireTransientBuffer(vbDescriptor.usage, vbDescriptor.size);
         wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
 
         WGPUBufferDescriptor uboDescriptor{};
         uboDescriptor.label = StringView("CNA WebGPU Skinned3D UBO");
         uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
         uboDescriptor.size = sizeof(command.uniforms);
-        WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
+        WGPUBuffer uniformBuffer = AcquireTransientBuffer(uboDescriptor.usage, uboDescriptor.size);
         wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
 
         WGPUBufferDescriptor lightUboDescriptor{};
         lightUboDescriptor.label = StringView("CNA WebGPU Skinned3D LightUBO");
         lightUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
         lightUboDescriptor.size = sizeof(command.lightUniforms);
-        WGPUBuffer lightUniformBuffer = wgpuDeviceCreateBuffer(device_, &lightUboDescriptor);
+        WGPUBuffer lightUniformBuffer = AcquireTransientBuffer(lightUboDescriptor.usage, lightUboDescriptor.size);
         wgpuQueueWriteBuffer(queue_, lightUniformBuffer, 0, command.lightUniforms.data(), sizeof(command.lightUniforms));
 
         WGPUBufferDescriptor skinningUboDescriptor{};
         skinningUboDescriptor.label = StringView("CNA WebGPU Skinned3D SkinningUBO");
         skinningUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
         skinningUboDescriptor.size = sizeof(command.skinningParams);
-        WGPUBuffer skinningUniformBuffer = wgpuDeviceCreateBuffer(device_, &skinningUboDescriptor);
+        WGPUBuffer skinningUniformBuffer = AcquireTransientBuffer(skinningUboDescriptor.usage, skinningUboDescriptor.size);
         wgpuQueueWriteBuffer(queue_, skinningUniformBuffer, 0, command.skinningParams.data(), sizeof(command.skinningParams));
 
         std::array<WGPUBindGroupEntry, 3> uboEntries{};
@@ -10625,35 +10715,35 @@ namespace
         vbDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D VertexBuffer");
         vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
         vbDescriptor.size = Align4(command.vertexData.size());
-        WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
+        WGPUBuffer vertexBuffer = AcquireTransientBuffer(vbDescriptor.usage, vbDescriptor.size);
         wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
 
         WGPUBufferDescriptor uboDescriptor{};
         uboDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D UBO");
         uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
         uboDescriptor.size = sizeof(command.uniforms);
-        WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
+        WGPUBuffer uniformBuffer = AcquireTransientBuffer(uboDescriptor.usage, uboDescriptor.size);
         wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
 
         WGPUBufferDescriptor lightUboDescriptor{};
         lightUboDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D LightUBO");
         lightUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
         lightUboDescriptor.size = sizeof(command.lightUniforms);
-        WGPUBuffer lightUniformBuffer = wgpuDeviceCreateBuffer(device_, &lightUboDescriptor);
+        WGPUBuffer lightUniformBuffer = AcquireTransientBuffer(lightUboDescriptor.usage, lightUboDescriptor.size);
         wgpuQueueWriteBuffer(queue_, lightUniformBuffer, 0, command.lightUniforms.data(), sizeof(command.lightUniforms));
 
         WGPUBufferDescriptor factorsUboDescriptor{};
         factorsUboDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D FactorsUBO");
         factorsUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
         factorsUboDescriptor.size = sizeof(command.pbrFactors);
-        WGPUBuffer factorsUniformBuffer = wgpuDeviceCreateBuffer(device_, &factorsUboDescriptor);
+        WGPUBuffer factorsUniformBuffer = AcquireTransientBuffer(factorsUboDescriptor.usage, factorsUboDescriptor.size);
         wgpuQueueWriteBuffer(queue_, factorsUniformBuffer, 0, command.pbrFactors.data(), sizeof(command.pbrFactors));
 
         WGPUBufferDescriptor skinningUboDescriptor{};
         skinningUboDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D SkinningUBO");
         skinningUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
         skinningUboDescriptor.size = sizeof(command.skinningParams);
-        WGPUBuffer skinningUniformBuffer = wgpuDeviceCreateBuffer(device_, &skinningUboDescriptor);
+        WGPUBuffer skinningUniformBuffer = AcquireTransientBuffer(skinningUboDescriptor.usage, skinningUboDescriptor.size);
         wgpuQueueWriteBuffer(queue_, skinningUniformBuffer, 0, command.skinningParams.data(), sizeof(command.skinningParams));
 
         std::array<WGPUBindGroupEntry, 4> uboEntries{};

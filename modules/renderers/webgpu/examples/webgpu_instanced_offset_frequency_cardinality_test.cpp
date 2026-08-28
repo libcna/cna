@@ -14,16 +14,20 @@
 //   * bind the instance buffer at a native byte offset that is
 //     not the copy's own base                                  -> a validation error.
 //
-// Every CNA-side count is read from the live renderer and every native count from wgpu-native's own
-// wgpuGenerateReport(), before and after a known public sequence, so each expectation is an exact
-// number or an exact equality between two sequences rather than a trend.
+// Every CNA-side count is read from the live renderer; the native pipeline/command-buffer counts
+// come from wgpu-native's own wgpuGenerateReport(), before and after a known public sequence, so
+// each expectation is an exact number or an exact equality between two sequences rather than a trend.
 //
-// What the native counts do and do not measure, stated because a boundary that overclaims is worse
-// than none: this renderer releases a queued draw's transient buffers inside the same flush that
-// creates them, so a delta taken across a whole render-target cycle is a NET LIVE count, not a
-// created count. It therefore proves that no offset, no frequency and no repeat leaves a resource
-// behind -- the persistent-growth half of the contract -- while the "no second draw, pass, submit
-// or pipeline variant" half is carried by the renderer's own counters below, which are cumulative.
+// What the buffer count does and does not measure, stated because a boundary that overclaims is
+// worse than none: WEBGPU-12 pools this renderer's transient per-draw buffers (a submitted draw's
+// vertex/instance/uniform buffers are recycled into a bounded pool, not released), so wgpu's LIVE
+// buffer count plateaus and a delta of it no longer tracks per-draw usage. The buffer count here is
+// therefore the number of pool ACQUISITIONS (create + reuse) across a cycle -- exactly one per
+// pooled buffer per draw, invariant to pool warmth -- so a delta proves per-draw buffer usage does
+// not scale with instanceCount and does not vary with offset or frequency (a divisor expanded into
+// a buffer-per-instance, or an offset/frequency baked into an allocation, would change it). The
+// "no second draw, pass, submit or pipeline variant" half is carried by the renderer's own
+// cumulative counters below.
 //
 // Exit code 0 = all checks PASS, 1 = any FAIL.
 
@@ -156,16 +160,17 @@ class WebGpuInstancedOffsetFrequencyCardinalityTest : public Game
                                                 RenderTargetUsage::DiscardContents);
     }
 
-    /// wgpu-native's own live-object registry. A render pipeline per frequency, a buffer retained
-    /// per logical instance, or a command buffer left alive by a divisor would appear here
-    /// regardless of what the renderer's own counters say. These are LIVE counts -- see this file's
-    /// header for exactly what a delta over one cycle does and does not prove.
+    /// wgpu-native's own live-object registry. A render pipeline per frequency, or a command buffer
+    /// left alive by a divisor, would appear here regardless of what the renderer's own counters say.
+    /// These are LIVE counts. (The per-draw BUFFER cardinality is measured at the pool-acquire seam
+    /// in Snapshot() instead, since WEBGPU-12 recycles transient buffers -- see this file's header.)
     static Cost NativeCost(WebGPURenderer& renderer, Cost cost)
     {
 #ifdef CNA_HAVE_WGPU_NATIVE_REPORT
         WGPUGlobalReport report{};
         wgpuGenerateReport(renderer.Instance(), &report);
-        cost.nativeBuffers = report.hub.buffers.numAllocated;
+        // WEBGPU-12: nativeBuffers is filled from the transient-buffer pool counters in Snapshot(),
+        // not from the wgpu live buffer count -- see Snapshot() and this file's header.
         cost.nativePipelines = report.hub.renderPipelines.numAllocated;
         cost.nativeCommandBuffers = report.hub.commandBuffers.numAllocated;
 #else
@@ -181,7 +186,16 @@ class WebGpuInstancedOffsetFrequencyCardinalityTest : public Game
         cost.submits = renderer.GetQueueSubmitCountEXT();
         cost.coloredPipelines = renderer.GetColoredPipelineCacheSizeEXT();
         cost.instancedPipelines = renderer.GetInstancedPipelineCacheSizeEXT();
-        return NativeCost(renderer, cost);
+        cost = NativeCost(renderer, cost);
+        // WEBGPU-12: since transient per-draw buffers are POOLED (recycled after submit, not
+        // released), wgpu's live buffer count plateaus rather than returning to zero, so a delta of
+        // it no longer measures per-draw usage. `nativeBuffers` therefore counts buffer ACQUISITIONS
+        // (create + reuse) instead: exactly one per pooled buffer per draw, invariant to pool warmth,
+        // so a delta still proves per-draw buffer usage does not scale with instanceCount or vary
+        // with offset/frequency -- the same cardinality contract, measured at the acquire seam.
+        cost.nativeBuffers = renderer.GetTransientBufferCreateCountEXT() +
+                             renderer.GetTransientBufferReuseCountEXT();
+        return cost;
     }
 
     static Cost Delta(const Cost& before, const Cost& after)
@@ -200,7 +214,7 @@ class WebGpuInstancedOffsetFrequencyCardinalityTest : public Game
     static void Print(const char* label, const Cost& d)
     {
         std::printf("[ MEASURE  ] REMED-GFX-211/213 WebGPU %s: passes=%zu submits=%zu "
-                    "coloredPipelines=+%zu instancedPipelines=+%zu nativeBuffers=%zu "
+                    "coloredPipelines=+%zu instancedPipelines=+%zu bufferAcquisitions=%zu "
                     "nativePipelines=+%zu nativeCommandBuffers=%zu\n",
                     label, d.passes, d.submits, d.coloredPipelines, d.instancedPipelines,
                     d.nativeBuffers, d.nativePipelines, d.nativeCommandBuffers);
@@ -268,7 +282,7 @@ class WebGpuInstancedOffsetFrequencyCardinalityTest : public Game
         checkCount(fourAtTwo.submits, fourAtOne.submits,
                    "C1 frequency 2 queue submits match frequency 1");
         checkCount(fourAtTwo.nativeBuffers, fourAtOne.nativeBuffers,
-                   "C1 frequency 2 left the same live native buffer count as frequency 1");
+                   "C1 frequency 2 left the same buffer acquisition count as frequency 1");
         checkCount(fourAtTwo.nativeCommandBuffers, fourAtOne.nativeCommandBuffers,
                    "C1 frequency 2 native command buffers match frequency 1");
         checkCount(fourAtTwo.instancedPipelines, 0,
@@ -284,7 +298,7 @@ class WebGpuInstancedOffsetFrequencyCardinalityTest : public Game
 
         checkCount(eightAtOne.nativeBuffers - fourAtOne.nativeBuffers,
                    eightAtTwo.nativeBuffers - fourAtTwo.nativeBuffers,
-                   "C2 four more public draws left the same live native buffer count at either frequency");
+                   "C2 four more public draws left the same buffer acquisition count at either frequency");
         checkCount(eightAtTwo.passes, fourAtTwo.passes,
                    "C2 doubling the draws in one cycle opened no extra render pass");
         checkCount(eightAtTwo.submits, fourAtTwo.submits,
@@ -297,7 +311,7 @@ class WebGpuInstancedOffsetFrequencyCardinalityTest : public Game
         const Cost twelveAtTwo = CycleCost(dev, renderer, 0, 0, 2, 12, 4);
         Print("4 draws x 12 instances @frequency=2", twelveAtTwo);
         checkCount(twelveAtTwo.nativeBuffers, fourAtTwo.nativeBuffers,
-                   "C3 doubling the instance count left no additional live native buffer");
+                   "C3 doubling the instance count left no additional buffer acquisition");
         checkCount(twelveAtTwo.instancedPipelines, 0,
                    "C3 doubling the instance count built no new pipeline variant");
 
@@ -320,7 +334,7 @@ class WebGpuInstancedOffsetFrequencyCardinalityTest : public Game
         checkCount(offsets.submits, fourAtOne.submits,
                    "C4 nonzero VertexOffsets cost the same number of queue submits");
         checkCount(offsetsAndFrequency.nativeBuffers, fourAtOne.nativeBuffers,
-                   "C4 offsets plus frequency 3 left the same live native buffer count");
+                   "C4 offsets plus frequency 3 left the same buffer acquisition count");
 
         // ---- C5: repeating the whole sequence must not grow anything ----
         const Cost repeat = CycleCost(dev, renderer, 3, 5, 1, 6, 4);
@@ -328,7 +342,7 @@ class WebGpuInstancedOffsetFrequencyCardinalityTest : public Game
         checkCount(repeat.instancedPipelines, 0,
                    "C5 repeating an offset sequence built no further pipeline variant");
         checkCount(repeat.nativeBuffers, offsets.nativeBuffers,
-                   "C5 repeating an offset sequence left the same live native buffer count");
+                   "C5 repeating an offset sequence left the same buffer acquisition count");
         checkCount(repeat.passes, offsets.passes,
                    "C5 repeating an offset sequence opened the same render passes");
 

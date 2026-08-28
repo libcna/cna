@@ -2,9 +2,11 @@
 
 ## Status summary (2026-08-27)
 
-**144 rows — ✅ 140 · 🟨 3 · ⬜ 1** (counted from the row tables by `tools/count_webgpu_plan_status.sh`,
-not by hand). The **4 open rows** are the only WebGPU work not at ✅:
-`WEBGPU-1, 12, 59, 107`. (Closed 2026-08-28: `WEBGPU-29` shared `Build3DPipelineEXT()` descriptor
+**144 rows — ✅ 142 · 🟨 1 · ⬜ 1** (counted from the row tables by `tools/count_webgpu_plan_status.sh`,
+not by hand). The **2 open rows** are the only WebGPU work not at ✅:
+`WEBGPU-1, 107`. (Closed 2026-08-28: `WEBGPU-12`/`WEBGPU-59` transient per-draw buffer pool (recycle,
+don't churn) + 3-slot SpriteBatch vertex ring + `WebGPU_BufferPoolStress` (create count plateaus,
+reuse climbs, zero GPU errors); `WEBGPU-29` shared `Build3DPipelineEXT()` descriptor
 builder for all 12 3D families (behaviour-preserving, −318 lines, suite still 104/104); `WEBGPU-28` all WGSL extracted to
 `webgpu_shaders.hpp` + `ValidateAllShadersEXT()` whole-set validation + `WebGPU_ShaderValidation`
 test + `CNA_WEBGPU_VALIDATE_SHADERS` startup gate. Closed 2026-08-27: `WEBGPU-114` RenderTargetCube per-face MSAA
@@ -20,9 +22,6 @@ build/link/runtime verification.)
 ### Current limitations (what is genuinely still open)
 - **`WEBGPU-1` 🟨** — package integrity (SHA-256) and Linux x86_64 runtime are verified; the
   Windows/macOS/linux-aarch64 packages have pinned hashes but no build/link/runtime verification here.
-- **`WEBGPU-12` 🟨** — one fresh per-*draw* uniform `WGPUBuffer` (correct, GPU-validated), not the
-  per-frame/ring-buffer design this row describes.
-- **`WEBGPU-59` 🟨** — the SpriteBatch dynamic vertex buffer grows in place; no 3-frame ring/fencing.
 - **`WEBGPU-107` ⬜** — `DebugSimulateContextLoss` is an inherited no-op (a real device
   destroy+recreate plus re-init of every live GPU resource is a large GL-flavoured feature the Vulkan
   renderer also does not implement).
@@ -182,19 +181,16 @@ Phase 64.1.
 
 ## Active execution order — do this one task at a time
 
-**Current open tasks (2026-08-28)** — only these **4** rows are not ✅
-(`WEBGPU-1, 12, 59, 107`); do one at a time, each its own commit, never mark ✅ from
+**Current open tasks (2026-08-28)** — only these **2** rows are not ✅
+(`WEBGPU-1, 107`); do one at a time, each its own commit, never mark ✅ from
 source inspection.
 
 1. **`WEBGPU-1`** — build/link/run the Windows/macOS/aarch64 packages (whose hashes are now pinned) on
    an appropriate CI/platform, so package integrity becomes a full non-Linux verification.
-2. **`WEBGPU-12` / `WEBGPU-59`** — bounded, aligned ring-buffer uniform/vertex allocation with safe
-   lifetime across in-flight frames + a stress test. (Larger, separate task.)
-3. **`WEBGPU-107`** — real device/context loss recovery + resource re-init, or keep it open with the
+2. **`WEBGPU-107`** — real device/context loss recovery + resource re-init, or keep it open with the
    exact lifetime contract (a no-op must not be marked as an implementation).
 
-(Four open rows: `WEBGPU-1, 12, 59, 107`; `12` and `59` share item 2. Matches the
-"Status summary" and "Current limitations" at the top.)
+(Two open rows: `WEBGPU-1, 107`. Matches the "Status summary" and "Current limitations" at the top.)
 
 The dated chronology of completed 2D/3D work below is **archival** — read the "Status summary" and
 "Current limitations" at the top of this file for the live state, not this history.
@@ -471,7 +467,7 @@ mark it ✅ from source inspection alone.
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
 | WEBGPU-11 | Design `GpuUniforms` struct (128 bytes = 32 floats) matching Vulkan push constant layout; upload via `wgpuQueueWriteBuffer` | ✅ | Verified 2026-07-12: implemented as the anonymous-namespace `FillColoredUniforms()` helper, byte-for-byte matching `VulkanGraphicsBackend::FillExtPushConst()`'s 32-float layout (`[0..15]` MVP, `[16..19]` diffuseColor, `[20..23]` ambient+lightingEnabled, `[24..27]` light0Dir+textureEnabled, `[28..31]` light0Diffuse+vertexColorEnabled), uploaded via `wgpuQueueWriteBuffer`. Runtime-verified by `WebGPU_Colored3D`. |
-| WEBGPU-12 | Create `WGPUBuffer` (uniform, size=128) per frame (or ring buffer of 3); map on CPU side via `wgpuBufferGetMappedRange` | 🟨 | Re-audited 2026-08-26 -- still 🟨, gap unchanged. A correct, simpler variant is implemented and verified: one fresh 128-byte `WGPUBuffer` (`WGPUBufferUsage_Uniform\|CopyDst`) per *draw call* (not per frame, not a ring buffer), written via `wgpuQueueWriteBuffer` and released once the frame's command buffer is submitted (`WebGPURenderer::RenderColoredDraws()`/`pendingBufferReleases_`). Correct and GPU-validated with zero errors across all `WebGPU_Colored3D` checks, but not the per-frame/ring-buffer design this row describes — revisit if per-draw buffer churn becomes a real perf concern once more 3D draws land. |
+| WEBGPU-12 | Create `WGPUBuffer` (uniform, size=128) per frame (or ring buffer of 3); map on CPU side via `wgpuBufferGetMappedRange` | ✅ | **DONE 2026-08-28.** Every per-draw transient buffer (all 33 vertex/uniform/light/factors/skinning/transform/params/instance sites across the 11 3D families) is now ACQUIRED from a bounded pool -- `WebGPURenderer::AcquireTransientBuffer(usage, size)`, keyed by `(usage, power-of-two size class)` -- and RECYCLED back into it after submit (`RecycleTransientBuffer`, replacing the old `pendingBufferReleases_` release), rather than created and destroyed every draw. So a warmed-up scene reuses a bounded working set and stops calling `wgpuDeviceCreateBuffer` entirely. This is safe WITHOUT explicit fencing: every write (`wgpuQueueWriteBuffer`) and read (the recorded draw) goes through the single device queue in FIFO order, and wgpu-native keeps a buffer alive internally until the submission that references it completes, so a recycled buffer reused in a later cycle is only written after the prior cycle's reads. The pool is bounded per size class (cap 128) and released on teardown. Verified by `WebGPU_BufferPoolStress` (a 40-frame fixed scene): the buffer CREATE count plateaus after warm-up while the REUSE count keeps climbing (created=16, reused=608), with zero uncaptured GPU errors and the scene still rendering; the whole existing pixel suite still passes (`104`→`106` tests). Uses `wgpuQueueWriteBuffer` rather than a mapped ring, which is this renderer's upload path everywhere; index buffers keep their exact-size create/release (their odd sizes are released rather than pooled). |
 | WEBGPU-13 | `WGPUBindGroupLayout` for slot 0 binding 0 (uniform buffer) — shared across all 3D pipelines | ✅ | Verified 2026-07-12: `coloredBindGroupLayout_`, one `WGPUBufferBindingType_Uniform` entry at binding 0, visible to both vertex and fragment stages. Currently colored3D-pipeline-specific, not yet literally shared with a second 3D pipeline family (none exist yet) — same layout shape is intended to be reused once Phase 58's other WGSL shaders land. |
 | WEBGPU-14 | `WGPUBindGroup` creation and per-draw update for MVP matrix | ✅ | Verified 2026-07-12: a fresh `WGPUBindGroup` is created and bound per draw in `RenderColoredDraws()`, pointing at that draw's own uniform buffer. |
 | WEBGPU-15 | `WGPUBindGroupLayout` for slot 1 binding 0 (texture sampler) — for textured pipelines | ✅ | Verified 2026-07-12: `texturedBindGroupLayout_` (group 1: binding 0 sampler, binding 1 texture — mirrors the SpriteBatch bind group layout shape exactly), used alongside `coloredBindGroupLayout_` (group 0, the UBO) by the new `textured3d.wgsl` pipeline (`WEBGPU-20`/`33`). |
@@ -553,7 +549,7 @@ mark it ✅ from source inspection alone.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| WEBGPU-59 | `WebGPUSpriteBatchBackend`: dynamic vertex buffer ring (3 frames) for sprite quads | 🟨 | Re-audited 2026-08-26 -- still 🟨, gap unchanged. The growable dynamic SpriteBatch vertex buffer is runtime-verified (`WEBGPU-126`/`130`, including a real game's animated multi-sprite scenes); the three-frame ring/fencing optimization itself remains open (current single-buffer growth strategy works correctly, just unoptimized). |
+| WEBGPU-59 | `WebGPUSpriteBatchBackend`: dynamic vertex buffer ring (3 frames) for sprite quads | ✅ | **DONE 2026-08-28.** The SpriteBatch dynamic vertex buffer is now a THREE-slot ring (`spriteVertexRing_[3]`): each bind cycle's `UploadSpriteVertices()` rotates to the next slot before writing, so the buffer written this cycle is never the one the previous two submissions are still reading; each slot still grows in place when a cycle needs more than it holds. (Uploads use `wgpuQueueWriteBuffer`, which the queue already serialises, so the ring is defensive/parity with the reference renderers rather than fixing a live stall.) `spriteVertexBuffer_` is a non-owning alias of the active slot so the write/bind sites are unchanged; the ring owns and releases the three buffers. Exercised by `WebGPU_BufferPoolStress` (many frames of sprites rotate the ring) and the full existing SpriteBatch suite. |
 | WEBGPU-60 | Upload sprite quads via `wgpuQueueWriteBuffer` per batch | ✅ | Runtime-verified by every `WEBGPU-126`/`130` frame (flattened sprite upload → draw, no validation errors). |
 | WEBGPU-61 | Per-batch draw: set pipeline, bind groups (UBO + texture), vertex buffer, draw | ✅ | Runtime-verified the same way — `WEBGPU-130`'s `../mobile-eggbert` run alone issues many real per-frame SpriteBatch draws (title, UI panels, animated character, progress bar, fade overlay) with no WebGPU validation errors. |
 | WEBGPU-63 | Verify SpriteBatch sort modes: Immediate, Deferred, Texture, FrontToBack, BackToFront. | ✅ | Done 2026-08-26. New test `WebGPU_SpriteBatch_SortMode` (`webgpu_spritebatch_sortmode_test.cpp`), 6/6 on the real RADV GPU (`:0`): two overlapping solid sprites (red@layerDepth 0.2, blue@0.8) into a `RenderTarget2D`, reading which colour lands on top. Each depth-sorted mode is submitted in the OPPOSITE order to its sorted result, so a pass can only happen if the shared-layer sort actually reaches the WebGPU draw submission -- `BackToFront` -> red on top, `FrontToBack` -> blue on top (both overriding submission order); `Deferred` proven order-based both ways; `Immediate` in submission order; `Texture` (one texture group) order-preserving. As the row intended, the sort itself is shared `SpriteBatch` behaviour and is not reimplemented -- this validates the WebGPU submission path preserves it. |

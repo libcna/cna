@@ -172,6 +172,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_ShaderValidation COMMAND cna_test_webgpu_shader_validation
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # WEBGPU-12/59: transient per-draw buffer pool + 3-slot sprite vertex ring. Renders a fixed
+    # scene for many frames and asserts the pool's create count plateaus while its reuse count keeps
+    # climbing (bounded + reused), with zero uncaptured GPU errors. Reads pool stats off the
+    # concrete WebGPURenderer, so it also links WebGPU::WebGPU.
+    cna_webgpu_test(cna_test_webgpu_buffer_pool_stress webgpu_buffer_pool_stress_test.cpp)
+    target_link_libraries(cna_test_webgpu_buffer_pool_stress PRIVATE WebGPU::WebGPU)
+    cna_register_renderer_test(NAME WebGPU_BufferPoolStress COMMAND cna_test_webgpu_buffer_pool_stress
+        TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 1105 (plans/plan_graphics.md Phase 80): GetOrCreatePipelineLitTextured3DVertexLit /
     # BasicEffect.PreferPerPixelLighting real dispatch.
     cna_webgpu_test(cna_test_webgpu_basiceffect_preferperpixellighting webgpu_basiceffect_preferperpixellighting_test.cpp)
