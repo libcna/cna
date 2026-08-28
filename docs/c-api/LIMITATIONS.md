@@ -15,7 +15,7 @@ the C ABI is only repeating them.
 
 | | Symbols | What it means for a caller |
 |---|---:|---|
-| Fully mapped | 8,291 | A C route exists and is tested. |
+| Fully mapped | 8,298 | A C route exists and is tested. |
 | **Partially mapped** | 15 | A route exists but covers a stated subset. Read the next section before relying on one. |
 | **No C form** | 460 | Nothing callable was omitted; see the reasons below. |
 

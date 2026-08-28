@@ -185,8 +185,9 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > with its codec and `.cnj` compile path, then the sprite-font, sound-effect, song, video, curve and
 > animation-clip schemas, then the loader registry and the two compilation front ends: 460 rows and
 > 272 routes over twelve owned handle kinds, taking the ABI to `0.15.0` and 4,018 exports and leaving
-> 46 planned. **Every asset schema the format defines is bound, and a C application can compile
-> source files into `.cnb`.** Exactly one of those 460 rows was dispositioned `not-applicable` and it
+> 39 planned once `CBIND-103` closed the math tail beside them, with no new routes at all. **Every
+> asset schema the format defines is bound, and a C application can compile source files into
+> `.cnb`.** Exactly one of those 460 rows was dispositioned `not-applicable` and it
 > is named in its task row -- a `friend` declaration Doxygen reports as a member. `docs/c-api/CNB.md`
 > and `CONTENT.md` state the consumer-facing consequence, which is that the one thing still missing
 > is `ContentManager::RegisterCnbLoaderEXT`: a C-registered loader is invoked directly rather than

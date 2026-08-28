@@ -1211,7 +1211,15 @@ applies unchanged. Three things are specific to this phase:
 3. **Nothing was reclassified to shrink the backlog.** Phase B10 owns **0 of the 459** not-applicable rows and **0 of the 15** partials — both sets belong entirely to earlier tasks — and **all 506** planned rows name a B10 slice, with none naming a task outside the phase. This is the check that would catch a matrix "closed" by relabelling, run here against a matrix being *opened*, where the same temptation runs the other way.
 4. **Unmatched still means planned.** Measured rather than read: removing one rule (`graphics-renderer-identities`) moves exactly its 51 symbols from implemented to planned, 7,832→7,781 and 506→557. A rule that quietly stopped matching would reopen the matrix rather than hide in it.
 5. **Both `CNA_CNAEXT` configurations still export the same set, symbol by symbol.** 3,746 names in `cmake-build-debug` (OFF), `cmake-build-cnaext` (ON, OPENGLES3) and `build-probe` (ON, HEADLESS); `diff` of the three sorted lists is empty. Declared-versus-exported agrees exactly at 3,746 in each, and the ABI baseline verifies against each library. |
-| CBIND-103 | Bind the math tail | 7 | ⬜ | `Vector3::operator*=` (both), `operator/=` (both), `Matrix::operator*=` (both) and `Quaternion`'s default constructor. `CBIND-081` answered the same shape for `Vector2` and `Color` and needed no new routes: C has neither operator overloading nor compound assignment, so `a *= b` is the existing binary route with the destination naming the left operand, and that is well defined rather than an aliasing hazard because those routes take their values **by value**. Check that claim against `Matrix`, which is 64 bytes and may not follow `Vector2`'s convention, rather than assuming it. `Quaternion()` is the zero-initialized `CNA_Quaternion` a caller writes in a declaration — read the canonical constructor first and confirm it really is all zeros, because `CBIND-081` recorded that trap for `Matrix()` and it is the same question here. |
+| CBIND-103 | Bind the math tail | 7 | ✅ | **Done 2026-08-28.** All 7 rows close with **no new routes and no ABI change** — the first slice in this phase where the right answer was that the surface already existed: implemented 8,291 → 8,298 and planned 46 → 39, exports unchanged at 4,018 and the ABI still `0.15.0`.
+
+**Both checks the row demanded were performed, and both passed — but they were performed.** `cna_matrix_multiply` and `cna_matrix_multiply_scalar` do take `CNA_Matrix` **by value**, so `M *= N` is `cna_matrix_multiply(m, n, &m)` and that is well defined rather than an aliasing hazard, exactly as it is for `Vector2`. A 64-byte value was the plausible place for the convention to have changed, and it did not. `Quaternion()` really is all zeros — `X(0), Y(0), Z(0), W(0)`, with the canonical comment recording that C# zeroes struct fields — so the C form is the zero-initialized `CNA_Quaternion` a caller writes in a declaration, and the friendlier-looking identity is **not** it.
+
+**The tests measure both properties rather than restating them, and both were mutation-checked.** Each aliasing case runs twice — once into a separate destination, once with the destination aliasing an operand, from **both** sides — and then requires the aliased result to differ from the input, so a match cannot be a no-op agreeing with itself. Giving the aliased matrix call a different scalar fails; setting the zeroed quaternion's `w` to 1 fails. That is a stronger bar than `CBIND-081` set for `Vector2`, and it is the bar this row asked for.
+
+**One thing the approvals machinery caught that a regex would not have.** `^Quaternion::Quaternion$` matches every constructor overload, and `quaternion-operations` already owns the parameterised ones; the deriving script's own overlap assertion fired rather than silently approving all of them. The rule now carries `signature_regex: ^\(\)$`, so its pattern says what it means instead of relying on the approval list to fix it afterwards. **`color-default-constructor` has the same latent looseness** — a broad pattern held correct only by its single approval — which is worth a look under `CBIND-112` rather than a change here.
+
+**Verified in all three arms**, each built whole and then run serially: 103/103 `CApi` tests in `cmake-build-debug`, `cmake-build-cnaext` and `build-probe`; all eight build-free gates green; declared and exported routes agreeing exactly at 4,018 in each tree. |
 | CBIND-104 | Bind the graphics tail | 22 | ⬜ | Seventeen of these are `DynamicVertexBuffer::SetData`. Fourteen are the base-class overloads that `using VertexBuffer::SetData;` makes declarations of the derived type too — the operations themselves are already bound on `VertexBuffer`, so the question is whether a `using` declaration deserves its own rule text or is answered by the base route, and the answer must be written down either way. The other three are real: two `SetData<TVertex>` templates for an application-defined vertex type, which flatten onto the existing element-size descriptor the way `StorageBufferT<T>` did in `CBIND-084A`, and the windowed overload that takes an explicit `offsetInBytes` and stride. Beneath them sit `VertexBuffer::SetDataRawWithOptions`/`SetDataRawAtWithOptions`, which are what those templates call. Also `EffectMaterial::RetainParameterTextureEXT`/`GetRetainedParameterTextureCountEXT` — a lifetime contract, so read `SAMPLE-028` before shaping it — and `OcclusionQuery::isPixelCountPreciseEXT`, one boolean. |
 | CBIND-105 | Bind the reflective content readers and the `.cnb` loader hook | 17 | ⬜ | `ReflectiveTypeReader`, `EnumTypeReader` and `ReflectiveTypeReaderBuilder` are how a game declares a reflectively serialized XNB type's field list once and gets a reader for it (`SAMPLE-044`). The builder is a fluent C++ template — `Field`, `EnumField`, `Custom`, `Register` — so the C form is a descriptor plus an append route, not a chained call; the existing content-reader registration routes are the precedent to follow rather than a new mechanism. `ContentManager::RegisterCnbLoaderEXT` and its `CnbLoaderFn` alias are the callback seam the CNB tier loads through, and `cna_content_manager_register_cnj_loader_ext` is its exact sibling — match that route's shape, its context pointer and its lifetime rules. |
 | CBIND-106 | Bind the CNB container: identities, format, arithmetic, CRC-32C and read limits | 66 | ✅ | **Done 2026-08-28.** `CNA/C/cnb.h` and `CnaCApiCnb.cpp` add 24 routes, two identities, one versioned structure and 30 constants, closing all 66 rows: implemented 7,832 → 7,898 and planned 506 → 440, the delta this phase requires to equal the slice's row count.
@@ -1402,8 +1410,8 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-**Snapshot (2026-08-28, after `CBIND-111`):** 536 headers / 8,812 symbols —
-**8,291 implemented, 15 approved partial, 46 planned, 460 not applicable.** ABI `0.15.0`, 4,018
+**Snapshot (2026-08-28, after `CBIND-103`):** 536 headers / 8,812 symbols —
+**8,298 implemented, 15 approved partial, 39 planned, 460 not applicable.** ABI `0.15.0`, 4,018
 exported symbols — the same 4,018 with `CNA_CNAEXT` on and off (measured symbol by symbol: zero
 differ), which is the engine layer's ABI promise measured rather than asserted.
 
@@ -1418,7 +1426,8 @@ no other. That is not a regression and not a document going stale: the sixth mer
 brought in 506 public symbols, 460 of them the `CNA::Content::Cnb` content format, and the owner
 ruled on 2026-08-28 that binding them belongs to a later pass — then asked for `CBIND-106`,
 `CBIND-107`–`CBIND-111` — the container, the document, every asset schema the format defines, and
-the compile path with the loader registry — which closed 460 of them and left 46. The gate says so out loud because
+the compile path with the loader registry — and then `CBIND-103`'s math tail, which closed 467 of
+them and left 39. The gate says so out loud because
 `CBIND-042B` built it to fail in both directions, and a deferral that only lives in somebody's
 memory is the thing it exists to prevent.
 
@@ -1448,7 +1457,7 @@ CNAEXT engine layer and the fifth merge's tail opened, and `CBIND-095` verified 
 
 ### What remains
 
-**Phase B10 — 46 rows left of 506, in three slices. `CBIND-106`–`CBIND-111` are closed; `CBIND-103`–`CBIND-105` remain, with `CBIND-113` beside them and `CBIND-112` to close it.** The
+**Phase B10 — 39 rows left of 506, in two slices. `CBIND-103` and `CBIND-106`–`CBIND-111` are closed; `CBIND-104` and `CBIND-105` remain, with `CBIND-113` beside them and `CBIND-112` to close it.** The
 sixth reopening. `origin/next` merged on 2026-08-28 and brought in the **CNB content format**
 (`CNA::Content::Cnb`, 23 public headers, `plans/plan_cnb.md`'s `CNBF-002`–`CNBF-123`) — 460 of the
 506 rows — plus 46 ordinary XNA symbols: the math types' compound-assignment operators,

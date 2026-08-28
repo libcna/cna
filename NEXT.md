@@ -141,13 +141,22 @@ does not raise** — the shared image decoder throws a plain runtime error for a
 the C route holds the documented contract and answers `CNA_RESULT_IO`, with the canonical gap
 recorded rather than patched.
 
-**Where it stands:** 536 headers / 8,812 symbols — 8,291 implemented, 15 approved partial, 46
+**`CBIND-103` then closed the math tail with no new routes and no ABI change** — the first slice in
+this phase where the right answer was that the surface already existed. `Vector3`'s and `Matrix`'s
+compound assignments are the existing binary routes with the destination naming the left operand,
+which is well defined because those routes take their values **by value** — checked on `Matrix`
+rather than inherited from `Vector2`, because 64 bytes is exactly where an ABI might have switched
+to pointers. `Quaternion()` is all zeros, not the identity. Both properties are now measured from
+both aliasing sides and mutation-checked, which is a stronger bar than `CBIND-081` set for the same
+shape.
+
+**Where it stands:** 536 headers / 8,812 symbols — 8,298 implemented, 15 approved partial, 39
 planned, 460 not applicable. ABI `0.15.0`, 4,018 exported symbols, the same set with `CNA_CNAEXT` on
 and off. 103/103 `CApi` tests in all three arms: `cmake-build-debug` (HEADLESS, `CNA_CNAEXT=OFF`),
 `cmake-build-cnaext` (OPENGLES3/EasyGL, `CNA_CNAEXT=ON`) and `build-probe` (HEADLESS,
 `CNA_CNAEXT=ON`). The not-applicable count moved for the first time this phase, by exactly one row —
 a `friend` declaration Doxygen reports as a member, named in `CBIND-111`. What remains in Phase B10
-is the math, graphics and reflective-reader tails (`CBIND-103`–`CBIND-105`, 46 rows) and the two
+is the graphics and reflective-reader tails (`CBIND-104` and `CBIND-105`, 39 rows) and the two
 closing tasks.
 
 ## `SAMPLE-005` official XNA content fidelity (`ReachGraphicsDemo_4_0`, 2026-08-23)
