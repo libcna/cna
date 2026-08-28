@@ -1,6 +1,6 @@
 # docs/ index
 
-224 Markdown documents in `docs/` (including this index) — this index exists so a reader (human or
+233 Markdown documents in `docs/` (including this index) — this index exists so a reader (human or
 AI agent) can tell what's current without opening every file. It groups files by topic and flags
 which ones are known-current vs. historical/dated. Entries not explicitly flagged have not been
 individually re-verified in the 2026-07-11 documentation pass that produced this index — treat
@@ -80,6 +80,10 @@ on it) rather than assuming either way.
 - **[`migration-guide.md`](migration-guide.md)** — practical guide for porting an existing XNA/FNA
   game to CNA; the two gaps that block most real ports (`.xnb`, compiled `.fx` bytecode) are at
   the top.
+- **[`content-pipeline.md`](content-pipeline.md)** — the CNA-native build-time
+  Importer -> Processor -> Content Type Writer system above frozen CNB: `cna-content`, built-in
+  source routes, dependency/XREF semantics, incremental manifests, determinism, atomic publication,
+  Unicode paths, custom extensions, and the exact stable/experimental boundary.
 
 ## Graphics — per-effect / per-feature support matrices
 

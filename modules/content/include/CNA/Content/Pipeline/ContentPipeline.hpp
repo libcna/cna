@@ -112,7 +112,7 @@ namespace CNA::Content::Pipeline
         /** @brief Semantic category of the dependency. */
         ContentDependencyKind kind = ContentDependencyKind::SourceFile;
 
-        /** @brief Canonical native path, or logical name for a ContentBuild dependency. */
+        /** @brief Canonical generic UTF-8 path, or logical name for a ContentBuild dependency. */
         std::string identity;
 
         /** @brief Orders records deterministically by category and identity. */
