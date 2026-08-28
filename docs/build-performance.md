@@ -142,6 +142,49 @@ peak memory rose by about 2.8%. Clang 19.1.7 also compiled and linked the same P
 focused executable preserved its test inventory; its STUB run retained only the renderer/shader
 capability failures also observed without PCH.
 
+## Clang header and translation-unit traces
+
+`tools/build/analyze_clang_time_trace.py` aggregates Clang `-ftime-trace` JSON without modifying
+the build tree. It ranks translation units by `Total ExecuteCompiler` and project headers by
+inclusive `Source` time, and can emit text or JSON. A profiling build can be reproduced with an
+isolated build directory (the raw flag is intentionally confined to this diagnostic build):
+
+```sh
+cmake -S . -B /tmp/cna-trace -G Ninja \
+  -DCMAKE_CXX_COMPILER=clang++ \
+  '-DCMAKE_CXX_FLAGS=-ftime-trace -ftime-trace-granularity=500' \
+  -DCMAKE_BUILD_TYPE=Debug -DCNA_GRAPHICS_RENDERER=STUB \
+  -DCNA_BUILD_TESTS=OFF -DCNA_BUILD_EXAMPLES=OFF -DCNA_BUILD_C_API=OFF \
+  -DCNA_ENABLE_NET=OFF -DCNA_ENABLE_VIDEO=OFF -DCNA_ENABLE_DRACO=OFF \
+  -DCNA_USE_CCACHE=OFF
+cmake --build /tmp/cna-trace --target cna_content --parallel 12
+python3 tools/build/analyze_clang_time_trace.py \
+  /tmp/cna-trace/modules/content/CMakeFiles/cna_content.dir --top 20
+clang-scan-deps-19 -compilation-database=/tmp/cna-trace/compile_commands.json \
+  -format=make -j 12 -o /tmp/cna-trace-dependencies.make
+```
+
+The 2026-08-28 Clang 19.1.7 baseline identified these leading production content TUs:
+`ContentManager.cpp` (13.31 s), `GltfImportCore.cpp` (9.70 s), `CnbModelCodec.cpp` (6.73 s),
+`CnbModelFromCnj.cpp` (5.66 s), and `CnjToCnb.cpp` (5.45 s). The leading project headers were
+`ContentReader.hpp` (23.71 s across 20 parses), `SkinnedModelEXT.hpp` (9.77 s across six), and
+`ContentManager.hpp` (9.40 s across 13). These are inclusive trace times and can overlap; they are
+ranking evidence, not values to add together.
+
+The retained include-hygiene change removes seven complete math headers from `ContentReader.hpp`
+and forward-declares their return types. `ContentReader.cpp` and the one test that constructs
+`Color`/`Vector4` now include their actual dependencies explicitly. Across the 46 production
+content TUs, parses of those seven headers fell from 173 to 120 (30.6%); their inclusive trace time
+fell from 3.67 s to 2.27 s (38.1%). A three-run, single-job consumer probe's mean Clang frontend
+time fell from 1,308 ms to 988 ms (24.5%). `clang-scan-deps` reports 24 TUs in the complete focused
+build closure depending on `ContentReader.hpp`, so the reduction also narrows public-header rebuild
+fan-out rather than optimizing only its own implementation TU.
+
+Single clean traced target samples varied from 83.80 s before to 95.53 s after while peak RSS stayed
+essentially flat at 490 MiB, so they are not used as a whole-target speed claim. The accepted metric
+is the controlled header probe plus the deterministic parse-count reduction. GCC 14.2.0 and Clang
+19.1.7 both build `CnaContentTests`, and all 21 directly affected `ContentReader` tests pass on both.
+
 ## Compiler-policy layers
 
 The CMake targets distinguish requirements imposed on a consumer from CNA's private build policy:

@@ -61,7 +61,7 @@ must not be compared with the new post-reset counters.
 | COMP-003 | Pilot target-specific precompiled headers | COMP-002 | ✅ |
 | COMP-004 | Benchmark Mold and LLD final linking | COMP-001 | ⬜ |
 | COMP-005 | Reduce CMake configure/regeneration cost | COMP-001 | ✅ |
-| COMP-006 | Reduce measured header and translation-unit cost | COMP-001 | ⬜ |
+| COMP-006 | Reduce measured header and translation-unit cost | COMP-001 | ✅ |
 | COMP-007 | Add an opt-in CI unity-build experiment | COMP-002, COMP-006 | ⬜ |
 | COMP-008 | Publish results and add regression guardrails | COMP-002–COMP-007 | ⬜ |
 
@@ -274,6 +274,27 @@ foundation work.
 - Each retained change improves the chosen metric by at least 10% or removes a documented large
   rebuild fan-out, with affected tests passing on GCC and Clang.
 - No new cyclic includes, public API changes, or implementation bodies moved into public headers.
+
+### Completion evidence (2026-08-28)
+
+- A repository-owned `tools/build/analyze_clang_time_trace.py` reports text or JSON rankings from
+  modern Clang begin/end `Source` events and `Total ExecuteCompiler`. Clang 19.1.7 `-ftime-trace`
+  ranked `ContentManager.cpp` (13.31 s), `GltfImportCore.cpp` (9.70 s), and `CnbModelCodec.cpp`
+  (6.73 s) as the leading content TUs; `ContentReader.hpp` led project headers at 23.71 s across
+  20 production parses. `clang-scan-deps-19` independently found 24 dependants in the complete
+  focused build closure.
+- `ContentReader.hpp` no longer transitively includes seven full math definitions used only as
+  return declarations. Forward declarations preserve the API; implementation and test users now
+  include the definitions they construct. This reduces those math-header parse occurrences across
+  46 production content TUs from 173 to 120 (30.6%) and inclusive trace time from 3.67 s to 2.27 s
+  (38.1%).
+- Three controlled consumer-probe runs reduced mean Clang frontend time from 1,308 ms to 988 ms
+  (24.5%), exceeding the 10% acceptance threshold. Whole-target single samples were noisy
+  (83.80 s before, 95.53 s after), so no clean-target wall-time gain is claimed; peak RSS remained
+  about 490 MiB.
+- GCC 14.2.0 and Clang 19.1.7 both build and link `CnaContentTests`; all 21 directly affected
+  `ContentReader` and external-reference tests pass under both. No API signature, implementation
+  placement, or runtime behavior changed.
 
 ## 10. COMP-007 — opt-in unity build for clean CI builds
 
