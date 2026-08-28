@@ -142,6 +142,27 @@ example with `ccache --max-size 40G`. A shared cache is most effective when deve
 the same `CNA_CCACHE_BASEDIR`. Do not enable `CCACHE_NOHASHDIR` globally: it needs a separate
 reproducible-debug-path and `__FILE__` compatibility check.
 
+Interpret direct/preprocessed hit counters as workload deltas, not as a lifetime percentage. A
+2026-08-28 investigation of an apparent 0% direct-hit rate showed `direct_mode = true` and a debug
+log result of `direct_cache_hit`. The counter did not advance because that sandboxed build could
+read cached objects but could not create ccache's statistics file under its configured temporary
+directory; the log ended with `Error while finalizing stats`. Repeating the same rebuild with a
+writable cache advanced the direct-hit counter from zero to one. This was an observation-environment
+problem, not a CNA launcher or ccache configuration defect, so CNA does not override the user's
+global direct-mode or sloppiness settings.
+
+For a trustworthy one-file diagnosis, record stats before and after the same rebuild in an
+environment that can write both `cache_dir` and `temporary_dir`. When the aggregate counters are
+surprising, enable ccache's per-invocation debug log temporarily:
+
+```sh
+mkdir -p /tmp/cna-ccache-debug
+touch modules/math/tests/Microsoft/Xna/Framework/MathHelperTests.cpp
+CCACHE_DEBUG=1 CCACHE_DEBUGDIR=/tmp/cna-ccache-debug \
+  cmake --build cmake-build-unit --target CnaMathTests --parallel 1
+rg 'Result:|Error while finalizing stats' /tmp/cna-ccache-debug
+```
+
 ## Sanitizers
 
 Set `CNA_SANITIZE` instead of writing raw CMake flag variables. The existing device presets use:

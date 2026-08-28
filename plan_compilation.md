@@ -91,6 +91,18 @@ builds can hide include hygiene and alter which translation units appear expensi
 - The plan records a measured baseline rather than extrapolating elapsed time solely from command
   counts.
 
+### Direct-mode diagnostic evidence (2026-08-28)
+
+- The apparent 0% direct-hit snapshot was not caused by CNA: `ccache --show-config` reported
+  `direct_mode = true`, and a one-file debug trace ended in `Result: direct_cache_hit`.
+- The same trace reported that its statistics could not be finalized because the sandbox could not
+  create ccache's configured temporary directory. Repeating the rebuild with writable global-cache
+  state advanced the direct counter from zero to one.
+- No unsafe `sloppiness`, timestamp relaxation, or project override was added. Documentation now
+  requires per-workload counter deltas from a writable environment and shows the exact debug-log
+  procedure. The broader GCC/Clang cold-build baseline in this task remains pending until COMP-001's
+  benchmark driver is completed.
+
 ## 5. COMP-002 — split the monolithic unit-test iteration path
 
 `CnaTests` currently requires 1,126 compile commands and a large final link even when one module is
