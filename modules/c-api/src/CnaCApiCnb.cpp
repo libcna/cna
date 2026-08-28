@@ -13,17 +13,23 @@
 #include "CNA/Content/Cnb/CnbFormat.hpp"
 #include "CNA/Content/Cnb/CnbAnimationClipCodec.hpp"
 #include "CNA/Content/Cnb/CnbCurveCodec.hpp"
+#include "CNA/Content/Cnb/CnbLoaderRegistry.hpp"
 #include "CNA/Content/Cnb/CnbMediaCodec.hpp"
 #include "CNA/Content/Cnb/CnbModelCodec.hpp"
 #include "CNA/Content/Cnb/CnbModelData.hpp"
 #include "CNA/Content/Cnb/CnbModelFromCnj.hpp"
 #include "CNA/Content/Cnb/CnbSoundEffectCodec.hpp"
+#include "CNA/Content/Cnb/CnbSourceImport.hpp"
 #include "CNA/Content/Cnb/CnbSpriteFontCodec.hpp"
+#include "CNA/Content/Cnb/CnjToCnb.hpp"
+#include "CNA/Content/ForeignContentObjectEXT.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "CNA/Content/Cnb/CnbReadLimits.hpp"
 #include "CNA/Content/Cnb/CnbTextureCodec.hpp"
 #include "CNA/Content/Cnb/CnbTextureFormat.hpp"
 #include "CNA/Content/Cnb/CnbWriter.hpp"
 
+#include <any>
 #include <cmath>
 #include <cstring>
 #include <limits>
@@ -824,6 +830,131 @@ struct CnbAnimationClipResource final {
         out.scale.x = key.Scale.X;
         out.scale.y = key.Scale.Y;
         out.scale.z = key.Scale.Z;
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+
+/// CBIND-111: a resolved loader is a **copy** of the registered function, so it is an object.
+struct CnbLoaderResource final {
+    CNA::Content::CnbLoaderRegistry::LoaderFn value;
+};
+
+/// CBIND-111: what compiling one `.cnj` produced, plus the two lists a build system needs.
+struct CnjToCnbResultResource final {
+    std::shared_ptr<Cnb::CnjToCnbResult> value;
+};
+
+[[nodiscard]] CNA_Result GetLoader(
+    const CNA_CnbLoaderHandle handle,
+    std::shared_ptr<CnbLoaderResource>* const outLoader)
+{
+    const CNA_Result result = GetRuntimeHandles().Get(handle, ObjectKind::CnbLoader, outLoader);
+    if (result != CNA_RESULT_SUCCESS) {
+        return Fail(result, ErrorCategoryForResult(result), "The CNB loader handle is invalid.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result GetCompiledCnj(
+    const CNA_CnjToCnbResultHandle handle,
+    std::shared_ptr<CnjToCnbResultResource>* const outResult)
+{
+    const CNA_Result result =
+        GetRuntimeHandles().Get(handle, ObjectKind::CnjToCnbResult, outResult);
+    if (result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result, ErrorCategoryForResult(result), "The CNJ compile handle is invalid.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result CreateLoader(
+    CNA::Content::CnbLoaderRegistry::LoaderFn loader,
+    CNA_CnbLoaderHandle* const outLoader)
+{
+    const auto resource = std::make_shared<CnbLoaderResource>();
+    resource->value = std::move(loader);
+    const CNA_Result result =
+        GetRuntimeHandles().Create(ObjectKind::CnbLoader, resource, outLoader);
+    if (result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result, ErrorCategoryForResult(result),
+            "The CNB loader handle could not be created.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+/**
+ * Wraps a C loader callback as the canonical `LoaderFn`.
+ *
+ * Two things here are the established discipline rather than a choice. The document and the
+ * content manager reach the callback as **callback-scoped borrowed handles** -- created over the
+ * canonical references with a no-op deleter and released on every path before returning -- so a
+ * callback that caches one and uses it later gets an invalid-handle answer rather than a dangling
+ * reference. And the produced pointer is boxed as `ForeignContentObjectEXT`, the same wrapper a
+ * caller-supplied `.xnb` reader's object goes into, so a C++ load asking for another type fails
+ * its unboxing cleanly instead of reinterpreting an unrelated pointer.
+ */
+[[nodiscard]] CNA::Content::CnbLoaderRegistry::LoaderFn WrapLoaderCallback(
+    const CNA_CnbLoaderCallback callback,
+    void* const context,
+    std::string canonicalTypeName)
+{
+    return [callback, context, name = std::move(canonicalTypeName)](
+               const Cnb::CnbDocument& document,
+               Microsoft::Xna::Framework::Content::ContentManager& contentManager,
+               const std::string& assetName) -> std::any {
+        const auto documentResource = std::make_shared<CnbDocumentResource>();
+        documentResource->value =
+            std::shared_ptr<Cnb::CnbDocument>(const_cast<Cnb::CnbDocument*>(&document),
+                                              [](Cnb::CnbDocument*) {});
+        CNA_CnbDocumentHandle documentHandle = CNA_INVALID_HANDLE;
+        if (GetRuntimeHandles().Create(
+                ObjectKind::CnbDocument, documentResource, &documentHandle) !=
+            CNA_RESULT_SUCCESS) {
+            throw Microsoft::Xna::Framework::Content::ContentLoadException(
+                "A borrowed CNB document handle could not be created for the loader registered as "
+                "'" + name + "'.");
+        }
+        CNA_Handle managerHandle = CNA_INVALID_HANDLE;
+        if (CNA::C::Detail::BorrowContentManagerForCallback(contentManager, &managerHandle) !=
+            CNA_RESULT_SUCCESS) {
+            static_cast<void>(GetRuntimeHandles().Release(documentHandle));
+            throw Microsoft::Xna::Framework::Content::ContentLoadException(
+                "A borrowed content-manager handle could not be created for the loader registered "
+                "as '" + name + "'.");
+        }
+
+        void* object = nullptr;
+        const CNA_StringView assetNameView{
+            assetName.empty() ? nullptr : assetName.data(),
+            static_cast<uint64_t>(assetName.size())};
+        const CNA_Result result =
+            callback(context, documentHandle, managerHandle, assetNameView, &object);
+        static_cast<void>(GetRuntimeHandles().Release(managerHandle));
+        static_cast<void>(GetRuntimeHandles().Release(documentHandle));
+        if (result != CNA_RESULT_SUCCESS) {
+            throw Microsoft::Xna::Framework::Content::ContentLoadException(
+                "The caller-supplied CNB loader registered as '" + name +
+                "' failed to load (CNA_Result " + std::to_string(result) + ").");
+        }
+        return std::any(CNA::Content::ForeignContentObjectEXT{object});
+    };
+}
+
+[[nodiscard]] CNA_Result CreateCompiledCnj(
+    Cnb::CnjToCnbResult compiled,
+    CNA_CnjToCnbResultHandle* const outResult)
+{
+    const auto resource = std::make_shared<CnjToCnbResultResource>();
+    resource->value = std::make_shared<Cnb::CnjToCnbResult>(std::move(compiled));
+    const CNA_Result result =
+        GetRuntimeHandles().Create(ObjectKind::CnjToCnbResult, resource, outResult);
+    if (result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result, ErrorCategoryForResult(result),
+            "The CNJ compile handle could not be created.");
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -6533,5 +6664,586 @@ CNA_Result cna_cnb_byte_writer_write_keyframe(
         key.Scale = {keyframe->scale.x, keyframe->scale.y, keyframe->scale.z};
         Cnb::WriteCnbKeyframe(*writer->value, key);
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+/* --- CBIND-111: the loader registry and the two compilation front ends ------------------------- */
+
+CNA_Result cna_cnb_loader_registry_register(
+    const uint32_t assetTypeId,
+    const CNA_StringView canonicalTypeName,
+    const CNA_CnbLoaderCallback callback,
+    void* const context)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (callback == nullptr) {
+            return InvalidArgument("The CNB loader callback is null.");
+        }
+        std::string nameText;
+        if (const CNA_Result result = BorrowText(canonicalTypeName, &nameText);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        CNA::Content::CnbLoaderRegistry::Register(
+            assetTypeId, nameText, WrapLoaderCallback(callback, context, nameText));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_loader_registry_remove(
+    const uint32_t assetTypeId,
+    CNA_Bool* const outRemoved)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        const bool removed = CNA::Content::CnbLoaderRegistry::Remove(assetTypeId);
+        if (outRemoved != nullptr) {
+            *outRemoved = removed ? CNA_TRUE : CNA_FALSE;
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_loader_registry_clear(void)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        CNA::Content::CnbLoaderRegistry::Clear();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_loader_registry_is_registered(
+    const uint32_t assetTypeId,
+    CNA_Bool* const outRegistered)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outRegistered == nullptr) {
+            return InvalidArgument("The registration output is null.");
+        }
+        *outRegistered =
+            CNA::Content::CnbLoaderRegistry::IsRegistered(assetTypeId) ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_loader_registry_find(
+    const uint32_t assetTypeId,
+    CNA_Bool* const outFound,
+    CNA_CnbLoaderHandle* const outLoader)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outLoader == nullptr) {
+            return InvalidArgument("The CNB loader output handle is null.");
+        }
+        *outLoader = CNA_INVALID_HANDLE;
+        std::optional<CNA::Content::CnbLoaderRegistry::LoaderFn> found =
+            CNA::Content::CnbLoaderRegistry::Find(assetTypeId);
+        if (outFound != nullptr) {
+            *outFound = found.has_value() ? CNA_TRUE : CNA_FALSE;
+        }
+        if (!found.has_value()) {
+            return CNA_RESULT_SUCCESS;
+        }
+        return CreateLoader(std::move(found).value(), outLoader);
+    });
+}
+
+CNA_Result cna_cnb_loader_registry_get_registered_type_name_size(
+    const uint32_t assetTypeId,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ReportSize(
+            CNA::Content::CnbLoaderRegistry::RegisteredTypeName(assetTypeId), outBytes);
+    });
+}
+
+CNA_Result cna_cnb_loader_registry_copy_registered_type_name(
+    const uint32_t assetTypeId,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CopyText(
+            CNA::Content::CnbLoaderRegistry::RegisteredTypeName(assetTypeId),
+            destination, capacity, outBytes);
+    });
+}
+
+CNA_Result cna_cnb_loader_registry_resolve_for_document(
+    const CNA_CnbDocumentHandle documentHandle,
+    CNA_CnbLoaderHandle* const outLoader)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbDocumentResource> document;
+        if (const CNA_Result result = GetDocument(documentHandle, &document);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (outLoader == nullptr) {
+            return InvalidArgument("The CNB loader output handle is null.");
+        }
+        *outLoader = CNA_INVALID_HANDLE;
+        return CreateLoader(
+            CNA::Content::CnbLoaderRegistry::ResolveForDocument(*document->value), outLoader);
+    });
+}
+
+CNA_Result cna_cnb_loader_registry_register_builtins(void)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        CNA::Content::CnbLoaderRegistry::RegisterBuiltIns();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_loader_destroy(const CNA_CnbLoaderHandle loaderHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbLoaderResource> loader;
+        if (const CNA_Result result = GetLoader(loaderHandle, &loader);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result result = GetRuntimeHandles().Release(loaderHandle);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The CNB loader handle could not be destroyed.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_loader_invoke(
+    const CNA_CnbLoaderHandle loaderHandle,
+    const CNA_CnbDocumentHandle documentHandle,
+    const CNA_Handle contentManagerHandle,
+    const CNA_StringView assetName,
+    void** const outObject)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbLoaderResource> loader;
+        if (const CNA_Result result = GetLoader(loaderHandle, &loader);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<CnbDocumentResource> document;
+        if (const CNA_Result result = GetDocument(documentHandle, &document);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (outObject == nullptr) {
+            return InvalidArgument("The loaded-object output is null.");
+        }
+        *outObject = nullptr;
+        std::string assetNameText;
+        if (const CNA_Result result = BorrowText(assetName, &assetNameText);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // The canonical signature takes the manager by reference, so there is no "no manager" to
+        // pass. Manufacturing a placeholder one would be worse than requiring it: a content manager
+        // constructor installs the built-in loaders, and inventing that side effect to satisfy a
+        // reference would make an invoke do something a caller never asked for.
+        Microsoft::Xna::Framework::Content::ContentManager* manager = nullptr;
+        if (const CNA_Result result = CNA::C::Detail::GetContentManagerObject(
+                contentManagerHandle, &manager);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const std::any produced = loader->value(*document->value, *manager, assetNameText);
+        const auto* const foreign =
+            std::any_cast<CNA::Content::ForeignContentObjectEXT>(&produced);
+        if (foreign == nullptr) {
+            return NotSupported(
+                "The loader produced a C++ object rather than one this ABI can hand to C; only a "
+                "loader registered through cna_cnb_loader_registry_register produces the latter.");
+        }
+        *outObject = foreign->value;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_import_image_as_texture2d(
+    const CNA_StringView imagePath,
+    const CNA_CnbImageImportOptions* const options,
+    CNA_CnbTextureDataHandle* const outTexture)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outTexture == nullptr) {
+            return InvalidArgument("The CNB texture output handle is null.");
+        }
+        *outTexture = CNA_INVALID_HANDLE;
+        Cnb::CnbImageImportOptions native;
+        if (options != nullptr) {
+            if (const CNA_Result result = RequireStruct(
+                    options, CNA_CNB_IMAGE_IMPORT_OPTIONS_STRUCT_VERSION,
+                    "The image-import options are not a known size and version.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (const CNA_Result result =
+                    ValidateCanonicalBool(options->has_color_key, "has_color_key");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (options->has_color_key != CNA_FALSE) {
+                native.colorKey = std::array<uint8_t, 3>{
+                    options->color_key[0], options->color_key[1], options->color_key[2]};
+            }
+        }
+        std::string pathText;
+        if (const CNA_Result result = BorrowText(imagePath, &pathText);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // CBIND-111: the canonical importer documents a content failure "if the file cannot be
+        // read or decoded", but the shared image decoder raises a plain `std::runtime_error` for an
+        // unreadable file and the importer translates only its own two checks. Left alone, the
+        // firewall would answer CNA_RESULT_INTERNAL -- "a bug in CNA" -- for a caller whose file is
+        // simply not there. The C layer answers the documented contract instead; the canonical gap
+        // is recorded in plans/plan_binding.md rather than patched here.
+        try {
+            return CreateTextureData(Cnb::ImportImageAsCnbTexture2D(pathText, native), outTexture);
+        } catch (const Microsoft::Xna::Framework::Content::ContentLoadException&) {
+            throw;
+        } catch (const std::runtime_error& exception) {
+            return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
+        }
+    });
+}
+
+CNA_Result cna_cnb_import_dds_as_texture_cube(
+    const CNA_StringView ddsPath,
+    CNA_CnbTextureDataHandle* const outTexture)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outTexture == nullptr) {
+            return InvalidArgument("The CNB texture output handle is null.");
+        }
+        *outTexture = CNA_INVALID_HANDLE;
+        std::string pathText;
+        if (const CNA_Result result = BorrowText(ddsPath, &pathText);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CreateTextureData(Cnb::ImportDdsAsCnbTextureCube(pathText), outTexture);
+    });
+}
+
+CNA_Result cna_cnb_decode_dds_as_texture_cube(
+    const uint8_t* const bytes,
+    const uint64_t byteCount,
+    const CNA_StringView origin,
+    CNA_CnbTextureDataHandle* const outTexture)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outTexture == nullptr) {
+            return InvalidArgument("The CNB texture output handle is null.");
+        }
+        *outTexture = CNA_INVALID_HANDLE;
+        std::span<const uint8_t> source;
+        if (const CNA_Result result = BorrowBytes(bytes, byteCount, &source);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string originText;
+        if (const CNA_Result result = BorrowText(origin, &originText);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CreateTextureData(
+            Cnb::DecodeDdsAsCnbTextureCube(source, originText), outTexture);
+    });
+}
+
+CNA_Result cna_cnb_decode_wav_as_sound_effect(
+    const uint8_t* const bytes,
+    const uint64_t byteCount,
+    const CNA_StringView origin,
+    CNA_CnbSoundEffectDataHandle* const outSound)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outSound == nullptr) {
+            return InvalidArgument("The CNB sound output handle is null.");
+        }
+        *outSound = CNA_INVALID_HANDLE;
+        std::span<const uint8_t> source;
+        if (const CNA_Result result = BorrowBytes(bytes, byteCount, &source);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string originText;
+        if (const CNA_Result result = BorrowText(origin, &originText);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CreateSoundEffect(
+            Cnb::DecodeWavAsCnbSoundEffect(source, originText), outSound);
+    });
+}
+
+CNA_Result cna_cnb_import_wav_as_sound_effect(
+    const CNA_StringView wavPath,
+    CNA_CnbSoundEffectDataHandle* const outSound)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outSound == nullptr) {
+            return InvalidArgument("The CNB sound output handle is null.");
+        }
+        *outSound = CNA_INVALID_HANDLE;
+        std::string pathText;
+        if (const CNA_Result result = BorrowText(wavPath, &pathText);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CreateSoundEffect(Cnb::ImportWavAsCnbSoundEffect(pathText), outSound);
+    });
+}
+
+CNA_Result cna_cnb_compile_cnj(
+    const CNA_StringView cnjPath,
+    const CNA_StringView contentRoot,
+    const CNA_StringView contentName,
+    CNA_CnjToCnbResultHandle* const outResult)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outResult == nullptr) {
+            return InvalidArgument("The CNJ compile output handle is null.");
+        }
+        *outResult = CNA_INVALID_HANDLE;
+        std::string pathText;
+        if (const CNA_Result result = BorrowText(cnjPath, &pathText);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string rootText;
+        if (const CNA_Result result = BorrowText(contentRoot, &rootText);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string nameText;
+        if (const CNA_Result result = BorrowText(contentName, &nameText);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CreateCompiledCnj(
+            Cnb::CompileCnjToCnb(pathText, rootText, nameText), outResult);
+    });
+}
+
+CNA_Result cna_cnb_cnj_result_destroy(const CNA_CnjToCnbResultHandle resultHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnjToCnbResultResource> compiled;
+        if (const CNA_Result result = GetCompiledCnj(resultHandle, &compiled);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result result = GetRuntimeHandles().Release(resultHandle);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The CNJ compile handle could not be destroyed.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_cnj_result_get_asset_type_id(
+    const CNA_CnjToCnbResultHandle resultHandle,
+    uint32_t* const outAssetTypeId)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnjToCnbResultResource> compiled;
+        if (const CNA_Result result = GetCompiledCnj(resultHandle, &compiled);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (outAssetTypeId == nullptr) {
+            return InvalidArgument("The asset-type output is null.");
+        }
+        *outAssetTypeId = compiled->value->assetTypeId;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_cnj_result_get_asset_type_name_size(
+    const CNA_CnjToCnbResultHandle resultHandle,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnjToCnbResultResource> compiled;
+        if (const CNA_Result result = GetCompiledCnj(resultHandle, &compiled);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return ReportSize(compiled->value->assetTypeName, outBytes);
+    });
+}
+
+CNA_Result cna_cnb_cnj_result_copy_asset_type_name(
+    const CNA_CnjToCnbResultHandle resultHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnjToCnbResultResource> compiled;
+        if (const CNA_Result result = GetCompiledCnj(resultHandle, &compiled);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyText(compiled->value->assetTypeName, destination, capacity, outBytes);
+    });
+}
+
+CNA_Result cna_cnb_cnj_result_copy_bytes(
+    const CNA_CnjToCnbResultHandle resultHandle,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnjToCnbResultResource> compiled;
+        if (const CNA_Result result = GetCompiledCnj(resultHandle, &compiled);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
+            return InvalidArgument("The compiled-byte output is invalid.");
+        }
+        return CopyBytes(compiled->value->bytes, destination, capacity, outBytes);
+    });
+}
+
+CNA_Result cna_cnb_cnj_result_get_absorbed_file_count(
+    const CNA_CnjToCnbResultHandle resultHandle,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnjToCnbResultResource> compiled;
+        if (const CNA_Result result = GetCompiledCnj(resultHandle, &compiled);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (outCount == nullptr) {
+            return InvalidArgument("The absorbed-file count output is null.");
+        }
+        *outCount = static_cast<uint64_t>(compiled->value->absorbedFiles.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_cnj_result_get_absorbed_file_size(
+    const CNA_CnjToCnbResultHandle resultHandle,
+    const uint64_t index,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnjToCnbResultResource> compiled;
+        if (const CNA_Result result = GetCompiledCnj(resultHandle, &compiled);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = RequireIndex(
+                index, compiled->value->absorbedFiles.size(),
+                "The absorbed-file index is out of range.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return ReportSize(
+            compiled->value->absorbedFiles[static_cast<std::size_t>(index)], outBytes);
+    });
+}
+
+CNA_Result cna_cnb_cnj_result_copy_absorbed_file(
+    const CNA_CnjToCnbResultHandle resultHandle,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnjToCnbResultResource> compiled;
+        if (const CNA_Result result = GetCompiledCnj(resultHandle, &compiled);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = RequireIndex(
+                index, compiled->value->absorbedFiles.size(),
+                "The absorbed-file index is out of range.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyText(
+            compiled->value->absorbedFiles[static_cast<std::size_t>(index)],
+            destination, capacity, outBytes);
+    });
+}
+
+CNA_Result cna_cnb_cnj_result_get_external_reference_count(
+    const CNA_CnjToCnbResultHandle resultHandle,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnjToCnbResultResource> compiled;
+        if (const CNA_Result result = GetCompiledCnj(resultHandle, &compiled);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (outCount == nullptr) {
+            return InvalidArgument("The external-reference count output is null.");
+        }
+        *outCount = static_cast<uint64_t>(compiled->value->externalReferences.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_cnj_result_get_external_reference_size(
+    const CNA_CnjToCnbResultHandle resultHandle,
+    const uint64_t index,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnjToCnbResultResource> compiled;
+        if (const CNA_Result result = GetCompiledCnj(resultHandle, &compiled);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = RequireIndex(
+                index, compiled->value->externalReferences.size(),
+                "The external-reference index is out of range.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return ReportSize(
+            compiled->value->externalReferences[static_cast<std::size_t>(index)], outBytes);
+    });
+}
+
+CNA_Result cna_cnb_cnj_result_copy_external_reference(
+    const CNA_CnjToCnbResultHandle resultHandle,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnjToCnbResultResource> compiled;
+        if (const CNA_Result result = GetCompiledCnj(resultHandle, &compiled);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = RequireIndex(
+                index, compiled->value->externalReferences.size(),
+                "The external-reference index is out of range.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyText(
+            compiled->value->externalReferences[static_cast<std::size_t>(index)],
+            destination, capacity, outBytes);
     });
 }

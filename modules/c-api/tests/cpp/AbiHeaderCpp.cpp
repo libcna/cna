@@ -8,7 +8,7 @@
 
 #include <cstddef>
 
-static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 14, 0));
+static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 15, 0));
 static_assert(sizeof(CNA_Result) == sizeof(uint32_t));
 static_assert(sizeof(CNA_Handle) == sizeof(uint64_t));
 static_assert(sizeof(CNA_GraphicsResourceTag) == sizeof(uint64_t));
@@ -1162,3 +1162,9 @@ static_assert(sizeof(CNA_CnbSoundEffectInfo) == 32U);
 static_assert(offsetof(CNA_CnbSoundEffectInfo, loop_length) == 28U);
 static_assert(sizeof(CNA_CnbVideoInfo) == 32U);
 static_assert(offsetof(CNA_CnbVideoInfo, soundtrack_type) == 24U);
+
+// CBIND-111: the loader registry and the two compilation front ends.
+static_assert(sizeof(CNA_CnbImageImportOptions) == 12U);
+static_assert(alignof(CNA_CnbImageImportOptions) == 4U);
+static_assert(offsetof(CNA_CnbImageImportOptions, has_color_key) == 11U);
+static_assert(CNA_CNB_IMAGE_IMPORT_OPTIONS_STRUCT_VERSION == UINT32_C(1));

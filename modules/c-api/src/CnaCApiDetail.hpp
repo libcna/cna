@@ -289,6 +289,11 @@ enum class ObjectKind : uint32_t {
     CnbSpriteFontData = 175,
     CnbSoundEffectData = 176,
     CnbAnimationClip = 177,
+
+    // CBIND-111: a resolved loader is a copy of the registered function, which is why it is an
+    // object rather than a cursor into the table; a compile result holds bytes and two file lists.
+    CnbLoader = 178,
+    CnjToCnbResult = 179,
     Test = UINT32_MAX
 };
 

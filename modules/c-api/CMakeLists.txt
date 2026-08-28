@@ -877,6 +877,22 @@ if(CNA_BUILD_TESTS)
     cna_c_api_enable_strict_warnings(cna_c_api_cnb_schema_smoke)
     add_test(NAME CApi_CnbSchemaSmoke COMMAND cna_c_api_cnb_schema_smoke)
 
+    # CBIND-111: the loader registry and the two compilation front ends -- the one part of the CNB
+    # surface a C application uses as a tool rather than as a runtime. Its own suite because it
+    # needs real source files and a content manager, and because the registry is driven end to end
+    # rather than only queried.
+    add_executable(cna_c_api_cnb_tooling_smoke
+        tests/pure_c/CnbToolingSmoke.c
+    )
+    set_target_properties(cna_c_api_cnb_tooling_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_cnb_tooling_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_cnb_tooling_smoke)
+    add_test(NAME CApi_CnbToolingSmoke COMMAND cna_c_api_cnb_tooling_smoke)
+
     add_executable(cna_c_api_packed_vector_smoke
         tests/pure_c/PackedVectorSmoke.c
     )

@@ -4726,6 +4726,522 @@ CNA_C_API CNA_Result cna_cnb_byte_writer_write_keyframe(
     CNA_CnbByteWriterHandle writer,
     const CNA_KeyframeEXT* keyframe);
 
+/* --- CBIND-111: the loader registry and the two compilation front ends ------------------------- */
+
+/**
+ * @brief A copy of one registered `.cnb` loader, safe to invoke after the call that produced it.
+ *
+ * The canonical lookups return the loader **by value** on purpose: a pointer into the table would
+ * be invalidated by any later registration that rehashes it, and the caller would have no way to
+ * know. This handle carries that copy.
+ */
+typedef CNA_Handle CNA_CnbLoaderHandle;
+
+/**
+ * @brief Turns one validated `.cnb` container into a caller-owned object.
+ *
+ * @param context The context supplied at registration.
+ * @param document **Callback-scoped borrowed** document handle, already validated. It is
+ *        invalidated before this callback returns and has no destroy operation; caching it and
+ *        using it later fails with `CNA_RESULT_INVALID_HANDLE`.
+ * @param content_manager **Callback-scoped borrowed** content-manager handle -- the manager
+ *        performing the load, so the loader can resolve the file's external references through the
+ *        normal cache. Same lifetime rule as @p document, and always valid: the canonical loader
+ *        signature takes the manager by reference, so there is never a load without one.
+ * @param asset_name The logical asset name, for diagnostics. Borrowed, and not NUL-terminated.
+ * @param out_object Receives the caller's opaque object. This ABI never dereferences, copies or
+ *        frees it; its lifetime is the caller's own business.
+ * @return `CNA_RESULT_SUCCESS`, or any documented result code to fail the load that asked for it.
+ *
+ * The object is boxed in the **same** wrapper a caller-supplied `.xnb` reader's object goes into,
+ * so a C-produced `.cnb` asset and a C-produced `.xnb` asset are the same kind of thing to
+ * everything above them -- and a C++ load asking for some other type fails its unboxing cleanly
+ * rather than reinterpreting an unrelated pointer.
+ */
+typedef CNA_Result (*CNA_CnbLoaderCallback)(
+    void* context,
+    CNA_CnbDocumentHandle document,
+    CNA_Handle content_manager,
+    CNA_StringView asset_name,
+    void** out_object);
+
+/**
+ * @brief Registers a game extension's loader for one custom asset type identifier.
+ *
+ * This is the only registration route outside CNA, and it accepts a **custom** identifier only --
+ * `CNA_CNB_ASSET_TYPE_CUSTOM_RANGE_FIRST` or above, which is what
+ * @ref cna_cnb_asset_type_id_from_name mints. CNA's built-in and reserved identifiers belong to
+ * CNA, and there is deliberately no parameter by which a caller can claim one.
+ *
+ * Registering the same identifier twice under the same name is accepted and has no effect, so two
+ * initialisation paths registering the same type is not an error. Registering it under a
+ * *different* name is refused: that is the hash-collision case a 31-bit identifier space makes
+ * possible, and letting the second registration win would mean loading one game type's file with
+ * another's loader.
+ *
+ * @param asset_type_id The identifier appearing in a `.cnb` header. Must be a custom identifier.
+ * @param canonical_type_name The type's canonical name. Not merely a label: it is compared against
+ *        the name the file itself carries before dispatch, so it must be exactly the string passed
+ *        to @ref cna_cnb_asset_type_id_from_name. Must not be empty.
+ * @param callback Non-null loader.
+ * @param context Caller-owned context passed back to @p callback; it must outlive the
+ *        registration, which is process-wide.
+ * @return A CNA result code; a null callback, an empty name, a non-custom identifier or a name
+ *         that does not hash to the identifier is `CNA_RESULT_INVALID_ARGUMENT`, and an identifier
+ *         already registered under a different name is `CNA_RESULT_INVALID_STATE`.
+ *
+ * **Registrations are process-wide and outlive any content manager**, matching how the `.xnb`
+ * reader table already works. There is no per-manager variant.
+ */
+CNA_C_API CNA_Result cna_cnb_loader_registry_register(
+    uint32_t asset_type_id,
+    CNA_StringView canonical_type_name,
+    CNA_CnbLoaderCallback callback,
+    void* context);
+
+/**
+ * @brief Withdraws the loader registered for an identifier.
+ *
+ * @param asset_type_id The identifier to withdraw.
+ * @param out_removed Receives true when a loader was registered and has now been removed, false
+ *        when nothing was registered -- which is not an error. May be null.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_loader_registry_remove(
+    uint32_t asset_type_id,
+    CNA_Bool* out_removed);
+
+/**
+ * @brief Withdraws every registration.
+ *
+ * Primarily for test isolation. A test that clears the table and wants the whole of it back must
+ * construct a content manager, not merely call @ref cna_cnb_loader_registry_register_builtins --
+ * eight of the built-in loaders construct a runtime object and are installed by the manager.
+ *
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_loader_registry_clear(void);
+
+/**
+ * @brief Reports whether a loader is registered for an identifier.
+ *
+ * @param asset_type_id The identifier to query.
+ * @param out_registered Receives whether a loader is registered.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_loader_registry_is_registered(
+    uint32_t asset_type_id,
+    CNA_Bool* out_registered);
+
+/**
+ * @brief Looks up the loader registered for an identifier, by number alone.
+ *
+ * This performs **no type-name check**, so it is the wrong entry point for loading a file -- use
+ * @ref cna_cnb_loader_registry_resolve_for_document for that. It exists for tooling that wants to
+ * ask what is registered without holding a document.
+ *
+ * @param asset_type_id The identifier to look up.
+ * @param out_found Receives whether a loader is registered. May be null.
+ * @param out_loader Receives a new loader handle the caller releases, or `CNA_INVALID_HANDLE` when
+ *        none is registered. Absence is an ordinary answer, not a refusal.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_loader_registry_find(
+    uint32_t asset_type_id,
+    CNA_Bool* out_found,
+    CNA_CnbLoaderHandle* out_loader);
+
+/**
+ * @brief Reports the byte length of the canonical type name an identifier was registered under.
+ *
+ * @param asset_type_id The identifier to look up.
+ * @param out_byte_count Receives the length, without a terminator. Zero when nothing is registered.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_loader_registry_get_registered_type_name_size(
+    uint32_t asset_type_id,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies the canonical type name an identifier was registered under.
+ *
+ * @param asset_type_id The identifier to look up.
+ * @param destination Destination bytes, or null only for zero capacity. Not terminated.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_cnb_loader_registry_copy_registered_type_name(
+    uint32_t asset_type_id,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Resolves the loader that may decode a document, proving identity as well as matching the
+ *        number.
+ *
+ * For a **built-in** asset type the number is authoritative: CNA assigns those and they are frozen,
+ * so a match is a proof of identity and the file's `CMET` type name is not consulted.
+ *
+ * For a **custom** one it is not. A custom identifier is a 31-bit hash, so two unrelated game types
+ * can legitimately collide. This therefore also requires the file to carry a canonical type name
+ * and that name to equal the registered one. A file whose number matches but whose name does not is
+ * refused -- it is a different type that happens to collide, and decoding it with this loader would
+ * be a silent misinterpretation of someone's content.
+ *
+ * @param document The container to resolve a loader for.
+ * @param out_loader Receives a new loader handle the caller releases.
+ * @return A CNA result code; no loader for the file's type, a custom-typed file carrying no
+ *         canonical type name, and a name disagreeing with the registered one are all
+ *         `CNA_RESULT_IO`, because each is a statement about the file rather than about the call.
+ */
+CNA_C_API CNA_Result cna_cnb_loader_registry_resolve_for_document(
+    CNA_CnbDocumentHandle document,
+    CNA_CnbLoaderHandle* out_loader);
+
+/**
+ * @brief Registers the built-in loaders that need nothing but their own codec.
+ *
+ * `Curve` and `AnimationClip` -- **not** every built-in type. The other eight construct a runtime
+ * object that needs a graphics device or the content manager itself, and are registered by a
+ * content manager instead. Idempotent, and called automatically by every content manager, so games
+ * never need to call it.
+ *
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_loader_registry_register_builtins(void);
+
+/**
+ * @brief Releases a resolved loader.
+ *
+ * @param loader The loader to release.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_loader_destroy(CNA_CnbLoaderHandle loader);
+
+/**
+ * @brief Invokes a resolved loader on a document.
+ *
+ * @param loader The loader.
+ * @param document The container to decode. Not required to be the one it was resolved from, which
+ *        is why the loader is a value rather than a cursor into the table.
+ * @param content_manager The manager to hand the loader for resolving external references.
+ *        **Required.** The canonical loader signature takes it by reference, so there is no "no
+ *        manager" to pass, and manufacturing a placeholder would install the built-in loaders as a
+ *        side effect of an invoke -- something a caller never asked for.
+ * @param asset_name The logical asset name, for diagnostics; may be empty.
+ * @param out_object Receives the object the loader produced.
+ * @return A CNA result code; a loader that produced a C++ object rather than a C one answers
+ *         `CNA_RESULT_NOT_SUPPORTED`, and a loader that failed answers what it returned.
+ *
+ * **Only a loader registered from C produces something C can hold.** CNA's own built-in loaders
+ * construct C++ objects -- a `Curve`, a `Texture2D` -- and this route says so rather than handing
+ * back a pointer whose type nothing in C could name. That is not a limitation of the registry: it
+ * is the same boundary a caller-supplied `.xnb` reader has, and the same box on both sides of it.
+ */
+CNA_C_API CNA_Result cna_cnb_loader_invoke(
+    CNA_CnbLoaderHandle loader,
+    CNA_CnbDocumentHandle document,
+    CNA_Handle content_manager,
+    CNA_StringView asset_name,
+    void** out_object);
+
+/** @brief Version of @ref CNA_CnbImageImportOptions this header declares. */
+#define CNA_CNB_IMAGE_IMPORT_OPTIONS_STRUCT_VERSION UINT32_C(1)
+
+/** @brief Options for importing an image file as a `Texture2D` description. */
+typedef struct CNA_CnbImageImportOptions {
+    /** @brief Size of this structure, in bytes. */
+    uint32_t struct_size;
+    /** @brief Structure version; `CNA_CNB_IMAGE_IMPORT_OPTIONS_STRUCT_VERSION`. */
+    uint32_t struct_version;
+    /** @brief RGB colour to make fully transparent, meaningful only when @ref has_color_key. */
+    uint8_t color_key[3];
+    /**
+     * @brief Whether a colour key applies at all.
+     *
+     * **Applied only when explicitly requested.** The `.cnj` route applies a colour key when the
+     * document asks for one; a direct image compile has no document to ask, and silently rewriting
+     * someone's pixels would be worse than making them say so. Matching pixels keep their RGB and
+     * get an alpha of 0, which is what the runtime path does.
+     */
+    CNA_Bool has_color_key;
+} CNA_CnbImageImportOptions;
+
+/**
+ * @brief Decodes an image file into a single-level `RGBA8` `Texture2D` description.
+ *
+ * Uses CNA's own shared image decoder, so a `.cnb` compiled here holds the same pixels the runtime
+ * would have loaded from the same file -- there is no second decoder to disagree with.
+ *
+ * @param image_path Filesystem path to a PNG, JPEG or other format CNA's image loader decodes.
+ * @param options Import options, or null for the defaults.
+ * @param out_texture Receives a new texture handle the caller releases.
+ * @return A CNA result code; a file that cannot be read or decoded, or that decodes to zero
+ *         pixels, is `CNA_RESULT_IO`. That is the documented canonical contract, and this route
+ *         holds it even where the shared decoder raises a plainer failure of its own.
+ */
+CNA_C_API CNA_Result cna_cnb_import_image_as_texture2d(
+    CNA_StringView image_path,
+    const CNA_CnbImageImportOptions* options,
+    CNA_CnbTextureDataHandle* out_texture);
+
+/**
+ * @brief Decodes a DDS cube map file into a `TextureCube` description.
+ *
+ * Goes through the **same** decoder the runtime's DDS path uses, so a compiled cube map holds the
+ * pixels the runtime would have produced from the same file.
+ *
+ * The result is `RGBA8`, not the original DXT blocks. That is not a shortcut: the runtime DDS path
+ * already decompresses on the CPU, and texture schema 1's contract is the portable `RGBA8`
+ * baseline -- storing the blocks would produce a file this build could not upload.
+ *
+ * @param dds_path Filesystem path to the `.dds`.
+ * @param out_texture Receives a new texture handle the caller releases.
+ * @return A CNA result code; an unreadable file is `CNA_RESULT_IO`, and a malformed, non-cube or
+ *         unsupported DDS is `CNA_RESULT_NOT_SUPPORTED` or `CNA_RESULT_ENCODING` -- the shared
+ *         decoder's own answers, with the same meanings the runtime gives them.
+ */
+CNA_C_API CNA_Result cna_cnb_import_dds_as_texture_cube(
+    CNA_StringView dds_path,
+    CNA_CnbTextureDataHandle* out_texture);
+
+/**
+ * @brief Decodes DDS bytes already in memory into a `TextureCube` description.
+ *
+ * @param bytes The complete file contents, or null only for a zero count.
+ * @param byte_count Number of bytes.
+ * @param origin Text naming the source in diagnostics, for example its path; may be empty.
+ * @param out_texture Receives a new texture handle the caller releases.
+ * @return A CNA result code; as @ref cna_cnb_import_dds_as_texture_cube.
+ */
+CNA_C_API CNA_Result cna_cnb_decode_dds_as_texture_cube(
+    const uint8_t* bytes,
+    uint64_t byte_count,
+    CNA_StringView origin,
+    CNA_CnbTextureDataHandle* out_texture);
+
+/**
+ * @brief Decodes WAV bytes already in memory into a `SoundEffect` description.
+ *
+ * A pure-data RIFF/WAVE parser. The runtime's WAV path decodes through the mixer engine, which
+ * needs an audio device a build machine cannot have, so this reads the container directly. It is
+ * deliberately narrow rather than a second general decoder: it accepts the uncompressed formats
+ * that convert to `CNA_CNB_AUDIO_FORMAT_PCM16` **exactly** -- 16-bit PCM stored as-is and 8-bit
+ * unsigned PCM widened exactly -- and **refuses everything else by name** instead of resampling or
+ * truncating someone's audio silently. 24-bit, 32-bit, IEEE float and ADPCM are each an authoring
+ * decision rather than a compiler's.
+ *
+ * A `smpl` chunk's first loop entry becomes the sound's loop region, using the runtime's own rules,
+ * so a looping WAV compiles to a looping `.cnb`.
+ *
+ * @param bytes The complete file contents, or null only for a zero count.
+ * @param byte_count Number of bytes.
+ * @param origin Text naming the source in diagnostics; may be empty.
+ * @param out_sound Receives a new sound handle the caller releases.
+ * @return A CNA result code; bytes that are not a WAV, are truncated, declare an impossible format
+ *         or use an encoding this importer deliberately refuses are all `CNA_RESULT_IO`.
+ */
+CNA_C_API CNA_Result cna_cnb_decode_wav_as_sound_effect(
+    const uint8_t* bytes,
+    uint64_t byte_count,
+    CNA_StringView origin,
+    CNA_CnbSoundEffectDataHandle* out_sound);
+
+/**
+ * @brief Reads and decodes a WAV file as a `SoundEffect` description.
+ *
+ * @param wav_path Filesystem path to the `.wav`.
+ * @param out_sound Receives a new sound handle the caller releases.
+ * @return A CNA result code; see @ref cna_cnb_decode_wav_as_sound_effect.
+ */
+CNA_C_API CNA_Result cna_cnb_import_wav_as_sound_effect(
+    CNA_StringView wav_path,
+    CNA_CnbSoundEffectDataHandle* out_sound);
+
+/**
+ * @brief What compiling one `.cnj` produced, and what it did with the source's sidecar files.
+ *
+ * A handle because it holds the compiled bytes and two file lists, and because the lists are what
+ * make it useful to a build system rather than only to a loader.
+ */
+typedef CNA_Handle CNA_CnjToCnbResultHandle;
+
+/**
+ * @brief Compiles one `.cnj` document, and the binary sidecars it names, into a `.cnb` file image.
+ *
+ * Supported `"type"` values are all eight: `Curve`, `AnimationClip`, `Model`, `Texture2D`,
+ * `Texture3D`, `TextureCube`, `SpriteFont` and `SoundEffect`. Any other type is refused by name
+ * rather than silently producing an empty file.
+ *
+ * @param cnj_path Filesystem path of the `.cnj` document to compile.
+ * @param content_root Directory sidecar references resolve against; empty for the document's own
+ *        parent directory, which is where every CNA content tool writes them.
+ * @param content_name Logical asset name recorded in the debug `CMET` chunk; empty for the
+ *        document's stem.
+ * @param out_result Receives a new result handle the caller releases.
+ * @return A CNA result code; a document that cannot be read, is not a supported type, or names
+ *         something the compiler cannot express is `CNA_RESULT_IO`.
+ */
+CNA_C_API CNA_Result cna_cnb_compile_cnj(
+    CNA_StringView cnj_path,
+    CNA_StringView content_root,
+    CNA_StringView content_name,
+    CNA_CnjToCnbResultHandle* out_result);
+
+/**
+ * @brief Releases a compile result.
+ *
+ * @param result The result to release.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_cnj_result_destroy(CNA_CnjToCnbResultHandle result);
+
+/**
+ * @brief Reads the asset type identifier written into the compiled file's header.
+ *
+ * @param result The compile result.
+ * @param out_asset_type_id Receives the identifier.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_cnj_result_get_asset_type_id(
+    CNA_CnjToCnbResultHandle result,
+    uint32_t* out_asset_type_id);
+
+/**
+ * @brief Reports the byte length of the compiled asset type's human-readable name.
+ *
+ * @param result The compile result.
+ * @param out_byte_count Receives the length, without a terminator.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_cnj_result_get_asset_type_name_size(
+    CNA_CnjToCnbResultHandle result,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies the compiled asset type's human-readable name.
+ *
+ * @param result The compile result.
+ * @param destination Destination bytes, or null only for zero capacity. Not terminated.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_cnb_cnj_result_copy_asset_type_name(
+    CNA_CnjToCnbResultHandle result,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies the compiled `.cnb` file bytes.
+ *
+ * @param result The compile result.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_cnb_cnj_result_copy_bytes(
+    CNA_CnjToCnbResultHandle result,
+    uint8_t* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Reports how many source files the compile absorbed.
+ *
+ * These are files whose contents are now *inside* the `.cnb` and no longer need to ship. Paths are
+ * as they were written in the source document, not resolved filesystem paths, so a build script can
+ * match them against what it generated -- including a document's authored subdirectory, so
+ * `art/ui/hero.png` and `art/world/hero.png` remain two distinguishable entries. The `.cnj` itself
+ * is always the first entry.
+ *
+ * @param result The compile result.
+ * @param out_count Receives the count.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_cnj_result_get_absorbed_file_count(
+    CNA_CnjToCnbResultHandle result,
+    uint64_t* out_count);
+
+/**
+ * @brief Reports the byte length of one absorbed source file's path.
+ *
+ * @param result The compile result.
+ * @param index Index into the absorbed files.
+ * @param out_byte_count Receives the length, without a terminator.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_cnj_result_get_absorbed_file_size(
+    CNA_CnjToCnbResultHandle result,
+    uint64_t index,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies one absorbed source file's path.
+ *
+ * @param result The compile result.
+ * @param index Index into the absorbed files.
+ * @param destination Destination bytes, or null only for zero capacity. Not terminated.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_cnb_cnj_result_copy_absorbed_file(
+    CNA_CnjToCnbResultHandle result,
+    uint64_t index,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Reports how many logical asset names the compiled file still refers to from outside.
+ *
+ * A texture shared by a hundred models stays one shared asset; embedding a copy in each would
+ * defeat a content manager's cache. These are the names recorded in the `XREF` chunk, and they are
+ * what tells a build system which other assets must also be compiled.
+ *
+ * @param result The compile result.
+ * @param out_count Receives the count.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_cnj_result_get_external_reference_count(
+    CNA_CnjToCnbResultHandle result,
+    uint64_t* out_count);
+
+/**
+ * @brief Reports the byte length of one external asset name.
+ *
+ * @param result The compile result.
+ * @param index Index into the external references.
+ * @param out_byte_count Receives the length, without a terminator.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_cnj_result_get_external_reference_size(
+    CNA_CnjToCnbResultHandle result,
+    uint64_t index,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies one external asset name.
+ *
+ * @param result The compile result.
+ * @param index Index into the external references.
+ * @param destination Destination bytes, or null only for zero capacity. Not terminated.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_cnb_cnj_result_copy_external_reference(
+    CNA_CnjToCnbResultHandle result,
+    uint64_t index,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
 #ifdef __cplusplus
 }
 #endif

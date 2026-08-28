@@ -129,13 +129,26 @@ asserting it, by reading each decoded asset back through the other family's own 
 videos deliberately got **no** handle — they are metadata, and a handle would have added a lifetime
 to something that has none.
 
-**Where it stands:** 536 headers / 8,812 symbols — 8,267 implemented, 15 approved partial, 71
-planned, 459 not applicable. ABI `0.14.0`, 3,990 exported symbols, the same set with `CNA_CNAEXT` on
-and off. 102/102 `CApi` tests in all three arms: `cmake-build-debug` (HEADLESS, `CNA_CNAEXT=OFF`),
+**`CBIND-111` then bound the loader registry and the two compilation front ends** — 28 routes, 25
+rows, and **a C application is now a content compiler**: image, DDS, WAV and `.cnj` in, `.cnb` out.
+The plan row had assumed this slice must wait for `CBIND-105`'s `ContentManager` hook; it did not —
+the registry is a standalone process-wide table, and resolve-plus-invoke exercises all of it. Two
+findings came out of doing it. The **identity rule is enforced at both ends**: the first attempt to
+build a file whose identifier and canonical name disagree was refused by the *writer*, a step before
+any loader sees it, so the load-time collision refusal defends against files from elsewhere and
+cannot be reached from C at all. And `ImportImageAsCnbTexture2D` **documents a content failure it
+does not raise** — the shared image decoder throws a plain runtime error for an unreadable file — so
+the C route holds the documented contract and answers `CNA_RESULT_IO`, with the canonical gap
+recorded rather than patched.
+
+**Where it stands:** 536 headers / 8,812 symbols — 8,291 implemented, 15 approved partial, 46
+planned, 460 not applicable. ABI `0.15.0`, 4,018 exported symbols, the same set with `CNA_CNAEXT` on
+and off. 103/103 `CApi` tests in all three arms: `cmake-build-debug` (HEADLESS, `CNA_CNAEXT=OFF`),
 `cmake-build-cnaext` (OPENGLES3/EasyGL, `CNA_CNAEXT=ON`) and `build-probe` (HEADLESS,
-`CNA_CNAEXT=ON`). What remains in Phase B10 is the loader registry and the two compilation front
-ends (`CBIND-111`), the math/graphics/reader tails (`CBIND-103`–`CBIND-105`), and the two closing
-tasks.
+`CNA_CNAEXT=ON`). The not-applicable count moved for the first time this phase, by exactly one row —
+a `friend` declaration Doxygen reports as a member, named in `CBIND-111`. What remains in Phase B10
+is the math, graphics and reflective-reader tails (`CBIND-103`–`CBIND-105`, 46 rows) and the two
+closing tasks.
 
 ## `SAMPLE-005` official XNA content fidelity (`ReachGraphicsDemo_4_0`, 2026-08-23)
 

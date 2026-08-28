@@ -1316,7 +1316,29 @@ applies unchanged. Three things are specific to this phase:
 **ABI `0.13.0` → `0.14.0`, exports 3,949 → 3,990**, purely additive. `AbiHeaderC.c` freezes every new structure's size, alignment and offsets and each audio-format ordinal individually. `--approve-rule-symbols` was again unusable for the reason `CBIND-106` recorded, so the fifteen new rules' approvals were derived with the tool's own matcher over those fifteen patterns only, with the same two assertions in the deriving script — and the derived total was 85, matching the row count exactly before anything was written.
 
 **Verified in all three arms**, each built whole and then run serially: 102/102 `CApi` tests in `cmake-build-debug`, `cmake-build-cnaext` and `build-probe`; all eight build-free gates green; declared and exported routes agreeing exactly at 3,990 in each tree. `docs/c-api/CNB.md` gains a `## The other five schemas` section built around the reuse table, the encode-time ordering rule and the published keyframe encoding. |
-| CBIND-111 | Bind the CNB loader registry and the two compilation front ends | 25 | ⬜ | `CnbLoaderRegistry` (11) is what a `ContentManager` resolves an asset through, so it lands after `CBIND-105`'s hook rather than before it. `CnbSourceImport` (7) and `CnjToCnb` (7) are the headless import paths — image, WAV, glTF and `.cnj` in, `.cnb` out — which makes them the one part of this phase a C application would use as a *tool* rather than as a runtime, and their error reporting deserves the same care the runtime routes get. |
+| CBIND-111 | Bind the CNB loader registry and the two compilation front ends | 25 | ✅ | **Done 2026-08-28.** 28 routes, two new handle kinds (`CnbLoader` = 178, `CnjToCnbResult` = 179), one callback type and one versioned structure close all 25 rows: implemented 8,267 → 8,291, **one row not applicable**, and planned 71 → 46. With this a C application is a content compiler.
+
+**The row's own ordering assumption did not hold, and that is worth stating rather than quietly working around.** It said the registry "lands after `CBIND-105`'s hook rather than before it". It does not need to: the hook is how a *`ContentManager` load* reaches the registry, but the registry is a standalone process-wide table, and `resolve_for_document` + `invoke` exercise the whole of it without any manager surface `CBIND-105` owns. The slice is therefore complete and self-proving; what remains for `CBIND-105` is only the ordinary-`Load` path.
+
+**`LoaderFn` returns `std::any`, and the C form follows a precedent this ABI had already set rather than inventing one.** A C callback produces a `void*`, boxed as `CNA::Content::ForeignContentObjectEXT` — **the same wrapper a caller-supplied `.xnb` reader's object goes into**. So a C-produced `.cnb` asset and a C-produced `.xnb` asset are one kind of thing to everything above them, and a C++ `Load<T>` for some other `T` fails its unboxing cleanly instead of reinterpreting an unrelated pointer. The document and the content manager reach the callback as **callback-scoped borrowed handles**, created over the canonical references with a no-op deleter and released on every path — the discipline `CnaCApiContentReaders.cpp` already established for a borrowed `ContentReader`.
+
+**`Find` and `ResolveForDocument` return a handle rather than a boolean, because what they canonically return is a copy.** The canonical comment says why the copy exists: a pointer into the table would be invalidated by any later registration. `cna_cnb_loader_invoke` is what makes the copy worth having in C, and the test proves the property — a loader resolved, then its registration withdrawn, then invoked successfully.
+
+**A built-in loader answers `CNA_RESULT_NOT_SUPPORTED` from `invoke`, and that is honest rather than a gap.** It constructs a `Curve` or a `Texture2D`; there is no C name for that pointer. Saying so beats handing one back.
+
+**The identity rule turned out to be enforced at both ends, and the test had to be moved to find it.** The first attempt built a file whose identifier and canonical name disagree, to watch the registry refuse it — and `cna_cnb_writer_build` refused to assemble it first, a whole step earlier. So a well-formed CNA file can never reach the load-time collision refusal; that refusal defends against files from elsewhere, and it cannot be reached from C without forging a container and its checksums. The test now pins the writer's refusal, which is the same rule where CNA actually applies it.
+
+**One canonical defect found and recorded, not patched.** `ImportImageAsCnbTexture2D` documents `@throws ContentLoadException` "if the file cannot be read or decoded", but the shared `ImageLoader::Load` raises a plain `std::runtime_error` for an unreadable file and the importer translates only its own two checks. Left alone the exception firewall answers `CNA_RESULT_INTERNAL` — "a bug in CNA" — to a caller whose file is simply not there. The C route holds the documented contract and answers `CNA_RESULT_IO`, with the reason in a comment at the site; the canonical gap stays recorded here rather than being fixed under a binding ticket.
+
+**One row is not applicable, and it is named here so `CBIND-112` can count it.** `CnbLoaderRegistry::ContentManager` is a `friend` declaration Doxygen reports as a member — the compile-time half of the CNA/game boundary that keeps a game from registering a built-in identifier at all. Publishing a route for it would hand a caller the access the declaration exists to withhold. It joins the existing `graphics-device-friend-declarations` category rather than opening a new one. **No other row in this phase has been dispositioned not-applicable or partial.**
+
+**Throw/clamp survey: 49 refusal sites, zero clamps.** `CnbLoaderRegistry.cpp` 10 throws, `CnbSourceImport.cpp` 4 throws plus 27 `FailWav(` sites, `CnjToCnb.cpp` 8 throws; no `min`/`max`/`clamp` anywhere in the three, and no guarded assignment that would keep an old value silently.
+
+**The importers are measured, not merely called.** A one-pixel BMP is imported three ways — no key, a matching key, a non-matching key — and its pixel compared each time, which is the only way to tell an applied colour key from an ignored one. A DXT1 cube is checked to arrive as `RGBA8` and explicitly **not** as `BC1`. An IEEE-float WAV is refused by name rather than converted. And the compiler is checked against the codec: a compiled `.cnj` curve's bytes are parsed as a container and the curve decoded back out through `CBIND-110`'s route.
+
+**ABI `0.14.0` → `0.15.0`, exports 3,990 → 4,018**, purely additive. `--approve-rule-symbols` was again unusable for the reason `CBIND-106` recorded, so the five new rules' approvals were derived with the tool's own matcher over those five patterns only, with the same two assertions in the deriving script — and the derived total was 25, matching the row count exactly before anything was written.
+
+**Verified in all three arms**, each built whole and then run serially: 103/103 `CApi` tests in `cmake-build-debug`, `cmake-build-cnaext` and `build-probe`; all eight build-free gates green; declared and exported routes agreeing exactly at 4,018 in each tree. `docs/c-api/CNB.md` gains a `## Compiling content, and extending the format` section. |
 | CBIND-113 | Make an exit-code-only C API suite say which stage failed | — | ⬜ | `CBIND-101` closed on fifteen runs that produced one occurrence, and the complete capture of that occurrence was the renderer banner and nothing else — `RuntimeComponentsSmoke.c` contains no `printf` or `fprintf` at all and reports only through exit codes. A `--output-on-failure` capture of such a suite cannot say more than "it failed", which is why an intermittent one costs a whole session to place. Give every suite that reports only through exit codes the diagnostic `TextureVolumeSmoke.c`'s `VOL` and `EffectSmoke.c`'s `REQUIRE` already have: the file, the line and the expression. Audit which suites lack it rather than assuming; the useful measure of done is that a failure identifies its own stage without a rerun. |
 | CBIND-112 | Close the reopened matrix | — | ⬜ | The `CBIND-095` shape, and it inherits that row's rule: **do not close on a green `--check`.** Re-run the four independent checks by name — no mapping rule cites a route that does not exist; no `approved_symbols` list has drifted from the headers; the rows were bound rather than reclassified (count this phase's own not-applicable and partial contributions and name each one); and an unclaimed symbol still falls through to `planned`. Then the two this phase adds: both `CNA_CNAEXT` configurations still export the same symbol set measured name by name, and the release gate's verdict has moved to `Ready` **because the rows were bound**, not because a criterion was edited. |
 
@@ -1380,10 +1402,14 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-**Snapshot (2026-08-28, after `CBIND-110`):** 536 headers / 8,812 symbols —
-**8,267 implemented, 15 approved partial, 71 planned, 459 not applicable.** ABI `0.14.0`, 3,990
-exported symbols — the same 3,990 with `CNA_CNAEXT` on and off (measured symbol by symbol: zero
+**Snapshot (2026-08-28, after `CBIND-111`):** 536 headers / 8,812 symbols —
+**8,291 implemented, 15 approved partial, 46 planned, 460 not applicable.** ABI `0.15.0`, 4,018
+exported symbols — the same 4,018 with `CNA_CNAEXT` on and off (measured symbol by symbol: zero
 differ), which is the engine layer's ABI promise measured rather than asserted.
+
+The not-applicable count moved 459 → 460 for the first time in this phase, and the one row is named
+in `CBIND-111`: a `friend` declaration Doxygen reports as a member. Every other row this phase
+closed was **bound**.
 Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.
 
 **The matrix is open, and Phase B10 is the backlog that closes it.** `docs/c-api/RELEASE_GATE.md`
@@ -1391,8 +1417,8 @@ reads **Not ready**, on exactly one criterion — *No public C++ symbol is unacc
 no other. That is not a regression and not a document going stale: the sixth merge of `next`
 brought in 506 public symbols, 460 of them the `CNA::Content::Cnb` content format, and the owner
 ruled on 2026-08-28 that binding them belongs to a later pass — then asked for `CBIND-106`,
-`CBIND-107`–`CBIND-110` — the container, the document, and every asset schema the format defines —
-which closed 435 of them and left 71. The gate says so out loud because
+`CBIND-107`–`CBIND-111` — the container, the document, every asset schema the format defines, and
+the compile path with the loader registry — which closed 460 of them and left 46. The gate says so out loud because
 `CBIND-042B` built it to fail in both directions, and a deferral that only lives in somebody's
 memory is the thing it exists to prevent.
 
@@ -1422,7 +1448,7 @@ CNAEXT engine layer and the fifth merge's tail opened, and `CBIND-095` verified 
 
 ### What remains
 
-**Phase B10 — 71 rows left of 506, in four slices. `CBIND-106`–`CBIND-110` are closed; `CBIND-103`–`CBIND-105` and `CBIND-111` remain, with `CBIND-113` beside them and `CBIND-112` to close it.** The
+**Phase B10 — 46 rows left of 506, in three slices. `CBIND-106`–`CBIND-111` are closed; `CBIND-103`–`CBIND-105` remain, with `CBIND-113` beside them and `CBIND-112` to close it.** The
 sixth reopening. `origin/next` merged on 2026-08-28 and brought in the **CNB content format**
 (`CNA::Content::Cnb`, 23 public headers, `plans/plan_cnb.md`'s `CNBF-002`–`CNBF-123`) — 460 of the
 506 rows — plus 46 ordinary XNA symbols: the math types' compound-assignment operators,
@@ -2136,7 +2162,7 @@ than owned by this campaign:
 | `cmake-build-cnaext` | `OPENGLES3`/EasyGL, `CNA_CNAEXT=ON` | the only renderer here that advertises compute, so the only arm where an engine-layer success path executes at all |
 | `build-probe` | `HEADLESS`, `CNA_CNAEXT=ON` | the layer present on a renderer that cannot do the work — `CBIND-097` is the record of what only this arm finds |
 
-All three run the same 102 `CApi` tests. Every tree needs `-DCNA_BUILD_C_API=ON`, which defaults to
+All three run the same 103 `CApi` tests. Every tree needs `-DCNA_BUILD_C_API=ON`, which defaults to
 OFF: a freshly configured tree silently has no `modules/c-api` build directory at all without it.
 Parallelism is not capped (the `-j3` the paragraphs below assume was for a cooling fault repaired
 on 2026-08-22); memory is the constraint that remains, so drop the job count for one target that

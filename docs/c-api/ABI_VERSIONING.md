@@ -2,7 +2,13 @@
 
 ## ABI identity
 
-The ABI is `0.14.0`. It adds the `.cnb` **sprite-font, sound-effect, song, video, curve and
+The ABI is `0.15.0`. It adds the `.cnb` **loader registry and the two compilation front ends** from
+`plans/plan_binding.md` `CBIND-111`: twenty-eight `cna_cnb_*` routes over two new handle kinds
+(`CNA_CnbLoaderHandle`, `CNA_CnjToCnbResultHandle`), the `CNA_CnbLoaderCallback` extension point by
+which a game teaches CNA about an asset type CNA does not know, and one versioned structure. **With
+it a C application is a content compiler**: image, DDS, WAV and `.cnj` in, `.cnb` out.
+
+`0.14.0` added the `.cnb` **sprite-font, sound-effect, song, video, curve and
 animation-clip** schemas from `plans/plan_binding.md` `CBIND-110`: forty-one `cna_cnb_*` routes over
 three new handle kinds (`CNA_CnbSpriteFontDataHandle`, `CNA_CnbSoundEffectDataHandle`,
 `CNA_CnbAnimationClipHandle`), the `CNA_CnbAudioFormat` identity with its six frozen wire values,
@@ -32,15 +38,16 @@ checksums, whole-file arithmetic, read limits and chunk compression, the `CNA_Cn
 `CNA_CnbCompression` identities, the versioned `CNA_CnbReadLimits` structure, and the format's
 byte-level constants.
 
-**All five generations are purely additive** -- no existing route, constant, structure field or error
+**All six generations are purely additive** -- no existing route, constant, structure field or error
 rule changed, and the four evolution paths below are the ones taken. The minor moves anyway,
 because that is what this project has done for every additive generation since `0.4.0`: a consumer
-needs a number it can require, and `find_package(CNA 0.14 CONFIG)` is what asks for these routes.
+needs a number it can require, and `find_package(CNA 0.15 CONFIG)` is what asks for these routes.
 
-A C application can now build and parse a `.cnb` container, read its chunks, and encode and decode
-**every asset schema the format defines**. It still cannot load a `.cnb` asset through a
-`ContentManager`: the loader registry and the two compilation front ends are not bound, and
-`docs/c-api/CNB.md` says exactly where that line falls.
+A C application can now compile source files into `.cnb`, build and parse a container, read its
+chunks, encode and decode every asset schema the format defines, and register a loader for an asset
+type of its own. The one thing still missing is the `ContentManager` hook that reaches the registry
+during an ordinary `Load` -- a C-registered loader is invoked directly rather than through a
+manager; `docs/c-api/CNB.md` says exactly where that line falls.
 
 `0.9.0` added the owned-`GraphicsDevice` routes
 (`cna_graphics_device_create`/`_destroy`), the render-target ContentLost subscription
@@ -246,7 +253,7 @@ Recording the baseline needs the library:
 python3 tools/c-api/generate_abi_baseline.py --write --library <build>/modules/c-api/libcna_c_api.so
 ```
 
-All four build configurations export the same 3,990 symbols. That is itself part of the contract:
+All four build configurations export the same 4,018 symbols. That is itself part of the contract:
 the ABI **surface** does not vary with the renderer, with `CNA_DEVICES`, or with `CNA_CNAEXT` —
 only the answers do. A route whose backend or layer is absent exists and refuses, rather than
 disappearing from the library. `CNA_CNAEXT` is the newest member of that list and the one with the

@@ -8,7 +8,7 @@
 
 #include <stddef.h>
 
-_Static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 14, 0),
+_Static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 15, 0),
                "CNA C ABI version encoding must remain stable");
 _Static_assert(sizeof(CNA_Result) == sizeof(uint32_t),
                "CNA_Result must have a fixed-width representation");
@@ -1983,3 +1983,13 @@ _Static_assert(sizeof(CNA_CnbVideoInfo) == 32U &&
                    offsetof(CNA_CnbVideoInfo, reserved) == 28U &&
                    CNA_CNB_VIDEO_INFO_STRUCT_VERSION == UINT32_C(1),
                "CNA_CnbVideoInfo layout must remain stable");
+
+/* CBIND-111: the loader registry and the two compilation front ends. */
+_Static_assert(sizeof(CNA_CnbImageImportOptions) == 12U &&
+                   _Alignof(CNA_CnbImageImportOptions) == 4U &&
+                   offsetof(CNA_CnbImageImportOptions, color_key) == 8U &&
+                   offsetof(CNA_CnbImageImportOptions, has_color_key) == 11U &&
+                   CNA_CNB_IMAGE_IMPORT_OPTIONS_STRUCT_VERSION == UINT32_C(1),
+               "CNA_CnbImageImportOptions layout must remain stable");
+_Static_assert(sizeof(CNA_CnbLoaderCallback) == sizeof(void (*)(void)),
+               "CNA_CnbLoaderCallback must remain a plain function pointer");

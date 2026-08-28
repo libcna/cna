@@ -1,10 +1,10 @@
 {
  "abi_version": {
-  "encoded": 3584,
+  "encoded": 3840,
   "major": 0,
-  "minor": 14,
+  "minor": 15,
   "patch": 0,
-  "runtime": 3584
+  "runtime": 3840
  },
  "colors": {
   "CNA_COLOR_ALICE_BLUE": [
@@ -1430,6 +1430,18 @@
   "cna_cnb_checked_add",
   "cna_cnb_checked_multiply",
   "cna_cnb_chunk_entry_is_mandatory",
+  "cna_cnb_cnj_result_copy_absorbed_file",
+  "cna_cnb_cnj_result_copy_asset_type_name",
+  "cna_cnb_cnj_result_copy_bytes",
+  "cna_cnb_cnj_result_copy_external_reference",
+  "cna_cnb_cnj_result_destroy",
+  "cna_cnb_cnj_result_get_absorbed_file_count",
+  "cna_cnb_cnj_result_get_absorbed_file_size",
+  "cna_cnb_cnj_result_get_asset_type_id",
+  "cna_cnb_cnj_result_get_asset_type_name_size",
+  "cna_cnb_cnj_result_get_external_reference_count",
+  "cna_cnb_cnj_result_get_external_reference_size",
+  "cna_cnb_compile_cnj",
   "cna_cnb_copy_asset_type_name",
   "cna_cnb_copy_audio_format_name",
   "cna_cnb_copy_chunk_id_string",
@@ -1445,6 +1457,7 @@
   "cna_cnb_crc32c_uses_hardware",
   "cna_cnb_decode_animation_clip",
   "cna_cnb_decode_curve",
+  "cna_cnb_decode_dds_as_texture_cube",
   "cna_cnb_decode_model",
   "cna_cnb_decode_song_duration_milliseconds",
   "cna_cnb_decode_song_name",
@@ -1459,6 +1472,7 @@
   "cna_cnb_decode_video",
   "cna_cnb_decode_video_stream_reference",
   "cna_cnb_decode_video_stream_reference_size",
+  "cna_cnb_decode_wav_as_sound_effect",
   "cna_cnb_document_copy_chunk_data",
   "cna_cnb_document_copy_external_reference_name",
   "cna_cnb_document_copy_metadata_asset_type_name",
@@ -1508,12 +1522,26 @@
   "cna_cnb_get_texture_format_unit_bytes",
   "cna_cnb_get_texture_level_byte_size",
   "cna_cnb_has_magic",
+  "cna_cnb_import_dds_as_texture_cube",
+  "cna_cnb_import_image_as_texture2d",
+  "cna_cnb_import_wav_as_sound_effect",
   "cna_cnb_is_block_compressed_texture_format",
   "cna_cnb_is_compression_supported",
   "cna_cnb_is_custom_asset_type_id",
   "cna_cnb_is_known_texture_format",
   "cna_cnb_is_well_formed_chunk_id",
   "cna_cnb_is_well_formed_utf8",
+  "cna_cnb_loader_destroy",
+  "cna_cnb_loader_invoke",
+  "cna_cnb_loader_registry_clear",
+  "cna_cnb_loader_registry_copy_registered_type_name",
+  "cna_cnb_loader_registry_find",
+  "cna_cnb_loader_registry_get_registered_type_name_size",
+  "cna_cnb_loader_registry_is_registered",
+  "cna_cnb_loader_registry_register",
+  "cna_cnb_loader_registry_register_builtins",
+  "cna_cnb_loader_registry_remove",
+  "cna_cnb_loader_registry_resolve_for_document",
   "cna_cnb_make_chunk_id",
   "cna_cnb_model_add_animation",
   "cna_cnb_model_add_bone",
@@ -4847,9 +4875,9 @@
   "cna_write_leaderboards_event_info_init"
  ],
  "integers": {
-  "CNA_ABI_VERSION": 3584,
+  "CNA_ABI_VERSION": 3840,
   "CNA_ABI_VERSION_MAJOR": 0,
-  "CNA_ABI_VERSION_MINOR": 14,
+  "CNA_ABI_VERSION_MINOR": 15,
   "CNA_ABI_VERSION_PATCH": 0,
   "CNA_ALPHA_MODE_BLEND_EXT": 2,
   "CNA_ALPHA_MODE_MASK_EXT": 1,
@@ -5119,6 +5147,7 @@
   "CNA_CNB_FORMAT_HEADER_SIZE": 64,
   "CNA_CNB_FORMAT_MAGIC_SIZE": 4,
   "CNA_CNB_FORMAT_TOC_ENTRY_SIZE": 48,
+  "CNA_CNB_IMAGE_IMPORT_OPTIONS_STRUCT_VERSION": 1,
   "CNA_CNB_MATERIAL_INFO_STRUCT_VERSION": 1,
   "CNA_CNB_MATERIAL_TEXTURE_BASE_COLOR": 0,
   "CNA_CNB_MATERIAL_TEXTURE_EMISSIVE": 4,
@@ -6614,6 +6643,10 @@
    4,
    4
   ],
+  "CNA_CnbLoaderHandle": [
+   8,
+   8
+  ],
   "CNA_CnbMaterialTextureSlot": [
    4,
    4
@@ -6659,6 +6692,10 @@
    4
   ],
   "CNA_CnbWriterHandle": [
+   8,
+   8
+  ],
+  "CNA_CnjToCnbResultHandle": [
    8,
    8
   ],
@@ -8652,6 +8689,28 @@
     ]
    },
    "size": 16
+  },
+  "CNA_CnbImageImportOptions": {
+   "align": 4,
+   "fields": {
+    "color_key": [
+     8,
+     3
+    ],
+    "has_color_key": [
+     11,
+     1
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 12
   },
   "CNA_CnbMaterialInfo": {
    "align": 4,

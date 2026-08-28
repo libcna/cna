@@ -193,7 +193,7 @@
     },
     {
       "subject": "The static archive keeps a few dozen C++ statics visible",
-      "impact": "A static CNA exists and exports exactly the same 3,990 `cna_*` names the shared library does: the whole closure is partially linked into one object and every other global symbol is localized. What cannot be localized is the handful GCC emits as `STB_GNU_UNIQUE` -- function-local statics in inline and template code, whose uniqueness is what makes them correct. They are mangled C++ names, no C program can collide with them, and none is callable API. How many there are depends on what the configuration links -- 154 with the engine layer off, 164 and 165 with it on, measured on 2026-08-28 -- which is why no single number is written here. The build **fails** if a symbol of any other binding survives, so the exception cannot widen quietly.",
+      "impact": "A static CNA exists and exports exactly the same 4,018 `cna_*` names the shared library does: the whole closure is partially linked into one object and every other global symbol is localized. What cannot be localized is the handful GCC emits as `STB_GNU_UNIQUE` -- function-local statics in inline and template code, whose uniqueness is what makes them correct. They are mangled C++ names, no C program can collide with them, and none is callable API. How many there are depends on what the configuration links -- 154 with the engine layer off, 164 and 165 with it on, measured on 2026-08-28 -- which is why no single number is written here. The build **fails** if a symbol of any other binding survives, so the exception cannot widen quietly.",
       "status": "by design",
       "owner": "CONSUMING.md"
     },

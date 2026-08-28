@@ -15,15 +15,18 @@ file-declared numbers, CRC-32C, the read limits, and chunk compression (`CBIND-1
 document, its bounded cursor, the primitive writer and the container writer (`CBIND-107`); and the
 texture pixel formats with the `Texture2D`, `TextureCube` and `Texture3D` schemas (`CBIND-108`);
 and the model schema, with its codec and the `.cnj` compile path (`CBIND-109`); and the sprite-font,
-sound-effect, song, video, curve and animation-clip schemas (`CBIND-110`). **Every asset schema the
-format defines is bound.**
+sound-effect, song, video, curve and animation-clip schemas (`CBIND-110`); and the loader registry
+with the two compilation front ends (`CBIND-111`). **Every asset schema the format defines is bound,
+and so is the whole compile path.**
 
-**Not bound.** The loader registry and the two compilation front ends — the headless image, WAV,
-glTF and `.cnj` import paths.
+**Not bound.** `ContentManager::RegisterCnbLoaderEXT` — the hook that reaches the registry during an
+ordinary `Load`. A C-registered loader is invoked directly, through
+`cna_cnb_loader_registry_resolve_for_document` and `cna_cnb_loader_invoke`, rather than by asking a
+content manager for the asset by name.
 
-So a C application can **build a `.cnb` file and parse one back**, walk its table of contents, read
-any chunk's bytes, check its metadata and external references, and encode or decode any asset type
-the format defines. It still cannot load a `.cnb` asset through a `ContentManager`.
+So a C application can **compile source files into `.cnb`**, build a file and parse one back, walk
+its table of contents, read any chunk's bytes, check its metadata and external references, encode or
+decode any asset type the format defines, and teach CNA about an asset type of its own.
 `plans/plan_binding.md` Phase B10 is the backlog for the rest, and `docs/c-api/CONTENT.md` records
 the consequence from the `ContentManager` side.
 
@@ -36,9 +39,9 @@ is no lifetime to manage there, no thread affinity and no `_destroy`.
 The document, the writers and the two decoded descriptions do own something, so they are handles:
 `CNA_CnbDocumentHandle`, `CNA_CnbReaderHandle`, `CNA_CnbByteWriterHandle`, `CNA_CnbWriterHandle`,
 `CNA_CnbTextureDataHandle`, `CNA_CnbModelDataHandle`, `CNA_CnbModelFromCnjHandle`,
-`CNA_CnbSpriteFontDataHandle`, `CNA_CnbSoundEffectDataHandle` and `CNA_CnbAnimationClipHandle`. One
-borrow relationship exists and it is the one to know about — see *Documents, cursors and who owns
-the bytes* below.
+`CNA_CnbSpriteFontDataHandle`, `CNA_CnbSoundEffectDataHandle`, `CNA_CnbAnimationClipHandle`,
+`CNA_CnbLoaderHandle` and `CNA_CnjToCnbResultHandle`. One borrow relationship exists and it is the
+one to know about — see *Documents, cursors and who owns the bytes* below.
 
 A decoded **curve** is not on that list: it comes back as the `CNA_CurveHandle` the `cna_curve_*`
 family already owns, and is released with `cna_curve_destroy`. A **song** and a **video** have no
@@ -413,6 +416,85 @@ cna_cnb_reader_read_seconds(reader, name, &seconds);
 **content** failure naming the file, not as a numeric error from somewhere below. Writing such a
 time is your mistake (`CNA_RESULT_INVALID_ARGUMENT`); reading one out of a file is the file's
 (`CNA_RESULT_IO`).
+
+## Compiling content, and extending the format
+
+`CBIND-111` bound the part a C application uses as a **tool** rather than as a runtime. None of it
+needs a graphics device, an audio device or a window: a content compiler runs on a build machine.
+
+### Importing source files
+
+```c
+CNA_CnbTextureDataHandle texture;
+cna_cnb_import_image_as_texture2d(path, NULL, &texture);   /* PNG, JPEG, BMP … */
+cna_cnb_encode_texture2d(texture, name, NULL, 0, &needed);
+```
+
+Each importer produces the *same* description handle the codecs already take, so an imported asset
+and a decoded one are the same thing.
+
+Two behaviours worth knowing before you rely on them:
+
+- **A colour key is applied only when you ask for one.** The `.cnj` route applies one when the
+  document says so; a direct image compile has no document to ask, and silently rewriting someone's
+  pixels would be worse than making them say so. Matching pixels keep their RGB and get alpha 0.
+- **A DDS cube arrives as `RGBA8`, not as DXT blocks.** The runtime DDS path already decompresses on
+  the CPU, and texture schema 1's contract is the portable baseline — storing the blocks would
+  produce a file this build could not upload.
+- **The WAV importer is deliberately narrow.** It accepts what converts to `PCM16` exactly — 16-bit
+  PCM and 8-bit unsigned PCM — and refuses 24-bit, 32-bit, float and ADPCM **by name**. Each of
+  those is a lossy conversion, which is an authoring decision rather than a compiler's.
+
+### Compiling a `.cnj`
+
+```c
+CNA_CnjToCnbResultHandle compiled;
+cna_cnb_compile_cnj(cnj_path, content_root, content_name, &compiled);
+cna_cnb_cnj_result_copy_bytes(compiled, NULL, 0, &needed);
+```
+
+The result carries two lists a build system needs, kept apart because they answer different
+questions: `absorbed_file` is what the compile consumed — so a dependency graph knows when to
+rebuild — and `external_reference` is what it left external, so the same graph knows those assets
+must also be compiled. Paths are as written in the source document, not resolved, so they match what
+your build script generated. The `.cnj` itself is always the first absorbed entry.
+
+### Teaching CNA a new asset type
+
+A `.cnb` names its asset type as one `u32`, and the loader registered for that number decodes it.
+There is no reflection and no per-file reader table — this is the whole extension mechanism.
+
+```c
+uint32_t id;
+cna_cnb_asset_type_id_from_name(view("Contoso.Game.LevelScript"), &id);
+cna_cnb_loader_registry_register(id, view("Contoso.Game.LevelScript"), on_load, &state);
+```
+
+**The name is not a label.** A custom identifier is a 31-bit hash, so two unrelated game types can
+collide; the name travels in the file's `CMET` chunk and is compared before dispatch. CNA's writer
+refuses to assemble a file whose identifier and canonical name disagree, and the registry refuses to
+resolve one — the same rule enforced at both ends.
+
+Built-in identifiers have **no** registration route at all. That boundary is compile-time by design:
+were it merely an argument, a game could claim a built-in identifier before any content manager
+existed and keep CNA's own loader from ever being installed.
+
+```c
+CNA_CnbLoaderHandle loader;
+cna_cnb_loader_registry_resolve_for_document(document, &loader);
+cna_cnb_loader_invoke(loader, document, manager, asset_name, &object);
+```
+
+A resolved loader is a **copy**, not a cursor into the table: it keeps working after the
+registration it came from is withdrawn, and a later registration cannot invalidate it.
+
+Inside the callback, the document and the content manager are **callback-scoped borrowed handles** —
+live for the call and invalid after it, with no destroy operation. The object you produce is opaque:
+this ABI never dereferences, copies or frees it.
+
+`cna_cnb_loader_invoke` on one of CNA's **own** built-in loaders answers `CNA_RESULT_NOT_SUPPORTED`.
+That is not a limitation of the registry — a built-in loader constructs a `Curve` or a `Texture2D`,
+and there is no C name for those pointers. The route says so rather than handing one back.
 
 ## Which failure means what
 

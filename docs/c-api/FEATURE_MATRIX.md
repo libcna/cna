@@ -279,12 +279,12 @@ thread.
 The following families are planned work, not implicitly supported and not permanent exclusions:
 
 - the remaining typed content asset routes;
-- the parts of the **CNB content format** (`CNA::Content::Cnb`) above its asset schemas: the loader
-  registry, the two compilation front ends and `ContentManager::RegisterCnbLoaderEXT`. A C
-  application can build and parse a `.cnb` container, read its chunks and encode or decode **every
-  asset type the format defines** — `CBIND-106` through `CBIND-110` bound that much, see
-  [`CNB.md`](CNB.md) — and cannot load a `.cnb` asset through a `ContentManager`. Backlogged as
-  `plans/plan_binding.md` Phase B10;
+- `ContentManager::RegisterCnbLoaderEXT`, the hook that reaches the **CNB** loader registry during
+  an ordinary `Load`. A C application can compile source files into `.cnb`, build and parse a
+  container, read its chunks, encode or decode **every asset type the format defines**, and register
+  and invoke a loader of its own — `CBIND-106` through `CBIND-111` bound that much, see
+  [`CNB.md`](CNB.md) — but a C-registered loader is invoked directly rather than reached through a
+  content manager. Backlogged as `plans/plan_binding.md` Phase B10;
 - remaining audio (file/content loading, fire-and-forget, globals/3D, streaming, microphone and
   XACT), plus media and video;
 - remaining window, platform, service, event and runtime APIs;

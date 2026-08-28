@@ -18598,6 +18598,101 @@
         "CPP-13685996EE2D",
         "CPP-C2A598CD54B0"
       ]
+    },
+    {
+      "id": "cnb-loader-registry-friend",
+      "qualified_name_regex": "^CNA::Content::CnbLoaderRegistry::ContentManager$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No C mapping: this is a friendship declaration granting `ContentManager` access to the private built-in registration route, not a callable public member. Publishing a route for it would hand a caller the access the declaration exists to withhold -- the compile-time half of the CNA/game boundary that keeps a game from registering a built-in identifier at all.",
+      "tests": "Doxygen declaration inventory; no callable native operation exists",
+      "status": "not-applicable",
+      "task": "CBIND-111",
+      "approved_symbols": [
+        "CPP-1465BF0F07E5"
+      ]
+    },
+    {
+      "id": "cnb-loader-registry",
+      "qualified_name_regex": "^CNA::Content::CnbLoaderRegistry(::(LoaderFn|Register|Remove|Clear|IsRegistered|Find|RegisteredTypeName|ResolveForDocument|RegisterBuiltIns))?$",
+      "kinds": [
+        "class",
+        "alias",
+        "method"
+      ],
+      "mapping": "The process-wide table becomes ten `cna_cnb_loader_registry_*` routes plus a `CNA_CnbLoaderHandle`. There is no registry handle: the canonical class is entirely static, so a handle would be a name for a thing there is only one of.\n\n`LoaderFn` becomes `CNA_CnbLoaderCallback`, which produces a `void*` boxed as the **same** wrapper a caller-supplied `.xnb` reader's object goes into -- so a C-produced `.cnb` asset and a C-produced `.xnb` asset are one kind of thing to everything above them, and a C++ load asking for another type fails its unboxing cleanly rather than reinterpreting an unrelated pointer. The document and the content manager reach the callback as **callback-scoped borrowed handles**, created over the canonical references and released on every path before the callback returns.\n\n`Find` and `ResolveForDocument` return a `CNA_CnbLoaderHandle` rather than a boolean, because what they canonically return is a **copy** of the loader -- a pointer into the table would be invalidated by any later registration, and the copy is what makes an already-resolved loader survive its own withdrawal. `cna_cnb_loader_invoke` is what makes that copy worth having; a loader registered from C++ answers `CNA_RESULT_NOT_SUPPORTED` there, because it constructs a C++ object whose type nothing in C could name.\n\n`Remove` returning false and `Find` returning `std::nullopt` are ordinary answers, not refusals: absence is reported through an output, the way every optional query in this ABI reports it.",
+      "tests": "`CnbToolingSmoke.c` `validate_loader_registry` drives the whole table end to end: a custom identifier minted from a name, a C loader registered for it, a real `.cnb` carrying that identifier and that canonical name built, resolved and invoked, and the pointer the callback produced compared with what it returned. The callback proves **both** borrowed handles were live inside it by reading the document's asset type and the manager's root directory through them. Re-registration under the same name is a no-op and under a different name is refused; a built-in identifier has no registration route; a name that does not hash to its identifier is refused. A failing loader fails the load. The identity rule is checked at the point CNA enforces it -- the **writer** refuses to assemble a file whose canonical name and identifier disagree, a step before any loader sees it. Withdrawing a registration makes every lookup answer as before while the already-resolved copy still invokes, which is the whole reason it is a copy.",
+      "status": "implemented",
+      "task": "CBIND-111",
+      "approved_symbols": [
+        "CPP-071369169069",
+        "CPP-333F135BC59C",
+        "CPP-4267F8086A28",
+        "CPP-64128347DD3D",
+        "CPP-649AB979AE68",
+        "CPP-78A51AE9B9A4",
+        "CPP-A39B24D476D6",
+        "CPP-A71BF356E028",
+        "CPP-B6D894DD42FF",
+        "CPP-E0DB0D63AC6F"
+      ]
+    },
+    {
+      "id": "cnb-image-import-options",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbImageImportOptions(::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "`CNA_CnbImageImportOptions`, a versioned structure whose `has_color_key` carries the canonical `std::optional`'s presence. Absence is the default and means the pixels are not touched: the `.cnj` route applies a colour key when the document asks for one, and a direct image compile has no document to ask, so silently rewriting someone's pixels would be worse than making them say so.",
+      "tests": "`CnbToolingSmoke.c` `validate_image_import` imports the same one-pixel image three ways -- with no options, with a key that matches, and with a key that does not -- and compares the pixel each time. A matching key leaves the RGB and zeroes only the alpha; a non-matching one changes nothing, which is what makes the first check mean something. An unknown structure version and a non-canonical `CNA_Bool` are both refused. `AbiHeaderC.c` freezes the layout.",
+      "status": "implemented",
+      "task": "CBIND-111",
+      "approved_symbols": [
+        "CPP-3AD229996391",
+        "CPP-5849876F8ECF"
+      ]
+    },
+    {
+      "id": "cnb-source-import",
+      "qualified_name_regex": "^CNA::Content::Cnb::(ImportImageAsCnbTexture2D|ImportDdsAsCnbTextureCube|DecodeDdsAsCnbTextureCube|ImportWavAsCnbSoundEffect|DecodeWavAsCnbSoundEffect)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "Five routes producing the handles `CBIND-108` and `CBIND-110` already publish, so an imported asset and a decoded one are the same thing and reach the same encoder. The from-path and from-bytes pairs both exist because the canonical layer has both, and a build system that already holds the bytes should not have to write them to a file to compile them.\n\n**One deviation, and it is the C layer holding the documented contract the canonical layer states but does not enforce.** `ImportImageAsCnbTexture2D` documents a content failure \"if the file cannot be read or decoded\", but the shared image decoder raises a plain `std::runtime_error` for an unreadable file and the importer translates only its own two checks; left alone the exception firewall would answer `CNA_RESULT_INTERNAL` -- \"a bug in CNA\" -- to a caller whose file is simply not there. This route answers `CNA_RESULT_IO`. The canonical gap is recorded in `plans/plan_binding.md` rather than patched.",
+      "tests": "`CnbToolingSmoke.c` measures rather than merely calls: the imported image's pixel is compared, the DXT1 cube is checked to arrive as `RGBA8` and explicitly **not** as `BC1` -- the contract being that the compiler decompresses rather than storing blocks this build could not upload -- and all six faces are read as whole 4x4 levels. The WAV's format, rate, channel count, frame count and sample bytes are all compared, and an IEEE-float WAV is refused by name rather than converted, which is the point of the importer being narrow. Missing files, truncated bytes and null outputs are each driven.",
+      "status": "implemented",
+      "task": "CBIND-111",
+      "approved_symbols": [
+        "CPP-3654F551DC06",
+        "CPP-4D2687E43812",
+        "CPP-668B505CAFBC",
+        "CPP-AAC1BD504A8B",
+        "CPP-F8534DFA6182"
+      ]
+    },
+    {
+      "id": "cnb-cnj-compile",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnjToCnbResult(::[A-Za-z0-9_]+)?|CompileCnjToCnb)$",
+      "kinds": [
+        "struct",
+        "field",
+        "function"
+      ],
+      "mapping": "`cna_cnb_compile_cnj` produces a `CNA_CnjToCnbResultHandle`; the bytes come out through a copy route and the two file lists through count/size/copy triples.\n\nA handle rather than loose outputs because the two lists are what make the result useful to a build system rather than only to a loader, and they answer different questions: `absorbed_file` is what the compile consumed, so a dependency graph knows when to rebuild, and `external_reference` is what it left external, so the same graph knows those assets must also be compiled. Collapsing them would lose that. The paths are as they were written in the source document rather than resolved, so a build script can match them against what it generated.",
+      "tests": "`CnbToolingSmoke.c` `validate_cnj_compile` compiles a `.cnj` curve and then **checks the compiler against the codec**: the produced bytes are parsed as a container, its asset type compared with the one the result reports, and the curve decoded back out through `CBIND-110`'s route and read through the curve family's own accessors. The source document is checked to be the first absorbed entry under its own name, and a curve is checked to name nothing external. Out-of-range indices, a missing document, a null output and a released handle are each driven.",
+      "status": "implemented",
+      "task": "CBIND-111",
+      "approved_symbols": [
+        "CPP-61B5B249BF7C",
+        "CPP-6CC604E7A37D",
+        "CPP-8DDA90ED4E99",
+        "CPP-8E522A9D3403",
+        "CPP-C1D9CCCAB3E3",
+        "CPP-D4CD91A0A55C",
+        "CPP-FF72C2BC16B7"
+      ]
     }
   ]
 }

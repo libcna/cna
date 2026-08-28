@@ -16,6 +16,8 @@ namespace Microsoft::Xna::Framework::Graphics {
 class GraphicsDevice;
 }
 
+namespace Microsoft::Xna::Framework::Content { class ContentManager; }
+
 namespace CNA::C::Detail {
 
 /// A device a call may use. `parentGame` is the **owner token**, not necessarily a game: it is
@@ -46,6 +48,21 @@ struct OwnedGraphicsDevice final {
 [[nodiscard]] CNA_Result BorrowGameGraphicsDevice(
     CNA_Handle game,
     CNA_Handle* outGraphicsDevice);
+
+// CBIND-111: a callback-scoped borrowed content-manager handle over a canonical manager the C layer
+// does not own. A `.cnb` loader receives the manager performing the load so it can resolve the
+// file's external references through the normal cache, and that manager may be one no C handle
+// names. The handle wraps it with a no-op deleter, refuses destruction like every other borrow, and
+// is released by its creator before the callback returns.
+[[nodiscard]] CNA_Result BorrowContentManagerForCallback(
+    Microsoft::Xna::Framework::Content::ContentManager& contentManager,
+    CNA_Handle* outContentManager);
+
+// CBIND-111: the canonical manager behind a content-manager handle, for the routes that must hand
+// it to something taking a reference.
+[[nodiscard]] CNA_Result GetContentManagerObject(
+    CNA_Handle handle,
+    Microsoft::Xna::Framework::Content::ContentManager** outContentManager);
 
 // The canonical display queries take a window, and this ABI has no window handle of its own: a game
 // owns exactly one, so the game handle addresses it.
