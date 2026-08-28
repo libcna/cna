@@ -398,6 +398,64 @@ CNA_C_API CNA_Result cna_vertex_buffer_set_data_raw_at(
  * the raw route could never be read back. That asymmetry had no reason behind it -- the bytes are
  * held either way.
  */
+/**
+ * @brief Uploads raw vertex bytes with an explicit streaming hint.
+ *
+ * The options-carrying counterpart of @ref cna_vertex_buffer_set_data_raw, and what a
+ * caller-defined vertex type reaches: a type this ABI has no `CNA_VertexType` for is uploaded
+ * exactly as it sits in memory, so there is nothing to pack and the stride is the type's own.
+ *
+ * @param vertex_buffer Owned vertex-buffer handle.
+ * @param data Source vertex bytes.
+ * @param data_byte_count Number of bytes readable from @p data.
+ * @param vertex_count Number of vertices to upload.
+ * @param vertex_stride Size of one vertex in bytes.
+ * @param options Streaming hint. `CNA_SET_DATA_NONE` matches
+ *        @ref cna_vertex_buffer_set_data_raw, so this route is the wider one rather than a second
+ *        spelling of it.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null source, a zero stride, a
+ *         byte count smaller than the vertices described, or an undefined option, or a documented
+ *         handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_vertex_buffer_set_data_raw_with_options(
+    CNA_VertexBufferHandle vertex_buffer,
+    const void* data,
+    uint64_t data_byte_count,
+    uint64_t vertex_count,
+    uint32_t vertex_stride,
+    CNA_SetDataOptions options);
+
+/**
+ * @brief Uploads raw vertex bytes into a window of the buffer with an explicit streaming hint.
+ *
+ * @param vertex_buffer Owned vertex-buffer handle.
+ * @param buffer_offset_in_bytes Byte offset into **this buffer**, a multiple of @p vertex_stride.
+ *        This is the one offset in the family that indexes the buffer rather than the caller's
+ *        array, which is what XNA's `offsetInBytes` means.
+ * @param data Source vertex bytes.
+ * @param data_byte_count Number of bytes readable from @p data.
+ * @param vertex_count Number of vertices to write.
+ * @param vertex_stride Size of one vertex in bytes.
+ * @param options Streaming hint.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null source, a zero stride, a
+ *         misaligned offset, a byte count smaller than the vertices described, or an undefined
+ *         option, or a documented handle/thread/native failure.
+ *
+ * **Documented deviation, about cost rather than result** -- the same one
+ * @ref cna_vertex_buffer_set_data_raw_at carries: a windowed upload cannot keep
+ * `CNA_SET_DATA_NO_OVERWRITE`'s promise that nothing the GPU may still be reading is
+ * touched, so the renderer receives the whole buffer. The result is correct and merely slower than
+ * XNA's.
+ */
+CNA_C_API CNA_Result cna_vertex_buffer_set_data_raw_at_with_options(
+    CNA_VertexBufferHandle vertex_buffer,
+    uint64_t buffer_offset_in_bytes,
+    const void* data,
+    uint64_t data_byte_count,
+    uint64_t vertex_count,
+    uint32_t vertex_stride,
+    CNA_SetDataOptions options);
+
 CNA_C_API CNA_Result cna_vertex_buffer_get_data_raw(
     CNA_VertexBufferHandle vertex_buffer,
     uint64_t buffer_offset_in_bytes,

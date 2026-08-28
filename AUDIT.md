@@ -179,13 +179,26 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > 3,746 exported symbols, and the release gate reads **not ready** on exactly one criterion. That is
 > recorded rather than smoothed over: not one of the 506 rows is dispositioned `not-applicable`,
 > because deferring work and deciding it has no C form are different claims. `plans/plan_binding.md`
-> Phase B10 is the backlog. `CBIND-106` and `CBIND-107` have since bound its first two slices --
-> the `.cnb` container's identities, constants, checksums, arithmetic, read limits and chunk
-> compression, then the parsed document, its bounded cursor and both writers: 154 rows and 104
-> routes over four owned handle kinds, taking the ABI to `0.11.0` and 3,850 exports and leaving 352
-> planned. `docs/c-api/CNB.md` and `CONTENT.md` state the consumer-facing consequence, which is that
-> a C application can build a `.cnb` file and parse one back, and still cannot load a `.cnb` asset
-> because no schema and no loader registry is bound.
+> Phase B10 is the backlog. `CBIND-106` through `CBIND-111` have since bound its first six slices --
+> the `.cnb` container, then the parsed document with its bounded cursor and both writers, then the
+> texture pixel formats and the `Texture2D`/`TextureCube`/`Texture3D` schemas, then the model schema
+> with its codec and `.cnj` compile path, then the sprite-font, sound-effect, song, video, curve and
+> animation-clip schemas, then the loader registry and the two compilation front ends: 460 rows and
+> 272 routes over twelve owned handle kinds, taking the ABI to `0.15.0` and 4,018 exports and leaving
+> **0 planned** once `CBIND-103`, `CBIND-104` and `CBIND-105` closed the math, graphics and
+> reflective-reader tails beside them. The release gate reads **Ready** on all ten criteria again,
+> and `CBIND-112` has verified that by name rather than by a green `--check` -- finding one real
+> defect in the process, a rule citing a route that does not exist. 505 rows were bound, exactly one
+> was dispositioned `not-applicable` and named, none was made `partial`. `CBIND-113` then closed the
+> phase by giving the 53 suites that reported only through exit codes a shared diagnostic, at 344
+> sites: **0 of 83 C API suites can now fail silently**, where 38 had identified their stage by exit
+> code alone and 15 had said nothing at all. **Every
+> asset schema the format defines is bound, and a C application can compile source files into
+> `.cnb`.** Exactly one of those 460 rows was dispositioned `not-applicable` and it
+> is named in its task row -- a `friend` declaration Doxygen reports as a member. `docs/c-api/CNB.md`
+> and `CONTENT.md` state the consumer-facing consequence, which is that the one thing still missing
+> is `ContentManager::RegisterCnbLoaderEXT`: a C-registered loader is invoked directly rather than
+> reached through a content manager's ordinary `Load`.
 
 ---
 

@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <stdlib.h>
 #include <string.h>
 #include <threads.h>
@@ -660,7 +662,7 @@ int main(void)
             2U,
             &synthetic_key_count) != CNA_RESULT_SUCCESS ||
         copied_keys[0] != CNA_KEY_A || copied_keys[1] != CNA_KEY_OEM_CLEAR) {
-        return 11;
+        return CNA_TEST_FAIL(11);
     }
     CNA_GameCallbacks callbacks = {
         sizeof(CNA_GameCallbacks),
@@ -680,12 +682,12 @@ int main(void)
     CNA_Handle game = CNA_INVALID_HANDLE;
 
     if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS || game == CNA_INVALID_HANDLE) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
     CNA_Handle graphics_device = CNA_INVALID_HANDLE;
     if (cna_game_get_graphics_device(game, &graphics_device) != CNA_RESULT_INVALID_STATE ||
         graphics_device != CNA_INVALID_HANDLE) {
-        return 2;
+        return CNA_TEST_FAIL(2);
     }
     WrongThreadState wrong_thread_state = {
         game, CNA_RESULT_SUCCESS, CNA_RESULT_SUCCESS
@@ -696,7 +698,7 @@ int main(void)
         thrd_join(wrong_thread, &wrong_thread_return) != thrd_success ||
         wrong_thread_return != 0 || wrong_thread_state.result != CNA_RESULT_THREAD ||
         wrong_thread_state.keyboard_result != CNA_RESULT_THREAD) {
-        return 3;
+        return CNA_TEST_FAIL(3);
     }
     if (cna_game_set_window_title(game, (CNA_StringView){"C API title", 11U}) != CNA_RESULT_SUCCESS ||
         cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS ||
@@ -704,7 +706,7 @@ int main(void)
         state.saw_time != 1 || state.borrowed_graphics_device == CNA_INVALID_HANDLE ||
         state.renderer_name_bytes == 0U || state.texture == CNA_INVALID_HANDLE ||
         state.sprite_batch == CNA_INVALID_HANDLE || state.readback_validated != 1) {
-        return 4;
+        return CNA_TEST_FAIL(4);
     }
     CNA_RendererInfo stale_renderer_info = {
         sizeof(CNA_RendererInfo), UINT32_C(1), 0U, 0U, 0U, 0U
@@ -712,7 +714,7 @@ int main(void)
     if (cna_graphics_device_get_renderer_info(
             state.borrowed_graphics_device,
             &stale_renderer_info) != CNA_RESULT_INVALID_HANDLE) {
-        return 5;
+        return CNA_TEST_FAIL(5);
     }
     CNA_Texture2DInfo live_texture_info = {
         sizeof(CNA_Texture2DInfo), UINT32_C(1), 0U, 0U, 0U, 0U
@@ -726,14 +728,14 @@ int main(void)
         cna_sprite_batch_end(state.sprite_batch) != CNA_RESULT_INVALID_HANDLE ||
         cna_texture2d_destroy(state.texture) != CNA_RESULT_INVALID_HANDLE ||
         cna_texture2d_get_info(state.texture, &live_texture_info) != CNA_RESULT_INVALID_HANDLE) {
-        return 6;
+        return CNA_TEST_FAIL(6);
     }
     if (cna_game_request_exit(game) != CNA_RESULT_SUCCESS ||
         cna_game_destroy(game) != CNA_RESULT_SUCCESS ||
         state.unload_count != 1 || state.exit_count != 1 ||
         state.lifecycle_stage != 5 ||
         cna_game_run_one_frame(game) != CNA_RESULT_INVALID_HANDLE) {
-        return 7;
+        return CNA_TEST_FAIL(7);
     }
 
     callbacks.update = on_update_and_exit;
@@ -748,7 +750,7 @@ int main(void)
         cna_texture2d_destroy(state.texture) != CNA_RESULT_SUCCESS ||
         cna_game_destroy(game) != CNA_RESULT_SUCCESS ||
         state.unload_count != 2 || state.exit_count != 2 || state.lifecycle_stage != 9) {
-        return 8;
+        return CNA_TEST_FAIL(8);
     }
 
     callbacks.load_content = on_failing_load;
@@ -760,7 +762,7 @@ int main(void)
     create_info = make_create_info(&callbacks, "", 0U);
     if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
         cna_game_run_one_frame(game) != CNA_RESULT_CALLBACK) {
-        return 9;
+        return CNA_TEST_FAIL(9);
     }
 
     CNA_ErrorInfo error_info = {sizeof(CNA_ErrorInfo), UINT32_C(1), 0U, 0U, 0U};
@@ -774,7 +776,7 @@ int main(void)
             CNA_RESULT_SUCCESS ||
         message_bytes != 21U || memcmp(message, "test callback failure", 21U) != 0 ||
         cna_game_destroy(game) != CNA_RESULT_CALLBACK) {
-        return 10;
+        return CNA_TEST_FAIL(10);
     }
 
     return 0;

@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <math.h>
 #include <string.h>
 
@@ -148,7 +150,38 @@ static int validate_operations(void)
     return 1;
 }
 
+/*
+ * CBIND-103: the canonical parameterless `Quaternion()` sets all four components to zero -- C# gives
+ * every struct one that zeroes its fields -- so its C form is the zero-initialized `CNA_Quaternion`
+ * a caller already writes in a declaration, and a `cna_quaternion_init` route would be a second
+ * spelling of it.
+ *
+ * The trap `CBIND-081` recorded for `Matrix()` is the same one here, and this is what pins it: the
+ * zero quaternion is **not** the identity. A future "friendlier" default that returned (0,0,0,1)
+ * would silently disagree with every default-constructed canonical Quaternion, and this fails.
+ */
+static int validate_default_value(void)
+{
+    CNA_Quaternion zeroed;
+    memset(&zeroed, 0, sizeof(zeroed));
+    if (zeroed.x != 0.0F || zeroed.y != 0.0F || zeroed.z != 0.0F || zeroed.w != 0.0F) {
+        return 0;
+    }
+
+    CNA_Quaternion identity;
+    memset(&identity, 0, sizeof(identity));
+    if (cna_quaternion_get_identity(&identity) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (identity.x != 0.0F || identity.y != 0.0F || identity.z != 0.0F || identity.w != 1.0F) {
+        return 0;
+    }
+    /* The default is the zero quaternion, and the identity is a different value. */
+    return identity.w != zeroed.w;
+}
+
 int main(void)
 {
-    return validate_construction_and_members() && validate_operations() ? 0 : 1;
+    return CNA_TEST_STAGE(validate_construction_and_members()) && CNA_TEST_STAGE(validate_operations()) &&
+        CNA_TEST_STAGE(validate_default_value()) ? 0 : 1;
 }

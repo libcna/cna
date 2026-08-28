@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <math.h>
 #include <stdint.h>
 #include <string.h>
@@ -254,5 +256,5 @@ static int validate_rectangle(void)
 
 int main(void)
 {
-    return validate_math_helper() && validate_point() && validate_rectangle() ? 0 : 1;
+    return CNA_TEST_STAGE(validate_math_helper()) && CNA_TEST_STAGE(validate_point()) && CNA_TEST_STAGE(validate_rectangle()) ? 0 : 1;
 }

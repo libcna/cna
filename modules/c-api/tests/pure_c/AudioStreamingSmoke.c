@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <string.h>
 
 typedef struct EventState {
@@ -266,16 +268,16 @@ int main(void)
     CNA_Handle game = CNA_INVALID_HANDLE;
 
     if (!validate_identities()) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
     if (cna_game_create(&game_info, &game) != CNA_RESULT_SUCCESS) {
-        return 2;
+        return CNA_TEST_FAIL(2);
     }
     if (!validate_streaming(game)) {
-        return 3;
+        return CNA_TEST_FAIL(3);
     }
     if (!validate_capture(game)) {
-        return 4;
+        return CNA_TEST_FAIL(4);
     }
     return cna_game_destroy(game) == CNA_RESULT_SUCCESS ? 0 : 5;
 }

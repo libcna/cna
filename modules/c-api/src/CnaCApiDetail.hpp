@@ -273,6 +273,31 @@ enum class ObjectKind : uint32_t {
     CnbReader = 169,
     CnbByteWriter = 170,
     CnbWriter = 171,
+
+    // CBIND-108: the decoded texture description, which the canonical layer expresses as nested
+    // vectors and C therefore reaches through a handle rather than a POD.
+    CnbTextureData = 172,
+
+    // CBIND-109: the model graph, one handle for the whole of it, and the compile result that
+    // carries a model plus the two file lists a build system needs alongside it.
+    CnbModelData = 173,
+    CnbModelFromCnj = 174,
+
+    // CBIND-110: the two schemas whose decoded form owns bulk data -- a font its atlas, a sound its
+    // samples -- plus a standalone clip, whose keyframes cannot be lent back as a borrowed
+    // descriptor. Curve decodes into ObjectKind::Curve, the handle the curve family already owns.
+    CnbSpriteFontData = 175,
+    CnbSoundEffectData = 176,
+    CnbAnimationClip = 177,
+
+    // CBIND-111: a resolved loader is a copy of the registered function, which is why it is an
+    // object rather than a cursor into the table; a compile result holds bytes and two file lists.
+    CnbLoader = 178,
+    CnjToCnbResult = 179,
+
+    // CBIND-105: a reflective reader's field list, held while it is being declared. The reader it
+    // registers is owned by the canonical reader table, not by a handle.
+    ReflectiveTypeReaderBuilder = 180,
     Test = UINT32_MAX
 };
 

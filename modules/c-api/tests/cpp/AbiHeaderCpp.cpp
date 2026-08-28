@@ -8,7 +8,7 @@
 
 #include <cstddef>
 
-static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 11, 0));
+static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 17, 0));
 static_assert(sizeof(CNA_Result) == sizeof(uint32_t));
 static_assert(sizeof(CNA_Handle) == sizeof(uint64_t));
 static_assert(sizeof(CNA_GraphicsResourceTag) == sizeof(uint64_t));
@@ -1110,3 +1110,67 @@ static_assert(sizeof(CNA_CnbExternalReference) == 16U);
 static_assert(offsetof(CNA_CnbExternalReference, expected_asset_type_id) == 12U);
 static_assert(sizeof(CNA_CnbMetadata) == 16U);
 static_assert(offsetof(CNA_CnbMetadata, flags) == 12U);
+static_assert(sizeof(CNA_CnbTextureFormat) == sizeof(uint32_t));
+static_assert(CNA_CNB_TEXTURE_FORMAT_MAXIMUM == UINT32_C(27));
+static_assert(CNA_CNB_TEXTURE_CHUNK_HEADER == UINT32_C(0x48584554));
+static_assert(CNA_CNB_TEXTURE_HEADER_STRIDE == UINT32_C(24));
+static_assert(CNA_CNB_TEXTURE_CUBE_FACE_COUNT == UINT32_C(6));
+static_assert(sizeof(CNA_CnbTextureInfo) == 32U);
+static_assert(alignof(CNA_CnbTextureInfo) == 4U);
+static_assert(offsetof(CNA_CnbTextureInfo, representation_count) == 28U);
+
+// CBIND-109: the model schema.
+static_assert(CNA_CNB_EFFECT_KIND_MAXIMUM == UINT32_C(5));
+static_assert(CNA_CNB_MATERIAL_TEXTURE_MAXIMUM == UINT32_C(7));
+static_assert(CNA_CNB_MORPH_DELTA_MAXIMUM == UINT32_C(2));
+static_assert(CNA_CNB_MORPH_KEY_MAXIMUM == UINT32_C(2));
+static_assert(CNA_CNB_SKELETON_MATRIX_MAXIMUM == UINT32_C(2));
+static_assert(CNA_CNB_MODEL_CHUNK_HEADER == UINT32_C(0x484C444D));
+static_assert(CNA_CNB_MODEL_MATERIAL_STRIDE == UINT32_C(368));
+static_assert(CNA_CNB_TEXTURE_SLOT_COUNT == UINT32_C(7));
+static_assert(CNA_CNB_NO_INDEX == UINT32_C(0xFFFFFFFF));
+static_assert(sizeof(CNA_CnbTextureTransform) == 20U);
+static_assert(alignof(CNA_CnbTextureTransform) == 4U);
+static_assert(sizeof(CNA_CnbSamplerState) == 16U);
+static_assert(sizeof(CNA_CnbModelLight) == 24U);
+static_assert(sizeof(CNA_CnbModelInfo) == 56U);
+static_assert(alignof(CNA_CnbModelInfo) == 8U);
+static_assert(sizeof(CNA_CnbModelBone) == 80U);
+static_assert(offsetof(CNA_CnbModelBone, transform) == 16U);
+static_assert(sizeof(CNA_CnbModelPartInfo) == 40U);
+static_assert(sizeof(CNA_CnbMaterialInfo) == 84U);
+static_assert(offsetof(CNA_CnbMaterialInfo, double_sided) == 80U);
+static_assert(sizeof(CNA_CnbMorphInfo) == 48U);
+static_assert(sizeof(CNA_CnbMeshInfo) == 24U);
+static_assert(sizeof(CNA_CnbSkeletonInfo) == 24U);
+static_assert(sizeof(CNA_CnbMorphWeightKeyInfo) == 40U);
+
+// CBIND-110: the font, audio, media, curve and animation schemas.
+static_assert(CNA_CNB_AUDIO_FORMAT_MAXIMUM == UINT32_C(5));
+static_assert(CNA_CNB_SPRITE_FONT_CHUNK_HEADER == UINT32_C(0x544E4F46));
+static_assert(CNA_CNB_MAX_SPRITE_FONT_GLYPHS == UINT32_C(65536));
+static_assert(CNA_CNB_SOUND_EFFECT_HEADER_STRIDE == UINT32_C(28));
+static_assert(CNA_CNB_MAX_AUDIO_SAMPLE_RATE == UINT32_C(384000));
+static_assert(CNA_CNB_MEDIA_CHUNK_SONG_HEADER == UINT32_C(0x48474E53));
+static_assert(CNA_CNB_VIDEO_HEADER_STRIDE == UINT32_C(24));
+static_assert(CNA_CNB_CURVE_KEY_STRIDE == UINT32_C(20));
+static_assert(CNA_CNB_ANIMATION_KEY_STRIDE == UINT32_C(48));
+static_assert(sizeof(CNA_CnbSpriteFontInfo) == 32U);
+static_assert(alignof(CNA_CnbSpriteFontInfo) == 8U);
+static_assert(offsetof(CNA_CnbSpriteFontInfo, has_default_character) == 26U);
+static_assert(sizeof(CNA_CnbSoundEffectInfo) == 32U);
+static_assert(offsetof(CNA_CnbSoundEffectInfo, loop_length) == 28U);
+static_assert(sizeof(CNA_CnbVideoInfo) == 32U);
+static_assert(offsetof(CNA_CnbVideoInfo, soundtrack_type) == 24U);
+
+// CBIND-111: the loader registry and the two compilation front ends.
+static_assert(sizeof(CNA_CnbImageImportOptions) == 12U);
+static_assert(alignof(CNA_CnbImageImportOptions) == 4U);
+static_assert(offsetof(CNA_CnbImageImportOptions, has_color_key) == 11U);
+static_assert(CNA_CNB_IMAGE_IMPORT_OPTIONS_STRUCT_VERSION == UINT32_C(1));
+
+// CBIND-105: the reflective content readers.
+static_assert(CNA_CONTENT_FIELD_BOOLEAN == UINT32_C(0));
+static_assert(CNA_CONTENT_FIELD_TIMESPAN == UINT32_C(13));
+static_assert(CNA_CONTENT_FIELD_MAXIMUM == CNA_CONTENT_FIELD_TIMESPAN);
+static_assert(sizeof(CNA_ContentFieldKind) == sizeof(uint32_t));

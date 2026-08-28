@@ -15,6 +15,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <stdint.h>
 #include <string.h>
 #include <threads.h>
@@ -507,13 +509,13 @@ int main(void)
     create_info.callbacks = &callbacks;
     if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
         game == CNA_INVALID_HANDLE) {
-        return 81;
+        return CNA_TEST_FAIL(81);
     }
     /* One frame is what creates the graphics device and, through the update callback, the child
        resource the shutdown-order check needs. */
     if (cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS) {
         cna_game_destroy(game);
-        return 82;
+        return CNA_TEST_FAIL(82);
     }
 
     step = check_buffer_boundaries(game);
@@ -528,7 +530,7 @@ int main(void)
 
     if (cna_game_destroy(game) != CNA_RESULT_SUCCESS ||
         cna_game_destroy(game) != CNA_RESULT_INVALID_HANDLE) {
-        return 83;
+        return CNA_TEST_FAIL(83);
     }
 
     return check_registration_outliving_its_game();

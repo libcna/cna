@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <string.h>
 
 static CNA_StringView view(const char* const text)
@@ -332,26 +334,26 @@ int main(void)
     CNA_Handle game = CNA_INVALID_HANDLE;
     CNA_SignedInGamerHandle gamer = CNA_INVALID_HANDLE;
     CNA_Handle component = CNA_INVALID_HANDLE;
-    int status = 0;
+    int status = CNA_TEST_FAIL(0);
 
     if (!validate_settings()) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
     if (!validate_keyboard_input()) {
-        return 2;
+        return CNA_TEST_FAIL(2);
     }
     if (!validate_message_box()) {
-        return 3;
+        return CNA_TEST_FAIL(3);
     }
     if (cna_game_create(&game_info, &game) != CNA_RESULT_SUCCESS) {
-        return 4;
+        return CNA_TEST_FAIL(4);
     }
     if (cna_signed_in_gamer_create_ext(view("CnaCApiGuideGamer"), CNA_FALSE, CNA_FALSE,
                                        CNA_PLAYER_INDEX_ONE, &gamer) != CNA_RESULT_SUCCESS) {
-        status = 5;
+        status = CNA_TEST_FAIL(5);
     }
     if (status == 0 && !validate_screens(gamer)) {
-        status = 6;
+        status = CNA_TEST_FAIL(6);
     }
     /* Both renderers refuse a handle that is not the surface they need, which is the boundary this
        container can exercise: drawing itself needs a font and a backbuffer a headless tree has not
@@ -363,29 +365,29 @@ int main(void)
          cna_guide_render_pending_message_box_ext(CNA_INVALID_HANDLE, CNA_INVALID_HANDLE,
                                                   CNA_INVALID_HANDLE, CNA_INVALID_HANDLE) !=
              CNA_RESULT_INVALID_HANDLE)) {
-        status = 7;
+        status = CNA_TEST_FAIL(7);
     }
     if (status == 0 && !validate_dispatcher(game)) {
-        status = 8;
+        status = CNA_TEST_FAIL(8);
     }
     if (status == 0 &&
         (cna_gamer_services_component_create(game, &component) != CNA_RESULT_SUCCESS ||
          component == CNA_INVALID_HANDLE)) {
-        status = 9;
+        status = CNA_TEST_FAIL(9);
     }
     /* The handle is an ordinary component handle, so the component routes accept it. */
     if (status == 0) {
         CNA_Bool enabled = UINT8_C(9);
         if (cna_game_component_get_enabled(component, &enabled) != CNA_RESULT_SUCCESS ||
             cna_game_component_destroy(component) != CNA_RESULT_SUCCESS) {
-            status = 10;
+            status = CNA_TEST_FAIL(10);
         }
     }
     if (status == 0 && cna_signed_in_gamer_destroy(gamer) != CNA_RESULT_SUCCESS) {
-        status = 11;
+        status = CNA_TEST_FAIL(11);
     }
     if (status == 0 && cna_game_destroy(game) != CNA_RESULT_SUCCESS) {
-        status = 12;
+        status = CNA_TEST_FAIL(12);
     }
     return status;
 }

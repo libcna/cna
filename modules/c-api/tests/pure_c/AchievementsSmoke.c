@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <string.h>
 
 static CNA_StringView view(const char* const text)
@@ -271,23 +273,23 @@ static int validate_gamer_achievements(const CNA_SignedInGamerHandle gamer)
 int main(void)
 {
     CNA_SignedInGamerHandle gamer = CNA_INVALID_HANDLE;
-    int status = 0;
+    int status = CNA_TEST_FAIL(0);
 
     if (!validate_achievement()) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
     if (!validate_collection()) {
-        return 2;
+        return CNA_TEST_FAIL(2);
     }
     if (cna_signed_in_gamer_create_ext(view("CnaCApiAchiever"), CNA_FALSE, CNA_FALSE,
                                        CNA_PLAYER_INDEX_ONE, &gamer) != CNA_RESULT_SUCCESS) {
-        return 3;
+        return CNA_TEST_FAIL(3);
     }
     if (!validate_gamer_achievements(gamer)) {
-        status = 4;
+        status = CNA_TEST_FAIL(4);
     }
     if (status == 0 && cna_signed_in_gamer_destroy(gamer) != CNA_RESULT_SUCCESS) {
-        status = 5;
+        status = CNA_TEST_FAIL(5);
     }
     return status;
 }

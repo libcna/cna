@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <string.h>
 
 static CNA_StringView view(const char* const text)
@@ -280,19 +282,19 @@ int main(void)
     CNA_Handle sound_effect = CNA_INVALID_HANDLE;
 
     if (!validate_identities() || !validate_sample_math()) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
     if (cna_game_create(&game_info, &game) != CNA_RESULT_SUCCESS) {
-        return 2;
+        return CNA_TEST_FAIL(2);
     }
     if (!validate_static_settings(game)) {
-        return 3;
+        return CNA_TEST_FAIL(3);
     }
     if (!validate_creation(game, &sound_effect)) {
-        return 4;
+        return CNA_TEST_FAIL(4);
     }
     if (!validate_effect(sound_effect)) {
-        return 5;
+        return CNA_TEST_FAIL(5);
     }
     {
         /* Argument validation runs before handle validation everywhere in this ABI, so a stale
@@ -301,7 +303,7 @@ int main(void)
         if (cna_sound_effect_destroy(sound_effect) != CNA_RESULT_SUCCESS ||
             cna_sound_effect_get_is_disposed(sound_effect, &disposed) !=
                 CNA_RESULT_INVALID_HANDLE) {
-            return 6;
+            return CNA_TEST_FAIL(6);
         }
     }
     return cna_game_destroy(game) == CNA_RESULT_SUCCESS ? 0 : 7;

@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <stdint.h>
 #include <string.h>
 #include <threads.h>
@@ -354,13 +356,13 @@ static int validate_lifecycle_resource(void)
 int main(void)
 {
     if (!validate_standalone_resource()) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
     if (!validate_destroy_event_and_threads()) {
-        return 2;
+        return CNA_TEST_FAIL(2);
     }
     if (!validate_failures()) {
-        return 3;
+        return CNA_TEST_FAIL(3);
     }
     return validate_lifecycle_resource() ? 0 : 4;
 }

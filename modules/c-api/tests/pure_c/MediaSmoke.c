@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <string.h>
 #include <threads.h>
 
@@ -505,7 +507,7 @@ int main(void)
 {
     /* One code per validator, so a failure names the family it came from. */
     if (!validate_pure_visualization()) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
 
     MediaSmokeState smoke_state = {0};
@@ -525,7 +527,7 @@ int main(void)
     if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
         cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS ||
         smoke_state.validated != 1) {
-        return 2;
+        return CNA_TEST_FAIL(2);
     }
 
     /* Both the media statics and a song handle are thread-affine. */
@@ -534,7 +536,7 @@ int main(void)
     if (!create_song_fixture(&fixture) ||
         cna_song_create(game, view(fixture.first_path), view("Threaded"), &song) !=
             CNA_RESULT_SUCCESS) {
-        return 3;
+        return CNA_TEST_FAIL(3);
     }
     WrongThreadState wrong_thread = {game, song, CNA_RESULT_SUCCESS, CNA_RESULT_SUCCESS};
     thrd_t thread;
@@ -542,14 +544,14 @@ int main(void)
         thrd_join(thread, 0) != thrd_success ||
         wrong_thread.count_result != CNA_RESULT_THREAD ||
         wrong_thread.song_result != CNA_RESULT_THREAD) {
-        return 4;
+        return CNA_TEST_FAIL(4);
     }
     if (cna_song_destroy(song) != CNA_RESULT_SUCCESS || !destroy_song_fixture(&fixture)) {
-        return 5;
+        return CNA_TEST_FAIL(5);
     }
 
     if (cna_game_destroy(game) != CNA_RESULT_SUCCESS) {
-        return 6;
+        return CNA_TEST_FAIL(6);
     }
     return 0;
 }

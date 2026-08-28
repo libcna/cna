@@ -391,6 +391,106 @@ static int validate_default_and_raw(const CNA_Handle device)
     return 1;
 }
 
+/*
+ * CBIND-104: the options-carrying raw upload, which is what a caller-defined vertex type reaches.
+ *
+ * The existing raw routes take a stride but no streaming hint; these take both. Canonically they
+ * are `DynamicVertexBuffer`'s `SetData<TVertex>` templates over `VertexBuffer`'s protected
+ * `SetDataRawWithOptions`, so a **static** buffer has no such overload -- and this measures that
+ * refusal rather than only the success, because a route that quietly accepted a static buffer would
+ * be inventing a path the canonical API does not have.
+ */
+static int validate_raw_with_options(const CNA_Handle device)
+{
+    const CNA_VertexPositionColor expected[2] = {
+        {{1.0f, 2.0f, 3.0f}, {4U, 5U, 6U, 7U}},
+        {{8.0f, 9.0f, 10.0f}, {11U, 12U, 13U, 14U}}};
+    unsigned char bytes[32];
+    memcpy(bytes, expected, sizeof(bytes));
+
+    /* A static buffer has no SetDataOptions overload at all. */
+    CNA_VertexBufferHandle stat = CNA_INVALID_HANDLE;
+    if (!create_buffer(
+            device, CNA_VERTEX_TYPE_POSITION_COLOR, CNA_FALSE,
+            CNA_BUFFER_USAGE_NONE, 2, &stat)) {
+        return 0;
+    }
+    if (cna_vertex_buffer_set_data_raw_with_options(
+            stat, bytes, sizeof(bytes), 2U, 16U, CNA_SET_DATA_DISCARD) !=
+            CNA_RESULT_NOT_SUPPORTED ||
+        cna_vertex_buffer_set_data_raw_at_with_options(
+            stat, 0U, bytes, sizeof(bytes), 2U, 16U, CNA_SET_DATA_DISCARD) !=
+            CNA_RESULT_NOT_SUPPORTED ||
+        cna_vertex_buffer_destroy(stat) != CNA_RESULT_SUCCESS) {
+        (void)cna_vertex_buffer_destroy(stat);
+        return 0;
+    }
+
+    CNA_VertexBufferHandle dynamic = CNA_INVALID_HANDLE;
+    if (!create_buffer(
+            device, CNA_VERTEX_TYPE_POSITION_COLOR, CNA_TRUE,
+            CNA_BUFFER_USAGE_NONE, 2, &dynamic)) {
+        return 0;
+    }
+
+    CNA_VertexPositionColor actual[2] = {0};
+    CNA_VertexBufferTransfer transfer = make_transfer(
+        CNA_VERTEX_TYPE_POSITION_COLOR, CNA_SET_DATA_NONE, 0U, 2U);
+    uint64_t required = 0U;
+    if (cna_vertex_buffer_set_data_raw_with_options(
+            dynamic, bytes, sizeof(bytes), 2U, 16U, CNA_SET_DATA_DISCARD) !=
+            CNA_RESULT_SUCCESS ||
+        cna_vertex_buffer_get_data(dynamic, &transfer, actual, 2U, &required) !=
+            CNA_RESULT_SUCCESS ||
+        memcmp(actual, expected, sizeof(expected)) != 0) {
+        (void)cna_vertex_buffer_destroy(dynamic);
+        return 0;
+    }
+
+    /* The windowed form writes one vertex at a byte offset into the buffer, leaving the other. */
+    {
+        const CNA_VertexPositionColor replacement = {{20.0f, 21.0f, 22.0f}, {23U, 24U, 25U, 26U}};
+        unsigned char window[16];
+        memcpy(window, &replacement, sizeof(window));
+        memset(actual, 0, sizeof(actual));
+        if (cna_vertex_buffer_set_data_raw_at_with_options(
+                dynamic, 16U, window, sizeof(window), 1U, 16U, CNA_SET_DATA_NO_OVERWRITE) !=
+                CNA_RESULT_SUCCESS ||
+            cna_vertex_buffer_get_data(dynamic, &transfer, actual, 2U, &required) !=
+                CNA_RESULT_SUCCESS ||
+            memcmp(&actual[0], &expected[0], sizeof(expected[0])) != 0 ||
+            memcmp(&actual[1], &replacement, sizeof(replacement)) != 0) {
+            (void)cna_vertex_buffer_destroy(dynamic);
+            return 0;
+        }
+    }
+
+    /* An option outside the defined set, a null source, a zero stride and a misaligned offset are
+       each refused, and a zero-vertex upload is the same legal no-op it is elsewhere. */
+    if (cna_vertex_buffer_set_data_raw_with_options(
+            dynamic, bytes, sizeof(bytes), 2U, 16U, UINT32_C(99)) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_vertex_buffer_set_data_raw_with_options(
+            dynamic, 0, sizeof(bytes), 2U, 16U, CNA_SET_DATA_NONE) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_vertex_buffer_set_data_raw_with_options(
+            dynamic, bytes, sizeof(bytes), 2U, 0U, CNA_SET_DATA_NONE) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_vertex_buffer_set_data_raw_with_options(
+            dynamic, bytes, 15U, 1U, 16U, CNA_SET_DATA_NONE) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_vertex_buffer_set_data_raw_at_with_options(
+            dynamic, 8U, bytes, sizeof(bytes), 1U, 16U, CNA_SET_DATA_NONE) ==
+            CNA_RESULT_SUCCESS ||
+        cna_vertex_buffer_set_data_raw_at_with_options(
+            dynamic, 0U, 0, 0U, 0U, 16U, CNA_SET_DATA_NONE) != CNA_RESULT_SUCCESS) {
+        (void)cna_vertex_buffer_destroy(dynamic);
+        return 0;
+    }
+
+    return cna_vertex_buffer_destroy(dynamic) == CNA_RESULT_SUCCESS;
+}
+
 static void on_content_lost(
     const CNA_VertexBufferHandle buffer,
     void* const context)
@@ -606,6 +706,7 @@ static CNA_Result on_load(
     if (
         !validate_all_typed(device) ||
         !validate_default_and_raw(device) ||
+        !validate_raw_with_options(device) ||
         !validate_lifecycle_and_failures(device, state)) {
         return CNA_RESULT_INVALID_STATE;
     }

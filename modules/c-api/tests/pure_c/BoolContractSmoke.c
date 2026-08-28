@@ -161,6 +161,13 @@ int main(void)
                (unsigned)result);
         ++accepted;
     }
+    result = cna_cnb_model_set_flags(0, UINT8_C(9), UINT8_C(9));
+    if (result != CNA_RESULT_INVALID_ARGUMENT &&
+        result != CNA_RESULT_NOT_SUPPORTED) {
+        printf("accepted a non-canonical CNA_Bool (%u): cna_cnb_model_set_flags\n",
+               (unsigned)result);
+        ++accepted;
+    }
     result = cna_compass_set_test_backend_ext(0, UINT8_C(9), UINT8_C(9));
     if (result != CNA_RESULT_INVALID_ARGUMENT &&
         result != CNA_RESULT_NOT_SUPPORTED) {
@@ -855,6 +862,6 @@ int main(void)
         ++accepted;
     }
 
-    printf("%d of 113 routes accepted a CNA_Bool of 9\n", accepted);
+    printf("%d of 114 routes accepted a CNA_Bool of 9\n", accepted);
     return accepted == 0 ? 0 : 1;
 }

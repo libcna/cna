@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <math.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -447,13 +449,13 @@ static int validate_curve(void)
 int main(void)
 {
     if (!validate_construction_and_properties()) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
     if (!validate_value_operations()) {
-        return 2;
+        return CNA_TEST_FAIL(2);
     }
     if (!validate_collection()) {
-        return 3;
+        return CNA_TEST_FAIL(3);
     }
     return validate_curve() ? 0 : 4;
 }

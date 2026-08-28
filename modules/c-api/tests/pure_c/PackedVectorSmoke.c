@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <math.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -260,13 +262,13 @@ static int validate_failures_are_atomic(void)
 int main(void)
 {
     if (!validate_all_formats()) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
     if (!validate_half_helpers_and_special_values()) {
-        return 2;
+        return CNA_TEST_FAIL(2);
     }
     if (!validate_failures_are_atomic()) {
-        return 3;
+        return CNA_TEST_FAIL(3);
     }
     return 0;
 }

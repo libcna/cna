@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <string.h>
 #include <threads.h>
 
@@ -381,7 +383,7 @@ int main(void)
     if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
         cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS ||
         smoke_state.validated != 1) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
 
     WrongThreadState wrong_thread = {game, CNA_RESULT_SUCCESS};
@@ -389,11 +391,11 @@ int main(void)
     if (thrd_create(&thread, query_on_wrong_thread, &wrong_thread) != thrd_success ||
         thrd_join(thread, 0) != thrd_success ||
         wrong_thread.result != CNA_RESULT_THREAD) {
-        return 2;
+        return CNA_TEST_FAIL(2);
     }
 
     if (cna_game_destroy(game) != CNA_RESULT_SUCCESS) {
-        return 3;
+        return CNA_TEST_FAIL(3);
     }
     return 0;
 }

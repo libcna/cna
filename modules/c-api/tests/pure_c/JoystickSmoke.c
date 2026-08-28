@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <string.h>
 #include <threads.h>
 
@@ -511,10 +513,10 @@ int main(void)
 {
     /* One code per validator, so a failure names the family it came from. */
     if (!validate_pure_info()) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
     if (!validate_pure_capabilities()) {
-        return 2;
+        return CNA_TEST_FAIL(2);
     }
 
     JoystickSmokeState smoke_state = {0};
@@ -534,13 +536,13 @@ int main(void)
     if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
         cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS ||
         smoke_state.validated != 1) {
-        return 3;
+        return CNA_TEST_FAIL(3);
     }
 
     /* Both the facade and a captured snapshot are thread-affine. */
     CNA_JoystickStateHandle state = CNA_INVALID_HANDLE;
     if (cna_joysticks_capture_state(game, UINT32_C(0), &state) != CNA_RESULT_SUCCESS) {
-        return 4;
+        return CNA_TEST_FAIL(4);
     }
     WrongThreadState wrong_thread = {game, state, CNA_RESULT_SUCCESS, CNA_RESULT_SUCCESS};
     thrd_t thread;
@@ -548,14 +550,14 @@ int main(void)
         thrd_join(thread, 0) != thrd_success ||
         wrong_thread.count_result != CNA_RESULT_THREAD ||
         wrong_thread.state_result != CNA_RESULT_THREAD) {
-        return 5;
+        return CNA_TEST_FAIL(5);
     }
     if (cna_joystick_state_destroy(state) != CNA_RESULT_SUCCESS) {
-        return 6;
+        return CNA_TEST_FAIL(6);
     }
 
     if (cna_game_destroy(game) != CNA_RESULT_SUCCESS) {
-        return 7;
+        return CNA_TEST_FAIL(7);
     }
     return 0;
 }

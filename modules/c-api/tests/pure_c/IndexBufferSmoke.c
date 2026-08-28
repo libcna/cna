@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -490,7 +492,7 @@ int main(void)
         cna_graphics_device_get_renderer_info(state.borrowed_device, &stale) !=
             CNA_RESULT_INVALID_HANDLE ||
         cna_game_destroy(game) != CNA_RESULT_SUCCESS) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
     return 0;
 }

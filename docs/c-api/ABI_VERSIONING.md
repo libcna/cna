@@ -2,25 +2,62 @@
 
 ## ABI identity
 
-The ABI is `0.11.0`. It adds the `.cnb` document, its bounded cursor and the two writers from
-`plans/plan_binding.md` `CBIND-107`: eighty `cna_cnb_*` routes over four new handle kinds
-(`CNA_CnbDocumentHandle`, `CNA_CnbReaderHandle`, `CNA_CnbByteWriterHandle`,
-`CNA_CnbWriterHandle`) and three new versioned structures (`CNA_CnbChunkEntry`,
-`CNA_CnbExternalReference`, `CNA_CnbMetadata`).
+The ABI is `0.17.0`. It adds the **reflective content readers** from `plans/plan_binding.md`
+`CBIND-105`: ten routes over one new handle kind (`CNA_ReflectiveTypeReaderBuilderHandle`), the
+`CNA_ContentFieldKind` identity and two callback types. With it a game can declare a reflectively
+serialized `.xnb` type's field list from C and have CNA read it.
+
+`0.16.0` added the **graphics tail** from `plans/plan_binding.md` `CBIND-104`: five
+routes — the options-carrying raw vertex upload in both its whole-buffer and windowed forms, the
+`EffectMaterial` retained-texture pair, and the flag that says whether an occlusion query's pixel
+count is a tally or a boolean. No new structures and no new handle kinds.
+
+`0.15.0` added the `.cnb` **loader registry and the two compilation front ends** from
+`plans/plan_binding.md` `CBIND-111`: twenty-eight `cna_cnb_*` routes over two new handle kinds
+(`CNA_CnbLoaderHandle`, `CNA_CnjToCnbResultHandle`), the `CNA_CnbLoaderCallback` extension point by
+which a game teaches CNA about an asset type CNA does not know, and one versioned structure. **With
+it a C application is a content compiler**: image, DDS, WAV and `.cnj` in, `.cnb` out.
+
+`0.14.0` added the `.cnb` **sprite-font, sound-effect, song, video, curve and
+animation-clip** schemas from `plans/plan_binding.md` `CBIND-110`: forty-one `cna_cnb_*` routes over
+three new handle kinds (`CNA_CnbSpriteFontDataHandle`, `CNA_CnbSoundEffectDataHandle`,
+`CNA_CnbAnimationClipHandle`), the `CNA_CnbAudioFormat` identity with its six frozen wire values,
+three versioned structures, and the four schemas' chunk identifiers and strides. Three of the six
+schemas are bound to C values other families already publish -- `CNA_SpriteFontGlyph`,
+`CNA_CurveHandle` and `CNA_AnimationClipEXTDescriptor` -- rather than to parallel types of their own.
+
+`0.13.0` added the `.cnb` **model** schema from `CBIND-109`:
+seventy-one `cna_cnb_*` routes over two new handle kinds (`CNA_CnbModelDataHandle` and
+`CNA_CnbModelFromCnjHandle`), the `CNA_CnbEffectKind` identity with its six frozen wire values, four
+more selector identities (`CNA_CnbMaterialTextureSlot`, `CNA_CnbMorphDeltaStream`,
+`CNA_CnbMorphKeyStream`, `CNA_CnbSkeletonMatrixSet`), three unversioned value structures
+(`CNA_CnbTextureTransform`, `CNA_CnbSamplerState`, `CNA_CnbModelLight`) and eight versioned ones.
+
+`0.12.0` added the `.cnb` texture pixel formats and the `Texture2D`, `TextureCube`
+and `Texture3D` schemas from `CBIND-108`: twenty-eight `cna_cnb_*` routes,
+the `CNA_CnbTextureFormat` identity with its 27 frozen wire values, the `CNA_CnbTextureDataHandle`
+and the versioned `CNA_CnbTextureInfo`.
+
+`0.11.0` added the `.cnb` document, its bounded cursor and the two writers from `CBIND-107`: eighty
+routes over four new handle kinds (`CNA_CnbDocumentHandle`, `CNA_CnbReaderHandle`,
+`CNA_CnbByteWriterHandle`, `CNA_CnbWriterHandle`) and three new versioned structures
+(`CNA_CnbChunkEntry`, `CNA_CnbExternalReference`, `CNA_CnbMetadata`).
 
 `0.10.0` added the container itself, from `CBIND-106`: twenty-four routes over its identities,
 checksums, whole-file arithmetic, read limits and chunk compression, the `CNA_CnbChunkId` and
 `CNA_CnbCompression` identities, the versioned `CNA_CnbReadLimits` structure, and the format's
 byte-level constants.
 
-**Both generations are purely additive** -- no existing route, constant, structure field or error
+**All eight generations are purely additive** -- no existing route, constant, structure field or error
 rule changed, and the four evolution paths below are the ones taken. The minor moves anyway,
 because that is what this project has done for every additive generation since `0.4.0`: a consumer
-needs a number it can require, and `find_package(CNA 0.11 CONFIG)` is what asks for these routes.
+needs a number it can require, and `find_package(CNA 0.17 CONFIG)` is what asks for these routes.
 
-A C application can now build and parse a `.cnb` container and read its chunks. It still cannot
-load a `.cnb` **asset**: the schemas and the loader registry are not bound, and
-`docs/c-api/CNB.md` says exactly where that line falls.
+A C application can now compile source files into `.cnb`, build and parse a container, read its
+chunks, encode and decode every asset schema the format defines, and register a loader for an asset
+type of its own. The one thing still missing is the `ContentManager` hook that reaches the registry
+during an ordinary `Load` -- a C-registered loader is invoked directly rather than through a
+manager; `docs/c-api/CNB.md` says exactly where that line falls.
 
 `0.9.0` added the owned-`GraphicsDevice` routes
 (`cna_graphics_device_create`/`_destroy`), the render-target ContentLost subscription
@@ -226,7 +263,7 @@ Recording the baseline needs the library:
 python3 tools/c-api/generate_abi_baseline.py --write --library <build>/modules/c-api/libcna_c_api.so
 ```
 
-All four build configurations export the same 3,850 symbols. That is itself part of the contract:
+All four build configurations export the same 4,033 symbols. That is itself part of the contract:
 the ABI **surface** does not vary with the renderer, with `CNA_DEVICES`, or with `CNA_CNAEXT` —
 only the answers do. A route whose backend or layer is absent exists and refuses, rather than
 disappearing from the library. `CNA_CNAEXT` is the newest member of that list and the one with the

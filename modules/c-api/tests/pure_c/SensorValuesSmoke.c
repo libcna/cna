@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <string.h>
 
 /* Every route in this header is a pure value operation, so the whole suite runs with no game and
@@ -385,19 +387,19 @@ int main(void)
 {
     /* One code per validator, so a failure names the reading it came from. */
     if (!validate_accelerometer_reading()) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
     if (!validate_gyroscope_reading()) {
-        return 2;
+        return CNA_TEST_FAIL(2);
     }
     if (!validate_attitude_reading()) {
-        return 3;
+        return CNA_TEST_FAIL(3);
     }
     if (!validate_compass_reading()) {
-        return 4;
+        return CNA_TEST_FAIL(4);
     }
     if (!validate_motion_reading()) {
-        return 5;
+        return CNA_TEST_FAIL(5);
     }
     return 0;
 }

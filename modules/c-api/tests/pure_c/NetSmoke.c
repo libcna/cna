@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <stdint.h>
 #include <string.h>
 
@@ -1802,31 +1804,31 @@ static int validate_join_error(void)
 int main(void)
 {
     if (!validate_identities()) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
     if (!validate_quality_of_service()) {
-        return 2;
+        return CNA_TEST_FAIL(2);
     }
     if (!validate_properties()) {
-        return 3;
+        return CNA_TEST_FAIL(3);
     }
     if (!validate_packets()) {
-        return 4;
+        return CNA_TEST_FAIL(4);
     }
     if (!validate_color_asymmetry()) {
-        return 5;
+        return CNA_TEST_FAIL(5);
     }
     if (!validate_join_error()) {
-        return 6;
+        return CNA_TEST_FAIL(6);
     }
     if (!validate_gamers()) {
-        return 7;
+        return CNA_TEST_FAIL(7);
     }
     if (!validate_available_sessions()) {
-        return 8;
+        return CNA_TEST_FAIL(8);
     }
     if (!validate_sessions()) {
-        return 9;
+        return CNA_TEST_FAIL(9);
     }
     return 0;
 }

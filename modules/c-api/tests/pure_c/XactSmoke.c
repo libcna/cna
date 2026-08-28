@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <stdio.h>
 #include <string.h>
 
@@ -541,16 +543,16 @@ int main(void)
     uint64_t size = UINT64_C(0);
     char text[64];
     int disposals = 0;
-    int status = 0;
+    int status = CNA_TEST_FAIL(0);
 
     if (CNA_AUDIO_ENGINE_CONTENT_VERSION != INT32_C(46)) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
     if (!write_settings() || !write_wave_bank() || !write_sound_bank()) {
-        status = 2;
+        status = CNA_TEST_FAIL(2);
     }
     if (status == 0 && cna_game_create(&game_info, &game) != CNA_RESULT_SUCCESS) {
-        status = 3;
+        status = CNA_TEST_FAIL(3);
     }
 
     /* A settings file that is not there is an I/O failure, not an internal one. */
@@ -559,12 +561,12 @@ int main(void)
              CNA_RESULT_IO ||
          rejected != CNA_INVALID_HANDLE ||
          cna_audio_engine_create(game, view(SettingsPath), 0) != CNA_RESULT_INVALID_ARGUMENT)) {
-        status = 4;
+        status = CNA_TEST_FAIL(4);
     }
     if (status == 0 &&
         (cna_audio_engine_create(game, view(SettingsPath), &engine) != CNA_RESULT_SUCCESS ||
          engine == CNA_INVALID_HANDLE)) {
-        status = 5;
+        status = CNA_TEST_FAIL(5);
     }
     /* The look-ahead and the renderer id are accepted and ignored: there is one backend. */
     if (status == 0 &&
@@ -573,7 +575,7 @@ int main(void)
              CNA_RESULT_SUCCESS ||
          second_engine == CNA_INVALID_HANDLE ||
          cna_audio_engine_destroy(second_engine) != CNA_RESULT_SUCCESS)) {
-        status = 6;
+        status = CNA_TEST_FAIL(6);
     }
     if (status == 0 &&
         (cna_audio_engine_get_is_disposed(engine, &flag) != CNA_RESULT_SUCCESS ||
@@ -583,16 +585,16 @@ int main(void)
          !text_equals(cna_audio_engine_copy_type_name(engine, text, sizeof(text), &size), size,
                       text, "Microsoft.Xna.Framework.Audio.AudioEngine") ||
          cna_audio_engine_update(engine) != CNA_RESULT_SUCCESS)) {
-        status = 7;
+        status = CNA_TEST_FAIL(7);
     }
     if (status == 0 && !validate_renderers(engine)) {
-        status = 8;
+        status = CNA_TEST_FAIL(8);
     }
     if (status == 0 && !validate_global_variables(engine)) {
-        status = 9;
+        status = CNA_TEST_FAIL(9);
     }
     if (status == 0 && !validate_categories(engine)) {
-        status = 10;
+        status = CNA_TEST_FAIL(10);
     }
 
     if (status == 0 &&
@@ -601,7 +603,7 @@ int main(void)
          rejected != CNA_INVALID_HANDLE ||
          cna_wave_bank_create(engine, view(WaveBankPath), &wave_bank) != CNA_RESULT_SUCCESS ||
          wave_bank == CNA_INVALID_HANDLE)) {
-        status = 11;
+        status = CNA_TEST_FAIL(11);
     }
     /* CBIND-065: the streaming constructor, which nothing named. The fixture bank is a whole
        in-memory bank rather than a streaming one, so what is asserted is the same contract its
@@ -629,14 +631,14 @@ int main(void)
              cna_wave_bank_destroy(absent) != CNA_RESULT_SUCCESS ||
              cna_wave_bank_create_streaming(engine, view(WaveBankPath), 0, 64U, 0) !=
                  CNA_RESULT_INVALID_ARGUMENT)) {
-            status = 30;
+            status = CNA_TEST_FAIL(30);
         }
         if (status == 0 && streamed == CNA_RESULT_SUCCESS) {
             if (cna_wave_bank_destroy(streaming) != CNA_RESULT_SUCCESS) {
-                status = 31;
+                status = CNA_TEST_FAIL(31);
             }
         } else if (status == 0 && streaming != CNA_INVALID_HANDLE) {
-            status = 32;
+            status = CNA_TEST_FAIL(32);
         }
     }
     if (status == 0 &&
@@ -649,7 +651,7 @@ int main(void)
          size > sizeof(text) ||
          !text_equals(cna_wave_bank_copy_type_name(wave_bank, text, sizeof(text), &size), size,
                       text, "Microsoft.Xna.Framework.Audio.WaveBank"))) {
-        status = 12;
+        status = CNA_TEST_FAIL(12);
     }
 
     if (status == 0 &&
@@ -658,7 +660,7 @@ int main(void)
          rejected != CNA_INVALID_HANDLE ||
          cna_sound_bank_create(engine, view(SoundBankPath), &sound_bank) != CNA_RESULT_SUCCESS ||
          sound_bank == CNA_INVALID_HANDLE)) {
-        status = 13;
+        status = CNA_TEST_FAIL(13);
     }
     if (status == 0 &&
         (cna_sound_bank_get_is_disposed(sound_bank, &flag) != CNA_RESULT_SUCCESS ||
@@ -668,7 +670,7 @@ int main(void)
          size > sizeof(text) ||
          !text_equals(cna_sound_bank_copy_type_name(sound_bank, text, sizeof(text), &size), size,
                       text, "Microsoft.Xna.Framework.Audio.SoundBank"))) {
-        status = 14;
+        status = CNA_TEST_FAIL(14);
     }
 
     /* A fire-and-forget cue never gets a handle; the engine's own update is what retires it. */
@@ -677,7 +679,7 @@ int main(void)
          cna_sound_bank_play_cue(sound_bank, view("Nope")) != CNA_RESULT_INVALID_STATE ||
          cna_sound_bank_play_cue(sound_bank, view("")) != CNA_RESULT_INVALID_ARGUMENT ||
          cna_audio_engine_update(engine) != CNA_RESULT_SUCCESS)) {
-        status = 15;
+        status = CNA_TEST_FAIL(15);
     }
     if (status == 0 &&
         (cna_audio_emitter_init(&emitter) != CNA_RESULT_SUCCESS ||
@@ -686,15 +688,15 @@ int main(void)
              CNA_RESULT_SUCCESS ||
          cna_sound_bank_play_cue_3d(sound_bank, view(CueName), 0, &emitter) !=
              CNA_RESULT_INVALID_ARGUMENT)) {
-        status = 16;
+        status = CNA_TEST_FAIL(16);
     }
     if (status == 0 && !validate_cue(sound_bank)) {
-        status = 17;
+        status = CNA_TEST_FAIL(17);
     }
 
     /* A parent refuses to be released while a C child of it is still alive. */
     if (status == 0 && cna_audio_engine_destroy(engine) != CNA_RESULT_INVALID_STATE) {
-        status = 18;
+        status = CNA_TEST_FAIL(18);
     }
 
     if (status == 0 &&
@@ -703,14 +705,14 @@ int main(void)
          cna_sound_bank_subscribe_disposing_ext(sound_bank, 0, &disposals, &rejected) !=
              CNA_RESULT_INVALID_ARGUMENT ||
          rejected != CNA_INVALID_HANDLE)) {
-        status = 19;
+        status = CNA_TEST_FAIL(19);
     }
     if (status == 0 &&
         (cna_sound_bank_destroy(sound_bank) != CNA_RESULT_SUCCESS || disposals != 1)) {
-        status = 20;
+        status = CNA_TEST_FAIL(20);
     }
     if (status == 0 && cna_audio_unsubscribe_ext(registration) != CNA_RESULT_SUCCESS) {
-        status = 21;
+        status = CNA_TEST_FAIL(21);
     }
     /* CBIND-065: the other three disposal subscriptions in this family. Only the sound bank's was
        ever driven, while the coverage matrix recorded all four against this file -- the wave
@@ -730,16 +732,16 @@ int main(void)
              cna_cue_subscribe_disposing_ext(
                  CNA_INVALID_HANDLE, &on_disposing, &wave_disposals, &refused) !=
                  CNA_RESULT_INVALID_HANDLE)) {
-            status = 25;
+            status = CNA_TEST_FAIL(25);
         }
         if (status == 0 && cna_wave_bank_destroy(wave_bank) != CNA_RESULT_SUCCESS) {
-            status = 22;
+            status = CNA_TEST_FAIL(22);
         }
         if (status == 0 && wave_disposals != 1) {
-            status = 26;
+            status = CNA_TEST_FAIL(26);
         }
         if (status == 0 && cna_audio_unsubscribe_ext(wave_registration) != CNA_RESULT_SUCCESS) {
-            status = 27;
+            status = CNA_TEST_FAIL(27);
         }
     }
     {
@@ -749,20 +751,20 @@ int main(void)
             cna_audio_engine_subscribe_disposing_ext(
                 engine, &on_disposing, &engine_disposals, &engine_registration) !=
                 CNA_RESULT_SUCCESS) {
-            status = 28;
+            status = CNA_TEST_FAIL(28);
         }
         if (status == 0 && cna_audio_unsubscribe_ext(engine_registration) !=
             CNA_RESULT_SUCCESS) {
-            status = 29;
+            status = CNA_TEST_FAIL(29);
         }
     }
     if (status == 0 &&
         (cna_audio_engine_destroy(engine) != CNA_RESULT_SUCCESS ||
          cna_audio_engine_get_is_disposed(engine, &flag) != CNA_RESULT_INVALID_HANDLE)) {
-        status = 23;
+        status = CNA_TEST_FAIL(23);
     }
     if (status == 0 && cna_game_destroy(game) != CNA_RESULT_SUCCESS) {
-        status = 24;
+        status = CNA_TEST_FAIL(24);
     }
 
     (void)remove(SettingsPath);

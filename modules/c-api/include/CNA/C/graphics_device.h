@@ -1338,6 +1338,23 @@ CNA_C_API CNA_Result cna_occlusion_query_get_pixel_count(
     int32_t* out_pixel_count);
 
 /**
+ * @brief Gets whether the pixel count is a real per-fragment tally rather than a flag.
+ *
+ * @param occlusion_query Owned occlusion-query handle.
+ * @param out_is_precise Receives whether the count is a genuine tally.
+ * @return `CNA_RESULT_SUCCESS`, or a documented argument/handle/thread failure.
+ *
+ * True where the backend counts fragments the way XNA's own Direct3D 9 query does; false where it
+ * can only answer "any" or "none" -- OpenGL ES 3.0 and WebGL 2, whose core query target is boolean.
+ * **A coverage ratio computed from a boolean count is `1/area`, not a fraction**, so a game that
+ * needs one has to be able to ask which it is holding rather than dividing and hoping. Ask this
+ * before dividing @ref cna_occlusion_query_get_pixel_count by an area.
+ */
+CNA_C_API CNA_Result cna_occlusion_query_get_is_pixel_count_precise_ext(
+    CNA_OcclusionQueryHandle occlusion_query,
+    CNA_Bool* out_is_precise);
+
+/**
  * @brief Gets whether the query still owns a live native query object.
  *
  * @param occlusion_query Owned occlusion-query handle.

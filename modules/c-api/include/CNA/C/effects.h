@@ -1326,6 +1326,47 @@ CNA_C_API CNA_Result cna_effect_material_create(
     CNA_EffectHandle* out_effect);
 
 /**
+ * @brief Takes ownership of a texture an EffectMaterial's parameters point at.
+ *
+ * An `EffectParameter` stores a raw texture pointer, so something has to keep the object alive for
+ * as long as the material can be drawn. A content reader loads a material's textures into values it
+ * then discards, which would leave every such parameter pointing at freed memory; the material owns
+ * them instead.
+ *
+ * @param effect Owned effect handle that must hold an EffectMaterial.
+ * @param texture_type Which `CNA_EFFECT_TEXTURE_*` family @p texture belongs to.
+ * @param texture Owned texture handle to keep alive, or `CNA_INVALID_HANDLE` to do nothing --
+ *        the canonical method ignores a null pointer, and this ignores the null handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when @p effect is not an
+ *         EffectMaterial or @p texture_type is not a texture family, or a documented
+ *         handle/thread failure.
+ *
+ * **Retaining does not gate the texture's own destroy, and that is the point rather than an
+ * oversight.** `cna_effect_parameter_set_value_texture` does gate one, because a parameter holds a raw
+ * pointer nothing owns; retaining is the mechanism that removes that hazard, so a caller may
+ * release its handle immediately afterwards and the material keeps the texture alive on its own.
+ */
+CNA_C_API CNA_Result cna_effect_material_retain_parameter_texture_ext(
+    CNA_EffectHandle effect,
+    CNA_EffectTextureType texture_type,
+    CNA_Handle texture);
+
+/**
+ * @brief Reports how many textures an EffectMaterial is keeping alive for its parameters.
+ *
+ * @param effect Owned effect handle that must hold an EffectMaterial.
+ * @param out_count Receives the number of retained textures.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when @p effect is not an
+ *         EffectMaterial, or a documented handle/thread failure.
+ *
+ * Exists so a caller can assert the ownership itself rather than infer it from a read through a
+ * pointer that may merely happen to still be readable.
+ */
+CNA_C_API CNA_Result cna_effect_material_get_retained_parameter_texture_count_ext(
+    CNA_EffectHandle effect,
+    uint64_t* out_count);
+
+/**
  * @brief Creates the stock SpriteEffect.
  * @param graphics_device Borrowed graphics-device handle from an active game callback.
  * @param out_effect Receives the owned effect handle.

@@ -830,6 +830,69 @@ if(CNA_BUILD_TESTS)
     cna_c_api_enable_strict_warnings(cna_c_api_cnb_document_smoke)
     add_test(NAME CApi_CnbDocumentSmoke COMMAND cna_c_api_cnb_document_smoke)
 
+    # CBIND-108: the texture pixel formats and the three texture schemas. Separate again from the
+    # container and document suites, because what it proves is different: a wire-format numbering
+    # that would survive being wrong in both directions, and a block-size rule no round trip sees.
+    add_executable(cna_c_api_cnb_texture_smoke
+        tests/pure_c/CnbTextureSmoke.c
+    )
+    set_target_properties(cna_c_api_cnb_texture_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_cnb_texture_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_cnb_texture_smoke)
+    add_test(NAME CApi_CnbTextureSmoke COMMAND cna_c_api_cnb_texture_smoke)
+
+    # CBIND-109: the model schema. Its own suite because the model is the one asset whose C shape
+    # is a decision -- one handle for a graph reached by index -- and because its material carries
+    # two different texture orderings that a round trip alone would let stay confused.
+    add_executable(cna_c_api_cnb_model_smoke
+        tests/pure_c/CnbModelSmoke.c
+    )
+    set_target_properties(cna_c_api_cnb_model_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_cnb_model_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_cnb_model_smoke)
+    add_test(NAME CApi_CnbModelSmoke COMMAND cna_c_api_cnb_model_smoke)
+
+    # CBIND-110: the five remaining asset schemas. One suite because three of them are bound to C
+    # values other families already publish -- CNA_SpriteFontGlyph, CNA_CurveHandle and
+    # CNA_AnimationClipEXTDescriptor -- so each round trip ends by reading the decoded asset back
+    # through the very routes the rest of the ABI uses, which a parallel set of types would not
+    # prove.
+    add_executable(cna_c_api_cnb_schema_smoke
+        tests/pure_c/CnbSchemaSmoke.c
+    )
+    set_target_properties(cna_c_api_cnb_schema_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_cnb_schema_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_cnb_schema_smoke)
+    add_test(NAME CApi_CnbSchemaSmoke COMMAND cna_c_api_cnb_schema_smoke)
+
+    # CBIND-111: the loader registry and the two compilation front ends -- the one part of the CNB
+    # surface a C application uses as a tool rather than as a runtime. Its own suite because it
+    # needs real source files and a content manager, and because the registry is driven end to end
+    # rather than only queried.
+    add_executable(cna_c_api_cnb_tooling_smoke
+        tests/pure_c/CnbToolingSmoke.c
+    )
+    set_target_properties(cna_c_api_cnb_tooling_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_cnb_tooling_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_cnb_tooling_smoke)
+    add_test(NAME CApi_CnbToolingSmoke COMMAND cna_c_api_cnb_tooling_smoke)
+
     add_executable(cna_c_api_packed_vector_smoke
         tests/pure_c/PackedVectorSmoke.c
     )

@@ -8420,3 +8420,128 @@ CNA_Result cna_shader_effect_set_uniform_mat4_array(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+/* --- CBIND-104: the EffectMaterial retained-texture contract ----------------------------------- */
+
+namespace {
+
+/*
+ * An EffectMaterial has no handle of its own -- it is an Effect handle whose object happens to be
+ * one, the same way `cna_effect_material_create` hands one back. So these two routes have to say
+ * which they got, rather than trusting the caller's word for it.
+ */
+[[nodiscard]] CNA_Result GetEffectMaterial(
+    const CNA_EffectHandle handle,
+    std::shared_ptr<EffectResource>* const outEffect,
+    EffectMaterial** const outMaterial)
+{
+    if (const CNA_Result result = GetEffect(handle, outEffect);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    auto* const material = dynamic_cast<EffectMaterial*>((*outEffect)->value.get());
+    if (material == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The Effect handle does not hold an EffectMaterial.");
+    }
+    *outMaterial = material;
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+CNA_Result cna_effect_material_retain_parameter_texture_ext(
+    const CNA_EffectHandle effectHandle,
+    const CNA_EffectTextureType textureType,
+    const CNA_Handle textureHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<EffectResource> effect;
+        EffectMaterial* material = nullptr;
+        if (const CNA_Result result = GetEffectMaterial(effectHandle, &effect, &material);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (textureType > CNA_EFFECT_TEXTURE_CUBE) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The texture type is not a CNA_EFFECT_TEXTURE_* family.");
+        }
+        // The canonical method ignores a null pointer; the null handle is its C spelling, and
+        // treating it as an error would make the two disagree about the same input.
+        if (textureHandle == CNA_INVALID_HANDLE) {
+            return CNA_RESULT_SUCCESS;
+        }
+
+        std::shared_ptr<Texture> texture;
+        switch (textureType) {
+        case CNA_EFFECT_TEXTURE_BASE: {
+            TextureResourceView view;
+            if (const CNA_Result result = GetOwnedTexture(textureHandle, &view);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            texture = std::move(view.value);
+            break;
+        }
+        case CNA_EFFECT_TEXTURE_2D: {
+            std::shared_ptr<CNA::C::Detail::Texture2DResource> resource;
+            if (const CNA_Result result = GetOwnedTexture2D(textureHandle, &resource);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            texture = std::static_pointer_cast<Texture>(resource->value);
+            break;
+        }
+        case CNA_EFFECT_TEXTURE_3D: {
+            std::shared_ptr<CNA::C::Detail::Texture3DResource> resource;
+            if (const CNA_Result result = GetOwnedTexture3D(textureHandle, &resource);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            texture = std::static_pointer_cast<Texture>(resource->value);
+            break;
+        }
+        default: {
+            TextureCubeResourceView view;
+            if (const CNA_Result result = GetOwnedTextureCube(textureHandle, &view);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            texture = std::static_pointer_cast<Texture>(view.value);
+            break;
+        }
+        }
+
+        // Only the canonical texture is handed over, not the C resource wrapper: retaining is what
+        // makes the material own the object outright, so the caller's handle may be released
+        // immediately afterwards without the parameter dangling.
+        material->RetainParameterTextureEXT(std::move(texture));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_material_get_retained_parameter_texture_count_ext(
+    const CNA_EffectHandle effectHandle,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<EffectResource> effect;
+        EffectMaterial* material = nullptr;
+        if (const CNA_Result result = GetEffectMaterial(effectHandle, &effect, &material);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (outCount == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The retained-texture count output is null.");
+        }
+        *outCount = static_cast<uint64_t>(material->GetRetainedParameterTextureCountEXT());
+        return CNA_RESULT_SUCCESS;
+    });
+}

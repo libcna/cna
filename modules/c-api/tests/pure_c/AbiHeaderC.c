@@ -8,7 +8,7 @@
 
 #include <stddef.h>
 
-_Static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 11, 0),
+_Static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 17, 0),
                "CNA C ABI version encoding must remain stable");
 _Static_assert(sizeof(CNA_Result) == sizeof(uint32_t),
                "CNA_Result must have a fixed-width representation");
@@ -1700,3 +1700,318 @@ _Static_assert(CNA_CNB_CHUNK_ENTRY_STRUCT_VERSION == UINT32_C(1) &&
                    CNA_CNB_EXTERNAL_REFERENCE_STRUCT_VERSION == UINT32_C(1) &&
                    CNA_CNB_METADATA_STRUCT_VERSION == UINT32_C(1),
                "The CNB document's published structures are all at version 1");
+
+/* CBIND-108: the texture format identifiers are wire format -- a `.cnb` written by any build must
+   mean the same thing to every other -- so the whole numbering is frozen here rather than only its
+   ends. The three chunk identifiers are frozen with it. */
+_Static_assert(sizeof(CNA_CnbTextureFormat) == sizeof(uint32_t) &&
+                   CNA_CNB_TEXTURE_FORMAT_UNKNOWN == UINT32_C(0) &&
+                   CNA_CNB_TEXTURE_FORMAT_RGBA8 == UINT32_C(1) &&
+                   CNA_CNB_TEXTURE_FORMAT_BGRA8 == UINT32_C(2) &&
+                   CNA_CNB_TEXTURE_FORMAT_RGBA8_SRGB == UINT32_C(3) &&
+                   CNA_CNB_TEXTURE_FORMAT_BGR565 == UINT32_C(4) &&
+                   CNA_CNB_TEXTURE_FORMAT_BGRA5551 == UINT32_C(5) &&
+                   CNA_CNB_TEXTURE_FORMAT_BGRA4444 == UINT32_C(6) &&
+                   CNA_CNB_TEXTURE_FORMAT_ALPHA8 == UINT32_C(7) &&
+                   CNA_CNB_TEXTURE_FORMAT_R8 == UINT32_C(8) &&
+                   CNA_CNB_TEXTURE_FORMAT_R16 == UINT32_C(9) &&
+                   CNA_CNB_TEXTURE_FORMAT_RG16 == UINT32_C(10) &&
+                   CNA_CNB_TEXTURE_FORMAT_RGBA16 == UINT32_C(11) &&
+                   CNA_CNB_TEXTURE_FORMAT_RG8_SNORM == UINT32_C(12) &&
+                   CNA_CNB_TEXTURE_FORMAT_RGBA8_SNORM == UINT32_C(13) &&
+                   CNA_CNB_TEXTURE_FORMAT_RGB10_A2 == UINT32_C(14) &&
+                   CNA_CNB_TEXTURE_FORMAT_R32_FLOAT == UINT32_C(15) &&
+                   CNA_CNB_TEXTURE_FORMAT_RG32_FLOAT == UINT32_C(16) &&
+                   CNA_CNB_TEXTURE_FORMAT_RGBA32_FLOAT == UINT32_C(17) &&
+                   CNA_CNB_TEXTURE_FORMAT_R16_FLOAT == UINT32_C(18) &&
+                   CNA_CNB_TEXTURE_FORMAT_RG16_FLOAT == UINT32_C(19) &&
+                   CNA_CNB_TEXTURE_FORMAT_RGBA16_FLOAT == UINT32_C(20) &&
+                   CNA_CNB_TEXTURE_FORMAT_HDR_BLENDABLE == UINT32_C(21) &&
+                   CNA_CNB_TEXTURE_FORMAT_BC1 == UINT32_C(22) &&
+                   CNA_CNB_TEXTURE_FORMAT_BC2 == UINT32_C(23) &&
+                   CNA_CNB_TEXTURE_FORMAT_BC3 == UINT32_C(24) &&
+                   CNA_CNB_TEXTURE_FORMAT_BC3_SRGB == UINT32_C(25) &&
+                   CNA_CNB_TEXTURE_FORMAT_BC7 == UINT32_C(26) &&
+                   CNA_CNB_TEXTURE_FORMAT_BC7_SRGB == UINT32_C(27) &&
+                   CNA_CNB_TEXTURE_FORMAT_MAXIMUM == UINT32_C(27),
+               "CNB texture format identifiers are wire format and must remain stable");
+_Static_assert(CNA_CNB_TEXTURE_CHUNK_HEADER == UINT32_C(0x48584554) &&
+                   CNA_CNB_TEXTURE_CHUNK_REPRESENTATIONS == UINT32_C(0x52584554) &&
+                   CNA_CNB_TEXTURE_CHUNK_PAYLOAD == UINT32_C(0x44584554) &&
+                   CNA_CNB_TEXTURE_SCHEMA_VERSION == UINT32_C(1) &&
+                   CNA_CNB_TEXTURE_HEADER_STRIDE == UINT32_C(24) &&
+                   CNA_CNB_TEXTURE_REPRESENTATION_STRIDE == UINT32_C(24) &&
+                   CNA_CNB_TEXTURE_CUBE_FACE_COUNT == UINT32_C(6) &&
+                   CNA_CNB_MAX_TEXTURE_MIP_LEVELS == UINT32_C(16) &&
+                   CNA_CNB_MAX_TEXTURE_REPRESENTATIONS == UINT32_C(8),
+               "CNB texture schema constants are wire format and must remain stable");
+_Static_assert(sizeof(CNA_CnbTextureInfo) == 32U &&
+                   _Alignof(CNA_CnbTextureInfo) == 4U &&
+                   offsetof(CNA_CnbTextureInfo, width) == 8U &&
+                   offsetof(CNA_CnbTextureInfo, height) == 12U &&
+                   offsetof(CNA_CnbTextureInfo, depth) == 16U &&
+                   offsetof(CNA_CnbTextureInfo, face_count) == 20U &&
+                   offsetof(CNA_CnbTextureInfo, mip_count) == 24U &&
+                   offsetof(CNA_CnbTextureInfo, representation_count) == 28U &&
+                   CNA_CNB_TEXTURE_INFO_STRUCT_VERSION == UINT32_C(1),
+               "CNA_CnbTextureInfo layout must remain stable");
+
+/* CBIND-109: the model schema. */
+_Static_assert(CNA_CNB_EFFECT_KIND_BASIC == UINT32_C(0) &&
+                   CNA_CNB_EFFECT_KIND_SKINNED == UINT32_C(1) &&
+                   CNA_CNB_EFFECT_KIND_DUAL_TEXTURE == UINT32_C(2) &&
+                   CNA_CNB_EFFECT_KIND_PBR == UINT32_C(3) &&
+                   CNA_CNB_EFFECT_KIND_SKINNED_PBR == UINT32_C(4) &&
+                   CNA_CNB_EFFECT_KIND_EXTERNAL == UINT32_C(5) &&
+                   CNA_CNB_EFFECT_KIND_MAXIMUM == UINT32_C(5),
+               "CNB effect kinds are wire format and must remain stable");
+_Static_assert(CNA_CNB_MATERIAL_TEXTURE_BASE_COLOR == UINT32_C(0) &&
+                   CNA_CNB_MATERIAL_TEXTURE_SECOND == UINT32_C(1) &&
+                   CNA_CNB_MATERIAL_TEXTURE_NORMAL == UINT32_C(2) &&
+                   CNA_CNB_MATERIAL_TEXTURE_METALLIC_ROUGHNESS == UINT32_C(3) &&
+                   CNA_CNB_MATERIAL_TEXTURE_EMISSIVE == UINT32_C(4) &&
+                   CNA_CNB_MATERIAL_TEXTURE_OCCLUSION == UINT32_C(5) &&
+                   CNA_CNB_MATERIAL_TEXTURE_SPECULAR == UINT32_C(6) &&
+                   CNA_CNB_MATERIAL_TEXTURE_SPECULAR_COLOR == UINT32_C(7) &&
+                   CNA_CNB_MATERIAL_TEXTURE_MAXIMUM == UINT32_C(7),
+               "CNB material texture slots must remain stable");
+_Static_assert(CNA_CNB_MORPH_DELTA_POSITION == UINT32_C(0) &&
+                   CNA_CNB_MORPH_DELTA_NORMAL == UINT32_C(1) &&
+                   CNA_CNB_MORPH_DELTA_TANGENT == UINT32_C(2) &&
+                   CNA_CNB_MORPH_DELTA_MAXIMUM == UINT32_C(2) &&
+                   CNA_CNB_MORPH_KEY_WEIGHTS == UINT32_C(0) &&
+                   CNA_CNB_MORPH_KEY_IN_TANGENT == UINT32_C(1) &&
+                   CNA_CNB_MORPH_KEY_OUT_TANGENT == UINT32_C(2) &&
+                   CNA_CNB_MORPH_KEY_MAXIMUM == UINT32_C(2) &&
+                   CNA_CNB_SKELETON_MATRIX_BIND_POSE == UINT32_C(0) &&
+                   CNA_CNB_SKELETON_MATRIX_INVERSE_BIND_POSE == UINT32_C(1) &&
+                   CNA_CNB_SKELETON_MATRIX_ROOT_PREFIX == UINT32_C(2) &&
+                   CNA_CNB_SKELETON_MATRIX_MAXIMUM == UINT32_C(2),
+               "CNB model stream selectors must remain stable");
+_Static_assert(CNA_CNB_MODEL_CHUNK_HEADER == UINT32_C(0x484C444D) &&
+                   CNA_CNB_MODEL_CHUNK_STRINGS == UINT32_C(0x5254534D) &&
+                   CNA_CNB_MODEL_CHUNK_BONES == UINT32_C(0x4E4F424D) &&
+                   CNA_CNB_MODEL_CHUNK_MESHES == UINT32_C(0x48534D4D) &&
+                   CNA_CNB_MODEL_CHUNK_MATERIALS == UINT32_C(0x54414D4D) &&
+                   CNA_CNB_MODEL_CHUNK_VERTEX_DATA == UINT32_C(0x5854564D) &&
+                   CNA_CNB_MODEL_CHUNK_INDEX_DATA == UINT32_C(0x5844494D) &&
+                   CNA_CNB_MODEL_CHUNK_MORPH_DATA == UINT32_C(0x50524D4D) &&
+                   CNA_CNB_MODEL_CHUNK_SKELETON == UINT32_C(0x4C4B534D) &&
+                   CNA_CNB_MODEL_CHUNK_ANIMATIONS == UINT32_C(0x4D4E414D) &&
+                   CNA_CNB_MODEL_CHUNK_LIGHTS == UINT32_C(0x54494C4D) &&
+                   CNA_CNB_MODEL_SCHEMA_VERSION == UINT32_C(1) &&
+                   CNA_CNB_MODEL_BONE_STRIDE == UINT32_C(72) &&
+                   CNA_CNB_MODEL_MESH_STRIDE == UINT32_C(16) &&
+                   CNA_CNB_MODEL_PART_STRIDE == UINT32_C(56) &&
+                   CNA_CNB_MODEL_MATERIAL_STRIDE == UINT32_C(368) &&
+                   CNA_CNB_TEXTURE_SLOT_COUNT == UINT32_C(7) &&
+                   CNA_CNB_NO_INDEX == UINT32_C(0xFFFFFFFF),
+               "CNB model schema constants are wire format and must remain stable");
+_Static_assert(sizeof(CNA_CnbTextureTransform) == 20U &&
+                   _Alignof(CNA_CnbTextureTransform) == 4U &&
+                   offsetof(CNA_CnbTextureTransform, offset_x) == 0U &&
+                   offsetof(CNA_CnbTextureTransform, offset_y) == 4U &&
+                   offsetof(CNA_CnbTextureTransform, scale_x) == 8U &&
+                   offsetof(CNA_CnbTextureTransform, scale_y) == 12U &&
+                   offsetof(CNA_CnbTextureTransform, rotation) == 16U,
+               "CNA_CnbTextureTransform layout must remain stable");
+_Static_assert(sizeof(CNA_CnbSamplerState) == 16U &&
+                   _Alignof(CNA_CnbSamplerState) == 4U &&
+                   offsetof(CNA_CnbSamplerState, filter) == 0U &&
+                   offsetof(CNA_CnbSamplerState, address_u) == 4U &&
+                   offsetof(CNA_CnbSamplerState, address_v) == 8U &&
+                   offsetof(CNA_CnbSamplerState, declared) == 12U &&
+                   offsetof(CNA_CnbSamplerState, reserved) == 13U,
+               "CNA_CnbSamplerState layout must remain stable");
+_Static_assert(sizeof(CNA_CnbModelLight) == 24U &&
+                   _Alignof(CNA_CnbModelLight) == 4U &&
+                   offsetof(CNA_CnbModelLight, direction) == 0U &&
+                   offsetof(CNA_CnbModelLight, diffuse_color) == 12U,
+               "CNA_CnbModelLight layout must remain stable");
+_Static_assert(sizeof(CNA_CnbModelInfo) == 56U &&
+                   _Alignof(CNA_CnbModelInfo) == 8U &&
+                   offsetof(CNA_CnbModelInfo, bone_count) == 8U &&
+                   offsetof(CNA_CnbModelInfo, part_count) == 16U &&
+                   offsetof(CNA_CnbModelInfo, mesh_count) == 24U &&
+                   offsetof(CNA_CnbModelInfo, animation_count) == 32U &&
+                   offsetof(CNA_CnbModelInfo, light_count) == 40U &&
+                   offsetof(CNA_CnbModelInfo, has_skeleton) == 48U &&
+                   offsetof(CNA_CnbModelInfo, applies_gltf_lighting_policy) == 49U &&
+                   offsetof(CNA_CnbModelInfo, has_bone_hierarchy) == 50U &&
+                   CNA_CNB_MODEL_INFO_STRUCT_VERSION == UINT32_C(1),
+               "CNA_CnbModelInfo layout must remain stable");
+_Static_assert(sizeof(CNA_CnbModelBone) == 80U &&
+                   _Alignof(CNA_CnbModelBone) == 4U &&
+                   offsetof(CNA_CnbModelBone, parent) == 8U &&
+                   offsetof(CNA_CnbModelBone, transform) == 16U &&
+                   CNA_CNB_MODEL_BONE_STRUCT_VERSION == UINT32_C(1),
+               "CNA_CnbModelBone layout must remain stable");
+_Static_assert(sizeof(CNA_CnbModelPartInfo) == 40U &&
+                   _Alignof(CNA_CnbModelPartInfo) == 4U &&
+                   offsetof(CNA_CnbModelPartInfo, vertex_stride) == 8U &&
+                   offsetof(CNA_CnbModelPartInfo, vertex_count) == 12U &&
+                   offsetof(CNA_CnbModelPartInfo, index_count) == 16U &&
+                   offsetof(CNA_CnbModelPartInfo, index_element_size) == 20U &&
+                   offsetof(CNA_CnbModelPartInfo, primitive_topology) == 24U &&
+                   offsetof(CNA_CnbModelPartInfo, primitive_count) == 28U &&
+                   offsetof(CNA_CnbModelPartInfo, effect_kind) == 32U &&
+                   offsetof(CNA_CnbModelPartInfo, vertex_color_enabled) == 36U &&
+                   offsetof(CNA_CnbModelPartInfo, unlit) == 37U &&
+                   CNA_CNB_MODEL_PART_INFO_STRUCT_VERSION == UINT32_C(1),
+               "CNA_CnbModelPartInfo layout must remain stable");
+_Static_assert(sizeof(CNA_CnbMaterialInfo) == 84U &&
+                   _Alignof(CNA_CnbMaterialInfo) == 4U &&
+                   offsetof(CNA_CnbMaterialInfo, base_color_factor) == 8U &&
+                   offsetof(CNA_CnbMaterialInfo, emissive_factor) == 24U &&
+                   offsetof(CNA_CnbMaterialInfo, specular_color_factor) == 36U &&
+                   offsetof(CNA_CnbMaterialInfo, metallic_factor) == 48U &&
+                   offsetof(CNA_CnbMaterialInfo, roughness_factor) == 52U &&
+                   offsetof(CNA_CnbMaterialInfo, ior) == 56U &&
+                   offsetof(CNA_CnbMaterialInfo, specular_factor) == 60U &&
+                   offsetof(CNA_CnbMaterialInfo, normal_scale) == 64U &&
+                   offsetof(CNA_CnbMaterialInfo, occlusion_strength) == 68U &&
+                   offsetof(CNA_CnbMaterialInfo, alpha_cutoff) == 72U &&
+                   offsetof(CNA_CnbMaterialInfo, alpha_mode) == 76U &&
+                   offsetof(CNA_CnbMaterialInfo, double_sided) == 80U &&
+                   CNA_CNB_MATERIAL_INFO_STRUCT_VERSION == UINT32_C(1),
+               "CNA_CnbMaterialInfo layout must remain stable");
+_Static_assert(sizeof(CNA_CnbMorphInfo) == 48U &&
+                   _Alignof(CNA_CnbMorphInfo) == 8U &&
+                   offsetof(CNA_CnbMorphInfo, vertex_count) == 8U &&
+                   offsetof(CNA_CnbMorphInfo, target_count) == 16U &&
+                   offsetof(CNA_CnbMorphInfo, weight_count) == 24U &&
+                   offsetof(CNA_CnbMorphInfo, weight_track_key_count) == 32U &&
+                   offsetof(CNA_CnbMorphInfo, recompute_flat_normals) == 40U &&
+                   offsetof(CNA_CnbMorphInfo, weight_track_step_interpolation) == 41U &&
+                   offsetof(CNA_CnbMorphInfo, weight_track_cubic_spline) == 42U &&
+                   CNA_CNB_MORPH_INFO_STRUCT_VERSION == UINT32_C(1),
+               "CNA_CnbMorphInfo layout must remain stable");
+_Static_assert(sizeof(CNA_CnbMeshInfo) == 24U &&
+                   _Alignof(CNA_CnbMeshInfo) == 8U &&
+                   offsetof(CNA_CnbMeshInfo, parent_bone) == 8U &&
+                   offsetof(CNA_CnbMeshInfo, part_index_count) == 16U &&
+                   CNA_CNB_MESH_INFO_STRUCT_VERSION == UINT32_C(1),
+               "CNA_CnbMeshInfo layout must remain stable");
+_Static_assert(sizeof(CNA_CnbSkeletonInfo) == 24U &&
+                   _Alignof(CNA_CnbSkeletonInfo) == 8U &&
+                   offsetof(CNA_CnbSkeletonInfo, joint_count) == 8U &&
+                   offsetof(CNA_CnbSkeletonInfo, has_root_prefix) == 16U &&
+                   CNA_CNB_SKELETON_INFO_STRUCT_VERSION == UINT32_C(1),
+               "CNA_CnbSkeletonInfo layout must remain stable");
+_Static_assert(sizeof(CNA_CnbMorphWeightKeyInfo) == 40U &&
+                   _Alignof(CNA_CnbMorphWeightKeyInfo) == 8U &&
+                   offsetof(CNA_CnbMorphWeightKeyInfo, time_seconds) == 8U &&
+                   offsetof(CNA_CnbMorphWeightKeyInfo, weight_count) == 16U &&
+                   offsetof(CNA_CnbMorphWeightKeyInfo, in_tangent_count) == 24U &&
+                   offsetof(CNA_CnbMorphWeightKeyInfo, out_tangent_count) == 32U &&
+                   CNA_CNB_MORPH_WEIGHT_KEY_INFO_STRUCT_VERSION == UINT32_C(1),
+               "CNA_CnbMorphWeightKeyInfo layout must remain stable");
+
+/* CBIND-110: the font, audio, media, curve and animation schemas. */
+_Static_assert(CNA_CNB_AUDIO_FORMAT_UNKNOWN == UINT32_C(0) &&
+                   CNA_CNB_AUDIO_FORMAT_PCM16 == UINT32_C(1) &&
+                   CNA_CNB_AUDIO_FORMAT_PCM8 == UINT32_C(2) &&
+                   CNA_CNB_AUDIO_FORMAT_PCM_FLOAT32 == UINT32_C(3) &&
+                   CNA_CNB_AUDIO_FORMAT_ADPCM == UINT32_C(4) &&
+                   CNA_CNB_AUDIO_FORMAT_VORBIS == UINT32_C(5) &&
+                   CNA_CNB_AUDIO_FORMAT_MAXIMUM == UINT32_C(5),
+               "CNB audio format identifiers are wire format and must remain stable");
+_Static_assert(CNA_CNB_SPRITE_FONT_CHUNK_HEADER == UINT32_C(0x544E4F46) &&
+                   CNA_CNB_SPRITE_FONT_CHUNK_GLYPH_BOUNDS == UINT32_C(0x50594C47) &&
+                   CNA_CNB_SPRITE_FONT_CHUNK_CROPPING == UINT32_C(0x504F5243) &&
+                   CNA_CNB_SPRITE_FONT_CHUNK_KERNING == UINT32_C(0x4E52454B) &&
+                   CNA_CNB_SPRITE_FONT_CHUNK_CHARACTERS == UINT32_C(0x52414843) &&
+                   CNA_CNB_SPRITE_FONT_SCHEMA_VERSION == UINT32_C(1) &&
+                   CNA_CNB_SPRITE_FONT_HEADER_STRIDE == UINT32_C(24) &&
+                   CNA_CNB_SPRITE_FONT_RECTANGLE_STRIDE == UINT32_C(16) &&
+                   CNA_CNB_SPRITE_FONT_KERNING_STRIDE == UINT32_C(12) &&
+                   CNA_CNB_SPRITE_FONT_CHARACTER_STRIDE == UINT32_C(4) &&
+                   CNA_CNB_MAX_SPRITE_FONT_GLYPHS == UINT32_C(65536),
+               "CNB sprite-font schema constants are wire format and must remain stable");
+_Static_assert(CNA_CNB_SOUND_EFFECT_CHUNK_HEADER == UINT32_C(0x48445541) &&
+                   CNA_CNB_SOUND_EFFECT_CHUNK_DATA == UINT32_C(0x44445541) &&
+                   CNA_CNB_SOUND_EFFECT_SCHEMA_VERSION == UINT32_C(1) &&
+                   CNA_CNB_SOUND_EFFECT_HEADER_STRIDE == UINT32_C(28) &&
+                   CNA_CNB_MAX_AUDIO_SAMPLE_RATE == UINT32_C(384000),
+               "CNB sound-effect schema constants are wire format and must remain stable");
+_Static_assert(CNA_CNB_MEDIA_CHUNK_SONG_HEADER == UINT32_C(0x48474E53) &&
+                   CNA_CNB_MEDIA_CHUNK_VIDEO_HEADER == UINT32_C(0x48444956) &&
+                   CNA_CNB_MEDIA_SCHEMA_VERSION == UINT32_C(1) &&
+                   CNA_CNB_SONG_HEADER_FIXED_STRIDE == UINT32_C(8) &&
+                   CNA_CNB_VIDEO_HEADER_STRIDE == UINT32_C(24) &&
+                   CNA_CNB_MAX_VIDEO_DIMENSION == UINT32_C(65536),
+               "CNB media schema constants are wire format and must remain stable");
+_Static_assert(CNA_CNB_CURVE_CHUNK_HEADER == UINT32_C(0x48565243) &&
+                   CNA_CNB_CURVE_CHUNK_KEYS == UINT32_C(0x4B565243) &&
+                   CNA_CNB_CURVE_SCHEMA_VERSION == UINT32_C(1) &&
+                   CNA_CNB_CURVE_KEY_STRIDE == UINT32_C(20),
+               "CNB curve schema constants are wire format and must remain stable");
+_Static_assert(CNA_CNB_ANIMATION_CLIP_CHUNK_HEADER == UINT32_C(0x484C4341) &&
+                   CNA_CNB_ANIMATION_CLIP_CHUNK_TRACKS == UINT32_C(0x544C4341) &&
+                   CNA_CNB_ANIMATION_CLIP_CHUNK_KEYS == UINT32_C(0x4B4C4341) &&
+                   CNA_CNB_ANIMATION_CLIP_SCHEMA_VERSION == UINT32_C(1) &&
+                   CNA_CNB_ANIMATION_TRACK_STRIDE == UINT32_C(12) &&
+                   CNA_CNB_ANIMATION_KEY_STRIDE == UINT32_C(48),
+               "CNB animation-clip schema constants are wire format and must remain stable");
+_Static_assert(sizeof(CNA_CnbSpriteFontInfo) == 32U &&
+                   _Alignof(CNA_CnbSpriteFontInfo) == 8U &&
+                   offsetof(CNA_CnbSpriteFontInfo, glyph_count) == 8U &&
+                   offsetof(CNA_CnbSpriteFontInfo, line_spacing) == 16U &&
+                   offsetof(CNA_CnbSpriteFontInfo, spacing) == 20U &&
+                   offsetof(CNA_CnbSpriteFontInfo, default_character) == 24U &&
+                   offsetof(CNA_CnbSpriteFontInfo, has_default_character) == 26U &&
+                   offsetof(CNA_CnbSpriteFontInfo, reserved) == 27U &&
+                   CNA_CNB_SPRITE_FONT_INFO_STRUCT_VERSION == UINT32_C(1),
+               "CNA_CnbSpriteFontInfo layout must remain stable");
+_Static_assert(sizeof(CNA_CnbSoundEffectInfo) == 32U &&
+                   _Alignof(CNA_CnbSoundEffectInfo) == 4U &&
+                   offsetof(CNA_CnbSoundEffectInfo, format) == 8U &&
+                   offsetof(CNA_CnbSoundEffectInfo, sample_rate) == 12U &&
+                   offsetof(CNA_CnbSoundEffectInfo, channels) == 16U &&
+                   offsetof(CNA_CnbSoundEffectInfo, frame_count) == 20U &&
+                   offsetof(CNA_CnbSoundEffectInfo, loop_start) == 24U &&
+                   offsetof(CNA_CnbSoundEffectInfo, loop_length) == 28U &&
+                   CNA_CNB_SOUND_EFFECT_INFO_STRUCT_VERSION == UINT32_C(1),
+               "CNA_CnbSoundEffectInfo layout must remain stable");
+_Static_assert(sizeof(CNA_CnbVideoInfo) == 32U &&
+                   _Alignof(CNA_CnbVideoInfo) == 4U &&
+                   offsetof(CNA_CnbVideoInfo, duration_milliseconds) == 8U &&
+                   offsetof(CNA_CnbVideoInfo, width) == 12U &&
+                   offsetof(CNA_CnbVideoInfo, height) == 16U &&
+                   offsetof(CNA_CnbVideoInfo, frames_per_second) == 20U &&
+                   offsetof(CNA_CnbVideoInfo, soundtrack_type) == 24U &&
+                   offsetof(CNA_CnbVideoInfo, reserved) == 28U &&
+                   CNA_CNB_VIDEO_INFO_STRUCT_VERSION == UINT32_C(1),
+               "CNA_CnbVideoInfo layout must remain stable");
+
+/* CBIND-111: the loader registry and the two compilation front ends. */
+_Static_assert(sizeof(CNA_CnbImageImportOptions) == 12U &&
+                   _Alignof(CNA_CnbImageImportOptions) == 4U &&
+                   offsetof(CNA_CnbImageImportOptions, color_key) == 8U &&
+                   offsetof(CNA_CnbImageImportOptions, has_color_key) == 11U &&
+                   CNA_CNB_IMAGE_IMPORT_OPTIONS_STRUCT_VERSION == UINT32_C(1),
+               "CNA_CnbImageImportOptions layout must remain stable");
+_Static_assert(sizeof(CNA_CnbLoaderCallback) == sizeof(void (*)(void)),
+               "CNA_CnbLoaderCallback must remain a plain function pointer");
+
+/* CBIND-105: the reflective content readers. */
+_Static_assert(CNA_CONTENT_FIELD_BOOLEAN == UINT32_C(0) &&
+                   CNA_CONTENT_FIELD_SINGLE == UINT32_C(1) &&
+                   CNA_CONTENT_FIELD_DOUBLE == UINT32_C(2) &&
+                   CNA_CONTENT_FIELD_INT32 == UINT32_C(3) &&
+                   CNA_CONTENT_FIELD_UINT32 == UINT32_C(4) &&
+                   CNA_CONTENT_FIELD_INT64 == UINT32_C(5) &&
+                   CNA_CONTENT_FIELD_BYTE == UINT32_C(6) &&
+                   CNA_CONTENT_FIELD_VECTOR2 == UINT32_C(7) &&
+                   CNA_CONTENT_FIELD_VECTOR3 == UINT32_C(8) &&
+                   CNA_CONTENT_FIELD_VECTOR4 == UINT32_C(9) &&
+                   CNA_CONTENT_FIELD_MATRIX == UINT32_C(10) &&
+                   CNA_CONTENT_FIELD_QUATERNION == UINT32_C(11) &&
+                   CNA_CONTENT_FIELD_COLOR == UINT32_C(12) &&
+                   CNA_CONTENT_FIELD_TIMESPAN == UINT32_C(13) &&
+                   CNA_CONTENT_FIELD_MAXIMUM == UINT32_C(13),
+               "CNB reflective field kinds must remain stable");
+_Static_assert(sizeof(CNA_ContentFieldKind) == sizeof(uint32_t) &&
+                   sizeof(CNA_ReflectiveObjectCreateCallback) == sizeof(void (*)(void)) &&
+                   sizeof(CNA_ReflectiveFieldCallback) == sizeof(void (*)(void)),
+               "reflective reader identities and callbacks must remain fixed width");

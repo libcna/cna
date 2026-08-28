@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -291,7 +293,7 @@ int main(void)
         cna_effect_annotation_destroy(matrix) != CNA_RESULT_SUCCESS ||
         cna_effect_annotation_destroy(matrix) != CNA_RESULT_INVALID_HANDLE ||
         cna_effect_annotation_destroy(integer) != CNA_RESULT_SUCCESS) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
     return 0;
 }

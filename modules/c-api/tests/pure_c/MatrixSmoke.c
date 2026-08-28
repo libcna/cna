@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <math.h>
 #include <string.h>
 
@@ -359,8 +361,57 @@ static int validate_operations(void)
     return 1;
 }
 
+/*
+ * CBIND-103: `Matrix::operator*=` has no C route of its own, because C has neither operator
+ * overloading nor compound assignment on a struct: `M *= N` is the binary route with the
+ * destination naming the left operand.
+ *
+ * That is only well defined if the operands are copies. `CBIND-081` established it for `Vector2`,
+ * but a `Matrix` is 64 bytes and a wider value is exactly where an ABI might have switched to
+ * passing by pointer -- so this measures it rather than inheriting the conclusion. The aliased call
+ * must produce the same matrix as the unaliased one, for both overloads.
+ */
+static int validate_compound_assignment(void)
+{
+    CNA_Matrix left = {0};
+    CNA_Matrix right = {0};
+    for (int index = 0; index < 16; ++index) {
+        ((float*)&left)[index] = (float)(index + 1);
+        ((float*)&right)[index] = (float)(32 - index);
+    }
+
+    CNA_Matrix separate = {0};
+    if (cna_matrix_multiply(left, right, &separate) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    CNA_Matrix aliased = left;
+    if (cna_matrix_multiply(aliased, right, &aliased) != CNA_RESULT_SUCCESS ||
+        !matrix_near(aliased, separate)) {
+        return 0;
+    }
+    /* The right operand aliasing the destination is the same question from the other side. */
+    CNA_Matrix rightAliased = right;
+    if (cna_matrix_multiply(left, rightAliased, &rightAliased) != CNA_RESULT_SUCCESS ||
+        !matrix_near(rightAliased, separate)) {
+        return 0;
+    }
+
+    if (cna_matrix_multiply_scalar(left, 3.0F, &separate) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    aliased = left;
+    if (cna_matrix_multiply_scalar(aliased, 3.0F, &aliased) != CNA_RESULT_SUCCESS ||
+        !matrix_near(aliased, separate)) {
+        return 0;
+    }
+
+    /* And the destination really was written, so a match cannot be a no-op agreeing with itself. */
+    return !matrix_near(aliased, left);
+}
+
 int main(void)
 {
-    return validate_construction_properties_and_members() &&
-        validate_factories() && validate_operations() ? 0 : 1;
+    return CNA_TEST_STAGE(validate_construction_properties_and_members()) &&
+        CNA_TEST_STAGE(validate_factories()) && CNA_TEST_STAGE(validate_operations()) &&
+        CNA_TEST_STAGE(validate_compound_assignment()) ? 0 : 1;
 }

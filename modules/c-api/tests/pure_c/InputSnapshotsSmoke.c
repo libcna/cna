@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <math.h>
 #include <string.h>
 #include <threads.h>
@@ -2550,43 +2552,43 @@ int main(void)
 {
     /* One code per validator, so a failure names the family it came from. */
     if (!validate_pure_gamepad_helpers()) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
     if (!validate_pure_capabilities_helpers()) {
-        return 10;
+        return CNA_TEST_FAIL(10);
     }
     if (!validate_pure_button_set_helpers()) {
-        return 11;
+        return CNA_TEST_FAIL(11);
     }
     if (!validate_pure_dpad_helpers()) {
-        return 12;
+        return CNA_TEST_FAIL(12);
     }
     if (!validate_pure_analog_value_helpers()) {
-        return 13;
+        return CNA_TEST_FAIL(13);
     }
     if (!validate_pure_state_value_helpers()) {
-        return 14;
+        return CNA_TEST_FAIL(14);
     }
     if (!validate_pure_keyboard_value_helpers()) {
-        return 15;
+        return CNA_TEST_FAIL(15);
     }
     if (!validate_pure_mouse_value_helpers()) {
-        return 17;
+        return CNA_TEST_FAIL(17);
     }
     if (!validate_pure_dead_zone_exclusion()) {
-        return 18;
+        return CNA_TEST_FAIL(18);
     }
     if (!validate_pure_touch_helpers()) {
-        return 16;
+        return CNA_TEST_FAIL(16);
     }
     if (!validate_pure_gesture_value_helpers()) {
-        return 19;
+        return CNA_TEST_FAIL(19);
     }
     if (!validate_pure_touch_value_helpers()) {
-        return 20;
+        return CNA_TEST_FAIL(20);
     }
     if (!validate_pure_touch_collection_helpers()) {
-        return 21;
+        return CNA_TEST_FAIL(21);
     }
 
     InputState input_state = {0};
@@ -2606,7 +2608,7 @@ int main(void)
     if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
         cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS ||
         input_state.capture_validated != 1) {
-        return 2;
+        return CNA_TEST_FAIL(2);
     }
 
     WrongThreadState wrong_thread = {
@@ -2623,11 +2625,11 @@ int main(void)
         wrong_thread.touch_result != CNA_RESULT_THREAD ||
         wrong_thread.text_input_result != CNA_RESULT_THREAD ||
         wrong_thread.touch_panel_result != CNA_RESULT_THREAD) {
-        return 3;
+        return CNA_TEST_FAIL(3);
     }
 
     if (cna_game_destroy(game) != CNA_RESULT_SUCCESS) {
-        return 4;
+        return CNA_TEST_FAIL(4);
     }
     return 0;
 }

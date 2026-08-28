@@ -1379,4 +1379,34 @@ void ResetGameContentManagerState() noexcept
     cached = CNA_INVALID_HANDLE;
 }
 
+CNA_Result BorrowContentManagerForCallback(
+    ContentManager& contentManager,
+    CNA_Handle* const outContentManager)
+{
+    // A fresh handle per callback rather than the cached game one: this manager is whichever one is
+    // performing the load, it may be owned by nobody C knows, and its handle must die with the call
+    // that made it. `borrowed` is what makes cna_content_manager_destroy refuse it.
+    const auto resource = std::make_shared<ContentManagerResource>(
+        ContentManagerResource{
+            std::shared_ptr<ContentManager>(&contentManager, [](ContentManager*) {}),
+            CNA_INVALID_HANDLE,
+            CNA_INVALID_HANDLE,
+            true});
+    return GetRuntimeHandles().Create(
+        ObjectKind::ContentManager, resource, outContentManager);
+}
+
+CNA_Result GetContentManagerObject(
+    const CNA_Handle handle,
+    ContentManager** const outContentManager)
+{
+    std::shared_ptr<ContentManagerResource> resource;
+    if (const CNA_Result result = GetContentManager(handle, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outContentManager = resource->value.get();
+    return CNA_RESULT_SUCCESS;
+}
+
 } // namespace CNA::C::Detail

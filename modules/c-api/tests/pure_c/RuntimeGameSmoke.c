@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <stdio.h>
 #include <string.h>
 
@@ -735,7 +737,7 @@ int main(void)
     create_info.callbacks = &callbacks;
 
     if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
     /* The frame hooks are a second table installed after creation, so the published callback table
        every existing consumer already writes stays exactly as it was. */
@@ -744,16 +746,16 @@ int main(void)
         broken.struct_version = UINT32_C(0);
         if (cna_game_set_frame_hooks_ext(game, &broken) != CNA_RESULT_INVALID_ARGUMENT ||
             cna_game_set_frame_hooks_ext(game, &hooks) != CNA_RESULT_SUCCESS) {
-            return 1;
+            return CNA_TEST_FAIL(1);
         }
     }
     if (cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS || smoke_state.validated != 1) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
     /* The frame hooks the grown callback table adds all ran, and drawing happened between them. */
     if (smoke_state.initialize_calls != 1 || smoke_state.begin_draw_calls < 1 ||
         smoke_state.end_draw_calls < 1 || smoke_state.draw_calls < 1) {
-        return 2;
+        return CNA_TEST_FAIL(2);
     }
     /* CBIND-063: and they ran in the documented ORDER, which counting them cannot see.
        `initialize` is documented as running "while the game initializes, before content loads";
@@ -761,7 +763,7 @@ int main(void)
        base delivered the two backwards. Most ported games touch fields in LoadContent that
        Initialize set, so the reversal breaks them at the first frame. */
     if (strncmp(smoke_state.order, "ilu", 3U) != 0) {
-        return 2;
+        return CNA_TEST_FAIL(2);
     }
     /* Suppressing the draw skips exactly one frame's drawing. */
     {
@@ -771,7 +773,7 @@ int main(void)
             smoke_state.draw_calls != draws_before ||
             cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS ||
             smoke_state.draw_calls != draws_before + 1) {
-            return 3;
+            return CNA_TEST_FAIL(3);
         }
     }
     /* Refusing to draw from the pre-draw hook skips the draw callback and its end hook. */
@@ -780,13 +782,13 @@ int main(void)
         smoke_state.suppress_next_draw = CNA_TRUE;
         if (cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS ||
             smoke_state.draw_calls != draws_before) {
-            return 7;
+            return CNA_TEST_FAIL(7);
         }
         smoke_state.suppress_next_draw = CNA_FALSE;
     }
     /* A frame step outside any callback is an ordinary request. */
     if (cna_game_tick(game) != CNA_RESULT_SUCCESS) {
-        return 4;
+        return CNA_TEST_FAIL(4);
     }
     /* Removing the hooks stops every one of them. */
     {
@@ -794,7 +796,7 @@ int main(void)
         if (cna_game_set_frame_hooks_ext(game, 0) != CNA_RESULT_SUCCESS ||
             cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS ||
             smoke_state.begin_draw_calls != draws_before) {
-            return 5;
+            return CNA_TEST_FAIL(5);
         }
     }
     return cna_game_destroy(game) == CNA_RESULT_SUCCESS ? 0 : 6;

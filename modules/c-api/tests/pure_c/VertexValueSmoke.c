@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -377,6 +379,6 @@ static int validate_failures_are_atomic(void)
 
 int main(void)
 {
-    return validate_defaults() && validate_all_vertex_types() && validate_vertex_element() &&
-            validate_failures_are_atomic() ? 0 : 1;
+    return CNA_TEST_STAGE(validate_defaults()) && CNA_TEST_STAGE(validate_all_vertex_types()) && CNA_TEST_STAGE(validate_vertex_element()) &&
+            CNA_TEST_STAGE(validate_failures_are_atomic()) ? 0 : 1;
 }

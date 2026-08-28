@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <math.h>
 #include <string.h>
 
@@ -613,6 +615,6 @@ static int validate_bounding_frustum(void)
 
 int main(void)
 {
-    return validate_plane() && validate_ray() && validate_bounding_box() &&
-            validate_bounding_sphere() && validate_bounding_frustum() ? 0 : 1;
+    return CNA_TEST_STAGE(validate_plane()) && CNA_TEST_STAGE(validate_ray()) && CNA_TEST_STAGE(validate_bounding_box()) &&
+            CNA_TEST_STAGE(validate_bounding_sphere()) && CNA_TEST_STAGE(validate_bounding_frustum()) ? 0 : 1;
 }

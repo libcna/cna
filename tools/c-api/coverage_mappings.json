@@ -17908,6 +17908,991 @@
         "CPP-B8693D7DA5EB",
         "CPP-EBE51C53F1E0"
       ]
+    },
+    {
+      "id": "cnb-texture-format-identity",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnbTextureFormat(::[A-Za-z0-9_]+)?|CnbTextureFormatMax)$",
+      "kinds": [
+        "enum",
+        "enum-value",
+        "field"
+      ],
+      "mapping": "`CNA_CnbTextureFormat` and `CNA_CNB_TEXTURE_FORMAT_*` at the canonical ordinals, with `CnbTextureFormatMax` as `CNA_CNB_TEXTURE_FORMAT_MAXIMUM`.\n\n**These are wire format and the whole numbering is frozen, not just its ends.** The enumeration exists precisely because serializing `SurfaceFormat` would not be safe: its enumerators carry no explicit values, so inserting one -- an ordinary thing to do to an XNA-shaped enum -- would renumber everything after it and silently change the meaning of every `.cnb` already written. Publishing the C constants at anything but the canonical values would reintroduce exactly that hazard one layer out.",
+      "tests": "`CnbTextureSmoke.c` `validate_format_identities` walks all 27 identifiers, and `AbiHeaderC.c` freezes **each** value individually rather than only the first and the last -- a renumbering that shifted the middle would otherwise pass a maximum check.",
+      "status": "implemented",
+      "task": "CBIND-108",
+      "approved_symbols": [
+        "CPP-012AF705F8AF",
+        "CPP-081DB8688C68",
+        "CPP-0B0E67F912DF",
+        "CPP-0B87C872D8B1",
+        "CPP-1176215A6D1D",
+        "CPP-180E11CEC69F",
+        "CPP-18AB245EDB5A",
+        "CPP-1CE19B8A5C1D",
+        "CPP-1FFC857449EB",
+        "CPP-30A43B65CB56",
+        "CPP-3B173D7268B4",
+        "CPP-41DF38DCC5CB",
+        "CPP-4C35C9962484",
+        "CPP-52CE2C43F378",
+        "CPP-6A57BE3722E6",
+        "CPP-6BAA3898DB44",
+        "CPP-80B28856BCF6",
+        "CPP-B92F6D9C1E7B",
+        "CPP-B96E7FA91CE8",
+        "CPP-B978BB114FE0",
+        "CPP-BAC1C7A9616E",
+        "CPP-C0F336F2B3FE",
+        "CPP-D557120B09A8",
+        "CPP-D80D8EDA68B3",
+        "CPP-D89AFECEB62C",
+        "CPP-DB9EAEC162E6",
+        "CPP-E0D0F1AC005F",
+        "CPP-E8BD3DF0D8C2",
+        "CPP-F0C663ECE2FE",
+        "CPP-F35AC4EF55FC"
+      ]
+    },
+    {
+      "id": "cnb-texture-format-queries",
+      "qualified_name_regex": "^CNA::Content::Cnb::(IsKnownCnbTextureFormat|CnbTextureFormatToString|IsBlockCompressedCnbTextureFormat|CnbTextureFormatUnitBytes|CnbTextureLevelByteSize|CnbTextureFormatToSurfaceFormat|SurfaceFormatToCnbTextureFormat)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "`cna_cnb_is_known_texture_format`, the `cna_cnb_get_texture_format_name_size`/`_copy_texture_format_name` pair, `cna_cnb_is_block_compressed_texture_format`, `cna_cnb_get_texture_format_unit_bytes`, `cna_cnb_get_texture_level_byte_size`, and the two mapping routes `cna_cnb_texture_format_to_surface_format`/`_from_surface_format`.\n\nThe two mapping routes deliberately stay routes rather than becoming a published table: the whole point of the canonical design is that the correspondence is a function somebody edits, not a cast that follows a runtime enumeration's declaration order.\n\nThe classification and rendering routes accept **any** 32-bit value, because a corrupt file can name one and a route that refused the values a corrupt file contains would be useless for diagnosing one. `CnbTextureLevelByteSize` is the one that refuses, because there its answer would be a number rather than a description.",
+      "tests": "`CnbTextureSmoke.c` `validate_format_identities` and `validate_surface_format_mapping`. The block-compressed size rule gets its own attention because a round trip cannot see it: a 1x1 BC7 level is a whole block and 5x4 BC1 is two blocks, asserted against each format's own reported unit size rather than a transcribed constant, and mutation-checked by asserting a quarter block instead. The surface-format mapping is round-tripped over **all 27** identifiers -- the check that would catch a correspondence that had drifted -- and mutation-checked by asserting the wrong identifier comes back.",
+      "status": "implemented",
+      "task": "CBIND-108",
+      "approved_symbols": [
+        "CPP-02502C5844D9",
+        "CPP-120606527CD7",
+        "CPP-316B3E8695DA",
+        "CPP-5ED9F2E1CEE5",
+        "CPP-66761DC5EAF0",
+        "CPP-B5BBAEFE10A1",
+        "CPP-D20E8992E20F"
+      ]
+    },
+    {
+      "id": "cnb-texture-schema-constants",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnbTextureChunk::[A-Za-z0-9_]+|CnbTextureSchemaVersion|CnbTextureHeaderStride|CnbTextureRepresentationStride|CnbTextureCubeFaceCount|CnbMaxTextureMipLevels|CnbMaxTextureRepresentations)$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "`CNA_CNB_TEXTURE_CHUNK_HEADER`, `_REPRESENTATIONS` and `_PAYLOAD` as packed identifiers, plus `CNA_CNB_TEXTURE_SCHEMA_VERSION`, `_HEADER_STRIDE`, `_REPRESENTATION_STRIDE`, `_CUBE_FACE_COUNT`, `CNA_CNB_MAX_TEXTURE_MIP_LEVELS` and `_MAX_TEXTURE_REPRESENTATIONS`.\n\nThe two ceilings are published rather than kept private because they are the reason a hostile count is refused on sight rather than after the reader has tried to account for four billion mip levels; a caller sizing its own buffers wants the same numbers.",
+      "tests": "`CnbTextureSmoke.c` `validate_schemas` asserts each chunk identifier equals what packing its four letters gives, so the constants cannot drift from the packing rule, and reads a real header chunk's size back out of a built file to check it against the published stride -- a number a schema change would otherwise move silently. `AbiHeaderC.c` freezes all nine.",
+      "status": "implemented",
+      "task": "CBIND-108",
+      "approved_symbols": [
+        "CPP-1246EC0AFA2A",
+        "CPP-59BD3B8A215B",
+        "CPP-658DD39509D2",
+        "CPP-707EDBF31A24",
+        "CPP-73F48E44E921",
+        "CPP-91D0FF19CAA6",
+        "CPP-A55033526EF1",
+        "CPP-C0F92CDAEE91",
+        "CPP-D59AB9B62199"
+      ]
+    },
+    {
+      "id": "cnb-texture-data",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnbTextureData(::[A-Za-z0-9_]+)?|CnbTextureRepresentation(::[A-Za-z0-9_]+)?|CnbTextureLevelDimensions|MakeRgba8Texture2DData|SelectCnbTextureRepresentation)$",
+      "kinds": [
+        "struct",
+        "field",
+        "function"
+      ],
+      "mapping": "`CNA_CnbTextureDataHandle`, because the canonical value is nested vectors and C cannot hold one. Its shape is read through `CNA_CnbTextureInfo`, and its representations and levels through `cna_cnb_texture_data_get_representation_count`, `_get_representation_format`, `_get_level_count`, `_set_level` and `_copy_level` -- which is what `CnbTextureRepresentation`'s `format` and `levels` become, since a structure holding a vector of vectors has no C form.\n\n`add_representation` sizes the new representation for the `face_count * mip_count` the description already declares, so a caller fills levels **by index** rather than pushing them in an order the format would then have to trust.\n\n`SelectCnbTextureRepresentation` takes a predicate, so the C form is a function pointer plus an opaque context, called synchronously and never retained. The canonical function reports \"none supported\" by returning the list size; in C that would be a sentinel a caller has to know to compare against, so it becomes the availability pair every optional query in this ABI uses -- absence is an ordinary answer with the index left untouched.",
+      "tests": "`CnbTextureSmoke.c` `validate_texture_data`: the shape and every level round-trip, out-of-range indices at both levels of nesting answering `CNA_RESULT_INVALID_ARGUMENT`, the mip rule halving and never falling below 1, the predicate called exactly once per representation in order, and the no-supported-format case reported as an answer with the index left at its previous value.",
+      "status": "implemented",
+      "task": "CBIND-108",
+      "approved_symbols": [
+        "CPP-0ABB84B038E8",
+        "CPP-2A77B40DC750",
+        "CPP-313EBB2C388E",
+        "CPP-5ABBDD956A36",
+        "CPP-867D94F3C765",
+        "CPP-94490E48DD77",
+        "CPP-9880313E0C42",
+        "CPP-D1AC4D17ABC6",
+        "CPP-D8EE068F1952",
+        "CPP-DF96C055FFA7",
+        "CPP-EF908D9BEB2D",
+        "CPP-F153D1D5EEE0",
+        "CPP-F798EFB44D8C"
+      ]
+    },
+    {
+      "id": "cnb-texture-schemas",
+      "qualified_name_regex": "^CNA::Content::Cnb::(EncodeTexture2DToCnb|EncodeTextureCubeToCnb|EncodeTexture3DToCnb|DecodeTexture2DFromCnb|DecodeTextureCubeFromCnb|DecodeTexture3DFromCnb|AppendEmbeddedTexture2DChunks|ReadEmbeddedTexture2DChunks)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "`cna_cnb_encode_texture2d`, `_cube` and `_3d` follow the count/copy shape for bytes whose size is only known by producing them; `cna_cnb_decode_texture2d`, `_cube` and `_3d` each hand back a new texture handle. The embedded pair becomes `cna_cnb_writer_append_embedded_texture2d` and `cna_cnb_document_read_embedded_texture2d`, named after the object each acts on rather than after the free function, because in C the writer and the document are the handles a caller already holds.\n\n**Every identifier can be decoded; schema 1 only ever encodes `RGBA8`.** That asymmetry is canonical and preserved rather than smoothed: encoding any other format is refused, which is better than writing a file no reader of this schema would accept.",
+      "tests": "`CnbTextureSmoke.c` `validate_schemas` builds and re-reads all three asset types -- a 2D texture with a real three-level mip chain, a six-faced cube, and a 3D texture whose depth halves per level -- comparing every level byte for byte, and checks each file's declared asset type and schema version and that it carries one header, one representation table and one payload per level. Asking the wrong schema of a right file is a content refusal that leaves the output handle invalid, and encoding a one-faced texture as a cube is refused for its shape. `validate_schema1_format_restriction` pins the encode-only-Rgba8 rule, and `validate_embedded_atlas` round-trips an atlas through a **sprite-font** document -- so the embedded path is proved against a file the texture decoders themselves refuse, which is the whole point of it.",
+      "status": "implemented",
+      "task": "CBIND-108",
+      "approved_symbols": [
+        "CPP-0BA2A5927A10",
+        "CPP-1E8600E4BB8B",
+        "CPP-304F8DC3362D",
+        "CPP-4FFF10D9B348",
+        "CPP-6B7A35253DD2",
+        "CPP-A0AA6C74AD30",
+        "CPP-D5BDAAAE1C5C",
+        "CPP-DD4F7E4F97DC"
+      ]
+    },
+    {
+      "id": "cnb-model-schema-constants",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnbModelChunk::[A-Za-z0-9_]+|CnbModelSchemaVersion|CnbModelBoneStride|CnbModelMeshStride|CnbModelPartStride|CnbModelMaterialStride|CnbNoIndex|CnbTextureSlotCount|CnbMaxEffectKind)$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "The eleven chunk identifiers as `CNA_CNB_MODEL_CHUNK_HEADER`, `_STRINGS`, `_BONES`, `_MESHES`, `_MATERIALS`, `_VERTEX_DATA`, `_INDEX_DATA`, `_MORPH_DATA`, `_SKELETON`, `_ANIMATIONS` and `_LIGHTS`, plus `CNA_CNB_MODEL_SCHEMA_VERSION`, the four record strides, `CNA_CNB_NO_INDEX`, `CNA_CNB_TEXTURE_SLOT_COUNT` and `CNA_CNB_EFFECT_KIND_MAXIMUM` for `CnbMaxEffectKind`.\n\nThe strides are published for the same reason the texture ones are: a caller that walks a chunk itself needs the number the encoder used, and a schema change that moved one silently would otherwise be invisible until a file failed to load.",
+      "tests": "`CnbModelSmoke.c` `validate_identities` asserts the schema version, all four strides and the no-index sentinel; `validate_round_trip` looks up three of the chunk identifiers in a file the encoder actually produced, so a constant that drifted from what is written would be a missing chunk rather than a silent mismatch. `AbiHeaderC.c` freezes all eighteen.",
+      "status": "implemented",
+      "task": "CBIND-109",
+      "approved_symbols": [
+        "CPP-08E73092C1CF",
+        "CPP-0D528A0657AE",
+        "CPP-22B44F9A943E",
+        "CPP-2C05A63C74FE",
+        "CPP-3E6C727B60AA",
+        "CPP-46683F7ED7AA",
+        "CPP-4CB02227B146",
+        "CPP-768337A9BB2A",
+        "CPP-84768B5547D0",
+        "CPP-8CC86A86AD3A",
+        "CPP-A3A7D45A0297",
+        "CPP-A4147A0C2CEA",
+        "CPP-AD6B158EDD3C",
+        "CPP-C6D08948C396",
+        "CPP-C7B535BD99E9",
+        "CPP-D2238E8FA27A",
+        "CPP-EB18A7FB7321",
+        "CPP-F3D8BB632896",
+        "CPP-F7416266E985"
+      ]
+    },
+    {
+      "id": "cnb-model-effect-kind",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbEffectKind(::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "`CNA_CnbEffectKind`, a `uint32_t` identity with `CNA_CNB_EFFECT_KIND_BASIC`, `_SKINNED`, `_DUAL_TEXTURE`, `_PBR`, `_SKINNED_PBR` and `_EXTERNAL` at their canonical ordinals, and `_MAXIMUM` naming the highest.\n\nThe ordinals are wire format -- they are written into the material chunk -- so they are frozen rather than merely documented, and a value above `_MAXIMUM` is refused when a part is added or replaced rather than stored and written out.",
+      "tests": "`CnbModelSmoke.c` `validate_identities` pins each ordinal and the maximum; `validate_refusals` shows `_MAXIMUM + 1` refused by both `cna_cnb_model_add_part` and `cna_cnb_model_set_part`, so an unknown kind cannot reach a file through either door. `AbiHeaderC.c` freezes the numbering.",
+      "status": "implemented",
+      "task": "CBIND-109",
+      "approved_symbols": [
+        "CPP-0A654B72C373",
+        "CPP-30D4929654B5",
+        "CPP-67F58CA28991",
+        "CPP-6AE30B53840E",
+        "CPP-E9681E40C851",
+        "CPP-F4567ED17436",
+        "CPP-FCB45366BA0F"
+      ]
+    },
+    {
+      "id": "cnb-model-graph",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnbModelData(::[A-Za-z0-9_]+)?|CnbModelBone(::[A-Za-z0-9_]+)?|CnbModelMesh(::[A-Za-z0-9_]+)?)$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "`CNA_CnbModelDataHandle` -- **one handle for the whole graph, whose nodes are reached by index.** The canonical description is a graph of nested vectors, so C cannot hold it by value; the choice that remained was a handle per node or indexed accessors, and this ABI takes the second. A bone, part, mesh, animation or light has no lifetime of its own, a handle each would multiply the registry by the size of the model and leave a caller with one release per node to get right, and every cross-reference the format itself writes -- a mesh's part indices, a bone's parent, the skeleton's hierarchy -- is already an index.\n\nThe model's counts and its two content flags are read through `CNA_CnbModelInfo` and set through `cna_cnb_model_set_flags`; `bones` and `meshes` become `cna_cnb_model_add_bone` / `_get_bone` / `_get_bone_name_size` / `_copy_bone_name` and the matching mesh five, with `partIndices` copied out by `cna_cnb_model_copy_mesh_part_indices`.\n\n`appliesGltfLightingPolicy` and `hasBoneHierarchy` are carried rather than inferred, because each selects a real behavioural fork -- which lighting defaults apply, and whether meshes attach to named bones -- and a reader that guessed would be right most of the time and silently wrong the rest.",
+      "tests": "`CnbModelSmoke.c` builds a two-bone hierarchy with a mesh parented to the child and reads every field back both before and after an encode/decode cycle, so a level dropped by either half of the codec is visible; `validate_refusals` drives an out-of-range index at the bone, part, mesh, animation and light levels.",
+      "status": "implemented",
+      "task": "CBIND-109",
+      "approved_symbols": [
+        "CPP-22C775B9710A",
+        "CPP-2A0EA7BF5ABF",
+        "CPP-36F678C7DEAE",
+        "CPP-3DE6041F34B6",
+        "CPP-48507319A2B6",
+        "CPP-574DEB3D77BA",
+        "CPP-5C389C4BFB5D",
+        "CPP-5D0F3B93AB31",
+        "CPP-6552C76FB152",
+        "CPP-6810AD5A5432",
+        "CPP-76CE78B036BF",
+        "CPP-94E5324C9875",
+        "CPP-A67FD7631128",
+        "CPP-B670D4457D24",
+        "CPP-C9D1EAEE0A7B",
+        "CPP-CD97973EA689",
+        "CPP-E1123037B59D"
+      ]
+    },
+    {
+      "id": "cnb-model-part",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelPart(::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "`CNA_CnbModelPartInfo` for the numeric half, added with `cna_cnb_model_add_part` and replaced with `_set_part`; the two names through count/copy pairs; `vertexBytes` and `indexBytes` through `cna_cnb_model_set_part_vertex_bytes` / `_copy_part_vertex_bytes` and the index pair; `material` and `morph` through the routes in their own rules.\n\n`indexElementSize` and `primitiveCount` are stored rather than derived. The `.cnj` pipeline infers the first from the vertex count, which makes a truncated sidecar decode as a shorter mesh instead of failing; the compiled form states both, and the encoder is what checks them against the bytes actually supplied -- so a partially built part may be inconsistent right up until it is encoded, which is what lets a caller fill it in any order.",
+      "tests": "`CnbModelSmoke.c` round-trips a part with real vertex and index bytes and reads the indices back as `uint16_t` to prove the element size travelled; `validate_mutation` shows `set_part` replacing the numbers while the name, the external effect name and the material stay where they were.",
+      "status": "implemented",
+      "task": "CBIND-109",
+      "approved_symbols": [
+        "CPP-072C682D594A",
+        "CPP-1237CF03F2F4",
+        "CPP-2FC675B7F995",
+        "CPP-341234D3264B",
+        "CPP-4AB7635E9AF2",
+        "CPP-4D06E13FE01F",
+        "CPP-4DEA197E54EE",
+        "CPP-5C62BC11C7A0",
+        "CPP-636BA9B6E9CA",
+        "CPP-7322249EB6FB",
+        "CPP-A6ECF9F1BC28",
+        "CPP-B749274B4851",
+        "CPP-E0BB6040794D",
+        "CPP-ED542DC5B9B0",
+        "CPP-F2B4F8BA87E8",
+        "CPP-FA12DD35580A"
+      ]
+    },
+    {
+      "id": "cnb-model-material",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnbMaterial(::[A-Za-z0-9_]+)?|CnbTextureTransform(::[A-Za-z0-9_]+)?|CnbSamplerState(::[A-Za-z0-9_]+)?)$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "`CNA_CnbMaterialInfo` for the factors and modes, and **two deliberately separate index spaces for the textures**, because the canonical material carries two different orderings and confusing them is the one mistake here a round trip cannot catch -- both halves would be wrong together.\n\nThe eight texture **names** are one operation selected by `CNA_CnbMaterialTextureSlot`, which runs base colour, second layer, normal, metallic-roughness, emissive, occlusion, specular, specular colour. They are eight separate fields canonically, and they are collapsed for the same reason eleven named gamepad button getters were: sixteen count/copy routes would be the same call written out eight times.\n\nThe per-slot arrays -- `textureCoordinateSets`, `textureTransforms`, `samplers` -- keep the importer's own seven-slot order and are addressed by a plain index below `CNA_CNB_TEXTURE_SLOT_COUNT`. `CNA_CnbTextureTransform` and `CNA_CnbSamplerState` are unversioned values, like a thumbstick pair, because each is a fixed mathematical or wire quantity rather than a descriptor that grows.\n\n`CnbSamplerState::declared` is preserved rather than dropped as redundant: the values are the defaults either way, and what it records is whether the author chose them.",
+      "tests": "`CnbModelSmoke.c` writes a **distinguishable value into every one of the eight names and every one of the seven per-slot entries**, then reads all fifteen back after an encode/decode cycle -- so a binding that had crossed the two orderings would surface as a mismatch rather than round-tripping quietly. `validate_refusals` shows a slot above `CNA_CNB_MATERIAL_TEXTURE_MAXIMUM` and an index at `CNA_CNB_TEXTURE_SLOT_COUNT` both refused.",
+      "status": "implemented",
+      "task": "CBIND-109",
+      "approved_symbols": [
+        "CPP-018DEDF3A7A0",
+        "CPP-032D618917B5",
+        "CPP-0DEC44C4FC2C",
+        "CPP-1C5CE6A2D840",
+        "CPP-1DF21868617E",
+        "CPP-202FDD1CF860",
+        "CPP-2477AD2A2117",
+        "CPP-367CEB23B37F",
+        "CPP-401F2FE5E1AC",
+        "CPP-49CF0C5F81EA",
+        "CPP-4EF628B20655",
+        "CPP-626061DEFD6D",
+        "CPP-7A18FA9AA345",
+        "CPP-8C8E98885DEC",
+        "CPP-9BA0C6501801",
+        "CPP-A1702FA2EF1E",
+        "CPP-A968B825C4A1",
+        "CPP-AC7054BBBE38",
+        "CPP-AED269184A65",
+        "CPP-B520DD2DD0F1",
+        "CPP-BB6DBCF0B8F5",
+        "CPP-BEB43916DB3C",
+        "CPP-C430124738C4",
+        "CPP-C5ED088D9922",
+        "CPP-D42ECBA315CB",
+        "CPP-D70F430B03CA",
+        "CPP-D77418FD190D",
+        "CPP-D8502B1AE87D",
+        "CPP-D8A92CB9C07B",
+        "CPP-E5C41C25AAF6",
+        "CPP-E87A2ECF9483",
+        "CPP-E913B7A80CCC",
+        "CPP-EE1BBA5C4733",
+        "CPP-F76E26F83E69",
+        "CPP-FD708EDD46D9"
+      ]
+    },
+    {
+      "id": "cnb-model-morph",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnbMorphData(::[A-Za-z0-9_]+)?|CnbMorphTarget(::[A-Za-z0-9_]+)?|CnbMorphWeightKey(::[A-Za-z0-9_]+)?)$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "`CNA_CnbMorphInfo` for the flags and counts, with `cna_cnb_model_has_morph`, `_set_morph` and `_clear_morph` standing in for the canonical `std::optional` -- presence is an ordinary answer rather than a failed read, which is what an optional means to a C caller.\n\n`CnbMorphTarget`'s three delta vectors and `CnbMorphWeightKey`'s three float vectors each become one count/copy pair selected by `CNA_CnbMorphDeltaStream` and `CNA_CnbMorphKeyStream`, for the same reason the texture names collapsed: three identical operations differing only in which vector they name.\n\nThe counts in `CNA_CnbMorphInfo` are outputs of the routes that build the streams and are ignored on the way in, so a caller cannot declare a target count the targets do not have.",
+      "tests": "`CnbModelSmoke.c` round-trips a morph target with position deltas, a default weight and a weight-track key, and reads an *empty* stream back as a zero count rather than a refusal; `validate_mutation` adds morph data, clears it, and shows every morph route refusing again afterwards -- and clearing what is already absent still succeeding.",
+      "status": "implemented",
+      "task": "CBIND-109",
+      "approved_symbols": [
+        "CPP-1A0A806514CC",
+        "CPP-266AE6575850",
+        "CPP-27DCCCF2BED9",
+        "CPP-2DE4138487D5",
+        "CPP-334C2E25541D",
+        "CPP-6AFB17976B2D",
+        "CPP-9638DF7C7D4C",
+        "CPP-AEAEF5F662E5",
+        "CPP-AF8C194ACB57",
+        "CPP-BC0CDCA37BC4",
+        "CPP-CB028E873BC3",
+        "CPP-D534E921E6A9",
+        "CPP-DA2F89E37984",
+        "CPP-E06EC8B9D35E",
+        "CPP-E865F97C5BD1",
+        "CPP-EAC8B20313CE",
+        "CPP-EDCF5E1AFD73"
+      ]
+    },
+    {
+      "id": "cnb-model-skeleton",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelSkeleton(::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "`cna_cnb_model_set_skeleton` takes the hierarchy and both pose arrays at once, because a skeleton whose three arrays disagree is not a state worth being able to reach; `_clear_skeleton` removes it, `CNA_CnbSkeletonInfo` reports its shape, and the three matrix arrays come out through one `cna_cnb_model_copy_skeleton_matrices` selected by `CNA_CnbSkeletonMatrixSet`.\n\n`rootPrefix` is optional and its absence is reported by `has_root_prefix` rather than by a zero length alone. The `.skeleton.bin` sidecar signalled it by whether bytes were left over, which made \"deliberately absent\" and \"file truncated\" the same observation; the compiled form states it, and so does this ABI.",
+      "tests": "`CnbModelSmoke.c` round-trips a two-joint skeleton whose bind, inverse-bind and root-prefix matrices carry different diagonals, so a route reading the wrong array is a value mismatch rather than a plausible-looking pass; `validate_mutation` sets a skeleton with no prefix and reads `has_root_prefix` false, then clears it and shows the read refusing while `cna_cnb_model_get_info` still answers. `validate_refusals` shows pose arrays that disagree with the joint count refused.",
+      "status": "implemented",
+      "task": "CBIND-109",
+      "approved_symbols": [
+        "CPP-0946724E9581",
+        "CPP-270A2992E4E9",
+        "CPP-37C054BC3F44",
+        "CPP-3A8DC28200AE",
+        "CPP-CCF9673F7F3E"
+      ]
+    },
+    {
+      "id": "cnb-model-animations-lights",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnbModelAnimation(::[A-Za-z0-9_]+)?|CnbModelLight(::[A-Za-z0-9_]+)?)$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "An animation is added with `cna_cnb_model_add_animation`, which takes the **`CNA_AnimationClipEXTDescriptor` this ABI already publishes** for `SkinnedModelEXT` rather than a second clip shape, and read back through `_get_animation`, `_get_animation_track` and `_copy_animation_keyframes` -- the indexed counterpart, since a decoded clip is owned by the model and cannot be handed out as a borrowed descriptor.\n\nThe target space is a separate argument because the descriptor does not carry one: a `SkinnedModelEXT` clip is always a joint palette, while a compiled model may hold either, and applying one as the other is a silent corruption rather than a visible error.\n\n`CNA_CnbModelLight` is a plain value: three floats of direction and three of colour, already reduced to XNA's directional form by the importer.",
+      "tests": "`CnbModelSmoke.c` round-trips a two-keyframe track on bone 1 with a scene-node target space and checks the space survives -- the default is the *other* value, so a dropped field would read as joint palette and fail. `validate_refusals` shows a target space above the maximum, a non-finite duration and a null descriptor each refused.",
+      "status": "implemented",
+      "task": "CBIND-109",
+      "approved_symbols": [
+        "CPP-1A7F4B8C1955",
+        "CPP-3997A337FBA7",
+        "CPP-9EEB27A1B914",
+        "CPP-B541AAA8813D",
+        "CPP-FE67A92509D2",
+        "CPP-FF9F842C6459"
+      ]
+    },
+    {
+      "id": "cnb-model-codec",
+      "qualified_name_regex": "^CNA::Content::Cnb::(EncodeModelToCnb|DecodeModelFromCnb)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "`cna_cnb_encode_model` follows the count/copy shape for bytes whose size is only known by producing them; `cna_cnb_decode_model` takes an open document and hands back a new model handle the caller releases.\n\nA model whose parts, meshes or skeleton do not agree with each other is refused as `CNA_RESULT_IO`, which is where the canonical `ContentLoadException` lands -- the same answer a malformed file gets, because an inconsistent model and an inconsistent file are the same defect seen from two sides.",
+      "tests": "`CnbModelSmoke.c` `validate_round_trip` encodes a model with every level occupied, parses the bytes as a document, checks its asset type and schema version, and decodes it back -- then re-runs the *entire* field-by-field comparison against the decoded handle. A short destination writes nothing and still reports the size needed, and `validate_wrong_asset_type` shows a sprite-font document refused by the model decoder with the output handle left invalid.",
+      "status": "implemented",
+      "task": "CBIND-109",
+      "approved_symbols": [
+        "CPP-6793C6C45D44",
+        "CPP-875DABB69370"
+      ]
+    },
+    {
+      "id": "cnb-model-from-cnj",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnbModelFromCnjResult(::[A-Za-z0-9_]+)?|BuildCnbModelFromCnj)$",
+      "kinds": [
+        "struct",
+        "field",
+        "function"
+      ],
+      "mapping": "`cna_cnb_build_model_from_cnj` produces a `CNA_CnbModelFromCnjHandle` holding the whole result, and the two file lists come out through count/size/copy triples. The model is reached with `cna_cnb_model_from_cnj_take_model`, which **transfers** it into its own handle rather than lending it: a borrowed model would outlive nothing safely, and a caller could otherwise be left holding one that releasing the result had already destroyed. Taking twice is refused.\n\nThe two lists are kept apart because they answer different questions for a build system -- `absorbedFiles` is what to watch for changes, `externalReferences` is what else must be compiled -- and collapsing them would lose that.",
+      "tests": "`CnbModelSmoke.c` `validate_cnj_compile` shows a missing document answering `CNA_RESULT_IO` with the output handle left invalid, and every accessor on that never-created handle refusing rather than reading through it.",
+      "status": "implemented",
+      "task": "CBIND-109",
+      "approved_symbols": [
+        "CPP-0DA59000D954",
+        "CPP-23C849FF710C",
+        "CPP-9267E69B1C18",
+        "CPP-C15803CD266A",
+        "CPP-CF25B89FD73F"
+      ]
+    },
+    {
+      "id": "cnb-sprite-font-constants",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnbSpriteFontChunk::[A-Za-z0-9_]+|CnbSpriteFontSchemaVersion|CnbSpriteFontHeaderStride|CnbSpriteFontRectangleStride|CnbSpriteFontKerningStride|CnbSpriteFontCharacterStride|CnbMaxSpriteFontGlyphs)$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "`CNA_CNB_SPRITE_FONT_CHUNK_HEADER`, `_GLYPH_BOUNDS`, `_CROPPING`, `_KERNING` and `_CHARACTERS` as packed identifiers, plus `CNA_CNB_SPRITE_FONT_SCHEMA_VERSION`, the four strides and `CNA_CNB_MAX_SPRITE_FONT_GLYPHS`.\n\nThe glyph ceiling is published for the reason the texture ceilings are: it is why a hostile count is refused on sight rather than after the reader has multiplied it by four stride sizes, and a caller sizing its own buffers wants the same number.",
+      "tests": "`CnbSchemaSmoke.c` `validate_identities` asserts each chunk identifier equals what packing its four letters gives, so the constants cannot drift from the packing rule, and pins all six numbers. `validate_sprite_font` then looks up all five identifiers in a file the encoder actually produced. `AbiHeaderC.c` freezes the eleven.",
+      "status": "implemented",
+      "task": "CBIND-110",
+      "approved_symbols": [
+        "CPP-151451B5A0F1",
+        "CPP-2573E070FC71",
+        "CPP-276D9169DD37",
+        "CPP-43A4DB8FE382",
+        "CPP-6A06275FD2FD",
+        "CPP-6DDBCE646359",
+        "CPP-8ED56631930D",
+        "CPP-929836A8EE4C",
+        "CPP-C3A6196DC950",
+        "CPP-D60493485D32",
+        "CPP-EB96ABB6F39F"
+      ]
+    },
+    {
+      "id": "cnb-sprite-font-data",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbSpriteFontData(::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "`CNA_CnbSpriteFontDataHandle`, a handle because the description owns its glyph atlas as well as four parallel arrays.\n\nThe four per-glyph arrays -- `glyphBounds`, `cropping`, `kerning`, `characters` -- become **one** indexed row, `CNA_SpriteFontGlyph`, which is the glyph type the `cna_sprite_font_*` family already publishes. Four parallel count/copy pairs would be a second spelling of the same glyph, and a caller moving a font between the two families would have to marshal between them; the arrays are also required to stay the same length, which one row makes structural rather than a rule to remember.\n\n`lineSpacing`, `spacing` and `defaultCharacter` are read and written through `CNA_CnbSpriteFontInfo`, whose `has_default_character` is how the canonical `std::optional` reaches C: absence is an ordinary answer rather than a zero character that could also be a real one. The atlas is set from and copied out to a `CNA_CnbTextureDataHandle` -- a copy rather than a borrow, because lending it would let a caller hold a texture the font's release had destroyed.",
+      "tests": "`CnbSchemaSmoke.c` `validate_sprite_font` builds a two-glyph font with distinguishable bounds, cropping and kerning per glyph, round-trips it through encode/decode, and reads every field back on both sides; the atlas is copied out and read through the texture routes, then destroyed to show the font still holds its own. The no-default-character case is set, read back as an absence, and re-encoded.",
+      "status": "implemented",
+      "task": "CBIND-110",
+      "approved_symbols": [
+        "CPP-034C914BCB0C",
+        "CPP-0FB07C3E7EBE",
+        "CPP-1F38FF4F0716",
+        "CPP-578DD8898D60",
+        "CPP-676A70AA78CE",
+        "CPP-6A99809ED119",
+        "CPP-6F9377A75B9D",
+        "CPP-8D709A2E34B0",
+        "CPP-B56F54F30CC5"
+      ]
+    },
+    {
+      "id": "cnb-sprite-font-codec",
+      "qualified_name_regex": "^CNA::Content::Cnb::(EncodeSpriteFontToCnb|DecodeSpriteFontFromCnb)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "`cna_cnb_encode_sprite_font` follows the count/copy shape for bytes whose size is only known by producing them; `cna_cnb_decode_sprite_font` hands back a new font handle.\n\nThe **strictly ascending character map** is enforced at encode rather than when a glyph is added. That is deliberate: a caller may build the table in any order and sort it, and the check that matters is the one that stops a file no reader would accept from being written at all.",
+      "tests": "`CnbSchemaSmoke.c` `validate_character_order` builds the same two glyphs in descending order, shows the encode refused as `CNA_RESULT_IO`, then rewrites them in order through `set_glyph` and shows the same font encoding -- so the refusal is the ordering and not something else about the font. `validate_wrong_asset_types` shows a song document refused with the output handle left invalid.",
+      "status": "implemented",
+      "task": "CBIND-110",
+      "approved_symbols": [
+        "CPP-25FB600C7838",
+        "CPP-34B58DDBE259"
+      ]
+    },
+    {
+      "id": "cnb-audio-format-identity",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnbAudioFormat(::[A-Za-z0-9_]+)?|CnbAudioFormatMax)$",
+      "kinds": [
+        "enum",
+        "enum-value",
+        "field"
+      ],
+      "mapping": "`CNA_CnbAudioFormat`, a `uint32_t` identity with the six canonical ordinals and `CNA_CNB_AUDIO_FORMAT_MAXIMUM` for `CnbAudioFormatMax`.\n\nThe numbering is wire format and frozen, for the reason `CnbTextureFormat` exists at all: a file format must not depend on the declaration order of a runtime enumeration, and no audio backend's identifiers are a serialisation ABI. Four of the six are identifiers with **no schema-1 codec**, and they are published anyway because a file may legally declare one and a reader must be able to say which it found.",
+      "tests": "`CnbSchemaSmoke.c` `validate_identities` pins each of the six ordinals and the maximum individually, so a renumbering that moved the middle would not pass a maximum check. `validate_sound_effect` shows a reserved identifier accepted into a description and refused by the encoder -- nameable, not writable.",
+      "status": "implemented",
+      "task": "CBIND-110",
+      "approved_symbols": [
+        "CPP-1E012D227222",
+        "CPP-7560D0A3986E",
+        "CPP-846BA4A006BD",
+        "CPP-A6A89C77B7AD",
+        "CPP-B9250905F21C",
+        "CPP-C83B031A60BC",
+        "CPP-E1652289747F",
+        "CPP-F3B03AFD59AD"
+      ]
+    },
+    {
+      "id": "cnb-audio-format-queries",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnbAudioFrameBytes|CnbAudioFormatToString)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "`cna_cnb_audio_frame_bytes` and the count/copy pair `cna_cnb_get_audio_format_name_size` / `cna_cnb_copy_audio_format_name`.\n\nNeither refuses an identity outside the named set. A frame size of zero is exactly true of a format with no fixed frame size, and a diagnostic that could not render an unknown number would be unable to report the corrupt file it exists to describe -- the same rule the container's own diagnostics follow.",
+      "tests": "`CnbSchemaSmoke.c` `validate_identities` checks a real frame size for mono and stereo PCM16, zero for a reserved format, and zero for an identity no enumerator names; and renders both a named and an unnamed identity. `validate_sound_effect` multiplies the published frame size by the decoded frame count and compares it with the sample byte count the copy route reports, so the two halves of the family are checked against each other rather than each against itself.",
+      "status": "implemented",
+      "task": "CBIND-110",
+      "approved_symbols": [
+        "CPP-3119192C3B92",
+        "CPP-49F8B77B5880"
+      ]
+    },
+    {
+      "id": "cnb-sound-effect-constants",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnbSoundEffectChunk::[A-Za-z0-9_]+|CnbSoundEffectSchemaVersion|CnbSoundEffectHeaderStride|CnbMaxAudioSampleRate)$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "`CNA_CNB_SOUND_EFFECT_CHUNK_HEADER` and `_DATA` as packed identifiers, plus `CNA_CNB_SOUND_EFFECT_SCHEMA_VERSION`, `_HEADER_STRIDE` and `CNA_CNB_MAX_AUDIO_SAMPLE_RATE`.",
+      "tests": "`CnbSchemaSmoke.c` `validate_identities` asserts the `AUDD` identifier equals what packing its letters gives and pins the stride, the schema version and the rate ceiling. `AbiHeaderC.c` freezes all five.",
+      "status": "implemented",
+      "task": "CBIND-110",
+      "approved_symbols": [
+        "CPP-0452C45FE850",
+        "CPP-436DC15D7B51",
+        "CPP-89C2B92C25B9",
+        "CPP-98FC52258908",
+        "CPP-AC4695C13192"
+      ]
+    },
+    {
+      "id": "cnb-sound-effect-data",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbSoundEffectData(::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "`CNA_CnbSoundEffectDataHandle`, built from `CNA_CnbSoundEffectInfo` plus its sample bytes and read back through the same structure and `cna_cnb_sound_effect_data_copy_samples`.\n\nA handle rather than a returned value, because the samples are bulk data: a decode that handed them back by copy would have to run twice for a caller to size the buffer, and a sound effect is exactly the asset where that second pass is measured in megabytes.\n\n`samples` is headerless little-endian PCM in `format`, not a container's raw bytes -- that is what the runtime's raw-buffer constructor takes, and storing anything else would mean decoding a container at load time for no benefit. The description is stored as given; the encoder is what checks it, which is what lets a caller fill one in any order.",
+      "tests": "`CnbSchemaSmoke.c` `validate_sound_effect` round-trips a stereo 22.05 kHz sound with a real loop region and compares the samples byte for byte; a loop region reaching past the end of the sound is refused by the encoder rather than stored silently, and a short capacity reports the size needed without writing.",
+      "status": "implemented",
+      "task": "CBIND-110",
+      "approved_symbols": [
+        "CPP-3FA1F4FE5728",
+        "CPP-63461BFA3C1B",
+        "CPP-6969703EA10E",
+        "CPP-7666EDEE63DE",
+        "CPP-A4B95D9B57E8",
+        "CPP-A80F5201AD95",
+        "CPP-B5E541E3801B",
+        "CPP-F217B85FD2B7"
+      ]
+    },
+    {
+      "id": "cnb-sound-effect-codec",
+      "qualified_name_regex": "^CNA::Content::Cnb::(EncodeSoundEffectToCnb|DecodeSoundEffectFromCnb)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "`cna_cnb_encode_sound_effect` and `cna_cnb_decode_sound_effect`, the same count/copy and new-handle shapes the other schemas use. A reserved format with no v1 codec, an inconsistent description and a loop region outside the sound are all `CNA_RESULT_IO`, which is where the canonical content exception lands.",
+      "tests": "`CnbSchemaSmoke.c` `validate_sound_effect` covers all three refusals and the round trip; `validate_wrong_asset_types` shows a song document refused with the output handle left invalid.",
+      "status": "implemented",
+      "task": "CBIND-110",
+      "approved_symbols": [
+        "CPP-98CE64A0714F",
+        "CPP-A19A37556AF7"
+      ]
+    },
+    {
+      "id": "cnb-media-constants",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnbMediaChunk::[A-Za-z0-9_]+|CnbMediaSchemaVersion|CnbSongHeaderFixedStride|CnbVideoHeaderStride|CnbMaxVideoDimension)$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "`CNA_CNB_MEDIA_CHUNK_SONG_HEADER` and `_VIDEO_HEADER` as packed identifiers, plus `CNA_CNB_MEDIA_SCHEMA_VERSION`, `CNA_CNB_SONG_HEADER_FIXED_STRIDE`, `CNA_CNB_VIDEO_HEADER_STRIDE` and `CNA_CNB_MAX_VIDEO_DIMENSION`.\n\nThe song stride is named `_FIXED_STRIDE` because it is the fixed part only: the display name follows it and is variable-length.",
+      "tests": "`CnbSchemaSmoke.c` `validate_identities` asserts both chunk identifiers equal what packing their letters gives and pins the four numbers. `AbiHeaderC.c` freezes all six.",
+      "status": "implemented",
+      "task": "CBIND-110",
+      "approved_symbols": [
+        "CPP-18E4349902AD",
+        "CPP-2C8E632CF3C6",
+        "CPP-6A9FC8EF4526",
+        "CPP-80BA80D422BC",
+        "CPP-ECF817418981",
+        "CPP-EFACE3DB60B5"
+      ]
+    },
+    {
+      "id": "cnb-media-values",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnbSongData(::[A-Za-z0-9_]+)?|CnbVideoData(::[A-Za-z0-9_]+)?)$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "**No handle for either.** Both are metadata -- three scalars and two short strings for a song, five scalars and one string for a video -- so a song is written from three loose arguments and read back through `cna_cnb_decode_song_duration_milliseconds` plus two count/copy pairs, and a video through `CNA_CnbVideoInfo` in both directions plus one count/copy pair for its reference. A handle would have added a lifetime to something that does not have one.\n\n`soundtrackType` is `CNA_VideoSoundtrackType`, the identity the `cna_video_*` family already publishes, rather than a bare number.\n\nThe `streamReference` is why these files are metadata at all: a song can be hundreds of megabytes and wants streaming, so the media stays beside the file and is recorded as its single `XREF` entry. That makes it readable two ways -- through the container's external-reference table, or through the schema route here, which also applies the rule that there is **exactly one**.",
+      "tests": "`CnbSchemaSmoke.c` `validate_media` round-trips a named song and a 1280x720 29.97 fps video with a music-and-dialog soundtrack, reads every field back, and **cross-checks the stream reference against the document's own external-reference table** so the two views of one fact cannot drift. A song with no display name reports a zero-length name rather than failing; an empty stream reference, an over-range dimension, a zero frame rate and an unknown soundtrack type are each refused.",
+      "status": "implemented",
+      "task": "CBIND-110",
+      "approved_symbols": [
+        "CPP-248D67C13D0C",
+        "CPP-27E2D16F2F58",
+        "CPP-2DDEA45FD53B",
+        "CPP-501899FD5D32",
+        "CPP-657D27C13655",
+        "CPP-7AC5EB0CBAFC",
+        "CPP-7B511E6E0B73",
+        "CPP-802BEAF6878D",
+        "CPP-8E1A83D17960",
+        "CPP-A7AF0F228983",
+        "CPP-FA5CD5F559AF"
+      ]
+    },
+    {
+      "id": "cnb-media-codec",
+      "qualified_name_regex": "^CNA::Content::Cnb::(EncodeSongToCnb|EncodeVideoToCnb|DecodeSongFromCnb|DecodeVideoFromCnb)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "`cna_cnb_encode_song` and `cna_cnb_encode_video` follow the count/copy shape; the decode direction is spread over the field routes above rather than a single call, because C cannot return owned strings inside a structure and a two-call decode of a whole song would re-copy its display name anyway.",
+      "tests": "`CnbSchemaSmoke.c` `validate_media` covers both round trips and every refusal, and shows each media decoder refusing the other's file -- a song document read as a video, and a video document read as a song.",
+      "status": "implemented",
+      "task": "CBIND-110",
+      "approved_symbols": [
+        "CPP-A2C5C915880B",
+        "CPP-B14D31D8076D",
+        "CPP-C0DF6F74094B",
+        "CPP-D84FF62C1730"
+      ]
+    },
+    {
+      "id": "cnb-curve-schema",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnbCurveChunk::[A-Za-z0-9_]+|CnbCurveSchemaVersion|CnbCurveKeyStride|EncodeCurveToCnb|DecodeCurveFromCnb)$",
+      "kinds": [
+        "field",
+        "function"
+      ],
+      "mapping": "`CNA_CNB_CURVE_CHUNK_HEADER` and `_KEYS`, `CNA_CNB_CURVE_SCHEMA_VERSION`, `CNA_CNB_CURVE_KEY_STRIDE`, and the pair `cna_cnb_encode_curve` / `cna_cnb_decode_curve`.\n\nThe curve on both sides is the **`CNA_CurveHandle` the `cna_curve_*` family already owns**, released with `cna_curve_destroy`. There is no compiled-curve description in this ABI, because there is none in the canonical layer either: a curve is small enough that the compiled form is the runtime form laid out flat, and inventing a second C type for it would have made a decoded curve something a caller had to convert before using.",
+      "tests": "`CnbSchemaSmoke.c` `validate_curve` builds a curve through the curve family's own routes with two keys of different continuity and two different loop types, encodes it, and then reads the decoded handle back **through those same routes** -- `cna_curve_get_pre_loop`, `cna_curve_get_keys`, `cna_curve_key_collection_get` -- which is what proves the decoded handle is an ordinary curve rather than a second kind of object that merely looks like one.",
+      "status": "implemented",
+      "task": "CBIND-110",
+      "approved_symbols": [
+        "CPP-23E7FD1373B4",
+        "CPP-B8D16A272A63",
+        "CPP-BB62D7E2EBEF",
+        "CPP-C611E7214C57",
+        "CPP-F68121F49DAF",
+        "CPP-F80AED7A0223"
+      ]
+    },
+    {
+      "id": "cnb-animation-clip-constants",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnbAnimationClipChunk::[A-Za-z0-9_]+|CnbAnimationClipSchemaVersion|CnbAnimationTrackStride|CnbAnimationKeyStride)$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "`CNA_CNB_ANIMATION_CLIP_CHUNK_HEADER`, `_TRACKS` and `_KEYS` as packed identifiers, plus `CNA_CNB_ANIMATION_CLIP_SCHEMA_VERSION`, `CNA_CNB_ANIMATION_TRACK_STRIDE` and `CNA_CNB_ANIMATION_KEY_STRIDE`.",
+      "tests": "`CnbSchemaSmoke.c` `validate_identities` asserts the `ACLK` identifier equals what packing its letters gives and pins both strides; `validate_shared_keyframe` writes one keyframe through the byte writer and asserts the bytes produced equal `CNA_CNB_ANIMATION_KEY_STRIDE` -- so the published stride is what the writer actually writes rather than a transcribed number.",
+      "status": "implemented",
+      "task": "CBIND-110",
+      "approved_symbols": [
+        "CPP-08BD0E169774",
+        "CPP-3CBC31352026",
+        "CPP-3DFE7B19ABF0",
+        "CPP-A29CDD9960A6",
+        "CPP-C8ADFBF1E26C",
+        "CPP-DD5AEF9628B7"
+      ]
+    },
+    {
+      "id": "cnb-animation-clip-primitives",
+      "qualified_name_regex": "^CNA::Content::Cnb::(ReadCnbSeconds|WriteCnbKeyframe|ReadCnbKeyframe)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "`cna_cnb_reader_read_seconds`, `cna_cnb_reader_read_keyframe` and `cna_cnb_byte_writer_write_keyframe` -- named after the cursor and the writer a C caller already holds rather than after the free functions, the way the embedded-texture pair was.\n\nThey are published rather than kept internal because they are the reason there is exactly **one** keyframe encoding in CNB: a model's embedded clips and a standalone clip go through the same three routines, and a caller writing a chunk of its own can use the same ones instead of re-deriving the layout.\n\n`ReadCnbSeconds` exists because the canonical `TimeSpan` factory throws a numeric exception for a NaN or out-of-range value, and that is not what the content subsystem's callers catch; in C the same distinction is a malformed file answering `CNA_RESULT_IO` rather than an argument error.",
+      "tests": "`CnbSchemaSmoke.c` `validate_shared_keyframe` writes a keyframe, measures it against the published stride, reads it back through a cursor over those exact bytes, and shows a second read past the end answering `CNA_RESULT_IO` rather than junk. An infinity written as a bare `f64` and then read as seconds is a content failure; a finite value reads. A non-finite time is refused on the way *in* as an argument error, which is the right side of the same line.",
+      "status": "implemented",
+      "task": "CBIND-110",
+      "approved_symbols": [
+        "CPP-18008F4FC1CE",
+        "CPP-9DD8BBF87D6A",
+        "CPP-E79B83929527"
+      ]
+    },
+    {
+      "id": "cnb-animation-clip-codec",
+      "qualified_name_regex": "^CNA::Content::Cnb::(EncodeAnimationClipToCnb|DecodeAnimationClipFromCnb)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "`cna_cnb_encode_animation_clip` takes the **`CNA_AnimationClipEXTDescriptor` this ABI already publishes**, with the target space as a separate argument for the reason `CBIND-109` gave: the descriptor cannot carry one, a compiled clip may hold either, and applying one as the other is a silent corruption.\n\n`cna_cnb_decode_animation_clip` hands back a `CNA_CnbAnimationClipHandle` read by index, because a decoded clip owns its keyframes and so cannot be lent back as the borrowed descriptor the encode direction takes.",
+      "tests": "`CnbSchemaSmoke.c` `validate_animation_clip` round-trips a two-track clip with a scene-node target space -- the default is the *other* value, so a dropped field fails rather than passing -- checks each track's bone index and keyframe count, compares the keyframes, and shows a short capacity reporting the count without writing. An unknown target space and a null descriptor are argument errors, not content ones.",
+      "status": "implemented",
+      "task": "CBIND-110",
+      "approved_symbols": [
+        "CPP-13685996EE2D",
+        "CPP-C2A598CD54B0"
+      ]
+    },
+    {
+      "id": "cnb-loader-registry-friend",
+      "qualified_name_regex": "^CNA::Content::CnbLoaderRegistry::ContentManager$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No C mapping: this is a friendship declaration granting `ContentManager` access to the private built-in registration route, not a callable public member. Publishing a route for it would hand a caller the access the declaration exists to withhold -- the compile-time half of the CNA/game boundary that keeps a game from registering a built-in identifier at all.",
+      "tests": "Doxygen declaration inventory; no callable native operation exists",
+      "status": "not-applicable",
+      "task": "CBIND-111",
+      "approved_symbols": [
+        "CPP-1465BF0F07E5"
+      ]
+    },
+    {
+      "id": "cnb-loader-registry",
+      "qualified_name_regex": "^CNA::Content::CnbLoaderRegistry(::(LoaderFn|Register|Remove|Clear|IsRegistered|Find|RegisteredTypeName|ResolveForDocument|RegisterBuiltIns))?$",
+      "kinds": [
+        "class",
+        "alias",
+        "method"
+      ],
+      "mapping": "The process-wide table becomes ten `cna_cnb_loader_registry_*` routes plus a `CNA_CnbLoaderHandle`. There is no registry handle: the canonical class is entirely static, so a handle would be a name for a thing there is only one of.\n\n`LoaderFn` becomes `CNA_CnbLoaderCallback`, which produces a `void*` boxed as the **same** wrapper a caller-supplied `.xnb` reader's object goes into -- so a C-produced `.cnb` asset and a C-produced `.xnb` asset are one kind of thing to everything above them, and a C++ load asking for another type fails its unboxing cleanly rather than reinterpreting an unrelated pointer. The document and the content manager reach the callback as **callback-scoped borrowed handles**, created over the canonical references and released on every path before the callback returns.\n\n`Find` and `ResolveForDocument` return a `CNA_CnbLoaderHandle` rather than a boolean, because what they canonically return is a **copy** of the loader -- a pointer into the table would be invalidated by any later registration, and the copy is what makes an already-resolved loader survive its own withdrawal. `cna_cnb_loader_invoke` is what makes that copy worth having; a loader registered from C++ answers `CNA_RESULT_NOT_SUPPORTED` there, because it constructs a C++ object whose type nothing in C could name.\n\n`Remove` returning false and `Find` returning `std::nullopt` are ordinary answers, not refusals: absence is reported through an output, the way every optional query in this ABI reports it.",
+      "tests": "`CnbToolingSmoke.c` `validate_loader_registry` drives the whole table end to end: a custom identifier minted from a name, a C loader registered for it, a real `.cnb` carrying that identifier and that canonical name built, resolved and invoked, and the pointer the callback produced compared with what it returned. The callback proves **both** borrowed handles were live inside it by reading the document's asset type and the manager's root directory through them. Re-registration under the same name is a no-op and under a different name is refused; a built-in identifier has no registration route; a name that does not hash to its identifier is refused. A failing loader fails the load. The identity rule is checked at the point CNA enforces it -- the **writer** refuses to assemble a file whose canonical name and identifier disagree, a step before any loader sees it. Withdrawing a registration makes every lookup answer as before while the already-resolved copy still invokes, which is the whole reason it is a copy.",
+      "status": "implemented",
+      "task": "CBIND-111",
+      "approved_symbols": [
+        "CPP-071369169069",
+        "CPP-333F135BC59C",
+        "CPP-4267F8086A28",
+        "CPP-64128347DD3D",
+        "CPP-649AB979AE68",
+        "CPP-78A51AE9B9A4",
+        "CPP-A39B24D476D6",
+        "CPP-A71BF356E028",
+        "CPP-B6D894DD42FF",
+        "CPP-E0DB0D63AC6F"
+      ]
+    },
+    {
+      "id": "cnb-image-import-options",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbImageImportOptions(::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "`CNA_CnbImageImportOptions`, a versioned structure whose `has_color_key` carries the canonical `std::optional`'s presence. Absence is the default and means the pixels are not touched: the `.cnj` route applies a colour key when the document asks for one, and a direct image compile has no document to ask, so silently rewriting someone's pixels would be worse than making them say so.",
+      "tests": "`CnbToolingSmoke.c` `validate_image_import` imports the same one-pixel image three ways -- with no options, with a key that matches, and with a key that does not -- and compares the pixel each time. A matching key leaves the RGB and zeroes only the alpha; a non-matching one changes nothing, which is what makes the first check mean something. An unknown structure version and a non-canonical `CNA_Bool` are both refused. `AbiHeaderC.c` freezes the layout.",
+      "status": "implemented",
+      "task": "CBIND-111",
+      "approved_symbols": [
+        "CPP-3AD229996391",
+        "CPP-5849876F8ECF"
+      ]
+    },
+    {
+      "id": "cnb-source-import",
+      "qualified_name_regex": "^CNA::Content::Cnb::(ImportImageAsCnbTexture2D|ImportDdsAsCnbTextureCube|DecodeDdsAsCnbTextureCube|ImportWavAsCnbSoundEffect|DecodeWavAsCnbSoundEffect)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "Five routes producing the handles `CBIND-108` and `CBIND-110` already publish, so an imported asset and a decoded one are the same thing and reach the same encoder. The from-path and from-bytes pairs both exist because the canonical layer has both, and a build system that already holds the bytes should not have to write them to a file to compile them.\n\n**One deviation, and it is the C layer holding the documented contract the canonical layer states but does not enforce.** `ImportImageAsCnbTexture2D` documents a content failure \"if the file cannot be read or decoded\", but the shared image decoder raises a plain `std::runtime_error` for an unreadable file and the importer translates only its own two checks; left alone the exception firewall would answer `CNA_RESULT_INTERNAL` -- \"a bug in CNA\" -- to a caller whose file is simply not there. This route answers `CNA_RESULT_IO`. The canonical gap is recorded in `plans/plan_binding.md` rather than patched.",
+      "tests": "`CnbToolingSmoke.c` measures rather than merely calls: the imported image's pixel is compared, the DXT1 cube is checked to arrive as `RGBA8` and explicitly **not** as `BC1` -- the contract being that the compiler decompresses rather than storing blocks this build could not upload -- and all six faces are read as whole 4x4 levels. The WAV's format, rate, channel count, frame count and sample bytes are all compared, and an IEEE-float WAV is refused by name rather than converted, which is the point of the importer being narrow. Missing files, truncated bytes and null outputs are each driven.",
+      "status": "implemented",
+      "task": "CBIND-111",
+      "approved_symbols": [
+        "CPP-3654F551DC06",
+        "CPP-4D2687E43812",
+        "CPP-668B505CAFBC",
+        "CPP-AAC1BD504A8B",
+        "CPP-F8534DFA6182"
+      ]
+    },
+    {
+      "id": "cnb-cnj-compile",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnjToCnbResult(::[A-Za-z0-9_]+)?|CompileCnjToCnb)$",
+      "kinds": [
+        "struct",
+        "field",
+        "function"
+      ],
+      "mapping": "`cna_cnb_compile_cnj` produces a `CNA_CnjToCnbResultHandle`; the bytes come out through a copy route and the two file lists through count/size/copy triples.\n\nA handle rather than loose outputs because the two lists are what make the result useful to a build system rather than only to a loader, and they answer different questions: `absorbed_file` is what the compile consumed, so a dependency graph knows when to rebuild, and `external_reference` is what it left external, so the same graph knows those assets must also be compiled. Collapsing them would lose that. The paths are as they were written in the source document rather than resolved, so a build script can match them against what it generated.",
+      "tests": "`CnbToolingSmoke.c` `validate_cnj_compile` compiles a `.cnj` curve and then **checks the compiler against the codec**: the produced bytes are parsed as a container, its asset type compared with the one the result reports, and the curve decoded back out through `CBIND-110`'s route and read through the curve family's own accessors. The source document is checked to be the first absorbed entry under its own name, and a curve is checked to name nothing external. Out-of-range indices, a missing document, a null output and a released handle are each driven.",
+      "status": "implemented",
+      "task": "CBIND-111",
+      "approved_symbols": [
+        "CPP-61B5B249BF7C",
+        "CPP-6CC604E7A37D",
+        "CPP-8DDA90ED4E99",
+        "CPP-8E522A9D3403",
+        "CPP-C1D9CCCAB3E3",
+        "CPP-D4CD91A0A55C",
+        "CPP-FF72C2BC16B7"
+      ]
+    },
+    {
+      "id": "vector3-compound-assignment",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Vector3::operator(?:\\*=|/=)$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "`cna_vector3_multiply`, `_multiply_scalar`, `_divide` and `_divide_scalar`, one per overload. C has no operator overloading and no compound assignment on a struct, so `v *= w` is the binary route with the destination naming the left operand: every one of these takes its vectors **by value**, which is what makes `cna_vector3_multiply(v, w, &v)` well defined rather than an aliasing hazard.\n\nThis follows `CBIND-081`'s answer for `Vector2`, and needs no new routes for the same reason -- but the by-value property is measured here rather than inherited, because it is the whole of the mapping.",
+      "tests": "`VectorSmoke.c` `validate_vector3_compound_assignment` runs each of the four overloads twice, once into a separate destination and once with the destination aliasing an operand, and requires the two results to agree -- from **both** sides, with the right operand aliasing the destination as well as the left. It then requires the aliased result to differ from the input, so a match cannot be a no-op agreeing with itself. Mutation-checked: giving the aliased call a different scalar fails.",
+      "status": "implemented",
+      "task": "CBIND-103",
+      "approved_symbols": [
+        "CPP-0701DE2335F0",
+        "CPP-0E17FBF9D6A0",
+        "CPP-7FDADD77EA8F",
+        "CPP-FAE1195393AE"
+      ]
+    },
+    {
+      "id": "matrix-compound-assignment",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Matrix::operator\\*=$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "`cna_matrix_multiply` and `cna_matrix_multiply_scalar`, one per overload, with the destination naming the left operand.\n\n**Checked rather than assumed.** `CBIND-081` established the by-value convention on `Vector2`, but a `Matrix` is 64 bytes and a wider value is exactly where an ABI might have switched to passing by pointer -- at which point `cna_matrix_multiply(m, n, &m)` would be an aliasing hazard instead of the mapping. Both routes do take their matrices by value, and the test measures it.",
+      "tests": "`MatrixSmoke.c` `validate_compound_assignment` multiplies two fully populated matrices into a separate destination and again with the destination aliasing an operand -- left and right in turn -- and requires the results to agree; the scalar overload gets the same treatment. It then requires the aliased result to differ from the input, so a match cannot be a no-op. Mutation-checked: giving the aliased call a different scalar fails.",
+      "status": "implemented",
+      "task": "CBIND-103",
+      "approved_symbols": [
+        "CPP-B0D70D5086E5",
+        "CPP-D56E15CFDCB8"
+      ]
+    },
+    {
+      "id": "quaternion-default-constructor",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Quaternion::Quaternion$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "the zero-initialized `CNA_Quaternion`. The canonical parameterless constructor sets all four components to zero -- C# gives every struct one that zeroes its fields, and the canonical comment says so -- and the C form of that is the struct's own zero value, which a caller writes directly in a declaration. An init route would be a second spelling of it.\n\n**Read rather than assumed**, because `CBIND-081` recorded the same trap for `Matrix()`: the friendly-looking default for a quaternion is the *identity*, and it is not what the canonical constructor produces.",
+      "tests": "`QuaternionSmoke.c` `validate_default_value` requires a zeroed `CNA_Quaternion` to be (0,0,0,0) and the identity from `cna_quaternion_get_identity` to be (0,0,0,1), then requires the two to differ -- which is what would fail if a later change made the C default the friendlier identity. Mutation-checked: setting the zeroed value's `w` to 1 fails.",
+      "status": "implemented",
+      "task": "CBIND-103",
+      "approved_symbols": [
+        "CPP-96F2229DA75C"
+      ],
+      "signature_regex": "^\\(\\)$"
+    },
+    {
+      "id": "dynamic-vertex-buffer-using-declarations",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::DynamicVertexBuffer::SetData$",
+      "signature_regex": "^\\(const Vertex[A-Za-z]+ \\*data, int (?:count|startIndex, int elementCount)\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_vertex_buffer_set_data`, unchanged -- these are `VertexBuffer`'s own seven typed families, and they appear on the derived type only because `using VertexBuffer::SetData;` makes the base overloads declarations of it too.\n\n**A `using` declaration introduces no operation, so it gets no route**, and the C shape already carries the reason: a dynamic buffer is not a separate handle type here. `CNA_VertexBufferCreateInfo` has a `dynamic` flag and `CNA_VertexBufferInfo` reports it, so one `CNA_VertexBufferHandle` addresses both kinds and one route serves both. The transfer descriptor also carries `options`, which is why the same route answers the no-option overloads here and the `SetDataOptions` overloads the derived type declares itself.\n\nThe rows are listed separately rather than folded into `vertex-buffer-complete-contract` because that rule's text describes the base contract, and what needed writing down was **why a derived-class declaration is answered by a base route** -- which is a different statement.",
+      "tests": "`VertexBufferSmoke.c` `validate_all_typed` covers all seven built-in vertex types through both the count and the source-window transfer, on dynamic as well as static buffers, which is exactly the set of overloads these declarations name.",
+      "status": "implemented",
+      "task": "CBIND-104",
+      "approved_symbols": [
+        "CPP-074BB6CC9DC0",
+        "CPP-5AFA44B3536E",
+        "CPP-7F0FAA828233",
+        "CPP-85210D78375E",
+        "CPP-A6EB39EA3A4F",
+        "CPP-AF728A50E712",
+        "CPP-B2408C94B703",
+        "CPP-BCB11700FC89",
+        "CPP-D16C7FD30AE7",
+        "CPP-D926EF94BB7C",
+        "CPP-DB4A440037AB",
+        "CPP-DDB2590D8250",
+        "CPP-F1160C75705F",
+        "CPP-F8EBD924D15A"
+      ]
+    },
+    {
+      "id": "vertex-buffer-raw-with-options",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::(?:VertexBuffer::SetDataRaw(?:At)?WithOptions|DynamicVertexBuffer::SetData)$",
+      "signature_regex": "^(?:\\(const void \\*data, int startIndex, int elementCount, int stride, SetDataOptions options\\)|\\(int offsetInBytes, const void \\*data, int startIndex, int elementCount, int stride, SetDataOptions options\\)|template<typename TVertex> \\(const TVertex \\*data, int count\\)|template<typename TVertex> \\(const TVertex \\*data, int startIndex, int elementCount, SetDataOptions options\\)|template<typename TVertex> \\(int offsetInBytes, const TVertex \\*data, int startIndex, int elementCount, int vertexStride, SetDataOptions options\\))$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_vertex_buffer_set_data_raw_with_options` and `cna_vertex_buffer_set_data_raw_at_with_options`, plus the existing `cna_vertex_buffer_set_data_raw` for the two-argument template.\n\nThe `SetData<TVertex>` templates are the public door to the two protected `SetDataRaw*WithOptions` methods, and they flatten in C the way `StorageBufferT<T>` did: an application-defined vertex type has no `CNA_VertexType`, so it is uploaded exactly as it sits in memory and the stride becomes an argument. The **windowed** template is what both new routes call, because it takes the stride as a parameter while the narrower one derives it from `sizeof(TVertex)` -- and a stride known only at run time cannot be a type's size.\n\n**A static buffer is refused.** These overloads are declared on `DynamicVertexBuffer`, a streaming hint means nothing without one, and accepting a static buffer would invent a path the canonical API does not have.\n\nThe two protected methods have no route of their own for the ordinary reason: they are not public, and what a caller reaches is the template above them.",
+      "tests": "`VertexBufferSmoke.c` `validate_raw_with_options` uploads through both routes on a dynamic buffer and reads the vertices back typed, checks the windowed form replaces one vertex and leaves the other, and drives the refusals -- an undefined option, a null source, a zero stride, a byte count short of the vertices described, a misaligned offset, and a **static** buffer answering `CNA_RESULT_NOT_SUPPORTED` for both routes, which is the arm that would pass silently if the dynamic requirement were dropped.",
+      "status": "implemented",
+      "task": "CBIND-104",
+      "approved_symbols": [
+        "CPP-0785B25EC8C3",
+        "CPP-2EEE0102E3F8",
+        "CPP-4C978529F372",
+        "CPP-6C8AEFADA468",
+        "CPP-A5E136BCC58C"
+      ]
+    },
+    {
+      "id": "effect-material-retained-textures",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::EffectMaterial::(?:RetainParameterTextureEXT|GetRetainedParameterTextureCountEXT)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_effect_material_retain_parameter_texture_ext` and `cna_effect_material_get_retained_parameter_texture_count_ext`. An `EffectMaterial` has no handle of its own -- it is a `CNA_EffectHandle` whose object happens to be one, which is what `cna_effect_material_create` hands back -- so both routes check what they were actually given rather than trusting the caller.\n\nThe texture arrives as a handle plus a `CNA_EffectTextureType`, the same discriminator `cna_effect_parameter_set_value_texture` already uses, because C has no single texture handle type. A null handle is ignored rather than refused, because the canonical method ignores a null pointer and the two must not disagree about the same input.\n\n**Retaining does not gate the texture's own destroy, and that is the contract rather than an omission.** `cna_effect_parameter_set_value_texture` gates one because a parameter holds a raw pointer nothing owns; retaining is precisely the mechanism that removes that hazard, so only the canonical texture is handed over and the caller may release its handle immediately afterwards.",
+      "tests": "`EffectSmoke.c` retains a real 1x1 texture, checks the count rises, **destroys the caller's handle and checks the count stays raised** -- which is the whole contract, and the arm a gate would have made unreachable. The create is deliberately not guarded on success, because a skipped check defends nothing. An Effect that is not an EffectMaterial, a texture type outside the named family and a null count output are each refused. Mutation-checked: removing the retain call fails.",
+      "status": "implemented",
+      "task": "CBIND-104",
+      "approved_symbols": [
+        "CPP-6134D2403453",
+        "CPP-7BB39EBD31F7"
+      ]
+    },
+    {
+      "id": "occlusion-query-pixel-count-precision",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::OcclusionQuery::isPixelCountPreciseEXT$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_occlusion_query_get_is_pixel_count_precise_ext`.\n\nOne boolean, and it exists because the pixel count beside it is not always a count: OpenGL ES 3.0 and WebGL 2 have only the boolean `GL_ANY_SAMPLES_PASSED`, so their query answers 0 or 1. A coverage ratio computed from that is `1/area` rather than a fraction, so a game that needs one has to be able to ask which it is holding rather than dividing and hoping.",
+      "tests": "`GraphicsDeviceSmoke.c` reads it beside the pixel count it qualifies and requires a canonical `CNA_Bool` -- not which of the two this build reports, because that is the backend's answer -- and requires the null output to be refused.",
+      "status": "implemented",
+      "task": "CBIND-104",
+      "approved_symbols": [
+        "CPP-147BC775F119"
+      ]
+    },
+    {
+      "id": "reflective-type-reader-builder",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ReflectiveTypeReaderBuilder(?:::(?:ReflectiveTypeReaderBuilder|Field|EnumField|Custom|Register))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
+      "mapping": "`CNA_ReflectiveTypeReaderBuilderHandle` and six `cna_reflective_type_reader_builder_*` routes.\n\nThe canonical builder is a fluent template whose `Field(&T::member)` captures a **pointer-to-member**, and C has no such thing. A field therefore becomes a **kind and a byte offset**, which carries the same information in the form C can hold: `add_field` for the value types XNA writes inline, `add_enum_field` for an enum, `add_custom` for a member the wire format does not map onto an offset. Chaining becomes a handle plus append routes, following `cna_content_type_reader_manager_register` rather than inventing a mechanism.\n\nTwo things the C form must supply that C++ took from `T`. The object is made by a caller callback, because the canonical reader default-constructs its `T` -- and that also settles ownership without an allocator crossing the ABI: the object is the caller's, allocated and freed by the caller, and CNA only writes the declared fields into it. And a **reference-type** member cannot land in a byte offset at all, because XNA writes it with its own reader index in front; that is what `add_custom` is for, and the header says so rather than leaving a caller to discover it.\n\n`Register()` returns no handle, because the canonical one has no undo: registering the same canonical name again replaces the entry, which is what both sides rely on, and a withdrawal route here would be surface the canonical layer does not have.",
+      "tests": "`ContentSmoke.c` `validate_reflective_reader` declares a five-member type -- an int, a float, an enum, a bool and a custom member -- against a **hand-written `.xnb`** whose type-reader table names both readers, and checks every field of the object the load produced. The custom callback stores its value *doubled*, so a value it wrote cannot be confused with one CNA stored inline. Mutation-checked twice: expecting the undoubled value fails, and dropping the enum reader registration fails -- which is what proves the `.xnb`'s table must resolve in full before any object is read, even for a reader this one never dispatches to. An undefined field kind, a null callback, a null factory and an empty type name are each refused, and a released builder refuses further appends while the registration it made keeps working.",
+      "status": "implemented",
+      "task": "CBIND-105",
+      "approved_symbols": [
+        "CPP-13D3ECA10DDF",
+        "CPP-6BEF953DB7A2",
+        "CPP-8E7B06045778",
+        "CPP-958C0C76CA6E",
+        "CPP-BCA8863A0B4F",
+        "CPP-DA9105F5AF12"
+      ]
+    },
+    {
+      "id": "reflective-type-reader",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ReflectiveTypeReader(?:::(?:ReflectiveTypeReader|FieldReader|Read|CanonicalReaderName))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "alias",
+        "method"
+      ],
+      "mapping": "The reader the builder registers, plus `cna_reflective_type_reader_get_canonical_name_size` / `_copy_canonical_name`.\n\n**It is not this template that gets instantiated, and it could not be**: `ReflectiveTypeReader<T>` needs a C++ `T` to default-construct and to hold member pointers into, and a C caller has neither. What is bound is the **contract** -- the canonical reader name, the declared wire order, and value types read inline -- implemented against a caller-made object and byte offsets. Recording that plainly is better than implying a template was reached from C.\n\n`FieldReader`, a `std::function<void(T&, ContentReader&)>`, is `CNA_ReflectiveFieldCallback`, with the ContentReader arriving as the **callback-scoped borrowed handle** the caller-supplied reader path already uses. `Read` is the override the reader table calls, reached by loading rather than by a route. `CanonicalReaderName` is published because it is the key the table is looked up by -- a caller checking a manifest wants the same string CNA computes.",
+      "tests": "`ContentSmoke.c` builds its fixture's type-reader table **from these routes** rather than transcribing the name, so a change to the composition would break the file rather than pass unnoticed, and checks the composed name against the literal both ways. A short destination writes nothing and still reports the size needed. The read path itself is covered by the builder's fixture above.",
+      "status": "implemented",
+      "task": "CBIND-105",
+      "approved_symbols": [
+        "CPP-09F8D426369F",
+        "CPP-3BE11F5524B5",
+        "CPP-8CFE0971200E",
+        "CPP-AD878A828305",
+        "CPP-B05F4DF8284A"
+      ]
+    },
+    {
+      "id": "enum-type-reader",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::EnumTypeReader(?:::(?:EnumTypeReader|Read|CanonicalReaderName))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
+      "mapping": "Registered by `cna_reflective_type_reader_builder_add_enum_field`, with its name published by `cna_enum_type_reader_get_canonical_name_size` / `_copy_canonical_name`.\n\nIt gets no construction route of its own for the reason the canonical class exists at all: it is never dispatched to. A reflective payload writes an enum **inline** as its `Int32`; this reader exists so the `.xnb`'s type-reader table resolves in full, which it must do before any object is read. Publishing a way to make one by hand would suggest a use it does not have.",
+      "tests": "`ContentSmoke.c` names it in the fixture's reader table using the canonical-name route, and the mutation that stops registering it makes the load fail -- so the reader is proved load-bearing rather than assumed to be.",
+      "status": "implemented",
+      "task": "CBIND-105",
+      "approved_symbols": [
+        "CPP-07B276A48B0C",
+        "CPP-4E9F84E62F5A",
+        "CPP-9DD01785B424",
+        "CPP-A6C4833A7DA5"
+      ]
+    },
+    {
+      "id": "content-manager-cnb-loader-hook",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentManager::(?:CnbLoaderFn|RegisterCnbLoaderEXT)$",
+      "kinds": [
+        "alias",
+        "method"
+      ],
+      "mapping": "`cna_cnb_loader_registry_register`, from `CBIND-111`, and **no second route**.\n\nThe canonical method is a `static` wrapper whose whole body forwards to `CnbLoaderRegistry::Register` after dropping the asset name and boxing the result in a `std::any`. The C callback already receives the asset name and already produces the object the C layer boxes, so a route differing only in a parameter the callback would not get would be a second spelling of one operation -- the thing this campaign refuses to publish.\n\n**The plan row's premise that `cna_content_manager_register_cnj_loader_ext` is its exact sibling does not hold**, and that is worth recording: the `.cnj` route is per-manager because `RegisterCnjLoader<T>` is a non-static member, while this is process-wide because `RegisterCnbLoaderEXT` is static. Matching the sibling's shape would have meant giving a process-wide registration a manager argument it does not use.\n\n`CnbLoaderFn<T>` is `CNA_CnbLoaderCallback`, already published.",
+      "tests": "`ContentSmoke.c` `validate_cnb_loader_through_manager` settles what `CBIND-111` could only leave open: it writes a real custom-typed `.cnb` beside the content root, registers a C loader for its type, and loads it **by asset name through `cna_content_manager_load_foreign_ext`** -- so a C-registered CNB loader is reached by an ordinary content load, not only by invoking it directly. Withdrawing the registration is checked to report that it removed one. Mutation-checked: registering the loader under a different asset type makes the load fail.",
+      "status": "implemented",
+      "task": "CBIND-105",
+      "approved_symbols": [
+        "CPP-6B69258118AC",
+        "CPP-E79A0F65AB65"
+      ]
     }
   ]
 }

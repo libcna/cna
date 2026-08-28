@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <math.h>
 #include <string.h>
 
@@ -687,12 +689,68 @@ static int validate_vector4_transforms(void)
     return 1;
 }
 
+/*
+ * CBIND-103: `Vector3::operator*=` and `operator/=` have no C routes of their own -- `v *= w` is the
+ * binary route with the destination naming the left operand. The routes take their vectors by
+ * value, which is what makes that well defined rather than an aliasing hazard, and this measures it
+ * for all four overloads instead of asserting it.
+ */
+static int validate_vector3_compound_assignment(void)
+{
+    const CNA_Vector3 left = {2.0F, 3.0F, 4.0F};
+    const CNA_Vector3 right = {5.0F, -2.0F, 8.0F};
+    CNA_Vector3 separate = {0.0F, 0.0F, 0.0F};
+    CNA_Vector3 aliased = left;
+
+    if (cna_vector3_multiply(left, right, &separate) != CNA_RESULT_SUCCESS ||
+        cna_vector3_multiply(aliased, right, &aliased) != CNA_RESULT_SUCCESS ||
+        !vector3_near(aliased, separate.x, separate.y, separate.z)) {
+        return 0;
+    }
+    /* The right operand aliasing the destination is the same question from the other side. */
+    aliased = right;
+    if (cna_vector3_multiply(left, aliased, &aliased) != CNA_RESULT_SUCCESS ||
+        !vector3_near(aliased, separate.x, separate.y, separate.z)) {
+        return 0;
+    }
+
+    aliased = left;
+    if (cna_vector3_multiply_scalar(left, 1.5F, &separate) != CNA_RESULT_SUCCESS ||
+        cna_vector3_multiply_scalar(aliased, 1.5F, &aliased) != CNA_RESULT_SUCCESS ||
+        !vector3_near(aliased, separate.x, separate.y, separate.z)) {
+        return 0;
+    }
+
+    aliased = left;
+    if (cna_vector3_divide(left, right, &separate) != CNA_RESULT_SUCCESS ||
+        cna_vector3_divide(aliased, right, &aliased) != CNA_RESULT_SUCCESS ||
+        !vector3_near(aliased, separate.x, separate.y, separate.z)) {
+        return 0;
+    }
+    aliased = right;
+    if (cna_vector3_divide(left, aliased, &aliased) != CNA_RESULT_SUCCESS ||
+        !vector3_near(aliased, separate.x, separate.y, separate.z)) {
+        return 0;
+    }
+
+    aliased = left;
+    if (cna_vector3_divide_scalar(left, 4.0F, &separate) != CNA_RESULT_SUCCESS ||
+        cna_vector3_divide_scalar(aliased, 4.0F, &aliased) != CNA_RESULT_SUCCESS ||
+        !vector3_near(aliased, separate.x, separate.y, separate.z)) {
+        return 0;
+    }
+
+    /* The destination really was written, so a match cannot be a no-op agreeing with itself. */
+    return !vector3_near(aliased, left.x, left.y, left.z);
+}
+
 int main(void)
 {
-    return validate_construction_and_members() &&
-        validate_arithmetic() && validate_transforms() &&
-        validate_vector3_construction_and_members() &&
-        validate_vector3_arithmetic() && validate_vector3_transforms() &&
-        validate_vector4_construction_and_members() &&
-        validate_vector4_arithmetic() && validate_vector4_transforms() ? 0 : 1;
+    return CNA_TEST_STAGE(validate_construction_and_members()) &&
+        CNA_TEST_STAGE(validate_arithmetic()) && CNA_TEST_STAGE(validate_transforms()) &&
+        CNA_TEST_STAGE(validate_vector3_construction_and_members()) &&
+        CNA_TEST_STAGE(validate_vector3_arithmetic()) && CNA_TEST_STAGE(validate_vector3_transforms()) &&
+        CNA_TEST_STAGE(validate_vector3_compound_assignment()) &&
+        CNA_TEST_STAGE(validate_vector4_construction_and_members()) &&
+        CNA_TEST_STAGE(validate_vector4_arithmetic()) && CNA_TEST_STAGE(validate_vector4_transforms()) ? 0 : 1;
 }

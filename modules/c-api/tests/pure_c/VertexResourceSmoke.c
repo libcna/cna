@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <limits.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -259,13 +261,13 @@ static int validate_handle_failures(void)
 int main(void)
 {
     if (!validate_creation_and_copy()) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
     if (!validate_binding()) {
-        return 2;
+        return CNA_TEST_FAIL(2);
     }
     if (!validate_creation_failures()) {
-        return 3;
+        return CNA_TEST_FAIL(3);
     }
     return validate_handle_failures() ? 0 : 4;
 }

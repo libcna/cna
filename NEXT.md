@@ -101,11 +101,114 @@ one route taking a destination could not report a short capacity without either 
 consuming it twice. `ReadBytes` deliberately does not get the same treatment, because its size is
 the caller's own argument rather than something the file declares.
 
-**Where it stands:** 536 headers / 8,812 symbols — 7,986 implemented, 15 approved partial, 352
-planned, 459 not applicable. ABI `0.11.0`, 3,850 exported symbols, the same set with `CNA_CNAEXT` on
-and off. 99/99 `CApi` tests in all three arms: `cmake-build-debug` (HEADLESS, `CNA_CNAEXT=OFF`),
+**`CBIND-108` then bound the texture pixel formats and the three texture schemas** — 28 routes, 67
+rows, and a C application can now encode and decode a `.cnb` texture. Its one lasting decision is
+that the 27-value format numbering is frozen **individually** in the ABI wall rather than only at its
+ends: the enumeration exists precisely because `SurfaceFormat`'s positional numbering cannot be
+serialized safely, and publishing the C constants at anything but the canonical values would
+reintroduce that hazard one layer out. The mapping between the two is round-tripped over all 27,
+which is the check that finds drift.
+
+**`CBIND-109` then bound the model schema** — 71 routes, 129 rows, the biggest single type in the
+format. Its lasting decision is the shape one: **one handle for the whole graph, its nodes reached
+by index**, rather than a borrowed handle per bone, part, mesh, animation and light. A node has no
+lifetime of its own, a handle each would multiply the registry by the size of the model, and every
+cross-reference the format writes is already an index. Its lasting *trap* is the material's two
+texture orderings — eight named CNA effect slots against seven importer-ordered per-slot arrays —
+which are given two separate index spaces on purpose, because a binding that crossed them would
+round-trip perfectly with both halves wrong together. The suite writes a distinguishable value into
+all fifteen for exactly that reason.
+
+**`CBIND-110` then bound the remaining five schemas** — sprite font, sound effect, song, video,
+curve and animation clip; 41 routes, 85 rows, and **every asset schema the format defines is now
+bound**. Its lasting decision is the one the plan row asked for: where another family already
+publishes the C value, that value is what these routes take and return. A font's glyphs are
+`CNA_SpriteFontGlyph`; a decoded curve *is* a `CNA_CurveHandle`, released with `cna_curve_destroy`;
+a clip is encoded from `CNA_AnimationClipEXTDescriptor`. The tests prove the reuse rather than
+asserting it, by reading each decoded asset back through the other family's own routes. Songs and
+videos deliberately got **no** handle — they are metadata, and a handle would have added a lifetime
+to something that has none.
+
+**`CBIND-111` then bound the loader registry and the two compilation front ends** — 28 routes, 25
+rows, and **a C application is now a content compiler**: image, DDS, WAV and `.cnj` in, `.cnb` out.
+The plan row had assumed this slice must wait for `CBIND-105`'s `ContentManager` hook; it did not —
+the registry is a standalone process-wide table, and resolve-plus-invoke exercises all of it. Two
+findings came out of doing it. The **identity rule is enforced at both ends**: the first attempt to
+build a file whose identifier and canonical name disagree was refused by the *writer*, a step before
+any loader sees it, so the load-time collision refusal defends against files from elsewhere and
+cannot be reached from C at all. And `ImportImageAsCnbTexture2D` **documents a content failure it
+does not raise** — the shared image decoder throws a plain runtime error for an unreadable file — so
+the C route holds the documented contract and answers `CNA_RESULT_IO`, with the canonical gap
+recorded rather than patched.
+
+**`CBIND-103` then closed the math tail with no new routes and no ABI change** — the first slice in
+this phase where the right answer was that the surface already existed. `Vector3`'s and `Matrix`'s
+compound assignments are the existing binary routes with the destination naming the left operand,
+which is well defined because those routes take their values **by value** — checked on `Matrix`
+rather than inherited from `Vector2`, because 64 bytes is exactly where an ABI might have switched
+to pointers. `Quaternion()` is all zeros, not the identity. Both properties are now measured from
+both aliasing sides and mutation-checked, which is a stronger bar than `CBIND-081` set for the same
+shape.
+
+**`CBIND-104` then closed the graphics tail** with five routes, no new structures and no new handle
+kinds. Its lasting answer is the one the row asked for: **a `using` declaration introduces no
+operation, so it gets no route** — the fourteen `DynamicVertexBuffer::SetData` rows are
+`VertexBuffer`'s own families, and the C shape already had the reason, because a dynamic buffer is
+not a separate handle type here. Two real routes were needed for the options-carrying raw upload,
+which refuses a static buffer rather than inventing a path the canonical API does not have. And the
+`EffectMaterial` retained-texture pair deliberately does **not** gate the texture's own destroy:
+retaining is the mechanism that makes gating unnecessary, and the test destroys the caller's handle
+and checks the count stays raised.
+
+**`CBIND-105` then closed the reflective-reader tail, and with it the matrix.** A pointer-to-member
+becomes a kind and a byte offset; the object is made by a caller callback, which settles ownership
+without an allocator crossing the ABI; and `ReflectiveTypeReader<T>` is deliberately **not**
+instantiated, because it needs a C++ `T` — what is bound is its contract, implemented in the C layer
+against a caller-made object. The row's premise that `RegisterCnbLoaderEXT` is the `.cnj` loader's
+exact sibling turned out to be wrong in the one respect that decides the shape (that one is
+per-manager, this one static and process-wide), so it maps to `CBIND-111`'s registry route with no
+second spelling published — and the thing `CBIND-111` left open is now **measured**: a C-registered
+CNB loader *is* reached by an ordinary `cna_content_manager_load_foreign_ext` load.
+
+**The matrix is closed: 0 planned rows, and `docs/c-api/RELEASE_GATE.md` reads `Ready` on all ten
+criteria** for the first time since the sixth merge reopened it.
+
+**`CBIND-112` then verified the closure by name rather than by `--check`, and found one real defect
+doing it**: a mapping rule written two commits earlier cited `cna_effect_set_parameter_texture`,
+and the route is `cna_effect_parameter_set_value_texture`. A green `--check` would never have found
+it — which is why that row's rule is *not to close on one*. The other five checks: 22 stale
+approvals exist and are provably harmless (dropping them leaves the inventory byte-identical,
+because a rule maps a symbol only when it is present **and** approved); 505 rows were bound with
+**exactly one** dispositioned not-applicable and named and **zero** made partial, summing to the 506
+the merge reopened at; `planned` is still reachable, so the zero means the work is done rather than
+the fall-through being broken; all three build arms export the same 4,033 names with zero
+differences; and the gate's verdict is *computed*, so the one-line record change could only agree
+with the measurement, never cause it.
+
+**Where it stands:** 536 headers / 8,812 symbols — 8,337 implemented, 15 approved partial, **0
+planned**, 460 not applicable. ABI `0.17.0`, 4,033 exported symbols, the same set with `CNA_CNAEXT`
+on and off. 103/103 `CApi` tests in all three arms: `cmake-build-debug` (HEADLESS, `CNA_CNAEXT=OFF`),
 `cmake-build-cnaext` (OPENGLES3/EasyGL, `CNA_CNAEXT=ON`) and `build-probe` (HEADLESS,
-`CNA_CNAEXT=ON`).
+`CNA_CNAEXT=ON`). The not-applicable count moved for the first time this phase, by exactly one row —
+a `friend` declaration Doxygen reports as a member, named in `CBIND-111`.
+
+**`CBIND-113` closed the phase by making every C API suite able to say which stage failed.** Its
+audit found far more than the one suite `CBIND-101` named: of 83 pure-C suites, 1 is a compile-time
+wall, 29 printed something identifying the failure, **38 identified their stage by exit code alone**
+and **15 said nothing at all**. Two macros at 344 sites across those 53 — `CNA_TEST_FAIL(code)`
+evaluating to the code and `CNA_TEST_STAGE(call)` evaluating to what the call returned, so nothing a
+suite does changes. Demonstrated rather than claimed: breaking one assertion inside
+`RuntimeComponentsSmoke.c` now prints `RuntimeComponentsSmoke.c:592: main: FAILED, exit code 8`,
+where `CBIND-101`'s complete capture had been the renderer banner. **0 of 83 suites can still fail
+silently.**
+
+A process failure is recorded with it, because it is the class of mistake the task exists to
+prevent: the transform script was run twice and double-wrapped 10 stage calls. It was caught by
+auditing the diff rather than trusting the run, the files were restored from `HEAD`, and the script
+was given a guard that refuses a file already carrying the header — with a second run reporting all
+52 refused, which is the proof the guard works.
+
+**Phase B10 is complete.** All twelve tasks are closed.
 
 ## `SAMPLE-005` official XNA content fidelity (`ReachGraphicsDemo_4_0`, 2026-08-23)
 

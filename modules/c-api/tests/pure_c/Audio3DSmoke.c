@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <math.h>
 #include <string.h>
 
@@ -279,32 +281,32 @@ int main(void)
     memset(silence, 0, sizeof(silence));
 
     if (!validate_defaults()) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
     if (cna_game_create(&game_info, &game) != CNA_RESULT_SUCCESS) {
-        return 2;
+        return CNA_TEST_FAIL(2);
     }
     if (cna_sound_effect_create_pcm16_range_ext(
             game, &create_info, silence, (uint64_t)sizeof(silence), 0, (int32_t)sizeof(silence),
             0, 0, &sound_effect) != CNA_RESULT_SUCCESS) {
-        return 3;
+        return CNA_TEST_FAIL(3);
     }
     if (cna_sound_effect_create_instance(sound_effect, &instance) != CNA_RESULT_SUCCESS ||
         instance == CNA_INVALID_HANDLE) {
-        return 4;
+        return CNA_TEST_FAIL(4);
     }
     if (!validate_structure_refusals(instance)) {
-        return 5;
+        return CNA_TEST_FAIL(5);
     }
     if (!validate_positioning(game, sound_effect, instance)) {
-        return 6;
+        return CNA_TEST_FAIL(6);
     }
     if (!validate_multi_listener(instance)) {
-        return 7;
+        return CNA_TEST_FAIL(7);
     }
     if (cna_audio_emitter_init(&emitter) != CNA_RESULT_SUCCESS ||
         cna_audio_listener_init(&listener) != CNA_RESULT_SUCCESS) {
-        return 8;
+        return CNA_TEST_FAIL(8);
     }
     /* A released instance is gone; positioning it is a handle failure, not a disposal report. */
     if (cna_sound_effect_instance_destroy(instance) != CNA_RESULT_SUCCESS ||
@@ -312,10 +314,10 @@ int main(void)
             CNA_RESULT_INVALID_HANDLE ||
         cna_sound_effect_instance_apply_3d_multi_ext(instance, &listener, UINT64_C(1), &emitter) !=
             CNA_RESULT_INVALID_HANDLE) {
-        return 9;
+        return CNA_TEST_FAIL(9);
     }
     if (cna_sound_effect_destroy(sound_effect) != CNA_RESULT_SUCCESS) {
-        return 10;
+        return CNA_TEST_FAIL(10);
     }
     return cna_game_destroy(game) == CNA_RESULT_SUCCESS ? 0 : 11;
 }

@@ -2,6 +2,8 @@
 
 #include <CNA/C/cna.h>
 
+#include "CnaTestReport.h"
+
 #include <string.h>
 
 typedef struct SensorEventsSmokeState {
@@ -502,7 +504,7 @@ int main(void)
     if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
         cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS ||
         smoke_state.validated != 1) {
-        return 1;
+        return CNA_TEST_FAIL(1);
     }
     return cna_game_destroy(game) == CNA_RESULT_SUCCESS ? 0 : 2;
 }
