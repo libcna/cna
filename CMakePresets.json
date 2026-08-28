@@ -226,10 +226,42 @@
     },
     {
       "name": "unit",
-      "displayName": "Build focused CnaTests",
+      "displayName": "Build the complete CnaTests suite",
       "configurePreset": "unit",
       "targets": [
         "CnaTests"
+      ]
+    },
+    {
+      "name": "unit-core",
+      "displayName": "Build focused core tests",
+      "configurePreset": "unit",
+      "targets": [
+        "CnaCoreTests"
+      ]
+    },
+    {
+      "name": "unit-math",
+      "displayName": "Build focused math tests",
+      "configurePreset": "unit",
+      "targets": [
+        "CnaMathTests"
+      ]
+    },
+    {
+      "name": "unit-content",
+      "displayName": "Build focused content tests",
+      "configurePreset": "unit",
+      "targets": [
+        "CnaContentTests"
+      ]
+    },
+    {
+      "name": "unit-graphics",
+      "displayName": "Build focused graphics tests",
+      "configurePreset": "unit",
+      "targets": [
+        "CnaGraphicsTests"
       ]
     },
     {

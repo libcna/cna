@@ -57,7 +57,7 @@ must not be compared with the new post-reset counters.
 | ID | Task | Depends on | Status |
 |---|---|---|---|
 | COMP-001 | Rebuild the benchmark and ccache evidence baseline | foundation commit | ⬜ |
-| COMP-002 | Split the monolithic unit-test iteration path | COMP-001 | ⬜ |
+| COMP-002 | Split the monolithic unit-test iteration path | COMP-001 | ✅ |
 | COMP-003 | Pilot target-specific precompiled headers | COMP-002 | ⬜ |
 | COMP-004 | Benchmark Mold and LLD final linking | COMP-001 | ⬜ |
 | COMP-005 | Reduce CMake configure/regeneration cost | COMP-001 | ⬜ |
@@ -119,6 +119,28 @@ being edited. The goal is a focused developer target, while retaining a full com
 - Test sources are not compiled twice when building `CnaTests`.
 - Record focused `.cpp` rebuild and final-link times. Keep the split only if a representative
   module loop improves by at least 30% without increasing the full clean build by more than 10%.
+
+### Completion evidence (2026-08-28)
+
+- The build maps 17 possible module/renderer/integration groups to focused executables. The unit
+  preset enables 15 of them (networking and gamer-services are disabled there) while retaining
+  `CnaTests` as the complete compatibility executable for that configuration.
+- The complete pre/post `--gtest_list_tests` output has 8,102 lines and an identical normalized
+  SHA-256 (`373e1f4446a06ffd890f4b835d4b083d83ad2c1b77815957947834966f4b8136`).
+  The normalization removes GoogleTest parameter comments containing process-specific pointer
+  bytes; test names and order are unchanged.
+- A `CnaMathTests` build requires 130 compile commands versus 1,126 for `CnaTests` (88.5% fewer),
+  and its 840 tests pass. Core, content, and graphics require 90.7%, 43.9%, and 66.6% fewer commands
+  respectively. No test source compile command is duplicated in the complete target graph.
+- With a warm ccache and `--parallel 12`, a representative math-test source rebuild takes 0.24 s
+  through `CnaMathTests` versus 0.84 s through `CnaTests` (71% less); a forced final link takes
+  0.20 s versus 0.75 s (73% less). Focused executables are excluded from `all`, while the complete
+  target retains its pre-split 1,126 compile commands, so the split adds no clean-build edges.
+- The complete `CnaTests` target links successfully. Three renderer-capability content cases remain
+  invalid under the STUB renderer (3D/cube texture storage); they predate and are independent of
+  the source partitioning.
+- Useful core, math, content, and graphics build presets plus direct invocation documentation were
+  added without registering the focused binaries as duplicate CTest suites.
 
 ## 6. COMP-003 — target-specific PCH pilot
 

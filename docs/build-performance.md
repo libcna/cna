@@ -14,7 +14,7 @@ All new performance-oriented presets use Ninja and write `compile_commands.json`
 | Preset | Intended use | Deliberately omitted |
 | --- | --- | --- |
 | `dev` | Fast local code/edit/link loop; builds `cna_tool_cnb_info` | Tests, demos, C API, networking, FFmpeg, Draco |
-| `unit` | Portable unit-test iteration; builds `CnaTests` | Demos, C API, networking, FFmpeg, Draco |
+| `unit` | Portable complete unit-test suite; builds `CnaTests` | Demos, C API, networking, FFmpeg, Draco |
 | `release-modules` | Optimized module/content-tool validation | Tests, demos, C API, networking, FFmpeg, Draco |
 | `release-ipo` | Explicit IPO/LTO measurement build | Same as `release-modules`; IPO is opt-in |
 
@@ -28,6 +28,54 @@ cmake --preset unit
 cmake --build --preset unit --parallel 12
 ./cmake-build-unit/CnaTests
 ```
+
+### Focused unit-test executables
+
+The unit configuration compiles each physical module's tests once through an object library. The
+objects feed both the complete `CnaTests` executable and a module-focused executable, so a developer
+can avoid building and linking unrelated test code without changing the full-suite compatibility
+path. Focused executables are intentionally not registered as duplicate CTest tests.
+
+The common build presets cover the most useful edit loops:
+
+```sh
+cmake --preset unit
+cmake --build --preset unit-math --parallel 12
+SDL_AUDIODRIVER=dummy ./cmake-build-unit/CnaMathTests
+
+cmake --build --preset unit-content --parallel 12
+SDL_AUDIODRIVER=dummy ./cmake-build-unit/CnaContentTests
+```
+
+The available focused targets are `CnaAudioTests`, `CnaContentTests`, `CnaCoreTests`,
+`CnaDevicesTests`, `CnaDevicesExtTests`, `CnaGamerServicesTests`, `CnaGraphicsTests`,
+`CnaGraphicsExtTests`, `CnaInputModuleTests`, `CnaIntegrationTests`, `CnaMathTests`,
+`CnaMediaTests`, `CnaNetTests`, `CnaPlatformModuleTests`, `CnaRendererTests`,
+`CnaRuntimeTests`, and `CnaStorageTests`. The `unit-core`, `unit-math`, `unit-content`, and
+`unit-graphics` build presets are shortcuts; use `cmake --build cmake-build-unit --target <target>`
+for the other modules.
+
+On the 2026-08-28 reference STUB/GCC configuration, Ninja reported the following compile-command
+graph sizes. These are structural measurements, not elapsed-time promises:
+
+| Test target | Compile commands | Reduction from complete `CnaTests` |
+| --- | ---: | ---: |
+| `CnaTests` | 1,126 | baseline |
+| `CnaContentTests` | 632 | 43.9% |
+| `CnaGraphicsTests` | 376 | 66.6% |
+| `CnaMathTests` | 130 | 88.5% |
+| `CnaCoreTests` | 105 | 90.7% |
+
+The normalized `--gtest_list_tests` inventory of the complete executable remained byte-identical
+across the split (8,102 output lines). A focused `CnaMathTests` build ran all 840 math tests in 2 ms;
+the STUB configuration's content suite retains three existing GPU-capability failures for 3D/cube
+textures and is not evidence for those renderer-dependent cases.
+
+With a warm ccache and 12-way Ninja parallelism on the same machine, touching
+`MathHelperTests.cpp` and rebuilding took 0.24 s through `CnaMathTests` versus 0.84 s through
+`CnaTests` (71% less wall time). A forced final link took 0.20 s versus 0.75 s (73% less). The full
+target retains the same 1,126 compile commands as before the split, and its graph contains no
+duplicate commands; focused targets are `EXCLUDE_FROM_ALL`, so they add no work to a full build.
 
 Do not use `dev` as merge evidence for a renderer-, C API-, network-, media-, or Draco-specific
 change. Existing renderer/platform/integration presets remain the required evidence for the code
