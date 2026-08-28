@@ -1,6 +1,6 @@
 # plan_content_pipeline.md — CNA Content Pipeline
 
-> **Status (2026-08-28):** `CP-001` through `CP-005` are complete. `CP-006` is current. The
+> **Status (2026-08-28):** `CP-001` through `CP-006` are complete. `CP-007` is current. The
 > project starts from the existing `content-pipeline` branch at `0e6899f17017c03c0e23d575d25cd70c678e2781`.
 > That commit contains the completed CNB baseline through `CNBF-123`. Local `next` was actually
 > `4ab1859dc8a540af1bd326df0fa816579adf7027`, two unrelated platform/binding commits ahead; the
@@ -463,6 +463,27 @@ move once to a shared module and the old header will forward to it; it will not 
 Directory creation and manifest update must not make a partial `.cnb` visible. A failed rebuild of
 an existing artifact must leave its old bytes untouched and remove its sibling temporary.
 
+Implemented as the `cna_content_tool` CMake target with output name `cna-content`:
+
+```text
+cna-content build <source-file> -o <artifact.cnb>
+cna-content build <source-directory> -o <output-directory>
+```
+
+The configured registry currently contains the completed image/Texture2D and WAV/SoundEffect
+routes. Single-file builds use the source stem as the logical name. Directory builds enumerate
+regular files, derive logical names and output paths from extensionless relative paths, sort by the
+UTF-8 generic logical name before building, and diagnose unsupported extensions. The output root is
+forbidden inside the source root so generated artifacts cannot become new source discoveries; a
+single build cannot overwrite its source. Every artifact is fully imported/processed/encoded before
+its parent directory is created and its bytes are handed to the one existing atomic helper.
+
+Six real-process CLI tests pass: pipeline-byte equality, nested output creation, sorted two-asset
+directory compilation, logical path preservation, repeated byte determinism, unknown-extension
+failure, destructive-layout rejection, and old-output preservation/no temporary debris after a
+failed rebuild. The fresh HEADLESS Debug test executable rebuilt successfully; 38 combined core,
+Texture2D, SoundEffect, CLI and golden-vector cases passed in the final focused run.
+
 ### Windows pathname strategy
 
 The new CLI will use `wmain(int, wchar_t**)` on Windows and construct `std::filesystem::path` from
@@ -471,6 +492,11 @@ accepted by `std::filesystem`. Logical content names are UTF-8 with `/` separato
 explicitly at the native/logical boundary; native paths are never serialized as logical names.
 Narrow `main` on Windows is rejected for the new CLI because it cannot represent every filesystem
 path. Old tools are not refactored as part of this decision.
+
+The CLI entry point and logical-name conversion now implement that decision. End-to-end Windows
+non-ASCII source paths remain `CP-012`: the current shared image/WAV importer APIs still accept
+`std::string` paths, so the build cannot claim complete Windows Unicode support until that lower
+boundary accepts native `std::filesystem::path` (or an explicitly audited UTF-8 conversion).
 
 ---
 
@@ -562,8 +588,8 @@ Required before the corresponding task closes:
 | `CP-003` | **completed** | Implemented experimental component identities, checked type-erased values, focused importer/processor contexts, categorized dependency and separate runtime-reference collectors, scoped logging, component contracts, a serial build-to-bytes coordinator, and an explicit deterministic registry. Ten focused tests prove duplicate/ambiguous/missing route diagnostics, explicit selection, parameter errors, persistent-type/RTTI separation, dependency/XREF reporting, traversal and symlink containment, and the complete abstract stage flow. `cna_content` and `CnaTests` built in a fresh HEADLESS Debug configuration; all 10 `ContentPipelineCoreTest` cases passed. |
 | `CP-004` | **completed** | Added `ImportedImage`, `ImageImporter`, `TextureProcessor`, and `Texture2DContentWriter`; the writer calls the existing encoder. Five slice tests prove strict parameter validation, stage identities/dependencies, repeated determinism, typed decode, runtime loading, and default/color-key byte equality against both the unchanged producer library path and real `cna_tool_source_to_cnb` subprocess. The focused original producer/tool/codec and all golden-vector regressions passed. |
 | `CP-005` | **completed** | Split the existing bounded RIFF parser to source-oriented `ImportedSound`, shared its one exact PCM processing helper with the compatibility API, and added `WavImporter`, `SoundEffectProcessor`, and a writer that calls the existing encoder. Six new tests and 66 focused old/new regressions pass; pre/post-refactor real-tool bytes also match exactly. No build component initializes audio. |
-| `CP-006` | **current** | Add `cna-content build` single/directory CLI, sorted traversal, logical relative names, atomic publication and failure preservation tests. |
-| `CP-007` | future | Make categorized dependency collection and the build result complete/observable for built-in flows. |
+| `CP-006` | **completed** | Added the `cna-content` executable with single/directory builds, deterministic discovery, relative logical/output preservation, explicit built-in selection diagnostics, wide Windows entry point, safe output layouts and the shared audited atomic publisher. Six subprocess tests prove the CLI contract and failed-rebuild preservation. |
+| `CP-007` | **current** | Make categorized dependency collection and the build result complete/observable for built-in flows. |
 | `CP-008` | future | Add deterministic inspectable manifest and content fingerprints; prove no-op and precise invalidation behavior. |
 | `CP-009` | future | Integrate glTF/Model without a second interpretation; retain direct-vs-CNJ byte oracle and report glTF dependencies. |
 | `CP-010` | future | Integrate CNJ as a front-end that converges on shared processors/writers; remove build-time ContentManager shortcut and preserve sidecar safety/equivalence. |

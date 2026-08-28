@@ -225,6 +225,9 @@ if(CNA_BUILD_TESTS)
         # plans/plan_cnb.md CNBF-120: CnbSourceToolTests.cpp spawns cna_tool_source_to_cnb the same
         # way, so it is excluded on exactly the same platforms and for exactly the same reasons.
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Content/Cnb/CnbSourceToolTests\\.cpp$")
+        # plans/plan_content_pipeline.md CP-006: this test spawns cna-content to exercise its real
+        # filesystem publication and process exit contract.
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Content/Pipeline/ContentPipelineCliTests\\.cpp$")
     endif()
 
     # DevicesShutdownOrderingTests.cpp (Task SDLCORE-011) uses the same POSIX-only process APIs
@@ -553,6 +556,14 @@ if(CNA_BUILD_TESTS)
         add_dependencies(CnaTests cna_tool_source_to_cnb)
         target_compile_definitions(CnaTests PRIVATE
             CNA_SOURCE_TO_CNB_TOOL_PATH="$<TARGET_FILE:cna_tool_source_to_cnb>"
+        )
+    endif()
+
+    if(TARGET cna_content_tool)
+        # plans/plan_content_pipeline.md CP-006: run the real unified front end as a subprocess.
+        add_dependencies(CnaTests cna_content_tool)
+        target_compile_definitions(CnaTests PRIVATE
+            CNA_CONTENT_TOOL_PATH="$<TARGET_FILE:cna_content_tool>"
         )
     endif()
 

@@ -248,6 +248,7 @@ include(cmake/ToolCnjToCnb.cmake)
 include(cmake/ToolCnbInfo.cmake)
 include(cmake/ToolGltfToCnb.cmake)
 include(cmake/ToolSourceToCnb.cmake)
+include(cmake/ToolContentPipeline.cmake)
 
 include(cmake/UnitTests.cmake)
 
