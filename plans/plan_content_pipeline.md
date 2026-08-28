@@ -1,6 +1,6 @@
 # plan_content_pipeline.md — CNA Content Pipeline
 
-> **Status (2026-08-28):** `CP-001` through `CP-010` are complete. `CP-011` is current. The
+> **Status (2026-08-28):** `CP-001` through `CP-011` are complete. `CP-012` is current. The
 > project starts from the existing `content-pipeline` branch at `0e6899f17017c03c0e23d575d25cd70c678e2781`.
 > That commit contains the completed CNB baseline through `CNBF-123`. Local `next` was actually
 > `4ab1859dc8a540af1bd326df0fa816579adf7027`, two unrelated platform/binding commits ahead; the
@@ -257,7 +257,8 @@ The initial hybrid deliberately favors debugger clarity over template machinery:
 * virtual `ContentImporter`, `ContentProcessor` and `ContentTypeWriter` component contracts;
 * explicit `ContentComponentIdentity { name, version }` with stable UTF-8 names;
 * explicit stable input/output type identity strings; implemented routes include imported image,
-  sound and canonical glTF Model-document values plus their corresponding `Cnb*Data` outputs;
+  sound, Model document, font, volume, cube, Curve and AnimationClip semantics plus their processed
+  outputs;
 * an internal `ContentValue` carrying a shared immutable erased value, the stable type identity
   and an ephemeral `std::type_index` guard;
 * small templated helpers only for checked boxing/unboxing at component implementation boundaries;
@@ -390,6 +391,34 @@ XNA ContentTypeReader concept
 ```
 
 No new runtime reader hierarchy is planned.
+
+### 5.10 Custom extension proof (`CP-011`)
+
+The extension seam is proven end to end by a realistic `ExampleGame.WorldLevel` test component set:
+
+```text
+arena.level
+ -> ExampleGame.WorldLevelImporter/3
+ -> ImportedWorldLevel + contained arena.collision source dependency
+ -> ExampleGame.WorldLevelProcessor/5 { solidBorder: bool }
+ -> CompiledWorldLevel + Textures/dungeon runtime reference
+ -> ExampleGame.WorldLevelWriter/2
+ -> standalone EncodeWorldLevelToCnb() custom codec over CnbWriter
+ -> custom CNB
+ -> ContentManager::RegisterCnbLoaderEXT<WorldLevel>()
+ -> WorldLevel
+```
+
+The writer calls the custom asset's one codec function rather than embedding its schema a second
+time. The test proves deterministic bytes, stable component selection, strict typed parameter
+validation, contained sidecar collection, the build-dependency/runtime-XREF distinction, custom
+CMET identity, custom XREF serialization and runtime `ContentManager` loading.
+
+`ContentPipelineExtensionApiIsExperimental` deliberately remains true. One complete custom type
+validates that the virtual/type-erased model is usable, but it is not enough evidence to promise
+long-term C++ source or ABI stability. In particular, multi-output graph components and dynamic
+plugin loading have not yet exercised the API. Persistent component/type identity strings and CNB
+custom-type rules are stable behavior; the C++ registration surface is experimental.
 
 ---
 
@@ -710,8 +739,8 @@ Required before the corresponding task closes:
 | `CP-008` | **completed** | Added the version-1 inspectable JSON manifest, canonical SHA-256 effective-input fingerprints, output-integrity hashes, safe corruption fallback and atomic manifest publication. Nine real CLI tests and six manifest tests prove no-op skip, independent rebuilds, byte-not-mtime invalidation, component/parameter/dependency identities, output repair and path containment. Content-build dependency fingerprints are modeled but serial graph scheduling remains intentionally disabled until cycle rules exist. |
 | `CP-009` | **completed** | Linked the one existing glTF-to-CNJ implementation behind both front ends; added `ImportedModelDocument`, `GltfImporter`, `ModelProcessor` over `BuildCnbModelFromCnj`, and a writer over `EncodeModelToCnb`. External buffers/images are explicit source dependencies, Model XREFs remain separate, the manifest invalidates on dependency bytes, runtime loading succeeds, direct/two-step/pipeline bytes remain equal, and all focused/golden tests pass. Multi-Model and generated-texture child outputs remain explicit build-graph work rather than silent partial behavior. |
 | `CP-010` | **completed** | Added a bounded multi-output `CnjImporter` and integrated all eight compiler-supported CNJ types with explicit intermediate values, processors and writer adapters over the existing codecs. Image/WAV/DDS/Model implementations are reused; canonical Curve/AnimationClip readers are now shared by runtime and both build paths, eliminating the build-time `ContentManager` shortcut. Sidecars are contained source dependencies, XREF stays separate, every type is byte-equivalent to the old compiler, and the final broad selection passed 241/243 tests (two environment-gated large glTF fixtures skipped). |
-| `CP-011` | **current** | Add realistic custom importer/processor/writer plus custom runtime loader end-to-end example/test; review experimental API. |
-| `CP-012` | future | Implement/audit Windows wide argv and non-ASCII pathname tests; document logical/native conversion. |
+| `CP-011` | **completed** | Added a realistic custom `.level` importer, parameterized processor, custom codec/writer and `ContentManager` loader end-to-end test. It proves deterministic output, source dependency versus runtime XREF behavior, stable component identities, custom CMET/XREF data, configuration diagnostics and runtime loading. The C++ API remains explicitly experimental because one custom schema does not settle source/ABI stability or multi-output/plugin requirements. |
+| `CP-012` | **current** | Implement/audit Windows wide argv and non-ASCII pathname tests; document logical/native conversion. |
 | `CP-013` | future | Add `docs/content-pipeline.md`, stable/experimental/internal labels, compatibility/migration guidance and architectural review. |
 | `CP-014` | future | Evaluate and, only if justified, implement CNA-convention CMake orchestration over the same CLI/library. |
 | `CP-015` | future | Final sanitizer, golden-vector, compatibility, architecture and risk review; reconcile plan status with the tree. |
