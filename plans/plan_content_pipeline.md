@@ -1,6 +1,6 @@
 # plan_content_pipeline.md — CNA Content Pipeline
 
-> **Status (2026-08-28):** `CP-001` through `CP-003` are complete. `CP-004` is current. The
+> **Status (2026-08-28):** `CP-001` through `CP-004` are complete. `CP-005` is current. The
 > project starts from the existing `content-pipeline` branch at `0e6899f17017c03c0e23d575d25cd70c678e2781`.
 > That commit contains the completed CNB baseline through `CNBF-123`. Local `next` was actually
 > `4ab1859dc8a540af1bd326df0fa816579adf7027`, two unrelated platform/binding commits ahead; the
@@ -233,7 +233,7 @@ pipeline components.
 
 ---
 
-## 5. Chosen C++23 architecture (`CP-003`, current)
+## 5. Chosen C++23 architecture (`CP-003`, implemented)
 
 ### 5.1 Namespace and physical ownership
 
@@ -255,10 +255,10 @@ The initial hybrid deliberately favors debugger clarity over template machinery:
 
 * virtual `ContentImporter`, `ContentProcessor` and `ContentTypeWriter` component contracts;
 * explicit `ContentComponentIdentity { name, version }` with stable UTF-8 names;
-* explicit stable input/output type identity strings such as `cna.imported.image.v1` and
-  `cna.cnb.texture2d.v1`;
-* an internal `ContentValue` carrying `std::any`, the stable type identity and an ephemeral
-  `std::type_index` guard;
+* explicit stable input/output type identity strings; the first real route uses
+  `CNA.Content.Pipeline.ImportedImage` and `CNA.Content.Cnb.Texture2DData`;
+* an internal `ContentValue` carrying a shared immutable erased value, the stable type identity
+  and an ephemeral `std::type_index` guard;
 * small templated helpers only for checked boxing/unboxing at component implementation boundaries;
 * no persistent RTTI names or `std::type_index` values.
 
@@ -287,13 +287,12 @@ component diagnostic.
 * canonical source root, primary source path and logical asset name;
 * safe contained dependency resolution;
 * source-dependency registration;
-* read-only build options;
 * scoped logger access.
 
 `ContentProcessorContext` contains only:
 
 * logical asset name;
-* validated processor parameter view and build options;
+* validated processor parameter view;
 * source/content-build/generated dependency registration when relevant;
 * runtime XREF registration as a separate operation;
 * scoped logger access.
@@ -308,8 +307,9 @@ value set: boolean, signed/unsigned integer, finite double and UTF-8 string. Eac
 unknown names, wrong types and invalid values before transformation. Canonical key order and typed
 canonical value encoding participate in fingerprints. There is no property reflection.
 
-Global `ContentBuildOptions` initially contains only proven cross-cutting values. Target/profile is
-deferred; adding an unused enum would imply platform-specific output that CNB v1 does not have.
+No global `ContentBuildOptions` type exists yet because there is no proven cross-cutting option.
+Target/profile is deferred; adding an unused enum would imply platform-specific output that CNB v1
+does not have.
 
 ### 5.6 Deterministic registry and selection
 
@@ -317,7 +317,8 @@ All lookup candidates are stored/diagnosed in stable name order. Registration or
 a winner.
 
 * importer: lowercase source extension -> candidates; explicit importer name may disambiguate;
-* processor: imported stable type + optional requested processed type -> candidates;
+* processor: imported stable type -> candidates; an explicit stable component name can override
+  default selection;
 * writer: processed stable type -> candidates;
 * duplicate component identity is rejected at registration;
 * a default route with more than one candidate is an ambiguity error naming every candidate;
@@ -393,6 +394,20 @@ PNG/JPEG/etc.
 The existing source tool is the byte oracle. Its implementation is not changed until the new path
 is proven equivalent for default and color-key options. Tests compare bytes, decode the output, and
 exercise the existing ContentManager runtime path where a headless-compatible test fixture permits.
+
+Implemented identities are `CNA.ImageImporter/1`, `CNA.TextureProcessor/1` and
+`CNA.Texture2DContentWriter/1`. `ImageImporter` calls the existing shared `ImageLoader` and emits
+only source semantics. `TextureProcessor` owns the optional, strictly validated string parameter
+`colorKey=R,G,B` and constructs `CnbTextureData`. The writer contains no schema logic: it calls
+`EncodeTexture2DToCnb()` and reports the frozen Texture2D asset ID/name.
+
+Verification on the HEADLESS Debug build passed five vertical-slice tests plus the ten core tests.
+Both default and color-key output matched the unchanged `cna_tool_source_to_cnb` subprocess and its
+library path byte-for-byte; two repeated pipeline builds were identical; typed decode preserved
+every pixel; and `ContentManager::Load<Texture2D>("Textures/wall")` loaded the resulting bytes.
+The relevant original source-tool, producer, texture-codec and all CNB golden-vector tests also
+passed (41 focused regression cases total in that run). The old producer implementation remains
+untouched as an oracle; sharing the new components from old front ends is a later safe migration.
 
 ### 6.2 SoundEffect (`CP-005`)
 
@@ -529,8 +544,8 @@ Required before the corresponding task closes:
 | `CP-001` | **completed** | Verify branch/CNB baseline; audit XNA/MonoGame importer, processor, writer/reader, contexts, identities, dependencies, external references and build cache concepts; record retained/rejected concepts. |
 | `CP-002` | **completed** | Trace real CNA image/WAV/DDS/glTF/CNJ imports, canonical DTO construction, encoders, runtime loaders, path rules, XREFs, tool publication and duplication; record the build/runtime map. |
 | `CP-003` | **completed** | Implemented experimental component identities, checked type-erased values, focused importer/processor contexts, categorized dependency and separate runtime-reference collectors, scoped logging, component contracts, a serial build-to-bytes coordinator, and an explicit deterministic registry. Ten focused tests prove duplicate/ambiguous/missing route diagnostics, explicit selection, parameter errors, persistent-type/RTTI separation, dependency/XREF reporting, traversal and symlink containment, and the complete abstract stage flow. `cna_content` and `CnaTests` built in a fresh HEADLESS Debug configuration; all 10 `ContentPipelineCoreTest` cases passed. |
-| `CP-004` | **current** | Complete Texture2D Importer -> Processor -> Writer -> existing encoder vertical slice; prove old/new bytes, deterministic bytes, decode/runtime compatibility and headless operation. |
-| `CP-005` | future | Complete WAV/SoundEffect vertical slice by splitting/reusing the existing parser; prove byte equivalence and no audio initialization. |
+| `CP-004` | **completed** | Added `ImportedImage`, `ImageImporter`, `TextureProcessor`, and `Texture2DContentWriter`; the writer calls the existing encoder. Five slice tests prove strict parameter validation, stage identities/dependencies, repeated determinism, typed decode, runtime loading, and default/color-key byte equality against both the unchanged producer library path and real `cna_tool_source_to_cnb` subprocess. The focused original producer/tool/codec and all golden-vector regressions passed. |
+| `CP-005` | **current** | Complete WAV/SoundEffect vertical slice by splitting/reusing the existing parser; prove byte equivalence and no audio initialization. |
 | `CP-006` | future | Add `cna-content build` single/directory CLI, sorted traversal, logical relative names, atomic publication and failure preservation tests. |
 | `CP-007` | future | Make categorized dependency collection and the build result complete/observable for built-in flows. |
 | `CP-008` | future | Add deterministic inspectable manifest and content fingerprints; prove no-op and precise invalidation behavior. |
