@@ -101,6 +101,12 @@ namespace CNA::Graphics {
          * transparent surface see the opaque geometry in front of it without occluding the ones
          * behind it.
          *
+         * **The bracket opens on every renderer, including one that cannot resolve.** Where
+         * @ref isSupported is false this binds nothing and changes no device state, but
+         * @ref isAccumulating still reports true and the matching @ref end still succeeds. A caller
+         * brackets its transparent geometry the same way everywhere and takes the fallback it
+         * chooses, rather than having the second half of a correctly paired call throw.
+         *
          * @param farPlane The camera's far distance, which the weight is scaled against; must be
          *                 positive.
          * @throws std::invalid_argument If @p farPlane is not positive.
@@ -110,6 +116,10 @@ namespace CNA::Graphics {
 
         /**
          * @brief Closes accumulation and restores the previously bound target and states.
+         *
+         * Restores exactly what the matching @ref begin changed: on a renderer that cannot resolve,
+         * begin bound and set nothing, so end unbinds and resets nothing and leaves the caller's
+         * own target and states alone.
          *
          * @throws std::logic_error If accumulation is not open.
          */
@@ -173,6 +183,11 @@ namespace CNA::Graphics {
         int  width_  = 0;
         int  height_ = 0;
         bool accumulating_ = false;
+        // Whether the open bracket actually bound the targets and changed device state, which is a
+        // different question from whether it is open: on an unsupported renderer begin() opens the
+        // bracket and touches nothing, and end() must then restore nothing rather than resetting
+        // states the caller set itself.
+        bool boundTargets_ = false;
     };
 
 /** @} */

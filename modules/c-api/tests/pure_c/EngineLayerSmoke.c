@@ -4333,13 +4333,17 @@ static int validate_transparency_and_bridge(const CNA_Handle graphics_device)
     ok = ok && cna_weighted_blended_transparency_resize(wbt, INT32_C(8), INT32_C(8)) ==
         CNA_RESULT_SUCCESS;
 
-    /* CBIND-098, reproduced rather than corrected. begin() opens the bracket only where the
-       resolve is supported, so on a renderer without it isAccumulating() stays false and the
-       matching end() refuses. Both branches assert; neither is a skip, and the unsupported branch
-       is the one that pins the defect in place so a later fix is visible as a test change. */
+    /* CBIND-098, fixed rather than pinned. This block used to assert the defect: begin() opened
+       the bracket only where the resolve was supported, so on a renderer without it
+       is_accumulating() stayed false and the matching end() refused -- and this test required that
+       refusal, which is what "reproduced rather than corrected" meant. The engine layer now opens
+       the bracket on every renderer, so **both** branches assert the same three facts about it:
+       begin succeeds, is_accumulating reports true, and the matching end succeeds. What still
+       differs between them is only what happens *inside* the bracket, which is where support
+       genuinely matters. */
     ok = ok && cna_weighted_blended_transparency_begin(wbt, 100.0F) == CNA_RESULT_SUCCESS;
     ok = ok && cna_weighted_blended_transparency_is_accumulating(wbt, &flag) ==
-        CNA_RESULT_SUCCESS && flag == supported;
+        CNA_RESULT_SUCCESS && flag == CNA_TRUE;
     if (ok && supported == CNA_TRUE) {
         /* While the bracket is open, both reconfigurations are sequencing mistakes. */
         ok = ok && cna_weighted_blended_transparency_resize(wbt, INT32_C(4), INT32_C(4)) ==
@@ -4356,9 +4360,24 @@ static int validate_transparency_and_bridge(const CNA_Handle graphics_device)
     } else {
         /* `ok = ok && ...`, never `ok = ...`: a plain assignment here would discard every failure
            the validator had already recorded, and this branch is the one the unsupported arm
-           takes -- so the arm that pins CBIND-098 in place would have been the arm that could not
-           fail. Found by breaking the assertion above and watching arm 3 keep passing. */
+           takes -- so the arm that used to pin CBIND-098 in place would have been the arm that
+           could not fail. Found by breaking the assertion above and watching arm 3 keep passing.
+
+           An open bracket is an open bracket wherever it opened, so the sequencing refusals hold
+           here too; the resolve is the one operation that legitimately still does nothing. */
+        ok = ok && cna_weighted_blended_transparency_resize(wbt, INT32_C(4), INT32_C(4)) ==
+            CNA_RESULT_INVALID_STATE;
+        ok = ok && cna_weighted_blended_transparency_begin(wbt, 100.0F) ==
+            CNA_RESULT_INVALID_STATE;
+        ok = ok && cna_weighted_blended_transparency_end(wbt) == CNA_RESULT_SUCCESS;
         ok = ok && cna_weighted_blended_transparency_end(wbt) == CNA_RESULT_INVALID_STATE;
+        /* And the object survives a completed bracket instead of being poisoned by it, which is
+           the half of the defect that outlived the first end(): every later begin() used to go
+           down the same path and leave the pass permanently unusable. */
+        ok = ok && cna_weighted_blended_transparency_begin(wbt, 100.0F) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_weighted_blended_transparency_is_accumulating(wbt, &flag) ==
+            CNA_RESULT_SUCCESS && flag == CNA_TRUE;
+        ok = ok && cna_weighted_blended_transparency_end(wbt) == CNA_RESULT_SUCCESS;
     }
     ok = ok && cna_weighted_blended_transparency_is_accumulating(wbt, &flag) ==
         CNA_RESULT_SUCCESS && flag == CNA_FALSE;

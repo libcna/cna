@@ -16,6 +16,7 @@
 #include "CNA/Graphics/WeightedBlendedTransparency.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -44,6 +45,7 @@ namespace {
 using CNA::Graphics::WeightedBlendedTransparency;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Vector3;
+using Microsoft::Xna::Framework::Graphics::Blend;
 using Microsoft::Xna::Framework::Graphics::BlendState;
 using Microsoft::Xna::Framework::Graphics::DepthStencilState;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
@@ -255,6 +257,54 @@ TEST(WeightedBlendedTransparencyTest, EveryMisuseIsRejected)
     EXPECT_THROW(oit.resize(64, 64), std::logic_error) << "resized while still open";
     oit.end();
     EXPECT_FALSE(oit.isAccumulating());
+}
+
+// plans/plan_binding.md CBIND-098. begin() used to return before setting accumulating_ whenever the
+// resolve could not run, so on such a renderer it reported success, isAccumulating() stayed false,
+// and the matching end() threw "accumulation is not open". A caller that bracketed its transparent
+// geometry the obvious way got an error on the *second* call, on exactly the renderers least able
+// to say why -- and the object was then permanently unusable, because every later begin() went
+// down the same path.
+//
+// This asserts the bracket contract itself, and it is deliberately not branched on isSupported():
+// the contract is the same on every renderer, and the assertions below are only *distinguishing*
+// where the resolve is absent. build-probe (HEADLESS with CNA_CNAEXT=ON) is that arm.
+TEST(WeightedBlendedTransparencyTest, TheBracketIsSymmetricOnEveryRenderer)
+{
+    GraphicsDevice device;
+    WeightedBlendedTransparency oit(device, kSize, kSize);
+
+    // A state the pass does not use, set before the bracket, so "end() restored what begin()
+    // changed" can be told apart from "end() reset the device to its own defaults".
+    device.setBlendStateProperty(BlendState::Additive);
+
+    oit.begin(kFarPlane);
+    EXPECT_TRUE(oit.isAccumulating()) << "begin() must open the bracket on every renderer";
+    EXPECT_NO_THROW(oit.end()) << "a correctly paired end() must not throw";
+    EXPECT_FALSE(oit.isAccumulating());
+
+    // The device stores a copy of the state rather than the caller's object, so the two are told
+    // apart by a field they disagree on: Additive's colour destination is One, Opaque's is Zero.
+    const Blend destination = device.getBlendStateProperty().getColorDestinationBlendProperty();
+    if (oit.isSupported())
+    {
+        // The supported path bound targets and set its own states, so it undoes them.
+        EXPECT_EQ(destination, BlendState::Opaque.getColorDestinationBlendProperty());
+    }
+    else
+    {
+        // The unsupported path bound nothing and set nothing, so it has nothing to undo: resetting
+        // here would clobber a state the caller owns.
+        EXPECT_EQ(destination, BlendState::Additive.getColorDestinationBlendProperty())
+            << "end() reset a state its begin() never changed";
+    }
+
+    // And the object survives a completed bracket rather than being poisoned by the first one.
+    oit.begin(kFarPlane);
+    EXPECT_TRUE(oit.isAccumulating());
+    oit.end();
+    EXPECT_FALSE(oit.isAccumulating());
+    EXPECT_THROW(oit.end(), std::logic_error) << "end() twice must still be refused";
 }
 
 TEST(WeightedBlendedTransparencyTest, AFrameWithNothingTransparentInItIsUntouched)
