@@ -16,6 +16,7 @@
 #include <unistd.h>
 
 #include "CNA/Content/Cnb/CnbDocument.hpp"
+#include "CNA/Content/Pipeline/ContentBuildManifest.hpp"
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
 #include "CNA/Content/Pipeline/Texture2DContentPipeline.hpp"
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
@@ -232,9 +233,19 @@ TEST(ContentPipelineCliTest, DirectoryBuildIsSortedAndPreservesLogicalRelativePa
         Cnb::CnbDocument::ParseFile((output / "Textures" / "wall.cnb").string());
     EXPECT_EQ(sound.Metadata().contentName, "Sounds/explosion");
     EXPECT_EQ(texture.Metadata().contentName, "Textures/wall");
+
+    const std::filesystem::path manifestPath =
+        output / Pipeline::ContentBuildManifestFileName;
+    ASSERT_TRUE(std::filesystem::is_regular_file(manifestPath));
+    const std::vector<std::uint8_t> manifestBytes = ReadBytes(manifestPath);
+    const Pipeline::ContentBuildManifest manifest = Pipeline::ContentBuildManifest::Parse(
+        std::string(manifestBytes.begin(), manifestBytes.end()));
+    ASSERT_EQ(manifest.Entries().size(), 2u);
+    EXPECT_NE(manifest.Find("Sounds/explosion"), nullptr);
+    EXPECT_NE(manifest.Find("Textures/wall"), nullptr);
 }
 
-TEST(ContentPipelineCliTest, RepeatedBuildPublishesByteIdenticalOutput)
+TEST(ContentPipelineCliTest, RepeatedBuildSkipsWithoutChangingOutputOrManifest)
 {
     ScratchDirectory scratch("deterministic");
     const std::filesystem::path source = scratch.Path() / "wall.png";
@@ -243,8 +254,75 @@ TEST(ContentPipelineCliTest, RepeatedBuildPublishesByteIdenticalOutput)
 
     ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--quiet"}), 0);
     const std::vector<std::uint8_t> first = ReadBytes(output);
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--quiet"}), 0);
+    const std::filesystem::path manifest =
+        output.parent_path() / Pipeline::ContentBuildManifestFileName;
+    const std::vector<std::uint8_t> firstManifest = ReadBytes(manifest);
+    std::string log;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    EXPECT_NE(log.find("[SKIP] wall"), std::string::npos) << log;
+    EXPECT_NE(log.find("Built: 0  Skipped: 1  Failed: 0"), std::string::npos) << log;
     EXPECT_EQ(ReadBytes(output), first);
+    EXPECT_EQ(ReadBytes(manifest), firstManifest);
+}
+
+TEST(ContentPipelineCliTest, ChangingOneIndependentSourceRebuildsOnlyThatAsset)
+{
+    ScratchDirectory scratch("independent");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    WriteBytes(source / "Sounds" / "explosion.wav", MakeWav());
+    WriteBytes(source / "Textures" / "wall.png", MakePng(3, 2));
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--quiet"}), 0);
+    const std::vector<std::uint8_t> sound = ReadBytes(output / "Sounds" / "explosion.cnb");
+
+    WriteBytes(source / "Textures" / "wall.png", MakePng(4, 3));
+    std::string log;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    EXPECT_NE(log.find("[SKIP] Sounds/explosion"), std::string::npos) << log;
+    EXPECT_NE(log.find("[BUILD] Textures/wall"), std::string::npos) << log;
+    EXPECT_NE(log.find("Built: 1  Skipped: 1  Failed: 0"), std::string::npos) << log;
+    EXPECT_EQ(ReadBytes(output / "Sounds" / "explosion.cnb"), sound);
+}
+
+TEST(ContentPipelineCliTest, MissingOrTamperedOutputForcesARebuild)
+{
+    ScratchDirectory scratch("tampered_output");
+    const std::filesystem::path source = scratch.Path() / "wall.png";
+    const std::filesystem::path output = scratch.Path() / "wall.cnb";
+    WriteBytes(source, MakePng(3, 2));
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--quiet"}), 0);
+    const std::vector<std::uint8_t> expected = ReadBytes(output);
+
+    WriteBytes(output, {'b', 'a', 'd'});
+    std::string log;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    EXPECT_NE(log.find("[BUILD] wall"), std::string::npos) << log;
+    EXPECT_EQ(ReadBytes(output), expected);
+
+    std::filesystem::remove(output);
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    EXPECT_EQ(ReadBytes(output), expected);
+}
+
+TEST(ContentPipelineCliTest, CorruptManifestSafelyRebuildsAndIsReplaced)
+{
+    ScratchDirectory scratch("corrupt_manifest");
+    const std::filesystem::path source = scratch.Path() / "wall.png";
+    const std::filesystem::path output = scratch.Path() / "wall.cnb";
+    const std::filesystem::path manifest =
+        output.parent_path() / Pipeline::ContentBuildManifestFileName;
+    WriteBytes(source, MakePng(3, 2));
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--quiet"}), 0);
+    WriteBytes(manifest, {'b', 'a', 'd'});
+
+    std::string log;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    EXPECT_NE(log.find("[WARN] Ignoring incompatible or corrupt manifest"), std::string::npos)
+        << log;
+    EXPECT_NE(log.find("[BUILD] wall"), std::string::npos) << log;
+    const std::vector<std::uint8_t> manifestBytes = ReadBytes(manifest);
+    EXPECT_NO_THROW((void)Pipeline::ContentBuildManifest::Parse(
+        std::string(manifestBytes.begin(), manifestBytes.end())));
 }
 
 TEST(ContentPipelineCliTest, FailedRebuildPreservesTheOldValidOutputAndLeavesNoTemporary)
@@ -255,13 +333,18 @@ TEST(ContentPipelineCliTest, FailedRebuildPreservesTheOldValidOutputAndLeavesNoT
     WriteBytes(source, MakePng(2, 2));
     ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--quiet"}), 0);
     const std::vector<std::uint8_t> oldBytes = ReadBytes(output);
+    const std::filesystem::path manifest =
+        output.parent_path() / Pipeline::ContentBuildManifestFileName;
+    const std::vector<std::uint8_t> oldManifest = ReadBytes(manifest);
 
     WriteBytes(source, std::vector<std::uint8_t>{'n', 'o', 't', 'p', 'n', 'g'});
     std::string log;
     EXPECT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--quiet"}, log), 1);
     EXPECT_NE(log.find("Import (CNA.ImageImporter)"), std::string::npos) << log;
     EXPECT_EQ(ReadBytes(output), oldBytes);
+    EXPECT_EQ(ReadBytes(manifest), oldManifest);
     EXPECT_TRUE(TemporaryFilesBeside(output).empty());
+    EXPECT_TRUE(TemporaryFilesBeside(manifest).empty());
 }
 
 TEST(ContentPipelineCliTest, UnknownExtensionsFailWithoutPublishingAnOutput)

@@ -212,6 +212,9 @@ namespace CNA::Content::Pipeline
         /** @brief Returns true when no parameters were configured. */
         [[nodiscard]] bool Empty() const noexcept;
 
+        /** @brief Compares every parameter name, type, and value. */
+        bool operator==(const ContentProcessorParameters&) const = default;
+
     private:
         std::map<std::string, ContentProcessorParameterValue> values_;
     };

@@ -1,6 +1,6 @@
 # plan_content_pipeline.md — CNA Content Pipeline
 
-> **Status (2026-08-28):** `CP-001` through `CP-007` are complete. `CP-008` is current. The
+> **Status (2026-08-28):** `CP-001` through `CP-008` are complete. `CP-009` is current. The
 > project starts from the existing `content-pipeline` branch at `0e6899f17017c03c0e23d575d25cd70c678e2781`.
 > That commit contains the completed CNB baseline through `CNBF-123`. Local `next` was actually
 > `4ab1859dc8a540af1bd326df0fa816579adf7027`, two unrelated platform/binding commits ahead; the
@@ -109,7 +109,7 @@ surface follows XNA's model.
 |---|---|---|
 | `ContentImporter<T>` | Isolates parsing/source semantics from runtime transformation | Retain as an experimental C++ component contract with explicit stable identity, version, supported extensions and imported-type identity. |
 | `ContentImporterContext` | Supplies scoped logging and dependency recording | Retain only source/logical identity, safe path resolution, source-dependency recording, build options and logging. No output/intermediate directories until a component genuinely needs them. |
-| Intermediate object model | Lets several source formats converge before processing | Retain where source semantics differ from `Cnb*Data`; first real types are `ImportedImage` and `ImportedAudio`. Do not invent one class per XNA name. |
+| Intermediate object model | Lets several source formats converge before processing | Retain where source semantics differ from `Cnb*Data`; first real types are `ImportedImage` and `ImportedSound`. Do not invent one class per XNA name. |
 | `ContentProcessor<TInput,TOutput>` | Separates source parsing from content-affecting transformations and runtime preparation | Retain. A thin adapter is valid when current behavior has no richer transformation yet. |
 | `ContentProcessorContext` | Supplies validated parameters, dependency/XREF reporting and scoped logging | Retain as a smaller, distinct context. Build recursion is omitted initially. |
 | Processor parameters | Makes transformations configurable and fingerprintable | Retain as a bounded ordered value map, validated by the chosen processor before processing. No reflection over C++ properties. |
@@ -524,26 +524,49 @@ enter a content fingerprint.
 
 ---
 
-## 9. Incremental manifest/cache design (`CP-008`, future)
+## 9. Incremental manifest/cache (`CP-008`, implemented)
 
-The first manifest is a deterministic, versioned, inspectable file under the output root. It records
-one entry per logical asset, sorted by logical name. A SHA-256 (or another explicitly selected stable
-cryptographic digest already available without a heavy dependency) fingerprint covers canonical
-length-prefixed fields:
+The first manifest is the deterministic, versioned, inspectable
+`.cna-content-manifest.json` under the output root. It records one entry per logical asset, sorted by
+logical name. CNA reuses the existing SharpRuntime SHA-256 implementation rather than adding a
+second digest implementation. The effective fingerprint covers canonical length-prefixed fields:
 
 * primary source bytes;
 * every recorded source-dependency path relative to root and its bytes, sorted by category/path;
-* content/build dependency identities and their effective fingerprints;
+* content/build dependency identities and their supplied effective fingerprints;
 * importer, processor and writer stable names and versions;
 * canonical processor parameters;
-* relevant build options;
 * logical content identity where it affects CMET/output bytes;
-* CNB container identity plus selected asset schema/codec identity;
+* CNB container major/minor identity, asset type ID, and selected writer identity/version (the
+  built-in writer build version owns schema/codec behavior);
 * manifest format version.
 
-No timestamp alone, RTTI name, absolute temporary path, process ID or native path separator enters
-the fingerprint. Missing/corrupt/incompatible manifest data causes a safe rebuild. The output's own
-bytes/hash are recorded so tampering does not yield a false skip. Manifest publication is atomic.
+No timestamp, RTTI name, absolute path, temporary path, process ID or native path separator enters
+the fingerprint. Source and generated paths are root-relative generic paths. Processor values are
+encoded with explicit `bool`/`i64`/`u64`/`f64`/`string` tags, so neither JSON number precision nor a
+C++ variant index becomes persistent identity. Missing/corrupt/incompatible manifest data causes a
+safe rebuild. The output's own SHA-256 is checked so deletion or tampering never yields a false
+skip. CNB and manifest files are both published through the same audited atomic helper; an unchanged
+manifest is not rewritten.
+
+The CLI resolves the current importer -> processor -> writer route without invoking it, compares
+stable identities and parameters, recomputes file/dependency hashes from the previous record, and
+only then emits `[SKIP]`. A directory run builds a fresh next-manifest in deterministic discovery
+order and publishes it only if every asset succeeded. If an earlier artifact was updated before a
+later failure, the old manifest remains; its output hash then safely forces a rebuild on the next
+run.
+
+Content-build dependency fingerprints are represented and unit-tested, including invalidation when
+the referenced effective fingerprint changes. The current serial CLI deliberately refuses to cache
+or publish a component that declares such a dependency until graph scheduling/cycle handling is
+implemented; it never substitutes a stale fingerprint. File dependency invalidation is fully live.
+
+Verification covers the known SHA-256 `abc` vector, deterministic parse/serialize round trips, all
+five parameter types, source/dependency byte changes, mtime-only changes, component version,
+parameter, logical-name, asset-type and referenced-build invalidation, traversal/symlink rejection,
+identical no-op builds, one-of-two independent rebuilds, output deletion/tampering, corrupt-manifest
+recovery and failed-build preservation. The combined pipeline/CLI/golden selection passed all 47
+cases after a successful fresh HEADLESS build.
 
 Scheduling remains serial initially. Registries become read-only during builds and components are
 expected to be reentrant so later parallel scheduling does not require an API rewrite.
@@ -599,8 +622,8 @@ Required before the corresponding task closes:
 | `CP-005` | **completed** | Split the existing bounded RIFF parser to source-oriented `ImportedSound`, shared its one exact PCM processing helper with the compatibility API, and added `WavImporter`, `SoundEffectProcessor`, and a writer that calls the existing encoder. Six new tests and 66 focused old/new regressions pass; pre/post-refactor real-tool bytes also match exactly. No build component initializes audio. |
 | `CP-006` | **completed** | Added the `cna-content` executable with single/directory builds, deterministic discovery, relative logical/output preservation, explicit built-in selection diagnostics, wide Windows entry point, safe output layouts and the shared audited atomic publisher. Six subprocess tests prove the CLI contract and failed-rebuild preservation. |
 | `CP-007` | **completed** | Completed the observable build result: categorized build dependencies and separate runtime XREFs are returned with ordered contextual messages. The coordinator records while forwarding to an optional scoped logger; image/WAV importers and Texture/SoundEffect processors expose their actual stages. The fresh HEADLESS Debug targets built and the 38-case combined pipeline/CLI/golden selection passed. |
-| `CP-008` | **current** | Add deterministic inspectable manifest and content fingerprints; prove no-op and precise invalidation behavior. |
-| `CP-009` | future | Integrate glTF/Model without a second interpretation; retain direct-vs-CNJ byte oracle and report glTF dependencies. |
+| `CP-008` | **completed** | Added the version-1 inspectable JSON manifest, canonical SHA-256 effective-input fingerprints, output-integrity hashes, safe corruption fallback and atomic manifest publication. Nine real CLI tests and six manifest tests prove no-op skip, independent rebuilds, byte-not-mtime invalidation, component/parameter/dependency identities, output repair and path containment. Content-build dependency fingerprints are modeled but serial graph scheduling remains intentionally disabled until cycle rules exist. |
+| `CP-009` | **current** | Integrate glTF/Model without a second interpretation; retain direct-vs-CNJ byte oracle and report glTF dependencies. |
 | `CP-010` | future | Integrate CNJ as a front-end that converges on shared processors/writers; remove build-time ContentManager shortcut and preserve sidecar safety/equivalence. |
 | `CP-011` | future | Add realistic custom importer/processor/writer plus custom runtime loader end-to-end example/test; review experimental API. |
 | `CP-012` | future | Implement/audit Windows wide argv and non-ASCII pathname tests; document logical/native conversion. |
@@ -628,6 +651,12 @@ the ordering wrong; it is not a promise to build speculative abstractions.
   diagnostics are mandatory; the string is persistent identity, the RTTI guard is only defensive.
 * Dependency correctness precedes incremental correctness. An incomplete dependency set must force
   rebuilds rather than permit a wrong skip.
+* SharpRuntime's current SHA-256 API accepts one `intcs`-bounded in-memory buffer. CP-008 therefore
+  rejects any individual fingerprinted file above 2 GiB instead of truncating it. A future streaming
+  hash API should remove that implementation limit before very large model/video dependencies are
+  advertised as supported by the cache.
+* Content-to-content dependency records have deterministic fingerprint semantics, but the serial
+  CLI intentionally forces/refuses that route until graph ordering and cycles are implemented.
 
 ### Rejected alternatives
 
@@ -660,7 +689,6 @@ the ordering wrong; it is not a promise to build speculative abstractions.
 
 * Whether the experimental layer eventually deserves its own physical/CMake module after its link
   closure and consumer set are measured.
-* Which digest implementation best fits CNA without adding a heavyweight build dependency.
 * Whether a future build dependency may intentionally live outside source root, and what explicit
   capability grants that access.
 * Whether one source producing several logical assets (glTF skins/clips) should be one graph node
@@ -668,5 +696,3 @@ the ordering wrong; it is not a promise to build speculative abstractions.
   question; it will be settled before recursive build APIs.
 * How custom writer schema/codec version identities should compose with custom CNB asset schema
   versions in fingerprints. Built-ins can use their frozen asset schema IDs directly.
-* Whether manifest JSON should reuse `CNA::Internal::Json` or use a smaller pipeline-owned canonical
-  representation; whichever is chosen must have deterministic field/key ordering.

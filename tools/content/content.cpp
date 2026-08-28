@@ -4,12 +4,14 @@
 #include <cstdint>
 #include <exception>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
+#include "CNA/Content/Pipeline/ContentBuildManifest.hpp"
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
 #include "CNA/Content/Pipeline/SoundEffectContentPipeline.hpp"
 #include "CNA/Content/Pipeline/Texture2DContentPipeline.hpp"
@@ -129,11 +131,14 @@ namespace
     }
 
     std::vector<BuildItem> DiscoverBuilds(const CommandLine& command,
-                                          std::filesystem::path& sourceRoot)
+                                          std::filesystem::path& sourceRoot,
+                                          std::filesystem::path& outputRoot,
+                                          bool& directoryBuild)
     {
         const std::filesystem::path source = WeaklyCanonical(command.source);
         if (std::filesystem::is_regular_file(source))
         {
+            directoryBuild = false;
             if (command.output.extension() != ".cnb")
             {
                 throw std::invalid_argument(
@@ -145,6 +150,7 @@ namespace
                 throw std::invalid_argument("the output path must not replace the source file.");
             }
             sourceRoot = source.parent_path();
+            outputRoot = output.parent_path();
             return {{source, output, LogicalName(source.filename())}};
         }
         if (!std::filesystem::is_directory(source))
@@ -153,8 +159,9 @@ namespace
                                         "' is neither a regular file nor a directory.");
         }
 
+        directoryBuild = true;
         sourceRoot = source;
-        const std::filesystem::path outputRoot = WeaklyCanonical(command.output);
+        outputRoot = WeaklyCanonical(command.output);
         if (IsWithin(sourceRoot, outputRoot))
         {
             throw std::invalid_argument(
@@ -187,6 +194,100 @@ namespace
         return registry;
     }
 
+    std::string ReadText(const std::filesystem::path& path)
+    {
+        std::ifstream stream(path, std::ios::binary);
+        if (!stream)
+        {
+            throw std::runtime_error("cannot open '" + path.string() + "'.");
+        }
+        return {std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
+    }
+
+    Pipeline::ContentBuildManifest LoadManifest(const std::filesystem::path& path,
+                                                std::string& original,
+                                                bool quiet)
+    {
+        try
+        {
+            if (!std::filesystem::exists(path)) { return {}; }
+            original = ReadText(path);
+            return Pipeline::ContentBuildManifest::Parse(original);
+        }
+        catch (const std::exception& error)
+        {
+            original.clear();
+            if (!quiet)
+            {
+                std::cout << "[WARN] Ignoring incompatible or corrupt manifest '"
+                          << path.string() << "': " << error.what() << "\n";
+            }
+            return {};
+        }
+    }
+
+    bool HasContentBuildDependency(const Pipeline::ContentBuildManifestEntry& entry)
+    {
+        return std::any_of(entry.dependencies.begin(), entry.dependencies.end(),
+                           [](const Pipeline::ContentDependency& dependency)
+        {
+            return dependency.kind == Pipeline::ContentDependencyKind::ContentBuild;
+        });
+    }
+
+    bool IsCurrentRoute(const Pipeline::ContentBuildManifestEntry& entry,
+                        const Pipeline::ContentPipelineRegistry& registry,
+                        const BuildItem& item,
+                        const Pipeline::ContentProcessorParameters& parameters)
+    {
+        try
+        {
+            const std::shared_ptr<const Pipeline::ContentImporter> importer =
+                registry.ResolveImporter(item.source);
+            const std::shared_ptr<const Pipeline::ContentProcessor> processor =
+                registry.ResolveProcessor(importer->OutputType());
+            processor->ValidateParameters(parameters);
+            const std::shared_ptr<const Pipeline::ContentTypeWriter> writer =
+                registry.ResolveWriter(processor->OutputType());
+            return entry.importer == importer->Identity() &&
+                   entry.processor == processor->Identity() &&
+                   entry.writer == writer->Identity() && entry.parameters == parameters;
+        }
+        catch (...)
+        {
+            return false;
+        }
+    }
+
+    bool CanSkip(const Pipeline::ContentBuildManifestEntry& entry,
+                 const Pipeline::ContentPipelineRegistry& registry,
+                 const BuildItem& item, const std::filesystem::path& sourceRoot,
+                 const std::filesystem::path& outputRoot,
+                 const Pipeline::ContentProcessorParameters& parameters)
+    {
+        try
+        {
+            if (HasContentBuildDependency(entry)) { return false; }
+            if (WeaklyCanonical(sourceRoot / entry.source) != WeaklyCanonical(item.source) ||
+                WeaklyCanonical(outputRoot / entry.output) != WeaklyCanonical(item.output) ||
+                !IsCurrentRoute(entry, registry, item, parameters))
+            {
+                return false;
+            }
+            if (Pipeline::ComputeContentBuildFingerprint(entry, sourceRoot) != entry.fingerprint ||
+                !std::filesystem::is_regular_file(item.output) ||
+                Pipeline::ContentFileSha256(item.output) != entry.outputSha256)
+            {
+                return false;
+            }
+            return true;
+        }
+        catch (...)
+        {
+            return false;
+        }
+    }
+
     int Run(const std::vector<std::filesystem::path>& arguments)
     {
         CommandLine command;
@@ -202,10 +303,12 @@ namespace
         }
 
         std::filesystem::path sourceRoot;
+        std::filesystem::path outputRoot;
+        bool directoryBuild = false;
         std::vector<BuildItem> builds;
         try
         {
-            builds = DiscoverBuilds(command, sourceRoot);
+            builds = DiscoverBuilds(command, sourceRoot, outputRoot, directoryBuild);
         }
         catch (const std::exception& error)
         {
@@ -213,18 +316,58 @@ namespace
             return 1;
         }
 
-        const Pipeline::ContentPipeline pipeline(CreateRegistry());
+        const std::shared_ptr<const Pipeline::ContentPipelineRegistry> registry = CreateRegistry();
+        const Pipeline::ContentPipeline pipeline(registry);
+        const std::filesystem::path manifestPath =
+            outputRoot / Pipeline::ContentBuildManifestFileName;
+        std::string originalManifest;
+        const Pipeline::ContentBuildManifest previousManifest =
+            LoadManifest(manifestPath, originalManifest, command.quiet);
+        Pipeline::ContentBuildManifest nextManifest = previousManifest;
+        if (directoryBuild) { nextManifest.Clear(); }
+
         std::size_t built = 0u;
+        std::size_t skipped = 0u;
         std::size_t failed = 0u;
         for (const BuildItem& item : builds)
         {
             try
             {
+                const Pipeline::ContentBuildManifestEntry* previous =
+                    previousManifest.Find(item.logicalName);
+                const Pipeline::ContentProcessorParameters parameters;
+                if (previous != nullptr &&
+                    CanSkip(*previous, *registry, item, sourceRoot, outputRoot, parameters))
+                {
+                    nextManifest.Set(*previous);
+                    ++skipped;
+                    if (!command.quiet)
+                    {
+                        std::cout << "[SKIP] " << item.logicalName << " -> "
+                                  << item.output.string() << "\n";
+                    }
+                    continue;
+                }
+
                 Pipeline::ContentBuildRequest request;
                 request.sourceRoot = sourceRoot;
                 request.source = item.source;
                 request.logicalName = item.logicalName;
+                request.parameters = parameters;
                 Pipeline::ContentBuildResult result = pipeline.Build(request);
+
+                Pipeline::ContentBuildManifestEntry manifestEntry =
+                    Pipeline::MakeContentBuildManifestEntry(
+                        result, sourceRoot, outputRoot, item.output);
+                if (HasContentBuildDependency(manifestEntry))
+                {
+                    throw std::runtime_error(
+                        "content-build dependencies require graph fingerprint scheduling, which "
+                        "is not enabled in this serial CLI yet.");
+                }
+                manifestEntry.fingerprint =
+                    Pipeline::ComputeContentBuildFingerprint(manifestEntry, sourceRoot);
+                manifestEntry.outputSha256 = Pipeline::ContentSha256(result.output.bytes);
 
                 try
                 {
@@ -240,6 +383,8 @@ namespace
                         item.source, item.logicalName, Pipeline::ContentPipelineStage::Publish,
                         "CNA.AtomicPublisher", error.what());
                 }
+
+                nextManifest.Set(std::move(manifestEntry));
 
                 ++built;
                 if (!command.quiet)
@@ -257,9 +402,30 @@ namespace
             }
         }
 
+        if (failed == 0u)
+        {
+            try
+            {
+                const std::string serialized = nextManifest.Serialize();
+                if (serialized != originalManifest)
+                {
+                    std::filesystem::create_directories(outputRoot);
+                    CNA::Tools::WriteFileAtomically(
+                        manifestPath,
+                        std::vector<std::uint8_t>(serialized.begin(), serialized.end()));
+                }
+            }
+            catch (const std::exception& error)
+            {
+                ++failed;
+                std::cerr << "content manifest publication failed: " << error.what() << "\n";
+            }
+        }
+
         if (!command.quiet || failed != 0u)
         {
-            std::cout << "Built: " << built << "  Failed: " << failed << "\n";
+            std::cout << "Built: " << built << "  Skipped: " << skipped
+                      << "  Failed: " << failed << "\n";
         }
         return failed == 0u ? 0 : 1;
     }
