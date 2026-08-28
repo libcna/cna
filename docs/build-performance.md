@@ -15,6 +15,7 @@ All new performance-oriented presets use Ninja and write `compile_commands.json`
 | --- | --- | --- |
 | `dev` | Fast local code/edit/link loop; builds `cna_tool_cnb_info` | Tests, demos, C API, networking, FFmpeg, Draco |
 | `unit` | Portable complete unit-test suite; builds `CnaTests` | Demos, C API, networking, FFmpeg, Draco |
+| `unit-pch` | Opt-in content-test PCH pilot; builds `CnaContentTests` | Same as `unit`; PCH is limited to the content test object group |
 | `release-modules` | Optimized module/content-tool validation | Tests, demos, C API, networking, FFmpeg, Draco |
 | `release-ipo` | Explicit IPO/LTO measurement build | Same as `release-modules`; IPO is opt-in |
 
@@ -108,6 +109,38 @@ The source glob behavior is unchanged. Adding a temporary module `.cpp` produced
 regenerated again. A temporary forbidden `SDL_CreateWindow` reference invalidated the cache and
 made configuration fail at the strict ratchet gate, proving that caching does not weaken the
 correctness check.
+
+## Content-test PCH pilot
+
+`CNA_ENABLE_PCH=ON` enables the COMP-003 pilot only for the `cna_content_test_objects` target.
+The private precompiled header contains GoogleTest and stable standard-library headers; CNA public
+headers deliberately remain textual. The option defaults to `OFF`, does not affect installed
+consumers or third-party targets, and has a dedicated preset:
+
+```sh
+cmake --preset unit-pch
+cmake --build --preset unit-content-pch --parallel 12
+SDL_AUDIODRIVER=dummy ./cmake-build-unit-pch/CnaContentTests
+```
+
+ccache's safe defaults do not fully support PCH reuse. The documented ccache PCH path requires
+relaxing `pch_defines` and `time_macros` checks, so CNA does not change global sloppiness. When both
+features are requested, only the content-test object target bypasses ccache; its dependency graph
+continues to use the configured launcher.
+
+The 2026-08-28 GCC 14.2.0 measurement rebuilt only the 140 content-test translation units after
+prebuilding an identical dependency graph. Both configurations used Debug/STUB, Ninja, Mold,
+`--parallel 12`, and ccache disabled. Each mode was run twice:
+
+| Mode | Run 1 | Run 2 | Mean | Peak RSS |
+| --- | ---: | ---: | ---: | ---: |
+| PCH off | 69.83 s | 73.96 s | 71.90 s | 533 MiB |
+| PCH on | 54.18 s | 55.88 s | 55.03 s | 548 MiB |
+
+The PCH reduced clean content-test compilation by 23.5%, exceeding the 15% pilot threshold, while
+peak memory rose by about 2.8%. Clang 19.1.7 also compiled and linked the same PCH target. The
+focused executable preserved its test inventory; its STUB run retained only the renderer/shader
+capability failures also observed without PCH.
 
 ## Compiler-policy layers
 

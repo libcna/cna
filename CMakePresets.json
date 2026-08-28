@@ -50,6 +50,16 @@
       }
     },
     {
+      "name": "unit-pch",
+      "displayName": "Focused content tests with PCH (STUB, Debug)",
+      "description": "Opt-in COMP-003 pilot. Builds the content-test object group with a private standard-library/GoogleTest PCH; CNA public headers remain textual.",
+      "inherits": "unit",
+      "binaryDir": "${sourceDir}/cmake-build-unit-pch",
+      "cacheVariables": {
+        "CNA_ENABLE_PCH": "ON"
+      }
+    },
+    {
       "name": "release-modules",
       "displayName": "Focused release modules (STUB)",
       "description": "A portable Release configuration for checking optimized CNA module and content-tool builds without test/demo/C API volume.",
@@ -252,6 +262,14 @@
       "name": "unit-content",
       "displayName": "Build focused content tests",
       "configurePreset": "unit",
+      "targets": [
+        "CnaContentTests"
+      ]
+    },
+    {
+      "name": "unit-content-pch",
+      "displayName": "Build focused content tests with the PCH pilot",
+      "configurePreset": "unit-pch",
       "targets": [
         "CnaContentTests"
       ]

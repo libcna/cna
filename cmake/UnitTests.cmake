@@ -8,6 +8,9 @@
 # The CROSSCOMPILING_EMULATOR chain further down is deliberately NOT converted: a target carries one
 # emulator property, so it can only ever describe one renderer, and the default is the honest choice.
 
+option(CNA_ENABLE_PCH
+    "Enable the measured precompiled-header pilot for the content unit-test object target" OFF)
+
 if(CNA_BUILD_TESTS)
     # Task DEVPERF-001: fail fast with an actionable message rather than
     # CMake's own generic "add_subdirectory given source ... which is not an
@@ -371,6 +374,34 @@ if(CNA_BUILD_TESTS)
         target_link_libraries(${_cna_test_object_target} PRIVATE
             cna_test_build_config
             ${_cna_test_group_dependencies})
+        if(CNA_ENABLE_PCH AND _cna_test_group STREQUAL "content")
+            # COMP-003 deliberately pilots only stable standard-library and GoogleTest headers.
+            # CNA public headers stay textual so editing the framework API does not rebuild a
+            # large project-owned PCH before every content test translation unit can proceed.
+            target_precompile_headers(${_cna_test_object_target} PRIVATE
+                <algorithm>
+                <array>
+                <cstdint>
+                <filesystem>
+                <memory>
+                <optional>
+                <span>
+                <string>
+                <string_view>
+                <unordered_map>
+                <utility>
+                <vector>
+                <gtest/gtest.h>)
+
+            # Safe ccache support for PCH requires relaxed pch_defines/time_macros correctness
+            # checks. CNA does not impose those global tradeoffs, so only this experimental object
+            # target bypasses the inherited launcher; every dependency remains cacheable normally.
+            if(CNA_USE_CCACHE AND CNA_CCACHE_PROGRAM)
+                set_property(TARGET ${_cna_test_object_target} PROPERTY CXX_COMPILER_LAUNCHER "")
+                message(STATUS
+                    "CNA: content-test PCH bypasses ccache; no unsafe sloppiness was enabled")
+            endif()
+        endif()
         target_sources(CnaTests PRIVATE "$<TARGET_OBJECTS:${_cna_test_object_target}>")
         set("CNA_TEST_OBJECT_TARGET_${_cna_test_group}" "${_cna_test_object_target}")
 

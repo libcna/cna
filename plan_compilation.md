@@ -58,7 +58,7 @@ must not be compared with the new post-reset counters.
 |---|---|---|---|
 | COMP-001 | Rebuild the benchmark and ccache evidence baseline | foundation commit | ⬜ |
 | COMP-002 | Split the monolithic unit-test iteration path | COMP-001 | ✅ |
-| COMP-003 | Pilot target-specific precompiled headers | COMP-002 | ⬜ |
+| COMP-003 | Pilot target-specific precompiled headers | COMP-002 | ✅ |
 | COMP-004 | Benchmark Mold and LLD final linking | COMP-001 | ⬜ |
 | COMP-005 | Reduce CMake configure/regeneration cost | COMP-001 | ✅ |
 | COMP-006 | Reduce measured header and translation-unit cost | COMP-001 | ⬜ |
@@ -175,6 +175,21 @@ being edited. The goal is a focused developer target, while retaining a full com
 - No material regression in one-source incremental time, no new warnings, and no test difference.
 - Peak memory remains safe at the documented parallelism. Otherwise remove the pilot and record it
   as rejected evidence.
+
+### Completion evidence (2026-08-28)
+
+- `CNA_ENABLE_PCH`, default `OFF`, applies only to the 140-source content-test object target. Its
+  private PCH contains GoogleTest and stable standard-library headers, never CNA public headers or
+  third-party target policy. `unit-pch` / `unit-content-pch` provide an isolated build directory.
+- With GCC 14.2.0, Debug/STUB, Ninja, Mold, ccache disabled, and `--parallel 12`, two clean object
+  rebuilds averaged 71.90 s without PCH and 55.03 s with PCH: a 23.5% improvement. Peak RSS rose
+  from about 533 MiB to 548 MiB (2.8%), remaining safe on the reference host.
+- Clang 19.1.7 also compiled the PCH and linked `CnaContentTests`. GCC and Clang emitted no new
+  PCH-specific warnings. The focused test inventory was preserved, and PCH-on/off runs retained the
+  same known STUB renderer/shader capability failures rather than introducing a test difference.
+- ccache PCH support would require relaxed `pch_defines,time_macros` correctness checks. CNA does
+  not enable that sloppiness: when ccache and the pilot are both on, this one object target bypasses
+  the launcher while all dependencies remain cacheable.
 
 ## 7. COMP-004 — Mold/LLD linker benchmark
 
