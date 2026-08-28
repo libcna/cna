@@ -104,6 +104,13 @@ endif()
 add_library(cna_instrumentation INTERFACE)
 add_library(CNA::Instrumentation ALIAS cna_instrumentation)
 
+add_library(cna_debug_info_options INTERFACE)
+add_library(CNA::DebugInfoOptions ALIAS cna_debug_info_options)
+
+set(CNA_DEBUG_INFO "FULL" CACHE STRING
+    "Debug information for CNA-owned Debug targets (FULL, LINE_TABLES, or SPLIT)")
+set_property(CACHE CNA_DEBUG_INFO PROPERTY STRINGS FULL LINE_TABLES SPLIT)
+
 set(CNA_SANITIZE "" CACHE STRING
     "Comma-separated sanitizers to enable (for example address,undefined); empty disables")
 set(CNA_SANITIZE_OPTIMIZATION "DEFAULT" CACHE STRING
@@ -161,6 +168,52 @@ function(cna_configure_instrumentation)
         "(optimization: ${_cna_sanitize_optimization})")
 endfunction()
 
+function(cna_configure_debug_info)
+    string(TOUPPER "${CNA_DEBUG_INFO}" _cna_debug_info)
+    if(NOT _cna_debug_info MATCHES "^(FULL|LINE_TABLES|SPLIT)$")
+        message(FATAL_ERROR
+            "CNA_DEBUG_INFO must be FULL, LINE_TABLES, or SPLIT "
+            "(received '${CNA_DEBUG_INFO}').")
+    endif()
+    set(CNA_DEBUG_INFO "${_cna_debug_info}" CACHE STRING
+        "Debug information for CNA-owned Debug targets (FULL, LINE_TABLES, or SPLIT)" FORCE)
+    set_property(CACHE CNA_DEBUG_INFO PROPERTY STRINGS FULL LINE_TABLES SPLIT)
+
+    if(_cna_debug_info STREQUAL "FULL")
+        return()
+    endif()
+    if(CNA_SANITIZE)
+        message(FATAL_ERROR
+            "CNA_DEBUG_INFO=${_cna_debug_info} cannot be combined with CNA_SANITIZE; sanitizer "
+            "presets retain full debug information for diagnostics.")
+    endif()
+    if(EMSCRIPTEN OR CMAKE_CROSSCOMPILING OR
+       NOT CMAKE_CXX_COMPILER_ID MATCHES "^(GNU|Clang)$")
+        message(FATAL_ERROR
+            "CNA_DEBUG_INFO=${_cna_debug_info} is currently supported only by verified native "
+            "GNU/Clang builds. Use CNA_DEBUG_INFO=FULL for this toolchain.")
+    endif()
+    if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+        message(FATAL_ERROR
+            "CNA_DEBUG_INFO=${_cna_debug_info} affects only Debug configurations; current build "
+            "type is '${CMAKE_BUILD_TYPE}'.")
+    endif()
+
+    if(_cna_debug_info STREQUAL "LINE_TABLES")
+        if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+            set(_cna_debug_flag -g1)
+        else()
+            set(_cna_debug_flag -gline-tables-only)
+        endif()
+    else()
+        set(_cna_debug_flag -gsplit-dwarf)
+    endif()
+    target_compile_options(cna_debug_info_options INTERFACE
+        "$<$<CONFIG:Debug>:${_cna_debug_flag}>")
+    message(STATUS
+        "CNA: Debug information mode ${_cna_debug_info} (${_cna_debug_flag})")
+endfunction()
+
 function(cna_link_private_build_support target)
     get_target_property(_cna_target_type "${target}" TYPE)
     if(_cna_target_type STREQUAL "INTERFACE_LIBRARY")
@@ -171,7 +224,8 @@ function(cna_link_private_build_support target)
 endfunction()
 
 function(cna_apply_sharp_runtime_build_support)
-    set(_cna_runtime_support cna_instrumentation cna_emscripten_abi)
+    set(_cna_runtime_support
+        cna_instrumentation cna_debug_info_options cna_emscripten_abi)
     if(CNA_SHARP_RUNTIME_IS_MODULAR)
         sharp_runtime_get_enabled_components(_cna_sharp_runtime_components)
         set(_cna_sharp_runtime_targets)
@@ -244,6 +298,7 @@ function(cna_apply_build_support_to_cna_targets)
         cna_link_private_build_support("${_cna_target}"
             cna_project_options
             cna_instrumentation
+            cna_debug_info_options
             cna_emscripten_abi
             cna_linker_options)
         math(EXPR _cna_supported_target_count "${_cna_supported_target_count} + 1")

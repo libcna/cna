@@ -14,6 +14,7 @@ All new performance-oriented presets use Ninja and write `compile_commands.json`
 | Preset | Intended use | Deliberately omitted |
 | --- | --- | --- |
 | `dev` | Fast local code/edit/link loop; builds `cna_tool_cnb_info` | Tests, demos, C API, networking, FFmpeg, Draco |
+| `dev-fast-debug` | Same edit loop with line-table-only debug information | Same as `dev`; local-variable/type debugger detail |
 | `unit` | Portable complete unit-test suite; builds `CnaTests` | Demos, C API, networking, FFmpeg, Draco |
 | `unit-pch` | Opt-in content-test PCH pilot; builds `CnaContentTests` | Same as `unit`; PCH is limited to the content test object group |
 | `release-modules` | Optimized module/content-tool validation | Tests, demos, C API, networking, FFmpeg, Draco |
@@ -185,6 +186,48 @@ essentially flat at 490 MiB, so they are not used as a whole-target speed claim.
 is the controlled header probe plus the deterministic parse-count reduction. GCC 14.2.0 and Clang
 19.1.7 both build `CnaContentTests`, and all 21 directly affected `ContentReader` tests pass on both.
 
+## Fast debug information
+
+`CNA_DEBUG_INFO` controls debug information only for CNA-owned and enabled Sharp Runtime targets:
+
+- `FULL` is the default and preserves the toolchain's normal Debug information;
+- `LINE_TABLES` appends `-g1` on GCC or `-gline-tables-only` on Clang;
+- `SPLIT` appends `-gsplit-dwarf` as an explicit experiment.
+
+`dev-fast-debug` selects `LINE_TABLES` in its own build directory:
+
+```sh
+cmake --preset dev-fast-debug
+cmake --build --preset dev-fast-debug --parallel 12
+```
+
+Line tables retain source-level stacks, breakpoints, symbols, and address-to-line resolution, but
+not the full local-variable and type inspection data. Use the regular `dev` preset when a debugger
+session needs that information. Non-full modes are restricted to native GNU/Clang Debug builds and
+cannot be combined with sanitizers; vendored targets remain outside this project policy.
+
+The 2026-08-28 GCC 14.2.0 Debug/STUB/Mold measurement used ccache off and `--parallel 12` after
+prebuilding an identical dependency graph:
+
+| Mode | 46-source `cna_content` rebuild | Peak RSS | Content objects | Build tree | Final tool |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `FULL` | 38.76 s | 865 MiB | 68.9 MiB | 590.6 MB | 1.30 MB |
+| `LINE_TABLES` | 34.99 s | 721 MiB | 39.8 MiB | 312.1 MB | 0.62 MB |
+| `SPLIT` | 38.32 s | 865 MiB | 42.7 MiB + 40.3 MiB `.dwo` | 605.4 MB | 1.07 MB |
+
+Line tables improved that controlled compile by 9.7%, reduced peak memory by 16.6%, content object
+size by 42.3%, the complete build tree by 47.2%, and the final tool by 52.5%. Two single-job
+`ContentManager.cpp` rebuilds averaged 9.20 s with full debug information and 8.30 s with line tables
+(9.8% faster). Mold made the final relink effectively identical (0.21 s versus 0.20 s), and no-op
+builds were 0.14 s versus 0.13 s.
+
+The first full clean-closure samples varied in the opposite direction (104.94 s full, 126.72 s line
+tables, 166.84 s split) as the host load changed, so they are disclosed but not used as the accepted
+speed metric. Split DWARF provided no meaningful controlled compile gain and made the total tree
+larger, so it has no preset. Both modes remain selectable for other machines. The line-table tool
+contains 18,922 decoded source-line rows and runs normally; Clang 19.1.7 also builds and runs the
+same preset with `-gline-tables-only`.
+
 ## Compiler-policy layers
 
 The CMake targets distinguish requirements imposed on a consumer from CNA's private build policy:
@@ -193,6 +236,7 @@ The CMake targets distinguish requirements imposed on a consumer from CNA's priv
 | --- | --- | --- |
 | `CNA::BuildConfig` | Public | C++23 and preprocessor/build facts a public header or ABI requires, including the selected renderer and feature macros. |
 | `CNA::ProjectOptions` | Private to CNA-owned targets | Non-ABI compiler policy, currently deterministic MSVC UTF-8 source decoding. |
+| `CNA::DebugInfoOptions` | Private to CNA-owned targets and Sharp Runtime | Optional Debug-only line-table or split-DWARF policy. |
 | `CNA::Instrumentation` | Private to CNA-owned targets and Sharp Runtime | Sanitizer compile/link options. |
 | `CNA::EmscriptenAbi` | Public where required, private internally | The Emscripten exception/Asyncify ABI shared by CNA, Sharp Runtime, and final applications. |
 | `CNA::LinkerOptions` | Private to CNA-owned targets | An explicitly selected native fast linker. |

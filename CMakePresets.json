@@ -33,6 +33,16 @@
       }
     },
     {
+      "name": "dev-fast-debug",
+      "displayName": "Fast local development with line-table debug info",
+      "description": "Opt-in COMP-009 build using line tables instead of full variable/type debug information. Keeps source-level stacks and breakpoints while reducing compile/link I/O; use dev for full debugger inspection.",
+      "inherits": "dev",
+      "binaryDir": "${sourceDir}/cmake-build-dev-fast-debug",
+      "cacheVariables": {
+        "CNA_DEBUG_INFO": "LINE_TABLES"
+      }
+    },
+    {
       "name": "unit",
       "displayName": "Focused unit tests (STUB, Debug)",
       "description": "Builds CnaTests without demos, the C API, networking, FFmpeg, or Draco. Use the renderer-specific and integration presets for coverage that requires those components.",
@@ -230,6 +240,14 @@
       "name": "dev",
       "displayName": "Build the fast local-development content tool",
       "configurePreset": "dev",
+      "targets": [
+        "cna_tool_cnb_info"
+      ]
+    },
+    {
+      "name": "dev-fast-debug",
+      "displayName": "Build the fast-debug content tool",
+      "configurePreset": "dev-fast-debug",
       "targets": [
         "cna_tool_cnb_info"
       ]

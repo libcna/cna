@@ -64,6 +64,7 @@ must not be compared with the new post-reset counters.
 | COMP-006 | Reduce measured header and translation-unit cost | COMP-001 | ✅ |
 | COMP-007 | Add an opt-in CI unity-build experiment | COMP-002, COMP-006 | ⬜ |
 | COMP-008 | Publish results and add regression guardrails | COMP-002–COMP-007 | ⬜ |
+| COMP-009 | Add an opt-in fast-debug preset | COMP-001 | ✅ |
 
 `COMP-003`, `COMP-004`, `COMP-005`, and `COMP-006` may proceed independently after their stated
 dependencies. `COMP-007` must remain last among compilation-technique experiments because unity
@@ -296,7 +297,41 @@ foundation work.
   `ContentReader` and external-reference tests pass under both. No API signature, implementation
   placement, or runtime behavior changed.
 
-## 10. COMP-007 — opt-in unity build for clean CI builds
+## 10. COMP-009 — opt-in fast-debug preset
+
+### Work
+
+- Keep the ordinary Debug configuration unchanged and add a separate preset with reduced debug
+  information for local compile/link loops.
+- Compare line tables (`-g1` on GCC, `-gline-tables-only` on Clang) with full and split DWARF using
+  identical target closures, cache state, linker, and parallelism.
+- Preserve source-level stacks and breakpoints; reject combinations that would weaken sanitizer
+  diagnostics or silently do nothing on unverified toolchains.
+
+### Acceptance
+
+- Retain only an opt-in preset. Record compile, memory, object/tree size, relink, no-op, and basic
+  debugger-line evidence; full Debug must remain the default.
+
+### Completion evidence (2026-08-28)
+
+- `CNA_DEBUG_INFO=FULL|LINE_TABLES|SPLIT` is target-scoped to CNA-owned and enabled Sharp Runtime
+  targets. `FULL` remains the default. Reduced modes are native GNU/Clang Debug-only and are refused
+  with sanitizers; vendored libraries and consumers do not inherit the flags.
+- `dev-fast-debug` selects line tables in an isolated build directory. GCC emits `-g -g1`; Clang
+  emits `-g -gline-tables-only`. Both build and run `cna_tool_cnb_info`, whose line-table executable
+  retains 18,922 decoded source-line rows.
+- With GCC 14.2.0, Debug/STUB, Mold, ccache off, and 12 jobs, rebuilding the 46-source content module
+  after identical dependencies took 38.76 s full versus 34.99 s line tables (9.7% faster). Peak RSS
+  fell 16.6%, content objects 42.3%, the complete tree 47.2%, and the final tool 52.5%. Two
+  single-job `ContentManager.cpp` rebuilds averaged 9.20 s versus 8.30 s (9.8% faster). Mold relinks
+  and no-op builds were effectively unchanged.
+- Split DWARF took 38.32 s for the controlled module but grew the full tree to 605.4 MB versus
+  590.6 MB full because 40.3 MiB of `.dwo` files accompany the objects. It remains an explicit
+  experiment without a preset. Full clean-closure samples were load-sensitive and contradicted the
+  controlled result, so the documentation discloses them and makes no clean-closure speed claim.
+
+## 11. COMP-007 — opt-in unity build for clean CI builds
 
 ### Work
 
@@ -316,7 +351,7 @@ foundation work.
 - Unity remains opt-in unless a later project-owner decision accepts its incremental-build and
   diagnostic tradeoffs.
 
-## 11. COMP-008 — results and regression guardrails
+## 12. COMP-008 — results and regression guardrails
 
 ### Work
 
@@ -337,7 +372,7 @@ foundation work.
 - The final report distinguishes clean-build, incremental-build, configure, link, and cache gains;
   it does not present compile-command reduction as an elapsed-time benchmark.
 
-## 12. Explicit non-goals
+## 13. Explicit non-goals
 
 - No global `-march=native`, `-Ofast`, or `-ffast-math`; distribution portability and XNA numerical
   behavior take priority.

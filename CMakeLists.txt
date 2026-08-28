@@ -127,6 +127,7 @@ endif()
 # Optional sanitizers are modeled by CNA::Instrumentation so they apply to CNA, Sharp Runtime,
 # and the final test/tool executables while remaining outside vendored SDL/ENet sub-builds.
 cna_configure_instrumentation()
+cna_configure_debug_info()
 
 set(SHARP_RUNTIME_BUILD_TESTS OFF CACHE BOOL "Build sharp-runtime tests" FORCE)
 # Load CNA's component closure before adding the sibling. Without an explicit selection the
