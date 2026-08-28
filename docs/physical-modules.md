@@ -41,8 +41,10 @@ Umbrellas (defined in `modules/CMakeLists.txt`):
 - **`cna_cnaext` / `CNA::CnaExt`** — compatibility umbrella; the former STATIC library's
   implementation is now the graphics-ext module, and the umbrella composes
   `CNA::GraphicsExt` + `CNA::DevicesExt` as an INTERFACE.
-- **`cna_build_flags` / `CNA::BuildFlags`** — the shared PUBLIC compile definitions. It no
-  longer carries any include directory; the former global `include/` root does not exist.
+- **`cna_build_config` / `CNA::BuildConfig`** — the shared PUBLIC compile definitions and
+  language requirements. It carries no include directory; the former global `include/` root does
+  not exist. Private compiler policy lives in `CNA::ProjectOptions`,
+  `CNA::Instrumentation`, and `CNA::LinkerOptions`.
 
 Every module test tree preserves its former `tests/`-relative mirror path (e.g.
 `modules/audio/tests/Microsoft/Xna/Framework/Audio/...`), and `CnaTests` remains the single

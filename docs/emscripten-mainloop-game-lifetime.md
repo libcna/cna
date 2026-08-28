@@ -31,7 +31,7 @@ second C++/Wasm callback never re-enters a suspended Wasm instance, and the
 caller is not unwound. This preserves XNA's blocking `Run()` lifetime contract while still yielding
 the browser thread.
 
-The flags are exported through CNA's `cna_build_flags` interface so the framework, its dependencies,
+The flags are exported through CNA's `cna_build_config` interface so the framework, its dependencies,
 and the final game executable use one exception ABI:
 
 ```text

@@ -181,6 +181,9 @@ scope for the 2026-07-11 Graphics documentation-accuracy pass; check each file's
   …)` plus `CNA_VERSION_PRERELEASE`), what derives from it, which numbers are deliberately *not*
   the product version (the C ABI version, XNA 4.0), and the step-by-step release checklist.
   Written 2026-08-20 for the first tag, `v0.1.0-alpha.1`.
+- **[`build-performance.md`](build-performance.md)** — fast local/unit/release presets, the
+  target-scoped compiler/linker/instrumentation policy, ccache operation, and the benchmark
+  protocol for evaluating further build-speed work.
 
 ---
 

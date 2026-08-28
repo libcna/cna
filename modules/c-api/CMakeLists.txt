@@ -1935,7 +1935,7 @@ if(CNA_BUILD_TESTS)
     )
     target_link_libraries(cna_c_api_handle_registry_test PRIVATE
         # plans/plan_binding.md CBIND-084A. CNA_CNAEXT reaches this target through
-        # cna_build_flags, so CnaCApiDetail.hpp's EngineException firewall arm is compiled here --
+        # cna_build_config, so CnaCApiDetail.hpp's EngineException firewall arm is compiled here --
         # which means the engine layer's include path has to reach it too. Linking cna_graphics_ext
         # is what supplies it, and it also keeps this target catching the same exceptions the
         # library does: a boundary test that saw a narrower firewall than production would be
@@ -1973,7 +1973,7 @@ if(CNA_BUILD_TESTS)
     # link line.
     target_link_libraries(cna_c_api_boundary_detail_test PRIVATE
         # plans/plan_binding.md CBIND-084A. CNA_CNAEXT reaches this target through
-        # cna_build_flags, so CnaCApiDetail.hpp's EngineException firewall arm is compiled here --
+        # cna_build_config, so CnaCApiDetail.hpp's EngineException firewall arm is compiled here --
         # which means the engine layer's include path has to reach it too. Linking cna_graphics_ext
         # is what supplies it, and it also keeps this target catching the same exceptions the
         # library does: a boundary test that saw a narrower firewall than production would be
@@ -2016,7 +2016,7 @@ if(CNA_BUILD_TESTS)
     )
     target_link_libraries(cna_c_api_utf8_oracle_test PRIVATE
         # plans/plan_binding.md CBIND-084A. CNA_CNAEXT reaches this target through
-        # cna_build_flags, so CnaCApiDetail.hpp's EngineException firewall arm is compiled here --
+        # cna_build_config, so CnaCApiDetail.hpp's EngineException firewall arm is compiled here --
         # which means the engine layer's include path has to reach it too. Linking cna_graphics_ext
         # is what supplies it, and it also keeps this target catching the same exceptions the
         # library does: a boundary test that saw a narrower firewall than production would be
