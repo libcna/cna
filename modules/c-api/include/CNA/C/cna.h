@@ -48,6 +48,7 @@
 #include "CNA/C/input_devices.h"
 #include "CNA/C/content.h"
 #include "CNA/C/content_readers.h"
+#include "CNA/C/cnb.h"
 #include "CNA/C/gamer_services.h"
 #include "CNA/C/net.h"
 #include "CNA/C/net_gamers.h"

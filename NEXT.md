@@ -68,9 +68,42 @@ desktop. All three trees now name a private `Xvfb :143`, and the suite is run wi
 that names neither a driver nor a display reaches the host compositor rather than any X server you
 started.
 
-**Where it stands:** 536 headers / 8,812 symbols — 7,832 implemented, 15 approved partial, 506
-planned, 459 not applicable. ABI `0.9.0`, 3,746 exported symbols, the same set with `CNA_CNAEXT` on
-and off. 97/97 `CApi` tests in all three arms: `cmake-build-debug` (HEADLESS, `CNA_CNAEXT=OFF`),
+**`CBIND-106` then bound the first slice of it: the `.cnb` container.** 24 `cna_cnb_*` routes over
+the format's identities, byte-level constants, chunk identifiers, asset type identifiers,
+external-reference name validation, CRC-32C, checked whole-file arithmetic, the versioned read
+limits and chunk compression — 66 rows, no handles at all, and ABI `0.9.0` → `0.10.0` for a purely
+additive generation. A C application can now inspect and transform a `.cnb` container; it still
+cannot load a `.cnb` **asset**, because the document, the byte cursors, the writer, the loader
+registry and every asset schema are the eight slices that remain. `docs/c-api/CNB.md` is the
+consumer contract and says exactly where that line falls.
+
+Three decisions in it are worth knowing before the next slice, because they set precedent for the
+rest of the format. `CnbChunkId` is a one-`uint32_t` structure with defaulted equality, so the C
+form is that integer and it maps the structure, the field and the operator together. The `Reserved*`
+codec enumerators are *aliases*, not distinct values, so they are the same constants — a second C
+name for one wire value would invite a caller to believe the two mean different things in a file.
+And the canonical refusal *order* is contract: an unsupported codec whose declared size is also over
+the ceiling reports the ceiling, and a stored chunk consults neither size, so a C reader agrees with
+the C++ one about the same file.
+
+**`CBIND-107` then bound the document, its cursor and both writers** — 80 more routes, four owned
+handle kinds and three versioned structures, 88 rows. A C application can now **build a `.cnb` file
+and parse one back**, walk its table of contents and read any chunk's bytes. It still cannot load a
+`.cnb` **asset**: nothing turns those bytes into a `Texture2D` or a `Model`, because the schemas and
+the loader registry are the slices that remain.
+
+Two decisions in it set precedent for the rest. **A cursor opened from a document borrows it and
+blocks its release; a cursor created over caller bytes copies them** — the canonical cursor never
+copies, but C has no way to be told "keep that alive", so the ABI takes the copy rather than
+publishing a rule it cannot police, and the test proves it by zeroing the caller's buffer and
+reading on. And **reading a string is destructive while copying it is not, so they are two routes**:
+one route taking a destination could not report a short capacity without either losing the string or
+consuming it twice. `ReadBytes` deliberately does not get the same treatment, because its size is
+the caller's own argument rather than something the file declares.
+
+**Where it stands:** 536 headers / 8,812 symbols — 7,986 implemented, 15 approved partial, 352
+planned, 459 not applicable. ABI `0.11.0`, 3,850 exported symbols, the same set with `CNA_CNAEXT` on
+and off. 99/99 `CApi` tests in all three arms: `cmake-build-debug` (HEADLESS, `CNA_CNAEXT=OFF`),
 `cmake-build-cnaext` (OPENGLES3/EasyGL, `CNA_CNAEXT=ON`) and `build-probe` (HEADLESS,
 `CNA_CNAEXT=ON`).
 

@@ -265,6 +265,14 @@ enum class ObjectKind : uint32_t {
 
     // CBIND-092D.
     DebugDraw = 167,
+
+    // CBIND-107: the .cnb container's four owning objects. The reader is the only one that can
+    // hold a borrow -- of the document it was opened from -- which is why the document counts its
+    // active borrows and refuses release while any stands.
+    CnbDocument = 168,
+    CnbReader = 169,
+    CnbByteWriter = 170,
+    CnbWriter = 171,
     Test = UINT32_MAX
 };
 

@@ -17399,6 +17399,515 @@
         "CPP-E543EEEE10EE",
         "CPP-FF531D6AB2D4"
       ]
+    },
+    {
+      "id": "cnb-format-constants",
+      "qualified_name_regex": "^CNA::Content::Cnb::Format::(Magic|HeaderSize|TocEntrySize|HeaderChecksumCoverage|HeaderChecksumOffset|HeaderReservedSize|ContainerMajor|ContainerMinor|DefaultTocOffset)$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "`CNA_CNB_FORMAT_*` constants, plus `cna_cnb_copy_format_magic` for the one that is four bytes rather than a number.\n\nEvery value is a byte offset or size a `.cnb` file is literally made of, so these are frozen the way a wire format is frozen rather than the way an ABI is: changing one would not break a caller's binary, it would stop this build reading files every other build writes. The magic is published as a copy route beside `CNA_CNB_FORMAT_MAGIC_SIZE` rather than as four byte constants, because a caller compares it against the first bytes of a file and `memcmp` is what that wants.",
+      "tests": "`CnbSmoke.c` `validate_format_constants`, which asserts the bytes are `C`, `N`, `B`, `0x1A`, that a short capacity reports the requirement and writes nothing, and the two relationships the numbers exist to hold -- the checksum covers exactly what precedes it, and the header is that coverage plus the checksum plus the reserved tail. Frozen against change by `AbiHeaderC.c`/`AbiHeaderCpp.cpp`.",
+      "status": "implemented",
+      "task": "CBIND-106",
+      "approved_symbols": [
+        "CPP-01472B5732B7",
+        "CPP-0E82AE113B35",
+        "CPP-14CB1110B8D9",
+        "CPP-231977DA5809",
+        "CPP-377BB9B7DB3C",
+        "CPP-6E232FF863BB",
+        "CPP-9D6FC25FE158",
+        "CPP-CFBA721C2DC5",
+        "CPP-EE36F8C18BDF"
+      ]
+    },
+    {
+      "id": "cnb-chunk-id",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnbChunkId|CnbChunkId::value|CnbChunkId::operator==|MakeChunkId|ChunkIdToString|IsWellFormedChunkId)$",
+      "kinds": [
+        "struct",
+        "field",
+        "operator",
+        "function"
+      ],
+      "mapping": "`CNA_CnbChunkId`, a `uint32_t` typedef, plus `cna_cnb_make_chunk_id`, the `cna_cnb_get_chunk_id_string_size`/`cna_cnb_copy_chunk_id_string` pair and `cna_cnb_is_well_formed_chunk_id`.\n\nThe canonical type is a structure holding exactly one `uint32_t` with defaulted equality, so **the typedef maps the structure, its field and its `operator==` together**: the value is the type, and two identifiers are compared with C's own `==`. Publishing a one-field structure and an equality route would be three spellings of one integer.\n\n`MakeChunkId` takes `char`, whose signedness is implementation-defined and therefore not an ABI type; it casts each argument to `unsigned char` before packing, so the route takes `uint8_t` -- the type the canonical function actually uses -- and a character literal still passes unchanged.",
+      "tests": "`CnbSmoke.c` `validate_chunk_identifiers`: packing `CMET` and `XREF` reproduces the published container constants, which is what proves those constants are not transcribed by hand; the low byte is the first character, which is the little-endian packing the type exists for; a byte outside printable ASCII makes the identifier ill-formed and renders as `?` rather than carrying a control character into a log line; and a short capacity writes nothing.",
+      "status": "implemented",
+      "task": "CBIND-106",
+      "approved_symbols": [
+        "CPP-16814CC8BCC5",
+        "CPP-42DFD13799E0",
+        "CPP-53CA5C9E658C",
+        "CPP-BA2864391220",
+        "CPP-C5EFF4D34787",
+        "CPP-F9F9C5D75545"
+      ]
+    },
+    {
+      "id": "cnb-chunk-flags",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbChunkFlags::(None|Mandatory|KnownMask)$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "`CNA_CNB_CHUNK_FLAG_NONE`, `_MANDATORY` and `_ALL`. `KnownMask` becomes `_ALL`, following the flag-set convention every other family here uses, so a caller validates a file's flags field the same way it validates any other flag set in this ABI.",
+      "tests": "`CnbSmoke.c` a compile-time assertion that the mask is exactly the one flag container version 1 defines, so a flag added without widening the mask fails the build rather than being silently accepted.",
+      "status": "implemented",
+      "task": "CBIND-106",
+      "approved_symbols": [
+        "CPP-12D8A2E70506",
+        "CPP-1EF72801EBA6",
+        "CPP-75970904424D"
+      ]
+    },
+    {
+      "id": "cnb-compression-identity",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbCompression(::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "`CNA_CnbCompression` and `CNA_CNB_COMPRESSION_*` at the canonical ordinals, with `CNA_CNB_COMPRESSION_MAXIMUM`.\n\n**The three `Reserved*` enumerators are aliases, not distinct values.** `ReservedLz4 = Lz4`, `ReservedZstd = Zstd` and `ReservedDeflate = Deflate` are deprecated former names kept so existing C++ source compiles; they are the same integers, so they are the same constants here. Publishing a second C name for one wire value would invite a caller to believe the two mean different things in a file.",
+      "tests": "`CnbSmoke.c` `validate_compression`, plus a compile-time assertion in the suite and in `AbiHeaderC.c` that the four values are 0-3: they are wire format, so a renumbering must fail the build rather than a test.",
+      "status": "implemented",
+      "task": "CBIND-106",
+      "approved_symbols": [
+        "CPP-17923C758E87",
+        "CPP-22EFA31BD4F1",
+        "CPP-49228712226C",
+        "CPP-605060587FED",
+        "CPP-85F201D243EA",
+        "CPP-8A29D5E5A20D",
+        "CPP-982B8B286088",
+        "CPP-E04FC09F1914"
+      ]
+    },
+    {
+      "id": "cnb-asset-type-identifiers",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbAssetTypeId::[A-Za-z0-9_]+$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "`CNA_CNB_ASSET_TYPE_*` constants at the canonical values, including the two range boundaries. The built-in identifiers are frozen once CNB v1 ships and the boundaries are what a caller classifies against, so both are constants rather than anything computed.",
+      "tests": "`CnbSmoke.c` `validate_asset_type_identifiers` renders every one of the twelve built-in identifiers and both boundaries, and `AbiHeaderC.c` freezes all fourteen values.",
+      "status": "implemented",
+      "task": "CBIND-106",
+      "approved_symbols": [
+        "CPP-22F5CDD343C9",
+        "CPP-380BCA56E211",
+        "CPP-3C76DB7DEF51",
+        "CPP-847AF21DA10A",
+        "CPP-85A611AFBDD1",
+        "CPP-8D9C3C980927",
+        "CPP-8F9D1A72F06E",
+        "CPP-9E0906C95F64",
+        "CPP-B207E668B875",
+        "CPP-D28B36B6A46F",
+        "CPP-D59D71663A63",
+        "CPP-F518756773E1",
+        "CPP-F6BF053C1560",
+        "CPP-FF240C462507"
+      ]
+    },
+    {
+      "id": "cnb-asset-type-operations",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnbAssetTypeIdFromName|IsCustomAssetTypeId|AssetTypeIdToString)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "`cna_cnb_asset_type_id_from_name`, `cna_cnb_is_custom_asset_type_id` and the `cna_cnb_get_asset_type_name_size`/`cna_cnb_copy_asset_type_name` pair.\n\n`IsCustomAssetTypeId` is one comparison against a published constant, and is still a route rather than something a caller open-codes: the range boundary is format policy, and a caller that inlined the comparison would carry a copy of that policy that a later container version could not move.\n\nThe empty-name refusal is decided in the C layer rather than recovered from the canonical `std::invalid_argument`, so the result is a named `CNA_RESULT_INVALID_ARGUMENT` with a message about type names rather than whatever the exception firewall makes of it.",
+      "tests": "`CnbSmoke.c` `validate_asset_type_identifiers`: minting is deterministic and always lands in the custom range -- the two properties a compiler, a runtime and a third-party tool depend on agreeing about -- two different names mint different identifiers, an empty name is refused and **leaves the output untouched**, and malformed UTF-8 in a type name is an encoding error, unlike a logical name where it is one of the answers.",
+      "status": "implemented",
+      "task": "CBIND-106",
+      "approved_symbols": [
+        "CPP-082B0885CDF6",
+        "CPP-136F6840139A",
+        "CPP-B0E3ECDE4E18"
+      ]
+    },
+    {
+      "id": "cnb-container-chunks",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbContainerChunk::(Metadata|ExternalReferences)$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "`CNA_CNB_CONTAINER_CHUNK_METADATA` and `_EXTERNAL_REFERENCES`, the packed identifiers of the two chunks the container defines independently of any asset schema.",
+      "tests": "`CnbSmoke.c` `validate_chunk_identifiers` asserts each equals what `cna_cnb_make_chunk_id` produces from its four letters, so the constants cannot drift from the packing rule.",
+      "status": "implemented",
+      "task": "CBIND-106",
+      "approved_symbols": [
+        "CPP-2C48B99C851C",
+        "CPP-6D17EABECFD2"
+      ]
+    },
+    {
+      "id": "cnb-logical-name",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbLogicalNameProblem$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "The `cna_cnb_get_logical_name_problem_size`/`cna_cnb_copy_logical_name_problem` pair. **A byte count of zero is the whole \"this name is acceptable\" answer**, so there is no separate boolean route giving a second spelling of it.\n\n**One deliberate deviation from this ABI's input-string rule.** Every other route validates a `CNA_StringView` as UTF-8 and refuses malformed bytes with `CNA_RESULT_ENCODING`. This one does not: malformed UTF-8 is one of the verdicts the canonical function exists to *report*, so refusing it at the boundary would withhold the answer the caller asked for. Only the pointer/length pair itself is checked.",
+      "tests": "`CnbSmoke.c` `validate_logical_names` covers all six refusal shapes -- empty, absolute, drive-qualified, backslash, a `..` segment, and a `..` segment in the middle -- against two acceptable names, and asserts the deviation directly: a name containing an invalid byte returns `CNA_RESULT_SUCCESS` with the problem text `is not well-formed UTF-8`, which is the assertion that would fail if the route were ever \"corrected\" to validate its input.",
+      "status": "implemented",
+      "task": "CBIND-106",
+      "approved_symbols": [
+        "CPP-EEE2A51DE7A2"
+      ]
+    },
+    {
+      "id": "cnb-checked-arithmetic",
+      "qualified_name_regex": "^CNA::Content::Cnb::Checked(Add|Multiply)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "`cna_cnb_checked_add` and `cna_cnb_checked_multiply`, each returning `CNA_RESULT_OVERFLOW` where the canonical helper throws.\n\nThe canonical functions throw `ContentLoadException`, which the firewall would turn into `CNA_RESULT_IO` -- the wrong answer for arithmetic that does not fit. The condition is therefore tested in the C layer, mirroring the canonical guard exactly, and the canonical function still performs the arithmetic: if the two ever drifted, the canonical throw would fire and the disagreement would surface as `CNA_RESULT_IO` rather than hide.\n\nThe `context` parameter shapes only the exception message, which no C caller sees; the result code carries the same fact.",
+      "tests": "`CnbSmoke.c` `validate_checked_arithmetic` walks both boundaries from either side -- `UINT64_MAX + 0` succeeds and `+ 1` overflows, `UINT64_MAX * 1` succeeds and `* 2` overflows, `0 * UINT64_MAX` is zero rather than a refusal -- and asserts that a refused call **leaves the previous answer standing**, which is the wrap-around failure mode the helpers exist to prevent, seen from C.",
+      "status": "implemented",
+      "task": "CBIND-106",
+      "approved_symbols": [
+        "CPP-4040AD8A3263",
+        "CPP-C9793444EA7E"
+      ]
+    },
+    {
+      "id": "cnb-crc32c",
+      "qualified_name_regex": "^CNA::Content::Cnb::Crc32c(Continue|Seed|UsesHardwareEXT|PortableEXT)?$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "`cna_cnb_crc32c`, `cna_cnb_crc32c_continue`, `cna_cnb_crc32c_portable`, `cna_cnb_crc32c_uses_hardware`, and `CNA_CNB_CRC32C_SEED` for the seed.\n\n`Crc32cSeed()` is a `constexpr` function returning a literal, and a compile-time constant is how C says that -- it is usable in a static initializer, which a route would not be. The two `EXT`-suffixed canonical members lose the suffix here, following `core_ext.h`: a whole header of CNA-namespace surface does not repeat a marker on every route.",
+      "tests": "`CnbSmoke.c` `validate_checksums` pins the published CRC-32/ISCSI check value for `123456789` rather than whatever this build produces -- a stored-in-the-file checksum is only worth anything if it is the value every other implementation computes -- proves the seed is the checksum of an empty range, splits one logical region across two buffers and requires the same answer, and requires the shipping path and the portable path to agree over a kilobyte, which is the only reason the portable route is published at all.",
+      "status": "implemented",
+      "task": "CBIND-106",
+      "approved_symbols": [
+        "CPP-212542DED9B2",
+        "CPP-47A7406DB3B1",
+        "CPP-8418B7C7C5CF",
+        "CPP-B5BD8515163A",
+        "CPP-DA6F4B7ECD7C"
+      ]
+    },
+    {
+      "id": "cnb-read-limits",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnbReadLimits(::[A-Za-z0-9_]+)?|DefaultCnbReadLimits)$",
+      "kinds": [
+        "struct",
+        "field",
+        "function"
+      ],
+      "mapping": "`CNA_CnbReadLimits`, a versioned structure with `struct_size`/`struct_version` and an explicit prefix rule, filled by `cna_cnb_read_limits_init` from the canonical process-wide defaults.\n\nIts 64-bit members are placed ahead of its 32-bit ones so the layout carries no padding on any supported target. The validator uses the documented prefix idiom (`struct_size <`), so a future caller's larger structure is accepted and an older caller's smaller one is refused -- `CBIND-100`'s rule, applied to a structure written after it rather than one retrofitted to it.",
+      "tests": "`CnbSmoke.c` `validate_read_limits` asserts all seven defaults by value, both relationships they exist to hold (a single chunk cannot fill a whole file; the expansion ceiling is above the file ceiling so compression can genuinely expand a file), and all three arms of the prefix rule -- larger accepted, smaller refused, unknown version refused -- each leaving the structure untouched on refusal. `AbiHeaderC.c` freezes the size, alignment and every offset.",
+      "status": "implemented",
+      "task": "CBIND-106",
+      "approved_symbols": [
+        "CPP-07B2225C755A",
+        "CPP-110801914158",
+        "CPP-3176CF05EB28",
+        "CPP-5DA1D1F588B1",
+        "CPP-7F31CB954BAD",
+        "CPP-86D279326292",
+        "CPP-8E8592DA2930",
+        "CPP-B19D45B7AF6E",
+        "CPP-F6A61E7DA6FB"
+      ]
+    },
+    {
+      "id": "cnb-chunk-compression",
+      "qualified_name_regex": "^CNA::Content::Cnb::(IsCnbCompressionSupported|CnbCompressionToString|CompressCnbChunk|DecompressCnbChunk)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "`cna_cnb_is_compression_supported`, the `cna_cnb_get_compression_name_size`/`cna_cnb_copy_compression_name` pair, the `cna_cnb_get_compressed_byte_count`/`cna_cnb_copy_compressed` pair, and `cna_cnb_copy_decompressed`.\n\nCompression follows the count/copy shape `cna_texture2d_get_encoded_byte_count`/`_copy_encoded` already uses for bytes whose size is only known by producing them. Decompression needs no count route: the size is an input, because the file declares it.\n\n**Two canonical refusals are decided ahead of the call rather than recovered from an exception type**, because the firewall would flatten both to `CNA_RESULT_IO`. A codec this build does not implement is `CNA_RESULT_NOT_SUPPORTED` -- a caller retries with another codec, it does not fix its numbers -- and a declared unpacked size above the ceiling is `CNA_RESULT_INVALID_ARGUMENT`, refused before anything is allocated. **The order of those two checks is canonical and is preserved**: an unsupported codec whose size is also over the ceiling reports the ceiling.\n\n**`level` is a correction, not a contract**: a value outside the codec's range is clamped exactly as the canonical implementation clamps it, never refused. And a stored chunk consults **neither** size, because `None` is answered before the ceiling is looked at -- canonical behaviour, preserved so a C reader and a C++ reader agree about the same file.",
+      "tests": "`CnbSmoke.c` `validate_compression`: every codec name including `unknown codec 7` for an identity a corrupt file can name; a stored round trip; short-capacity refusals on both directions that write nothing; the ordering of the ceiling and support checks asserted from both sides; and, where the build carries Zstandard, a full round trip that **requires the payload to actually shrink** -- without which the round trip would pass just as happily against a codec that stored the bytes -- plus a wrong declared size, an over-ceiling size and a non-frame input, each with its own result code. Both arms were mutation-checked: breaking the shrink assertion and inverting the support branch each move the exit code to stage 8.",
+      "status": "implemented",
+      "task": "CBIND-106",
+      "approved_symbols": [
+        "CPP-77B0665F135C",
+        "CPP-AFA18570FC1D",
+        "CPP-BA8472D1AA3A",
+        "CPP-D03BC4E059B7"
+      ]
+    },
+    {
+      "id": "cnb-byte-reader-lifetime",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbByteReader(::(CnbByteReader|Remaining|Position|Size|Context))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
+      "mapping": "`CNA_CnbReaderHandle` over `cna_cnb_reader_create`/`_destroy`, with `_get_remaining`, `_get_position`, `_get_size` and the `_get_context_size`/`_copy_context` pair.\n\n**The constructor copies its bytes, and that is this slice's one deliberate deviation.** The canonical cursor never copies: it documents that the caller must keep the region alive. C has no way to be told that and no way to be caught breaking it, so the adapter owns a copy rather than leaving a lifetime rule it cannot police. A cursor from `cna_cnb_document_open_chunk` still borrows -- there the document is a handle the ABI *can* police, and it does.\n\nThe `limits` argument is nullable and means the defaults, which is what the canonical default argument says in a language that has them.",
+      "tests": "`CnbDocumentSmoke.c` `validate_reader` proves the copy directly rather than describing it: the caller's buffer is zeroed immediately after the cursor is created, and every later read still returns the original value. Mutation-checked by asserting the zero instead, which fails -- so the assertion cannot pass against a borrowing implementation.",
+      "status": "implemented",
+      "task": "CBIND-107",
+      "approved_symbols": [
+        "CPP-238088C93CA9",
+        "CPP-3D061D889F9F",
+        "CPP-474FD5A90550",
+        "CPP-69543213F89D",
+        "CPP-87FDEECF8FC0",
+        "CPP-9AA003FC452F"
+      ]
+    },
+    {
+      "id": "cnb-byte-reader-primitives",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbByteReader::Read(U8|U16|U32|U64|I32|F32|F64)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_cnb_reader_read_u8`, `_u16`, `_u32`, `_u64`, `_i32`, `_f32` and `_f64`, one per canonical read, each with a typed output.\n\nThey are one shape repeated and are defined from one macro in the adapter for that reason -- seven hand-written copies of the same six lines is where a transposed type eventually hides. Each leaves its output untouched on a truncation, because the canonical read throws before the C layer assigns.",
+      "tests": "`CnbDocumentSmoke.c` `validate_reader` writes each type with the matching writer route and reads it back, and asserts the little-endian byte layout directly on the writer's output rather than only that the value round-trips -- a byte order that was wrong in both directions would round-trip perfectly. Reading past the end leaves the caller's value alone, which is asserted from a known sentinel.",
+      "status": "implemented",
+      "task": "CBIND-107",
+      "approved_symbols": [
+        "CPP-033E2CB29CEB",
+        "CPP-18B1421E6E64",
+        "CPP-407643B8D595",
+        "CPP-B09B7F406E84",
+        "CPP-BE910178B5A6",
+        "CPP-CB1126E4266A",
+        "CPP-D9D2881419F4"
+      ]
+    },
+    {
+      "id": "cnb-byte-reader-composites",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbByteReader::(ReadString|ReadCount|ReadBytes|Skip|RequireExhausted|Fail|IsWellFormedUtf8)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_cnb_reader_read_string` + `_copy_string`, `_read_count`, `_read_bytes`, `_skip`, `_require_exhausted`, `_fail`, and the free `cna_cnb_is_well_formed_utf8`.\n\n**`ReadString` needs two routes because reading is destructive and copying is not.** One route taking a destination could not report a capacity that was too small without either losing the string it had already consumed or consuming it twice; this reads once, reports the size, and holds the decoded bytes in the cursor until the next read replaces them. Copying before any read is `CNA_RESULT_INVALID_STATE` rather than an empty answer, so a caller cannot mistake \"nothing read yet\" for \"an empty string\".\n\n`ReadBytes` needs only one route, because its size is the caller's own argument rather than something the file declares: a capacity too small is settled **before** the cursor advances, so a refused call consumes nothing and can simply be repeated.\n\n`IsWellFormedUtf8` is static and becomes a free route. It does **not** validate its own input as UTF-8 first, for the same reason `cna_cnb_get_logical_name_problem_size` does not: the answer is the point of the call.",
+      "tests": "`CnbDocumentSmoke.c` `validate_reader` and `validate_utf8_check`: a string read then copied twice, once with a short capacity; a copy before any read refused by state; a count checked against what could follow it; a short `read_bytes` capacity proved to consume nothing by comparing the position before and after; `require_exhausted` on an exactly-consumed region and `fail` producing the cursor's own diagnostic shape; and a supplied `max_string_bytes` of one refusing a five-byte string, which is what proves the limits argument is carried rather than ignored.",
+      "status": "implemented",
+      "task": "CBIND-107",
+      "approved_symbols": [
+        "CPP-18D03880A106",
+        "CPP-39E6E194EA45",
+        "CPP-43067914E156",
+        "CPP-64CF05D7116C",
+        "CPP-7FC23204C943",
+        "CPP-8566ED22B905",
+        "CPP-E329FA8D24C7"
+      ]
+    },
+    {
+      "id": "cnb-byte-writer-lifetime",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbByteWriter(::(CnbByteWriter|Size|View|Take))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
+      "mapping": "`CNA_CnbByteWriterHandle` over `cna_cnb_byte_writer_create`/`_create_from_bytes`/`_destroy`, with `_get_size`, `_copy_bytes` for the non-destructive view and `_take` for the destructive one.\n\nThe two canonical constructors become two routes rather than one with a nullable argument, because \"empty\" and \"continue after these bytes\" are different intentions and a null pointer expresses neither of them clearly. **`Take` settles the capacity before it empties the writer**, so a refused take leaves the bytes where they were -- the same rule `_copy_compressed` follows, applied to an operation that would otherwise lose data.",
+      "tests": "`CnbDocumentSmoke.c` `validate_byte_writer` asserts the running size after every write, that a short capacity refuses without writing and -- for `take` -- without emptying, that a taken writer reports zero afterwards, that a seeded writer continues after its initial bytes, and that every route on a destroyed handle answers `CNA_RESULT_INVALID_HANDLE`.",
+      "status": "implemented",
+      "task": "CBIND-107",
+      "approved_symbols": [
+        "CPP-1AAA8DF8F9A2",
+        "CPP-8ECC3F8A3F46",
+        "CPP-9C7D5AC74167",
+        "CPP-A7B761731364",
+        "CPP-C4CA01C6A26B",
+        "CPP-E5D3B0E9B18E"
+      ]
+    },
+    {
+      "id": "cnb-byte-writer-primitives",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbByteWriter::Write(U8|U16|U32|U64|I32|F32|F64)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_cnb_byte_writer_write_u8`, `_u16`, `_u32`, `_u64`, `_i32`, `_f32` and `_f64`, the exact counterparts of the seven reads and defined from one macro for the same reason.",
+      "tests": "`CnbDocumentSmoke.c` `validate_byte_writer` asserts the emitted bytes of a `u32` explicitly -- `0x11223344` becomes `44 33 22 11` -- so a byte order that changed in both directions at once could not pass, and `validate_reader` round-trips all seven.",
+      "status": "implemented",
+      "task": "CBIND-107",
+      "approved_symbols": [
+        "CPP-138BDA527FFD",
+        "CPP-1B1CF4D8609D",
+        "CPP-57557670B4D9",
+        "CPP-7B13AA3CFE96",
+        "CPP-D8E2D93B9156",
+        "CPP-DDE0E25F4401",
+        "CPP-F30E45875144"
+      ]
+    },
+    {
+      "id": "cnb-byte-writer-composites",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbByteWriter::Write(String|Bytes|Zeros)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_cnb_byte_writer_write_string`, `_write_bytes` and `_write_zeros`. The zero count is narrowed to the host's size type rather than truncated, because a count above it cannot describe a buffer this host could ever produce.",
+      "tests": "`CnbDocumentSmoke.c` `validate_byte_writer` asserts that a malformed UTF-8 string is refused **and appends nothing**, by checking the writer's size is unchanged afterwards -- a refusal that had already written the length prefix would leave a file no reader could parse.",
+      "status": "implemented",
+      "task": "CBIND-107",
+      "approved_symbols": [
+        "CPP-06F0C3612535",
+        "CPP-284558C59B32",
+        "CPP-50A2A10C90DF"
+      ]
+    },
+    {
+      "id": "cnb-chunk-entry",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbChunkEntry(::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "struct",
+        "field",
+        "method"
+      ],
+      "mapping": "`CNA_CnbChunkEntry`, a versioned POD with its 64-bit members ahead of its 32-bit ones so the layout carries no padding, plus `cna_cnb_chunk_entry_is_mandatory` for the one accessor.\n\n`IsMandatory` gets a route rather than being left to the caller to write as `flags & CNA_CNB_CHUNK_FLAG_MANDATORY`. Which bit means mandatory is container policy, and a caller that inlined the test would carry a copy of that policy a later container version could not move.",
+      "tests": "`CnbDocumentSmoke.c` `validate_document` reads a real entry out of a file it built and checks every field against what was written -- type, both sizes, codec, flags, alignment and that the offset actually satisfies it -- and **recomputes the stored checksum with `cna_cnb_crc32c` from the image bytes**, which is the two halves of this family agreeing rather than each agreeing with itself. `AbiHeaderC.c` freezes the size, alignment and every offset.",
+      "status": "implemented",
+      "task": "CBIND-107",
+      "approved_symbols": [
+        "CPP-006662D9DF06",
+        "CPP-02AC274C85C1",
+        "CPP-4E4856E01135",
+        "CPP-57136B394D39",
+        "CPP-8E37F3E7E6D6",
+        "CPP-A36845494D97",
+        "CPP-A5BB5A74FA64",
+        "CPP-BA8E2A84F0F6",
+        "CPP-C284690DC910",
+        "CPP-FFC409EA508A"
+      ]
+    },
+    {
+      "id": "cnb-external-reference-value",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbExternalReference(::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "`CNA_CnbExternalReference` carries the two numeric fields; the logical name is a string and therefore does not live in the structure. Reading one is `cna_cnb_document_get_external_reference` plus the `_name_size`/`_copy_name` pair, and writing one is `cna_cnb_writer_add_external_reference`, which takes the value and the name side by side.",
+      "tests": "`CnbDocumentSmoke.c` `validate_document` round-trips an entry through a built file and reads back its expected asset type and its name; `validate_writer_limits_and_files` proves the writer applies the **same** name rule the reader does, by appending a `..`-carrying name and watching the build refuse.",
+      "status": "implemented",
+      "task": "CBIND-107",
+      "approved_symbols": [
+        "CPP-526E9DBD581E",
+        "CPP-7C9DD368BDAD",
+        "CPP-BD2CA19D9F42",
+        "CPP-ED17F4369067"
+      ]
+    },
+    {
+      "id": "cnb-metadata-value",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbMetadata(::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "`CNA_CnbMetadata` carries `present` and `flags`; the two names are read through `cna_cnb_document_get_metadata_asset_type_name_size`/`_copy_...` and the content-name pair, for the same reason a string cannot live in a POD.\n\nThe asymmetry the canonical type documents is preserved in the C documentation rather than in a second route: the type name is load-bearing for a custom asset type and diagnostic for a built-in one.",
+      "tests": "`CnbDocumentSmoke.c` `validate_document` reads both names back from a built file and `validate_writer_limits_and_files` exercises the load-bearing half: a custom-typed writer with no metadata name refuses to build, and building succeeds once the canonical name that mints the identifier is set.",
+      "status": "implemented",
+      "task": "CBIND-107",
+      "approved_symbols": [
+        "CPP-21E1254F352E",
+        "CPP-71791C42503D",
+        "CPP-988D11ED3802",
+        "CPP-F456525E7ED9",
+        "CPP-FA7AF4FEE796"
+      ]
+    },
+    {
+      "id": "cnb-document-parse",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbDocument(::(Parse|ParseFile|HasMagic))?$",
+      "kinds": [
+        "class",
+        "method"
+      ],
+      "mapping": "`CNA_CnbDocumentHandle` over `cna_cnb_document_parse`, `_parse_file` and `_destroy`, with the static magic pre-check as the free route `cna_cnb_has_magic`.\n\nThe document owns its bytes, and a reader opened from it borrows them: `_destroy` answers `CNA_RESULT_INVALID_STATE` until every such reader is destroyed. Retaining the document through the reader would already be memory-safe; blocking the release is the ABI's standing rule for a borrow, and it turns a leaked reader into a refused call instead of a document that quietly outlives its handle.",
+      "tests": "`CnbDocumentSmoke.c` `validate_document` parses a container the writer built, so both ends are checked against each other rather than against a fixture -- and refuses two malformed images, garbage bytes and the same valid image truncated by one byte, each leaving the output handle invalid. The borrow rule is asserted directly and **mutation-checked**: asserting success instead of the refusal fails.",
+      "status": "implemented",
+      "task": "CBIND-107",
+      "approved_symbols": [
+        "CPP-24CB3B07D473",
+        "CPP-3CCA69E472B1",
+        "CPP-7ECDAF14CAB6",
+        "CPP-F44D55729F88"
+      ]
+    },
+    {
+      "id": "cnb-document-identity",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbDocument::(Origin|ContainerMajor|ContainerMinor|AssetTypeId|AssetSchemaVersion|RequireAsset|Limits)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "One route per canonical accessor -- `cna_cnb_document_get_container_major`, `_get_container_minor`, `_get_asset_type_id`, `_get_asset_schema_version`, `_get_limits`, the `_get_origin_size`/`_copy_origin` pair and `_require_asset`.\n\nDeliberately not collapsed into one information structure. The canonical type publishes five separate accessors over an immutable document, so there is no torn-read to prevent and nothing to gain from a new versioned value; a `CNA_CnbDocumentInfo` would be a second spelling of five facts a caller can already ask for individually.",
+      "tests": "`CnbDocumentSmoke.c` `validate_document` checks each against the published container constants and against what the writer declared, and `_require_asset` from both sides: the right type and version passes, a different type and a lower maximum schema version are each refused.",
+      "status": "implemented",
+      "task": "CBIND-107",
+      "approved_symbols": [
+        "CPP-026B797BDA41",
+        "CPP-30D50B14D0A3",
+        "CPP-5AAD400BB23B",
+        "CPP-73087DB7CF98",
+        "CPP-A0A1B4F6FC90",
+        "CPP-CAAFED7A22E5",
+        "CPP-E9689C0202B1"
+      ]
+    },
+    {
+      "id": "cnb-document-chunks",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbDocument::(ChunkCount|ChunkAt|ChunkData|OpenChunk|FindAll|FindSingle|RequireSingle|RequireMandatoryChunksUnderstood)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_cnb_document_get_chunk_count`, `_get_chunk`, `_copy_chunk_data`, `_open_chunk`, `_find_all`, `_find_single`, `_require_single` and `_require_mandatory_chunks_understood`.\n\n**An out-of-range index is `CNA_RESULT_INVALID_ARGUMENT`, not `CNA_RESULT_IO`.** The canonical accessors throw `ContentLoadException` for it, which the firewall would report as a bad file -- but a caller fixes an index, it does not re-download the asset, so the two are decided apart in the C layer. A malformed *file* still answers `CNA_RESULT_IO` from the same routes.\n\n`FindSingle` returns an optional, so it follows the availability convention: absence is reported through `out_found` and the index is left untouched, never a failure. `RequireSingle` is the variant that does fail, and keeps failing as `CNA_RESULT_IO`, because zero or several is a statement about the file.",
+      "tests": "`CnbDocumentSmoke.c` `validate_document` exercises every one against a built container -- including that `find_all` with a zero capacity still reports the count, that an absent type is an ordinary empty answer while `require_single` on it is a refusal, and that an unknown **mandatory** chunk costs the file while an unknown optional one does not, which is the rule that lets a newer writer add data an older reader can skip. Every index route is also called out of range and asserted to answer `CNA_RESULT_INVALID_ARGUMENT`.",
+      "status": "implemented",
+      "task": "CBIND-107",
+      "approved_symbols": [
+        "CPP-3A0142B6BC9E",
+        "CPP-3C1055132EAB",
+        "CPP-48B97CC39EDA",
+        "CPP-6725A16F2D37",
+        "CPP-BC76BBCB138C",
+        "CPP-F658D7290EED",
+        "CPP-F7516A7FABD4",
+        "CPP-FDA2384FD59C"
+      ]
+    },
+    {
+      "id": "cnb-document-container-chunks",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbDocument::(Metadata|ExternalReferences|ExternalReferenceAt)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_cnb_document_get_metadata` with the two name pairs, and for the reference table `cna_cnb_document_get_external_reference_count` plus `_get_external_reference` with its `_name_size`/`_copy_name` pair.\n\n`ExternalReferences()` returns the whole vector and `ExternalReferenceAt()` indexes it with a diagnostic noun; in C the count-plus-indexed-accessor pair is both, which is the collection convention this ABI uses everywhere rather than a new one invented here.",
+      "tests": "`CnbDocumentSmoke.c` `validate_document` reads the metadata flags, both names and the single reference back out of a built file, and calls the indexed accessors out of range.",
+      "status": "implemented",
+      "task": "CBIND-107",
+      "approved_symbols": [
+        "CPP-75DB208C2ED7",
+        "CPP-C553E482409C",
+        "CPP-F18CEB340B1C"
+      ]
+    },
+    {
+      "id": "cnb-writer",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbWriter(::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
+      "mapping": "`CNA_CnbWriterHandle` over `cna_cnb_writer_create`/`_destroy`, with `_set_metadata`, `_add_chunk`, `_get_schema_chunk_count`, `_set_compression`, `_set_limits`, `_get_limits`, `_build` and `_write_to_file`.\n\n**`SetExternalReferences` becomes `_add_external_reference` plus `_clear_external_references`.** The canonical setter takes the whole table at once, which C cannot pass as one argument because each entry carries a string; clear-then-append in order is the same operation, and the append hands the accumulated table back to the canonical setter every time so the writer's own state stays the single source of truth.\n\n`SetCompression`'s refusal is decided ahead of the call, exactly as the compression routes decide it: the canonical setter throws `std::invalid_argument`, and \"this build does not implement that codec\" is `CNA_RESULT_NOT_SUPPORTED` rather than a bad argument, because the caller retries with another codec instead of correcting this one.\n\n`Build` is `const`, so the two-call sizing pattern works by building again rather than by remembering -- the same cost `_get_compressed_byte_count` already accepts.",
+      "tests": "`CnbDocumentSmoke.c` `validate_document` builds the container the whole suite then parses, and `validate_writer_limits_and_files` covers what a round trip cannot: that a container-defined chunk identifier and a malformed one are both refused **without changing the schema chunk count**, that a `max_file_size` of sixteen bytes makes the build fail at the producer rather than at load time, that an unimplemented codec is `NOT_SUPPORTED`, that a custom asset type without its canonical name refuses to build and succeeds once it is set, that an asset type of zero and a schema version of zero are refused, and the file round trip through `_write_to_file` and `_parse_file` including a missing path.",
+      "status": "implemented",
+      "task": "CBIND-107",
+      "approved_symbols": [
+        "CPP-039741F6D76E",
+        "CPP-050C801A3350",
+        "CPP-18278D118615",
+        "CPP-21CBED740ADB",
+        "CPP-49B590AC7955",
+        "CPP-4A7130A8985B",
+        "CPP-5EE8523BBB04",
+        "CPP-6DF972318055",
+        "CPP-A5A8ECD18A7B",
+        "CPP-B8693D7DA5EB",
+        "CPP-EBE51C53F1E0"
+      ]
     }
   ]
 }
