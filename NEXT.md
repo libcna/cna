@@ -46,9 +46,20 @@ git could see:
 
 **Two long-standing defect rows are closed.** `CBIND-098` — `WeightedBlendedTransparency::begin`
 opening its bracket only where the effect is supported — is **fixed in the canonical engine layer**
-under an explicit owner exception to the audit-only rule. `CBIND-101` — unrelated `CApi_*` suites
-failing together in a full run and passing on rerun — is **closed as not reproducible** under the
-expanded multi-target integration protocol, not as fixed. Both rows carry their own evidence.
+under an explicit owner exception to the audit-only rule, mutation-checked in both directions; the
+canonical suite turned out to have been failing on that renderer the whole time, unnoticed because
+this campaign ran only the `CApi` suite. `CBIND-101` — unrelated `CApi_*` suites failing together in
+a full run and passing on rerun — is **closed as not reproducible**, not as fixed: fifteen serial
+full runs, five of them immediately after a whole-configuration build of all three trees, produced
+one occurrence.
+
+**That one occurrence did surface a structural candidate, recorded as a candidate.** All six suites
+in all five occurrences scope their `SDL_VIDEODRIVER=dummy` to `SDL_RENDERER`, so in every arm this
+phase uses they named no video driver and inherited ctest's own environment — a live desktop
+session. Every C API test that names no driver now gets `SDL_VIDEODRIVER=x11` and the configured
+`CNA_TEST_DISPLAY`, which is `CBIND-094`'s rule applied to the display rather than to `$HOME` and is
+worth doing whether or not it was the cause. `CBIND-113` is opened for what the capture could not
+say: several suites report only through exit codes and print nothing at all on failure.
 
 **The test display was `:0` in all three build trees and is not any more.** `CNA_TEST_DISPLAY` is a
 cache variable, so it survived every reconfigure that did not name it, and `:0` is the owner's real

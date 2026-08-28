@@ -2006,4 +2006,35 @@ if(CNA_BUILD_TESTS)
     # The exhaustive sweep is the slowest test in the suite by a wide margin, and slower still under
     # a sanitizer; the default 1500 s ctest timeout is generous, but say so rather than rely on it.
     set_tests_properties(CApi_Utf8Oracle PROPERTIES TIMEOUT 900)
+
+    # plans/plan_binding.md CBIND-101. Every registration above that names a video driver at all
+    # names it for a reason, and those are left exactly as they are. What this loop settles is the
+    # rest: a test that names none inherits ctest's own environment, which on a developer machine is
+    # the live desktop session -- a shared, externally mutated resource the suite does not own, and
+    # which another application can resize, focus, lock or blank underneath it. Every registration
+    # that scopes `SDL_VIDEODRIVER=dummy` to `SDL_RENDERER` therefore ran unpinned in every other
+    # renderer's tree, which is all three this campaign uses.
+    #
+    # This is CBIND-094's rule applied to the display: a test whose result depends on the machine it
+    # runs on is not evidence. It is deliberately **not** a claim to have diagnosed CBIND-101 -- that
+    # row closes as not reproducible -- but it does remove the only structural candidate for it, and
+    # it would be worth doing with no such row at all.
+    get_property(_cna_c_api_registered_tests DIRECTORY PROPERTY TESTS)
+    foreach(_cna_c_api_test IN LISTS _cna_c_api_registered_tests)
+        get_test_property(${_cna_c_api_test} ENVIRONMENT _cna_c_api_test_environment)
+        if(NOT _cna_c_api_test_environment)
+            set(_cna_c_api_test_environment "")
+        endif()
+        string(FIND "${_cna_c_api_test_environment}" "SDL_VIDEODRIVER=" _cna_c_api_driver_named)
+        if(_cna_c_api_driver_named EQUAL -1)
+            list(APPEND _cna_c_api_test_environment
+                "SDL_VIDEODRIVER=x11" "DISPLAY=${CNA_TEST_DISPLAY}")
+            set_tests_properties(${_cna_c_api_test} PROPERTIES
+                ENVIRONMENT "${_cna_c_api_test_environment}")
+        endif()
+    endforeach()
+    unset(_cna_c_api_registered_tests)
+    unset(_cna_c_api_test)
+    unset(_cna_c_api_test_environment)
+    unset(_cna_c_api_driver_named)
 endif()
