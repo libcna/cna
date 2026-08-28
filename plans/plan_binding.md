@@ -1,12 +1,13 @@
 # CNA Native C Binding / Stable C ABI — Implementation Plan
 
-> **Status (2026-08-28, after `CBIND-102`): B0–B9 complete; B10 open and unstarted.** The sixth
-> merge of `next` reopened the coverage matrix by **506 rows**, 460 of them the `CNA::Content::Cnb`
-> content format, and the owner ruled that binding them is a later pass. Coverage on the merged
-> tree: **536 headers / 8,812 symbols — 7,832 implemented, 15 approved partial, 506 planned, 459
-> not applicable.** ABI `0.9.0`, 3,746 exported symbols, the same set with `CNA_CNAEXT` on and off.
-> `docs/c-api/RELEASE_GATE.md` reads **Not ready**, on the one criterion those 506 rows fail and on
-> no other — see *Current status* and Phase B10. This document is
+> **Status (2026-08-28, after `CBIND-114`): B0–B10 complete; B11 open and unstarted.** Phase B10
+> bound all 506 rows the sixth merge reopened, the CNB content format included. The seventh merge —
+> `feature/bindings` into `next` — then reopened the matrix by **15 rows**, none of them from the
+> bindings branch: all 15 come from three `next`-only commits the branch never saw. Coverage on the
+> merged tree: **537 headers / 8,827 symbols — 8,337 implemented, 15 approved partial, 15 planned,
+> 460 not applicable.** ABI `0.17.0`, 4,033 exported symbols, the same set with `CNA_CNAEXT` on and
+> off. `docs/c-api/RELEASE_GATE.md` reads **Not ready**, on the one criterion those 15 rows fail and
+> on no other — see *Current status* and Phase B11. This document is
 > the plan for a native C API, implemented inside the main CNA repository. It is intentionally
 > not a plan for C#, .NET, JavaScript/TypeScript, Rust, Python, Java, Zig, Go, Swift, or any other
 > language-specific binding. Such work must not begin, nor be planned here, without a new explicit
@@ -149,6 +150,7 @@ task. Do not start a later broad API phase merely because an earlier skeleton co
 | B8 | Reconciling with the platform separation | `next` merged into `feature/binding` |
 | B9 | The CNAEXT engine layer and the post-merge tail | Owner put the layer in scope, 2026-08-26 |
 | B10 | The CNB content format and the sixth merge's tail | `origin/next` merged 2026-08-28; owner deferred the binding itself |
+| B11 | The seventh merge's tail | `feature/bindings` merged into `next` 2026-08-28; three `next`-only commits reopened the matrix |
 
 ## Planning baseline
 
@@ -1416,6 +1418,42 @@ The shared header is `modules/c-api/tests/pure_c/CnaTestReport.h`, so a suite wr
 
 **Final state: 536 headers / 8,812 symbols — 8,337 implemented, 15 approved partial, 0 planned, 460 not applicable.** ABI `0.17.0`, 4,033 exports, `docs/c-api/RELEASE_GATE.md` **Ready** on all ten criteria. 103/103 `CApi` tests in all three arms; all eight build-free gates green. |
 
+## Phase B11 — the tail the seventh merge left behind
+
+The matrix reopened for the seventh time, on 2026-08-28, by **15 rows** — and this time the merge
+ran the other way. `CBIND-102` integrated `origin/next` *into* `feature/bindings`; this reopening
+follows `feature/bindings` being merged **into `next`**, which is where the branch's work is
+published rather than where it is done.
+
+**Nothing in these 15 rows came from the bindings branch.** The merge was textually disjoint: not
+one of the 93 files the branch changed is touched by any of the eight commits `next` had added
+since the sixth merge, so there was no conflict to resolve and no bindings work left unfinished.
+All 15 rows come from three of those eight commits, which the bindings branch never saw:
+
+| Rows | Surface | Commit |
+|---:|---|---|
+| 7 | `CNA::Content::ObjectDictionaryEXT`, the whole class | `0a32dba89` — let `Model.Tag` carry a `Dictionary<string, object>` |
+| 6 | `ReflectiveSharedTypeReader` and `ReflectiveTypeReaderBuilder::RegisterShared` | `2ce51f673` — read a reflective class dispatched from inside a collection |
+| 2 | `BasicEffect::get/setVertexColorEnabledProperty` | `a249358eb` — FX-125, light a vertex-coloured mesh instead of dropping it onto the unlit program |
+
+Each landed in a header an already-closed slice owns, so `owner_task()` attributed all 15 to
+finished tasks — `CBIND-036` 7, `CBIND-105` 6, `CBIND-093` 2 — which is exactly the state
+`CBIND-079`'s gate forbids. That the same mechanism produced it twice, two merges apart and in
+opposite directions, is the argument for the gate rather than against it: the defect is structural,
+not anyone's oversight, and it is caught the moment it appears instead of a week later.
+
+**The published documents said otherwise until this task.** `COVERAGE.md` and `RELEASE_GATE.md`
+were generated on `feature/bindings` before it saw those three commits, so on the merged tree they
+asserted **0 planned** and a verdict of **Ready** while the tree actually held 15 planned rows.
+Nothing was lying — both files were correct where they were written — and that is precisely the
+combination `CBIND-079` describes: locally consistent documents nobody re-read together. Correcting
+them is this task; **binding the 15 rows is not**, and the gate is left reading `Not ready` for
+exactly as long as they are open.
+
+| # | Task | Rows | Status | Acceptance criteria |
+|---|---|---:|---|---|
+| CBIND-114 | Give the seventh merge's tail an owner, and make the published state say what the tree holds | 15 | ⬜ | `B11_SLICE_OWNERS` in `tools/c-api/generate_coverage_inventory.py` partitions all 15 rows onto this task by module and header stem, consulted before `B10_SLICE_OWNERS` so a closed slice stops answering for symbols that did not exist when it closed. Only the *unmapped* rows move: `content/ReflectiveTypeReader`'s other 17 rows stay `CBIND-105`'s and stay bound, because `owner_task()` is consulted only where no rule matched. `COVERAGE.md` and `RELEASE_GATE.md` are regenerated from the merged tree, and `release_gate.json`'s `coverage-matrix` criterion returns to `not met` with the reopening recorded in its note. Acceptance: `generate_coverage_inventory.py --check` and `check_release_gate.py --check` both pass; `CApiCoverageMatrix` passes; the snapshot reads **15 planned** and the verdict **Not ready** on that one criterion and no other; no row is reclassified `partial` or `not-applicable` to shrink the count, and no rule is re-approved to absorb the new symbols. Binding the 15 is deliberately **not** in scope — the routes, their tests and the ABI bump belong to a later task. |
+
 ## Mandatory test layers
 
 Every implemented public C entry point must receive all applicable coverage in the same task:
@@ -1476,8 +1514,8 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-**Snapshot (2026-08-28, after `CBIND-105`):** 536 headers / 8,812 symbols —
-**8,337 implemented, 15 approved partial, 0 planned, 460 not applicable.** ABI `0.17.0`, 4,033
+**Snapshot (2026-08-28, after `CBIND-114`):** 537 headers / 8,827 symbols —
+**8,337 implemented, 15 approved partial, 15 planned, 460 not applicable.** ABI `0.17.0`, 4,033
 exported symbols — the same 4,033 with `CNA_CNAEXT` on and off (measured symbol by symbol: zero
 differ), which is the engine layer's ABI promise measured rather than asserted.
 
@@ -1495,10 +1533,21 @@ graphics and reflective-reader tails. **All 506 are accounted for, and exactly o
 dispositioned `not-applicable`** — a `friend` declaration Doxygen reports as a member, named in
 `CBIND-111`.
 
-`docs/c-api/RELEASE_GATE.md` therefore reads **Ready** again, on all ten criteria. It read **Not
-ready** on exactly one — *No public C++ symbol is unaccounted for* — for the whole of this phase,
-which is `CBIND-042B`'s design working: a deferral that only lives in somebody's memory is the thing
-that gate exists to prevent, and it stayed visible until the rows were actually bound.
+`docs/c-api/RELEASE_GATE.md` read **Ready** again at that point, on all ten criteria. It had read
+**Not ready** on exactly one — *No public C++ symbol is unaccounted for* — for the whole of this
+phase, which is `CBIND-042B`'s design working: a deferral that only lives in somebody's memory is
+the thing that gate exists to prevent, and it stayed visible until the rows were actually bound.
+
+**The seventh merge then reopened that same criterion, and Phase B11 owns it.** Merging
+`feature/bindings` into `next` was textually disjoint — not one of the branch's 93 files is touched
+by the eight commits `next` had added — but three of those eight added public C++ surface the branch
+never saw: `ObjectDictionaryEXT` (7 rows), `ReflectiveSharedTypeReader` with `RegisterShared` (6)
+and `BasicEffect`'s `VertexColorEnabled` pair (2). Each landed in a header a closed slice owns, so
+all 15 were attributed to finished tasks until `CBIND-114` partitioned them onto `B11_SLICE_OWNERS`.
+Until that task the published `COVERAGE.md` and `RELEASE_GATE.md` asserted **0 planned** and
+**Ready** on a tree holding 15 planned rows, because both had been generated on the bindings branch
+before it saw those commits. The gate now reads **Not ready** on that one criterion, and stays there
+until the 15 are bound — which is a later task, not `CBIND-114`.
 
 **`CBIND-112` has since checked that, by name rather than by `--check`, and found one real defect
 doing it** — a rule citing a route that does not exist, written two commits earlier. Its six checks

@@ -746,12 +746,38 @@ B10_SLICE_OWNERS: dict[str, str] = {
 }
 
 
+# CBIND-114, 2026-08-28: the seventh merge -- `feature/bindings` into `next` -- reopened the matrix
+# by 15 rows. It is the mirror image of `CBIND-102`: nothing here arrived from the bindings branch,
+# which was textually disjoint from everything `next` had added. All 15 come from three commits the
+# bindings branch never saw, and each one landed in a header an already-closed slice owns, so
+# `owner_task()` handed the new rows straight to a finished task -- the exact state `CBIND-079`'s
+# gate forbids, reached for the second time by the same mechanism rather than by anyone's mistake.
+# The partition is consulted before `B10_SLICE_OWNERS` for the same reason that one is consulted
+# before `CNAEXT_SLICE_OWNERS`: the newest partition owns the newest work, and the closed slice
+# stops answering for symbols that did not exist when it closed.
+B11_SLICE_OWNERS: dict[str, str] = {
+    # CBIND-114 -- 7 rows: `CNA::Content::ObjectDictionaryEXT`, the whole class, added so a
+    # `Model.Tag` can carry a `Dictionary<string, object>` (`0a32dba89`).
+    "content/ObjectDictionaryEXT": "CBIND-114",
+    # CBIND-114 -- 6 rows: `ReflectiveSharedTypeReader` and the builder's `RegisterShared`, added
+    # so a reflective class dispatched from inside a collection is readable (`2ce51f673`). The
+    # header's other 17 rows are `CBIND-105`'s and stay bound; only the new ones move.
+    "content/ReflectiveTypeReader": "CBIND-114",
+    # CBIND-114 -- 2 rows: `BasicEffect`'s `VertexColorEnabled` property pair, added by FX-125 so a
+    # vertex-coloured mesh is lit instead of dropped onto the unlit program (`a249358eb`).
+    "graphics/BasicEffect": "CBIND-114",
+}
+
+
 def owner_task(symbol: Symbol) -> str:
     override = SYMBOL_OWNER_OVERRIDES.get(symbol.qualified_name)
     if override is not None:
         return override
     header = Path(symbol.header)
     key = f"{header.parts[1]}/{header.stem}"
+    b11_owner = B11_SLICE_OWNERS.get(key)
+    if b11_owner is not None:
+        return b11_owner
     b10_owner = B10_SLICE_OWNERS.get(key)
     if b10_owner is not None:
         return b10_owner
