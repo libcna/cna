@@ -1,6 +1,6 @@
 # plan_content_pipeline.md — CNA Content Pipeline
 
-> **Status (2026-08-28):** `CP-001` and `CP-002` are complete. `CP-003` is current. The
+> **Status (2026-08-28):** `CP-001` through `CP-003` are complete. `CP-004` is current. The
 > project starts from the existing `content-pipeline` branch at `0e6899f17017c03c0e23d575d25cd70c678e2781`.
 > That commit contains the completed CNB baseline through `CNBF-123`. Local `next` was actually
 > `4ab1859dc8a540af1bd326df0fa816579adf7027`, two unrelated platform/binding commits ahead; the
@@ -528,8 +528,8 @@ Required before the corresponding task closes:
 |---|---|---|
 | `CP-001` | **completed** | Verify branch/CNB baseline; audit XNA/MonoGame importer, processor, writer/reader, contexts, identities, dependencies, external references and build cache concepts; record retained/rejected concepts. |
 | `CP-002` | **completed** | Trace real CNA image/WAV/DDS/glTF/CNJ imports, canonical DTO construction, encoders, runtime loaders, path rules, XREFs, tool publication and duplication; record the build/runtime map. |
-| `CP-003` | **current** | Implement experimental component identities, type-erased values, focused contexts, dependency collector, logger, component contracts and deterministic explicit registry with selection/error tests. |
-| `CP-004` | future | Complete Texture2D Importer -> Processor -> Writer -> existing encoder vertical slice; prove old/new bytes, deterministic bytes, decode/runtime compatibility and headless operation. |
+| `CP-003` | **completed** | Implemented experimental component identities, checked type-erased values, focused importer/processor contexts, categorized dependency and separate runtime-reference collectors, scoped logging, component contracts, a serial build-to-bytes coordinator, and an explicit deterministic registry. Ten focused tests prove duplicate/ambiguous/missing route diagnostics, explicit selection, parameter errors, persistent-type/RTTI separation, dependency/XREF reporting, traversal and symlink containment, and the complete abstract stage flow. `cna_content` and `CnaTests` built in a fresh HEADLESS Debug configuration; all 10 `ContentPipelineCoreTest` cases passed. |
+| `CP-004` | **current** | Complete Texture2D Importer -> Processor -> Writer -> existing encoder vertical slice; prove old/new bytes, deterministic bytes, decode/runtime compatibility and headless operation. |
 | `CP-005` | future | Complete WAV/SoundEffect vertical slice by splitting/reusing the existing parser; prove byte equivalence and no audio initialization. |
 | `CP-006` | future | Add `cna-content build` single/directory CLI, sorted traversal, logical relative names, atomic publication and failure preservation tests. |
 | `CP-007` | future | Make categorized dependency collection and the build result complete/observable for built-in flows. |
@@ -604,4 +604,3 @@ the ordering wrong; it is not a promise to build speculative abstractions.
   versions in fingerprints. Built-ins can use their frozen asset schema IDs directly.
 * Whether manifest JSON should reuse `CNA::Internal::Json` or use a smaller pipeline-owned canonical
   representation; whichever is chosen must have deterministic field/key ordering.
-
