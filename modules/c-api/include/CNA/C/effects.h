@@ -1342,7 +1342,7 @@ CNA_C_API CNA_Result cna_effect_material_create(
  *         handle/thread failure.
  *
  * **Retaining does not gate the texture's own destroy, and that is the point rather than an
- * oversight.** `cna_effect_set_parameter_texture` does gate one, because a parameter holds a raw
+ * oversight.** `cna_effect_parameter_set_value_texture` does gate one, because a parameter holds a raw
  * pointer nothing owns; retaining is the mechanism that removes that hazard, so a caller may
  * release its handle immediately afterwards and the material keeps the texture alive on its own.
  */

@@ -1228,9 +1228,9 @@ applies unchanged. Three things are specific to this phase:
 
 **The three templates and the two protected methods beneath them needed two real routes.** `cna_vertex_buffer_set_data_raw_with_options` and `_raw_at_with_options`: the existing raw pair takes a stride but no streaming hint, and `SetDataRawWithOptions`/`SetDataRawAtWithOptions` are protected, so the templates are their only public door. Both new routes call the **windowed** template, because it takes the stride as an argument while the narrower one derives it from `sizeof(TVertex)` — and a stride known only at run time cannot be a type's size. The two-argument template is answered by the existing `cna_vertex_buffer_set_data_raw`. **A static buffer is refused**, since these overloads are declared on `DynamicVertexBuffer` and a streaming hint means nothing without one; the test measures that refusal, because a route that quietly accepted a static buffer would be inventing a path the canonical API does not have.
 
-**`EffectMaterial` has no handle of its own, so both routes check what they were given.** It is a `CNA_EffectHandle` whose object happens to be an `EffectMaterial` — which is what `cna_effect_material_create` hands back — so a plain Effect is refused rather than trusted. The texture arrives as a handle plus the `CNA_EffectTextureType` discriminator `cna_effect_set_parameter_texture` already uses; a null handle is ignored rather than refused, because the canonical method ignores a null pointer and the two must not disagree about the same input.
+**`EffectMaterial` has no handle of its own, so both routes check what they were given.** It is a `CNA_EffectHandle` whose object happens to be an `EffectMaterial` — which is what `cna_effect_material_create` hands back — so a plain Effect is refused rather than trusted. The texture arrives as a handle plus the `CNA_EffectTextureType` discriminator `cna_effect_parameter_set_value_texture` already uses; a null handle is ignored rather than refused, because the canonical method ignores a null pointer and the two must not disagree about the same input.
 
-**The lifetime decision, which `SAMPLE-028` is the reason for: retaining deliberately does *not* gate the texture's own destroy.** `cna_effect_set_parameter_texture` gates one because a parameter holds a raw pointer nothing owns; retaining is precisely the mechanism that removes that hazard. So only the canonical texture is handed over, and the test destroys the caller's handle and checks the count stays raised — the arm a gate would have made unreachable. Mutation-checked: removing the retain call fails.
+**The lifetime decision, which `SAMPLE-028` is the reason for: retaining deliberately does *not* gate the texture's own destroy.** `cna_effect_parameter_set_value_texture` gates one because a parameter holds a raw pointer nothing owns; retaining is precisely the mechanism that removes that hazard. So only the canonical texture is handed over, and the test destroys the caller's handle and checks the count stays raised — the arm a gate would have made unreachable. Mutation-checked: removing the retain call fails.
 
 **One test guard removed on purpose.** The texture create was first written inside an `if`, which would have let the whole retained-texture contract stop being checked on any build that could not make a 1×1 texture. HEADLESS makes one — verified by instrumenting the branch rather than assuming — so the create is now required, because a skipped check defends nothing.
 
@@ -1388,7 +1388,21 @@ applies unchanged. Three things are specific to this phase:
 
 **Verified in all three arms**, each built whole and then run serially: 103/103 `CApi` tests in `cmake-build-debug`, `cmake-build-cnaext` and `build-probe`; all eight build-free gates green; declared and exported routes agreeing exactly at 4,018 in each tree. `docs/c-api/CNB.md` gains a `## Compiling content, and extending the format` section. |
 | CBIND-113 | Make an exit-code-only C API suite say which stage failed | — | ⬜ | `CBIND-101` closed on fifteen runs that produced one occurrence, and the complete capture of that occurrence was the renderer banner and nothing else — `RuntimeComponentsSmoke.c` contains no `printf` or `fprintf` at all and reports only through exit codes. A `--output-on-failure` capture of such a suite cannot say more than "it failed", which is why an intermittent one costs a whole session to place. Give every suite that reports only through exit codes the diagnostic `TextureVolumeSmoke.c`'s `VOL` and `EffectSmoke.c`'s `REQUIRE` already have: the file, the line and the expression. Audit which suites lack it rather than assuming; the useful measure of done is that a failure identifies its own stage without a rerun. |
-| CBIND-112 | Close the reopened matrix | — | ⬜ | The `CBIND-095` shape, and it inherits that row's rule: **do not close on a green `--check`.** Re-run the four independent checks by name — no mapping rule cites a route that does not exist; no `approved_symbols` list has drifted from the headers; the rows were bound rather than reclassified (count this phase's own not-applicable and partial contributions and name each one); and an unclaimed symbol still falls through to `planned`. Then the two this phase adds: both `CNA_CNAEXT` configurations still export the same symbol set measured name by name, and the release gate's verdict has moved to `Ready` **because the rows were bound**, not because a criterion was edited. |
+| CBIND-112 | Close the reopened matrix | — | ✅ | **Done 2026-08-28.** All six checks run by name, not by `--check`. **One real defect found and fixed**, which is the reason the row exists.
+
+**1 — no mapping rule cites a route that does not exist.** 733 distinct `cna_*` names are cited across 681 rules. 113 of them end in `_` and are family prefixes from prose like `` `cna_vector3_*` ``; of the rest, three did not resolve. Two are legitimate: `cna_c_api_boundary_detail_test` is a **test executable**, named in a `tests` field, and `cna_color_init` is cited by `color-default-constructor` **in order to say it should not exist** — the same two `CBIND-095` recorded. The third was real: `effect-material-retained-textures`, written by `CBIND-104` two commits earlier, named `cna_effect_set_parameter_texture`, and the route is `cna_effect_parameter_set_value_texture`. Corrected in the rule, in `effects.h`'s own prose and in this plan — three places; the adapter comment never named the route, which the sweep confirmed rather than assumed. **A green `--check` would never have found it**, which is exactly what this row's rule anticipates.
+
+**2 — no `approved_symbols` list has drifted in a way that matters, and that is proved rather than argued.** 8,718 approved stable IDs against 8,812 declared symbols; 22 approvals across 11 rules name an ID the headers no longer declare. That is the harmless direction, and the proof is mechanical: dropping all 22 leaves the inventory **byte-identical**, because `Rule.matches` requires a symbol to be present *and* approved, so a stale approval can narrow a rule but never broaden one. None of the 11 rules belongs to this phase — they are `media-*`, `song`, `drawable-game-component`, `content-typed-load-specializations` and `graphics-ext-settings-values`, the same pre-existing set. Every rule still matches at least one symbol.
+
+**3 — the rows were bound, and the exceptions are named.** Counted from the inventory rather than from memory: `CBIND-103` 7, `CBIND-104` 22, `CBIND-105` 17, `CBIND-106` 66, `CBIND-107` 88, `CBIND-108` 67, `CBIND-109` 129, `CBIND-110` 85, `CBIND-111` 24 — **505 implemented**, plus **exactly one not-applicable**, `CNA::Content::CnbLoaderRegistry::ContentManager`, a `friend` declaration Doxygen reports as a member. **Zero partial.** 505 + 1 = 506, which is the count the sixth merge reopened at.
+
+**4 — `planned` is still reachable, so a zero means the work is done rather than the fall-through being broken.** Removing `cnb-model-material` moves exactly its 35 rows, all of them from `implemented` to `planned`, and the fall-through assigns them to `CBIND-109` — the right owner, not a default.
+
+**5 — both `CNA_CNAEXT` configurations export the same set, name by name.** 4,033 in `cmake-build-debug` (OFF), `cmake-build-cnaext` (ON, EasyGL) and `build-probe` (ON, HEADLESS); **zero differences** in either comparison.
+
+**6 — the verdict moved because the rows were bound.** The only change to `release_gate.json` in the whole phase is one line, `"recorded": "not met"` → `"met"`; no criterion's `id`, `title`, `requirement` or `check` was touched. And the verdict is *computed*: restoring the old record still measures `met` — the record cannot influence the measurement, only disagree with it, which is how the gate caught the stale deferral in the first place.
+
+**Final state: 536 headers / 8,812 symbols — 8,337 implemented, 15 approved partial, 0 planned, 460 not applicable.** ABI `0.17.0`, 4,033 exports, `docs/c-api/RELEASE_GATE.md` **Ready** on all ten criteria. 103/103 `CApi` tests in all three arms; all eight build-free gates green. |
 
 ## Mandatory test layers
 
@@ -1474,8 +1488,12 @@ ready** on exactly one — *No public C++ symbol is unaccounted for* — for the
 which is `CBIND-042B`'s design working: a deferral that only lives in somebody's memory is the thing
 that gate exists to prevent, and it stayed visible until the rows were actually bound.
 
-**The verdict is not the closure.** `CBIND-112` is what checks that the rows were bound rather than
-reclassified, and its own rule is explicit: do not close on a green `--check`.
+**`CBIND-112` has since checked that, by name rather than by `--check`, and found one real defect
+doing it** — a rule citing a route that does not exist, written two commits earlier. Its six checks
+and their numbers are in its own row; the short version is that 505 rows were bound, exactly one was
+dispositioned not-applicable and named, none was made partial, `planned` is still reachable, all
+three build arms export the same 4,033 names, and the gate's verdict is computed rather than
+recorded.
 
 **Read this before rewriting this block.** The snapshot that stood here before `CBIND-079` — *0
 planned, ABI 0.2.0, the gate reads ready* — was accurate on 2026-08-19 and stayed in the file while
@@ -1503,7 +1521,7 @@ CNAEXT engine layer and the fifth merge's tail opened, and `CBIND-095` verified 
 
 ### What remains
 
-**Phase B10 — 0 rows left of 506. Every binding slice is closed: `CBIND-103`–`CBIND-111`. What remains is `CBIND-112`, which verifies the closure rather than asserting it, and `CBIND-113` beside it.** The
+**Phase B10 — 0 rows left of 506, and `CBIND-112` has verified the closure rather than asserting it. Only `CBIND-113` remains, and it is a diagnostics task rather than a binding one.** The
 sixth reopening. `origin/next` merged on 2026-08-28 and brought in the **CNB content format**
 (`CNA::Content::Cnb`, 23 public headers, `plans/plan_cnb.md`'s `CNBF-002`–`CNBF-123`) — 460 of the
 506 rows — plus 46 ordinary XNA symbols: the math types' compound-assignment operators,

@@ -171,9 +171,19 @@ second spelling published — and the thing `CBIND-111` left open is now **measu
 CNB loader *is* reached by an ordinary `cna_content_manager_load_foreign_ext` load.
 
 **The matrix is closed: 0 planned rows, and `docs/c-api/RELEASE_GATE.md` reads `Ready` on all ten
-criteria** for the first time since the sixth merge reopened it. That verdict is measured rather
-than asserted — and it is not the closure: `CBIND-112` still owes the four independent checks, and
-its own rule is not to close on a green `--check`.
+criteria** for the first time since the sixth merge reopened it.
+
+**`CBIND-112` then verified the closure by name rather than by `--check`, and found one real defect
+doing it**: a mapping rule written two commits earlier cited `cna_effect_set_parameter_texture`,
+and the route is `cna_effect_parameter_set_value_texture`. A green `--check` would never have found
+it — which is why that row's rule is *not to close on one*. The other five checks: 22 stale
+approvals exist and are provably harmless (dropping them leaves the inventory byte-identical,
+because a rule maps a symbol only when it is present **and** approved); 505 rows were bound with
+**exactly one** dispositioned not-applicable and named and **zero** made partial, summing to the 506
+the merge reopened at; `planned` is still reachable, so the zero means the work is done rather than
+the fall-through being broken; all three build arms export the same 4,033 names with zero
+differences; and the gate's verdict is *computed*, so the one-line record change could only agree
+with the measurement, never cause it.
 
 **Where it stands:** 536 headers / 8,812 symbols — 8,337 implemented, 15 approved partial, **0
 planned**, 460 not applicable. ABI `0.17.0`, 4,033 exported symbols, the same set with `CNA_CNAEXT`
@@ -181,7 +191,8 @@ on and off. 103/103 `CApi` tests in all three arms: `cmake-build-debug` (HEADLES
 `cmake-build-cnaext` (OPENGLES3/EasyGL, `CNA_CNAEXT=ON`) and `build-probe` (HEADLESS,
 `CNA_CNAEXT=ON`). The not-applicable count moved for the first time this phase, by exactly one row —
 a `friend` declaration Doxygen reports as a member, named in `CBIND-111`. What remains in Phase B10
-is `CBIND-112`, which verifies the closure rather than asserting it, and `CBIND-113`.
+is `CBIND-113` alone — a diagnostics task rather than a binding one: give every C API suite that
+reports only through exit codes the file, line and expression the others already print.
 
 ## `SAMPLE-005` official XNA content fidelity (`ReachGraphicsDemo_4_0`, 2026-08-23)
 
