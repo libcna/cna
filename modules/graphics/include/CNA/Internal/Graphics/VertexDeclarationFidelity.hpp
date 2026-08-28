@@ -194,6 +194,16 @@ namespace CNA::Internal::Graphics
         Microsoft::Xna::Framework::Graphics::VertexElementFormat format{};
         /** @brief The attribute's name in the shader, for the diagnostic. */
         const char* name = "";
+        /**
+         * @brief A second format the same input accepts, when the semantic has more than one
+         *        legal spelling.
+         *
+         * XNA's vertex element format describes the bytes in the buffer, not the shader register:
+         * a `BLENDINDICES` semantic arrives as a float4 in the shader whether the declaration
+         * spelled it `Byte4` or `Vector4`, and a content processor is free to write either.
+         * Defaults to @ref format, so an input with one legal spelling says nothing extra.
+         */
+        Microsoft::Xna::Framework::Graphics::VertexElementFormat alternateFormat = format;
     };
 
     /// Implementation detail of the predicate below; not part of any renderer's contract.
@@ -699,7 +709,8 @@ namespace CNA::Internal::Graphics
                 if (in.usage != e.getVertexElementUsageProperty() ||
                     in.usageIndex != e.getUsageIndexProperty())
                     continue;
-                if (in.format == e.getVertexElementFormatProperty())
+                if (in.format == e.getVertexElementFormatProperty() ||
+                    in.alternateFormat == e.getVertexElementFormatProperty())
                     break;
                 throw System::NotSupportedException(
                     std::string(rendererName) +
@@ -708,7 +719,11 @@ namespace CNA::Internal::Graphics
                     detail::Describe(e.getVertexElementUsageProperty(), e.getUsageIndexProperty(),
                                      e.getOffsetProperty(), e.getVertexElementFormatProperty()) +
                     " but shader input '" + in.name + "' expects " +
-                    detail::FormatName(in.format) + ".");
+                    detail::FormatName(in.format) +
+                    (in.alternateFormat == in.format
+                         ? std::string()
+                         : std::string(" or ") + detail::FormatName(in.alternateFormat)) +
+                    ".");
             }
         }
     }

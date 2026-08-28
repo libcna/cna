@@ -1472,6 +1472,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_easygl_basiceffect_lit_vertex_color
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plans/plan_fx.md FX-127: a BLENDINDICES element declared Vector4 rather than Byte4 is
+        # equally legal XNA -- the format describes the bytes, the shader register is a float4
+        # either way -- and EasyGL refused it outright.
+        cna_easygl_test(cna_test_easygl_skinnedeffect_vector4_bone_indices
+                        easygl_skinnedeffect_vector4_bone_indices_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_SkinnedEffectVector4BoneIndices
+            COMMAND cna_test_easygl_skinnedeffect_vector4_bone_indices
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 247: draw quad with each supported VertexElementFormat via VertexBuffer
         cna_easygl_test(cna_test_easygl_vertex_formats
                         easygl_vertex_formats_test.cpp)

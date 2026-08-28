@@ -115,7 +115,10 @@ layout(location = 0) in vec3 aPosition;
 layout(location = 1) in vec3 aNormal;
 layout(location = 2) in vec2 aUV;
 layout(location = 3) in vec4 aBoneWeights;
-layout(location = 4) in uvec4 aBoneIndices;
+// FX-127: a float vec4, matching the stock skinned programs -- XNA's BLENDINDICES is a
+// float4 register whether the declaration spelled the bytes Byte4 or Vector4, so EasyGL
+// binds both as floats and no shader may read the attribute as an integer.
+layout(location = 4) in vec4 aBoneIndices;
 uniform mat4 uWorld;
 uniform mat4 uView;
 uniform mat4 uProjection;
@@ -129,10 +132,10 @@ out float vViewDepth;
 out vec4 vCurrentClip;
 out vec4 vPreviousClip;
 void main() {
-    mat4 skin = uBones[aBoneIndices.x] * aBoneWeights.x;
-    if (uWeightsPerVertex >= 2) skin += uBones[aBoneIndices.y] * aBoneWeights.y;
-    if (uWeightsPerVertex >= 4) skin += uBones[aBoneIndices.z] * aBoneWeights.z
-                                      + uBones[aBoneIndices.w] * aBoneWeights.w;
+    mat4 skin = uBones[int(aBoneIndices.x)] * aBoneWeights.x;
+    if (uWeightsPerVertex >= 2) skin += uBones[int(aBoneIndices.y)] * aBoneWeights.y;
+    if (uWeightsPerVertex >= 4) skin += uBones[int(aBoneIndices.z)] * aBoneWeights.z
+                                      + uBones[int(aBoneIndices.w)] * aBoneWeights.w;
     vec4 world = uWorld * skin * vec4(aPosition, 1.0);
     vec4 view  = uView * world;
     gl_Position = uProjection * view;

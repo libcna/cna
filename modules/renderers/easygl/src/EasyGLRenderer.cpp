@@ -956,38 +956,6 @@ namespace CNA::Internal::Renderers::EasyGL
             return line;
         }
 
-        // plans/plan_glbackends.md GLB-36 follow-up: GLSL ES 1.00 has no integer vertex attribute types
-        // at all -- "layout(location=N) in uvec4 aBoneIndices;" (this file's
-        // SkinnedEffect/SkinnedPbrEffect shaders) has no direct equivalent. Encodes bone indices
-        // as a float vec4 instead (the matching C++-side change is
-        // DescribeVertexElementFormat()'s Byte4 case, which reads the same underlying
-        // UnsignedByte bytes as floats under this profile rather than true integers -- 0-255
-        // range, far more than the <=72 bone count needs, exactly float-representable). Rewrites,
-        // applied only when the source actually declares "aBoneIndices" (a no-op for every other
-        // shader in this file):
-        //   - "uvec4" -> "vec4" (only ever appears in the aBoneIndices declaration itself, so a
-        //     blanket whole-word replace is safe)
-        //   - "aBoneIndices.x"/".y"/".z"/".w" -> "int(aBoneIndices.x)"/etc. at their 4 uBones[]
-        //     index expressions (the only place aBoneIndices is ever used in this file) -- array
-        //     indices must be integer-typed even though the attribute itself is now a float vec4.
-        std::string RewriteBoneIndicesForEs100(std::string text)
-        {
-            if (text.find("aBoneIndices") == std::string::npos) return text;
-            text = ReplaceWholeWord(std::move(text), "uvec4", "vec4");
-            for (char component : { 'x', 'y', 'z', 'w' })
-            {
-                const std::string from = std::string("aBoneIndices.") + component;
-                const std::string to = "int(" + from + ")";
-                size_t pos = 0;
-                while ((pos = text.find(from, pos)) != std::string::npos)
-                {
-                    text.replace(pos, from.size(), to);
-                    pos += to.size();
-                }
-            }
-            return text;
-        }
-
         // plans/plan_glbackends.md GLB-36: rewrites a GLSL ES 3.00 shader body to GLSL ES 1.00
         // (WebGL 1). Real syntax differences handled, confirmed exhaustive by a full survey of
         // every shader in this file during GLB-36 (no texelFetch/textureSize/derivatives/
@@ -1006,8 +974,6 @@ namespace CNA::Internal::Renderers::EasyGL
         //     sampler's declared type (see RewriteTextureCallsForEs100 above).
         //   - "#version 300 es" -> "#version 100"; the following "precision ... float;" line is
         //     kept as-is (valid, and required, GLSL ES 1.00 syntax too).
-        //   - "uvec4 aBoneIndices" (SkinnedEffect/SkinnedPbrEffect only) -> float-encoded, see
-        //     RewriteBoneIndicesForEs100 above.
         std::string TransformGlslEs300BodyToEs100(const std::string& es300Body, GlShaderStageKind stage)
         {
             std::set<std::string> cubeSamplerNames;
@@ -1087,9 +1053,9 @@ namespace CNA::Internal::Renderers::EasyGL
                 out += rewritten + "\n";
             }
             // Applied to the whole assembled output, not per-line, since it must also see the
-            // "attribute uvec4 aBoneIndices;" declaration line produced by the
+            // "attribute vec4 aBoneIndices;" declaration line produced by the
             // layout(location=N) branch above (which `continue`s past the per-line pipeline).
-            return RewriteBoneIndicesForEs100(std::move(out));
+            return out;
         }
     }
 
@@ -1169,10 +1135,10 @@ if (ProfileIsDesktopCore())
         if (versionPos == std::string::npos) return src;
         src.replace(versionPos, versionLine.size(), "#version 100\n");
         std::string transformed = TransformGlslEs300BodyToEs100(src, stage);
-        // SkinnedEffect/SkinnedPbrEffect's "uvec4 aBoneIndices" is converted away by
-        // TransformGlslEs300BodyToEs100/RewriteBoneIndicesForEs100 (float-encoded bone indices,
-        // GLB-36 follow-up). This check is now a defensive safety net for any FUTURE shader that
-        // introduces a genuinely new integer vertex attribute the transform doesn't yet handle --
+        // No shader in this file declares an integer vertex attribute any more: the skinned
+        // programs' bone indices are a float vec4 on every profile (FX-127). This check is a
+        // defensive safety net for any FUTURE shader that introduces one the transform cannot
+        // handle --
         // fail loudly rather than let an invalid shader reach the driver with only an opaque
         // compile-error log as the symptom.
         if (transformed.find("uvec4") != std::string::npos || transformed.find("ivec") != std::string::npos)
@@ -6250,24 +6216,17 @@ else
             case VertexElementFormat::Vector4:         return { 4, ::easygl::DataType::Float,        false, false };
             case VertexElementFormat::Color:           return { 4, ::easygl::DataType::UnsignedByte, true,  false };
             case VertexElementFormat::Byte4:
-if (ProfileUsesGlslEs100())
-{
-                // plans/plan_glbackends.md GLB-36 follow-up: GLSL ES 1.00 (WEBGL1 and OPENGLES2) has no
-                // integer vertex attributes at all -- glVertexAttribIPointer isn't available.
-                // Byte4 is used exclusively for BLENDINDICES-style bone-index attributes
-                // (confirmed: only VertexPositionNormalTangentTextureSkinned/
-                // VertexPositionNormalTextureSkinned declare it), so read the same underlying
-                // bytes as floats instead (0-255 range, far more than the <=72 bone count needs,
-                // exactly float-representable) rather than as a true integer. The skinned shaders
-                // themselves declare "attribute vec4 aBoneIndices;" (not uvec4) and cast to int()
-                // when indexing uBones[] for these profiles -- see TransformGlslEs300BodyToEs100's
-                // bone-index rewrite.
+                // FX-127: read as floats on every profile, not as true integers. Byte4 is used
+                // exclusively for BLENDINDICES-style bone-index attributes, and the same semantic
+                // is equally legal as Vector4 -- XNA's vertex element format describes the bytes,
+                // while the shader register is a float4 either way, so a processor is free to
+                // write either (CustomModelAnimation's own SkinnedModelProcessor converts
+                // BlendIndices0 to Vector4 and real XNA renders it). One shader attribute cannot
+                // be both an integer and a float, so the skinned programs declare
+                // "in vec4 aBoneIndices" and cast to int() when indexing uBones[], and both
+                // formats bind to it as floats. The range is 0-255 at most, far more than the
+                // <= 72 bone count needs, and exactly float-representable.
                 return { 4, ::easygl::DataType::UnsignedByte, false, false };
-}
-else
-{
-                return { 4, ::easygl::DataType::UnsignedByte, false, true  };
-}
             case VertexElementFormat::Short2:          return { 2, ::easygl::DataType::Short,        false, false };
             case VertexElementFormat::Short4:          return { 4, ::easygl::DataType::Short,        false, false };
             case VertexElementFormat::NormalizedShort2:return { 2, ::easygl::DataType::Short,        true,  false };
@@ -6278,24 +6237,15 @@ else
             return { 3, ::easygl::DataType::Float, false, false };
         }
 
-        /// Binds a BLENDINDICES-style Byte4 bone-index attribute in the read mode the active
-        /// profile's skinned shaders expect: true integers (glVertexAttribIPointer) for the
-        /// GLSL ES 3.00 / desktop profiles, plain float reads for the GLSL ES 1.00 profiles --
-        /// whose transformed shaders declare "attribute vec4 aBoneIndices;", so an integer
-        /// pointer would feed a float attribute there. This is the same per-profile read-mode
-        /// choice DescribeVertexElementFormat's Byte4 case makes for declaration-driven layouts,
-        /// applied to ApplyLayout's fixed-stride skinned layouts (52/56/68) as well.
+        /// Binds a BLENDINDICES-style Byte4 bone-index attribute for ApplyLayout's fixed-stride
+        /// skinned layouts (52/56/68), in the one read mode every profile's skinned shaders now
+        /// expect: plain float reads, because "in vec4 aBoneIndices" is a float attribute on all
+        /// of them (FX-127). Same choice DescribeVertexElementFormat's Byte4 case makes for
+        /// declaration-driven layouts.
         void SetBoneIndicesAttributePointer(::easygl::VertexArray& vao, unsigned int location,
                                             std::size_t stride, const void* offset)
         {
-if (ProfileUsesGlslEs100())
-{
             vao.set_attribute_pointer(location, 4, ::easygl::DataType::UnsignedByte, false, stride, offset);
-}
-else
-{
-            vao.set_attribute_i_pointer(location, 4, ::easygl::DataType::UnsignedByte, stride, offset);
-}
         }
 
         void ConfigureDeclarationAttributes(
@@ -7816,7 +7766,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "layout(location=1) in vec3 aNormal;\n"
 "layout(location=2) in vec2 aUV;\n"
 "layout(location=3) in vec4 aBoneWeights;\n"
-"layout(location=4) in uvec4 aBoneIndices;\n"
+"layout(location=4) in vec4 aBoneIndices;\n"
 "layout(location=5) in vec4 aColor;\n"
 CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform mat4 uWVP;\n"
@@ -7834,9 +7784,9 @@ CNA_GL_SKIN_NORMAL_DECL
 "void main(){\n"
 // Task 895: FNA's real Skin(vin, boneCount) only sums the first WeightsPerVertex (1, 2, or 4)
 // weight/index pairs -- matches XNA's own validated property range, so >=2/>=4 gating suffices.
-"    mat4 skinMat=uBones[aBoneIndices.x]*aBoneWeights.x;\n"
-"    if(uWeightsPerVertex>=2) skinMat+=uBones[aBoneIndices.y]*aBoneWeights.y;\n"
-"    if(uWeightsPerVertex>=4) skinMat+=uBones[aBoneIndices.z]*aBoneWeights.z+uBones[aBoneIndices.w]*aBoneWeights.w;\n"
+"    mat4 skinMat=uBones[int(aBoneIndices.x)]*aBoneWeights.x;\n"
+"    if(uWeightsPerVertex>=2) skinMat+=uBones[int(aBoneIndices.y)]*aBoneWeights.y;\n"
+"    if(uWeightsPerVertex>=4) skinMat+=uBones[int(aBoneIndices.z)]*aBoneWeights.z+uBones[int(aBoneIndices.w)]*aBoneWeights.w;\n"
 "    vec4 skinnedPos=skinMat*vec4(aPos,1.0);\n"
 "    vec4 cnaPos=cnaInstancePosition(skinnedPos);\n"
 "    gl_Position=uWVP*cnaPos;\n"
@@ -8018,7 +7968,7 @@ CNA_GL_PUNCTUAL_DECL
 "layout(location=1) in vec3 aNormal;\n"
 "layout(location=2) in vec2 aUV;\n"
 "layout(location=3) in vec4 aBoneWeights;\n"
-"layout(location=4) in uvec4 aBoneIndices;\n"
+"layout(location=4) in vec4 aBoneIndices;\n"
 "layout(location=5) in vec4 aColor;\n"
 CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform mat4 uWVP;\n"
@@ -8052,9 +8002,9 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "out vec4 vColor;\n"
 CNA_GL_SKIN_NORMAL_DECL
 "void main(){\n"
-"    mat4 skinMat=uBones[aBoneIndices.x]*aBoneWeights.x;\n"
-"    if(uWeightsPerVertex>=2) skinMat+=uBones[aBoneIndices.y]*aBoneWeights.y;\n"
-"    if(uWeightsPerVertex>=4) skinMat+=uBones[aBoneIndices.z]*aBoneWeights.z+uBones[aBoneIndices.w]*aBoneWeights.w;\n"
+"    mat4 skinMat=uBones[int(aBoneIndices.x)]*aBoneWeights.x;\n"
+"    if(uWeightsPerVertex>=2) skinMat+=uBones[int(aBoneIndices.y)]*aBoneWeights.y;\n"
+"    if(uWeightsPerVertex>=4) skinMat+=uBones[int(aBoneIndices.z)]*aBoneWeights.z+uBones[int(aBoneIndices.w)]*aBoneWeights.w;\n"
 "    vec4 skinnedPos=skinMat*vec4(aPos,1.0);\n"
 "    vec4 cnaPos=cnaInstancePosition(skinnedPos);\n"
 "    gl_Position=uWVP*cnaPos;\n"
@@ -8487,7 +8437,7 @@ std::string("#version 300 es\n") +
 "layout(location=2) in vec4 aTangent;\n"
 "layout(location=3) in vec2 aUV;\n"
 "layout(location=4) in vec4 aBoneWeights;\n"
-"layout(location=5) in uvec4 aBoneIndices;\n"
+"layout(location=5) in vec4 aBoneIndices;\n"
 + (dualUv ? "layout(location=6) in vec2 aUV1;\n"
           // plans/plan_gltf.md GLTF-463: only the stride-76/80 program declares the colour, for the same
           // reason the rigid pair splits -- an unused varying added to the stride-68 program moved
@@ -8511,9 +8461,9 @@ CNA_GL_DIRECTION_HANDEDNESS_DECL
 "out vec3 vWorldPos;\n"
 CNA_GL_SKIN_NORMAL_DECL
 "void main(){\n"
-"    mat4 skinMat=uBones[aBoneIndices.x]*aBoneWeights.x;\n"
-"    if(uWeightsPerVertex>=2) skinMat+=uBones[aBoneIndices.y]*aBoneWeights.y;\n"
-"    if(uWeightsPerVertex>=4) skinMat+=uBones[aBoneIndices.z]*aBoneWeights.z+uBones[aBoneIndices.w]*aBoneWeights.w;\n"
+"    mat4 skinMat=uBones[int(aBoneIndices.x)]*aBoneWeights.x;\n"
+"    if(uWeightsPerVertex>=2) skinMat+=uBones[int(aBoneIndices.y)]*aBoneWeights.y;\n"
+"    if(uWeightsPerVertex>=4) skinMat+=uBones[int(aBoneIndices.z)]*aBoneWeights.z+uBones[int(aBoneIndices.w)]*aBoneWeights.w;\n"
 "    vec4 skinnedPos=skinMat*vec4(aPos,1.0);\n"
 "    vec4 cnaPos=cnaInstancePosition(skinnedPos);\n"
 "    gl_Position=uWVP*cnaPos;\n"
@@ -8945,8 +8895,12 @@ CNA_GL_PUNCTUAL_DECL
             VertexElementUsage::Tangent, 0, VertexElementFormat::Vector4, "aTangent"};
         static constexpr StockProgramInput kWeights{
             VertexElementUsage::BlendWeight, 0, VertexElementFormat::Vector4, "aBoneWeights"};
+        // FX-127: Vector4 is as legal a spelling of BLENDINDICES as Byte4 -- the format describes
+        // the bytes, the shader register is a float4 either way -- and a content processor may
+        // write either. CustomModelAnimation's own SkinnedModelProcessor writes Vector4.
         static constexpr StockProgramInput kIndices{
-            VertexElementUsage::BlendIndices, 0, VertexElementFormat::Byte4, "aBoneIndices"};
+            VertexElementUsage::BlendIndices, 0, VertexElementFormat::Byte4, "aBoneIndices",
+            VertexElementFormat::Vector4};
 
         static constexpr StockProgramInput kColored[]        = {kPos, kColor};
         static constexpr StockProgramInput kTextured[]       = {kPos, kUv};
@@ -9059,8 +9013,12 @@ CNA_GL_PUNCTUAL_DECL
             VertexElementUsage::Tangent, 0, VertexElementFormat::Vector4, "aTangent"};
         static constexpr StockProgramInput kWeights{
             VertexElementUsage::BlendWeight, 0, VertexElementFormat::Vector4, "aBoneWeights"};
+        // FX-127: Vector4 is as legal a spelling of BLENDINDICES as Byte4 -- the format describes
+        // the bytes, the shader register is a float4 either way -- and a content processor may
+        // write either. CustomModelAnimation's own SkinnedModelProcessor writes Vector4.
         static constexpr StockProgramInput kIndices{
-            VertexElementUsage::BlendIndices, 0, VertexElementFormat::Byte4, "aBoneIndices"};
+            VertexElementUsage::BlendIndices, 0, VertexElementFormat::Byte4, "aBoneIndices",
+            VertexElementFormat::Vector4};
 
         static constexpr StockProgramInput kColored[] = {kPos, kColor};
         static constexpr StockProgramInput kTextured[] = {kPos, kUv};
@@ -9190,7 +9148,8 @@ CNA_GL_PUNCTUAL_DECL
                 findInStream(buffer, buffer.GetStride(), 0);
             if (sourceElement == nullptr) continue;
 
-            if (sourceElement->getVertexElementFormatProperty() != input.format)
+            if (sourceElement->getVertexElementFormatProperty() != input.format &&
+                sourceElement->getVertexElementFormatProperty() != input.alternateFormat)
             {
                 throw System::NotSupportedException(
                     std::string("EasyGL: vertex semantic '") + input.name +
