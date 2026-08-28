@@ -1,72 +1,67 @@
 # NEXT.md
 
-## C ABI — the matrix reopened by 1,451 rows, and Phase B9 owns them (`CBIND-079`, 2026-08-26)
+## C ABI — the sixth merge reopened the matrix by 506 rows, and Phase B10 owns them (`CBIND-102`, 2026-08-28)
 
-`plans/plan_binding.md` said the C ABI campaign was finished. `docs/c-api/RELEASE_GATE.md`, on the
-same HEAD, said **Not ready**. The gate was right, and the interesting part is which document was
-wrong and why.
+`origin/next` merged into `feature/bindings` on 2026-08-28: 150 commits carrying the CNB content
+format, the WebGPU renderer's fog/MRT/stencil work, the official-XNA sample fidelity fixes and a
+corrected game clock. The coverage matrix reopened at **506 rows**, and this time the reopening is
+**recorded rather than worked off**.
 
-**What is actually unmapped: 1,451 public symbols, and 1,410 of them are one thing.** The merges
-that ran through `CBIND-078` brought in the **CNAEXT engine layer** — `modules/graphics-ext`, 95
-public headers from the `plans/plan_modern.md` campaign — together with its `*EXT` surface on the
-XNA types in `modules/graphics`. The remaining 41 are ordinary XNA symbols no slice picked up:
-`Vector2`'s compound-assignment operators, the three explicit-state `SpriteBatch::Begin` overloads,
-`ShaderEffect`'s array uniforms, `ContentManager::ResolveExistingAssetPath`, and the
-`Equals`/`GetHashCode`/`ToString` overrides on seven media identities.
+**What is unmapped: 506 public symbols, and 460 of them are one thing.** The CNB content format —
+`CNA::Content::Cnb`, 23 public headers under `modules/content/include/CNA/Content/Cnb/`, the whole
+`plans/plan_cnb.md` `CNBF-002`–`CNBF-123` campaign. The other 46 are ordinary XNA symbols the same
+merge added: `Vector3`/`Matrix` compound-assignment operators and `Quaternion`'s default
+constructor, `DynamicVertexBuffer`'s `using VertexBuffer::SetData` and its two `SetData<TVertex>`
+templates with the raw windowed upload pair beneath them, `EffectMaterial`'s retained parameter
+textures, `OcclusionQuery::isPixelCountPreciseEXT`, and the reflective XNB reader
+(`ReflectiveTypeReader`, `EnumTypeReader`, `ReflectiveTypeReaderBuilder`) with
+`ContentManager::RegisterCnbLoaderEXT` beside it.
 
-**Every one of those 95 headers is wrapped in `#ifdef CNA_CNAEXT`, and `CNA_CNAEXT` is OFF by
-default** (`CMakeLists.txt:81`). In the trees this campaign builds, none of those declarations
-exist. `tools/c-api/generate_coverage_inventory.py` reads header *text* and does not evaluate the
-preprocessor, which is how an entire opt-in subsystem entered the inventory in one step without
-anybody adding a line to it. That is worth remembering the next time the tracked surface jumps: ask
-what the generator can and cannot see before assuming the API grew.
+**The owner ruled on 2026-08-28 that binding it is a later pass.** So `CNA::Content::Cnb` is
+currently **not reachable from the C API at all**, that is published rather than implied, and
+`plans/plan_binding.md` Phase B10 is the sized backlog: `CBIND-103`–`CBIND-111` by subsystem, and
+`CBIND-112` to close the matrix the way `CBIND-095` closed the last one.
 
-**The owner put the layer in scope on 2026-08-26.** Offered the `CBIND-047` precedent — exclude it
-as a substrate the way `modules/platform` is excluded — the decision was to **bind it**. So Phase B9
-in `plans/plan_binding.md` is a real backlog of fourteen slices, `CBIND-080`–`CBIND-093`, sized from
-the inventory rather than estimated: 232 rows in the post-process chain, 209 in lights and shadows,
-177 in PBR materials, 157 in instancing/culling, 137 in IBL and probes, 140 in the engine
-foundations, 117 in the render pipeline, 116 in clustered lighting, 87 in HDR and tonemapping, 48
-on the `*EXT` surface of existing XNA types, and 50 in the four tail slices. The foundations grew
-by 19 when their compute routes proved they must own the barrier and image-access identities first
-drafted under the instancing slice.
+**`docs/c-api/RELEASE_GATE.md` therefore reads `Not ready`** — on exactly one criterion, *No public
+C++ symbol is unaccounted for*, and on no other of the ten. That is the gate working rather than a
+document going stale: `CBIND-042B` built it to fail in both directions precisely so a deferral
+appears in the published verdict instead of living in whoever deferred it. Do not "fix" the verdict
+by reclassifying rows — and in particular **not one of the 506 is recorded `not-applicable`**.
+`CBIND-047` excluded `modules/platform` as a substrate and that was a *scope* decision; this is a
+*scheduling* decision. Saying a byte format of PODs and free functions has no C form would be a
+false statement about C.
 
-**The ABI shape question is already answered — do not re-decide it.** An optional layer could make
-the export list depend on a CMake option, which would make the release gate's *No unreviewed ABI
-break* criterion (2,872 recorded exports) unenforceable. `CNA_DEVICES` hit this first and
-`modules/c-api/src/CnaCApiDevices.cpp` settled it: **always declare and export every route**, and
-compile an `#else` arm returning `CNA_RESULT_NOT_SUPPORTED` when the layer is absent. Every B9 slice
-follows that, and is built and tested **both** ways — `cmake-build-cnaext/` with `CNA_CNAEXT=ON`,
-`cmake-build-debug/` with it off.
+**Three test defects the merge exposed, all fixed in the merge commit**, none of them a conflict
+git could see:
 
-**Three record defects came with it, all now closed.** The plan's `## Current status` block still
-read *0 planned, ABI 0.2.0, gate ready* — accurate on 2026-08-19, stale for a week while four merges
-and an ABI bump moved every number in it. `CBIND-037D` still read 🟨 although its four children were
-✅ and `devices`/`devices-ext` had no planned row — a parent nobody re-read when its last child
-closed. And 1,414 planned rows named `CBIND-035`, a task recorded ✅: the matrix asserted that
-finished tasks owned unfinished work, which is precisely how the gap stayed invisible.
-`CBIND-037`'s 🟨, by contrast, is **correct** and stays — 23 of its own inventory rows are still open.
+- `LifecycleSmoke.c` required a positive `ElapsedGameTime` on every update. XNA's own clock gives
+  the **first** update exactly zero, which CNA now follows (`SAMPLE-044`, on the owner's ruling that
+  XNA is authoritative over FNA); the assertion pinned FNA's behaviour and so failed a correct fix.
+- `ContentSmoke.c`'s `.cnj` font descriptor listed `'A'` before `'?'`. The reader now refuses an
+  unsorted character map because `SpriteFont` binary-searches it, so the fixture is sorted and the
+  glyph assertions follow it.
+- `TextureVolumeSmoke.c` required a render-target cube to accept an upload. HEADLESS refuses it, so
+  acceptance is renderer storage rather than contract: the round trip is asserted in full where the
+  transfer is accepted and a matching refusal where it is not, and no third answer is allowed.
 
-**The gate in the same commit is the part that does not depend on anyone re-reading anything.** `--check` now fails
-when a `planned` row names a task the plan records as `✅`. Deliberately not "fail on any planned
-row": B9 has 1,451 of them by design. What it forbids is unfinished work parked on a finished task's
-name — and it runs in `CApiCoverageMatrix` and the CI workflow that already existed.
+**Two long-standing defect rows are closed.** `CBIND-098` — `WeightedBlendedTransparency::begin`
+opening its bracket only where the effect is supported — is **fixed in the canonical engine layer**
+under an explicit owner exception to the audit-only rule. `CBIND-101` — unrelated `CApi_*` suites
+failing together in a full run and passing on rerun — is **closed as not reproducible** under the
+expanded multi-target integration protocol, not as fixed. Both rows carry their own evidence.
 
-**`CBIND-094`: two C API tests were reading the machine, not the contract.** `CApi_MediaSmoke`
-writes under `$HOME` through the media library and failed outright where `$HOME` was read-only;
-`CApi_GamersSmoke` opened an audio device and blocked where PulseAudio was unreachable. Both now get
-an isolated `HOME`/`XDG_DATA_HOME` under the build tree and `SDL_AUDIODRIVER=dummy`, unconditionally
-rather than only under `SDL_RENDERER`. A reviewer of this branch had to hand-patch the environment
-before either test could measure anything, which is the definition of a test that is not evidence.
+**The test display was `:0` in all three build trees and is not any more.** `CNA_TEST_DISPLAY` is a
+cache variable, so it survived every reconfigure that did not name it, and `:0` is the owner's real
+desktop. All three trees now name a private `Xvfb :143`, and the suite is run with
+`env -u WAYLAND_DISPLAY DISPLAY=:143 SDL_VIDEODRIVER=x11` because this is a Wayland session: a test
+that names neither a driver nor a display reaches the host compositor rather than any X server you
+started.
 
-**`CBIND-084A` and `CBIND-084B` are closed; `CBIND-084C` is next.** The engine-layer foundation now
-has 51 of its 140 rows left: pass machinery, post-process context and PBR material binding. The C
-ABI is at **6,485 implemented, 15 approved partial, 1,362 planned and 444 not applicable**, with
-**2,923 identical exports** in the `CNA_CNAEXT=OFF` HEADLESS tree and the `ON` OPENGLES3/EasyGL
-tree. B settled the lifetime rules later slices inherit: a pool/factory refuses invalidation while
-counted borrowed views exist, borrowed native objects cannot be disposed through C, effect child
-views prolong their owner's borrow, and render-target scopes are checked per-device LIFO begin/end
-pairs rather than unchecked emulations of RAII.
+**Where it stands:** 536 headers / 8,812 symbols — 7,832 implemented, 15 approved partial, 506
+planned, 459 not applicable. ABI `0.9.0`, 3,746 exported symbols, the same set with `CNA_CNAEXT` on
+and off. 97/97 `CApi` tests in all three arms: `cmake-build-debug` (HEADLESS, `CNA_CNAEXT=OFF`),
+`cmake-build-cnaext` (OPENGLES3/EasyGL, `CNA_CNAEXT=ON`) and `build-probe` (HEADLESS,
+`CNA_CNAEXT=ON`).
 
 ## `SAMPLE-005` official XNA content fidelity (`ReachGraphicsDemo_4_0`, 2026-08-23)
 

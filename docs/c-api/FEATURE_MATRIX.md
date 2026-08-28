@@ -276,6 +276,10 @@ thread.
 The following families are planned work, not implicitly supported and not permanent exclusions:
 
 - the remaining typed content asset routes;
+- the whole **CNB content format** (`CNA::Content::Cnb`): its container, every asset schema, the
+  loader registry and `ContentManager::RegisterCnbLoaderEXT`. A C application cannot load a `.cnb`
+  asset. Deferred on 2026-08-28 and backlogged as `plans/plan_binding.md` Phase B10; see
+  [`CONTENT.md`](CONTENT.md) for what that does and does not mean;
 - remaining audio (file/content loading, fire-and-forget, globals/3D, streaming, microphone and
   XACT), plus media and video;
 - remaining window, platform, service, event and runtime APIs;

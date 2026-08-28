@@ -168,6 +168,19 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > 2026-08-17, mirroring `EffectTechnique`'s. The inventory is **6,296 implemented, 12 approved
 > partial, 0 planned, 386 not applicable** and the release gate reads **ready** again. Do not read
 > any of this as a finished state: a closed matrix is a snapshot between merges, not an end.
+>
+> **Update (2026-08-28):** the fifth merge reopened it at 1,451 rows -- the whole CNAEXT engine
+> layer, which the coverage generator sees because it reads header text and does not evaluate the
+> `#ifdef CNA_CNAEXT` around it -- and Phase B9 (`CBIND-080`-`CBIND-093`) bound every one, verified
+> by `CBIND-095` rather than read off a green `--check`. The sixth merge then reopened it at **506
+> rows**, 460 of them the CNB content format's 23 public headers, and the project owner ruled that
+> binding those belongs to a later pass. So the current inventory is **536 headers / 8,812 symbols
+> -- 7,832 implemented, 15 approved partial, 506 planned, 459 not applicable**, ABI `0.9.0` with
+> 3,746 exported symbols, and the release gate reads **not ready** on exactly one criterion. That is
+> recorded rather than smoothed over: not one of the 506 rows is dispositioned `not-applicable`,
+> because deferring work and deciding it has no C form are different claims. `plans/plan_binding.md`
+> Phase B10 is the backlog; `docs/c-api/CONTENT.md` states the consumer-facing consequence, which is
+> that a C application cannot load a `.cnb` asset.
 
 ---
 

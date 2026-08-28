@@ -685,12 +685,77 @@ SYMBOL_OWNER_OVERRIDES: dict[str, str] = {
 }
 
 
+# CBIND-102, 2026-08-28: the sixth merge of `next` reopened the matrix by 506 rows, and 460 of them
+# are one thing -- the `CNA::Content::Cnb` content format, 23 public headers that did not exist
+# here before. The owner ruled on 2026-08-28 that binding it is **not** this session's work: the
+# format is recorded as not yet reachable from the C ABI and the backlog below is what will make it
+# so. The remaining 46 are ordinary XNA symbols the merge added beside it.
+#
+# These keys are consulted before CNAEXT_SLICE_OWNERS on purpose. Three of them --
+# `graphics/DynamicVertexBuffer`, `graphics/VertexBuffer` and `content/ContentManager` -- already
+# name a Phase B9 slice that is ✅, and the rows they gained are new work rather than work that
+# slice left behind. Pointing them at the finished slice is precisely the defect `CBIND-079` gated
+# against, so the newer partition wins and the older keys keep answering for anything else.
+B10_SLICE_OWNERS: dict[str, str] = {
+    # CBIND-103 -- 7 rows: the compound-assignment operators and the default constructor the
+    # SAMPLE-043 work added to the math types.
+    "math/Vector3": "CBIND-103",
+    "math/Matrix": "CBIND-103",
+    "math/Quaternion": "CBIND-103",
+    # CBIND-104 -- 22 rows: DynamicVertexBuffer's `using VertexBuffer::SetData` (which makes every
+    # inherited overload a declaration of this type too) and its two templates, the raw windowed
+    # upload pair beneath them, EffectMaterial's retained parameter textures and OcclusionQuery's
+    # precision query.
+    "graphics/DynamicVertexBuffer": "CBIND-104",
+    "graphics/VertexBuffer": "CBIND-104",
+    "graphics/EffectMaterial": "CBIND-104",
+    "graphics/OcclusionQuery": "CBIND-104",
+    # CBIND-105 -- 17 rows: the reflectively serialized XNB reader and the .cnb loader hook that
+    # registers beside it.
+    "content/ReflectiveTypeReader": "CBIND-105",
+    "content/ContentManager": "CBIND-105",
+    # CBIND-106 -- 66 rows: the CNB container's identities and its whole-file arithmetic.
+    "content/CnbFormat": "CBIND-106",
+    "content/CnbArithmetic": "CBIND-106",
+    "content/CnbCrc32c": "CBIND-106",
+    "content/CnbReadLimits": "CBIND-106",
+    "content/CnbChunkCompression": "CBIND-106",
+    # CBIND-107 -- 88 rows: the document and the byte cursors every schema reads and writes with.
+    "content/CnbDocument": "CBIND-107",
+    "content/CnbByteReader": "CBIND-107",
+    "content/CnbByteWriter": "CBIND-107",
+    "content/CnbWriter": "CBIND-107",
+    # CBIND-108 -- 67 rows: the texture schemas.
+    "content/CnbTextureFormat": "CBIND-108",
+    "content/CnbTextureCodec": "CBIND-108",
+    # CBIND-109 -- 129 rows: the model schema, the largest single type in the format.
+    "content/CnbModelData": "CBIND-109",
+    "content/CnbModelCodec": "CBIND-109",
+    "content/CnbModelFromCnj": "CBIND-109",
+    # CBIND-110 -- 85 rows: the remaining asset schemas.
+    "content/CnbSpriteFontCodec": "CBIND-110",
+    "content/CnbSoundEffectCodec": "CBIND-110",
+    "content/CnbMediaCodec": "CBIND-110",
+    "content/CnbCurveCodec": "CBIND-110",
+    "content/CnbAnimationClipCodec": "CBIND-110",
+    # CBIND-111 -- 25 rows: the registry a ContentManager loads through, and the two front ends
+    # that produce a .cnb from something else.
+    "content/CnbLoaderRegistry": "CBIND-111",
+    "content/CnbSourceImport": "CBIND-111",
+    "content/CnjToCnb": "CBIND-111",
+}
+
+
 def owner_task(symbol: Symbol) -> str:
     override = SYMBOL_OWNER_OVERRIDES.get(symbol.qualified_name)
     if override is not None:
         return override
     header = Path(symbol.header)
-    slice_owner = CNAEXT_SLICE_OWNERS.get(f"{header.parts[1]}/{header.stem}")
+    key = f"{header.parts[1]}/{header.stem}"
+    b10_owner = B10_SLICE_OWNERS.get(key)
+    if b10_owner is not None:
+        return b10_owner
+    slice_owner = CNAEXT_SLICE_OWNERS.get(key)
     if slice_owner is not None:
         return slice_owner
     module = header.parts[1]
