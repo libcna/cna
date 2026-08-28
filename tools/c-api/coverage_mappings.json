@@ -17399,6 +17399,234 @@
         "CPP-E543EEEE10EE",
         "CPP-FF531D6AB2D4"
       ]
+    },
+    {
+      "id": "cnb-format-constants",
+      "qualified_name_regex": "^CNA::Content::Cnb::Format::(Magic|HeaderSize|TocEntrySize|HeaderChecksumCoverage|HeaderChecksumOffset|HeaderReservedSize|ContainerMajor|ContainerMinor|DefaultTocOffset)$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "`CNA_CNB_FORMAT_*` constants, plus `cna_cnb_copy_format_magic` for the one that is four bytes rather than a number.\n\nEvery value is a byte offset or size a `.cnb` file is literally made of, so these are frozen the way a wire format is frozen rather than the way an ABI is: changing one would not break a caller's binary, it would stop this build reading files every other build writes. The magic is published as a copy route beside `CNA_CNB_FORMAT_MAGIC_SIZE` rather than as four byte constants, because a caller compares it against the first bytes of a file and `memcmp` is what that wants.",
+      "tests": "`CnbSmoke.c` `validate_format_constants`, which asserts the bytes are `C`, `N`, `B`, `0x1A`, that a short capacity reports the requirement and writes nothing, and the two relationships the numbers exist to hold -- the checksum covers exactly what precedes it, and the header is that coverage plus the checksum plus the reserved tail. Frozen against change by `AbiHeaderC.c`/`AbiHeaderCpp.cpp`.",
+      "status": "implemented",
+      "task": "CBIND-106",
+      "approved_symbols": [
+        "CPP-01472B5732B7",
+        "CPP-0E82AE113B35",
+        "CPP-14CB1110B8D9",
+        "CPP-231977DA5809",
+        "CPP-377BB9B7DB3C",
+        "CPP-6E232FF863BB",
+        "CPP-9D6FC25FE158",
+        "CPP-CFBA721C2DC5",
+        "CPP-EE36F8C18BDF"
+      ]
+    },
+    {
+      "id": "cnb-chunk-id",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnbChunkId|CnbChunkId::value|CnbChunkId::operator==|MakeChunkId|ChunkIdToString|IsWellFormedChunkId)$",
+      "kinds": [
+        "struct",
+        "field",
+        "operator",
+        "function"
+      ],
+      "mapping": "`CNA_CnbChunkId`, a `uint32_t` typedef, plus `cna_cnb_make_chunk_id`, the `cna_cnb_get_chunk_id_string_size`/`cna_cnb_copy_chunk_id_string` pair and `cna_cnb_is_well_formed_chunk_id`.\n\nThe canonical type is a structure holding exactly one `uint32_t` with defaulted equality, so **the typedef maps the structure, its field and its `operator==` together**: the value is the type, and two identifiers are compared with C's own `==`. Publishing a one-field structure and an equality route would be three spellings of one integer.\n\n`MakeChunkId` takes `char`, whose signedness is implementation-defined and therefore not an ABI type; it casts each argument to `unsigned char` before packing, so the route takes `uint8_t` -- the type the canonical function actually uses -- and a character literal still passes unchanged.",
+      "tests": "`CnbSmoke.c` `validate_chunk_identifiers`: packing `CMET` and `XREF` reproduces the published container constants, which is what proves those constants are not transcribed by hand; the low byte is the first character, which is the little-endian packing the type exists for; a byte outside printable ASCII makes the identifier ill-formed and renders as `?` rather than carrying a control character into a log line; and a short capacity writes nothing.",
+      "status": "implemented",
+      "task": "CBIND-106",
+      "approved_symbols": [
+        "CPP-16814CC8BCC5",
+        "CPP-42DFD13799E0",
+        "CPP-53CA5C9E658C",
+        "CPP-BA2864391220",
+        "CPP-C5EFF4D34787",
+        "CPP-F9F9C5D75545"
+      ]
+    },
+    {
+      "id": "cnb-chunk-flags",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbChunkFlags::(None|Mandatory|KnownMask)$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "`CNA_CNB_CHUNK_FLAG_NONE`, `_MANDATORY` and `_ALL`. `KnownMask` becomes `_ALL`, following the flag-set convention every other family here uses, so a caller validates a file's flags field the same way it validates any other flag set in this ABI.",
+      "tests": "`CnbSmoke.c` a compile-time assertion that the mask is exactly the one flag container version 1 defines, so a flag added without widening the mask fails the build rather than being silently accepted.",
+      "status": "implemented",
+      "task": "CBIND-106",
+      "approved_symbols": [
+        "CPP-12D8A2E70506",
+        "CPP-1EF72801EBA6",
+        "CPP-75970904424D"
+      ]
+    },
+    {
+      "id": "cnb-compression-identity",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbCompression(::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "`CNA_CnbCompression` and `CNA_CNB_COMPRESSION_*` at the canonical ordinals, with `CNA_CNB_COMPRESSION_MAXIMUM`.\n\n**The three `Reserved*` enumerators are aliases, not distinct values.** `ReservedLz4 = Lz4`, `ReservedZstd = Zstd` and `ReservedDeflate = Deflate` are deprecated former names kept so existing C++ source compiles; they are the same integers, so they are the same constants here. Publishing a second C name for one wire value would invite a caller to believe the two mean different things in a file.",
+      "tests": "`CnbSmoke.c` `validate_compression`, plus a compile-time assertion in the suite and in `AbiHeaderC.c` that the four values are 0-3: they are wire format, so a renumbering must fail the build rather than a test.",
+      "status": "implemented",
+      "task": "CBIND-106",
+      "approved_symbols": [
+        "CPP-17923C758E87",
+        "CPP-22EFA31BD4F1",
+        "CPP-49228712226C",
+        "CPP-605060587FED",
+        "CPP-85F201D243EA",
+        "CPP-8A29D5E5A20D",
+        "CPP-982B8B286088",
+        "CPP-E04FC09F1914"
+      ]
+    },
+    {
+      "id": "cnb-asset-type-identifiers",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbAssetTypeId::[A-Za-z0-9_]+$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "`CNA_CNB_ASSET_TYPE_*` constants at the canonical values, including the two range boundaries. The built-in identifiers are frozen once CNB v1 ships and the boundaries are what a caller classifies against, so both are constants rather than anything computed.",
+      "tests": "`CnbSmoke.c` `validate_asset_type_identifiers` renders every one of the twelve built-in identifiers and both boundaries, and `AbiHeaderC.c` freezes all fourteen values.",
+      "status": "implemented",
+      "task": "CBIND-106",
+      "approved_symbols": [
+        "CPP-22F5CDD343C9",
+        "CPP-380BCA56E211",
+        "CPP-3C76DB7DEF51",
+        "CPP-847AF21DA10A",
+        "CPP-85A611AFBDD1",
+        "CPP-8D9C3C980927",
+        "CPP-8F9D1A72F06E",
+        "CPP-9E0906C95F64",
+        "CPP-B207E668B875",
+        "CPP-D28B36B6A46F",
+        "CPP-D59D71663A63",
+        "CPP-F518756773E1",
+        "CPP-F6BF053C1560",
+        "CPP-FF240C462507"
+      ]
+    },
+    {
+      "id": "cnb-asset-type-operations",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnbAssetTypeIdFromName|IsCustomAssetTypeId|AssetTypeIdToString)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "`cna_cnb_asset_type_id_from_name`, `cna_cnb_is_custom_asset_type_id` and the `cna_cnb_get_asset_type_name_size`/`cna_cnb_copy_asset_type_name` pair.\n\n`IsCustomAssetTypeId` is one comparison against a published constant, and is still a route rather than something a caller open-codes: the range boundary is format policy, and a caller that inlined the comparison would carry a copy of that policy that a later container version could not move.\n\nThe empty-name refusal is decided in the C layer rather than recovered from the canonical `std::invalid_argument`, so the result is a named `CNA_RESULT_INVALID_ARGUMENT` with a message about type names rather than whatever the exception firewall makes of it.",
+      "tests": "`CnbSmoke.c` `validate_asset_type_identifiers`: minting is deterministic and always lands in the custom range -- the two properties a compiler, a runtime and a third-party tool depend on agreeing about -- two different names mint different identifiers, an empty name is refused and **leaves the output untouched**, and malformed UTF-8 in a type name is an encoding error, unlike a logical name where it is one of the answers.",
+      "status": "implemented",
+      "task": "CBIND-106",
+      "approved_symbols": [
+        "CPP-082B0885CDF6",
+        "CPP-136F6840139A",
+        "CPP-B0E3ECDE4E18"
+      ]
+    },
+    {
+      "id": "cnb-container-chunks",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbContainerChunk::(Metadata|ExternalReferences)$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "`CNA_CNB_CONTAINER_CHUNK_METADATA` and `_EXTERNAL_REFERENCES`, the packed identifiers of the two chunks the container defines independently of any asset schema.",
+      "tests": "`CnbSmoke.c` `validate_chunk_identifiers` asserts each equals what `cna_cnb_make_chunk_id` produces from its four letters, so the constants cannot drift from the packing rule.",
+      "status": "implemented",
+      "task": "CBIND-106",
+      "approved_symbols": [
+        "CPP-2C48B99C851C",
+        "CPP-6D17EABECFD2"
+      ]
+    },
+    {
+      "id": "cnb-logical-name",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbLogicalNameProblem$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "The `cna_cnb_get_logical_name_problem_size`/`cna_cnb_copy_logical_name_problem` pair. **A byte count of zero is the whole \"this name is acceptable\" answer**, so there is no separate boolean route giving a second spelling of it.\n\n**One deliberate deviation from this ABI's input-string rule.** Every other route validates a `CNA_StringView` as UTF-8 and refuses malformed bytes with `CNA_RESULT_ENCODING`. This one does not: malformed UTF-8 is one of the verdicts the canonical function exists to *report*, so refusing it at the boundary would withhold the answer the caller asked for. Only the pointer/length pair itself is checked.",
+      "tests": "`CnbSmoke.c` `validate_logical_names` covers all six refusal shapes -- empty, absolute, drive-qualified, backslash, a `..` segment, and a `..` segment in the middle -- against two acceptable names, and asserts the deviation directly: a name containing an invalid byte returns `CNA_RESULT_SUCCESS` with the problem text `is not well-formed UTF-8`, which is the assertion that would fail if the route were ever \"corrected\" to validate its input.",
+      "status": "implemented",
+      "task": "CBIND-106",
+      "approved_symbols": [
+        "CPP-EEE2A51DE7A2"
+      ]
+    },
+    {
+      "id": "cnb-checked-arithmetic",
+      "qualified_name_regex": "^CNA::Content::Cnb::Checked(Add|Multiply)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "`cna_cnb_checked_add` and `cna_cnb_checked_multiply`, each returning `CNA_RESULT_OVERFLOW` where the canonical helper throws.\n\nThe canonical functions throw `ContentLoadException`, which the firewall would turn into `CNA_RESULT_IO` -- the wrong answer for arithmetic that does not fit. The condition is therefore tested in the C layer, mirroring the canonical guard exactly, and the canonical function still performs the arithmetic: if the two ever drifted, the canonical throw would fire and the disagreement would surface as `CNA_RESULT_IO` rather than hide.\n\nThe `context` parameter shapes only the exception message, which no C caller sees; the result code carries the same fact.",
+      "tests": "`CnbSmoke.c` `validate_checked_arithmetic` walks both boundaries from either side -- `UINT64_MAX + 0` succeeds and `+ 1` overflows, `UINT64_MAX * 1` succeeds and `* 2` overflows, `0 * UINT64_MAX` is zero rather than a refusal -- and asserts that a refused call **leaves the previous answer standing**, which is the wrap-around failure mode the helpers exist to prevent, seen from C.",
+      "status": "implemented",
+      "task": "CBIND-106",
+      "approved_symbols": [
+        "CPP-4040AD8A3263",
+        "CPP-C9793444EA7E"
+      ]
+    },
+    {
+      "id": "cnb-crc32c",
+      "qualified_name_regex": "^CNA::Content::Cnb::Crc32c(Continue|Seed|UsesHardwareEXT|PortableEXT)?$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "`cna_cnb_crc32c`, `cna_cnb_crc32c_continue`, `cna_cnb_crc32c_portable`, `cna_cnb_crc32c_uses_hardware`, and `CNA_CNB_CRC32C_SEED` for the seed.\n\n`Crc32cSeed()` is a `constexpr` function returning a literal, and a compile-time constant is how C says that -- it is usable in a static initializer, which a route would not be. The two `EXT`-suffixed canonical members lose the suffix here, following `core_ext.h`: a whole header of CNA-namespace surface does not repeat a marker on every route.",
+      "tests": "`CnbSmoke.c` `validate_checksums` pins the published CRC-32/ISCSI check value for `123456789` rather than whatever this build produces -- a stored-in-the-file checksum is only worth anything if it is the value every other implementation computes -- proves the seed is the checksum of an empty range, splits one logical region across two buffers and requires the same answer, and requires the shipping path and the portable path to agree over a kilobyte, which is the only reason the portable route is published at all.",
+      "status": "implemented",
+      "task": "CBIND-106",
+      "approved_symbols": [
+        "CPP-212542DED9B2",
+        "CPP-47A7406DB3B1",
+        "CPP-8418B7C7C5CF",
+        "CPP-B5BD8515163A",
+        "CPP-DA6F4B7ECD7C"
+      ]
+    },
+    {
+      "id": "cnb-read-limits",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnbReadLimits(::[A-Za-z0-9_]+)?|DefaultCnbReadLimits)$",
+      "kinds": [
+        "struct",
+        "field",
+        "function"
+      ],
+      "mapping": "`CNA_CnbReadLimits`, a versioned structure with `struct_size`/`struct_version` and an explicit prefix rule, filled by `cna_cnb_read_limits_init` from the canonical process-wide defaults.\n\nIts 64-bit members are placed ahead of its 32-bit ones so the layout carries no padding on any supported target. The validator uses the documented prefix idiom (`struct_size <`), so a future caller's larger structure is accepted and an older caller's smaller one is refused -- `CBIND-100`'s rule, applied to a structure written after it rather than one retrofitted to it.",
+      "tests": "`CnbSmoke.c` `validate_read_limits` asserts all seven defaults by value, both relationships they exist to hold (a single chunk cannot fill a whole file; the expansion ceiling is above the file ceiling so compression can genuinely expand a file), and all three arms of the prefix rule -- larger accepted, smaller refused, unknown version refused -- each leaving the structure untouched on refusal. `AbiHeaderC.c` freezes the size, alignment and every offset.",
+      "status": "implemented",
+      "task": "CBIND-106",
+      "approved_symbols": [
+        "CPP-07B2225C755A",
+        "CPP-110801914158",
+        "CPP-3176CF05EB28",
+        "CPP-5DA1D1F588B1",
+        "CPP-7F31CB954BAD",
+        "CPP-86D279326292",
+        "CPP-8E8592DA2930",
+        "CPP-B19D45B7AF6E",
+        "CPP-F6A61E7DA6FB"
+      ]
+    },
+    {
+      "id": "cnb-chunk-compression",
+      "qualified_name_regex": "^CNA::Content::Cnb::(IsCnbCompressionSupported|CnbCompressionToString|CompressCnbChunk|DecompressCnbChunk)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "`cna_cnb_is_compression_supported`, the `cna_cnb_get_compression_name_size`/`cna_cnb_copy_compression_name` pair, the `cna_cnb_get_compressed_byte_count`/`cna_cnb_copy_compressed` pair, and `cna_cnb_copy_decompressed`.\n\nCompression follows the count/copy shape `cna_texture2d_get_encoded_byte_count`/`_copy_encoded` already uses for bytes whose size is only known by producing them. Decompression needs no count route: the size is an input, because the file declares it.\n\n**Two canonical refusals are decided ahead of the call rather than recovered from an exception type**, because the firewall would flatten both to `CNA_RESULT_IO`. A codec this build does not implement is `CNA_RESULT_NOT_SUPPORTED` -- a caller retries with another codec, it does not fix its numbers -- and a declared unpacked size above the ceiling is `CNA_RESULT_INVALID_ARGUMENT`, refused before anything is allocated. **The order of those two checks is canonical and is preserved**: an unsupported codec whose size is also over the ceiling reports the ceiling.\n\n**`level` is a correction, not a contract**: a value outside the codec's range is clamped exactly as the canonical implementation clamps it, never refused. And a stored chunk consults **neither** size, because `None` is answered before the ceiling is looked at -- canonical behaviour, preserved so a C reader and a C++ reader agree about the same file.",
+      "tests": "`CnbSmoke.c` `validate_compression`: every codec name including `unknown codec 7` for an identity a corrupt file can name; a stored round trip; short-capacity refusals on both directions that write nothing; the ordering of the ceiling and support checks asserted from both sides; and, where the build carries Zstandard, a full round trip that **requires the payload to actually shrink** -- without which the round trip would pass just as happily against a codec that stored the bytes -- plus a wrong declared size, an over-ceiling size and a non-frame input, each with its own result code. Both arms were mutation-checked: breaking the shrink assertion and inverting the support branch each move the exit code to stage 8.",
+      "status": "implemented",
+      "task": "CBIND-106",
+      "approved_symbols": [
+        "CPP-77B0665F135C",
+        "CPP-AFA18570FC1D",
+        "CPP-BA8472D1AA3A",
+        "CPP-D03BC4E059B7"
+      ]
     }
   ]
 }

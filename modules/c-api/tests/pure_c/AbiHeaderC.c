@@ -8,7 +8,7 @@
 
 #include <stddef.h>
 
-_Static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 9, 0),
+_Static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 10, 0),
                "CNA C ABI version encoding must remain stable");
 _Static_assert(sizeof(CNA_Result) == sizeof(uint32_t),
                "CNA_Result must have a fixed-width representation");
@@ -1604,3 +1604,68 @@ _Static_assert(sizeof(CNA_AccelerometerReadingEventInfo) == 48U &&
                    offsetof(CNA_AccelerometerReadingEventInfo, y) == 32U &&
                    offsetof(CNA_AccelerometerReadingEventInfo, z) == 40U,
                "CNA_AccelerometerReadingEventInfo layout must remain stable");
+
+/* CBIND-106: the `.cnb` container. Both identities are typedefs of uint32_t rather than structures
+   -- the canonical CnbChunkId holds exactly one uint32_t with defaulted equality -- so what has to
+   stay frozen about them is the width and the wire values, not a layout. */
+_Static_assert(sizeof(CNA_CnbChunkId) == sizeof(uint32_t),
+               "CNA_CnbChunkId must have a fixed-width representation");
+_Static_assert(sizeof(CNA_CnbCompression) == sizeof(uint32_t) &&
+                   CNA_CNB_COMPRESSION_NONE == UINT32_C(0) &&
+                   CNA_CNB_COMPRESSION_LZ4 == UINT32_C(1) &&
+                   CNA_CNB_COMPRESSION_ZSTD == UINT32_C(2) &&
+                   CNA_CNB_COMPRESSION_DEFLATE == UINT32_C(3) &&
+                   CNA_CNB_COMPRESSION_MAXIMUM == UINT32_C(3),
+               "CNB codec identifiers are wire format and must remain stable");
+
+/* Byte offsets and sizes a .cnb file is literally made of. A changed value here does not break an
+   ABI so much as stop this build reading files every other build writes. */
+_Static_assert(CNA_CNB_FORMAT_MAGIC_SIZE == UINT32_C(4) &&
+                   CNA_CNB_FORMAT_HEADER_SIZE == UINT32_C(64) &&
+                   CNA_CNB_FORMAT_TOC_ENTRY_SIZE == UINT32_C(48) &&
+                   CNA_CNB_FORMAT_HEADER_CHECKSUM_COVERAGE == UINT32_C(44) &&
+                   CNA_CNB_FORMAT_HEADER_CHECKSUM_OFFSET == UINT32_C(44) &&
+                   CNA_CNB_FORMAT_HEADER_RESERVED_SIZE == UINT32_C(16) &&
+                   CNA_CNB_FORMAT_CONTAINER_MAJOR == UINT32_C(1) &&
+                   CNA_CNB_FORMAT_CONTAINER_MINOR == UINT32_C(0) &&
+                   CNA_CNB_FORMAT_DEFAULT_TOC_OFFSET == UINT64_C(64),
+               "CNB container constants are wire format and must remain stable");
+_Static_assert(CNA_CNB_CONTAINER_CHUNK_METADATA == UINT32_C(0x54454D43) &&
+                   CNA_CNB_CONTAINER_CHUNK_EXTERNAL_REFERENCES == UINT32_C(0x46455258) &&
+                   CNA_CNB_CHUNK_FLAG_NONE == UINT32_C(0) &&
+                   CNA_CNB_CHUNK_FLAG_MANDATORY == UINT32_C(1) &&
+                   CNA_CNB_CHUNK_FLAG_ALL == UINT32_C(1),
+               "CNB container chunk identifiers and flags must remain stable");
+_Static_assert(CNA_CNB_ASSET_TYPE_INVALID == UINT32_C(0) &&
+                   CNA_CNB_ASSET_TYPE_TEXTURE2D == UINT32_C(1) &&
+                   CNA_CNB_ASSET_TYPE_TEXTURE3D == UINT32_C(2) &&
+                   CNA_CNB_ASSET_TYPE_TEXTURE_CUBE == UINT32_C(3) &&
+                   CNA_CNB_ASSET_TYPE_SPRITE_FONT == UINT32_C(4) &&
+                   CNA_CNB_ASSET_TYPE_MODEL == UINT32_C(5) &&
+                   CNA_CNB_ASSET_TYPE_ANIMATION_CLIP == UINT32_C(6) &&
+                   CNA_CNB_ASSET_TYPE_CURVE == UINT32_C(7) &&
+                   CNA_CNB_ASSET_TYPE_SOUND_EFFECT == UINT32_C(8) &&
+                   CNA_CNB_ASSET_TYPE_SONG == UINT32_C(9) &&
+                   CNA_CNB_ASSET_TYPE_VIDEO == UINT32_C(10) &&
+                   CNA_CNB_ASSET_TYPE_EFFECT == UINT32_C(11) &&
+                   CNA_CNB_ASSET_TYPE_RESERVED_RANGE_FIRST == UINT32_C(0x40000000) &&
+                   CNA_CNB_ASSET_TYPE_CUSTOM_RANGE_FIRST == UINT32_C(0x80000000),
+               "CNB asset type identifiers are frozen once CNB v1 ships");
+_Static_assert(CNA_CNB_CRC32C_SEED == UINT32_C(0),
+               "The CRC-32C seed is the checksum of an empty range");
+
+/* The one versioned value structure in the family. Its 64-bit members are placed ahead of its
+   32-bit ones so the layout carries no padding on any supported target. */
+_Static_assert(sizeof(CNA_CnbReadLimits) == 48U &&
+                   _Alignof(CNA_CnbReadLimits) == 8U &&
+                   offsetof(CNA_CnbReadLimits, struct_version) == 4U &&
+                   offsetof(CNA_CnbReadLimits, max_file_size) == 8U &&
+                   offsetof(CNA_CnbReadLimits, max_chunk_size) == 16U &&
+                   offsetof(CNA_CnbReadLimits, max_total_uncompressed_size) == 24U &&
+                   offsetof(CNA_CnbReadLimits, max_chunk_count) == 32U &&
+                   offsetof(CNA_CnbReadLimits, max_string_bytes) == 36U &&
+                   offsetof(CNA_CnbReadLimits, max_array_element_count) == 40U &&
+                   offsetof(CNA_CnbReadLimits, max_chunk_alignment) == 44U,
+               "CNA_CnbReadLimits layout must remain stable");
+_Static_assert(CNA_CNB_READ_LIMITS_STRUCT_VERSION == UINT32_C(1),
+               "CNA_CnbReadLimits is at structure version 1");

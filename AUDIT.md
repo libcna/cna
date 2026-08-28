@@ -179,8 +179,12 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > 3,746 exported symbols, and the release gate reads **not ready** on exactly one criterion. That is
 > recorded rather than smoothed over: not one of the 506 rows is dispositioned `not-applicable`,
 > because deferring work and deciding it has no C form are different claims. `plans/plan_binding.md`
-> Phase B10 is the backlog; `docs/c-api/CONTENT.md` states the consumer-facing consequence, which is
-> that a C application cannot load a `.cnb` asset.
+> Phase B10 is the backlog. `CBIND-106` has since bound the first slice of it -- the `.cnb`
+> container's identities, constants, checksums, arithmetic, read limits and chunk compression, 66
+> rows and 24 routes with no handles at all, taking the ABI to `0.10.0` and 3,770 exports and
+> leaving 440 planned. `docs/c-api/CNB.md` and `CONTENT.md` state the consumer-facing consequence,
+> which is that a C application can inspect and transform a `.cnb` container and still cannot load a
+> `.cnb` asset.
 
 ---
 

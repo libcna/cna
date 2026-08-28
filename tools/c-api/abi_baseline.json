@@ -1,10 +1,10 @@
 {
  "abi_version": {
-  "encoded": 2304,
+  "encoded": 2560,
   "major": 0,
-  "minor": 9,
+  "minor": 10,
   "patch": 0,
-  "runtime": 2304
+  "runtime": 2560
  },
  "colors": {
   "CNA_COLOR_ALICE_BLUE": [
@@ -1403,6 +1403,30 @@
   "cna_clustered_shadow_policy_select",
   "cna_clustered_shadow_policy_set_budget",
   "cna_clustered_shadow_policy_set_hysteresis",
+  "cna_cnb_asset_type_id_from_name",
+  "cna_cnb_checked_add",
+  "cna_cnb_checked_multiply",
+  "cna_cnb_copy_asset_type_name",
+  "cna_cnb_copy_chunk_id_string",
+  "cna_cnb_copy_compressed",
+  "cna_cnb_copy_compression_name",
+  "cna_cnb_copy_decompressed",
+  "cna_cnb_copy_format_magic",
+  "cna_cnb_copy_logical_name_problem",
+  "cna_cnb_crc32c",
+  "cna_cnb_crc32c_continue",
+  "cna_cnb_crc32c_portable",
+  "cna_cnb_crc32c_uses_hardware",
+  "cna_cnb_get_asset_type_name_size",
+  "cna_cnb_get_chunk_id_string_size",
+  "cna_cnb_get_compressed_byte_count",
+  "cna_cnb_get_compression_name_size",
+  "cna_cnb_get_logical_name_problem_size",
+  "cna_cnb_is_compression_supported",
+  "cna_cnb_is_custom_asset_type_id",
+  "cna_cnb_is_well_formed_chunk_id",
+  "cna_cnb_make_chunk_id",
+  "cna_cnb_read_limits_init",
   "cna_color_copy_debug_string",
   "cna_color_copy_string",
   "cna_color_equals",
@@ -4603,9 +4627,9 @@
   "cna_write_leaderboards_event_info_init"
  ],
  "integers": {
-  "CNA_ABI_VERSION": 2304,
+  "CNA_ABI_VERSION": 2560,
   "CNA_ABI_VERSION_MAJOR": 0,
-  "CNA_ABI_VERSION_MINOR": 9,
+  "CNA_ABI_VERSION_MINOR": 10,
   "CNA_ABI_VERSION_PATCH": 0,
   "CNA_ALPHA_MODE_BLEND_EXT": 2,
   "CNA_ALPHA_MODE_MASK_EXT": 1,
@@ -4815,6 +4839,41 @@
   "CNA_CLUSTER_GRID_DEFAULT_TILES_Y_EXT": 8,
   "CNA_CLUSTER_GRID_MAX_SLICE_COUNT_EXT": 256,
   "CNA_CLUSTER_GRID_MAX_TILES_PER_AXIS_EXT": 128,
+  "CNA_CNB_ASSET_TYPE_ANIMATION_CLIP": 6,
+  "CNA_CNB_ASSET_TYPE_CURVE": 7,
+  "CNA_CNB_ASSET_TYPE_CUSTOM_RANGE_FIRST": 2147483648,
+  "CNA_CNB_ASSET_TYPE_EFFECT": 11,
+  "CNA_CNB_ASSET_TYPE_INVALID": 0,
+  "CNA_CNB_ASSET_TYPE_MODEL": 5,
+  "CNA_CNB_ASSET_TYPE_RESERVED_RANGE_FIRST": 1073741824,
+  "CNA_CNB_ASSET_TYPE_SONG": 9,
+  "CNA_CNB_ASSET_TYPE_SOUND_EFFECT": 8,
+  "CNA_CNB_ASSET_TYPE_SPRITE_FONT": 4,
+  "CNA_CNB_ASSET_TYPE_TEXTURE2D": 1,
+  "CNA_CNB_ASSET_TYPE_TEXTURE3D": 2,
+  "CNA_CNB_ASSET_TYPE_TEXTURE_CUBE": 3,
+  "CNA_CNB_ASSET_TYPE_VIDEO": 10,
+  "CNA_CNB_CHUNK_FLAG_ALL": 1,
+  "CNA_CNB_CHUNK_FLAG_MANDATORY": 1,
+  "CNA_CNB_CHUNK_FLAG_NONE": 0,
+  "CNA_CNB_COMPRESSION_DEFLATE": 3,
+  "CNA_CNB_COMPRESSION_LZ4": 1,
+  "CNA_CNB_COMPRESSION_MAXIMUM": 3,
+  "CNA_CNB_COMPRESSION_NONE": 0,
+  "CNA_CNB_COMPRESSION_ZSTD": 2,
+  "CNA_CNB_CONTAINER_CHUNK_EXTERNAL_REFERENCES": 1178948184,
+  "CNA_CNB_CONTAINER_CHUNK_METADATA": 1413827907,
+  "CNA_CNB_CRC32C_SEED": 0,
+  "CNA_CNB_FORMAT_CONTAINER_MAJOR": 1,
+  "CNA_CNB_FORMAT_CONTAINER_MINOR": 0,
+  "CNA_CNB_FORMAT_DEFAULT_TOC_OFFSET": 64,
+  "CNA_CNB_FORMAT_HEADER_CHECKSUM_COVERAGE": 44,
+  "CNA_CNB_FORMAT_HEADER_CHECKSUM_OFFSET": 44,
+  "CNA_CNB_FORMAT_HEADER_RESERVED_SIZE": 16,
+  "CNA_CNB_FORMAT_HEADER_SIZE": 64,
+  "CNA_CNB_FORMAT_MAGIC_SIZE": 4,
+  "CNA_CNB_FORMAT_TOC_ENTRY_SIZE": 48,
+  "CNA_CNB_READ_LIMITS_STRUCT_VERSION": 1,
   "CNA_COLOR_GRADE_MAX_LUT_SIZE_EXT": 64,
   "CNA_COLOR_WRITE_ALL": 15,
   "CNA_COLOR_WRITE_ALPHA": 8,
@@ -6168,6 +6227,14 @@
   "CNA_ClusteredShadowPolicyHandle": [
    8,
    8
+  ],
+  "CNA_CnbChunkId": [
+   4,
+   4
+  ],
+  "CNA_CnbCompression": [
+   4,
+   4
   ],
   "CNA_ColorWriteChannels": [
    4,
@@ -8087,6 +8154,48 @@
     ]
    },
    "size": 68
+  },
+  "CNA_CnbReadLimits": {
+   "align": 8,
+   "fields": {
+    "max_array_element_count": [
+     40,
+     4
+    ],
+    "max_chunk_alignment": [
+     44,
+     4
+    ],
+    "max_chunk_count": [
+     32,
+     4
+    ],
+    "max_chunk_size": [
+     16,
+     8
+    ],
+    "max_file_size": [
+     8,
+     8
+    ],
+    "max_string_bytes": [
+     36,
+     4
+    ],
+    "max_total_uncompressed_size": [
+     24,
+     8
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 48
   },
   "CNA_Color": {
    "align": 1,

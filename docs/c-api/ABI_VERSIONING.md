@@ -2,15 +2,29 @@
 
 ## ABI identity
 
-The ABI is `0.9.0`. It adds the owned-`GraphicsDevice` routes
+The ABI is `0.10.0`. It adds the `.cnb` container family from `plans/plan_binding.md` `CBIND-106`:
+twenty-four `cna_cnb_*` routes over the container's identities, checksums, whole-file arithmetic,
+read limits and chunk compression, the `CNA_CnbChunkId` and `CNA_CnbCompression` identities, the
+versioned `CNA_CnbReadLimits` structure, and the format's byte-level constants.
+
+**Every addition is additive** -- no existing route, constant, structure field or error rule
+changed, and the four evolution paths below are the ones taken. The minor moves anyway, because
+that is what this project has done for every additive generation since `0.4.0`: a consumer needs a
+number it can require, and `find_package(CNA 0.10 CONFIG)` is what asks for these routes.
+
+Nothing here is reachable by a `.cnb` *asset* yet. The container is bound; the document, the byte
+cursors, the asset schemas and the loader registry are not, and `docs/c-api/CNB.md` says which is
+which.
+
+`0.9.0` added the owned-`GraphicsDevice` routes
 (`cna_graphics_device_create`/`_destroy`), the render-target ContentLost subscription
 (`cna_render_target_subscribe_content_lost`/`_unsubscribe_content_lost` and the
 `CNA_RenderTargetEventRegistrationHandle` they hand back), and the frame-identity route
 `cna_video_player_get_frame_ext` with its `CNA_VideoFrameEXT` descriptor and
 `CNA_VIDEO_FRAME_EXT_STRUCT_VERSION`.
 
-Those additions alone would be additive. The minor moves because `0.9.0` also **changes seven
-documented contracts**. A consumer that read the `0.8.0` headers was told something other than what
+Those `0.9.0` additions alone would have been additive. Its minor moved because `0.9.0` also
+**changed seven documented contracts**. A consumer that read the `0.8.0` headers was told something other than what
 now happens in each case, so each is worth reading before adopting this generation:
 
 - **`SoundEffectInstance.Apply3D` refuses on a playing instance that was never positioned.** This
@@ -206,7 +220,7 @@ Recording the baseline needs the library:
 python3 tools/c-api/generate_abi_baseline.py --write --library <build>/modules/c-api/libcna_c_api.so
 ```
 
-All four build configurations export the same 3,746 symbols. That is itself part of the contract:
+All four build configurations export the same 3,770 symbols. That is itself part of the contract:
 the ABI **surface** does not vary with the renderer, with `CNA_DEVICES`, or with `CNA_CNAEXT` —
 only the answers do. A route whose backend or layer is absent exists and refuses, rather than
 disappearing from the library. `CNA_CNAEXT` is the newest member of that list and the one with the

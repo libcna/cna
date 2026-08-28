@@ -25,6 +25,7 @@ add_library(cna_c_api ${CNA_C_API_LIBRARY_KIND}
     src/CnaCApiAudio.cpp
     src/CnaCApiXact.cpp
     src/CnaCApiColor.cpp
+    src/CnaCApiCnb.cpp
     src/CnaCApiContent.cpp
     src/CnaCApiContentReaders.cpp
     src/CnaCApiCoreExt.cpp
@@ -796,6 +797,22 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_color_smoke PRIVATE cna_c_api)
     cna_c_api_enable_strict_warnings(cna_c_api_color_smoke)
     add_test(NAME CApi_ColorSmoke COMMAND cna_c_api_color_smoke)
+
+    # CBIND-106: the .cnb container. It owns no handle and needs no game, so unlike every other
+    # graphics-adjacent suite here it registers with no environment at all -- and the loop at the
+    # end of this file gives it the configured test display anyway, because a test that names
+    # nothing must not inherit the developer's session.
+    add_executable(cna_c_api_cnb_smoke
+        tests/pure_c/CnbSmoke.c
+    )
+    set_target_properties(cna_c_api_cnb_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_cnb_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_cnb_smoke)
+    add_test(NAME CApi_CnbSmoke COMMAND cna_c_api_cnb_smoke)
 
     add_executable(cna_c_api_packed_vector_smoke
         tests/pure_c/PackedVectorSmoke.c

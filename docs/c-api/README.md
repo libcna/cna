@@ -160,7 +160,9 @@ callbacks/threading, renderer capability reporting, [graphics resources](GRAPHIC
 [index buffers](INDEX_BUFFERS.md),
 [math and 3D values](MATH_AND_3D_VALUES.md), [input snapshots](INPUT_SNAPSHOTS.md) and the Sharp
 Runtime boundary. The owned content/cache
-contract is in [`CONTENT.md`](CONTENT.md); the device/container/stream ownership and fake-async
+contract is in [`CONTENT.md`](CONTENT.md), and the `.cnb` container -- its identities, checksums,
+read limits and chunk compression, and which parts of the format are not bound yet -- is in
+[`CNB.md`](CNB.md); the device/container/stream ownership and fake-async
 contract is in [`STORAGE.md`](STORAGE.md); the networking values, packet buffers and
 join-failure contract are in [`NET.md`](NET.md). The
 [audio ownership/control contract](AUDIO.md) defines the PCM and mixer-thread boundary; the
