@@ -814,6 +814,22 @@ if(CNA_BUILD_TESTS)
     cna_c_api_enable_strict_warnings(cna_c_api_cnb_smoke)
     add_test(NAME CApi_CnbSmoke COMMAND cna_c_api_cnb_smoke)
 
+    # CBIND-107: the document, its cursor and the two writers. Separate from CnbSmoke because it
+    # builds a container and parses it back, which is a different kind of evidence from the
+    # container primitives' one-call-per-fact checks -- and because one file covering both would be
+    # two thousand lines nobody re-reads.
+    add_executable(cna_c_api_cnb_document_smoke
+        tests/pure_c/CnbDocumentSmoke.c
+    )
+    set_target_properties(cna_c_api_cnb_document_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_cnb_document_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_cnb_document_smoke)
+    add_test(NAME CApi_CnbDocumentSmoke COMMAND cna_c_api_cnb_document_smoke)
+
     add_executable(cna_c_api_packed_vector_smoke
         tests/pure_c/PackedVectorSmoke.c
     )

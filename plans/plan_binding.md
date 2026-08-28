@@ -1231,7 +1231,28 @@ applies unchanged. Three things are specific to this phase:
 **`--approve-rule-symbols` could not be used and the approvals were computed instead.** That mode matches with `ignore_approval=True`, which surfaces a pre-existing ambiguity between `graphics-ext-settings-values` and `pbr-material-value` over `CNA::Graphics::PbrMaterial` and aborts before writing anything. The twelve new rules' approvals were therefore derived with the tool's own matcher over the twelve new patterns only, with two assertions in the deriving script: that no two of them claim the same symbol, and that no *existing* rule already approves one. 66 claimed, matching the row count per rule.
 
 **Verified in all three arms**, each built whole and then run serially: 98/98 `CApi` tests in `cmake-build-debug` (HEADLESS, `CNA_CNAEXT=OFF`), `cmake-build-cnaext` (OPENGLES3/EasyGL, `CNA_CNAEXT=ON`) and `build-probe` (HEADLESS, `CNA_CNAEXT=ON`); all eight build-free gates green; declared and exported routes agreeing exactly at 3,770 in each tree; and the same 3,770 names exported with the engine layer on and off, compared symbol by symbol. `docs/c-api/CNB.md` is the consumer contract, and `CONTENT.md`, `FEATURE_MATRIX.md` and `README.md` now say what a C application can and cannot do with a `.cnb` file — inspect and transform the container, and not load an asset out of it. |
-| CBIND-107 | Bind the CNB document and its byte cursors | 88 | ⬜ | `CnbDocument` (41) is the parsed container a codec reads from, and `CnbByteReader`/`CnbByteWriter` (36) are the bounded cursors every schema uses. These are the format's byte-facing surface, which means two obligations beyond the ordinary ones: the `CBIND-040B` treatment — an independent oracle and a fuzz target, the way `StringViewFuzz` and `CubeLutFuzz` already cover the ABI's other two byte-facing surfaces — and a lifetime rule for a cursor that borrows a document, following the counted-borrow precedent `CBIND-084B` set for pooled render targets. `CnbWriter` (11) is the other direction. |
+| CBIND-107 | Bind the CNB document and its byte cursors | 88 | ✅ | **Done 2026-08-28.** 80 routes over four new handle kinds (`CnbDocument` = 168, `CnbReader` = 169, `CnbByteWriter` = 170, `CnbWriter` = 171) and three new versioned structures close all 88 rows: implemented 7,898 → 7,986 and planned 440 → 352, the delta this phase requires.
+
+**The lifetime question this slice existed to answer, and both halves of the answer.** A cursor points into somebody's bytes, and the two ways of getting one differ in whose:
+
+- **From a document, it borrows.** `cna_cnb_document_open_chunk` retains the document and increments its borrow count, and `cna_cnb_document_destroy` answers `CNA_RESULT_INVALID_STATE` until every such reader is destroyed. Retaining alone would already be memory-safe — the document is immutable, unlike `CBIND-084B`'s pool, which could delete an element out from under a view — so refusing the release is not needed for safety. It is kept because it is this ABI's standing rule for a borrow, and because it turns a leaked cursor into a refused call rather than a document that quietly outlives its handle.
+- **From caller bytes, it copies.** The canonical `CnbByteReader` never copies: it documents that the caller must keep the region alive. C has no way to be told that and no way to be caught breaking it, so the adapter owns a copy instead of publishing a lifetime rule it cannot police. This is the slice's one deliberate deviation, and the test proves it rather than asserting it — the caller's buffer is zeroed immediately after the cursor is created and every later read still returns the original value. Mutation-checked: asserting the zeroed value instead fails.
+
+**`ReadString` needs two routes, and the reason generalises.** Reading consumes; copying does not. One route taking a destination could not report a short capacity without either losing the string it had already consumed or consuming it twice, so `cna_cnb_reader_read_string` reads once and reports the size and `cna_cnb_reader_copy_string` hands it over as often as asked. Copying before any read is `CNA_RESULT_INVALID_STATE`, so "nothing read yet" cannot be mistaken for "an empty string". `ReadBytes` deliberately does **not** get the same treatment: its size is the caller's own argument rather than something the file declares, so the capacity is settled before the cursor moves and one route suffices. The test proves that by comparing the position before and after a refused call.
+
+**An out-of-range index is an argument error, and separating it was work rather than style.** Every canonical accessor throws `ContentLoadException` for one, which the firewall maps to `CNA_RESULT_IO` — the answer for a bad file. A caller fixes an index; it does not re-download the asset. `RequireIndex` decides it ahead of the call for all five indexed routes, and a malformed *file* still answers `CNA_RESULT_IO` from the same routes.
+
+**Every throw in this slice is a contract; there are no corrections.** The grep the phase requires came back with 78 throw sites across the four sources and exactly one `std::min`, which is a `reserve` hint rather than a value the reader alters. So nothing here clamps, and every refusal is preserved exactly — including two that had to be decided ahead of the canonical call because the firewall would have flattened them: `CnbWriter::SetCompression`'s `std::invalid_argument` for a codec this build lacks becomes `CNA_RESULT_NOT_SUPPORTED`, matching what `CBIND-106` already decided for the compression routes.
+
+**`SetExternalReferences` becomes clear-then-append.** C cannot pass a table whose entries each carry a string as one argument, so `cna_cnb_writer_add_external_reference` takes the value and the name side by side and `cna_cnb_writer_clear_external_references` empties it. The append hands the accumulated table back to the canonical setter every time, so the writer's own state stays the single source of truth rather than the adapter keeping a shadow copy that could drift from it.
+
+**Five accessors were deliberately not collapsed into an info structure.** `Origin`, `ContainerMajor`, `ContainerMinor`, `AssetTypeId` and `AssetSchemaVersion` each get their own route. The document is immutable, so there is no torn read to prevent and nothing to gain; a `CNA_CnbDocumentInfo` would be a second spelling of five facts a caller can already ask for individually. `CBIND-082` collapsed a video frame's generation and texture into one descriptor for the opposite reason — there, reading them separately could pair a generation with the wrong frame.
+
+**The suite builds a container and parses it back, rather than shipping a fixture.** A fixture proves only that the reader still reads it; a round trip proves the writer still produces something the reader accepts, which is the invariant the format rests on. It also lets the test recompute a chunk's stored checksum with `CBIND-106`'s `cna_cnb_crc32c` from the image bytes — the two halves of the family agreeing rather than each agreeing with itself. Two mutation checks: asserting success instead of the borrow refusal fails at stage 4, and asserting the zeroed source byte fails at stage 2.
+
+**ABI `0.10.0` → `0.11.0`, exports 3,770 → 3,850**, purely additive. `AbiHeaderC.c`/`AbiHeaderCpp.cpp` freeze all three new structures' sizes, alignments and every offset; each places its 64-bit members ahead of its 32-bit ones so the layouts carry no padding. `--approve-rule-symbols` was again unusable for the reason `CBIND-106` recorded, so the fourteen new rules' approvals were derived with the tool's own matcher over those fourteen patterns only, with the same two assertions in the deriving script.
+
+**Verified in all three arms**, each built whole and then run serially: 99/99 `CApi` tests in `cmake-build-debug`, `cmake-build-cnaext` and `build-probe`; all eight build-free gates green; declared and exported routes agreeing exactly at 3,850 in each tree; and the same 3,850 names exported with the engine layer on and off, compared symbol by symbol. `docs/c-api/CNB.md` gains the document, cursor and writer contract and the table of which result code means whose mistake. |
 | CBIND-108 | Bind the CNB texture schemas | 67 | ⬜ | `CnbTextureFormat` (37) and `CnbTextureCodec` (30): `Texture2D`, `TextureCube` and `Texture3D` schema 1, including the block-compressed payloads WebGPU consumes natively. The surface-format identity already exists in the ABI (`CNA_SurfaceFormat`); do not mint a second one for the same concept — map the format's own tag onto it and record the mapping, or say why the two genuinely differ. |
 | CBIND-109 | Bind the CNB model schema | 129 | ⬜ | `CnbModelData` (105) is the biggest single type in the phase: bones, meshes, mesh parts, materials, morph targets and the animation payload. It is a POD graph, so the shape question is whether a caller walks it through borrowed handles per node or reads a flattened descriptor per level; answer it once, at the start, because 105 rows will follow whichever is chosen. `CnbModelCodec` (19) encodes and decodes it and `CnbModelFromCnj` (5) builds one from a `.cnj`. |
 | CBIND-110 | Bind the CNB font, audio, media, curve and animation schemas | 85 | ⬜ | `CnbSpriteFontCodec` (22), `CnbSoundEffectCodec` (25), `CnbMediaCodec` (21), `CnbCurveCodec` (6) and `CnbAnimationClipCodec` (11). Each has a runtime counterpart already bound — `cna_sprite_font_*`, `cna_sound_effect_*`, `cna_song_*`/`cna_video_*`, `cna_curve_*` — so the codec routes produce and consume the *same* C values those families already publish rather than parallel ones. The sprite-font schema carries the strictly-ascending character-map rule the `.cnj` reader enforces; a C route that writes one must refuse an unsorted map for the same reason. |
@@ -1299,8 +1320,8 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-**Snapshot (2026-08-28, after `CBIND-106`):** 536 headers / 8,812 symbols —
-**7,898 implemented, 15 approved partial, 440 planned, 459 not applicable.** ABI `0.10.0`, 3,770
+**Snapshot (2026-08-28, after `CBIND-107`):** 536 headers / 8,812 symbols —
+**7,986 implemented, 15 approved partial, 352 planned, 459 not applicable.** ABI `0.11.0`, 3,850
 exported symbols — the same 3,746 with `CNA_CNAEXT` on and off (measured symbol by symbol: zero
 differ), which is the engine layer's ABI promise measured rather than asserted.
 Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.
@@ -1309,8 +1330,8 @@ Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --
 reads **Not ready**, on exactly one criterion — *No public C++ symbol is unaccounted for* — and on
 no other. That is not a regression and not a document going stale: the sixth merge of `next`
 brought in 506 public symbols, 460 of them the `CNA::Content::Cnb` content format, and the owner
-ruled on 2026-08-28 that binding them belongs to a later pass — then asked for `CBIND-106`, the
-container slice, which closed 66 of them and left 440. The gate says so out loud because
+ruled on 2026-08-28 that binding them belongs to a later pass — then asked for `CBIND-106` and
+`CBIND-107`, the container and the document, which closed 154 of them and left 352. The gate says so out loud because
 `CBIND-042B` built it to fail in both directions, and a deferral that only lives in somebody's
 memory is the thing it exists to prevent.
 
@@ -1340,7 +1361,7 @@ CNAEXT engine layer and the fifth merge's tail opened, and `CBIND-095` verified 
 
 ### What remains
 
-**Phase B10 — 440 rows left of 506, in eight slices. `CBIND-106` is closed; `CBIND-103`–`CBIND-105` and `CBIND-107`–`CBIND-111` remain, with `CBIND-113` beside them and `CBIND-112` to close it.** The
+**Phase B10 — 352 rows left of 506, in seven slices. `CBIND-106` and `CBIND-107` are closed; `CBIND-103`–`CBIND-105` and `CBIND-108`–`CBIND-111` remain, with `CBIND-113` beside them and `CBIND-112` to close it.** The
 sixth reopening. `origin/next` merged on 2026-08-28 and brought in the **CNB content format**
 (`CNA::Content::Cnb`, 23 public headers, `plans/plan_cnb.md`'s `CNBF-002`–`CNBF-123`) — 460 of the
 506 rows — plus 46 ordinary XNA symbols: the math types' compound-assignment operators,
@@ -1350,8 +1371,9 @@ parameter textures, `OcclusionQuery`'s precision query, and the reflective XNB r
 
 **One slice of it is done and the rest is a recorded owner decision rather than a gap.** On
 2026-08-28 the ruling was that this pass integrates the merge and writes the backlog; binding the
-format itself is a later pass. `CBIND-106`, the container, was then asked for separately and is
-closed — which is why the count below reads 440 rather than 506. So `docs/c-api/RELEASE_GATE.md` reads **Not ready** and this plan says why,
+format itself is a later pass. `CBIND-106` and `CBIND-107` — the container and the document —
+were then asked for separately and are closed, which is why the count below reads 352 rather than
+506. So `docs/c-api/RELEASE_GATE.md` reads **Not ready** and this plan says why,
 which is the arrangement `CBIND-079` exists to keep honest: three documents agreeing on one
 measurable fact, rather than each being locally consistent.
 

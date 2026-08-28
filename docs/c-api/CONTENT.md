@@ -233,19 +233,19 @@ sound effects, media, curves, animation clips and models, its own compiler front
 (`cna_tool_source_to_cnb`, `cna_tool_cnj_to_cnb`, `cna_tool_gltf_to_cnb`) and its own
 `ContentManager` tier.
 
-**The container is bound; nothing that reads an asset out of it is.** `CBIND-106` published the
+**The container is bound; nothing that turns a chunk into an asset is.** `CBIND-106` published the
 format's identities, byte-level constants, checksums, whole-file arithmetic, read limits and chunk
-compression as the `cna_cnb_*` family — see [`CNB.md`](CNB.md). What still has no C route is the
-document a reader parses a file into, the byte cursors every schema uses, the writer, the loader
-registry, every asset schema, and `ContentManager::RegisterCnbLoaderEXT` — the hook a game uses to
-teach a manager about a `.cnb` asset type.
+compression, and `CBIND-107` published the parsed document, its bounded cursor and both writers —
+see [`CNB.md`](CNB.md). What still has no C route is the loader registry, every asset schema, and
+`ContentManager::RegisterCnbLoaderEXT` — the hook a game uses to teach a manager about a `.cnb`
+asset type.
 
 So a C application can load `.xnb` assets, loose files and `.cnj` descriptors through the routes
-above, can inspect and transform a `.cnb` container, and **cannot load a `.cnb` asset**.
+above, can build and parse a `.cnb` container and read any chunk's bytes out of it, and **cannot
+load a `.cnb` asset**: nothing turns those bytes into a `Texture2D` or a `Model`.
 
 That the rest is unbound is a **scheduling** decision recorded on 2026-08-28, not a judgement that
-the format has no C form: it is a byte container of plain-old-data structures and free functions,
-among the more straightforwardly bindable things in this repository. The remaining declarations are
-counted in [`COVERAGE.md`](COVERAGE.md) as `planned` — deliberately not as `not-applicable`, which
-would say something false — they are why [`RELEASE_GATE.md`](RELEASE_GATE.md) reads *Not ready*, and
-`plans/plan_binding.md` Phase B10 (`CBIND-107`–`CBIND-112`) is the sized backlog that binds them.
+the format has no C form. The remaining declarations are counted in [`COVERAGE.md`](COVERAGE.md) as
+`planned` — deliberately not as `not-applicable`, which would say something false — they are why
+[`RELEASE_GATE.md`](RELEASE_GATE.md) reads *Not ready*, and
+`plans/plan_binding.md` Phase B10 (`CBIND-108`–`CBIND-112`) is the sized backlog that binds them.

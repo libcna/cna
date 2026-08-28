@@ -8,7 +8,7 @@
 
 #include <stddef.h>
 
-_Static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 10, 0),
+_Static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 11, 0),
                "CNA C ABI version encoding must remain stable");
 _Static_assert(sizeof(CNA_Result) == sizeof(uint32_t),
                "CNA_Result must have a fixed-width representation");
@@ -1669,3 +1669,34 @@ _Static_assert(sizeof(CNA_CnbReadLimits) == 48U &&
                "CNA_CnbReadLimits layout must remain stable");
 _Static_assert(CNA_CNB_READ_LIMITS_STRUCT_VERSION == UINT32_C(1),
                "CNA_CnbReadLimits is at structure version 1");
+
+/* CBIND-107: the document's three published values. Each is versioned and each places its 64-bit
+   members ahead of its 32-bit ones, so the layouts carry no padding on any supported target. */
+_Static_assert(sizeof(CNA_CnbChunkEntry) == 56U &&
+                   _Alignof(CNA_CnbChunkEntry) == 8U &&
+                   offsetof(CNA_CnbChunkEntry, struct_version) == 4U &&
+                   offsetof(CNA_CnbChunkEntry, offset) == 8U &&
+                   offsetof(CNA_CnbChunkEntry, stored_size) == 16U &&
+                   offsetof(CNA_CnbChunkEntry, uncompressed_size) == 24U &&
+                   offsetof(CNA_CnbChunkEntry, type) == 32U &&
+                   offsetof(CNA_CnbChunkEntry, flags) == 36U &&
+                   offsetof(CNA_CnbChunkEntry, checksum) == 40U &&
+                   offsetof(CNA_CnbChunkEntry, compression) == 44U &&
+                   offsetof(CNA_CnbChunkEntry, alignment) == 48U &&
+                   offsetof(CNA_CnbChunkEntry, reserved) == 52U,
+               "CNA_CnbChunkEntry layout must remain stable");
+_Static_assert(sizeof(CNA_CnbExternalReference) == 16U &&
+                   _Alignof(CNA_CnbExternalReference) == 4U &&
+                   offsetof(CNA_CnbExternalReference, flags) == 8U &&
+                   offsetof(CNA_CnbExternalReference, expected_asset_type_id) == 12U,
+               "CNA_CnbExternalReference layout must remain stable");
+_Static_assert(sizeof(CNA_CnbMetadata) == 16U &&
+                   _Alignof(CNA_CnbMetadata) == 4U &&
+                   offsetof(CNA_CnbMetadata, present) == 8U &&
+                   offsetof(CNA_CnbMetadata, reserved) == 9U &&
+                   offsetof(CNA_CnbMetadata, flags) == 12U,
+               "CNA_CnbMetadata layout must remain stable");
+_Static_assert(CNA_CNB_CHUNK_ENTRY_STRUCT_VERSION == UINT32_C(1) &&
+                   CNA_CNB_EXTERNAL_REFERENCE_STRUCT_VERSION == UINT32_C(1) &&
+                   CNA_CNB_METADATA_STRUCT_VERSION == UINT32_C(1),
+               "The CNB document's published structures are all at version 1");

@@ -11,29 +11,159 @@ Everything here is declared in `CNA/C/cnb.h` and reachable through the umbrella 
 
 **Bound.** The container's identities and byte-level constants, chunk identifiers, asset type
 identifiers, external-reference name validation, the whole-file arithmetic a reader does on
-file-declared numbers, CRC-32C, the read limits, and chunk compression.
+file-declared numbers, CRC-32C, the read limits, and chunk compression (`CBIND-106`); and the parsed
+document, its bounded cursor, the primitive writer and the container writer (`CBIND-107`).
 
-**Not bound.** The `CnbDocument` a reader parses a file into, the `CnbByteReader`/`CnbByteWriter`
-cursors every schema reads and writes with, `CnbWriter`, the loader registry, and every asset
-schema — textures, sprite fonts, models, sound effects, media, curves and animation clips.
+**Not bound.** The loader registry, and every asset schema — textures, sprite fonts, models, sound
+effects, media, curves and animation clips.
 
-So **a C application still cannot load a `.cnb` asset.** What it can do is understand, validate and
-transform the container itself: check a file's magic and header checksum, classify its chunks and
-asset type, mint a custom asset type identifier, decide whether an external-reference name is legal,
-and compress or expand a chunk payload. `plans/plan_binding.md` Phase B10 is the backlog for the
-rest; `CBIND-107` through `CBIND-111` are the slices, and `docs/c-api/CONTENT.md` records the
-consequence from the `ContentManager` side.
+So a C application can **build a `.cnb` file and parse one back**, walk its table of contents, read
+any chunk's bytes, and check its metadata and external references. It still **cannot load a `.cnb`
+asset**: nothing turns a chunk's bytes into a `Texture2D` or a `Model`. `plans/plan_binding.md`
+Phase B10 is the backlog for the rest, and `docs/c-api/CONTENT.md` records the consequence from the
+`ContentManager` side.
 
-## Nothing here is a handle
+## Handles, and the parts that have none
 
-The whole family is pure functions over caller-owned bytes plus one versioned value structure.
-There is no lifetime to manage, no thread affinity and no `_destroy` route; a route that reads bytes
-takes a pointer and a count and never retains either. That is unusual for this ABI and is worth
-saying once rather than repeating in thirty places.
+The container primitives — identities, constants, checksums, arithmetic, name validation and chunk
+compression — are pure functions over caller-owned bytes plus one versioned value structure. There
+is no lifetime to manage there, no thread affinity and no `_destroy`.
+
+The document and the writers do own something, so they are handles: `CNA_CnbDocumentHandle`,
+`CNA_CnbReaderHandle`, `CNA_CnbByteWriterHandle` and `CNA_CnbWriterHandle`. One borrow relationship
+exists and it is the one to know about — see *Documents, cursors and who owns the bytes* below.
 
 Every route in the family is named `cna_cnb_*` and none carries an `_ext` suffix. The whole of
 `CNA::Content::Cnb` is CNA-namespace surface with no XNA 4.0 counterpart, so — following
 `core_ext.h` — the header is the marker rather than each route.
+
+
+## Documents, cursors and who owns the bytes
+
+`cna_cnb_document_parse` copies the whole file into the document, which then owns it. A document
+that exists is a container that is structurally sound: parsing applies every invariant — magic,
+versions, reserved-field zeroing, both structural checksums, every chunk checksum, overflow-safe
+offset arithmetic, alignment, table-of-contents ordering, exact non-overlapping coverage of the
+file, and zeroed alignment padding — before any accessor hands out a byte. A schema decoder only
+has to worry about its own contents.
+
+Two ways to reach a chunk's bytes, and they differ in who owns them:
+
+```c
+/* A copy you own. */
+uint64_t needed = 0;
+cna_cnb_document_copy_chunk_data(document, index, NULL, 0, &needed);
+/* allocate `needed`, then call again */
+
+/* A cursor over the document's own bytes -- no copy. */
+CNA_CnbReaderHandle chunk;
+cna_cnb_document_open_chunk(document, index, &chunk);
+```
+
+**A cursor opened from a document borrows it.** `cna_cnb_document_destroy` answers
+`CNA_RESULT_INVALID_STATE` until every reader opened from that document is destroyed. Retaining the
+document would already be memory-safe; refusing the release is this ABI's standing rule for a
+borrow, and it turns a leaked cursor into a refused call rather than a document that quietly
+outlives its handle.
+
+**A cursor created with `cna_cnb_reader_create` copies the bytes it is given.** The canonical C++
+cursor never copies — it documents that the caller must keep the region alive. C has no way to be
+told that and no way to be caught breaking it, so the ABI takes the copy instead of leaving a
+lifetime rule it cannot police. This is the one deliberate deviation in the family.
+
+## Reading a chunk
+
+Every read is checked against the region's end before a byte is touched, and a truncation is
+`CNA_RESULT_IO` naming the region and the offset. Integers are assembled byte by byte and floats
+come from an explicitly little-endian integer, so a decoded value never depends on the host.
+
+```c
+uint32_t count = 0;
+cna_cnb_reader_read_count(chunk, sizeof(float) * 3, (CNA_StringView){"points", 6}, &count);
+for (uint32_t i = 0; i < count; ++i) {
+    float x, y, z;
+    cna_cnb_reader_read_f32(chunk, &x);
+    cna_cnb_reader_read_f32(chunk, &y);
+    cna_cnb_reader_read_f32(chunk, &z);
+}
+cna_cnb_reader_require_exhausted(chunk);   /* trailing bytes mean you and the file disagree */
+```
+
+`cna_cnb_reader_read_count` is not a plain `u32` read: it checks the declared count against
+`max_array_element_count` **and** against how many elements could actually fit in what remains, so
+a corrupt count fails before anything is allocated for it.
+
+**Strings need two calls, because reading is destructive and copying is not.**
+
+```c
+uint64_t bytes = 0;
+cna_cnb_reader_read_string(chunk, &bytes);        /* consumes; reports the size */
+cna_cnb_reader_copy_string(chunk, buffer, capacity, &bytes);  /* repeatable */
+```
+
+A single route taking a destination could not report a capacity that was too small without either
+losing the string it had already consumed or consuming it twice. Copying before any read is
+`CNA_RESULT_INVALID_STATE`, so "nothing read yet" cannot be mistaken for "an empty string".
+
+`cna_cnb_reader_read_bytes` needs only one route, because its size is your own argument rather than
+something the file declares: a capacity too small is settled before the cursor advances, so a
+refused call consumes nothing and can simply be repeated.
+
+`cna_cnb_reader_fail` exists so a schema decoder's own refusals read exactly like the cursor's —
+same context, same offset, same shape.
+
+## Writing a container
+
+`CNA_CnbByteWriterHandle` emits the primitives; `CNA_CnbWriterHandle` assembles the file.
+
+```c
+CNA_CnbByteWriterHandle bytes;
+cna_cnb_byte_writer_create(&bytes);
+cna_cnb_byte_writer_write_u32(bytes, 3);
+cna_cnb_byte_writer_write_f32(bytes, 1.5f);
+
+CNA_CnbWriterHandle writer;
+cna_cnb_writer_create(CNA_CNB_ASSET_TYPE_CURVE, 1, &writer);
+cna_cnb_writer_set_metadata(writer, name, content);
+cna_cnb_writer_add_chunk(writer, id, payload, payload_size, CNA_CNB_CHUNK_FLAG_MANDATORY, 4);
+cna_cnb_writer_build(writer, image, capacity, &image_size);
+```
+
+The writer is deterministic: no clock, no random source, no pointer value. Identical inputs produce
+byte-identical output.
+
+Four things it refuses, each because accepting them would produce a file its own reader rejects:
+
+- the container's own identifiers (`CMET`, `XREF`) as schema chunks — the writer emits each at most
+  once, from `cna_cnb_writer_set_metadata` and `cna_cnb_writer_add_external_reference`;
+- a chunk identifier with a byte outside printable ASCII;
+- an external-reference name the reader would refuse — the writer applies the *same* rule, which is
+  what stops the two ends drifting apart;
+- a custom asset type with no matching canonical name, since a custom identifier is a 31-bit hash
+  and the name is what settles identity.
+
+`cna_cnb_writer_set_limits` is worth knowing about even if you never call it. Compression breaks the
+intuition that a file a writer built is a file a reader can open: a highly compressible document
+serializes to very little and expands to a great deal, so the writer enforces the reader's limits at
+build time. The producer is the right place to find that out.
+
+**The container-level chunks are always emitted first**, ahead of the schema's own, regardless of
+when they were set. A schema must therefore address chunks by type — `cna_cnb_document_find_all`,
+`_find_single`, `_require_single` — and never by table-of-contents index.
+
+## Which failure means what
+
+- `CNA_RESULT_INVALID_ARGUMENT` — **you** got something wrong: a null output, an unknown structure
+  version, or a chunk or reference index past the end. The canonical layer throws a content
+  exception for an out-of-range index; the C layer separates it, because a caller fixes an index
+  rather than re-downloading the asset.
+- `CNA_RESULT_IO` — **the file** is wrong: a broken container invariant, a truncated read, an
+  unknown mandatory chunk, a wrong asset type, a name the format forbids.
+- `CNA_RESULT_INVALID_STATE` — the **order** is wrong: destroying a document that still has readers,
+  or copying a string before reading one.
+- `CNA_RESULT_NOT_SUPPORTED` — this **build** cannot: a compression codec it was not built with.
+- `CNA_RESULT_BUFFER_TOO_SMALL` — your buffer is short. `out_byte_count` says how much is needed and
+  nothing is written; where the call would otherwise consume or empty something, it does not.
 
 ## Identities
 

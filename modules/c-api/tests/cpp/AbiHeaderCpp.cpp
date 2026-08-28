@@ -8,7 +8,7 @@
 
 #include <cstddef>
 
-static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 10, 0));
+static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 11, 0));
 static_assert(sizeof(CNA_Result) == sizeof(uint32_t));
 static_assert(sizeof(CNA_Handle) == sizeof(uint64_t));
 static_assert(sizeof(CNA_GraphicsResourceTag) == sizeof(uint64_t));
@@ -1102,3 +1102,11 @@ static_assert(alignof(CNA_CnbReadLimits) == 8U);
 static_assert(offsetof(CNA_CnbReadLimits, max_file_size) == 8U);
 static_assert(offsetof(CNA_CnbReadLimits, max_chunk_count) == 32U);
 static_assert(offsetof(CNA_CnbReadLimits, max_chunk_alignment) == 44U);
+static_assert(sizeof(CNA_CnbChunkEntry) == 56U);
+static_assert(alignof(CNA_CnbChunkEntry) == 8U);
+static_assert(offsetof(CNA_CnbChunkEntry, uncompressed_size) == 24U);
+static_assert(offsetof(CNA_CnbChunkEntry, compression) == 44U);
+static_assert(sizeof(CNA_CnbExternalReference) == 16U);
+static_assert(offsetof(CNA_CnbExternalReference, expected_asset_type_id) == 12U);
+static_assert(sizeof(CNA_CnbMetadata) == 16U);
+static_assert(offsetof(CNA_CnbMetadata, flags) == 12U);

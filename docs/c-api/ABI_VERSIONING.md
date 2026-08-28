@@ -2,19 +2,25 @@
 
 ## ABI identity
 
-The ABI is `0.10.0`. It adds the `.cnb` container family from `plans/plan_binding.md` `CBIND-106`:
-twenty-four `cna_cnb_*` routes over the container's identities, checksums, whole-file arithmetic,
-read limits and chunk compression, the `CNA_CnbChunkId` and `CNA_CnbCompression` identities, the
-versioned `CNA_CnbReadLimits` structure, and the format's byte-level constants.
+The ABI is `0.11.0`. It adds the `.cnb` document, its bounded cursor and the two writers from
+`plans/plan_binding.md` `CBIND-107`: eighty `cna_cnb_*` routes over four new handle kinds
+(`CNA_CnbDocumentHandle`, `CNA_CnbReaderHandle`, `CNA_CnbByteWriterHandle`,
+`CNA_CnbWriterHandle`) and three new versioned structures (`CNA_CnbChunkEntry`,
+`CNA_CnbExternalReference`, `CNA_CnbMetadata`).
 
-**Every addition is additive** -- no existing route, constant, structure field or error rule
-changed, and the four evolution paths below are the ones taken. The minor moves anyway, because
-that is what this project has done for every additive generation since `0.4.0`: a consumer needs a
-number it can require, and `find_package(CNA 0.10 CONFIG)` is what asks for these routes.
+`0.10.0` added the container itself, from `CBIND-106`: twenty-four routes over its identities,
+checksums, whole-file arithmetic, read limits and chunk compression, the `CNA_CnbChunkId` and
+`CNA_CnbCompression` identities, the versioned `CNA_CnbReadLimits` structure, and the format's
+byte-level constants.
 
-Nothing here is reachable by a `.cnb` *asset* yet. The container is bound; the document, the byte
-cursors, the asset schemas and the loader registry are not, and `docs/c-api/CNB.md` says which is
-which.
+**Both generations are purely additive** -- no existing route, constant, structure field or error
+rule changed, and the four evolution paths below are the ones taken. The minor moves anyway,
+because that is what this project has done for every additive generation since `0.4.0`: a consumer
+needs a number it can require, and `find_package(CNA 0.11 CONFIG)` is what asks for these routes.
+
+A C application can now build and parse a `.cnb` container and read its chunks. It still cannot
+load a `.cnb` **asset**: the schemas and the loader registry are not bound, and
+`docs/c-api/CNB.md` says exactly where that line falls.
 
 `0.9.0` added the owned-`GraphicsDevice` routes
 (`cna_graphics_device_create`/`_destroy`), the render-target ContentLost subscription
@@ -220,7 +226,7 @@ Recording the baseline needs the library:
 python3 tools/c-api/generate_abi_baseline.py --write --library <build>/modules/c-api/libcna_c_api.so
 ```
 
-All four build configurations export the same 3,770 symbols. That is itself part of the contract:
+All four build configurations export the same 3,850 symbols. That is itself part of the contract:
 the ABI **surface** does not vary with the renderer, with `CNA_DEVICES`, or with `CNA_CNAEXT` —
 only the answers do. A route whose backend or layer is absent exists and refuses, rather than
 disappearing from the library. `CNA_CNAEXT` is the newest member of that list and the one with the

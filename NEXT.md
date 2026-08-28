@@ -86,9 +86,24 @@ And the canonical refusal *order* is contract: an unsupported codec whose declar
 the ceiling reports the ceiling, and a stored chunk consults neither size, so a C reader agrees with
 the C++ one about the same file.
 
-**Where it stands:** 536 headers / 8,812 symbols — 7,898 implemented, 15 approved partial, 440
-planned, 459 not applicable. ABI `0.10.0`, 3,770 exported symbols, the same set with `CNA_CNAEXT` on
-and off. 98/98 `CApi` tests in all three arms: `cmake-build-debug` (HEADLESS, `CNA_CNAEXT=OFF`),
+**`CBIND-107` then bound the document, its cursor and both writers** — 80 more routes, four owned
+handle kinds and three versioned structures, 88 rows. A C application can now **build a `.cnb` file
+and parse one back**, walk its table of contents and read any chunk's bytes. It still cannot load a
+`.cnb` **asset**: nothing turns those bytes into a `Texture2D` or a `Model`, because the schemas and
+the loader registry are the slices that remain.
+
+Two decisions in it set precedent for the rest. **A cursor opened from a document borrows it and
+blocks its release; a cursor created over caller bytes copies them** — the canonical cursor never
+copies, but C has no way to be told "keep that alive", so the ABI takes the copy rather than
+publishing a rule it cannot police, and the test proves it by zeroing the caller's buffer and
+reading on. And **reading a string is destructive while copying it is not, so they are two routes**:
+one route taking a destination could not report a short capacity without either losing the string or
+consuming it twice. `ReadBytes` deliberately does not get the same treatment, because its size is
+the caller's own argument rather than something the file declares.
+
+**Where it stands:** 536 headers / 8,812 symbols — 7,986 implemented, 15 approved partial, 352
+planned, 459 not applicable. ABI `0.11.0`, 3,850 exported symbols, the same set with `CNA_CNAEXT` on
+and off. 99/99 `CApi` tests in all three arms: `cmake-build-debug` (HEADLESS, `CNA_CNAEXT=OFF`),
 `cmake-build-cnaext` (OPENGLES3/EasyGL, `CNA_CNAEXT=ON`) and `build-probe` (HEADLESS,
 `CNA_CNAEXT=ON`).
 
