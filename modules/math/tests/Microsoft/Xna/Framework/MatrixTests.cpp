@@ -838,3 +838,43 @@ TEST(MatrixTest, ToColumnMajorIdentity)
     EXPECT_NEAR(data[15], 1.0f, kEps); // M44
     EXPECT_NEAR(data[1], 0.0f, kEps);  // M12
 }
+
+// --- operator*= (CNAEXT) ---
+//
+// C# synthesises `*=` from op_Multiply, so XNA game code writes `world *= rotation` without
+// the type declaring anything. SAMPLE-035's PerPixelLighting rotates its mesh exactly that way.
+
+TEST(MatrixTest, CompoundMultiplyByMatrixMatchesOperatorMultiply)
+{
+    const Matrix a = Matrix::CreateRotationY(0.7f);
+    const Matrix b = Matrix::CreateTranslation(1.0f, 2.0f, 3.0f);
+    const Matrix expected = a * b;
+
+    Matrix value = a;
+    value *= b;
+
+    EXPECT_NEAR(value.M11, expected.M11, kEps);
+    EXPECT_NEAR(value.M22, expected.M22, kEps);
+    EXPECT_NEAR(value.M33, expected.M33, kEps);
+    EXPECT_NEAR(value.M41, expected.M41, kEps);
+    EXPECT_NEAR(value.M42, expected.M42, kEps);
+    EXPECT_NEAR(value.M43, expected.M43, kEps);
+}
+
+TEST(MatrixTest, CompoundMultiplyByScalarScalesEveryElement)
+{
+    Matrix value = Matrix::getIdentityProperty();
+    value.M12 = 3.0f;
+    value *= 2.0f;
+
+    EXPECT_NEAR(value.M11, 2.0f, kEps);
+    EXPECT_NEAR(value.M12, 6.0f, kEps);
+    EXPECT_NEAR(value.M44, 2.0f, kEps);
+}
+
+TEST(MatrixTest, CompoundMultiplyReturnsReferenceToThis)
+{
+    Matrix value = Matrix::getIdentityProperty();
+    Matrix& returned = (value *= 2.0f);
+    EXPECT_EQ(&returned, &value);
+}

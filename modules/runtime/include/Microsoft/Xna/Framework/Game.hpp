@@ -404,6 +404,10 @@ namespace Microsoft::Xna::Framework
 
         bool hasInitialized_;
         bool suppressDraw_;
+
+        // XNA runs the game's FIRST update with a zero ElapsedGameTime; every later one gets the
+        // real step. See Game::Tick().
+        bool hasUpdatedOnce_ = false;
         bool isDisposed_;
         bool forceElapsedTimeToZero_;
 

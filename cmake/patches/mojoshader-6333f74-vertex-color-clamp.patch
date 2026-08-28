@@ -1,0 +1,40 @@
+diff --git a/profiles/mojoshader_profile_glsl.c b/profiles/mojoshader_profile_glsl.c
+index 319e3cb..deea8a6 100644
+--- a/profiles/mojoshader_profile_glsl.c
++++ b/profiles/mojoshader_profile_glsl.c
+@@ -610,6 +610,35 @@ void emit_GLSL_end(Context *ctx)
+ #endif
+ #ifdef MOJOSHADER_DEPTH_CLIPPING
+         output_line(ctx, "gl_Position.z = gl_Position.z * 2.0 - gl_Position.w;");
++#endif
++#if SUPPORT_PROFILE_GLSLES
++        // Direct3D 9 clamps a vertex shader's colour output registers to [0,1] BEFORE the
++        // rasterizer interpolates them, and the desktop GLSL path inherits that for free by
++        // writing gl_FrontColor, which GL clamps by default. The GLSL ES profiles have no
++        // gl_FrontColor, so they fall through to a plain varying -- and a plain varying is not
++        // clamped anywhere. A shader whose per-vertex colour exceeds 1 then interpolates from
++        // the UNclamped value and saturates per fragment instead, which is a visibly different
++        // gradient, not a rounding difference: it is flat where D3D9 still has slope. Restore
++        // the clamp here, at the end of main, where the value is final.
++        //
++        // The register list to consult is used_registers, not attributes: an output register is
++        // only added to attributes by process_definitions(), which runs AFTER this function has
++        // already closed main(). used_registers is filled while the instruction stream is being
++        // parsed, so it knows about oD0 by the time the stream ends. -CNA
++        if (support_glsles(ctx))
++        {
++            const RegisterList *item = ctx->used_registers.next;
++            while (item != NULL)
++            {
++                if (item->regtype == REG_TYPE_ATTROUT)
++                {
++                    output_line(ctx, "io_%i_%i = clamp(io_%i_%i, 0.0, 1.0);",
++                                (int) MOJOSHADER_USAGE_COLOR, (int) item->regnum,
++                                (int) MOJOSHADER_USAGE_COLOR, (int) item->regnum);
++                } // if
++                item = item->next;
++            } // while
++        } // if
+ #endif
+     } // else if
+ 

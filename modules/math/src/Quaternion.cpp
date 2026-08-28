@@ -23,6 +23,10 @@ namespace Microsoft::Xna::Framework
         }
     }
 
+    Quaternion::Quaternion() : X(0.0f), Y(0.0f), Z(0.0f), W(0.0f)
+    {
+    }
+
     Quaternion::Quaternion(float x, float y, float z, float w)
         : X(x), Y(y), Z(z), W(w)
     {

@@ -3,6 +3,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Graphics/DdsCubeDecoder.hpp"
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "System/IO/Stream.hpp"
 #include "System/FormatException.hpp"
@@ -342,85 +343,36 @@ namespace Microsoft::Xna::Framework::Graphics
         const auto* raw = reinterpret_cast<const uint8_t*>(buf.data());
         const auto rawLen = static_cast<std::size_t>(len);
 
-        // --- Parse the DDS header (mirrors FNA's Texture.ParseDDS) ---
-        if (rawLen < 128 || ReadU32LE(raw) != kDdsMagic)
-            throw System::NotSupportedException("TextureCube::DDSFromStreamEXT: not a DDS stream");
-        if (ReadU32LE(raw + 4) != kDdsHeaderSize)
-            throw System::NotSupportedException("TextureCube::DDSFromStreamEXT: invalid DDS header");
-
-        const uint32_t flags = ReadU32LE(raw + 8);
-        if ((flags & (kDdsdHeight | kDdsdWidth)) != (kDdsdHeight | kDdsdWidth))
-            throw System::NotSupportedException("TextureCube::DDSFromStreamEXT: invalid DDS flags");
-
-        const int height = static_cast<int>(ReadU32LE(raw + 12));
-        const int width  = static_cast<int>(ReadU32LE(raw + 16));
-        int levels        = static_cast<int>(ReadU32LE(raw + 28));
-
-        const uint32_t formatSize = ReadU32LE(raw + 76);
-        if (formatSize != kDdsPixfmtSize)
-            throw System::NotSupportedException("TextureCube::DDSFromStreamEXT: bogus DDS pixel format size");
-        const uint32_t formatFlags  = ReadU32LE(raw + 80);
-        const uint32_t formatFourCC = ReadU32LE(raw + 84);
-
-        const uint32_t caps = ReadU32LE(raw + 108);
-        if ((caps & kDdscapsTexture) == 0)
-            throw System::NotSupportedException("TextureCube::DDSFromStreamEXT: not a texture");
-        const uint32_t caps2 = ReadU32LE(raw + 112);
-        const bool isCube = (caps2 & kDdscaps2Cubemap) == kDdscaps2Cubemap;
-        if (caps2 != 0 && !isCube)
-            throw System::NotSupportedException("TextureCube::DDSFromStreamEXT: invalid DDS caps2");
-        if (!isCube)
-            throw System::FormatException("This file does not contain cube data!");
-
-        if ((caps & kDdscapsMipmap) != kDdscapsMipmap)
-            levels = 1;
-        if (levels < 1)
-            levels = 1;
-
-        if ((formatFlags & kDdpfFourCC) == 0
-            || (formatFourCC != kFourCcDxt1 && formatFourCC != kFourCcDxt3 && formatFourCC != kFourCcDxt5))
-        {
-            throw System::NotSupportedException(
-                "TextureCube::DDSFromStreamEXT: unsupported DDS pixel format "
-                "(only DXT1/DXT3/DXT5-compressed cube maps are supported)");
-        }
-        if (width != height)
-            throw System::FormatException("TextureCube::DDSFromStreamEXT: cube map faces must be square");
+        // plans/plan_cnb.md CNBF-113: the parsing and DXT decompression that used to live here are
+        // now CNA::Internal::Graphics::DecodeDdsCube, a pure-CPU component with no GraphicsDevice
+        // in sight. Nothing about the format handling changed -- the code moved so that a headless
+        // content compiler could reach it too, which is what let CNB finally produce a cube map.
+        // The prefix keeps every diagnostic naming this API rather than the helper.
+        const CNA::Internal::Graphics::DecodedDdsCube decoded =
+            CNA::Internal::Graphics::DecodeDdsCube(raw, rawLen,
+                                                    "TextureCube::DDSFromStreamEXT");
 
         // CNA deviation from FNA (documented, matches Texture2D::FromStream's own established
         // precedent for the identical DDS/DXT problem): every face/level is fully decompressed to
         // RGBA8 on the CPU via DxtUtil and uploaded as SurfaceFormat::Color, rather than uploading
-        // the compressed blocks directly to a real compressed GPU format — CNA doesn't implement
+        // the compressed blocks directly to a real compressed GPU format -- CNA doesn't implement
         // compressed GPU texture formats end-to-end on any renderer (NEXT.md's documented
         // "SurfaceFormat support is Color-only for real GPU formats" limitation).
-        TextureCube result(device, width, levels > 1, SurfaceFormat::Color);
+        TextureCube result(device, decoded.width, decoded.mipCount > 1, SurfaceFormat::Color);
 
-        std::size_t offset = 128;
         for (int face = 0; face < 6; ++face)
         {
-            int levelSize = width;
-            for (int level = 0; level < levels; ++level)
+            int levelSize = decoded.width;
+            for (int level = 0; level < decoded.mipCount; ++level)
             {
-                const int blockBytes = CalculateDDSLevelSize(levelSize, levelSize, formatFourCC);
-                if (offset + static_cast<std::size_t>(blockBytes) > rawLen)
-                    throw System::FormatException("TextureCube::DDSFromStreamEXT: truncated DDS stream");
-
-                std::vector<uint8_t> rgba;
-                using CNA::Internal::Graphics::DxtUtil;
-                if (formatFourCC == kFourCcDxt1)
-                    rgba = DxtUtil::DecompressDxt1(raw + offset, static_cast<std::size_t>(blockBytes), levelSize, levelSize);
-                else if (formatFourCC == kFourCcDxt3)
-                    rgba = DxtUtil::DecompressDxt3(raw + offset, static_cast<std::size_t>(blockBytes), levelSize, levelSize);
-                else
-                    rgba = DxtUtil::DecompressDxt5(raw + offset, static_cast<std::size_t>(blockBytes), levelSize, levelSize);
-
-                std::vector<Color> colors(static_cast<std::size_t>(levelSize) * static_cast<std::size_t>(levelSize),
-                                          Color(0, 0, 0, 0));
+                const std::vector<uint8_t>& rgba =
+                    decoded.faces[static_cast<std::size_t>(face)][static_cast<std::size_t>(level)];
+                std::vector<Color> colors(
+                    static_cast<std::size_t>(levelSize) * static_cast<std::size_t>(levelSize),
+                    Color(0, 0, 0, 0));
                 rgbaToColors(rgba, colors.data(), 0, static_cast<int>(colors.size()));
                 result.SetData(static_cast<CubeMapFace>(face), level, nullptr,
                                colors.data(), 0, static_cast<int>(colors.size()));
-
-                offset += static_cast<std::size_t>(blockBytes);
                 levelSize = std::max(1, levelSize / 2);
             }
         }
