@@ -44,7 +44,9 @@ function(cna_configure_mojoshader)
     include(FetchContent)
 
     set(_cna_fna3d_mojoshader_patch
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-effect-parser-robustness.patch")
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-effect-parser-robustness.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-fragment-precision.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-vertex-color-clamp.patch")
     set(_cna_fna3d_mojoshader_patch_script
         "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-mojoshader-patch.cmake")
 
@@ -79,7 +81,7 @@ function(cna_configure_mojoshader)
 
     # A FETCHCONTENT_SOURCE_DIR_FNA3D override bypasses FetchContent's download/update/patch
     # steps. Re-run the idempotent script explicitly so an offline/local checkout receives the
-    # same required parser fix before any configured FNA3D target is compiled.
+    # same required fixes before any configured FNA3D target is compiled.
     execute_process(
         COMMAND "${CMAKE_COMMAND}"
                 "-DCNA_FNA3D_MOJOSHADER_PATCH_FILE=${_cna_fna3d_mojoshader_patch}"
@@ -88,7 +90,7 @@ function(cna_configure_mojoshader)
         RESULT_VARIABLE _cna_fna3d_mojoshader_patch_result)
     if(NOT _cna_fna3d_mojoshader_patch_result EQUAL 0)
         message(FATAL_ERROR
-            "CNA: failed to ensure the required MojoShader Effect parser patch is applied in "
+            "CNA: failed to ensure the required MojoShader patches are applied in "
             "${fna3d_SOURCE_DIR}.")
     endif()
 

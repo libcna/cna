@@ -621,9 +621,11 @@ if(CNA_BUILD_TESTS)
     cna_c_api_enable_strict_warnings(cna_c_api_draw3d_smoke)
     add_test(NAME CApi_Draw3DSmoke COMMAND cna_c_api_draw3d_smoke)
     # This draws and reads pixels back, so it needs a driver that can give it a GL context. Under
-    # the dummy driver it had been failing at cna_game_create -- returning 1, "no window" -- which
-    # is a failure it can never get past on any machine, and which masks whatever the draw path
-    # actually does. Same convention as CApi_OwnedGraphicsDeviceSmoke below.
+    # the dummy driver -- which has no OpenGL at all -- it had been failing at cna_game_create,
+    # returning 1, "no window": a failure it can never get past on any machine, and one that masks
+    # whatever the draw path actually does. Naming the driver and the display here rather than
+    # inheriting whichever one ctest was started with keeps the run hermetic on a GL build too.
+    # Same convention as CApi_OwnedGraphicsDeviceSmoke below.
     set_tests_properties(CApi_Draw3DSmoke PROPERTIES
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
     )
@@ -1968,6 +1970,7 @@ if(CNA_BUILD_TESTS)
                 -DCNA_EXPECT_STATIC=$<BOOL:${CNA_C_API_BUILD_STATIC}>
                 -DCNA_CONSUMER_VIDEODRIVER=x11
                 -DCNA_CONSUMER_DISPLAY=${CNA_TEST_DISPLAY}
+                -DCNA_GRAPHICS_RENDERER=${CNA_GRAPHICS_RENDERER}
                 -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/RunInstalledConsumer.cmake)
         # It installs, configures, compiles and runs; it is by far the slowest test here, and the
         # steady-state cost is small because cmake --install rewrites nothing that has not changed.

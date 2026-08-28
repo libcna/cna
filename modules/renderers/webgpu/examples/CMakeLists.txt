@@ -12,12 +12,41 @@ include_directories(${CNA_GRAPHICS_EXAMPLES_DIR})
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
    AND CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU")
     enable_testing()
+
+    # WEBGPU-150: route every display/GPU-backed WebGPU test (those whose ENVIRONMENT sets a DISPLAY)
+    # through a preflight/retry launcher so a headless / no-adapter host SKIPs (CTest code 77) instead
+    # of producing dozens of abort failures, while real failures and expected aborts propagate. Set
+    # before any cna_register_renderer_test call so the shared macro (cmake/TestHelpers.cmake) sees it.
+    set(CNA_RENDERER_GPU_TEST_LAUNCHER "${CMAKE_SOURCE_DIR}/modules/renderers/webgpu/webgpu_test_launcher.sh")
+    add_test(NAME WebGPU_LauncherSelfTest COMMAND sh
+        "${CMAKE_SOURCE_DIR}/modules/renderers/webgpu/webgpu_launcher_selftest.sh"
+        "${CNA_RENDERER_GPU_TEST_LAUNCHER}")
+    set_tests_properties(WebGPU_LauncherSelfTest PROPERTIES TIMEOUT 30 LABELS "WebGPU")
     if(TARGET cna_demo_2d)
         cna_register_renderer_test(NAME WebGPU_Native2D_Smoke COMMAND ${CMAKE_COMMAND} -DCNA_WEBGPU_DEMO=$<TARGET_FILE:cna_demo_2d> -P ${CMAKE_SOURCE_DIR}/cmake/WebGPUNativeSmokeTest.cmake
             TIMEOUT 70 LABELS "GraphicsSmoke;WebGPU" SKIP_REGULAR_EXPRESSION "\\[SKIP\\] CNA WebGPU native smoke")
     else()
         message(WARNING "CNA WebGPU: native smoke test requires CNA_BUILD_EXAMPLES=ON")
     endif()
+
+    # WEBGPU-1: SHA-256 integrity verification for the auto-downloaded wgpu-native packages. A pure
+    # CMake test (no GPU/display): it drives cmake/WebGPUChecksum.cmake with a good archive, a corrupt
+    # archive (must fail closed and remove the archive + stamp) and an unknown/empty hash.
+    cna_register_renderer_test(NAME WebGPU_ChecksumVerification COMMAND ${CMAKE_COMMAND}
+        -DMODULE=${CMAKE_SOURCE_DIR}/cmake/WebGPUChecksum.cmake
+        -DCHILD=${CMAKE_SOURCE_DIR}/cmake/tests/webgpu_checksum_verify_once.cmake
+        -DWORKDIR=${CMAKE_CURRENT_BINARY_DIR}/webgpu_checksum_tmp
+        -P ${CMAKE_SOURCE_DIR}/cmake/tests/webgpu_checksum_test.cmake
+        TIMEOUT 30 LABELS "WebGPU")
+
+    # WEBGPU-151: integration test of the real ThirdPartyWebGPU cache logic (cna_webgpu_prepare_cache
+    # + the versioned/hashed stamp + purge helpers): old/legacy stamp migration, correct new stamp,
+    # wrong hash (purge), changed version/asset, interrupted extraction, no archive. Pure CMake.
+    cna_register_renderer_test(NAME WebGPU_CacheMigration COMMAND ${CMAKE_COMMAND}
+        -DMODULE=${CMAKE_SOURCE_DIR}/cmake/WebGPUChecksum.cmake
+        -DWORKDIR=${CMAKE_CURRENT_BINARY_DIR}/webgpu_cache_tmp
+        -P ${CMAKE_SOURCE_DIR}/cmake/tests/webgpu_cache_test.cmake
+        TIMEOUT 30 LABELS "WebGPU")
 
     # WEBGPU-91/92: pixel-asserted readback coverage -- registered the same way as
     # WebGPU_Native2D_Smoke (SKIP_REGULAR_EXPRESSION for a headless/no-display environment),
@@ -49,6 +78,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_Clear_Readback COMMAND cna_test_webgpu_clear_readback
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plans/plan_webgpu.md WEBGPU-123: the shared cross-renderer diagnostic scene built for WEBGPU,
+    # exactly as EASYGL's cna_diag_easygl and SOFTWARE's cna_diag_software. Deliberately NOT a CTest
+    # (mirrors those two): it writes a 64x64 RGBA8 dump for cna_diag_compare to diff against another
+    # backend's dump, which is a two-build comparison, not a single-run pass/fail.
+    cna_webgpu_test(cna_diag_webgpu ${CNA_GRAPHICS_EXAMPLES_DIR}/cross_renderer_diagnostic_scene.cpp)
+
     # Phase 57/63 vertical slice: DrawColoredPrimitives/DrawIndexedColoredPrimitives.
     cna_webgpu_test(cna_test_webgpu_colored3d webgpu_colored3d_test.cpp)
     cna_register_renderer_test(NAME WebGPU_Colored3D COMMAND cna_test_webgpu_colored3d
@@ -74,6 +109,77 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_webgpu_test(cna_test_webgpu_littextured3d webgpu_littextured3d_test.cpp)
     cna_register_renderer_test(NAME WebGPU_LitTextured3D COMMAND cna_test_webgpu_littextured3d
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # WEBGPU-76: custom-WGSL ShaderEffect on the 3D DrawPrimitives route -- CreateEffectRenderer /
+    # WebGPUEffectRenderer / DeclareUniformBlockEXT, and World reaching the WGSL vertex stage.
+    cna_webgpu_test(cna_test_webgpu_shadereffect_3d webgpu_shadereffect_3d_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_ShaderEffect3D COMMAND cna_test_webgpu_shadereffect_3d
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # WEBGPU-85/86/87: multiple simultaneous render targets -- binds 2 then 4 targets and proves a
+    # custom-WGSL @location(0..N-1) fragment writes each slot's own content (not slot 0's in all).
+    cna_webgpu_test(cna_test_webgpu_mrt webgpu_mrt_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_MRT COMMAND cna_test_webgpu_mrt
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # WEBGPU-142: custom-WGSL ShaderEffect on the SpriteBatch route -- SetCustomEffect /
+    # IssueSpriteWithCustomEffect (a tint effect proves the sprite path runs the custom shader).
+    cna_webgpu_test(cna_test_webgpu_spritebatch_shadereffect webgpu_spritebatch_shadereffect_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_SpriteBatch_ShaderEffect COMMAND cna_test_webgpu_spritebatch_shadereffect
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # WEBGPU-144: GPU-native block-compressed textures -- a DXT1/BC1 block uploads to a BC texture
+    # and the GPU decodes it at sample time (no CPU decompression), plus an exact block round-trip.
+    cna_webgpu_test(cna_test_webgpu_compressed_texture webgpu_compressed_texture_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_CompressedTexture COMMAND cna_test_webgpu_compressed_texture
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # WEBGPU-144 Phase 2 (XNB-24): the content loaders reach the GPU-native BC path -- FromStream
+    # (DDS) and the .xnb Texture2DReader keep DXT compressed (gated on LoadsCompressedContentNativelyEXT)
+    # instead of force-decoding to Color.
+    cna_webgpu_test(cna_test_webgpu_compressed_content webgpu_compressed_content_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_CompressedContent COMMAND cna_test_webgpu_compressed_content
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # WEBGPU-83 (Phase 2): stencil ops bake into a NON-colored3d family's pipeline -- a stamp then
+    # a gate on the Textured3D route, where the gate must be rejected outside the stamped region.
+    cna_webgpu_test(cna_test_webgpu_stencil_family webgpu_stencil_family_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_StencilFamily COMMAND cna_test_webgpu_stencil_family
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # WEBGPU-83 (Phase 3): DepthStencilState.TwoSidedStencilMode -- a back-facing triangle must pick
+    # up the CounterClockwise* stencil ops (differential vs the two-sided=false control), the
+    # cross-renderer parity contract from easygl_depthstencilstate_stencil_twosided_test.cpp.
+    cna_webgpu_test(cna_test_webgpu_stencil_twosided webgpu_stencil_twosided_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_StencilTwoSided COMMAND cna_test_webgpu_stencil_twosided
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # WEBGPU-39: RenderTarget2D honours its DepthFormat exactly instead of always allocating
+    # Depth24Stencil8. None -> no depth test (far fragment overwrites), Depth16/Depth24 -> depth
+    # test works with NO stencil op named on the pass, Depth24Stencil8 -> depth test + a working
+    # stamp/gate stencil round trip on the target's own attachment.
+    cna_webgpu_test(cna_test_webgpu_depthformat webgpu_depthformat_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_DepthFormat COMMAND cna_test_webgpu_depthformat
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # WEBGPU-28: every WGSL source is extracted into webgpu_shaders.hpp and compilable through one
+    # entry point (ValidateAllShadersEXT); this drives it on a real device and asserts the whole set
+    # -- including shaders a scene never draws (mipBlit, the Pbr/SkinnedPbr variants) -- compiles.
+    cna_webgpu_test(cna_test_webgpu_shader_validation webgpu_shader_validation_test.cpp)
+    # ValidateAllShadersEXT lives on the concrete WebGPURenderer, so this test includes
+    # WebGPURenderer.hpp and needs webgpu.h on its include path (via the WebGPU::WebGPU target).
+    target_link_libraries(cna_test_webgpu_shader_validation PRIVATE WebGPU::WebGPU)
+    cna_register_renderer_test(NAME WebGPU_ShaderValidation COMMAND cna_test_webgpu_shader_validation
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # WEBGPU-12/59: transient per-draw buffer pool + 3-slot sprite vertex ring. Renders a fixed
+    # scene for many frames and asserts the pool's create count plateaus while its reuse count keeps
+    # climbing (bounded + reused), with zero uncaptured GPU errors. Reads pool stats off the
+    # concrete WebGPURenderer, so it also links WebGPU::WebGPU.
+    cna_webgpu_test(cna_test_webgpu_buffer_pool_stress webgpu_buffer_pool_stress_test.cpp)
+    target_link_libraries(cna_test_webgpu_buffer_pool_stress PRIVATE WebGPU::WebGPU)
+    cna_register_renderer_test(NAME WebGPU_BufferPoolStress COMMAND cna_test_webgpu_buffer_pool_stress
+        TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 1105 (plans/plan_graphics.md Phase 80): GetOrCreatePipelineLitTextured3DVertexLit /
     # BasicEffect.PreferPerPixelLighting real dispatch.
@@ -114,6 +220,44 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_webgpu_test(cna_test_webgpu_environmentmapeffect_fog webgpu_environmentmapeffect_fog_test.cpp)
     cna_register_renderer_test(NAME WebGPU_EnvironmentMapEffect_Fog COMMAND cna_test_webgpu_environmentmapeffect_fog
         TIMEOUT 90 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # WEBGPU-145: BasicEffect fog (FNA EffectHelpers.SetFogVector) on the colored3d / textured3d /
+    # colored_textured3d / lit_textured3d (per-pixel + per-vertex) WGSL families. Public BasicEffect
+    # API only: FogStart==FogEnd collapses every family to FogColor (the drop-the-fog discriminator),
+    # half fog lies between base and FogColor, boundaries, and FogColor genuinely drives the blend.
+    cna_webgpu_test(cna_test_webgpu_basiceffect_fog webgpu_basiceffect_fog_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_BasicEffect_Fog COMMAND cna_test_webgpu_basiceffect_fog
+        TIMEOUT 90 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # WEBGPU-146: AlphaTestEffect fog on both alpha_test3d WGSL modules (uncolored stride-20 and
+    # vertex-colour stride-24). Fog applies to the pixel that survives the alpha-test discard.
+    cna_webgpu_test(cna_test_webgpu_alphatesteffect_fog webgpu_alphatesteffect_fog_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_AlphaTestEffect_Fog COMMAND cna_test_webgpu_alphatesteffect_fog
+        TIMEOUT 90 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # WEBGPU-147: DualTextureEffect fog on both dual_texture3d WGSL modules (uncolored stride-20 and
+    # vertex-colour stride-24). Fog blends the composed sample0*2 x sample1 x tint result.
+    cna_webgpu_test(cna_test_webgpu_dualtextureeffect_fog webgpu_dualtextureeffect_fog_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_DualTextureEffect_Fog COMMAND cna_test_webgpu_dualtextureeffect_fog
+        TIMEOUT 90 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # WEBGPU-148: SkinnedEffect fog across all four skinned WGSL modules ({per-pixel,per-vertex}
+    # lighting x {stride-52, stride-56 vertex colour}). Fog uses the SKINNED view-space position.
+    cna_webgpu_test(cna_test_webgpu_skinnedeffect_fog webgpu_skinnedeffect_fog_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_SkinnedEffect_Fog COMMAND cna_test_webgpu_skinnedeffect_fog
+        TIMEOUT 90 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # WEBGPU-70: the reachable draw routes honour vertexStart (DrawPrimitives) / baseVertex+startIndex
+    # (DrawIndexedPrimitives) -- two identically-placed red/blue triangles, offset selects which.
+    cna_webgpu_test(cna_test_webgpu_vertexstart webgpu_vertexstart_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_VertexStart COMMAND cna_test_webgpu_vertexstart
+        TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # WEBGPU-108: PresentInterval -> present-mode policy (FIFO/Immediate/Mailbox + unsupported-mode
+    # fallback). A pure unit test of the WGPU-free SelectPresentModeChoiceEXT seam -- no GPU/display.
+    cna_webgpu_test(cna_test_webgpu_present_mode webgpu_present_mode_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_PresentModeMapping COMMAND cna_test_webgpu_present_mode
+        TIMEOUT 30 LABELS "WebGPU")
 
     # WEBGPU-27/38/68: instanced3d.wgsl / GetOrCreatePipelineInstanced3D / DrawInstancedPrimitivesEx
     # -- a genuine second (WGPUVertexStepMode_Instance) vertex buffer binding carrying a
@@ -248,6 +392,34 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # (volume texture) support (previously IGraphicsRenderer's own nullptr-returning default).
     cna_webgpu_test(cna_test_webgpu_texture3d webgpu_texture3d_test.cpp)
     cna_register_renderer_test(NAME WebGPU_Texture3D COMMAND cna_test_webgpu_texture3d
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # WEBGPU-47: a disposed VertexBuffer/IndexBuffer must throw System::ObjectDisposedException from
+    # SetData on the WebGPU device (the guard is the XNA GraphicsResource layer's; this proves the
+    # WebGPU path leaves it intact and that a live upload on the same device still works).
+    cna_webgpu_test(cna_test_webgpu_disposed_guard webgpu_disposed_guard_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_DisposedGuard COMMAND cna_test_webgpu_disposed_guard
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # WEBGPU-44/99: SetDataWithOptions (None/Discard/NoOverwrite) uploads correctly for every option,
+    # and a Discard re-upload between two already-queued draws does not corrupt the first (this
+    # renderer snapshots each draw's vertices at queue time, so the immediate-mode Discard hazard
+    # cannot occur).
+    cna_webgpu_test(cna_test_webgpu_setdataoptions webgpu_setdataoptions_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_SetDataOptions COMMAND cna_test_webgpu_setdataoptions
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # WEBGPU-63: every SpriteBatch sort mode's ordering (Immediate/Deferred/Texture/FrontToBack/
+    # BackToFront) reaches the WebGPU submission path -- two overlapping solid sprites, which colour
+    # ends up on top, with each depth-sorted mode set opposite to submission order.
+    cna_webgpu_test(cna_test_webgpu_spritebatch_sortmode webgpu_spritebatch_sortmode_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_SpriteBatch_SortMode COMMAND cna_test_webgpu_spritebatch_sortmode
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # WEBGPU-84: real GPU occlusion queries -- the same quad reads back 0 samples behind an occluder
+    # and a full target of samples in front, with two independent per-slot query results.
+    cna_webgpu_test(cna_test_webgpu_occlusion_query webgpu_occlusion_query_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_OcclusionQuery COMMAND cna_test_webgpu_occlusion_query
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # WEBGPU-114: WebGPURenderTargetCubeRenderer / CreateRenderTargetCube() -- this renderer's first
@@ -807,6 +979,46 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/backbuffer_headless_reject_test.cpp)
     cna_register_renderer_test(NAME WebGPU_BackbufferReject COMMAND cna_test_webgpu_backbuffer_reject
         TIMEOUT 300 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+endif()
+
+# plans/plan_webgpu.md WEBGPU-121: browser shader coverage. The native effect suites above prove
+# every WGSL pair compiles under wgpu-native; this block builds a curated set of the same Game
+# programs for the browser so their WGSL is compiled by emdawnwebgpu's Tint path via
+# createShaderModule too. The set is the shaders with features BasicEffect (already browser-verified
+# by cna_house3d_demo) does not exercise: PbrEffect's metallic-roughness BRDF, EnvironmentMapEffect's
+# cube-map sampling, and SkinnedEffect's bone palette. dual-texture and alpha-test are narrow
+# variants of the already-verified textured3d path. Each is a self-contained procedural Game (no
+# preloaded assets); drive them with scripts/run-webgpu-browser-test.sh (CNA_WEBGPU_DEMO=<target>).
+if(EMSCRIPTEN AND CNA_BUILD_EXAMPLES AND CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU")
+    macro(cna_webgpu_effect_page target src)
+        add_executable(${target} ${src})
+        set_target_properties(${target} PROPERTIES SUFFIX ".html")
+        target_link_libraries(${target} PRIVATE
+            CNA ${RENDERER_TARGET} SDL3::SDL3-static SHARP_RUNTIME)
+        target_link_options(${target} PRIVATE
+            -sALLOW_MEMORY_GROWTH=1
+            -sSTACK_SIZE=1048576
+            -sINITIAL_MEMORY=67108864
+            -sFORCE_FILESYSTEM=1)
+    endmacro()
+
+    cna_webgpu_effect_page(cna_webgpu_pbr3d_page       webgpu_pbr3d_test.cpp)
+    cna_webgpu_effect_page(cna_webgpu_envmap3d_page    webgpu_envmap3d_test.cpp)
+    cna_webgpu_effect_page(cna_webgpu_skinned3d_page   webgpu_skinned3d_test.cpp)
+    # The last two shader pairs: narrow variants of the already-verified textured3d path, built to
+    # close the "all 9" WEBGPU-121 question with real in-browser evidence rather than by inference.
+    cna_webgpu_effect_page(cna_webgpu_dualtexture3d_page webgpu_dualtexture3d_test.cpp)
+    cna_webgpu_effect_page(cna_webgpu_alphatest3d_page   webgpu_alphatest3d_test.cpp)
+
+    # plans/plan_webgpu.md WEBGPU-123: the shared, renderer-agnostic cross-renderer diagnostic scene
+    # (one unlit vertex-colour triangle -> 64x64 RGBA8 dump), built for WEBGPU exactly as SOFTWARE
+    # and EASYGL build it, so the WebGPU output can be pixel-compared against another backend's dump
+    # with cna_diag_compare. Under Emscripten it writes into MEMFS; scripts/run-webgpu-parity-test.sh
+    # extracts the dump and runs the comparison.
+    cna_webgpu_effect_page(cna_diag_webgpu ${CNA_GRAPHICS_EXAMPLES_DIR}/cross_renderer_diagnostic_scene.cpp)
+    # The scene writes its dump into MEMFS; export FS so the driver page (run-webgpu-parity-test.sh)
+    # can read the bytes back out of the browser without modifying the renderer-agnostic scene.
+    target_link_options(cna_diag_webgpu PRIVATE "SHELL:-sEXPORTED_RUNTIME_METHODS=FS,callMain")
 endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot

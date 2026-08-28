@@ -597,6 +597,14 @@ TEST(EasyGLCompiledEffectDrawTest, SharedRenderTargetSourceContract)
     CNA::TestSupport::RunCompiledEffectRenderTargetSourceContract(device);
 }
 
+TEST(EasyGLCompiledEffectDrawTest, SharedSpriteBatchRenderTargetSourceContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectSpriteBatchRenderTargetSourceContract(device);
+}
+
 TEST(EasyGLCompiledEffectDrawTest, SharedSpriteBatchMultiPassContract)
 {
     GraphicsDevice device;
@@ -705,6 +713,104 @@ TEST(EasyGLCompiledEffectDrawTest, SharedTruncationContract)
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectTruncationContract(device);
+}
+
+
+// SAMPLE-028: MojoShader ends every generated vertex shader with Direct3D 9's clip-space depth
+// conversion (`gl_Position.z = gl_Position.z * 2.0 - gl_Position.w`), because OpenGL's clip volume
+// is z in [-w, w] where Direct3D's is [0, w]. EasyGL's own stock shaders do NOT do that -- they
+// emit the XNA projection's Direct3D-style z unchanged. Without a compensating GL depth range the
+// two encodings disagree, and compiled-effect geometry is depth-tested against everything else on
+// a different scale: it wins where it should lose.
+//
+// Found on ColorReplacementSample_4_0, where the car body (a compiled effect) swallowed the
+// headlight lens and thin window edges that ordinary BasicEffect parts draw in front of it. This
+// pins the ordering directly: a compiled-effect quad placed BEHIND stock geometry must not
+// overwrite it.
+TEST(EasyGLCompiledEffectDrawTest, IsDepthTestedOnTheSameScaleAsStockGeometry)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+
+    auto runtime = CreateRuntime(device, "CnaConformanceEffect.fxb");
+    ASSERT_NE(runtime, nullptr);
+
+    Texture2D white = Texture2D::CreateFromPixels(
+        device, 1, 1, std::vector<std::uint8_t>{255, 255, 255, 255});
+    runtime->SetParameterTexture(5, &white);  // FxTexture is parameter 5.
+
+    RenderTarget2D rt(device, 8, 8, false, SurfaceFormat::Color, DepthFormat::Depth24);
+    device.SetRenderTarget(&rt);
+    device.Clear(Color(50, 50, 50, 255));
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    device.setDepthStencilStateProperty(DepthStencilState::Default);
+
+    // Both quads are handed over already in clip space -- the transforms are the identity, so the
+    // compiled effect's own `mul(Position, Transform)` passes them straight through, exactly as
+    // the sibling golden-pixel test relies on. z is therefore Direct3D-style: 0 is the near plane.
+    struct Vertex { float x, y, z; std::uint32_t rgba; };
+    const std::uint32_t kRed = 0xFF0000FFu;   // AABBGGRR: opaque red
+    auto fullScreenQuad = [kRed](float z) {
+        return std::vector<Vertex>{
+            {-1.0f,  1.0f, z, kRed}, {-1.0f, -1.0f, z, kRed}, { 1.0f, -1.0f, z, kRed},
+            {-1.0f,  1.0f, z, kRed}, { 1.0f, -1.0f, z, kRed}, { 1.0f,  1.0f, z, kRed}};
+    };
+    const VertexDeclaration stockDeclaration(16, {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        VertexElement(12, VertexElementFormat::Color, VertexElementUsage::Color, 0),
+    });
+
+    // 1. Stock geometry at z = 0.6. The two z values are chosen so the encodings disagree about
+    //    the ORDER, which is the whole defect: stock lands at (0.6+1)/2 = 0.800, and a compiled
+    //    quad at z = 0.7 lands at 0.700 without the compensation (wrongly nearer) but at
+    //    0.5 + 0.5*0.7 = 0.850 with it (correctly farther). Any pair with
+    //    z_stock < z_fx < (z_stock+1)/2 exposes it; this one is the sample's own situation, a lens
+    //    sitting just in front of the body.
+    const auto nearQuad = fullScreenQuad(0.6f);
+    auto stockVb = renderer->CreateVertexBuffer(6);
+    stockVb->SetVertexDeclaration(stockDeclaration);
+    stockVb->SetData(nearQuad.data(), 6, sizeof(Vertex));
+    GpuDrawParams stockParams{};
+    ASSERT_NO_THROW(renderer->DrawPrimitivesEx(
+        *stockVb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+        Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 2, stockParams));
+
+    // 2. A compiled-effect quad strictly BEHIND it. It must be rejected by the depth test.
+    struct FxVertex { float x, y, z, u, v; };
+    const std::vector<FxVertex> farQuad = {
+        {-1.0f,  1.0f, 0.7f, 0.0f, 0.0f}, {-1.0f, -1.0f, 0.7f, 0.0f, 1.0f},
+        { 1.0f, -1.0f, 0.7f, 1.0f, 1.0f}, {-1.0f,  1.0f, 0.7f, 0.0f, 0.0f},
+        { 1.0f, -1.0f, 0.7f, 1.0f, 1.0f}, { 1.0f,  1.0f, 0.7f, 1.0f, 0.0f}};
+    const VertexDeclaration fxDeclaration(20, {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        VertexElement(12, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+    });
+    CompiledEffectDeviceState deviceState;
+    CompiledEffectPassStateChanges changes;
+    runtime->SetTechnique(0);
+    runtime->ApplyPass(0, deviceState, changes);
+
+    auto fxVb = renderer->CreateVertexBuffer(6);
+    fxVb->SetVertexDeclaration(fxDeclaration);
+    fxVb->SetData(farQuad.data(), 6, sizeof(FxVertex));
+    GpuDrawParams fxParams{};
+    fxParams.compiledEffectRuntime = runtime.get();
+    ASSERT_NO_THROW(renderer->DrawPrimitivesEx(
+        *fxVb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+        Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 2, fxParams));
+
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+    std::vector<Color> pixels(64);
+    rt.GetData(pixels.data(), static_cast<int>(pixels.size()));
+    const Color centre = pixels[8 * 4 + 4];
+    EXPECT_EQ(centre.getRProperty(), 255)
+        << "the stock quad is nearer, so it must still own the pixel";
+    EXPECT_EQ(centre.getGProperty(), 0)
+        << "a compiled-effect quad drawn BEHIND stock geometry overwrote it -- the two paths are "
+           "encoding depth on different scales";
+    EXPECT_EQ(centre.getBProperty(), 0);
 }
 
 #endif  // CNA_EASYGL_COMPILED_EFFECTS

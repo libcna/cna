@@ -34,17 +34,26 @@ namespace CNA::Internal::Xnb
         // Applies one type-erased parameter value, covering the types the pipeline can store
         // in an EffectMaterial's table. An unknown type is refused rather than dropped: a
         // silently skipped parameter renders as a wrong colour with no diagnostic at all.
-        void ApplyParameterValue(EffectParameter& parameter, const std::string& name,
+        void ApplyParameterValue(EffectMaterial& material, EffectParameter& parameter,
+                                 const std::string& name,
                                  const std::any& value, const std::string& assetName)
         {
+            // EffectParameter stores a raw Texture*, and the value table these come out of is a
+            // local that dies with this reader. Pointing a parameter straight into it left every
+            // textured material dereferencing freed memory at its first draw -- a crash inside
+            // dynamic_cast, from whichever draw happened to reuse the block first. The material
+            // takes ownership, so the pointer stays valid for as long as it can be drawn.
             if (const auto* texture = std::any_cast<std::shared_ptr<Texture2D>>(&value))
             {
+                material.RetainParameterTextureEXT(*texture);
                 parameter.SetValue(texture->get());
                 return;
             }
             if (const auto* texture = std::any_cast<Texture2D>(&value))
             {
-                parameter.SetValue(const_cast<Texture2D*>(texture));
+                auto owned = std::make_shared<Texture2D>(*texture);
+                parameter.SetValue(owned.get());
+                material.RetainParameterTextureEXT(std::move(owned));
                 return;
             }
             if (const auto* v = std::any_cast<std::int32_t>(&value)) { parameter.SetValue(*v); return; }
@@ -93,7 +102,8 @@ namespace CNA::Internal::Xnb
         {
             EffectParameter* parameter = material->getParametersProperty()[name];
             if (parameter == nullptr) continue;
-            ApplyParameterValue(*parameter, name, value, input.getAssetNameProperty());
+            ApplyParameterValue(*material, *parameter, name, value,
+                                input.getAssetNameProperty());
         }
         return material;
     }

@@ -394,7 +394,11 @@ protected:
 
 TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
 {
-    if (CNA_RENDERER_IS(Skia))
+    // The two signed-normalized byte formats differ only in channel count, and EasyGL stores
+    // them through one branch -- NormalizedByte2 as RG8_SNORM beside NormalizedByte4's
+    // RGBA8_SNORM. Both need the ES 3 class of context that has SNORM at all, so this list
+    // is deliberately the same one NormalizedByte4Throws uses.
+    if (CNA_RENDERER_IS(Skia, OpenGLES3, OpenGL33, WebGL2))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte2));
     }
@@ -586,7 +590,8 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         const bool easyGlSignedNormalized =
             CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2);
         const bool supported = format == SurfaceFormat::Color
-            || (easyGlSignedNormalized && format == SurfaceFormat::NormalizedByte4)
+            || (easyGlSignedNormalized && (format == SurfaceFormat::NormalizedByte4
+                                           || format == SurfaceFormat::NormalizedByte2))
             || (igl && (format == SurfaceFormat::Rg32 || format == SurfaceFormat::Single))
             || (skia && (false
             || format == SurfaceFormat::Bgr565

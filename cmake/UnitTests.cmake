@@ -214,6 +214,17 @@ if(CNA_BUILD_TESTS)
     # reasons as the harness-spawning tests above.
     if(WIN32 OR EMSCRIPTEN OR ANDROID OR CNA_APPLE_IOS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Microsoft/Xna/Framework/Content/GltfToCnjToolTests\\.cpp$")
+        # plans/plan_cnb.md CNBF-064: CnbCompilerToolTests.cpp spawns cna_tool_cnj_to_cnb with the
+        # same POSIX-only posix_spawn/sys-wait APIs, so it is excluded on exactly the same
+        # platforms and for exactly the same reasons.
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Content/Cnb/CnbCompilerToolTests\\.cpp$")
+        # CnbModelEquivalenceTests.cpp spawns cna_tool_gltf_to_cnj the same way, for the same
+        # reason: it needs a REAL converted asset, not a hand-built approximation of one.
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Content/Cnb/CnbModelEquivalenceTests\\.cpp$")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Content/Cnb/CnbInfoToolTests\\.cpp$")
+        # plans/plan_cnb.md CNBF-120: CnbSourceToolTests.cpp spawns cna_tool_source_to_cnb the same
+        # way, so it is excluded on exactly the same platforms and for exactly the same reasons.
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Content/Cnb/CnbSourceToolTests\\.cpp$")
     endif()
 
     # DevicesShutdownOrderingTests.cpp (Task SDLCORE-011) uses the same POSIX-only process APIs
@@ -373,6 +384,10 @@ if(CNA_BUILD_TESTS)
             ${CMAKE_CURRENT_SOURCE_DIR}/modules/input/tests
             # PLAT-94: implementation test only; Sdl3AudioDevice remains out of public headers.
             ${CMAKE_CURRENT_SOURCE_DIR}/modules/audio/src
+            # plans/plan_cnb.md CNBF-122: the content tools' shared header-only helpers
+            # (CnaToolAtomicWrite.hpp), so the atomic-write contract can be asserted directly
+            # rather than only through what a subprocess happens to leave on disk.
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/common
     )
 
     # plans/plan_fx.md FX-060: the shared compiled-effect conformance suite is header-only test support
@@ -490,6 +505,14 @@ if(CNA_BUILD_TESTS)
         )
     endif()
 
+    # plans/plan_cnb.md CNBF-123: the CNB producer-output invariant test reads the three producers'
+    # own sources, so it needs the tools tree by absolute path rather than by guessing at the
+    # working directory. Baked in so the check can never silently skip itself in a build-directory
+    # run -- a source-level invariant that skips is an invariant nobody is enforcing.
+    target_compile_definitions(CnaTests PRIVATE
+        CNA_TOOLS_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tools"
+    )
+
     if(TARGET cna_tool_gltf_to_cnj)
         # plans/plan_cnj.md CNB-52: GltfToCnjToolTests.cpp spawns the real converter tool as a
         # subprocess (same reasoning as cna_net_two_process_harness above -- a separate
@@ -498,6 +521,48 @@ if(CNA_BUILD_TESTS)
         add_dependencies(CnaTests cna_tool_gltf_to_cnj)
         target_compile_definitions(CnaTests PRIVATE
             CNA_GLTF_TO_CNJ_TOOL_PATH="$<TARGET_FILE:cna_tool_gltf_to_cnj>"
+        )
+    endif()
+
+    if(TARGET cna_tool_cnj_to_cnb)
+        # plans/plan_cnb.md CNBF-063/CNBF-064: CnbCompilerToolTests.cpp spawns the real .cnj -> .cnb
+        # compiler as a subprocess, for the same reason GltfToCnjToolTests.cpp spawns its own
+        # tool -- proving cross-process determinism means two genuinely separate processes, not
+        # two calls inside one.
+        add_dependencies(CnaTests cna_tool_cnj_to_cnb)
+        target_compile_definitions(CnaTests PRIVATE
+            CNA_CNJ_TO_CNB_TOOL_PATH="$<TARGET_FILE:cna_tool_cnj_to_cnb>"
+        )
+    endif()
+
+    if(TARGET cna_tool_gltf_to_cnb)
+        # plans/plan_cnb.md CNBF-106: CnbGltfDirectToolTests.cpp spawns the direct compiler and
+        # compares its output against the two-step route byte for byte. Two separate processes,
+        # for the same reason the suites above use them.
+        add_dependencies(CnaTests cna_tool_gltf_to_cnb)
+        target_compile_definitions(CnaTests PRIVATE
+            CNA_GLTF_TO_CNB_TOOL_PATH="$<TARGET_FILE:cna_tool_gltf_to_cnb>"
+        )
+    endif()
+
+    if(TARGET cna_tool_source_to_cnb)
+        # plans/plan_cnb.md CNBF-120: CnbSourceToolTests.cpp spawns the direct source compiler as a
+        # subprocess, for the same reason the suites above do -- its contract is its exit code, its
+        # stderr and the bytes it leaves on disk, none of which a library call exercises. It was the
+        # only CNB tool with no such wiring, so the executable had never been run by a test at all.
+        add_dependencies(CnaTests cna_tool_source_to_cnb)
+        target_compile_definitions(CnaTests PRIVATE
+            CNA_SOURCE_TO_CNB_TOOL_PATH="$<TARGET_FILE:cna_tool_source_to_cnb>"
+        )
+    endif()
+
+    if(TARGET cna_tool_cnb_info)
+        # plans/plan_cnb.md CNBF-H013: CnbInfoToolTests.cpp spawns the inspector as a subprocess, for
+        # the same reason the other tool suites do -- it has its own main() and its contract is its
+        # stdout and its exit code, neither of which a library call exercises.
+        add_dependencies(CnaTests cna_tool_cnb_info)
+        target_compile_definitions(CnaTests PRIVATE
+            CNA_CNB_INFO_TOOL_PATH="$<TARGET_FILE:cna_tool_cnb_info>"
         )
     endif()
 
@@ -693,7 +758,7 @@ if(CNA_BUILD_TESTS)
         "L6|GltfConformanceL6.*:GltfDrawParamsOracleL6.*:GltfLightingPolicy.*:GltfLightBudget.*:GltfPbrBrdf.*"
         "Perf|GltfPerformance.*"
         "Ledger|GltfKnownDefect.*"
-        "Tool|GltfToCnjToolTest.*:RuntimeGltfModelTest.*")
+        "Tool|GltfToCnjToolTest.*:RuntimeGltfModelTest.*:CnbGltfDirectToolTest.*")
     foreach(_gltf_rung IN LISTS CNA_GLTF_CONFORMANCE_RUNGS)
         string(FIND "${_gltf_rung}" "|" _gltf_sep)
         string(SUBSTRING "${_gltf_rung}" 0 ${_gltf_sep} _gltf_layer)

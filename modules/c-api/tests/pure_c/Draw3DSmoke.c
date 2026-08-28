@@ -4,7 +4,15 @@
 #include <CNA/C/cna.h>
 
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
+
+/*
+ * Every route below is a separate claim, and a bare exit code cannot say which one broke.
+ * REPORT names the stage the moment it fails, the way the sibling smoke programs do.
+ */
+#define REPORT(condition) ((condition) ? 1 : (fprintf(stderr, \
+    "Draw3DSmoke failure at line %d: %s\n", __LINE__, #condition), 0))
 
 typedef struct Draw3DState {
     CNA_Bool supports_3d;
@@ -130,17 +138,19 @@ static int clear_and_confirm(
     CNA_Color clear_color)
 {
     CNA_Color pixel = {0U, 0U, 0U, 0U};
-    /* Depth as well as colour, and that is the whole of what was wrong with this test.
-       It used to clear CNA_CLEAR_OPTION_TARGET alone, which leaves the depth buffer holding
-       whatever the window system handed over -- undefined on the first frame. The triangle sits at
-       z = 0, so against undefined depth the default LessEqual test could discard every fragment,
-       and the draw then reported success while changing no pixel. That reads exactly like a broken
-       draw path and is not one: the geometry, the effect and the routes are all fine. */
+    /*
+     * Depth as well as colour, and that is the whole of what was wrong with this test. It used to
+     * clear CNA_CLEAR_OPTION_TARGET alone, which leaves the depth buffer holding whatever the
+     * window system handed over -- undefined before the first clear in both D3D and GL.
+     * DepthStencilState.Default keeps depth testing on and the triangle sits at z = 0, so against
+     * undefined depth the LessEqual test could discard every fragment: the draw then reported
+     * success while changing no pixel, which reads exactly like a broken draw path and is not one.
+     * Clearing target, depth and stencil together is what XNA's own Clear(Color) does.
+     */
     if (cna_graphics_device_clear_options(
             graphics_device,
-            CNA_CLEAR_OPTION_TARGET | CNA_CLEAR_OPTION_DEPTH_BUFFER,
-            clear_color, 1.0F, 0) !=
-        CNA_RESULT_SUCCESS) {
+            CNA_CLEAR_OPTION_TARGET | CNA_CLEAR_OPTION_DEPTH_BUFFER | CNA_CLEAR_OPTION_STENCIL,
+            clear_color, 1.0F, 0) != CNA_RESULT_SUCCESS) {
         return 0;
     }
     if (!state->has_readback) {
@@ -208,9 +218,9 @@ static int validate_real_output(CNA_Handle graphics_device, Draw3DState* state)
         const CNA_UserPrimitives primitives = {
             sizeof(CNA_UserPrimitives), UINT32_C(1), CNA_PRIMITIVE_TRIANGLE_LIST,
             CNA_USER_VERTEX_SOURCE_POSITION_COLOR, Triangle, CNA_INVALID_HANDLE, 0, 3, 1, 0U};
-        ok = cna_graphics_device_draw_user_primitives(graphics_device, &primitives) ==
-                CNA_RESULT_SUCCESS &&
-            confirm_drawn(graphics_device, state, clear_color);
+        ok = REPORT(cna_graphics_device_draw_user_primitives(
+                        graphics_device, &primitives) == CNA_RESULT_SUCCESS) &&
+            REPORT(confirm_drawn(graphics_device, state, clear_color));
         state->drew_user_primitives = ok;
     }
 
@@ -222,10 +232,10 @@ static int validate_real_output(CNA_Handle graphics_device, Draw3DState* state)
         const CNA_UserIndices indices = {
             sizeof(CNA_UserIndices), UINT32_C(1), CNA_INDEX_ELEMENT_SIZE_SIXTEEN_BITS, 0,
             TriangleIndices};
-        ok = clear_and_confirm(graphics_device, state, clear_color) &&
-            cna_graphics_device_draw_user_indexed_primitives(
-                graphics_device, &primitives, &indices) == CNA_RESULT_SUCCESS &&
-            confirm_drawn(graphics_device, state, clear_color);
+        ok = REPORT(clear_and_confirm(graphics_device, state, clear_color)) &&
+            REPORT(cna_graphics_device_draw_user_indexed_primitives(
+                       graphics_device, &primitives, &indices) == CNA_RESULT_SUCCESS) &&
+            REPORT(confirm_drawn(graphics_device, state, clear_color));
         state->drew_indexed = ok;
     }
 
@@ -267,16 +277,17 @@ static int validate_real_output(CNA_Handle graphics_device, Draw3DState* state)
                 CNA_RESULT_SUCCESS &&
             cna_graphics_device_set_index_buffer(graphics_device, index_buffer) ==
                 CNA_RESULT_SUCCESS &&
-            cna_graphics_device_draw_primitives(
-                graphics_device, CNA_PRIMITIVE_TRIANGLE_LIST, 0, 1) == CNA_RESULT_SUCCESS &&
-            confirm_drawn(graphics_device, state, clear_color);
+            REPORT(cna_graphics_device_draw_primitives(
+                       graphics_device, CNA_PRIMITIVE_TRIANGLE_LIST, 0, 1) ==
+                   CNA_RESULT_SUCCESS) &&
+            REPORT(confirm_drawn(graphics_device, state, clear_color));
     }
     if (ok) {
         ok = clear_and_confirm(graphics_device, state, clear_color) &&
-            cna_graphics_device_draw_indexed_primitives(
-                graphics_device, CNA_PRIMITIVE_TRIANGLE_LIST, 0, 0, 3, 0, 1) ==
-                CNA_RESULT_SUCCESS &&
-            confirm_drawn(graphics_device, state, clear_color);
+            REPORT(cna_graphics_device_draw_indexed_primitives(
+                       graphics_device, CNA_PRIMITIVE_TRIANGLE_LIST, 0, 0, 3, 0, 1) ==
+                   CNA_RESULT_SUCCESS) &&
+            REPORT(confirm_drawn(graphics_device, state, clear_color));
         state->drew_geometry = ok;
     }
 
@@ -305,8 +316,9 @@ static int validate_real_output(CNA_Handle graphics_device, Draw3DState* state)
     }
     if (ok) {
         ok = clear_and_confirm(graphics_device, state, clear_color) &&
-            cna_model_draw(model, Identity, Identity, Identity) == CNA_RESULT_SUCCESS &&
-            confirm_drawn(graphics_device, state, clear_color);
+            REPORT(cna_model_draw(model, Identity, Identity, Identity) ==
+                   CNA_RESULT_SUCCESS) &&
+            REPORT(confirm_drawn(graphics_device, state, clear_color));
         state->drew_model = ok;
     }
 

@@ -27,7 +27,7 @@ using System::Text::StringBuilder;
 
 // Single-glyph font: character 'A', kern=(leftBearing=1, width=8, rightBearing=2),
 // cropping height=12, lineSpacing=16, spacing=0.
-//   MeasureString("A")  → X = abs(1)+8+2 = 11,  Y = 16
+//   MeasureString("A")  → X = max(1,0)+8+2 = 11,  Y = 16
 //   MeasureString("AA") → X = 11 + (0+1)+8+2 = 22, Y = 16
 static SpriteFont makeFontA(float spacing = 0.0f,
                              std::optional<charcs> defaultChar = std::nullopt)
@@ -42,7 +42,7 @@ static SpriteFont makeFontA(float spacing = 0.0f,
 
 // Two-glyph font: 'A' (kern 1,8,2) and 'B' (kern 0,6,1).
 //   MeasureString("AB") with spacing=s:
-//     A first:  abs(1)+8+2 = 11
+//     A first:  max(1,0)+8+2 = 11
 //     B second: (s+0)+6+1  = s+7
 //     total X   = 11+s+7 = 18+s
 static SpriteFont makeFontAB(float spacing = 0.0f)
@@ -182,7 +182,7 @@ TEST(SpriteFontTest, MeasureEmptyStringReturnsZero)
 
 TEST(SpriteFontTest, MeasureSingleCharWidth)
 {
-    // A: abs(1)+8+2 = 11
+    // A: max(1,0)+8+2 = 11
     SpriteFont font = makeFontA();
     Vector2 size = font.MeasureString(std::string("A"));
     EXPECT_FLOAT_EQ(size.X, 11.0f);
@@ -230,6 +230,68 @@ TEST(SpriteFontTest, MeasureTwoDifferentCharsWithSpacing)
     SpriteFont font = makeFontAB(2.0f);
     Vector2 size = font.MeasureString(std::string("AB"));
     EXPECT_FLOAT_EQ(size.X, 20.0f);
+}
+
+// -----------------------------------------------------------------------
+// MeasureString — a line's first glyph, whose left side bearing is negative
+//
+// Measured against a live XNA 4.0 build (samples campaign SAMPLE-031), because FNA and XNA
+// disagree here and only one of them is the specification. The font is Segoe UI Mono Bold at
+// 12pt as the BloomPostprocess sample builds it: 'A' and 'X' have kerning.X = -1, 'B' has +1.
+// XNA's MeasureString returns 11 for "A" (= 0 + 11 + 0) and 10 for "B" (= 1 + 8 + 1), so a
+// negative bearing is CLAMPED AWAY on a line's first glyph rather than reflected: FNA's
+// Math.Abs would have made "A" 12. The same three single-character widths come back unchanged
+// when the font is rebuilt with Spacing 3 or -2, so Spacing is not applied there either.
+// -----------------------------------------------------------------------
+
+// Single-glyph font whose 'N' has a NEGATIVE left side bearing, kern=(-1, 8, 2).
+static SpriteFont makeFontNegativeBearing(float spacing = 0.0f)
+{
+    std::vector<Rectangle> glyphs   = { {0, 0, 8, 12} };
+    std::vector<Rectangle> cropping = { {0, 0, 8, 12} };
+    std::vector<charcs>    chars    = { u'N' };
+    std::vector<Vector3>   kern     = { Vector3(-1.0f, 8.0f, 2.0f) };
+    return SpriteFont(Texture2D{}, glyphs, cropping, chars,
+                      /*lineSpacing=*/16, spacing, kern, std::nullopt);
+}
+
+TEST(SpriteFontTest, FirstGlyphOfALineClampsANegativeLeftSideBearingToZero)
+{
+    // max(-1,0)+8+2 = 10. Math.Abs would give 11.
+    SpriteFont font = makeFontNegativeBearing();
+    EXPECT_FLOAT_EQ(font.MeasureString(std::string("N")).X, 10.0f);
+}
+
+TEST(SpriteFontTest, ANegativeLeftSideBearingStillAppliesAfterTheFirstGlyph)
+{
+    // "NN": 10 + (0 + -1) + 8 + 2 = 19. Only the FIRST glyph of a line is clamped.
+    SpriteFont font = makeFontNegativeBearing();
+    EXPECT_FLOAT_EQ(font.MeasureString(std::string("NN")).X, 19.0f);
+}
+
+TEST(SpriteFontTest, SpacingDoesNotApplyToTheFirstGlyphOfALine)
+{
+    // The measured XNA behaviour: a single character measures the same at any Spacing.
+    EXPECT_FLOAT_EQ(makeFontNegativeBearing(0.0f).MeasureString(std::string("N")).X, 10.0f);
+    EXPECT_FLOAT_EQ(makeFontNegativeBearing(3.0f).MeasureString(std::string("N")).X, 10.0f);
+    EXPECT_FLOAT_EQ(makeFontNegativeBearing(-2.0f).MeasureString(std::string("N")).X, 10.0f);
+    // ...while the second glyph does take it: 10 + (3 + -1) + 8 + 2 = 22.
+    EXPECT_FLOAT_EQ(makeFontNegativeBearing(3.0f).MeasureString(std::string("NN")).X, 22.0f);
+}
+
+TEST(SpriteFontTest, EveryLineClampsItsOwnFirstGlyph)
+{
+    // Both lines are 10 wide, so the widest line is 10 rather than 11.
+    SpriteFont font = makeFontNegativeBearing();
+    EXPECT_FLOAT_EQ(font.MeasureString(std::string("N\nN")).X, 10.0f);
+}
+
+TEST(SpriteFontTest, StringBuilderOverloadClampsTheFirstGlyphTheSameWay)
+{
+    SpriteFont font = makeFontNegativeBearing();
+    StringBuilder sb;
+    sb.Append(std::string("N"));
+    EXPECT_FLOAT_EQ(font.MeasureString(sb).X, 10.0f);
 }
 
 // -----------------------------------------------------------------------

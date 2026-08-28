@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <type_traits>
+
 #include "CNA/Internal/Graphics/IContentLosable.hpp"
 #include "System/EventArgs.hpp"
 #include "System/EventHandler.hpp"
@@ -54,6 +56,11 @@ namespace Microsoft::Xna::Framework::Graphics
          * Direct2D, Skia). Families that cannot lose one never raise it.
          */
         System::EventHandler<System::EventArgs> ContentLost;
+
+        // C++ name lookup stops at the first scope that declares the name, so the overloads below
+        // would hide every VertexBuffer::SetData. XNA's DynamicVertexBuffer inherits them all --
+        // a game restoring a lost buffer calls the whole-array form on the dynamic object.
+        using VertexBuffer::SetData;
 
         /**
          * @brief Uploads VertexPositionColor vertices with streaming semantics.
@@ -137,6 +144,70 @@ namespace Microsoft::Xna::Framework::Graphics
                      SetDataOptions options)
         {
             VertexBuffer::SetDataWithOptions(data, startIndex, elementCount, options);
+        }
+
+        /**
+         * @brief Uploads vertices of an application-defined XNA vertex type with streaming semantics.
+         *
+         * This is the C++ equivalent of XNA's generic
+         * `SetData<T>(T[] data, int startIndex, int elementCount, SetDataOptions options)`.
+         * A game supplies its own type here — a per-instance transform stream is the usual case,
+         * where the elements are plain `Matrix` values — so there is no packing step and the
+         * buffer's `VertexDeclaration` must describe exactly `sizeof(TVertex)` bytes.
+         *
+         * The built-in XNA vertex types keep their dedicated overloads above, which pack the C++
+         * object into the compact GPU stream first.
+         *
+         * @tparam TVertex Application-defined, trivially-copyable vertex type.
+         * @param data         Pointer to the source vertex array.
+         * @param startIndex   Index of the first element to read from @p data.
+         * @param elementCount Number of vertices to upload.
+         * @param options      Streaming hint (Discard / NoOverwrite / None).
+         */
+        template<typename TVertex>
+        void SetData(const TVertex* data,
+                     int startIndex,
+                     int elementCount,
+                     SetDataOptions options)
+        {
+            static_assert(std::is_trivially_copyable_v<TVertex>,
+                          "DynamicVertexBuffer::SetData<T> requires a trivially-copyable vertex type");
+            VertexBuffer::SetDataRawWithOptions(
+                data, startIndex, elementCount, static_cast<int>(sizeof(TVertex)), options);
+        }
+
+        /**
+         * @brief Uploads vertices into a window of this buffer, with streaming semantics.
+         *
+         * XNA's
+         * `SetData<T>(int offsetInBytes, T[] data, int startIndex, int elementCount, int vertexStride, SetDataOptions options)`.
+         * This is the overload a particle system needs: it writes only the newly created particles,
+         * at the position the circular queue has reached, instead of re-sending everything.
+         *
+         * @p options is accepted for conformance and not forwarded to the driver -- CNA composes a
+         * windowed write in a CPU shadow and uploads the buffer whole, which cannot keep a
+         * `NoOverwrite` promise. The contents end up correct; only the cost differs from XNA's.
+         *
+         * @tparam TVertex Application-defined, trivially-copyable vertex type.
+         * @param offsetInBytes Byte offset into this buffer, a multiple of @p vertexStride.
+         * @param data          Pointer to the source vertex array.
+         * @param startIndex    Index of the first element to read from @p data.
+         * @param elementCount  Number of vertices to upload.
+         * @param vertexStride  Size of one vertex in bytes.
+         * @param options       Streaming hint (Discard / NoOverwrite / None).
+         */
+        template<typename TVertex>
+        void SetData(int offsetInBytes,
+                     const TVertex* data,
+                     int startIndex,
+                     int elementCount,
+                     int vertexStride,
+                     SetDataOptions options)
+        {
+            static_assert(std::is_trivially_copyable_v<TVertex>,
+                          "DynamicVertexBuffer::SetData<T> requires a trivially-copyable vertex type");
+            VertexBuffer::SetDataRawAtWithOptions(
+                offsetInBytes, data, startIndex, elementCount, vertexStride, options);
         }
 
     private:

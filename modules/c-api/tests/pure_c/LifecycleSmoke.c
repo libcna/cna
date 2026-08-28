@@ -263,12 +263,22 @@ static CNA_Result on_update(
 {
     LifecycleState* const state = (LifecycleState*)context;
     (void)out_error;
-    if (game_time == 0 || game_time->elapsed_game_time_ticks <= 0) {
+    /*
+     * The FIRST update runs with ElapsedGameTime of exactly zero, and every later one carries a
+     * real step. That is XNA 4.0's own clock, measured on the real runtime and adopted by CNA on
+     * the owner's ruling that XNA is authoritative over FNA (SAMPLE-044). This used to require a
+     * positive step on every update, which is FNA's behaviour and what CNA had before that
+     * ruling -- so the assertion pinned the wrong runtime and a correct framework fix failed it.
+     */
+    if (game_time == 0) {
         return CNA_RESULT_INVALID_STATE;
     }
     if (state->lifecycle_stage == 1) {
+        if (game_time->elapsed_game_time_ticks != 0) {
+            return CNA_RESULT_INVALID_STATE;
+        }
         ++state->lifecycle_stage;
-    } else if (state->lifecycle_stage != 2) {
+    } else if (state->lifecycle_stage != 2 || game_time->elapsed_game_time_ticks <= 0) {
         return CNA_RESULT_INVALID_STATE;
     }
     CNA_KeyboardState keyboard_state = {

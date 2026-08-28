@@ -21,7 +21,26 @@ include_guard(GLOBAL)
 function(cna_register_renderer_test)
     cmake_parse_arguments(T "" "NAME;TIMEOUT;WORKING_DIRECTORY;SKIP_REGULAR_EXPRESSION" "COMMAND;LABELS;ENVIRONMENT" ${ARGN})
 
-    add_test(NAME ${T_NAME} COMMAND ${T_COMMAND})
+    # WEBGPU-150: opt-in launcher for display/GPU-backed tests. When CNA_RENDERER_GPU_TEST_LAUNCHER is
+    # set (currently only by the WebGPU examples), any single-executable test whose ENVIRONMENT selects
+    # a DISPLAY is routed through that launcher, which returns the CTest skip code (77) when the display
+    # or GPU adapter is unavailable and retries a transient X11 error -- so a headless run SKIPs those
+    # tests instead of aborting. Tests with no DISPLAY env (pure-CMake unit tests) and multi-command
+    # tests are registered unchanged. SKIP_RETURN_CODE 77 is already applied directory-wide.
+    list(LENGTH T_COMMAND _cna_cmd_len)
+    set(_cna_wrap_gpu FALSE)
+    # Only reference ${T_COMMAND} inside the single-element guard: a multi-token command (e.g. the
+    # native smoke test's `cmake -D... -P ...`) would make `if(TARGET ${T_COMMAND})` a parse error.
+    if(DEFINED CNA_RENDERER_GPU_TEST_LAUNCHER AND _cna_cmd_len EQUAL 1 AND "${T_ENVIRONMENT}" MATCHES "DISPLAY=")
+        if(TARGET ${T_COMMAND})
+            set(_cna_wrap_gpu TRUE)
+        endif()
+    endif()
+    if(_cna_wrap_gpu)
+        add_test(NAME ${T_NAME} COMMAND sh "${CNA_RENDERER_GPU_TEST_LAUNCHER}" "$<TARGET_FILE:${T_COMMAND}>")
+    else()
+        add_test(NAME ${T_NAME} COMMAND ${T_COMMAND})
+    endif()
 
     set(_cna_test_props "")
     if(DEFINED T_TIMEOUT)

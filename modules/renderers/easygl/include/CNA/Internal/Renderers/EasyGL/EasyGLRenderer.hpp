@@ -165,6 +165,12 @@ namespace CNA::Internal::Renderers::EasyGL
         void recreate_gl_resource() override;
         void ShareCpuPixels(std::shared_ptr<std::vector<uint8_t>> pixels) override;
 
+
+        /**
+         * @brief The raw SurfaceFormat ordinal this texture was created with.
+         * @return The ordinal; see ITextureRenderer::GetSurfaceFormatEXT for why a sampler needs it.
+         */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
     private:
         void UploadLevel(int level, int levelWidth, int levelHeight, const void* pixels);
 
@@ -238,7 +244,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /// plans/plan_modern.md MOD-115: the raw SurfaceFormat ordinal this target's colour storage was
         /// actually created with. Equal to what was requested -- an unsupported format is refused at
         /// creation rather than substituted, so this can never disagree with the caller's request.
-        [[nodiscard]] int GetSurfaceFormatEXT() const { return surfaceFormat_; }
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
         [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override
         {
             return depthFormatWasRequested && depthFormat_ != 0;
@@ -566,6 +572,10 @@ namespace CNA::Internal::Renderers::EasyGL
         [[nodiscard]] bool IsComplete() const override;
         [[nodiscard]] int  PixelCount() const override;
 
+        /// See IOcclusionQueryRenderer::PixelCountIsPreciseEXT. True once a driver has accepted
+        /// GL_SAMPLES_PASSED; false on the OpenGL ES 3.0 / WebGL 2 boolean fallback.
+        [[nodiscard]] bool PixelCountIsPreciseEXT() const noexcept override;
+
         void release_gl_handle_only() override;
         void recreate_gl_resource()   override;
 
@@ -620,16 +630,39 @@ namespace CNA::Internal::Renderers::EasyGL
         // flushed in one draw call. A flush also occurs when the texture changes.
         std::vector<Vertex>   pending_vertices_;
         std::vector<uint16_t> pending_indices_;
+        /**
+         * Writes the Direct3D 9 channel expansion for a surface format into the bound program.
+         *
+         * The locations are looked up on @p prog every flush rather than cached: a SpriteBatch
+         * drawn with a custom ShaderEffect runs that effect's OWN program, and a uniform location
+         * belongs to the program it came from -- handing one program's location to another is
+         * GL_INVALID_OPERATION, not a silent no-op. A custom effect samples the texture itself
+         * and has no such uniform, so the lookup simply misses and nothing is written.
+         *
+         * @param prog The program currently in use for this flush.
+         * @param surfaceFormat Raw SurfaceFormat ordinal of the texture about to be sampled.
+         */
+        void ApplyChannelExpansion(::easygl::Program* prog, int surfaceFormat) const;
+
         const ITextureRenderer* current_texture_ = nullptr;
         /// REMED-GFX-147: cached SampledRowOrderIsBottomUp(current_texture_). A batch is one
         /// texture by construction, so the answer is resolved when the source is bound, not once
         /// per sprite. Meaningless while current_texture_ is null.
+        ///
+        /// plans/plan_fx.md FX-118: false for a batch that flushes through the compiled-effect
+        /// route, which corrects row order per sampler slot instead. See
+        /// ResolveCurrentTextureRowOrder().
         bool current_texture_bottom_up_ = false;
         Matrix transform_ = Matrix::getIdentityProperty();
         Effect* customEffect_       = nullptr;
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
         std::unique_ptr<EasyGLCompiledEffect> spriteCompiledEffect_;
         std::uint32_t spriteMatrixParameterIndex_ = 0;
+        /// plans/plan_fx.md FX-120: the compiled route's own geometry, retained rather than created
+        /// per flush. The shared vertex array object records them, so a per-flush buffer would
+        /// leave it holding a deleted name -- which WebGL 2 refuses to draw with.
+        std::unique_ptr<IVertexBufferRenderer> compiledSpriteVertexBuffer_;
+        std::unique_ptr<IIndexBufferRenderer> compiledSpriteIndexBuffer_;
 #endif
 
         // Raw TextureFilter/TextureAddressMode values set via SetSamplerFilter/SetSamplerAddressMode
@@ -682,6 +715,28 @@ namespace CNA::Internal::Renderers::EasyGL
     private:
         void InitializeResources();
         void FlushBatch();
+
+        /**
+         * @brief Answers whether the batch currently being built will flush through the
+         *        compiled-Effect route.
+         *
+         * plans/plan_fx.md FX-118. The two routes correct a render target's row order in two
+         * different places -- the stock route mirrors V in the sprite's own vertex data
+         * (REMED-GFX-147), the compiled route binds a row-reversed copy of the source per sampler
+         * slot (FX-099) -- and applying both to one draw flips the image. The route is fixed for
+         * the whole batch, because SetCustomEffect() flushes whenever the effect changes.
+         *
+         * @return True when a compiled XNA Effect is set on this batch.
+         */
+        [[nodiscard]] bool BatchFlushesThroughCompiledEffect() const;
+
+        /**
+         * @brief Recomputes current_texture_bottom_up_ for the currently bound source.
+         *
+         * plans/plan_fx.md FX-118. Called when the source changes and when the effect changes,
+         * because either one can change the answer.
+         */
+        void ResolveCurrentTextureRowOrder();
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
         /// plans/plan_fx.md FX-080: the compiled-Effect half of FlushBatch(). Separate because it shares
         /// nothing with the stock/ShaderEffect route -- different program, different vertex array,
@@ -792,6 +847,12 @@ namespace CNA::Internal::Renderers::EasyGL
         // Declared first so it is destroyed last: all GL resources below release while the
         // platform context is still current and alive.
         std::unique_ptr<EasyGLPlatformContext> platformContext_;
+        // The viewport's own depth range. SetViewport() writes it unconditionally, so it cannot
+        // live behind CNA_EASYGL_COMPILED_EFFECTS -- a build without compiled effects, which is
+        // the default, would not compile. Compiled-effect draws narrow it and put it back
+        // (see SetCompiledEffectDepthRangeEXT).
+        float viewportMinDepth_ = 0.0f;
+        float viewportMaxDepth_ = 1.0f;
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
         // plans/plan_fx.md FX-062: one MojoShader GL context per this renderer's whole lifetime, created
         // lazily on first CreateCompiledEffect() call (see GetMojoShaderContextEXT() in
@@ -1251,6 +1312,30 @@ namespace CNA::Internal::Renderers::EasyGL
          *         consumes, the vertex shader itself samples a texture, or a reflected pixel-stage
          *         sampler has no 2D texture bound.
          */
+        /**
+         * @brief CNAEXT. Narrows the GL depth range for the duration of a compiled-effect draw.
+         *
+         * plans/plan_fx.md: MojoShader's generated GLSL ends every vertex shader with Direct3D 9's
+         * clip-space depth conversion, `gl_Position.z = gl_Position.z * 2.0 - gl_Position.w`,
+         * because OpenGL's clip volume is z in [-w, w] where Direct3D's is [0, w]. EasyGL's own
+         * stock shaders do NOT do that: they emit the XNA projection's Direct3D-style z unchanged,
+         * so all ordinary geometry lands in the upper half of the depth range.
+         *
+         * The two conventions therefore disagree, and geometry from a compiled effect is depth-
+         * tested against everything else on a different scale. Measured on
+         * ColorReplacementSample_4_0: the car body (a compiled effect) swallowed the headlight
+         * lens and thin window edges drawn by ordinary BasicEffect parts, which the XNA original
+         * renders in front of it.
+         *
+         * Setting the GL depth range to [(min+max)/2, max] while a compiled effect draws makes
+         * the two encodings produce identical window-space depth:
+         *   stock   d = min + (max-min)/2 + z*(max-min)/2
+         *   compiled d = min' + z*(max'-min'), with min' = (min+max)/2 and max' = max
+         *
+         * @param begin True to narrow the range, false to restore the viewport's own.
+         */
+        CNAEXT void SetCompiledEffectDepthRangeEXT(bool begin);
+
         CNAEXT void BindCompiledEffectForDrawEXT(
             const CompiledEffectStreamEXT* streams, std::size_t streamCount,
             ICompiledEffectRuntime& runtime,

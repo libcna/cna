@@ -137,6 +137,19 @@ namespace Microsoft::Xna::Framework::Graphics
             && device->GetRenderer().IsCompressedTransferFormatEXT(static_cast<int>(format));
     }
 
+    /// WEBGPU-144 Phase 2 / XNB-24: whether the content loaders should keep this block-compressed
+    /// format compressed rather than CPU-decompressing it to Color. True only for a renderer that
+    /// opts in via LoadsCompressedContentNativelyEXT() AND transfers this specific format as blocks
+    /// (IsCompressedTransferFormatEXT, which also carries any device-feature gate). Every renderer
+    /// that has not opted in keeps the historical decode-to-Color behaviour unchanged.
+    [[nodiscard]] static bool KeepCompressedOnLoadEXT(const GraphicsDevice* device,
+                                                      SurfaceFormat format) noexcept
+    {
+        return device != nullptr
+            && device->GetRenderer().LoadsCompressedContentNativelyEXT()
+            && device->GetRenderer().IsCompressedTransferFormatEXT(static_cast<int>(format));
+    }
+
     static int mipDim(int base, int level)
     {
         return std::max(1, base >> level);
@@ -2123,7 +2136,11 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         int width = 0;
         int height = 0;
+        // Level bytes: RGBA8 pixels when !compressed, raw block-compressed level bytes when
+        // compressed (WEBGPU-144 Phase 2). The field name is kept for the common RGBA case.
         std::vector<std::vector<uint8_t>> rgbaLevels;
+        bool compressed = false;
+        SurfaceFormat compressedFormat = SurfaceFormat::Color;
     };
 
     static uint32_t ReadU32Le(const uint8_t* bytes)
@@ -2152,6 +2169,7 @@ namespace Microsoft::Xna::Framework::Graphics
     // Once the DDS magic is present, every declared field and level is validated here and errors
     // are reported as DDS errors instead of falling through to an unrelated image decoder.
     static bool TryDecodeDds(const uint8_t* buf, std::size_t len, int maximumTextureDimension,
+                             const GraphicsDevice* device, bool allowCompressed,
                              DecodedTexture2D& decoded)
     {
         if (len < 4 || buf[0] != 'D' || buf[1] != 'D' || buf[2] != 'S' || buf[3] != ' ')
@@ -2194,6 +2212,13 @@ namespace Microsoft::Xna::Framework::Graphics
                 "(only DXT1/DXT3/DXT5 are supported)");
         }
 
+        // WEBGPU-144 Phase 2: keep the raw DXT blocks (upload them GPU-natively) when the device
+        // opts in; otherwise CPU-decompress each level to RGBA exactly as before.
+        const SurfaceFormat dxtFormat = fourCC == 0x31545844u ? SurfaceFormat::Dxt1
+                                      : fourCC == 0x33545844u ? SurfaceFormat::Dxt3
+                                                              : SurfaceFormat::Dxt5;
+        const bool keepCompressed = allowCompressed && KeepCompressedOnLoadEXT(device, dxtFormat);
+
         const int maximumLevels = CalculateMipLevels(width, height);
         const uint32_t declaredMipCount = r32(28);
         if (declaredMipCount > static_cast<uint32_t>(maximumLevels))
@@ -2215,6 +2240,8 @@ namespace Microsoft::Xna::Framework::Graphics
         DecodedTexture2D result;
         result.width = width;
         result.height = height;
+        result.compressed = keepCompressed;
+        result.compressedFormat = dxtFormat;
         result.rgbaLevels.reserve(static_cast<std::size_t>(mipCount));
 
         std::size_t offset = 128u;
@@ -2230,7 +2257,9 @@ namespace Microsoft::Xna::Framework::Graphics
             }
 
             const uint8_t* levelData = buf + offset;
-            if (fourCC == 0x31545844u)
+            if (keepCompressed)
+                result.rgbaLevels.emplace_back(levelData, levelData + levelBytes);
+            else if (fourCC == 0x31545844u)
                 result.rgbaLevels.push_back(DxtUtil::DecompressDxt1(
                     levelData, levelBytes, levelWidth, levelHeight));
             else if (fourCC == 0x33545844u)
@@ -2253,7 +2282,8 @@ namespace Microsoft::Xna::Framework::Graphics
     // DxtUtil, everything else through ImageLoader (see docs/texture-stream-formats.md for
     // the formats verified by CI).
     static DecodedTexture2D DecodeStreamToImageData(
-        System::IO::Stream& stream, int maximumTextureDimension)
+        System::IO::Stream& stream, int maximumTextureDimension,
+        const GraphicsDevice* device, bool allowCompressed)
     {
         using System::IO::intcs;
         using System::IO::bytecs;
@@ -2275,7 +2305,8 @@ namespace Microsoft::Xna::Framework::Graphics
         const auto* raw = reinterpret_cast<const uint8_t*>(buf.data());
 
         DecodedTexture2D decoded;
-        if (!TryDecodeDds(raw, static_cast<std::size_t>(len), maximumTextureDimension, decoded))
+        if (!TryDecodeDds(raw, static_cast<std::size_t>(len), maximumTextureDimension,
+                          device, allowCompressed, decoded))
         {
             ImageData image = ImageLoader::LoadFromMemory(raw, static_cast<std::size_t>(len));
             decoded.width = image.width;
@@ -2358,10 +2389,34 @@ namespace Microsoft::Xna::Framework::Graphics
         return tex;
     }
 
+    Texture2D Texture2D::MakeCompressedTextureFromMipBlocks(
+        GraphicsDevice& device, int w, int h, SurfaceFormat format,
+        std::vector<std::vector<std::uint8_t>>&& blockLevels)
+    {
+        if (blockLevels.empty())
+            throw std::invalid_argument(
+                "Texture2D::FromStream: decoded compressed mip chain must contain at least level zero");
+
+        // The block byte counts were already validated against the source (DDS/XNB) level
+        // dimensions by the decoder; the compressed SetData path validates them again per level.
+        const bool mipMap = blockLevels.size() > 1u;
+        Texture2D tex(device, w, h, mipMap, format);
+        for (std::size_t level = 0; level < blockLevels.size(); ++level)
+        {
+            tex.SetData(static_cast<int>(level), nullptr, blockLevels[level].data(), 0,
+                        static_cast<int>(blockLevels[level].size()));
+        }
+        return tex;
+    }
+
     Texture2D Texture2D::FromStream(GraphicsDevice& graphicsDevice, System::IO::Stream& stream)
     {
         DecodedTexture2D decoded = DecodeStreamToImageData(
-            stream, graphicsDevice.GetMaxTextureDimension());
+            stream, graphicsDevice.GetMaxTextureDimension(), &graphicsDevice, /*allowCompressed=*/true);
+        if (decoded.compressed)
+            return MakeCompressedTextureFromMipBlocks(
+                graphicsDevice, decoded.width, decoded.height, decoded.compressedFormat,
+                std::move(decoded.rgbaLevels));
         return MakeTextureFromMipPixels(
             graphicsDevice, decoded.width, decoded.height, std::move(decoded.rgbaLevels));
     }
@@ -2369,8 +2424,9 @@ namespace Microsoft::Xna::Framework::Graphics
     Texture2D Texture2D::FromStream(GraphicsDevice& graphicsDevice, System::IO::Stream& stream,
                                     int width, int height, bool zoom)
     {
+        // The resize overload must resample RGBA pixels, so it never keeps compressed blocks.
         DecodedTexture2D decoded = DecodeStreamToImageData(
-            stream, graphicsDevice.GetMaxTextureDimension());
+            stream, graphicsDevice.GetMaxTextureDimension(), &graphicsDevice, /*allowCompressed=*/false);
         const std::vector<uint8_t>& levelZero = decoded.rgbaLevels.front();
         ImageData resized = ImageLoader::ResizeRgba(
             levelZero.data(), decoded.width, decoded.height, width, height, zoom);

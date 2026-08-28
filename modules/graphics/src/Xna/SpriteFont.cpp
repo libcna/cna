@@ -162,7 +162,15 @@ namespace Microsoft::Xna::Framework::Graphics
             const Vector3& cKern = kerning_[index];
             if (firstInLine)
             {
-                curLineWidth += std::abs(cKern.X);
+                // The first glyph of a line takes only a POSITIVE left side bearing, and
+                // no Spacing. Measured against a live XNA 4.0 build (SAMPLE-031): with the
+                // sample's 'A' and 'X', whose kerning.X is -1, XNA advances 0 and places the
+                // glyph flush at the draw position; with 'B', whose kerning.X is +1, it
+                // advances 1. MeasureString returns the same single-character width whether
+                // that font's Spacing is 0, 3 or -2, so Spacing is not applied to a line's
+                // first glyph either. FNA writes Math.Abs(cKern.X) here, which pushes a
+                // negative bearing RIGHT by its magnitude instead of clamping it away.
+                curLineWidth += std::max(cKern.X, 0.0f);
                 firstInLine = false;
             }
             else

@@ -97,8 +97,19 @@ else()
         "CNA_C_API_BUILD_STATIC=OFF")
 endif()
 
+# The caller normally names the driver, and the suite's window-creating tests name the same one it
+# does. When it names none, the renderer decides: SDL's dummy video driver has no OpenGL, so a GL
+# renderer cannot create a window under it and the consumer dies before it reaches the graphics
+# device this test exists to reach. Only a renderer that needs no GL context can be run headless
+# that way; every other one is left to the environment's own driver.
 if(NOT DEFINED CNA_CONSUMER_VIDEODRIVER OR CNA_CONSUMER_VIDEODRIVER STREQUAL "")
-    set(CNA_CONSUMER_VIDEODRIVER "dummy")
+    if(NOT CNA_GRAPHICS_RENDERER OR
+       CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER" OR
+       CNA_GRAPHICS_RENDERER STREQUAL "HEADLESS" OR
+       CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE" OR
+       CNA_GRAPHICS_RENDERER STREQUAL "STUB")
+        set(CNA_CONSUMER_VIDEODRIVER "dummy")
+    endif()
 endif()
 
 # Deliberately no LD_LIBRARY_PATH: the consumer is run in an environment that knows nothing about
@@ -108,7 +119,10 @@ endif()
 # consumer failed at cna_game_create long before it could demonstrate anything -- on every machine,
 # with a message about the dummy driver rather than about the package. The driver now comes from
 # the caller, which passes the same one the rest of the window-creating suite uses.
-set(_consumer_env "SDL_VIDEODRIVER=${CNA_CONSUMER_VIDEODRIVER}")
+set(_consumer_env)
+if(CNA_CONSUMER_VIDEODRIVER)
+    list(APPEND _consumer_env "SDL_VIDEODRIVER=${CNA_CONSUMER_VIDEODRIVER}")
+endif()
 if(CNA_CONSUMER_DISPLAY)
     list(APPEND _consumer_env "DISPLAY=${CNA_CONSUMER_DISPLAY}")
 endif()

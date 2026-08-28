@@ -2,9 +2,11 @@
 #pragma once
 
 #include <cctype>
+#include <cerrno>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -495,9 +497,35 @@ namespace CNA::Internal
                     }
                 }
 
+                // Through std::strtod with an explicit range check rather than std::stod
+                // (plans/plan_cnb.md `CNBF-118`). `1e400` is valid JSON number GRAMMAR, and
+                // std::stod answers it by throwing std::out_of_range -- an exception type nothing
+                // in the content pipeline catches, so it escaped past every
+                // `catch (const ContentLoadException&)` a game has. RFC 8259 §6 explicitly allows
+                // an implementation to bound the range it accepts, so a magnitude no `double` can
+                // hold is reported here as what it is: a number this parser will not represent.
+                //
+                // Underflow is deliberately NOT a parse error. `1e-400` is a real, if unusual, way
+                // to write a very small number, and every JSON implementation reads it as zero.
+                const std::string token = text_.substr(start, pos_ - start);
+                errno = 0;
+                char* end = nullptr;
+                const double value = std::strtod(token.c_str(), &end);
+                if (end != token.c_str() + token.size())
+                {
+                    throw JsonParseException("Invalid JSON number '" + token + "' at offset " +
+                                              std::to_string(start) + ".");
+                }
+                if (errno == ERANGE && !std::isfinite(value))
+                {
+                    throw JsonParseException(
+                        "JSON number '" + token + "' at offset " + std::to_string(start) +
+                        " is outside the range a double can represent.");
+                }
+
                 JsonValue result;
                 result.type = JsonType::Number;
-                result.numberValue = std::stod(text_.substr(start, pos_ - start));
+                result.numberValue = value;
                 return result;
             }
 

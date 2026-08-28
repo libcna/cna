@@ -95,6 +95,10 @@ def read_link_line(module_dir: Path, build_dir: Path) -> tuple[list[str], list[s
             if token.startswith("-l"):
                 external.append(token)
             continue
+        # Shell punctuation and the compiler driver itself are not inputs. Ninja's form is
+        # ": && /usr/bin/c++ ... && :", and neither generator names an input this way.
+        if token in {":", "&&", "cd"} or token.endswith("/c++") or token.endswith("/cc"):
+            continue
         resolved = token if Path(token).is_absolute() else str((working / token).resolve())
         if token.endswith(".o"):
             objects.append(resolved)

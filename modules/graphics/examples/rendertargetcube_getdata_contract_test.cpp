@@ -190,14 +190,14 @@ namespace
     constexpr Contract kContract{"VULKAN", true, Support::Exact, Support::Exact,
                                  true, false, Support::Exact, MipTargets::Real, true, true, false, false, false};
 #elif defined(CNA_RENDERER_WEBGPU)
-    // `mipMapCubeTargets` false: WEBGPU-114 refuses a mipMap=true RenderTargetCube at construction
-    // rather than under-delivering the mip chain RenderTargetCube already told the XNA layer to
-    // expect -- a recorded boundary of this renderer, checked here rather than assumed.
-    // `preservesOnRebind` true since REMED-GFX-136: RenderPendingDrawsToRenderTargetCubeFace() no
-    // longer hardcodes WGPULoadOp_Clear, it uses the same `clearPending || !preserveContents`
-    // choice as its RenderTarget2D sibling. See examples/rendertargetcube_usage_test.cpp.
-    constexpr Contract kContract{"WEBGPU", true, Support::Exact, Support::Unsupported,
-                                 true, false, Support::Exact, MipTargets::RefusedAtCreation, true, true, false, false, false};
+    // `mipMapCubeTargets` Real / `mipLevel` Exact: WEBGPU-114 builds a real mip chain for a
+    // mipMap=true RenderTargetCube -- the colour texture carries the full chain and each face is
+    // regenerated from its resolved level 0 after that face's render pass (GenerateMipsForLayer),
+    // so GetData at level > 0 returns real downsampled content. `preservesOnRebind` true since
+    // REMED-GFX-136: RenderPendingDrawsToRenderTargetCubeFace() no longer hardcodes WGPULoadOp_Clear,
+    // it uses the same `clearPending || !preserveContents` choice as its RenderTarget2D sibling.
+    constexpr Contract kContract{"WEBGPU", true, Support::Exact, Support::Exact,
+                                 true, false, Support::Exact, MipTargets::Real, true, true, false, false, false};
 #elif defined(CNA_RENDERER_SDL_GPU)
     constexpr Contract kContract{"SDL_GPU", true, Support::Exact, Support::Exact,
                                  true, true, Support::Exact, MipTargets::Real, true, true, false, false, false};

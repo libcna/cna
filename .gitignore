@@ -102,3 +102,4 @@ build/doxygen-cnaext/
 # scripts/check_renderer_configure_sweep.sh. Each tree is deleted as soon as its identity is
 # checked; the logs are kept only until the next run.
 build/renderer-sweep/
+spikes/occlusion-count-spike/occlusion_count_probe

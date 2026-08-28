@@ -18,6 +18,7 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -173,22 +174,32 @@ namespace CNA::Internal::Renderers::WebGPU
         int width_ = 0;
         int height_ = 0;
         int mipLevels_ = 1;
+        /// WEBGPU-144: the XNA SurfaceFormat ordinal and its resolved WGPU format. A block-compressed
+        /// texture uploads its BC blocks natively (no CPU decompress); `blockBytes_` is the bytes per
+        /// 4x4 block (8 for BC1, 16 for BC2/3/7). `compressedLevels_` is the authoritative per-mip
+        /// block store the framework's `GetData` reads back (Texture2D keeps no compressed shadow).
+        int surfaceFormat_ = 0;
+        WGPUTextureFormat wgpuFormat_ = WGPUTextureFormat_RGBA8Unorm;
+        bool compressed_ = false;
+        int blockBytes_ = 4;
+        std::vector<std::vector<std::uint8_t>> compressedLevels_;
     };
 
     /// WEBGPU-53/54: off-screen render target backing a RenderTarget2D. Owns its own colour
     /// texture (always created in this renderer's chosen swapchain format, surfaceFormat_ -- see
-    /// this class's .cpp constructor comment for why) and its own depth+stencil texture (always
-    /// Depth24PlusStencil8, regardless of the requested DepthFormat, mirroring
-    /// VulkanRenderer's own "always allocate a combined depth+stencil buffer using the
-    /// device-wide format regardless of the exact value requested" documented simplification --
-    /// see IGraphicsRenderer::CreateRenderTarget2D's own doc comment). Mip regeneration is
+    /// this class's .cpp constructor comment for why) and its own depth texture. WEBGPU-39: the
+    /// depth texture is created in the EXACT format the requested DepthFormat maps to via
+    /// MapDepthFormatEXT() (None -> no depth texture at all; Depth16 -> Depth16Unorm; Depth24 ->
+    /// Depth24Plus; Depth24Stencil8 -> Depth24PlusStencil8), the same per-value mapping
+    /// VulkanRenderer::PickDepthFormat()/EasyGL/Bgfx already do -- not a device-wide fixed format.
+    /// DepthFormat()/DepthHasStencil() report what was actually allocated so the pass attachment,
+    /// pipeline depthStencil state and stencil load/store ops all match. Mip regeneration is
     /// deliberately NOT implemented yet: CreateRenderTarget2D() throws for mipMap=true rather
     /// than silently under-delivering a requested mip chain.
     /// WEBGPU-58: MSAA is real, but -- unlike VulkanRenderTargetRenderer's own per-instance
     /// "requestedMultiSampleCount>0 AND owner_->sampleCount_>1" opt-in gate -- this renderer
     /// unconditionally mirrors the OWNER's CURRENT global sampleCount_ at construction time,
-    /// ignoring the per-instance requested value entirely (the same "regardless of the exact
-    /// value requested" simplification already established for DepthFormat above). This is
+    /// ignoring the per-instance requested value entirely. This is
     /// necessary, not just simpler: WebGPURenderer's ~10 GetOrCreatePipeline*3D() families
     /// bake ONE single renderer-global WGPUMultisampleState.count into every pipeline object (see
     /// that class's own sampleCount_ comment) rather than selecting between an MSAA/non-MSAA
@@ -247,6 +258,10 @@ namespace CNA::Internal::Renderers::WebGPU
         /// REMED-GFX-102: exact colour-attachment format captured by this target object. Sprite
         /// pipeline identity uses format compatibility, never this target object's identity.
         [[nodiscard]] WGPUTextureFormat ColorFormat() const { return colorFormat_; }
+        /// WEBGPU-39: this target's depth attachment WGPU format (Undefined for DepthFormat::None) and
+        /// whether it carries a stencil aspect. Pipelines drawn into this target declare exactly this.
+        [[nodiscard]] WGPUTextureFormat DepthFormat() const { return depthFormat_; }
+        [[nodiscard]] bool DepthHasStencil() const { return depthHasStencil_; }
 
     private:
         WebGPURenderer* owner_ = nullptr;
@@ -256,6 +271,9 @@ namespace CNA::Internal::Renderers::WebGPU
         WGPUTextureFormat colorFormat_ = WGPUTextureFormat_Undefined;
         WGPUTexture colorTexture_ = nullptr;
         WGPUTextureView colorView_ = nullptr;
+        /// WEBGPU-39: mapped depth attachment format (Undefined = None, no depth texture created).
+        WGPUTextureFormat depthFormat_ = WGPUTextureFormat_Depth24PlusStencil8;
+        bool depthHasStencil_ = true;
         /// REMED-GFX-167: keeps colorTexture_/colorView_ — the pair a consumer draw SAMPLES —
         /// alive for any queued command still carrying it. The depth and multisample attachments
         /// below are deliberately not in it: they are only ever a render pass's own attachments,
@@ -342,14 +360,20 @@ namespace CNA::Internal::Renderers::WebGPU
     /// `ITextureCubeRenderer` has no plain-2D sampling path, only the cube one, matching XNA's own
     /// RenderTargetCube/TextureCube API shape).
     ///
-    /// Deliberately, honestly NOT implemented (documented scope cuts, matching
-    /// WebGPURenderTargetRenderer's own precedent): mip-chain regeneration (`mipMap=true` throws,
-    /// same as `CreateRenderTarget2D`) and MSAA (the `multiSampleCount` constructor argument is
-    /// ignored; `GetMultiSampleCount()` always reports 0) -- unlike `WebGPURenderTargetRenderer`,
-    /// this class does not attempt to mirror the renderer's global `sampleCount_`, since a
-    /// multisampled array texture resolved per-layer is meaningfully more machinery (a per-face
-    /// MSAA colour view/resolve target, still only one live at a time) than this task's time
-    /// budget affords landing well-tested; see `plans/plan_webgpu.md`'s `WEBGPU-114` row.
+    /// WEBGPU-114 per-face MSAA: when the renderer's global `sampleCount_` > 1 this target renders
+    /// each face into its own multisampled colour attachment and resolves it into that face's
+    /// single-sample layer (`msaaColorTextures_`/`msaaColorViews_`, six separate single-layer
+    /// textures because WebGPU forbids a multisampled ARRAY texture); the shared depth attachment
+    /// is allocated at the same sample count. `GetMultiSampleCount()` reports the applied count,
+    /// mirroring `WebGPURenderTargetRenderer`. The per-instance `multiSampleCount` argument is not
+    /// read, exactly like the 2D sibling.
+    ///
+    /// WEBGPU-114 mipMap: when `mipMap=true` the colour texture carries a full mip chain
+    /// (`levelCount_` = CalculateMipLevels(size)) and each face's chain is regenerated from its
+    /// resolved level 0 after that face's render pass (`GenerateMipsForLayer`, the WEBGPU-52
+    /// downsample cascade, in `colorFormat_`) -- the same on-unbind timing FNA3D's own
+    /// `ResolveTarget` uses. `GetData` accepts levels 0..`levelCount_`-1. MSAA and mipMap compose:
+    /// the resolve writes level 0, then the cascade downsamples it.
     class WebGPURenderTargetCubeRenderer final : public IRenderTargetCubeRenderer, public IWebGPUCubeSamplable
     {
     public:
@@ -363,7 +387,11 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] int GetSize() const override { return size_; }
         void BindAsRenderTargetFace(int face) override;
         void UnbindAsRenderTarget() override;
-        [[nodiscard]] int GetMultiSampleCount() const override { return 0; }
+        /// WEBGPU-114: mirrors WebGPURenderTargetRenderer::GetMultiSampleCount() -- the count this
+        /// target actually renders at, captured from the owner's global sampleCount_ at
+        /// construction (0/1 when MSAA is not engaged). Per-face MSAA renders into one shared
+        /// multisampled colour texture that resolves into each face layer (see MsaaColorView()).
+        [[nodiscard]] int GetMultiSampleCount() const override { return appliedMultiSampleCount_; }
         /// WEBGPU-114: real per-face CPU readback, same staged-copy technique as
         /// REMED-GFX-134: refuses an out-of-range face/level/rectangle by returning false (the
         /// shared layer's deterministic System::NotSupportedException) instead of throwing a raw
@@ -383,10 +411,23 @@ namespace CNA::Internal::Renderers::WebGPU
         /// The whole-cube sampling view (all 6 layers) -- IWebGPUCubeSamplable's contract.
         [[nodiscard]] WGPUTextureView CubeView() const override { return cubeView_; }
         [[nodiscard]] WebGPUSampledTextureEXT SampledCube() const override { return {cubeView_, sampled_}; }
-        /// This face's own single-layer 2D view, used as a render-pass colour attachment.
+        /// This face's own single-layer 2D view (mip 0), used directly as a render-pass colour
+        /// attachment at 1x, or as the resolve target for this face's multisampled attachment
+        /// when MSAA is engaged. It is a view of texture_ layer @p face, so GetData()/sampling
+        /// always read what a 1x render wrote or an MSAA render resolved.
         [[nodiscard]] WGPUTextureView ColorAttachmentView(int face) const { return faceViews_[static_cast<std::size_t>(face)]; }
+        /// WEBGPU-114: this face's OWN multisampled colour view, non-null exactly when
+        /// GetMultiSampleCount() > 1. Six per-face views (not one shared attachment) so a
+        /// PreserveContents face rebound for a partial update loads its own samples, never
+        /// whichever face rendered last -- the same six-per-face choice Vulkan/EasyGL settled on
+        /// (REMED-GFX-141). The pass makes this the colour attachment and resolves it into
+        /// ColorAttachmentView(face).
+        [[nodiscard]] WGPUTextureView MsaaColorAttachmentView(int face) const { return msaaColorViews_[static_cast<std::size_t>(face)]; }
         /// The one depth+stencil view shared by all 6 faces (only one is ever bound at once).
         [[nodiscard]] WGPUTextureView DepthView() const { return depthView_; }
+        /// WEBGPU-39: mapped depth attachment format (Undefined for DepthFormat::None) + stencil aspect.
+        [[nodiscard]] WGPUTextureFormat DepthFormat() const { return depthFormat_; }
+        [[nodiscard]] bool DepthHasStencil() const { return depthHasStencil_; }
         /// REMED-GFX-102: exact colour-attachment format shared by all faces. Sprite pipeline
         /// identity uses this format, not the cube object or face identity.
         [[nodiscard]] WGPUTextureFormat ColorFormat() const { return colorFormat_; }
@@ -396,10 +437,16 @@ namespace CNA::Internal::Renderers::WebGPU
         /// Immutable after construction, so the load op recorded for a pass can never come from a
         /// value some LATER target changed.
         [[nodiscard]] bool PreserveContents() const { return preserveContents_; }
+        /// WEBGPU-114: mip-chain length (1 unless mipMap=true), matching CalculateMipLevels(size).
+        /// The colour texture carries this many levels; each face's chain is regenerated from its
+        /// resolved level 0 after that face's render pass, and GetData accepts levels 0..this-1.
+        [[nodiscard]] int LevelCount() const { return levelCount_; }
 
     private:
         WebGPURenderer* owner_ = nullptr;
         int size_ = 0;
+        /// WEBGPU-114: number of mip levels in texture_ (1 unless mipMap=true).
+        int levelCount_ = 1;
         /// Mirrors owner_->surfaceFormat_ at construction time (see this class's own .cpp
         /// constructor comment) -- captured so GetData() can decide whether a BGRA->RGBA byte
         /// swap is needed, exactly like WebGPURenderTargetRenderer::colorFormat_'s identical role.
@@ -411,8 +458,21 @@ namespace CNA::Internal::Renderers::WebGPU
         /// only, consumed synchronously while this target is bound (see the RenderTarget2D twin).
         std::shared_ptr<const WebGPUSampledResourceEXT> sampled_;
         std::array<WGPUTextureView, 6> faceViews_{};
+        /// WEBGPU-114: per-face multisampled colour, created only when MSAA is engaged. SIX
+        /// separate single-layer textures (one per face) rather than one 6-layer texture, because
+        /// WebGPU forbids a multisampled ARRAY texture ("depth or array layers must be 1"); this
+        /// still gives each face its own attachment (see MsaaColorAttachmentView()).
+        std::array<WGPUTexture, 6> msaaColorTextures_{};
+        std::array<WGPUTextureView, 6> msaaColorViews_{};
+        /// The MSAA sample count this target actually renders at, captured from the owner's global
+        /// sampleCount_ at construction (0 when MSAA is not engaged). Mirrors
+        /// WebGPURenderTargetRenderer::appliedMultiSampleCount_.
+        int appliedMultiSampleCount_ = 0;
         WGPUTexture depthTexture_ = nullptr;
         WGPUTextureView depthView_ = nullptr;
+        /// WEBGPU-39: mapped depth attachment format (Undefined = None, no depth texture created).
+        WGPUTextureFormat depthFormat_ = WGPUTextureFormat_Depth24PlusStencil8;
+        bool depthHasStencil_ = true;
         bool preserveContents_ = false;
     };
 
@@ -529,6 +589,168 @@ namespace CNA::Internal::Renderers::WebGPU
         int indexCount_ = 0;
         bool thirtyTwoBit_ = false;
         std::vector<std::uint8_t> shadowData_;
+    };
+
+    /**
+     * @brief WEBGPU-84: a GPU occlusion query — counts the samples that pass depth/stencil for the
+     *        draws issued between `OcclusionQuery.Begin()` and `End()`.
+     *
+     * The renderer drives the real GPU recording (a slot in a shared occlusion `WGPUQuerySet`,
+     * `BeginOcclusionQuery`/`EndOcclusionQuery` around this query's tagged draws, and the resolve +
+     * readback), so `WebGPURenderer` is a one-directional `friend` — the same idiom
+     * `VulkanOcclusionQueryRenderer` uses. Every code path is gated on an active query, so a frame
+     * that uses none records exactly what it did before this type existed.
+     */
+    class WebGPUOcclusionQueryRenderer final : public IOcclusionQueryRenderer
+    {
+        friend class WebGPURenderer;
+
+    public:
+        /** @brief Constructs the query and reserves its slot in the renderer's occlusion query set. */
+        explicit WebGPUOcclusionQueryRenderer(WebGPURenderer* owner);
+        /** @brief Frees the slot and detaches from every pending renderer reference. */
+        ~WebGPUOcclusionQueryRenderer() override;
+
+        /** @brief Makes subsequent draws count toward this query until `End()`. */
+        void Begin() override;
+        /** @brief Stops tagging draws for this query. */
+        void End() override;
+        /** @brief Whether a resolved sample count is available. */
+        [[nodiscard]] bool IsComplete() const override;
+        /** @brief The number of samples that passed for the tagged draws (0 until resolved). */
+        [[nodiscard]] int PixelCount() const override;
+
+    private:
+        WebGPURenderer* owner_ = nullptr;
+        int slot_ = -1;                    ///< Fixed slot in the shared occlusion `WGPUQuerySet`.
+        bool ended_ = false;               ///< `End()` seen since the last `Begin()`.
+        bool recordedThisFlush_ = false;   ///< Its first contiguous draw run this flush is wrapped.
+        bool complete_ = false;            ///< A resolved result is available.
+        mutable int pixelCount_ = 0;       ///< The last resolved sample count.
+    };
+
+    /**
+     * @brief WEBGPU-76: one vertex attribute a custom `ShaderEffect` draw feeds its WGSL vertex
+     * stage, captured by value into the deferred draw command. CNAEXT.
+     *
+     * The bound `VertexBuffer`'s `VertexDeclaration` drives this: `shaderLocation` is the element's
+     * INDEX in the declaration's element list (the same "location = declaration index" convention
+     * EasyGL's custom-effect route uses, so one WGSL source runs unchanged across the renderer
+     * family), `format` is `WebGPUVertexFormatFromVEF(element.format)` (WEBGPU-116) and `offset` is
+     * the element's own byte offset within the vertex.
+     */
+    struct CustomEffectVertexAttr
+    {
+        /** @brief The WGPU vertex format, mapped from the declaration element's `VertexElementFormat`. */
+        WGPUVertexFormat format{};
+        /** @brief The element's byte offset within one vertex. */
+        std::uint64_t offset = 0;
+        /** @brief The WGSL `@location(i)` this attribute feeds — the element's declaration index. */
+        std::uint32_t shaderLocation = 0;
+    };
+
+    /**
+     * @brief WEBGPU-76: the WebGPU implementation of a custom-WGSL `ShaderEffect` (`IEffectRenderer`).
+     * CNAEXT.
+     *
+     * Constructed by `WebGPURenderer::CreateEffectRenderer(vertWgsl, fragWgsl)` from the two source
+     * strings a `ShaderEffect` carries. Unlike EasyGL's loose named GL uniforms, WGSL has no loose
+     * uniforms — every parameter lives in a uniform block — so this renderer implements
+     * `DeclareUniformBlockEXT` (the name→byte-offset bridge the interface documents for exactly this
+     * case) and every `SetUniform*` writes into a CPU-side staging block that a draw uploads to a
+     * `@group(0) @binding(0)` uniform buffer.
+     *
+     * Binding convention the custom WGSL must follow (documented in `docs/webgpu-renderer.md`):
+     *  - `@group(0) @binding(0) var<uniform> …` — the uniform block (visible to both stages);
+     *  - `@group(0) @binding(1) var …: sampler;` and `@binding(2) var …: texture_2d<f32>;` — only
+     *    when the fragment source samples a texture (detected by a source scan for `texture_2d`);
+     *  - vertex entry point `vs_main`, fragment entry point `fs_main`;
+     *  - a vertex input at `@location(i)` for the i-th declared vertex element.
+     *
+     * The renderer sets `World`/`View`/`Projection` (column-major, untransposed) on this effect at
+     * queue time exactly as EasyGL's `BindCustomEffectMatrices` does, so a 3D custom shader reads
+     * those three by name from its uniform block. Pipelines are cached here, keyed by the concrete
+     * render-pass state (vertex layout, target format/count, sample count, blend, depth); the
+     * colour-target count is a parameter so MRT (`WEBGPU-85/86/87`) reuses this builder for N slots.
+     */
+    class WebGPUEffectRenderer final : public IEffectRenderer
+    {
+        friend class WebGPURenderer;
+
+    public:
+        /** @brief Constructs an unbuilt effect owned by @p owner; `CompileProgram` builds it. */
+        explicit WebGPUEffectRenderer(WebGPURenderer* owner);
+        /** @brief Releases the shader modules, layouts, sampler and every cached pipeline. */
+        ~WebGPUEffectRenderer() override;
+
+        /**
+         * @brief Compiles the vertex and fragment WGSL into two `WGPUShaderModule`s.
+         * @param vertSrc Complete WGSL module with a `@vertex fn vs_main`.
+         * @param fragSrc Complete WGSL module with a `@fragment fn fs_main`.
+         * @return True on success; false with `GetCompileError()` set on failure (never throws, so
+         *         the tolerant neutral clone test survives an invalid placeholder source).
+         */
+        bool CompileProgram(const std::string& vertSrc, const std::string& fragSrc) override;
+        /** @brief Marks this the active custom effect on the owning renderer. */
+        void Bind() override;
+        /** @brief Clears the active custom effect if it is this one. */
+        void Unbind() override;
+        /** @brief Whether both modules and the layouts were built successfully. */
+        [[nodiscard]] bool IsValid() const override;
+        /** @brief The last compile/validation error, or empty. */
+        [[nodiscard]] std::string GetCompileError() const override;
+
+        /**
+         * @brief Declares the WGSL uniform block's size and member byte offsets by name.
+         * @param blockSizeBytes std140/WGSL-padded size of the whole block.
+         * @param names Member names, @p count of them.
+         * @param offsets Each member's byte offset from the start of the block.
+         * @param count Number of members.
+         */
+        void DeclareUniformBlockEXT(int blockSizeBytes, const char* const* names,
+                                    const int* offsets, int count) override;
+        /** @brief Writes a float into the staging block at @p name's declared offset. */
+        void SetUniformFloat(const char* name, float value) override;
+        /** @brief Writes an int (as a 32-bit word) into the staging block at @p name's offset. */
+        void SetUniformInt(const char* name, int value) override;
+        /** @brief Writes a vec2 into the staging block at @p name's declared offset. */
+        void SetUniformVec2(const char* name, float x, float y) override;
+        /** @brief Writes a vec3 into the staging block at @p name's declared offset. */
+        void SetUniformVec3(const char* name, float x, float y, float z) override;
+        /** @brief Writes a vec4 into the staging block at @p name's declared offset. */
+        void SetUniformVec4(const char* name, float x, float y, float z, float w) override;
+        /** @brief Writes a column-major 4×4 matrix into the staging block at @p name's offset. */
+        void SetUniformMat4(const char* name, const float* matrix) override;
+        /** @brief Writes @p count floats into the staging block at @p name's declared offset. */
+        void SetUniformFloatArray(const char* name, const float* values, int count) override;
+        /** @brief Writes @p count vec2 values into the staging block at @p name's offset. */
+        void SetUniformVec2Array(const char* name, const float* values, int count) override;
+        /** @brief Writes @p count vec3 values into the staging block at @p name's offset. */
+        void SetUniformVec3Array(const char* name, const float* values, int count) override;
+        /** @brief Writes @p count column-major matrices into the staging block at @p name's offset. */
+        void SetUniformMat4Array(const char* name, const float* matrices, int count) override;
+        /** @brief Binds a 2D texture for the custom shader's `@binding(2)`; only unit 0 is used. */
+        void BindTexture(int unit, ITextureRenderer* texture) override;
+
+    private:
+        /// Compiles one WGSL string into a module inside a validation error scope; null on failure.
+        WGPUShaderModule CompileModule(const std::string& wgsl, const char* label);
+        /// Copies @p byteCount bytes from @p data into the staging block at @p name's offset.
+        void WriteUniformBytes(const char* name, const void* data, int byteCount);
+
+        WebGPURenderer* owner_ = nullptr;
+        WGPUShaderModule vertexModule_ = nullptr;
+        WGPUShaderModule fragmentModule_ = nullptr;
+        WGPUBindGroupLayout bindGroupLayout_ = nullptr;
+        WGPUPipelineLayout pipelineLayout_ = nullptr;
+        WGPUSampler sampler_ = nullptr;         ///< Default filtering sampler for `@binding(1)`.
+        bool valid_ = false;
+        bool samplesTexture_ = false;           ///< Source scan: the fragment declares a `texture_2d`.
+        std::string compileError_;
+        std::vector<std::uint8_t> uniformStaging_;          ///< CPU uniform block, uploaded per draw.
+        std::unordered_map<std::string, int> uniformOffsets_;  ///< Member name → byte offset.
+        const ITextureRenderer* boundTexture0_ = nullptr;   ///< App-bound unit-0 texture (or null).
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> pipelineCache_;  ///< Keyed by pass state.
     };
 
     /**
@@ -700,6 +922,30 @@ namespace CNA::Internal::Renderers::WebGPU
             int alphaFunc = 0;
         };
 
+        /// WEBGPU-83: the XNA stencil state baked into a pipeline's `WGPUDepthStencilState`, captured
+        /// per draw command (a stamp draw and a gated draw in one frame carry different stencil
+        /// state, so it cannot be read as frame-global at replay). In WebGPU the read/write masks are
+        /// pipeline state (unlike Vulkan's dynamic masks), so they fold into the pipeline cache key
+        /// too; only the reference value is dynamic (`wgpuRenderPassEncoderSetStencilReference`).
+        /// Enum ordinals are XNA's: CompareFunction (Always=0..NotEqual=7), StencilOperation
+        /// (Keep=0, Zero=1, Replace=2, Increment=3, Decrement=4, IncrementSaturation=5,
+        /// DecrementSaturation=6, Invert=7).
+        struct StencilKeyParams
+        {
+            bool enable = false;
+            int func = 0;         ///< front/CW compare
+            int stencilPass = 0;  ///< front/CW ops
+            int stencilFail = 0;
+            int depthFail = 0;
+            int readMask = 0xFF;
+            int writeMask = 0xFF;
+            bool twoSided = false;
+            int ccwFunc = 0;      ///< back/CCW compare + ops (only when twoSided)
+            int ccwPass = 0;
+            int ccwFail = 0;
+            int ccwDepthFail = 0;
+        };
+
         struct SpriteVertex
         {
             float position[3];
@@ -732,6 +978,12 @@ namespace CNA::Internal::Renderers::WebGPU
             /// rectangle components) active at this draw's own public call, captured by
             /// value. Never resolved from live state during replay.
             WebGPUScissorSnapshot scissor{};
+            /// WEBGPU-142: the custom-WGSL ShaderEffect bound by `SpriteBatch.Begin(..., effect)`,
+            /// or null for a stock SpriteBatch draw. Supplies the sprite's shader modules/layout;
+            /// its uniform block is captured by value in `customUniforms` (a second Begin with
+            /// different uniforms must not see this sprite's block at replay).
+            WebGPUEffectRenderer* customEffect = nullptr;
+            std::vector<std::uint8_t> customUniforms;  ///< the effect's uniform block, by value
         };
 
         struct SpritePipelineKey
@@ -744,6 +996,12 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t multiSampleMask = 0xFFFFFFFFu;
             WGPUTextureFormat targetFormat = WGPUTextureFormat_Undefined;
             std::uint32_t sampleCount = 1;
+            /// WEBGPU-86 MRT: a sprite drawn into an MRT set needs a matching N-target pipeline
+            /// (writing attachment 0 only); 1 for the backbuffer / single target / cube face.
+            int colorAttachmentCount = 1;
+            /// WEBGPU-39: the active pass's depth attachment format (Undefined for DepthFormat::None).
+            /// A sprite pipeline must declare the same depth format as the pass it draws into.
+            WGPUTextureFormat depthFormat = WGPUTextureFormat_Depth24PlusStencil8;
 
             [[nodiscard]] bool operator==(const SpritePipelineKey& other) const noexcept
             {
@@ -753,7 +1011,9 @@ namespace CNA::Internal::Renderers::WebGPU
                     colorFunc == other.colorFunc && alphaFunc == other.alphaFunc &&
                     colorWriteMask == other.colorWriteMask &&
                     multiSampleMask == other.multiSampleMask &&
-                    targetFormat == other.targetFormat && sampleCount == other.sampleCount;
+                    targetFormat == other.targetFormat && sampleCount == other.sampleCount &&
+                    colorAttachmentCount == other.colorAttachmentCount &&
+                    depthFormat == other.depthFormat;
             }
         };
 
@@ -778,6 +1038,8 @@ namespace CNA::Internal::Renderers::WebGPU
                 mix(static_cast<std::size_t>(key.multiSampleMask));
                 mix(static_cast<std::size_t>(key.targetFormat));
                 mix(static_cast<std::size_t>(key.sampleCount));
+                mix(static_cast<std::size_t>(key.colorAttachmentCount));
+                mix(static_cast<std::size_t>(key.depthFormat));
                 return hash;
             }
         };
@@ -854,6 +1116,32 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             return nativeDrawIssueCount_;
         }
+        /// WEBGPU-12/59: lifetime count of real wgpuDeviceCreateBuffer calls for transient per-draw
+        /// buffers. Bounded once the pool warms up -- a repeating scene stops allocating. The stress
+        /// test asserts this plateaus while GetTransientBufferReuseCountEXT keeps climbing.
+        [[nodiscard]] std::size_t GetTransientBufferCreateCountEXT() const noexcept
+        {
+            return transientBuffersCreatedEXT_;
+        }
+        /// WEBGPU-12/59: lifetime count of transient per-draw buffers served from the pool (reuses).
+        [[nodiscard]] std::size_t GetTransientBufferReuseCountEXT() const noexcept
+        {
+            return transientBuffersReusedEXT_;
+        }
+
+        /**
+         * @brief WEBGPU-28: compiles every WGSL shader source (webgpu_shaders.hpp) through this
+         *        device inside a validation error scope, including shaders a scene never draws (the
+         *        lazy mipBlit shader and the Pbr/SkinnedPbr expanded variants), so a WGSL error is
+         *        caught deterministically rather than only at that effect's first pipeline creation.
+         *        Also reachable at device init via the CNA_WEBGPU_VALIDATE_SHADERS environment
+         *        variable, and exercised by the WebGPU_ShaderValidation test.
+         *
+         * @param failedLabels Optional; on return holds the label of every shader that failed.
+         * @return The number of shaders that failed to compile cleanly (0 on a healthy renderer).
+         */
+        CNAEXT [[nodiscard]] int ValidateAllShadersEXT(
+            std::vector<std::string>* failedLabels = nullptr) const;
 
         /**
          * @brief Reports whether @p capability is genuinely available on this renderer.
@@ -902,10 +1190,10 @@ namespace CNA::Internal::Renderers::WebGPU
         void SetDepthTestEnabled(bool enabled) override { depthTestEnabled_ = enabled; }
         void SetBlendEnabled(bool enabled) override { blendEnabled_ = enabled; }
         void SetDepthWriteEnabled(bool enabled) override { depthWriteEnabled_ = enabled; }
-        // Depth portion was the original Phase 57/63 vertical slice; WEBGPU-83 extends this to
-        // also STORE the stencil parameters (dsParams_ below) for a future task to bake into each
-        // pipeline's WGPUStencilFaceState -- see dsParams_'s own comment for why that bake-in step
-        // is deliberately still deferred. Without the depth half of this override,
+        // Depth portion was the original Phase 57/63 vertical slice; WEBGPU-83 (complete) also stores
+        // the stencil parameters (dsParams_ below) AND bakes them into every 3D pipeline's
+        // WGPUStencilFaceState (via the pipeline cache key), applying the reference per draw. Without
+        // the depth half of this override,
         // GraphicsDevice.DepthStencilState (the real XNA API surface almost every game/effect
         // uses, as opposed to the older SetDepthTestEnabled()/SetDepthWriteEnabled() convenience
         // methods above) had zero effect on this renderer -- found and fixed while verifying
@@ -1032,12 +1320,62 @@ namespace CNA::Internal::Renderers::WebGPU
                                                                           bool mipMap = false,
                                                                           int multiSampleCount = 0) override;
 
+        /** @brief WEBGPU-84: creates a GPU occlusion query backed by a slot in the shared query set. */
+        std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() override;
+
+        /**
+         * @brief WEBGPU-76: compiles a custom `ShaderEffect` from a WGSL vertex/fragment source pair.
+         * @param vertSrc WGSL vertex module (entry `vs_main`).
+         * @param fragSrc WGSL fragment module (entry `fs_main`).
+         * @return A `WebGPUEffectRenderer`; invalid (but non-null) when the source fails to compile.
+         */
+        std::unique_ptr<IEffectRenderer> CreateEffectRenderer(const std::string& vertSrc,
+                                                              const std::string& fragSrc) override;
+
+        /**
+         * @brief WEBGPU-76: this renderer genuinely compiles and runs the WGSL source a
+         * `ShaderEffect` carries (unlike Vulkan, which takes SPIR-V, or SOFTWARE/HEADLESS, which
+         * accept a source and ignore it), so a custom effect's pixels are its shader's.
+         */
+        [[nodiscard]] bool ExecutesShaderEffectSourceEXT() const override { return true; }
+
+        /** @brief WEBGPU-76: the source dialect a custom `ShaderEffect` must be written in. */
+        [[nodiscard]] ShaderDialectEXT GetShaderDialectEXT() const override
+        {
+            return ShaderDialectEXT::Wgsl;
+        }
+
+        /**
+         * @brief WEBGPU-144: whether a block-compressed format is uploaded to the GPU natively
+         * (as BC blocks) rather than CPU-decompressed to RGBA8 first. True for the DXT/BC7 formats
+         * when the adapter/device advertises `WGPUFeatureName_TextureCompressionBC` (checked at
+         * device creation); the framework then routes SetData/GetData through the block path.
+         */
+        [[nodiscard]] bool IsCompressedTransferFormatEXT(int surfaceFormat) const override;
+
+        /**
+         * @brief WEBGPU-144 Phase 2: WebGPU keeps loaded block-compressed content compressed.
+         *
+         * The `Texture2D::FromStream` (DDS) and `.xnb` content loaders keep the raw DXT/BC blocks
+         * and upload them to a `WGPUTextureFormat_BC*` instead of CPU-decompressing to `Color`. The
+         * actual per-format capability (and the `bcSupported_` device-feature gate) is still enforced
+         * by @ref IsCompressedTransferFormatEXT, which the loaders AND with this flag.
+         *
+         * @return true.
+         */
+        [[nodiscard]] bool LoadsCompressedContentNativelyEXT() const override;
+
+        /** @brief WEBGPU-144: the BC formats this renderer stores natively are Supported; else Defer. */
+        [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const override;
+
     private:
         friend class WebGPURenderTargetRenderer;
         friend class WebGPURenderTargetCubeRenderer;
         friend class WebGPUTextureRenderer;
         friend class WebGPUTextureCubeRenderer;
+        friend class WebGPUEffectRenderer;
         friend class WebGPUSpriteBatchRenderer;
+        friend class WebGPUOcclusionQueryRenderer;
         struct LogicalViewport
         {
             float x = 0.0f;
@@ -1121,7 +1459,8 @@ namespace CNA::Internal::Renderers::WebGPU
             Instanced,    ///< instancedDrawCommands_
             Pbr,          ///< pbrDrawCommands_
             Skinned,      ///< skinnedDrawCommands_
-            SkinnedPbr    ///< skinnedPbrDrawCommands_
+            SkinnedPbr,   ///< skinnedPbrDrawCommands_
+            CustomEffect  ///< customEffectDrawCommands_ (WEBGPU-76)
         };
 
         /**
@@ -1160,6 +1499,9 @@ namespace CNA::Internal::Renderers::WebGPU
             /// REMED-GFX-156: draw or ordered Clear(). Trailing, so existing three-field
             /// aggregate initialisations at the eleven draw-recording sites keep their meaning.
             OrderedKind kind = OrderedKind::Draw;
+            /// WEBGPU-84: the occlusion query active when this draw was queued (nullptr = none).
+            /// Trailing with a default, so the same three-field aggregate inits stay valid.
+            WebGPUOcclusionQueryRenderer* occlusionQuery = nullptr;
         };
 
         /**
@@ -1206,10 +1548,15 @@ namespace CNA::Internal::Renderers::WebGPU
          */
         struct PassDestination
         {
-            WGPUTextureView colorView = nullptr;    ///< The colour attachment (multisampled if any).
-            WGPUTextureView resolveView = nullptr;  ///< Its resolve target, or null when 1x.
-            WGPUTextureView depthView = nullptr;    ///< Depth/stencil attachment, or null.
-            WGPUTextureFormat colorFormat = WGPUTextureFormat_Undefined;
+            WGPUTextureView colorView = nullptr;    ///< Slot 0 colour attachment (multisampled if any).
+            WGPUTextureView resolveView = nullptr;  ///< Slot 0 resolve target, or null when 1x.
+            WGPUTextureView depthView = nullptr;    ///< Depth/stencil attachment, or null. Shared by MRT.
+            /// WEBGPU-39: the depth attachment's WGPU format (Undefined when depthView is null, i.e.
+            /// DepthFormat::None). Pipelines built for this pass must declare exactly this format.
+            WGPUTextureFormat depthFormat = WGPUTextureFormat_Depth24PlusStencil8;
+            /// WEBGPU-39: whether depthFormat carries a stencil aspect (only Depth24PlusStencil8 does).
+            bool depthHasStencil = true;
+            WGPUTextureFormat colorFormat = WGPUTextureFormat_Undefined;  ///< Slot 0 colour format.
             std::uint32_t sampleCount = 1;
             int width = 0;
             int height = 0;
@@ -1218,6 +1565,29 @@ namespace CNA::Internal::Renderers::WebGPU
             bool discardFirstSegment = false;
             const char* passLabel = "CNA WebGPU RenderPass";
             const char* traceName = "destination";
+            /// WEBGPU-85 MRT: 1 (the slot-0 fields above describe the whole pass) or 2..4. For N>1 the
+            /// EXTRA slots 1..N-1 live in the arrays below; slot 0 stays the single fields above, so
+            /// every single-target caller is byte-identical. The depth attachment stays shared.
+            int colorAttachmentCount = 1;
+            std::array<WGPUTextureView, 4> mrtColorViews{};    ///< Slots 1..3 (index 0 unused).
+            std::array<WGPUTextureView, 4> mrtResolveViews{};  ///< Slots 1..3 (index 0 unused).
+            std::array<WGPUTextureFormat, 4> mrtColorFormats{};///< Slots 1..3 (index 0 unused).
+
+            /** @brief The colour view for slot @p i (slot 0 is the single field). */
+            [[nodiscard]] WGPUTextureView ColorViewAt(int i) const
+            {
+                return i == 0 ? colorView : mrtColorViews[static_cast<std::size_t>(i)];
+            }
+            /** @brief The resolve view for slot @p i (slot 0 is the single field). */
+            [[nodiscard]] WGPUTextureView ResolveViewAt(int i) const
+            {
+                return i == 0 ? resolveView : mrtResolveViews[static_cast<std::size_t>(i)];
+            }
+            /** @brief The colour format for slot @p i (slot 0 is the single field). */
+            [[nodiscard]] WGPUTextureFormat ColorFormatAt(int i) const
+            {
+                return i == 0 ? colorFormat : mrtColorFormats[static_cast<std::size_t>(i)];
+            }
         };
 
         /**
@@ -1301,8 +1671,7 @@ namespace CNA::Internal::Renderers::WebGPU
          * @param firstEntry First @ref drawOrder_ index belonging to this segment.
          * @param entryCount How many entries from @p firstEntry belong to it.
          */
-        void ReplayDrawsInOrder(WGPURenderPassEncoder pass, WGPUTextureFormat targetFormat,
-                                std::uint32_t targetSampleCount, const char* destination,
+        void ReplayDrawsInOrder(WGPURenderPassEncoder pass, const PassDestination& destination,
                                 std::size_t firstEntry, std::size_t entryCount);
 
         /**
@@ -1365,6 +1734,17 @@ namespace CNA::Internal::Renderers::WebGPU
         void IssueSprite(WGPURenderPassEncoder pass, const SpriteCommand& command,
                          std::uint32_t spriteIndex, WGPUTextureFormat targetFormat,
                          std::uint32_t targetSampleCount, ReplayState& state);
+        /// WEBGPU-142: replays one sprite whose `SpriteBatch.Begin` bound a custom WGSL ShaderEffect
+        /// -- builds/fetches a pipeline from the effect's modules with the fixed SpriteVertex layout
+        /// (position/uv/color, no matrices: sprite vertices are already NDC) and binds
+        /// {uniform block @0, the sprite's sampler @1, the sprite's texture @2}. Slot 0 carries the
+        /// sprite's blend; extra MRT slots write nothing (a sprite effect writes @location(0)).
+        void IssueSpriteWithCustomEffect(WGPURenderPassEncoder pass, const SpriteCommand& command,
+                                         std::uint32_t spriteIndex, WGPUTextureFormat targetFormat,
+                                         std::uint32_t targetSampleCount, ReplayState& state);
+        /// WEBGPU-142: the custom-WGSL ShaderEffect bound by the currently-open `SpriteBatch.Begin`
+        /// (set via `WebGPUSpriteBatchRenderer::SetCustomEffect`), captured into each queued sprite.
+        WebGPUEffectRenderer* activeSpriteCustomEffect_ = nullptr;
         /**
          * @brief REMED-GFX-116: the complete GraphicsDevice.Viewport as it stands right now.
          *
@@ -1432,13 +1812,45 @@ namespace CNA::Internal::Renderers::WebGPU
          * @param snapshot The scissor state captured when the draw was queued.
          */
         void ApplyDrawScissor(WGPURenderPassEncoder pass, const WebGPUScissorSnapshot& snapshot);
+
+        /// WEBGPU-29: the inputs that vary between the 12 GetOrCreatePipeline*3D families. Everything
+        /// else in a 3D WGPURenderPipelineDescriptor -- colour target (surfaceFormat_ + CurrentWriteMask
+        /// + MRT via InitStockColorTargetsEXT), fragment/vertex entry points, CCW front face,
+        /// ToWGPUCullMode, the baked blend/multisample/depth-bias/stencil state and the depth-format
+        /// gating -- is identical across all 12 and is assembled by Build3DPipelineEXT. The per-family
+        /// vertex layout, cache key and cache map stay in each GetOrCreatePipeline* function.
+        struct Pipeline3DDescEXT
+        {
+            const char* label = nullptr;                 ///< Pipeline debug label.
+            WGPUPipelineLayout layout = nullptr;         ///< The family's bind-group pipeline layout.
+            WGPUShaderModule vertexModule = nullptr;     ///< vs_main provider.
+            WGPUShaderModule fragmentModule = nullptr;   ///< fs_main provider (often the same module).
+            const WGPUVertexBufferLayout* vertexBuffers = nullptr;  ///< Already-assembled layout(s).
+            std::size_t vertexBufferCount = 0;           ///< 1 for most, 2 for the instanced family.
+            WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
+            WGPUIndexFormat stripIndexFormat = WGPUIndexFormat_Undefined;
+            bool depthTest = true;
+            bool depthWrite = true;
+            int depthFunc = 0;
+            float depthBias = 0.0f;
+            float slopeScaleDepthBias = 0.0f;
+            bool blend = false;
+            BlendKeyParams blendParams{};
+            int cullMode = 0;
+            StencilKeyParams stencil{};
+        };
+        /// WEBGPU-29: assembles the shared 3D WGPURenderPipelineDescriptor from @p desc and creates
+        /// the pipeline. Byte-identical to the former per-function assembly. Throws on failure.
+        [[nodiscard]] WGPURenderPipeline Build3DPipelineEXT(const Pipeline3DDescEXT& desc);
+
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineColored3D(WGPUPrimitiveTopology topology,
                                                                        WGPUIndexFormat stripIndexFormat,
                                                                        bool depthTest, bool depthWrite,
                                                                        int depthFunc,
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
-                                                       float depthBias, float slopeScaleDepthBias);
+                                                       float depthBias, float slopeScaleDepthBias,
+                                                       const StencilKeyParams& stencil);  // WEBGPU-83
         // params == nullptr: the legacy DrawColoredPrimitives path (hardcoded white diffuse,
         // vertexColorEnabled=true, vertexStart=0). params != nullptr: DrawPrimitivesEx's real
         // GpuDrawParams dispatch (stride-16 only -- caller must have already verified the stride).
@@ -1453,6 +1865,10 @@ namespace CNA::Internal::Renderers::WebGPU
         // matching the Vulkan/Bgfx renderers' own on-demand-submit readback semantics. Returns
         // false if the surface isn't presentable right now (minimized, lost, etc).
         bool EnsureFrameRendered();
+        // WEBGPU-133: releases the currently acquired canvas surface texture and marks it re-
+        // acquirable. Used on Emscripten after a readback wait yields to the browser (which presents
+        // and invalidates the current texture), so the next flush obtains a fresh one.
+        void DiscardAcquiredBackbuffer();
         // WEBGPU-53/54: renders every currently queued Clear()/3D-draw/SpriteBatch command into a
         // single render pass targeting the given RenderTarget2D's own colour+depth attachments,
         // then submits and clears every per-frame draw-command queue -- the RT-targeting sibling
@@ -1489,7 +1905,6 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] WGPUPrimitiveTopology ToTopology(PrimitiveType primitive) const;
         [[nodiscard]] int PrimitiveVertexCount(PrimitiveType primitive, int primitiveCount) const;
         [[nodiscard]] int PrimitiveIndexCount(PrimitiveType primitive, int primitiveCount) const;
-        [[noreturn]] static void ThrowUnsupported3DDraw(const char* method);
 
         // WEBGPU-52: real, genuinely-linear-filtered mip generation for a plain Texture2D/
         // TextureCube, via a render pass per mip level that draws a full-screen triangle sampling
@@ -1512,11 +1927,21 @@ namespace CNA::Internal::Renderers::WebGPU
         // plans/plan_webgpu.md's WEBGPU-52 row and docs/webgpu-renderer.md for the full investigation
         // this finding is based on. Explicit per-level SetData(level>0, ...) calls made AFTER
         // construction are, as before, never auto-regenerated (matches every other renderer).
-        void EnsureMipBlitPipeline();
+        // WEBGPU-114: the blit pipeline's colour-target format must equal the texture being
+        // downsampled. A plain Texture2D/TextureCube is always RGBA8Unorm, but a RenderTargetCube
+        // is surfaceFormat_ (often BGRA), so the pipeline is cached per format (mipBlitPipelines_).
+        // The shader/bind-group-layout/pipeline-layout/sampler are format-independent, created once.
+        [[nodiscard]] WGPURenderPipeline EnsureMipBlitPipeline(WGPUTextureFormat format);
+        /// Creates the format-independent mip-blit shader/layouts/sampler exactly once (guarded on
+        /// mipBlitShader_ == nullptr by the caller). Split out of EnsureMipBlitPipeline so the
+        /// per-format pipeline cache does not re-run this.
+        void EnsureMipBlitSharedResources();
         // Shared implementation: generates levels 1..mipLevels-1 of ONE array layer of `texture`
-        // from that layer's own level 0. GenerateMips2D()/GenerateMipsCubeFace() are thin
-        // wrappers (layer=0 for a plain 2D texture, layer=face for one cube face).
-        void GenerateMipsForLayer(WGPUTexture texture, int layer, int width, int height, int mipLevels);
+        // from that layer's own level 0, sampling/rendering in `format`. GenerateMips2D()/
+        // GenerateMipsCubeFace() are thin wrappers (layer=0 for a plain 2D texture, layer=face for
+        // one cube face).
+        void GenerateMipsForLayer(WGPUTexture texture, int layer, int width, int height,
+                                  int mipLevels, WGPUTextureFormat format);
         // Generates levels 1..mipLevels-1 of a plain (non-array) 2D texture from level 0.
         void GenerateMips2D(WGPUTexture texture, int width, int height, int mipLevels);
         // Generates levels 1..mipLevels-1 of ONE array layer (cube face) of a 6-layer texture,
@@ -1530,6 +1955,9 @@ namespace CNA::Internal::Renderers::WebGPU
         WGPUAdapter adapter_ = nullptr;
         WGPUDevice device_ = nullptr;
         WGPUQueue queue_ = nullptr;
+        /// WEBGPU-144: true when the adapter advertised WGPUFeatureName_TextureCompressionBC and it
+        /// was requested at device creation, so BC1/2/3/7 textures upload natively.
+        bool bcSupported_ = false;
         WGPUSurfaceConfiguration surfaceConfig_{};
         // REMED-GFX-131: two distinct formats, deliberately separated.
         //
@@ -1578,8 +2006,20 @@ namespace CNA::Internal::Renderers::WebGPU
         WGPUPipelineLayout spritePipelineLayout_ = nullptr;
         std::unordered_map<SpritePipelineKey, WGPURenderPipeline, SpritePipelineKeyHash>
             spritePipelines_;
-        WGPUBuffer spriteVertexBuffer_ = nullptr;
-        std::uint64_t spriteVertexCapacityBytes_ = 0;
+        // WEBGPU-59: the SpriteBatch dynamic vertex buffer is a THREE-slot ring. Each bind cycle's
+        // UploadSpriteVertices() rotates to the next slot before writing, so the buffer being
+        // written for this cycle is never the one the previous two submissions are still reading --
+        // the classic dynamic-vertex-buffer ring. (Uploads use wgpuQueueWriteBuffer, which the queue
+        // already serialises, so the ring is defensive rather than fixing a live stall; it also
+        // matches the reference renderers' 3-frame ring.) Each slot grows in place when a cycle needs
+        // more than it holds. spriteVertexBuffer_ is a NON-owning alias of the active slot so the
+        // write/bind sites are unchanged; the ring owns the buffers.
+        static constexpr std::size_t kSpriteVertexRing = 3;
+        std::array<WGPUBuffer, kSpriteVertexRing> spriteVertexRing_{};
+        std::array<std::uint64_t, kSpriteVertexRing> spriteVertexRingCapacity_{};
+        std::size_t spriteVertexRingIndex_ = 0;
+        WGPUBuffer spriteVertexBuffer_ = nullptr;        ///< Non-owning alias of the active ring slot.
+        std::uint64_t spriteVertexCapacityBytes_ = 0;    ///< Active slot's capacity.
         /// REMED-GFX-159: bytes UploadSpriteVertices() wrote for the cycle being replayed. The
         /// sprite vertex buffer used to be bound once for the whole sprite run; interleaved 3D
         /// draws bind their own into the same slot, so it is rebound per sprite run and the bind
@@ -1588,13 +2028,13 @@ namespace CNA::Internal::Renderers::WebGPU
 
         // WEBGPU-52: mip-blit resources -- see EnsureMipBlitPipeline()'s own doc comment. Created
         // lazily on first use (a game that never requests mipMap=true with initial pixel data
-        // never pays for these). Always targets WGPUTextureFormat_RGBA8Unorm, matching
-        // WebGPUTextureRenderer/WebGPUTextureCubeRenderer's own fixed format -- no per-format cache
-        // needed, unlike the ~10 GetOrCreatePipeline*3D() families.
+        // never pays for these). The shader/layouts/sampler are format-independent; the pipeline is
+        // cached per colour-target format (mipBlitPipelines_): RGBA8Unorm for a plain Texture2D/
+        // TextureCube, surfaceFormat_ for a RenderTargetCube (WEBGPU-114).
         WGPUShaderModule mipBlitShader_ = nullptr;
         WGPUBindGroupLayout mipBlitBindGroupLayout_ = nullptr;
         WGPUPipelineLayout mipBlitPipelineLayout_ = nullptr;
-        WGPURenderPipeline mipBlitPipeline_ = nullptr;
+        std::unordered_map<WGPUTextureFormat, WGPURenderPipeline> mipBlitPipelines_;
         WGPUSampler mipBlitSampler_ = nullptr;
 
         std::vector<SpriteCommand> spriteCommands_;
@@ -1647,6 +2087,11 @@ namespace CNA::Internal::Renderers::WebGPU
         /// pipelines. Defaults match XNA (All / 0xFFFFFFFF).
         int colorWriteMask_ = 15;
         std::uint32_t sampleMask_ = 0xFFFFFFFFu;
+        /// WEBGPU-143 MRT: the full per-slot `BlendState.ColorWriteChannels`/`1`/`2`/`3`. Slot 0 is
+        /// `colorWriteMask_` (kept for the stock/single-target path); a custom-effect MRT draw writes
+        /// its own `@location(0..N-1)`, so each slot honours its own mask here. XNA has one blend
+        /// EQUATION for all targets, so only the write mask is per-slot.
+        std::array<int, 4> colorWriteChannels_ = {15, 15, 15, 15};
         /// XNA ColorWriteChannels (R=1,G=2,B=4,A=8) is bit-identical to WGPUColorWriteMask_*.
         [[nodiscard]] WGPUColorWriteMask CurrentWriteMask() const
         { return static_cast<WGPUColorWriteMask>(colorWriteMask_ & 0xF); }
@@ -1689,19 +2134,34 @@ namespace CNA::Internal::Renderers::WebGPU
         std::size_t queuedDrawCommandCount_ = 0;
         /// WEBGPU-115: see GetNativeDrawIssueCountEXT().
         std::size_t nativeDrawIssueCount_ = 0;
+
+        // WEBGPU-84: occlusion query state. Every field is inert until the first OcclusionQuery is
+        // created (EnsureOcclusionResources), and every replay path is gated on activeOcclusionQuery_
+        // / DrawOrderEntry::occlusionQuery, so a frame with no query behaves exactly as before.
+        static constexpr int kMaxOcclusionSlots = 32;
+        WGPUQuerySet occlusionQuerySet_ = nullptr;
+        WGPUBuffer occlusionResolveBuffer_ = nullptr;    ///< QueryResolve|CopySrc, kMaxOcclusionSlots * u64.
+        WGPUBuffer occlusionReadbackBuffer_ = nullptr;   ///< MapRead|CopyDst, same size.
+        WebGPUOcclusionQueryRenderer* activeOcclusionQuery_ = nullptr;  ///< Set between Begin()/End().
+        std::array<WebGPUOcclusionQueryRenderer*, kMaxOcclusionSlots> occlusionSlots_{};  ///< slot -> query.
+        std::vector<WebGPUOcclusionQueryRenderer*> occlusionResolvedThisFlush_;  ///< queries to read back.
+        bool occlusionReadbackPending_ = false;
+
+        void EnsureOcclusionResources();
+        int AllocateOcclusionSlot(WebGPUOcclusionQueryRenderer* query);
+        void FreeOcclusionSlot(int slot);
+        void PurgeOcclusionQuery(WebGPUOcclusionQueryRenderer* query);
+        void ReadbackOcclusionResults();
         float blendFactorR_ = 1.0f;
         float blendFactorG_ = 1.0f;
         float blendFactorB_ = 1.0f;
         float blendFactorA_ = 1.0f;
         int referenceStencil_ = 0;
-        // WEBGPU-83: stencil op storage only -- captured for a future task to bake into each
-        // pipeline's WGPUStencilFaceState. Deliberately NOT yet applied to any pipeline (stencil
-        // test stays Always/Keep everywhere, unchanged from prior behavior, so this is not a
-        // regression): VulkanRenderer::FillDepthStencilState()'s own comment documents a
-        // real, empirically-discovered front/back-winding quirk it had to work around on that
-        // renderer, and baking stencil ops into this renderer's 10 pipeline families without an
-        // equivalent WebGPU-side differential test risks the same silent-wrongness class this
-        // project explicitly avoids -- see plans/plan_webgpu.md's WEBGPU-83 row for the scope cut.
+        // WEBGPU-83 (complete): this stencil parameter set is both stored here AND baked into every
+        // 3D pipeline's WGPUStencilFaceState (FillWGPUStencilState, folded into the pipeline cache
+        // key since WebGPU keeps masks as pipeline state), with the reference applied per draw via
+        // wgpuRenderPassEncoderSetStencilReference. Two-sided front/back winding is pixel-verified
+        // (WebGPU_StencilTwoSided) -- see plans/plan_webgpu.md's WEBGPU-83 row.
         bool stencilEnable_ = false;
         int stencilFunc_ = 0;
         int stencilPass_ = 0;
@@ -1714,6 +2174,25 @@ namespace CNA::Internal::Renderers::WebGPU
         int ccwStencilPass_ = 0;
         int ccwStencilFail_ = 0;
         int ccwStencilDepthFail_ = 0;
+        /// WEBGPU-83: snapshots the current stencil state (set by ApplyDepthStencilState) into the
+        /// per-draw StencilKeyParams a colored3d draw command captures.
+        [[nodiscard]] StencilKeyParams CaptureStencilStateEXT() const
+        {
+            StencilKeyParams s;
+            s.enable = stencilEnable_;
+            s.func = stencilFunc_;
+            s.stencilPass = stencilPass_;
+            s.stencilFail = stencilFail_;
+            s.depthFail = stencilDepthFail_;
+            s.readMask = stencilReadMask_;
+            s.writeMask = stencilWriteMask_;
+            s.twoSided = twoSidedStencilMode_;
+            s.ccwFunc = ccwStencilFunc_;
+            s.ccwPass = ccwStencilPass_;
+            s.ccwFail = ccwStencilFail_;
+            s.ccwDepthFail = ccwStencilDepthFail_;
+            return s;
+        }
 
         // WEBGPU-82: per-slot SamplerState (slot 0 is texture0, read by every texture-consuming 3D
         // Queue*Draw() at queue time -- see GetOrCreateSlotSampler()).
@@ -1736,6 +2215,10 @@ namespace CNA::Internal::Renderers::WebGPU
 
         bool hasAcquiredTexture_ = false;
         WGPUTexture acquiredTexture_ = nullptr;
+        // WEBGPU-133 (Emscripten): set when a readback's browser-yielding map has let the browser
+        // invalidate the acquired surface texture; the next render discards and re-acquires, while a
+        // same-frame re-read still reuses readbackBuffer_. Always false on native.
+        bool acquiredBackbufferStale_ = false;
         bool framePending_ = true;
 
         // WEBGPU-53/54: the currently bound RenderTarget2D renderer, or nullptr for the swapchain
@@ -1748,6 +2231,13 @@ namespace CNA::Internal::Renderers::WebGPU
         // every other CNA renderer already assumes).
         WebGPURenderTargetRenderer* currentRenderTarget_ = nullptr;
 
+        // WEBGPU-85/87 MRT: the ADDITIONAL render targets bound alongside currentRenderTarget_
+        // (which is always slot 0). Empty for a single target / cube face / the backbuffer; holds
+        // slots 1..N-1 (N up to 4) while an MRT set is bound. All slots share width/height/sample
+        // count/depth, validated at SetRenderTargets() bind time. CurrentColorAttachmentCountEXT()
+        // is 1 + this size (or 1 when no RenderTarget2D is bound).
+        std::vector<WebGPURenderTargetRenderer*> mrtExtraTargets_;
+
         // WEBGPU-114: the cube-face sibling of currentRenderTarget_ above -- non-null exactly
         // when a RenderTargetCube face is the currently-bound render target (mutually exclusive
         // with currentRenderTarget_; only one of the two, or neither -- the backbuffer -- is ever
@@ -1755,6 +2245,30 @@ namespace CNA::Internal::Renderers::WebGPU
         // currentRenderTargetCubeFace_ is non-null.
         WebGPURenderTargetCubeRenderer* currentRenderTargetCubeFace_ = nullptr;
         int currentRenderTargetCubeFaceIndex_ = -1;
+
+        /// WEBGPU-86 MRT: how many colour attachments the pass currently being replayed has. Set at
+        /// the start of `ReplayDrawsInOrder` from the `PassDestination`, read by every stock pipeline
+        /// builder (via `ExpandStockColorTargetsEXT`) and folded into its cache key. 1 outside MRT,
+        /// so single-target pipelines are byte-identical to before.
+        int replayColorAttachmentCount_ = 1;
+
+        /// WEBGPU-39: the WGPU depth format of the render pass currently being replayed/built. Every 3D
+        /// pipeline's depthStencil.format and the pipeline cache key read this, so a pipeline built for a
+        /// Depth16 target is distinct from one for Depth24PlusStencil8 (WebGPU rejects a format mismatch
+        /// between pipeline and attachment). Set from the active target's own depth format at replay.
+        WGPUTextureFormat replayDepthFormat_ = WGPUTextureFormat_Depth24PlusStencil8;
+        /// WEBGPU-39: whether the active pass's depth format carries a stencil aspect (only the combined
+        /// Depth24PlusStencil8 does). Stencil ops (WEBGPU-83) are baked only when true; the depth pass's
+        /// own stencil load/store ops are likewise omitted for a depth-only format.
+        bool replayDepthHasStencil_ = true;
+
+        /// WEBGPU-86 MRT: fills a stock draw's EXTRA colour targets (slots 1..N-1) for the pass's
+        /// attachment count and returns that count. Slot 0 is left default -- the builder holds a
+        /// reference to `out[0]` and fills its real format/write-mask/blend itself (so a `blend`
+        /// assigned AFTER this call still lands in the array). Slots 1..N-1 keep `surfaceFormat_`
+        /// but write NOTHING (`writeMask` 0), so a stock draw into an MRT set writes attachment 0
+        /// only -- the "the 2D/stock pipeline writes attachment 0" behaviour every renderer has.
+        int InitStockColorTargetsEXT(std::array<WGPUColorTargetState, 4>& out) const;
 
         // Phase 57/63 vertical slice: DrawColoredPrimitives()/DrawIndexedColoredPrimitives() only
         // (VertexPositionColor, stride 16 -- see plans/plan_webgpu.md's Phase 57 entry-point note). The
@@ -1774,7 +2288,7 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t firstIndex = 0;
             std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 32> uniforms{};
+            std::array<float, 40> uniforms{};
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;  ///< XNA CompareFunction ordinal; 3 = LessEqual
@@ -1794,6 +2308,9 @@ namespace CNA::Internal::Renderers::WebGPU
             /// rectangle components) active at this draw's own public call, captured by
             /// value. Never resolved from live state during replay.
             WebGPUScissorSnapshot scissor{};
+            /// WEBGPU-83: the stencil state baked into this draw's pipeline + its dynamic reference.
+            StencilKeyParams stencil{};
+            int stencilRef = 0;
         };
         WGPUShaderModule coloredShader_ = nullptr;
         WGPUBindGroupLayout coloredBindGroupLayout_ = nullptr;
@@ -1810,6 +2327,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // own WEBGPU-N task).
         struct TexturedDrawCommand
         {
+            /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
+            StencilKeyParams stencil{};
+            int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
             std::vector<std::uint8_t> indexData;
             bool indexed = false;
@@ -1819,7 +2339,7 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t firstIndex = 0;
             std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 32> uniforms{};
+            std::array<float, 40> uniforms{};
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
@@ -1867,14 +2387,16 @@ namespace CNA::Internal::Renderers::WebGPU
                                                                         int depthFunc,
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
-                                                       float depthBias, float slopeScaleDepthBias);
+                                                       float depthBias, float slopeScaleDepthBias,
+                                                       const StencilKeyParams& stencil);
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineColoredTextured3D(WGPUPrimitiveTopology topology,
                                                                                WGPUIndexFormat stripIndexFormat,
                                                                                bool depthTest, bool depthWrite,
                                                                                int depthFunc,
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
-                                                       float depthBias, float slopeScaleDepthBias);
+                                                       float depthBias, float slopeScaleDepthBias,
+                                                       const StencilKeyParams& stencil);
         void QueueTexturedDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                const Matrix& world, const Matrix& view, const Matrix& projection,
                                PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
@@ -1897,6 +2419,29 @@ namespace CNA::Internal::Renderers::WebGPU
         std::vector<WGPUBuffer> pendingBufferReleases_;
         std::vector<WGPUBindGroup> pendingBindGroupReleases_;
 
+        // WEBGPU-12/59: transient per-draw buffer pool. Every 3D draw used to create a fresh
+        // WGPUBuffer for its vertices/uniforms/indices and release it once the frame's command
+        // buffer was submitted -- correct, but churning wgpuDeviceCreateBuffer/wgpuBufferRelease
+        // every draw, every frame. Instead, buffers are ACQUIRED from a pool keyed by
+        // (usage, power-of-two size class) and RECYCLED back into it after submit rather than
+        // released, so a warmed-up scene reuses a bounded working set and allocates nothing new.
+        // This is safe WITHOUT explicit fencing because every write (wgpuQueueWriteBuffer) and read
+        // (the recorded draw) goes through the single device queue in FIFO order, and wgpu-native
+        // keeps a buffer alive internally until the submission that references it completes -- so a
+        // recycled buffer reused in a later cycle is written only after the prior cycle's reads.
+        std::unordered_map<std::uint64_t, std::vector<WGPUBuffer>> transientBufferPool_;
+        std::size_t transientBuffersCreatedEXT_ = 0;   ///< Lifetime count of real wgpuDeviceCreateBuffer calls.
+        std::size_t transientBuffersReusedEXT_ = 0;     ///< Lifetime count of pool hits (reuses).
+        static constexpr std::size_t kTransientPoolPerClassCap = 128;  ///< Free buffers kept per size class.
+        /// Round @p size up to this pool's power-of-two size class (min 256 covers 128/160B UBOs).
+        [[nodiscard]] static std::uint64_t TransientSizeClassEXT(std::uint64_t size);
+        /// Acquire a pooled buffer of at least @p size with exactly @p usage (reused or freshly made).
+        [[nodiscard]] WGPUBuffer AcquireTransientBuffer(WGPUBufferUsage usage, std::uint64_t size);
+        /// Return @p buffer to the pool for reuse (or release it if the class cap is reached).
+        void RecycleTransientBuffer(WGPUBuffer buffer);
+        /// Release every pooled buffer (teardown).
+        void DestroyTransientBufferPool();
+
         // WEBGPU-22: lit_textured3d (stride 32, VertexPositionNormalTexture). Real Blinn-Phong
         // lighting (FNA's Lighting.fxh ComputeLights(): 3 directional lights, ambient, specular,
         // emissive), ported from VulkanRenderer's lit_textured3d.{vert,frag}.glsl. This is
@@ -1907,6 +2452,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // sampler + texture) unchanged. No fog (same deliberate deferral as the other 3D shaders).
         struct LitTexturedDrawCommand
         {
+            /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
+            StencilKeyParams stencil{};
+            int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
             std::vector<std::uint8_t> indexData;
             bool indexed = false;
@@ -1916,7 +2464,7 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t firstIndex = 0;
             std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 32> uniforms{};
+            std::array<float, 40> uniforms{};
             std::array<float, 68> lightUniforms{};
             bool depthTest = false;
             bool depthWrite = false;
@@ -1957,7 +2505,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                                            int depthFunc,
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
-                                                       float depthBias, float slopeScaleDepthBias);
+                                                       float depthBias, float slopeScaleDepthBias,
+                                                       const StencilKeyParams& stencil);
         /// Task 1105: real per-vertex-lit sibling to GetOrCreatePipelineLitTextured3D above --
         /// identical Blinn-Phong math (FNA's Lighting.fxh ComputeLights()), moved into the vertex
         /// stage and passed to the fragment shader as litRGB/specularRGB varyings instead of being
@@ -1970,7 +2519,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                                                     int depthFunc,
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
-                                                       float depthBias, float slopeScaleDepthBias);
+                                                       float depthBias, float slopeScaleDepthBias,
+                                                       const StencilKeyParams& stencil);
         void QueueLitTexturedDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                   PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
@@ -2001,6 +2551,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // for stride 24. No fog (same deliberate deferral as the other 3D shaders).
         struct AlphaTestDrawCommand
         {
+            /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
+            StencilKeyParams stencil{};
+            int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
             std::vector<std::uint8_t> indexData;
             bool indexed = false;
@@ -2010,7 +2563,7 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t firstIndex = 0;
             std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 32> uniforms{};
+            std::array<float, 40> uniforms{};
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
@@ -2047,7 +2600,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                                         int depthFunc,
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
-                                                       float depthBias, float slopeScaleDepthBias);
+                                                       float depthBias, float slopeScaleDepthBias,
+                                                       const StencilKeyParams& stencil);
         void QueueAlphaTestDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                 const Matrix& world, const Matrix& view, const Matrix& projection,
                                 PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
@@ -2074,6 +2628,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // No fog (same deliberate deferral as the other 3D shaders).
         struct DualTextureDrawCommand
         {
+            /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
+            StencilKeyParams stencil{};
+            int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
             std::vector<std::uint8_t> indexData;
             bool indexed = false;
@@ -2083,7 +2640,7 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t firstIndex = 0;
             std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 32> uniforms{};
+            std::array<float, 40> uniforms{};
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
@@ -2132,7 +2689,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                                           int depthFunc,
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
-                                                       float depthBias, float slopeScaleDepthBias);
+                                                       float depthBias, float slopeScaleDepthBias,
+                                                       const StencilKeyParams& stencil);
         void QueueDualTextureDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                   PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
@@ -2168,6 +2726,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // support already exists in the reference GLSL this was ported from, so it is wired in.
         struct EnvMapDrawCommand
         {
+            /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
+            StencilKeyParams stencil{};
+            int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
             std::vector<std::uint8_t> indexData;
             bool indexed = false;
@@ -2240,7 +2801,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                                       int depthFunc,
                                                    bool blend, const BlendKeyParams& blendParams,
                                                    int cullMode, bool wireframe,
-                                                   float depthBias, float slopeScaleDepthBias);
+                                                   float depthBias, float slopeScaleDepthBias,
+                                                       const StencilKeyParams& stencil);
         void QueueEnvMapDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                              const Matrix& world, const Matrix& view, const Matrix& projection,
                              PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
@@ -2270,6 +2832,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // lighting/texture -- this shader family has neither).
         struct InstancedDrawCommand
         {
+            /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
+            StencilKeyParams stencil{};
+            int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
             std::vector<std::uint8_t> indexData;
             std::vector<std::uint8_t> instVbData;
@@ -2290,7 +2855,7 @@ namespace CNA::Internal::Renderers::WebGPU
             std::size_t pvStride = 16;
             std::size_t instVbStride = 64;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 32> uniforms{};
+            std::array<float, 40> uniforms{};
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
@@ -2316,7 +2881,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                                          bool depthTest, bool depthWrite, int depthFunc,
                                                     bool blend, const BlendKeyParams& blendParams,
                                                     int cullMode, bool wireframe,
-                                                    float depthBias, float slopeScaleDepthBias);
+                                                    float depthBias, float slopeScaleDepthBias,
+                                                       const StencilKeyParams& stencil);
         void IssueInstancedDraw(WGPURenderPassEncoder pass, const InstancedDrawCommand& command,
                               ReplayState& state);
 
@@ -2349,6 +2915,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // shaders; alpha coverage stays in this PBR shader for glTF MASK draws.
         struct PbrDrawCommand
         {
+            /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
+            StencilKeyParams stencil{};
+            int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
             std::vector<std::uint8_t> indexData;
             /// plans/plan_gltf.md GLTF-465: true for stride 60, the record that carries COLOR_0.
@@ -2360,7 +2929,7 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t firstIndex = 0;
             std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 32> uniforms{};
+            std::array<float, 40> uniforms{};
             std::array<float, 68> lightUniforms{};
             /// plans/plan_gltf.md GLTF-344: 76 floats (304 bytes) -- the base 56 plus specular F0/factor
             /// and the two specular map transforms.
@@ -2410,7 +2979,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                                     int depthFunc,
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
-                                                       float depthBias, float slopeScaleDepthBias);
+                                                       float depthBias, float slopeScaleDepthBias,
+                                                       const StencilKeyParams& stencil);
         void QueuePbrDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                           const Matrix& world, const Matrix& view, const Matrix& projection,
                           PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
@@ -2455,6 +3025,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // always-pass default).
         struct SkinnedDrawCommand
         {
+            /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
+            StencilKeyParams stencil{};
+            int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
             std::vector<std::uint8_t> indexData;
             bool indexed = false;
@@ -2464,7 +3037,7 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t firstIndex = 0;
             std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 32> uniforms{};
+            std::array<float, 40> uniforms{};
             std::array<float, 68> lightUniforms{};
             /// SkinningParams UBO: [0] = WeightsPerVertex (Task 895's 1/2/4 convention, stored as a
             /// float in the x component of a padding vec4), [4 .. 4+72*16) = 72 column-major bone
@@ -2506,7 +3079,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                                         int depthFunc,
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
-                                                       float depthBias, float slopeScaleDepthBias);
+                                                       float depthBias, float slopeScaleDepthBias,
+                                                       const StencilKeyParams& stencil);
         void QueueSkinnedDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                               const Matrix& world, const Matrix& view, const Matrix& projection,
                               PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
@@ -2535,6 +3109,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // colour (SkinnedPbrEffect has no VertexColorEnabled, matching the EasyGL reference).
         struct SkinnedPbrDrawCommand
         {
+            /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
+            StencilKeyParams stencil{};
+            int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
             std::vector<std::uint8_t> indexData;
             /// plans/plan_gltf.md GLTF-463/GLTF-465: true for stride 80.
@@ -2546,7 +3123,7 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t firstIndex = 0;
             std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 32> uniforms{};
+            std::array<float, 40> uniforms{};
             std::array<float, 68> lightUniforms{};
             /// plans/plan_gltf.md GLTF-344: 76 floats (304 bytes) -- the base 56 plus specular F0/factor
             /// and the two specular map transforms.
@@ -2593,7 +3170,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                                            int depthFunc,
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
-                                                       float depthBias, float slopeScaleDepthBias);
+                                                       float depthBias, float slopeScaleDepthBias,
+                                                       const StencilKeyParams& stencil);
         void QueueSkinnedPbrDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                  const Matrix& world, const Matrix& view, const Matrix& projection,
                                  PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
@@ -2609,5 +3187,55 @@ namespace CNA::Internal::Renderers::WebGPU
         /// plans/plan_gltf.md GLTF-463/GLTF-465: the stride-80 pipelines.
         std::unordered_map<std::uint64_t, WGPURenderPipeline> skinnedPbrColorPipelines_;
         std::vector<SkinnedPbrDrawCommand> skinnedPbrDrawCommands_;
+
+        /**
+         * @brief WEBGPU-76: one deferred custom-`ShaderEffect` draw, captured by value at its public
+         * `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` call and replayed later like every other
+         * family. The uniform block bytes are captured per draw (a second draw of the same effect
+         * with different `SetUniform*` values must not see this one's), exactly as the stock
+         * families capture their fixed `uniforms` array; the `effect` pointer supplies only the
+         * per-effect shader modules, layouts and pipeline cache, which do not change between draws.
+         */
+        struct CustomEffectDrawCommand
+        {
+            std::vector<std::uint8_t> vertexData;
+            std::vector<std::uint8_t> indexData;   ///< empty for a non-indexed draw
+            bool indexed = false;
+            bool index32 = false;
+            std::uint32_t vertexCount = 0;
+            std::uint32_t indexCount = 0;
+            std::uint32_t firstIndex = 0;
+            std::int32_t baseVertex = 0;
+            std::uint64_t arrayStride = 0;                     ///< the bound vertex's byte stride
+            std::vector<CustomEffectVertexAttr> attributes;    ///< derived from the VertexDeclaration
+            WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
+            std::vector<std::uint8_t> uniforms;                ///< the effect's uniform block, by value
+            WebGPUSampledTextureEXT texture;                   ///< captured unit-0 texture, if any
+            WebGPUEffectRenderer* effect = nullptr;            ///< program/layout/pipeline-cache owner
+            bool depthTest = false;
+            bool depthWrite = false;
+            int depthFunc = 3;  ///< XNA CompareFunction ordinal; 3 = LessEqual
+            bool blend = true;
+            BlendKeyParams blendParams{};
+            /// WEBGPU-143 MRT: the per-slot ColorWriteChannels (slot i masks `@location(i)`); a custom
+            /// effect that writes N outputs honours each attachment's own BlendState mask.
+            std::array<int, 4> colorWriteChannels{15, 15, 15, 15};
+            int cullMode = 0;
+            float depthBias = 0.0f;
+            float slopeScaleDepthBias = 0.0f;
+            WebGPUViewportSnapshot viewport{};
+            WebGPUScissorSnapshot scissor{};
+        };
+        std::vector<CustomEffectDrawCommand> customEffectDrawCommands_;
+        /// WEBGPU-76: builds the deferred custom-effect command from a `DrawPrimitivesEx` /
+        /// `DrawIndexedPrimitivesEx` call whose `params.customEffectRenderer` is set.
+        void QueueCustomEffectDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
+                                   const Matrix& world, const Matrix& view, const Matrix& projection,
+                                   PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+        /// WEBGPU-76/86: replays one custom-effect command — builds/fetches its pipeline (keyed by
+        /// the concrete pass state incl. `destination.colorAttachmentCount`, 1 for a single target
+        /// and 2..4 for an MRT set) and issues the draw. The fragment must write `@location(0..N-1)`.
+        void IssueCustomEffectDraw(WGPURenderPassEncoder pass, const CustomEffectDrawCommand& command,
+                                   const PassDestination& destination, ReplayState& state);
     };
 }

@@ -524,9 +524,13 @@ static int write_font_fixture(void)
         "{\"cnjVersion\":1,\"type\":\"SpriteFont\","
         "\"texture\":\"cna_c_api_content_font_atlas.bmp\","
         "\"lineSpacing\":10,\"spacing\":1.0,\"defaultCharacter\":\"?\","
+        /* Strictly ascending by character: '?' (63) before 'A' (65). SpriteFont binary-searches
+           its character map, so the .cnj reader refuses an unsorted one rather than letting a
+           lookup return the wrong glyph -- this descriptor listed 'A' first and stopped loading
+           at all when that rule landed. */
         "\"glyphs\":["
-        "{\"char\":65,\"source\":[0,0,2,8],\"crop\":[0,0,2,8],\"kerning\":[0.0,5.0,0.0]},"
-        "{\"char\":63,\"source\":[2,0,2,8],\"crop\":[0,0,2,8],\"kerning\":[1.0,4.0,2.0]}"
+        "{\"char\":63,\"source\":[2,0,2,8],\"crop\":[0,0,2,8],\"kerning\":[1.0,4.0,2.0]},"
+        "{\"char\":65,\"source\":[0,0,2,8],\"crop\":[0,0,2,8],\"kerning\":[0.0,5.0,0.0]}"
         "]}";
     return write_binary_file(FontAtlasPath, FixtureBmp, sizeof(FixtureBmp)) &&
         write_text_file(FontDescriptorPath, descriptor);
@@ -577,9 +581,9 @@ static int validate_font_load(const CNA_Handle manager)
     memset(glyphs, 0, sizeof(glyphs));
     if (cna_sprite_font_copy_glyphs(font, glyphs, UINT64_C(2), &glyph_count) !=
             CNA_RESULT_SUCCESS ||
-        glyph_count != UINT64_C(2) || glyphs[0].character != (CNA_Char16)'A' ||
-        glyphs[0].glyph_bounds.width != 2 || glyphs[1].character != (CNA_Char16)'?' ||
-        glyphs[1].kerning.y != 4.0f ||
+        glyph_count != UINT64_C(2) || glyphs[0].character != (CNA_Char16)'?' ||
+        glyphs[0].glyph_bounds.width != 2 || glyphs[0].kerning.y != 4.0f ||
+        glyphs[1].character != (CNA_Char16)'A' || glyphs[1].kerning.y != 5.0f ||
         cna_sprite_font_measure_utf8(font, view("A"), &measured) != CNA_RESULT_SUCCESS ||
         measured.x != 5.0f || measured.y != 10.0f) {
         (void)cna_sprite_font_destroy(font);

@@ -392,7 +392,8 @@ Rules:
 
 After making changes:
 
-1. Build the affected target (`cmake --build cmake-build-debug --target CNA`).
+1. Build the affected target. There is **no** `CNA` CMake target — build the whole configuration
+   (`cmake --build <build-dir>`) or a specific test/example target by its own name (matching AGENTS.md).
 2. Report: changed files, added stubs, missing dependencies, intentional deviations, build result, remaining errors.
 
 Default debug build dir: `cmake-build-debug/`. Vulkan build dir: `cmake-build-vulkan/`.
@@ -533,8 +534,31 @@ public identities; EasyGL remains an internal implementation shared by five GL p
 `ASCII` renderer identity was removed in favor of a renderer-neutral post-process effect,
 `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`) -- see `docs/ascii-post-process-effect.md`.
 `WEBGPU`
-is experimental and has a functional native
-2D baseline, not yet the 3D/effect parity of the established GPU renderers.
+is experimental but well past a 2D baseline: on desktop (wgpu-native) it has 3D with every stock
+effect, real instancing, `RenderTarget2D`/`RenderTargetCube`, MSAA, `Texture3D`, GPU occlusion
+queries, custom WGSL `ShaderEffect`s on the 3D route (`WEBGPU-76`,
+`ExecutesShaderEffectSourceEXT()`→true, dialect `Wgsl`) and multiple render targets (`WEBGPU-85/86/87`:
+2..4 targets, a custom `@location(0..N-1)` shader fans out to every slot, a stock draw writes
+attachment 0) and custom WGSL `ShaderEffect`s on the SpriteBatch route too (`WEBGPU-142`). Since
+2026-08-27 **every FNA stock effect's fog is at parity** (`WEBGPU-145`–`148`: BasicEffect, AlphaTest,
+DualTexture, Skinned join the pre-existing EnvironmentMapEffect fog) — the shared primary UBO carries
+the FNA view-space `fogVector`+`fogColor` and each WGSL family applies `ApplyFog`. Since
+2026-08-26 it also runs in the browser through Emscripten's emdawnwebgpu port (2D + 3D, its pixels
+byte-identical to the native Vulkan renderer's). It is also the first CNA renderer to upload
+GPU-native block-compressed textures (`WEBGPU-144`: DXT1/3/5 + BC7 to `WGPUTextureFormat_BC*`, no CPU
+decompress) via the direct `Texture2D`+`SetData` API. `DepthStencilState` **stencil ops**
+(`WEBGPU-83`) now bake into `WGPUStencilFaceState` across **every 3D family** (colored3d plus
+textured/lit/skinned/PBR/env-map/dual-texture/alpha-test/instanced): a stamp-then-gate sequence
+works within one render-target bind cycle, proven on the real GPU by three tests: the shared
+`rendertarget_depthstencil_usage` acceptance test (colored3d), the WebGPU-local `WebGPU_StencilFamily`
+test (Textured3D) and `WebGPU_StencilTwoSided` (`TwoSidedStencilMode` front/back winding, matching
+the EasyGL parity contract) -- so `WEBGPU-83` is complete. Since 2026-08-27 the XNB/DDS content
+loaders also reach the native compressed path (`WEBGPU-144` Phase 2 / XNB-24): `Texture2D::FromStream`
+(DDS) and the `.xnb` `Texture2DReader` keep DXT blocks compressed and upload them GPU-natively
+instead of CPU-decoding to Color, gated on a new renderer-opt-in capability
+`LoadsCompressedContentNativelyEXT()` (WebGPU-only; every other renderer, Skia included, keeps its
+existing decode-to-Color loaders) AND the per-format `IsCompressedTransferFormatEXT`. See
+`docs/webgpu-renderer.md` and `plans/plan_webgpu.md`.
 `MAGNUM` is a desktop-OpenGL renderer built on mosra/magnum -- see `docs/magnum-renderer.md` and
 `plans/plan_magnum.md` for its own capability boundary.
 `DILIGENT` is experimental too, and is the one renderer whose native API is chosen at **runtime**
@@ -620,7 +644,8 @@ while drawing nothing.
 The project owner explicitly lifted the former WebGPU prohibition on **2026-07-12** and authorized
 its renderer implementation.
 
-- WebGPU tasks live in **`plans/plan_webgpu.md`** (`WEBGPU-1`–`WEBGPU-123`). Keep task statuses and
+- WebGPU tasks live in **`plans/plan_webgpu.md`** (`WEBGPU-1`–`WEBGPU-151`; its top-of-file
+  script-counted status summary is the source of truth). Keep task statuses and
   limitations current as implementation proceeds.
 - The native renderer uses pinned **wgpu-native v29.0.1.1**, selected with
   `-DCNA_GRAPHICS_RENDERER=WEBGPU`. Prefer `CNA_WEBGPU_ROOT` for reproducible/offline builds; the

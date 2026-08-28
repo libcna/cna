@@ -615,6 +615,13 @@ namespace Microsoft::Xna::Framework::Graphics
             GraphicsDevice& device, int w, int h,
             std::vector<std::vector<std::uint8_t>>&& rgbaLevels);
 
+        /// WEBGPU-144 Phase 2: builds a block-compressed Texture2D from raw compressed level
+        /// blocks (one entry per mip level), uploading each level through the compressed SetData
+        /// path so the renderer stores the blocks natively instead of CPU-decompressed pixels.
+        static Texture2D MakeCompressedTextureFromMipBlocks(
+            GraphicsDevice& device, int w, int h, SurfaceFormat format,
+            std::vector<std::vector<std::uint8_t>>&& blockLevels);
+
         void storeCpuPixels(const uint8_t* rgba, int pixelCount);
         std::vector<uint8_t>& getMipBuffer(int level);
         const std::vector<uint8_t>* getMipBufferConst(int level) const;

@@ -28,6 +28,14 @@ namespace Microsoft::Xna::Framework
         float W;
 
         /**
+         * @brief Constructs a quaternion whose components are all zero.
+         *
+         * C# gives every struct a parameterless constructor that zeroes its fields, so an
+         * undeclared XNA Quaternion field starts here; Vector3 and Matrix already match that.
+         */
+        Quaternion();
+
+        /**
          * @brief Constructs a quaternion from four scalar components.
          *
          * @param x The X component.

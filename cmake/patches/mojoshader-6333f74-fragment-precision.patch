@@ -1,0 +1,45 @@
+diff --git a/profiles/mojoshader_profile_glsl.c b/profiles/mojoshader_profile_glsl.c
+index 319e3cb..f12c8b1 100644
+--- a/profiles/mojoshader_profile_glsl.c
++++ b/profiles/mojoshader_profile_glsl.c
+@@ -552,10 +552,14 @@ void emit_GLSL_start(Context *ctx, const char *profilestr)
+         output_line(ctx, "#define texture2DRect texture");
+         output_line(ctx, "#define texture2DRectProj textureProj");
+         output_line(ctx, "#define texture2DRectLod textureLod");
+-        if (shader_is_vertex(ctx))
+-            output_line(ctx, "precision highp float;");
+-        else
+-            output_line(ctx, "precision mediump float;");
++        // A Direct3D 9 shader's float registers and arithmetic are full 32-bit unless an
++        // instruction opts into partial precision, so a fragment shader translated at
++        // GLSL ES's mediump default silently computes something else. mediump only
++        // guarantees fp16 range, and a world-space vector on the scale of a game's own
++        // units overflows it in the very first dot product: normalize() then returns zero
++        // and every term derived from that direction collapses, with no diagnostic
++        // anywhere. GLSL ES 3.00 requires highp in fragment shaders, so ask for it. -CNA
++        output_line(ctx, "precision highp float;");
+         output_line(ctx, "precision mediump int;");
+         pop_output(ctx);
+     } // else if
+@@ -567,10 +571,21 @@ void emit_GLSL_start(Context *ctx, const char *profilestr)
+         ctx->profile_supports_glsles = 1;
+         push_output(ctx, &ctx->preflight);
+         output_line(ctx, "#version 100");
++        // See the GLSL ES 3.00 branch above for why a translated fragment shader must not
++        // be left at mediump. GLSL ES 1.00 makes fragment highp OPTIONAL, so this asks for
++        // it only where the implementation advertises it and keeps the old qualifier
++        // otherwise -- on such an implementation the range limit is real hardware, not a
++        // translation choice. -CNA
+         if (shader_is_vertex(ctx))
+             output_line(ctx, "precision highp float;");
+         else
++        {
++            output_line(ctx, "#ifdef GL_FRAGMENT_PRECISION_HIGH");
++            output_line(ctx, "precision highp float;");
++            output_line(ctx, "#else");
+             output_line(ctx, "precision mediump float;");
++            output_line(ctx, "#endif");
++        } // else
+         output_line(ctx, "precision mediump int;");
+         pop_output(ctx);
+     } // else if

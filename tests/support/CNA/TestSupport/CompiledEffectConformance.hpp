@@ -1499,6 +1499,144 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief Contract: SpriteBatch + a compiled Effect samples a `RenderTarget2D` right way up.
+     *
+     * plans/plan_fx.md FX-118, and the reason it is a section of its own rather than a case inside
+     * `RunCompiledEffectRenderTargetSourceContract`: that one drives the compiled route through
+     * `DrawUserPrimitives`, where the game supplies its own vertices. SpriteBatch supplies the
+     * vertices instead, and a renderer that corrects a rendered source's row order in the sprite's
+     * texture coordinates AND again in the bound texture applies the correction twice -- an image
+     * that is upside down while every hop of the 3D route is right way up. Found by porting
+     * Microsoft's BloomPostprocess sample, whose whole postprocess is exactly this: four
+     * fullscreen `SpriteBatch` quads, each one a compiled `.fx` reading the render target the
+     * previous quad wrote.
+     *
+     * The last case is the one that keeps a fix honest in the other direction: an ordinary
+     * `Texture2D` drawn the same way must be unaffected by any row-order correction.
+     *
+     * @param device The graphics device under test.
+     */
+    inline void RunCompiledEffectSpriteBatchRenderTargetSourceContract(GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        constexpr int kSize = 8;
+        const Color red(255, 0, 0, 255);
+        const Color blue(0, 0, 255, 255);
+        const Color background(9, 19, 29, 255);
+
+        Texture2D white(device, 1, 1);
+        const Color whitePixel[1] = {Color::White};
+        white.SetData(whitePixel, 1);
+
+        // A source with a red TOP half and a blue BOTTOM half, in XNA's own top-down pixel space.
+        const auto paintHalves = [&](RenderTarget2D& target) {
+            device.SetRenderTarget(&target);
+            device.Clear(background);
+            SpriteBatch batch(device);
+            batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque);
+            batch.Draw(white, Rectangle(0, 0, kSize, kSize / 2), red);
+            batch.Draw(white, Rectangle(0, kSize / 2, kSize, kSize / 2), blue);
+            batch.End();
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        };
+        const auto expectRedOverBlue = [&](RenderTarget2D& target, const char* label) {
+            SCOPED_TRACE(label);
+            const Rectangle topProbe(kSize / 2, 1, 1, 1);
+            const Rectangle bottomProbe(kSize / 2, kSize - 2, 1, 1);
+            Color top(0, 0, 0, 0), bottom(0, 0, 0, 0);
+            target.GetData(0, &topProbe, &top, 0, 1);
+            target.GetData(0, &bottomProbe, &bottom, 0, 1);
+            EXPECT_NEAR(top.getRProperty(), 255, 3) << "the top half must be red";
+            EXPECT_NEAR(top.getBProperty(), 0, 3) << "the top half must be red";
+            EXPECT_NEAR(bottom.getBProperty(), 255, 3) << "the bottom half must be blue";
+            EXPECT_NEAR(bottom.getRProperty(), 0, 3) << "the bottom half must be blue";
+        };
+
+        Effect effect(device, BuildSyntheticSamplingEffect({
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+            {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp},
+        }));
+        auto& parameters = effect.getParametersProperty();
+        parameters["Tint"]->SetValue(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+        // The fixture's pass assigns its own vertex shader, so it needs SpriteBatch's own
+        // projection rather than the stock sprite vertex shader a pixel-only pass inherits.
+        parameters["Transform"]->SetValue(Matrix::CreateOrthographicOffCenter(
+            0.0f, static_cast<float>(kSize), static_cast<float>(kSize), 0.0f, -1.0f, 1.0f));
+
+        const auto blitThroughEffect = [&](Texture2D& source, RenderTarget2D& destination) {
+            device.SetRenderTarget(&destination);
+            device.Clear(background);
+            SpriteBatch batch(device);
+            SamplerState pointClamp = SamplerState::PointClamp;
+            batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &pointClamp,
+                        nullptr, nullptr, &effect);
+            batch.Draw(source, Rectangle(0, 0, kSize, kSize), Color::White);
+            batch.End();
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        };
+
+        RenderTarget2D source(device, kSize, kSize);
+        paintHalves(source);
+        expectRedOverBlue(source, "the source target itself, read back directly");
+
+        RenderTarget2D firstHop(device, kSize, kSize);
+        blitThroughEffect(source, firstHop);
+        expectRedOverBlue(firstHop,
+                          "RenderTarget2D -> SpriteBatch + compiled Effect -> RenderTarget2D");
+
+        // A second hop, so a renderer that flips once per hop cannot come out right by accident.
+        RenderTarget2D secondHop(device, kSize, kSize);
+        blitThroughEffect(firstHop, secondHop);
+        expectRedOverBlue(secondHop,
+                          "the same, twice: a per-hop flip would be visible here");
+
+        // plans/plan_fx.md FX-120: the same SpriteBatch flushed TWICE. The compiled route records its
+        // geometry in one long-lived vertex array object, and it used to create and destroy that
+        // geometry inside every flush, leaving the array object holding a deleted element buffer
+        // for the next draw to read. Desktop GL tolerates that and draws anyway, which is why
+        // this case cannot fail here -- it was observable only on WEBGL2, where the draw is
+        // refused outright with "glDrawElements: Insufficient buffer size" and every flush after
+        // a batch's first produced nothing. It is pinned so a backend that validates its bindings
+        // has something to fail on.
+        {
+            RenderTarget2D first(device, kSize, kSize);
+            RenderTarget2D second(device, kSize, kSize);
+            SpriteBatch batch(device);
+            SamplerState pointClamp = SamplerState::PointClamp;
+            for (RenderTarget2D* destination : {&first, &second})
+            {
+                device.SetRenderTarget(destination);
+                device.Clear(background);
+                batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &pointClamp,
+                            nullptr, nullptr, &effect);
+                batch.Draw(source, Rectangle(0, 0, kSize, kSize), Color::White);
+                batch.End();
+                device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            }
+            expectRedOverBlue(first, "the first flush of a reused SpriteBatch");
+            expectRedOverBlue(second, "the second flush of the SAME SpriteBatch");
+        }
+
+        // The other direction: an ordinary Texture2D source must be untouched by any correction.
+        {
+            Texture2D plain(device, kSize, kSize);
+            std::vector<Color> pixels(static_cast<std::size_t>(kSize * kSize));
+            for (int y = 0; y < kSize; ++y)
+                for (int x = 0; x < kSize; ++x)
+                    pixels[static_cast<std::size_t>(y * kSize + x)] = y < kSize / 2 ? red : blue;
+            plain.SetData(pixels.data(), static_cast<int>(pixels.size()));
+
+            RenderTarget2D destination(device, kSize, kSize);
+            blitThroughEffect(plain, destination);
+            expectRedOverBlue(destination,
+                              "Texture2D -> SpriteBatch + compiled Effect -> RenderTarget2D");
+        }
+    }
+
+    /**
      * @brief Contract: no truncation of a real effect wedges, crashes, or half-builds a runtime.
      *
      * plans/plan_fx.md FX-112. Every backend parses the effect container through the same pinned
@@ -2875,6 +3013,7 @@ namespace CNA::TestSupport
      * - `RunCompiledEffectSamplerPixelContract` -- the sampler state reaches the GPU
      * - `RunCompiledEffectPassSelectionContract` -- the applied pass is the pass that draws
      * - `RunCompiledEffectRenderTargetSourceContract` -- a rendered source is sampled right way up
+     * - `RunCompiledEffectSpriteBatchRenderTargetSourceContract` -- and through SpriteBatch too
      * - `RunCompiledEffectStockDrawIsolationContract` -- no state leaks into a later stock draw
      * - `RunCompiledEffectOrientationContract` -- compiled geometry lands where stock geometry does
      * - `RunCompiledEffectSwitchingContract` -- effects, clones and stock draws interleave cleanly

@@ -243,6 +243,12 @@ include(cmake/Harnesses.cmake)
 
 include(cmake/ToolGltfToCnj.cmake)
 
+include(cmake/ToolCnjToCnb.cmake)
+
+include(cmake/ToolCnbInfo.cmake)
+include(cmake/ToolGltfToCnb.cmake)
+include(cmake/ToolSourceToCnb.cmake)
+
 include(cmake/UnitTests.cmake)
 
 # A real UIKit/SDL_main/Game final-link product for the iOS device and simulator CI legs.

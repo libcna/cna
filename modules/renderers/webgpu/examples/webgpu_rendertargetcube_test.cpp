@@ -305,28 +305,157 @@ protected:
                   ColorStr(gotFace));
         }
 
-        // Check E: mipMap=true is a deliberate, documented scope cut -- must throw.
+        // Check E: mipMap=true now builds a real mip chain (WEBGPU-114). Render a left-half-red,
+        // right-half-blue face; level 0 keeps the sharp split, level 1 is its genuine linear
+        // downsample (far-left still red, far-right still blue). A chain that was allocated but
+        // never regenerated would read back undefined/zero at level 1, not the downsampled colours.
         {
-            bool threw = false;
-            try
-            {
-                RenderTargetCube rtcMip(dev, kCubeSize, true, SurfaceFormat::Color, DepthFormat::None);
-            }
-            catch (const std::exception&)
-            {
-                threw = true;
-            }
-            check(threw, "Check E: RenderTargetCube(mipMap=true) throws a clear exception "
-                        "(mip regeneration not yet implemented, WEBGPU-114)");
+            RenderTargetCube rtcMip(dev, kCubeSize, true, SurfaceFormat::Color, DepthFormat::None);
+            check(rtcMip.getLevelCountProperty() > 1,
+                  "Check E1: RenderTargetCube(mipMap=true) reports a multi-level chain: "
+                  + std::to_string(rtcMip.getLevelCountProperty()));
+
+            dev.SetRenderTarget(&rtcMip, CubeMapFace::PositiveX);
+            dev.Clear(Color::Blue);
+            const VertexPositionColor leftHalf[6] = {  // Red over clip-x in [-1, 0]
+                { Vector3(-1.0f,  1.0f, 0.0f), Color::Red },
+                { Vector3(-1.0f, -1.0f, 0.0f), Color::Red },
+                { Vector3( 0.0f, -1.0f, 0.0f), Color::Red },
+                { Vector3(-1.0f,  1.0f, 0.0f), Color::Red },
+                { Vector3( 0.0f, -1.0f, 0.0f), Color::Red },
+                { Vector3( 0.0f,  1.0f, 0.0f), Color::Red },
+            };
+            ApplyBasicEffect(dev);
+            dev.DrawUserPrimitives(PrimitiveType::TriangleList, leftHalf, 0, 2);
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+            std::vector<Color> lvl0(static_cast<std::size_t>(kCubeSize) * kCubeSize, Color(0, 0, 0, 0));
+            rtcMip.GetData(CubeMapFace::PositiveX, 0, nullptr, lvl0.data(), 0,
+                           static_cast<int>(lvl0.size()));
+            const Color l0left = lvl0[(kCubeSize / 2) * kCubeSize + kCubeSize / 4];        // x=8
+            const Color l0right = lvl0[(kCubeSize / 2) * kCubeSize + (kCubeSize * 3) / 4]; // x=24
+            check(Matches(l0left, Color::Red) && Matches(l0right, Color::Blue),
+                  "Check E2: level 0 keeps the sharp red/blue split: "
+                  + ColorStr(l0left) + " / " + ColorStr(l0right));
+
+            const int half = kCubeSize / 2;
+            std::vector<Color> lvl1(static_cast<std::size_t>(half) * half, Color(0, 0, 0, 0));
+            rtcMip.GetData(CubeMapFace::PositiveX, 1, nullptr, lvl1.data(), 0,
+                           static_cast<int>(lvl1.size()));
+            const Color l1left = lvl1[(half / 2) * half + 1];          // near left edge
+            const Color l1right = lvl1[(half / 2) * half + (half - 2)]; // near right edge
+            check(Matches(l1left, Color::Red, 24) && Matches(l1right, Color::Blue, 24),
+                  "Check E3: level 1 is a genuine downsample (far-left red, far-right blue): "
+                  + ColorStr(l1left) + " / " + ColorStr(l1right));
         }
 
-        // Check F: MultiSampleCount property fidelity -- MSAA is not implemented for
-        // RenderTargetCube on this renderer; requesting 4 must still honestly report 0.
+        // Check F: per-face MSAA (WEBGPU-114). Engage the renderer's global 4x MSAA, then a
+        // RenderTargetCube must (F1) report the applied sample count, (F2) render each face into
+        // its OWN multisampled attachment and resolve it into that face's own layer -- distinct
+        // per-face colours must not cross-contaminate -- and (F3) actually multisample: a
+        // half-covering triangle leaves blended edge pixels a 1x render cannot produce.
         {
-            RenderTargetCube rtcMsaa(dev, kCubeSize, false, SurfaceFormat::Color, DepthFormat::None, 4);
-            check(rtcMsaa.getMultiSampleCountProperty() == 0,
-                  "Check F: RenderTargetCube MultiSampleCount request 4 -> honestly reports 0 "
-                  "(MSAA not implemented for RenderTargetCube on this renderer, see WEBGPU-114)");
+            gdm_->setPreferMultiSamplingProperty(true);
+            gdm_->ApplyChanges();
+            const int applied =
+                dev.getPresentationParametersProperty().getMultiSampleCountProperty();
+            check(applied == 0 || applied == 4,
+                  "Check F0: backbuffer MSAA request resolves to the 0-or-4 contract (applied="
+                  + std::to_string(applied) + ")");
+
+            if (applied == 4)
+            {
+                // Depth24Stencil8 so the shared depth attachment is also allocated at 4x samples.
+                RenderTargetCube rtcMsaa(dev, kCubeSize, false, SurfaceFormat::Color,
+                                         DepthFormat::Depth24Stencil8, 4);
+                check(rtcMsaa.getMultiSampleCountProperty() == 4,
+                      "Check F1: RenderTargetCube reports the applied 4x sample count");
+
+                // Distinct solid colours into two faces -- proves each face resolves into its own
+                // layer with no cross-face leak (the six-per-face MSAA attachment design).
+                dev.SetRenderTarget(&rtcMsaa, CubeMapFace::PositiveX);
+                dev.Clear(Color::Black);
+                DrawFullScreenQuad(dev, Color::Red);
+                dev.SetRenderTarget(&rtcMsaa, CubeMapFace::NegativeX);
+                dev.Clear(Color::Black);
+                DrawFullScreenQuad(dev, Color::Lime);
+                dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+                const Color fpx = ReadFaceCentre(rtcMsaa, CubeMapFace::PositiveX);
+                const Color fnx = ReadFaceCentre(rtcMsaa, CubeMapFace::NegativeX);
+                check(Matches(fpx, Color::Red) && Matches(fnx, Color::Lime),
+                      "Check F2: each face resolves its OWN colour (+X red / -X green), no leak: "
+                      + ColorStr(fpx) + " / " + ColorStr(fnx));
+
+                // Genuine multisampling: a half-covering White triangle over a Black face must
+                // leave blended intermediate-grey pixels along its slanted hypotenuse -- a 1x
+                // render can only produce hard 0/255 edges there.
+                dev.SetRenderTarget(&rtcMsaa, CubeMapFace::PositiveY);
+                dev.Clear(Color::Black);
+                const VertexPositionColor tri[3] = {
+                    { Vector3(-1.0f,  1.0f, 0.0f), Color::White },
+                    { Vector3(-1.0f, -1.0f, 0.0f), Color::White },
+                    { Vector3( 1.0f, -1.0f, 0.0f), Color::White },
+                };
+                ApplyBasicEffect(dev);
+                dev.DrawUserPrimitives(PrimitiveType::TriangleList, tri, 0, 1);
+                dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+                std::vector<Color> facePix(static_cast<std::size_t>(kCubeSize) * kCubeSize,
+                                           Color(0, 0, 0, 0));
+                rtcMsaa.GetData(CubeMapFace::PositiveY, facePix.data(),
+                                static_cast<int>(facePix.size()));
+                int blended = 0;
+                for (const Color& c : facePix)
+                {
+                    const int r = c.getRProperty();
+                    if (r >= 16 && r <= 239 &&
+                        std::abs(r - c.getGProperty()) <= 16 &&
+                        std::abs(r - c.getBProperty()) <= 16)
+                        ++blended;
+                }
+                check(blended > 0,
+                      "Check F3: half-covering triangle leaves blended edge pixels (genuine "
+                      "multisample resolve): " + std::to_string(blended) + " intermediate pixels");
+
+                // F4: MSAA and mipMap together -- each face resolves its MSAA samples into level 0,
+                // then that resolved level 0 is downsampled into the mip chain. Same red/blue-split
+                // downsample discriminator as Check E3, now with the 4x resolve in front of it.
+                RenderTargetCube rtcBoth(dev, kCubeSize, true, SurfaceFormat::Color,
+                                         DepthFormat::Depth24Stencil8, 4);
+                dev.SetRenderTarget(&rtcBoth, CubeMapFace::PositiveX);
+                dev.Clear(Color::Blue);
+                const VertexPositionColor leftHalf[6] = {
+                    { Vector3(-1.0f,  1.0f, 0.0f), Color::Red },
+                    { Vector3(-1.0f, -1.0f, 0.0f), Color::Red },
+                    { Vector3( 0.0f, -1.0f, 0.0f), Color::Red },
+                    { Vector3(-1.0f,  1.0f, 0.0f), Color::Red },
+                    { Vector3( 0.0f, -1.0f, 0.0f), Color::Red },
+                    { Vector3( 0.0f,  1.0f, 0.0f), Color::Red },
+                };
+                ApplyBasicEffect(dev);
+                dev.DrawUserPrimitives(PrimitiveType::TriangleList, leftHalf, 0, 2);
+                dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+                const int bhalf = kCubeSize / 2;
+                std::vector<Color> blvl1(static_cast<std::size_t>(bhalf) * bhalf, Color(0, 0, 0, 0));
+                rtcBoth.GetData(CubeMapFace::PositiveX, 1, nullptr, blvl1.data(), 0,
+                                static_cast<int>(blvl1.size()));
+                const Color bl = blvl1[(bhalf / 2) * bhalf + 1];
+                const Color br = blvl1[(bhalf / 2) * bhalf + (bhalf - 2)];
+                check(Matches(bl, Color::Red, 24) && Matches(br, Color::Blue, 24),
+                      "Check F4: MSAA + mipMap compose (resolve then downsample), level 1 far-left "
+                      "red / far-right blue: " + ColorStr(bl) + " / " + ColorStr(br));
+            }
+            else
+            {
+                RenderTargetCube rtcMsaa(dev, kCubeSize, false, SurfaceFormat::Color,
+                                         DepthFormat::None, 4);
+                check(rtcMsaa.getMultiSampleCountProperty() == 0,
+                      "Check F1: 4x MSAA unsupported on this adapter -> RenderTargetCube honestly "
+                      "reports 0");
+                std::printf("[INFO] backbuffer MSAA applied=0; per-face MSAA render path not "
+                            "exercised on this adapter\n");
+            }
         }
 
         std::printf("=== %d/%d PASS ===\n", passCount, totalCount);

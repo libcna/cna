@@ -186,8 +186,8 @@
   ],
   "environment": [
     {
-      "subject": "FFmpeg stays a system dependency",
-      "impact": "The package installs the SDL3, SDL3_image and SDL3_mixer libraries this project builds, beside `libcna_c_api.so`, whose RPATH is `$ORIGIN` -- so an installed CNA links and runs with no environment variable. FFmpeg is different: libavcodec, libavformat, libavutil and libswresample come from the distribution. Copying a distribution's binaries into this package would take on their redistribution terms, freeze their soname against future security updates and drag in the transitive libraries they were linked against, so they remain a system dependency a deployment installs the ordinary way.",
+      "subject": "Enabled FFmpeg stays a system dependency",
+      "impact": "`CNA_ENABLE_VIDEO=OFF` omits FFmpeg entirely while preserving the C video ABI with deterministic `CNA_RESULT_NOT_SUPPORTED` playback. When `AUTO/ON` selects video, libavcodec, libavformat, libavutil and libswresample come from the distribution rather than being copied into the package: copying them would take on their redistribution terms, freeze their soname against security updates and drag in their transitive libraries.",
       "status": "by design",
       "owner": "CONSUMING.md"
     },

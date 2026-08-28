@@ -18,6 +18,24 @@ function(cna_configure_webgpu)
         return()
     endif()
 
+    # Web / browser target (WEBGPU-119): the browser owns the WebGPU implementation, reached from
+    # WebAssembly through Emscripten's emdawnwebgpu port. There is no wgpu-native library to
+    # download, find or copy -- the port supplies the same unified webgpu.h that wgpu-native v29
+    # exposes natively, plus the JavaScript bindings that route wgpu* calls to navigator.gpu. The
+    # single --use-port flag carries both the include path (at compile time) and those bindings (at
+    # link time); the WebAssembly module needs no sibling runtime file, so CNA_WEBGPU_RUNTIME_LIBRARY
+    # stays unset and the renderer's runtime-copy step is skipped. Asyncify is already enabled
+    # project-wide for Emscripten links (see top-level CMakeLists.txt), which is what lets this
+    # renderer's synchronous adapter/device waits yield to the browser event loop.
+    if(EMSCRIPTEN)
+        add_library(WebGPU::WebGPU INTERFACE IMPORTED GLOBAL)
+        set_target_properties(WebGPU::WebGPU PROPERTIES
+            INTERFACE_COMPILE_OPTIONS "--use-port=emdawnwebgpu"
+            INTERFACE_LINK_OPTIONS "--use-port=emdawnwebgpu")
+        message(STATUS "CNA WebGPU: using Emscripten emdawnwebgpu port (browser navigator.gpu)")
+        return()
+    endif()
+
     set(_root "${CNA_WEBGPU_ROOT}")
 
     if(NOT _root)
@@ -58,12 +76,30 @@ function(cna_configure_webgpu)
         set(_extract_stamp "${_download_dir}/.cna-extracted")
         file(MAKE_DIRECTORY "${_download_dir}")
 
-        if(NOT EXISTS "${_extract_stamp}")
+        # WEBGPU-1/151: refuse to auto-download a package we have no pinned SHA-256 for.
+        include("${CMAKE_CURRENT_LIST_DIR}/WebGPUChecksum.cmake")
+        cna_webgpu_expected_sha256("${CNA_WEBGPU_VERSION}" "${_asset}" _expected_sha256)
+        if(NOT _expected_sha256)
+            message(FATAL_ERROR
+                "CNA WebGPU: no pinned SHA-256 for ${_asset} at ${CNA_WEBGPU_VERSION}; refusing to "
+                "auto-download an unverifiable package. Set CNA_WEBGPU_ROOT, or add the hash to "
+                "cmake/WebGPUChecksum.cmake.")
+        endif()
+
+        # WEBGPU-151: evaluate the cache against the VERSIONED+HASHED stamp -- an old stamp (written
+        # before the checksum work) or a changed version/asset/hash forces a re-validation, and a
+        # corrupt/tampered cached archive is purged, so a pre-existing cache is never trusted blindly.
+        cna_webgpu_prepare_cache("${_download_dir}" "${CNA_WEBGPU_VERSION}" "${_asset}" "${_expected_sha256}" _needs_download)
+        if(_needs_download)
             set(_url "https://github.com/gfx-rs/wgpu-native/releases/download/${CNA_WEBGPU_VERSION}/${_asset}")
             message(STATUS "CNA WebGPU: downloading ${_url}")
+            # EXPECTED_HASH makes file(DOWNLOAD) verify the transfer; the explicit
+            # cna_webgpu_verify_sha256 re-checks before extraction and fails closed (removes archive +
+            # stamp) on mismatch.
             file(DOWNLOAD "${_url}" "${_archive}"
                 SHOW_PROGRESS
                 STATUS _download_status
+                EXPECTED_HASH SHA256=${_expected_sha256}
                 TLS_VERIFY ON)
             list(GET _download_status 0 _download_code)
             list(GET _download_status 1 _download_message)
@@ -73,8 +109,9 @@ function(cna_configure_webgpu)
                     "CNA WebGPU: failed to download wgpu-native (${_download_message}). "
                     "Download ${_asset} manually and set CNA_WEBGPU_ROOT to its extracted directory.")
             endif()
+            cna_webgpu_verify_sha256("${_archive}" "${_expected_sha256}" "${_extract_stamp}")
             file(ARCHIVE_EXTRACT INPUT "${_archive}" DESTINATION "${_download_dir}")
-            file(WRITE "${_extract_stamp}" "${CNA_WEBGPU_VERSION}\n${_asset}\n")
+            cna_webgpu_write_stamp("${_extract_stamp}" "${CNA_WEBGPU_VERSION}" "${_asset}" "${_expected_sha256}")
         endif()
         set(_root "${_download_dir}")
     endif()

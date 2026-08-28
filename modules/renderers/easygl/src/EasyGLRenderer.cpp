@@ -1033,6 +1033,21 @@ namespace CNA::Internal::Renderers::EasyGL
                 const std::string trimmed = (firstNonSpace == std::string::npos)
                     ? std::string() : line.substr(firstNonSpace);
 
+                // plans/plan_fx.md FX-124: GLSL ES 3.00 REQUIRES fragment highp, so the shaders in
+                // this file ask for it unconditionally. GLSL ES 1.00 makes it optional, and an
+                // implementation that lacks it fails to compile a shader that demands it -- so
+                // down here the request becomes a guarded one, exactly as FX-121 did for
+                // MojoShader's own GLSL ES 1.00 output. A fragment shader that only ever handles
+                // [0,1] colours is left at mediump by its own source and is untouched by this.
+                if (stage == GlShaderStageKind::Fragment && trimmed == "precision highp float;")
+                {
+                    out += "#ifdef GL_FRAGMENT_PRECISION_HIGH\n"
+                           "precision highp float;\n"
+                           "#else\n"
+                           "precision mediump float;\n"
+                           "#endif\n";
+                    continue;
+                }
                 if (trimmed.rfind("layout(location", 0) == 0)
                 {
                     // "layout(location=N) in TYPE NAME;" or "layout(location = N) in TYPE NAME;"
@@ -2177,16 +2192,50 @@ if (!ProfileIsEs2ApiGeneration())
         if (auto reg = registry_.lock()) reg->remove(this);
     }
 
+    namespace {
+        // GL_SAMPLES_PASSED. Not in metagl's QueryTarget, which is written to the ES 3.0 core set
+        // where the only occlusion target is the BOOLEAN GL_ANY_SAMPLES_PASSED. Desktop GL has
+        // had the real per-fragment tally since 1.5, and that is what XNA's PixelCount means, so
+        // ask for it and keep it when the driver agrees. Cast once, here -- the same shape the
+        // GL_TIME_ELAPSED timer query below already uses.
+        constexpr ::metagl::QueryTarget kSamplesPassed =
+            static_cast<::metagl::QueryTarget>(0x8914);
+
+        // Resolved once per process, on the first query that runs: begin the precise target and
+        // ask GL whether it took it. A driver that does not know the enum raises GL_INVALID_ENUM
+        // and has begun nothing, so there is nothing to end on that path.
+        bool ResolvePreciseTarget(const ::easygl::Query& query)
+        {
+            while (::metagl::glGetError() != ::metagl::ErrorCode::NoError) {}
+            query.begin(kSamplesPassed);
+            const bool accepted = ::metagl::glGetError() == ::metagl::ErrorCode::NoError;
+            if (accepted) query.end(kSamplesPassed);
+            return accepted;
+        }
+
+        // -1 until the first Begin() resolves it.
+        int g_preciseOcclusionTarget = -1;
+
+        ::metagl::QueryTarget OcclusionTarget()
+        {
+            return g_preciseOcclusionTarget == 1
+                       ? kSamplesPassed
+                       : ::easygl::QueryTarget::AnySamplesPassed;
+        }
+    }
+
     void EasyGLOcclusionQueryRenderer::Begin()
     {
         if (metagl::IsContextLost() || !query_.is_created()) return;
-        query_.begin(::easygl::QueryTarget::AnySamplesPassed);
+        if (g_preciseOcclusionTarget < 0)
+            g_preciseOcclusionTarget = ResolvePreciseTarget(query_) ? 1 : 0;
+        query_.begin(OcclusionTarget());
     }
 
     void EasyGLOcclusionQueryRenderer::End()
     {
         if (metagl::IsContextLost() || !query_.is_created()) return;
-        query_.end(::easygl::QueryTarget::AnySamplesPassed);
+        query_.end(OcclusionTarget());
     }
 
     bool EasyGLOcclusionQueryRenderer::IsComplete() const
@@ -2198,8 +2247,15 @@ if (!ProfileIsEs2ApiGeneration())
     int EasyGLOcclusionQueryRenderer::PixelCount() const
     {
         if (!IsComplete()) return 0;
-        // GLES3 uses GL_ANY_SAMPLES_PASSED — result is 0 (none) or 1 (any)
+        // With GL_SAMPLES_PASSED this is the real fragment tally, as XNA's own query is. With the
+        // ES/WebGL fallback, GL_ANY_SAMPLES_PASSED, it is 0 (none) or 1 (any) -- ask
+        // PixelCountIsPreciseEXT() rather than inferring a coverage ratio from it.
         return static_cast<int>(query_.result());
+    }
+
+    bool EasyGLOcclusionQueryRenderer::PixelCountIsPreciseEXT() const noexcept
+    {
+        return g_preciseOcclusionTarget == 1;
     }
 
     void EasyGLOcclusionQueryRenderer::release_gl_handle_only()
@@ -2327,14 +2383,23 @@ else
                                             const void* pixels)
     {
         using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
-        if (static_cast<SurfaceFormat>(surfaceFormat_) == SurfaceFormat::NormalizedByte4)
+        const SurfaceFormat uploadFormat = static_cast<SurfaceFormat>(surfaceFormat_);
+        // The two signed-normalized byte formats differ only in channel count. NormalizedByte2 is
+        // what a content pipeline picks for a 2D displacement map, where a third and fourth
+        // channel would carry nothing (SAMPLE-032's DisplacementMapProcessor ends with exactly
+        // that conversion).
+        if (uploadFormat == SurfaceFormat::NormalizedByte4 ||
+            uploadFormat == SurfaceFormat::NormalizedByte2)
         {
+            const bool twoChannel = uploadFormat == SurfaceFormat::NormalizedByte2;
             texture.bind(::easygl::TextureTarget::Texture2D);
             ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment, 1);
             texture.set_image_2d(::easygl::TextureTarget::Texture2D, level,
-                                 ::easygl::InternalFormat::Rgba8Snorm,
+                                 twoChannel ? ::easygl::InternalFormat::Rg8Snorm
+                                            : ::easygl::InternalFormat::Rgba8Snorm,
                                  levelWidth, levelHeight,
-                                 ::easygl::PixelFormat::Rgba,
+                                 twoChannel ? ::easygl::PixelFormat::Rg
+                                            : ::easygl::PixelFormat::Rgba,
                                  ::easygl::PixelType::Byte, pixels);
             texture.set_parameter(::easygl::TextureTarget::Texture2D,
                                   ::easygl::TextureParameterSetter::MinFilter,
@@ -3446,6 +3511,40 @@ if (ProfileIsEs2ApiGeneration())
         InitializeResources();
     }
 
+    void EasyGLSpriteBatchRenderer::ApplyChannelExpansion(::easygl::Program* prog,
+                                                          int surfaceFormat) const
+    {
+        if (prog == nullptr) return;
+        const int maskLocation = prog->uniform_location("uChannelMask");
+        const int fillLocation = prog->uniform_location("uChannelFill");
+        if (maskLocation < 0 || fillLocation < 0) return;
+
+        using ::Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        // D3D9's own expansion rule, per channel count of the stored format. Everything not
+        // listed stores all four channels and expands identically under GL, so it takes the
+        // identity pair.
+        float mask[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+        float fill[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+        case SurfaceFormat::Single:
+        case SurfaceFormat::HalfSingle:
+            mask[1] = mask[2] = mask[3] = 0.0f;
+            fill[1] = fill[2] = fill[3] = 1.0f;
+            break;
+        case SurfaceFormat::Vector2:
+        case SurfaceFormat::HalfVector2:
+        case SurfaceFormat::NormalizedByte2:
+            mask[2] = mask[3] = 0.0f;
+            fill[2] = fill[3] = 1.0f;
+            break;
+        default:
+            break;
+        }
+        prog->set_uniform(maskLocation, mask[0], mask[1], mask[2], mask[3]);
+        prog->set_uniform(fillLocation, fill[0], fill[1], fill[2], fill[3]);
+    }
+
     void EasyGLSpriteBatchRenderer::InitializeResources()
     {
         const char* vertexShaderSource = R"(#version 300 es
@@ -3478,9 +3577,20 @@ out vec4 FragColor;
 
 uniform sampler2D texture1;
 
+// Direct3D 9 expands a texture's missing channels when a shader samples it: a one-channel
+// format arrives as (R, 1, 1, 1) and a two-channel one as (R, G, 1, 1). OpenGL expands the
+// same storage to (R, 0, 0, 1) and (R, G, 0, 1), so an XNA game that draws a
+// SurfaceFormat.Single texture -- a shadow map, a depth visualisation -- gets a red image
+// here where it got a white one there. GL_TEXTURE_SWIZZLE_G/B/A = GL_ONE is exactly D3D9's
+// rule and is core in ES 3.0 and desktop GL 3.3, but WebGL 2 exposes neither the constants
+// nor the parameter (measured: texParameteri raises INVALID_ENUM), so the expansion is done
+// here instead, where every profile this renderer targets can do it identically.
+uniform vec4 uChannelMask;
+uniform vec4 uChannelFill;
+
 void main()
 {
-    FragColor = texture(texture1, TexCoord) * Color;
+    FragColor = (texture(texture1, TexCoord) * uChannelMask + uChannelFill) * Color;
 }
 )";
 
@@ -3587,12 +3697,36 @@ if (ProfileUsesGlslEs100())
         transform_ = m;
     }
 
+    bool EasyGLSpriteBatchRenderer::BatchFlushesThroughCompiledEffect() const
+    {
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+        return customEffect_ != nullptr && customEffect_->GetCompiledRuntimePtr() != nullptr;
+#else
+        return false;
+#endif
+    }
+
+    void EasyGLSpriteBatchRenderer::ResolveCurrentTextureRowOrder()
+    {
+        // plans/plan_fx.md FX-118: the compiled route corrects a bottom-up source per sampler slot
+        // (AcquireCompiledEffectFlippedSourceEXT), so the sprite's own V must be left alone there.
+        // Doing both mirrors the image -- and only the compiled route can correct a slot the
+        // sprite quad does not own, such as the base image a bloom combine reads from slot 1.
+        current_texture_bottom_up_ = current_texture_ != nullptr &&
+                                     !BatchFlushesThroughCompiledEffect() &&
+                                     SampledRowOrderIsBottomUp(current_texture_);
+    }
+
     void EasyGLSpriteBatchRenderer::SetCustomEffect(Effect* effect)
     {
         if (customEffect_ != effect)
         {
             FlushBatch();
             customEffect_ = effect;
+            // FlushBatch() is a no-op for an empty batch and then leaves current_texture_ in
+            // place, so a Begin() that only changes the effect would otherwise keep the previous
+            // batch's answer.
+            ResolveCurrentTextureRowOrder();
         }
     }
 
@@ -3712,6 +3846,7 @@ if (ProfileUsesGlslEs100())
             prog->set_uniform_matrix4(projLoc, ortho);
 
         current_texture_->BindGL();
+        ApplyChannelExpansion(prog, current_texture_->GetSurfaceFormatEXT());
         if (graphicsRenderer_)
             graphicsRenderer_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_, 1);
 
@@ -3832,14 +3967,35 @@ if (ProfileUsesGlslEs100())
 
         const int vertexCount = static_cast<int>(pending_vertices_.size());
         const int indexCount = static_cast<int>(pending_indices_.size());
-        auto vertexBuffer = graphicsRenderer_->CreateVertexBuffer(vertexCount);
-        vertexBuffer->SetVertexDeclaration(kSpriteDeclaration);
-        vertexBuffer->SetData(pending_vertices_.data(), vertexCount, sizeof(Vertex));
-        auto indexBuffer = graphicsRenderer_->CreateIndexBuffer16(indexCount);
-        indexBuffer->SetData16(pending_indices_.data(), indexCount);
+
+        // plans/plan_fx.md FX-120: these two buffers are RETAINED, not created per flush.
+        //
+        // The compiled route records them in a single long-lived vertex array object
+        // (EnsureCompiledEffectVaoEXT), so a buffer created and destroyed inside one flush
+        // leaves that array object holding a deleted name -- for the element buffer, which is
+        // part of a VAO's own state, that name is what the next flush's draw reads. Desktop GL
+        // tolerates it and draws; WebGL 2 validates the binding and refuses the whole draw with
+        // "glDrawElements: Insufficient buffer size", so on WEBGL2 the first flush of a batch
+        // drew and every later one silently produced nothing.
+        //
+        // Keeping them alive also removes two buffer creations and two deletions from every
+        // flush of every compiled-effect sprite batch.
+        if (compiledSpriteVertexBuffer_ == nullptr)
+        {
+            compiledSpriteVertexBuffer_ = graphicsRenderer_->CreateVertexBuffer(vertexCount);
+            compiledSpriteVertexBuffer_->SetVertexDeclaration(kSpriteDeclaration);
+        }
+        if (compiledSpriteIndexBuffer_ == nullptr)
+        {
+            compiledSpriteIndexBuffer_ = graphicsRenderer_->CreateIndexBuffer16(indexCount);
+        }
+        compiledSpriteVertexBuffer_->SetData(pending_vertices_.data(), vertexCount,
+                                             sizeof(Vertex));
+        compiledSpriteIndexBuffer_->SetData16(pending_indices_.data(), indexCount);
         auto* easyVertexBuffer =
-            static_cast<EasyGLVertexBufferRenderer*>(vertexBuffer.get());
-        auto* easyIndexBuffer = static_cast<EasyGLIndexBufferRenderer*>(indexBuffer.get());
+            static_cast<EasyGLVertexBufferRenderer*>(compiledSpriteVertexBuffer_.get());
+        auto* easyIndexBuffer =
+            static_cast<EasyGLIndexBufferRenderer*>(compiledSpriteIndexBuffer_.get());
 
         // The viewport is still this renderer's own business: a batch drawn into a RenderTarget2D
         // rasterizes at the target's size, not the window's, whatever shader runs.
@@ -3957,7 +4113,7 @@ if (ProfileUsesGlslEs100())
             current_texture_ = &texture;
             // REMED-GFX-147: resolved once per bound source rather than once per sprite -- a
             // batch is by construction one texture, so this is a binding-time decision.
-            current_texture_bottom_up_ = SampledRowOrderIsBottomUp(&texture);
+            ResolveCurrentTextureRowOrder();
         }
 
         const float texW = static_cast<float>(texture.GetWidth());
@@ -4188,7 +4344,7 @@ if (ProfileUsesGlslEs100())
                       << "; texture SurfaceFormat: Color"
                       << (ProfileIsEs2ApiGeneration()
                               ? " only"
-                              : " + NormalizedByte4 (RGBA8_SNORM)")
+                              : " + NormalizedByte4 (RGBA8_SNORM) + NormalizedByte2 (RG8_SNORM)")
                       // plans/plan_modern.md MOD-117: render targets are no longer Color-only, and the
                       // answer is driver-dependent, so it is probed rather than asserted.
                       << "; render-target SurfaceFormat: Color"
@@ -4725,7 +4881,8 @@ if (!ProfileIsEs2ApiGeneration())
         const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat);
         if (format == SurfaceFormat::Color)
             return RendererFormatVerdict::Supported;
-        if (format == SurfaceFormat::NormalizedByte4)
+        // Both signed-normalized byte formats need the ES 3 sized-internal-format set.
+        if (format == SurfaceFormat::NormalizedByte4 || format == SurfaceFormat::NormalizedByte2)
         {
             return ProfileIsEs2ApiGeneration()
                 ? RendererFormatVerdict::Unsupported
@@ -4737,7 +4894,8 @@ if (!ProfileIsEs2ApiGeneration())
     RendererFormatVerdict EasyGLRenderer::ClassifyColorTransferFormatEXT(int surfaceFormat) const
     {
         using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
-        if (static_cast<SurfaceFormat>(surfaceFormat) == SurfaceFormat::NormalizedByte4)
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat);
+        if (format == SurfaceFormat::NormalizedByte4 || format == SurfaceFormat::NormalizedByte2)
             return RendererFormatVerdict::Unsupported;
         return RendererFormatVerdict::Defer;
     }
@@ -5577,6 +5735,47 @@ if (!ProfileIsEs2ApiGeneration())
         // by ApplyRasterizerState via RasterizerState.ScissorTestEnable.
     }
 
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+    void EasyGLRenderer::SetCompiledEffectDepthRangeEXT(bool begin)
+    {
+        if (metagl::IsContextLost()) return;
+        if (begin)
+        {
+            const float midpoint =
+                0.5f * (viewportMinDepth_ + viewportMaxDepth_);
+            device.set_depth_range(midpoint, viewportMaxDepth_);
+        }
+        else
+        {
+            device.set_depth_range(viewportMinDepth_, viewportMaxDepth_);
+        }
+    }
+
+    namespace
+    {
+        // Scope guard so every early return and every throw out of a compiled-effect draw still
+        // restores the viewport's own depth range.
+        class CompiledEffectDepthRangeScope
+        {
+        public:
+            explicit CompiledEffectDepthRangeScope(EasyGLRenderer& renderer)
+                : renderer_(renderer)
+            {
+                renderer_.SetCompiledEffectDepthRangeEXT(true);
+            }
+            ~CompiledEffectDepthRangeScope()
+            {
+                renderer_.SetCompiledEffectDepthRangeEXT(false);
+            }
+            CompiledEffectDepthRangeScope(const CompiledEffectDepthRangeScope&) = delete;
+            CompiledEffectDepthRangeScope& operator=(const CompiledEffectDepthRangeScope&) = delete;
+
+        private:
+            EasyGLRenderer& renderer_;
+        };
+    }
+#endif
+
     void EasyGLRenderer::SetBlendFactor(float r, float g, float b, float a)
     {
         if (metagl::IsContextLost()) return;
@@ -5602,6 +5801,8 @@ if (!ProfileIsEs2ApiGeneration())
         }
         device.set_viewport(x, fbH - y - h, w, h);
         device.set_depth_range(minDepth, maxDepth);
+        viewportMinDepth_ = minDepth;
+        viewportMaxDepth_ = maxDepth;
     }
 
     void EasyGLRenderer::ApplySamplerState(int slot, int filter,
@@ -7043,7 +7244,19 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
-"precision mediump float;\n"
+// plans/plan_fx.md FX-124: this fragment stage normalizes a WORLD-SPACE vector --
+// normalize(uEyePosition - vWorldPos) -- and `mediump` guarantees only fp16 RANGE (~65504).
+// dot(v, v) is computed first, so an eye a few thousand units from the geometry overflows,
+// inversesqrt returns 0, the view direction collapses to the zero vector, and the specular term
+// is wrong everywhere while the frame still reads as a plausible lit render. Measured, not
+// assumed: SAMPLE-046 puts its camera 3500 units out, and with one directional light and
+// PreferPerPixelLighting the frame agreed with real XNA on 90.62% of pixels within 8 levels at
+// mediump and 99.99% at highp, the signed error over the model going from -20 levels to -0.01.
+// Mesa does honour the qualifier here. GLSL ES 3.00 requires fragment highp, so it is asked for
+// unconditionally; the GLSL ES 1.00 profiles get the GL_FRAGMENT_PRECISION_HIGH guard from
+// TransformGlslEs300BodyToEs100, where 1.00 makes highp optional. FX-121 is the same defect in
+// MojoShader's compiled-effect path; this is the built-in effect path.
+"precision highp float;\n"
 "in vec3 vNormal;\n"
 "in vec2 vUV;\n"
 "in float vFogFactor;\n"
@@ -7204,11 +7417,20 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "    float dotL1=dot(N,-uLight1Dir); float zeroL1=step(0.0,dotL1); float NdotL1=max(dotL1,0.0);\n"
 "    float dotL2=dot(N,-uLight2Dir); float zeroL2=step(0.0,dotL2); float NdotL2=max(dotL2,0.0);\n"
 "    vec3 lightSum=uAmbientColor+uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2;\n"
-"    vLitRGB=lightSum*uDiffuseColor.rgb+uEmissiveColor;\n"
+// plans/plan_fx.md FX-123: Direct3D 9 clamps a vertex shader's colour output registers
+// (oD0/oD1) to [0,1] BEFORE interpolating them, so XNA's own VSBasicVertexLighting /
+// VSSkinnedVertexLighting hand a saturated colour to the rasterizer even though the .fx
+// source never writes a saturate(). These are plain varyings, which nothing clamps, so an
+// unclamped sum interpolates high between vertices and the triangle comes out BRIGHTER than
+// D3D9's. It only shows once the lights accumulate past 1: SAMPLE-046 agrees with real XNA
+// to 99.99%% with any ONE of its three directional lights on and drops to 90.31%% with all
+// three. Saturating here is what oD0/oD1 do, not an approximation of them. FX-122 fixed the
+// same D3D9 semantic in MojoShader's compiled-effect path; this is the built-in effect path.
+"    vLitRGB=clamp(lightSum*uDiffuseColor.rgb+uEmissiveColor,0.0,1.0);\n"
 "    vec3 h0=normalize(E-uLight0Dir); float spec0=pow(max(dot(h0,N),0.0)*zeroL0,uSpecularPower);\n"
 "    vec3 h1=normalize(E-uLight1Dir); float spec1=pow(max(dot(h1,N),0.0)*zeroL1,uSpecularPower);\n"
 "    vec3 h2=normalize(E-uLight2Dir); float spec2=pow(max(dot(h2,N),0.0)*zeroL2,uSpecularPower);\n"
-"    vSpecularRGB=(spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor;\n"
+"    vSpecularRGB=clamp((spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor,0.0,1.0);\n"
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
@@ -7427,9 +7649,21 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 // interpolates the resulting scalar -- NOT a per-fragment recompute from an interpolated normal
 // (Task 1112: the two are not equivalent once vertices carry different normals).
 "    float viewAngle=dot(eyeVector,worldNormal);\n"
-"    vFresnel=(uFresnelEnabled>0.5)\n"
+// The clamp is XNA's, not a safety net. EnvironmentMapEffect.fx carries this scalar to the
+// pixel shader in `float4 Specular : COLOR1` (Structures.fxh's VSOutputTxEnvMap), and Direct3D 9
+// saturates a vertex shader's COLOR output registers to [0,1] BEFORE interpolating them. The
+// value itself is not bounded -- ComputeFresnelFactor multiplies by EnvironmentMapAmount, whose
+// XNA range reaches well past 1 -- and it is then used as the weight of
+// `lerp(color.rgb, envmap.rgb, ...)`. Without the clamp that lerp EXTRAPOLATES past the
+// environment map's own colour and the rim over-brightens: on RimLighting_4_0 at
+// EnvironmentMapAmount 5 that turned XNA's orange rim yellow-white and cost 4.5 % of the frame
+// (SAMPLE-037). Clamp here, at the vertex, so the interpolation starts from the same values
+// D3D9's register file would hold -- clamping per fragment instead would interpolate the
+// unclamped value first and give a different gradient (plans/plan_fx.md FX-122 is the same
+// distinction for translated effects).
+"    vFresnel=clamp((uFresnelEnabled>0.5)\n"
 "        ? pow(max(1.0-abs(viewAngle),0.0),uFresnelFactor)*uEnvMapAmount\n"
-"        : uEnvMapAmount;\n"
+"        : uEnvMapAmount, 0.0, 1.0);\n"
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
@@ -7585,7 +7819,19 @@ CNA_GL_SKIN_NORMAL_DECL
 
         static const char* fsrc =
 "#version 300 es\n"
-"precision mediump float;\n"
+// plans/plan_fx.md FX-124: this fragment stage normalizes a WORLD-SPACE vector --
+// normalize(uEyePosition - vWorldPos) -- and `mediump` guarantees only fp16 RANGE (~65504).
+// dot(v, v) is computed first, so an eye a few thousand units from the geometry overflows,
+// inversesqrt returns 0, the view direction collapses to the zero vector, and the specular term
+// is wrong everywhere while the frame still reads as a plausible lit render. Measured, not
+// assumed: SAMPLE-046 puts its camera 3500 units out, and with one directional light and
+// PreferPerPixelLighting the frame agreed with real XNA on 90.62% of pixels within 8 levels at
+// mediump and 99.99% at highp, the signed error over the model going from -20 levels to -0.01.
+// Mesa does honour the qualifier here. GLSL ES 3.00 requires fragment highp, so it is asked for
+// unconditionally; the GLSL ES 1.00 profiles get the GL_FRAGMENT_PRECISION_HIGH guard from
+// TransformGlslEs300BodyToEs100, where 1.00 makes highp optional. FX-121 is the same defect in
+// MojoShader's compiled-effect path; this is the built-in effect path.
+"precision highp float;\n"
 "in vec3 vNormal;\n"
 "in vec2 vUV;\n"
 "in float vFogFactor;\n"
@@ -7783,11 +8029,20 @@ CNA_GL_SKIN_NORMAL_DECL
 "    vec3 lightSum=uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2;\n"
 // Same FNA-fidelity fix as EnsureSkinnedProgram above - see its own comment for the full
 // reasoning; this vertex-lit sibling had the identical emissive-multiplied-twice bug.
-"    vLitRGB=lightSum*uDiffuseColor.rgb+uEmissiveColor;\n"
+// plans/plan_fx.md FX-123: Direct3D 9 clamps a vertex shader's colour output registers
+// (oD0/oD1) to [0,1] BEFORE interpolating them, so XNA's own VSBasicVertexLighting /
+// VSSkinnedVertexLighting hand a saturated colour to the rasterizer even though the .fx
+// source never writes a saturate(). These are plain varyings, which nothing clamps, so an
+// unclamped sum interpolates high between vertices and the triangle comes out BRIGHTER than
+// D3D9's. It only shows once the lights accumulate past 1: SAMPLE-046 agrees with real XNA
+// to 99.99%% with any ONE of its three directional lights on and drops to 90.31%% with all
+// three. Saturating here is what oD0/oD1 do, not an approximation of them. FX-122 fixed the
+// same D3D9 semantic in MojoShader's compiled-effect path; this is the built-in effect path.
+"    vLitRGB=clamp(lightSum*uDiffuseColor.rgb+uEmissiveColor,0.0,1.0);\n"
 "    vec3 h0=normalize(E-uLight0Dir); float spec0=pow(max(dot(h0,N),0.0)*zeroL0,uSpecularPower);\n"
 "    vec3 h1=normalize(E-uLight1Dir); float spec1=pow(max(dot(h1,N),0.0)*zeroL1,uSpecularPower);\n"
 "    vec3 h2=normalize(E-uLight2Dir); float spec2=pow(max(dot(h2,N),0.0)*zeroL2,uSpecularPower);\n"
-"    vSpecularRGB=(spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor;\n"
+"    vSpecularRGB=clamp((spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor,0.0,1.0);\n"
 "}\n";
 
         static const char* fsrc =
@@ -7926,7 +8181,19 @@ CNA_GL_DIRECTION_HANDEDNESS_DECL
             dualUv ? "cnaPbrUV(uSpecularTextureCoordinateSets.y)" : "vUV";
         const std::string fsrc =
 std::string("#version 300 es\n") +
-"precision mediump float;\n"
+// plans/plan_fx.md FX-124: this fragment stage normalizes a WORLD-SPACE vector --
+// normalize(uEyePosition - vWorldPos) -- and `mediump` guarantees only fp16 RANGE (~65504).
+// dot(v, v) is computed first, so an eye a few thousand units from the geometry overflows,
+// inversesqrt returns 0, the view direction collapses to the zero vector, and the specular term
+// is wrong everywhere while the frame still reads as a plausible lit render. Measured, not
+// assumed: SAMPLE-046 puts its camera 3500 units out, and with one directional light and
+// PreferPerPixelLighting the frame agreed with real XNA on 90.62% of pixels within 8 levels at
+// mediump and 99.99% at highp, the signed error over the model going from -20 levels to -0.01.
+// Mesa does honour the qualifier here. GLSL ES 3.00 requires fragment highp, so it is asked for
+// unconditionally; the GLSL ES 1.00 profiles get the GL_FRAGMENT_PRECISION_HIGH guard from
+// TransformGlslEs300BodyToEs100, where 1.00 makes highp optional. FX-121 is the same defect in
+// MojoShader's compiled-effect path; this is the built-in effect path.
+"precision highp float;\n"
 "in vec3 vNormal;\n"
 "in vec3 vTangent;\n"
 "in float vBitangentSign;\n"
@@ -8224,7 +8491,19 @@ CNA_GL_SKIN_NORMAL_DECL
             dualUv ? "cnaPbrUV(uSpecularTextureCoordinateSets.y)" : "vUV";
         const std::string fsrc =
 std::string("#version 300 es\n") +
-"precision mediump float;\n"
+// plans/plan_fx.md FX-124: this fragment stage normalizes a WORLD-SPACE vector --
+// normalize(uEyePosition - vWorldPos) -- and `mediump` guarantees only fp16 RANGE (~65504).
+// dot(v, v) is computed first, so an eye a few thousand units from the geometry overflows,
+// inversesqrt returns 0, the view direction collapses to the zero vector, and the specular term
+// is wrong everywhere while the frame still reads as a plausible lit render. Measured, not
+// assumed: SAMPLE-046 puts its camera 3500 units out, and with one directional light and
+// PreferPerPixelLighting the frame agreed with real XNA on 90.62% of pixels within 8 levels at
+// mediump and 99.99% at highp, the signed error over the model going from -20 levels to -0.01.
+// Mesa does honour the qualifier here. GLSL ES 3.00 requires fragment highp, so it is asked for
+// unconditionally; the GLSL ES 1.00 profiles get the GL_FRAGMENT_PRECISION_HIGH guard from
+// TransformGlslEs300BodyToEs100, where 1.00 makes highp optional. FX-121 is the same defect in
+// MojoShader's compiled-effect path; this is the built-in effect path.
+"precision highp float;\n"
 "in vec3 vNormal;\n"
 "in vec3 vTangent;\n"
 "in float vBitangentSign;\n"
@@ -9905,6 +10184,7 @@ else
             RequireCompiledEffectDeclarations(compiledStreams);
             ::easygl::VertexArray& compiledVao = EnsureCompiledEffectVaoEXT();
             compiledVao.bind();
+            const CompiledEffectDepthRangeScope compiledDepthRange(*this);
             BindCompiledEffectForDrawEXT(compiledStreams.data(), compiledStreams.size(),
                                          *params.compiledEffectRuntime);
             const int compiledVertexCount = VertexCountForPrimitives(primitive, primitiveCount);
@@ -9999,6 +10279,7 @@ else
             RequireCompiledEffectDeclarations(compiledStreams);
             ::easygl::VertexArray& compiledVao = EnsureCompiledEffectVaoEXT();
             compiledVao.bind();
+            const CompiledEffectDepthRangeScope compiledDepthRange(*this);
             BindCompiledEffectForDrawEXT(compiledStreams.data(), compiledStreams.size(),
                                          *params.compiledEffectRuntime);
             compiledIb.ibo.bind(::easygl::BufferTarget::ElementArray);
@@ -10179,6 +10460,7 @@ else
             RequireCompiledEffectDeclarations(compiledStreams);
             ::easygl::VertexArray& compiledVao = EnsureCompiledEffectVaoEXT();
             compiledVao.bind();
+            const CompiledEffectDepthRangeScope compiledDepthRange(*this);
             BindCompiledEffectForDrawEXT(compiledStreams.data(), compiledStreams.size(),
                                          *params.compiledEffectRuntime);
             compiledIb.ibo.bind(::easygl::BufferTarget::ElementArray);

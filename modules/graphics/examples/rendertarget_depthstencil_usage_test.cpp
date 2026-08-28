@@ -293,16 +293,18 @@ namespace
                                  true, true, true, true, true,
                                  true, true, true, true, false, true, true, false};
 #elif defined(CNA_RENDERER_WEBGPU)
-    // `stencilInRT` false: `WebGPURenderer::ApplyDepthStencilState` stores the stencil
-    // state and deliberately never bakes it into any pipeline's `WGPUStencilFaceState` (WEBGPU-83),
-    // so every fragment passes the stencil test -- check C2 measures exactly that and is the
-    // reason no stencil-preservation result is claimed here.
+    // `stencilInRT` true (WEBGPU-83): `WebGPURenderer::GetOrCreatePipelineColored3D` now bakes the
+    // stencil state into the pipeline's `WGPUStencilFaceState` (masks folded into the cache key,
+    // reference applied dynamically per draw), so a stencil-gated colored3d draw is rejected where
+    // the stamp did not write -- check C2 asserts exactly that. `stencilPreserves` true too: the
+    // render target's stencil lives in the same Depth24PlusStencil8 attachment as its depth
+    // (`depthPreserves` is true), so it survives a bind cycle the same way.
     // `orderedClearInCycle` was false while REMED-GFX-156 was open: a mid-cycle Clear was still
     // delivered through the pass load action, so it could not wipe a draw recorded before it
     // (check K7). It cuts the bind cycle into one native pass per observable Clear now, so K7
     // asserts the ordered result here; it was measured red the moment the fix landed.
     constexpr Contract kContract{"WEBGPU", Support::Exact, true, Support::Exact,
-                                 true, false, true, false, true,
+                                 true, true, true, true, true,
                                  true, true, false, false, true, true, false, false};
 #elif defined(CNA_RENDERER_SDL_GPU)
     // Already FNA3D-shaped: every depth/stencil target info uses `clearX ? CLEAR : LOAD` with an

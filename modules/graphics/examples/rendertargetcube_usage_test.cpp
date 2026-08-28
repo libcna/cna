@@ -177,10 +177,14 @@ namespace
     constexpr Contract kContract{"VULKAN", true, Support::Exact, true, true,
                                  false, Support::Exact, false, true, false};
 #elif defined(CNA_RENDERER_WEBGPU)
-    // `mipMapCubeTargets` false: WEBGPU-114 refuses a mipMap=true RenderTargetCube at construction
-    // rather than under-delivering the chain RenderTargetCube already promised the XNA layer.
+    // `mipMapCubeTargets` true: WEBGPU-114 builds a real mip chain for a mipMap=true RenderTargetCube
+    // and regenerates each face from its resolved level 0. `msaaCubeTargets` false: like EASYGL, a
+    // WebGPU cube target multisamples only when the BACKBUFFER was created multisampled (the
+    // per-instance multiSampleCount argument is not read, mirroring RenderTarget2D), so this file's
+    // standalone MSAA request does not engage it -- the real per-face path is covered by
+    // WebGPU_RenderTargetCube Check F and rendertargetcube_msaa_face_test.
     constexpr Contract kContract{"WEBGPU", true, Support::Exact, true, true,
-                                 false, Support::Exact, false, false, false};
+                                 false, Support::Exact, false, true, false};
 #elif defined(CNA_RENDERER_SDL_GPU)
     // `msaaPreserves` was false here: this renderer's multisampled cube target rendered into ONE
     // shared single-layer scratch texture that had to be cycled on every pass and was resolved away

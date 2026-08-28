@@ -82,27 +82,6 @@ namespace Microsoft::Xna::Framework::Graphics
             return value;
         }
 
-        // Rounds a glyph destination component, carrying a non-finite one through untouched.
-        // Returns a float rather than an `intcs` precisely so NaN and the infinities survive the
-        // trip; finite values are rounded exactly as before, so no glyph moves by a pixel.
-        float RoundDestinationComponent(float value, const char* parameterName)
-        {
-            if (!std::isfinite(value))
-            {
-                return value;
-            }
-
-            // Round in floating point first, then range-check the rounded value. Calling lround
-            // before the check would merely move the platform-dependent overflow to float->long
-            // on targets where long is 32-bit.
-            const double rounded = std::round(static_cast<double>(value));
-            if (rounded < static_cast<double>(std::numeric_limits<intcs>::lowest()) ||
-                rounded > static_cast<double>(std::numeric_limits<intcs>::max()))
-            {
-                ThrowDestinationOutOfRange(parameterName);
-            }
-            return static_cast<float>(rounded);
-        }
     }
 
     // -----------------------------------------------------------------------
@@ -700,7 +679,15 @@ namespace Microsoft::Xna::Framework::Graphics
             const Vector3& cKern = spriteFont.kerning_[index];
             if (firstInLine)
             {
-                curOffset.X += std::abs(cKern.X);
+                // The first glyph of a line takes only a POSITIVE left side bearing, and
+                // no Spacing. Measured against a live XNA 4.0 build (SAMPLE-031): with the
+                // sample's 'A' and 'X', whose kerning.X is -1, XNA advances 0 and places the
+                // glyph flush at the draw position; with 'B', whose kerning.X is +1, it
+                // advances 1. MeasureString returns the same single-character width whether
+                // that font's Spacing is 0, 3 or -2, so Spacing is not applied to a line's
+                // first glyph either. FNA writes Math.Abs(cKern.X) here, which pushes a
+                // negative bearing RIGHT by its magnitude instead of clamping it away.
+                curOffset.X += std::max(cKern.X, 0.0f);
                 firstInLine = false;
             }
             else
@@ -725,16 +712,23 @@ namespace Microsoft::Xna::Framework::Graphics
             const float rotX    = scaledX * cosR - scaledY * sinR;
             const float rotY    = scaledX * sinR + scaledY * cosR;
 
-            // The float overload, not the Rectangle one: an integer Rectangle cannot carry a
-            // non-finite destination, and since CABI-38 those are XNA-valid and must reach the
-            // vertex path. Finite components are still rounded, so glyph placement is unchanged.
-            pushSprite(texture,
-                       RoundDestinationComponent(position.X + rotX, "position"),
-                       RoundDestinationComponent(position.Y + rotY, "position"),
-                       RoundDestinationComponent(
-                           static_cast<float>(cGlyph.Width) * scale.X, "scale"),
-                       RoundDestinationComponent(
-                           static_cast<float>(cGlyph.Height) * scale.Y, "scale"),
+            // A glyph's destination stays in floating point, exactly as Draw()'s does. Measured
+            // against a live XNA 4.0 build (SAMPLE-031): the sample's own overlay text drawn at
+            // (64.5, 64.5) comes out of XNA filtered ACROSS the half pixel -- the row through
+            // its 'A' reads 121, 162, 174, 174, 162, 121 where a whole-pixel glyph reads
+            // 255, 255, 255, 255 -- and the same is visible at a fractional scale. Quantising
+            // here (which is what CNA did until this was measured) snapped every glyph onto a
+            // whole pixel and lost that, while Draw() had already been corrected.
+            const float destinationX =
+                ValidateDestinationComponent(position.X + rotX, "position");
+            const float destinationY =
+                ValidateDestinationComponent(position.Y + rotY, "position");
+            const float destinationWidth =
+                ValidateDestinationComponent(static_cast<float>(cGlyph.Width) * scale.X, "scale");
+            const float destinationHeight =
+                ValidateDestinationComponent(static_cast<float>(cGlyph.Height) * scale.Y, "scale");
+
+            pushSprite(texture, destinationX, destinationY, destinationWidth, destinationHeight,
                        cGlyph, color, rotation, Vector2::Zero, effects, layerDepth);
 
             curOffset.X += cKern.Y + cKern.Z;
