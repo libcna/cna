@@ -18740,6 +18740,82 @@
         "CPP-96F2229DA75C"
       ],
       "signature_regex": "^\\(\\)$"
+    },
+    {
+      "id": "dynamic-vertex-buffer-using-declarations",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::DynamicVertexBuffer::SetData$",
+      "signature_regex": "^\\(const Vertex[A-Za-z]+ \\*data, int (?:count|startIndex, int elementCount)\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_vertex_buffer_set_data`, unchanged -- these are `VertexBuffer`'s own seven typed families, and they appear on the derived type only because `using VertexBuffer::SetData;` makes the base overloads declarations of it too.\n\n**A `using` declaration introduces no operation, so it gets no route**, and the C shape already carries the reason: a dynamic buffer is not a separate handle type here. `CNA_VertexBufferCreateInfo` has a `dynamic` flag and `CNA_VertexBufferInfo` reports it, so one `CNA_VertexBufferHandle` addresses both kinds and one route serves both. The transfer descriptor also carries `options`, which is why the same route answers the no-option overloads here and the `SetDataOptions` overloads the derived type declares itself.\n\nThe rows are listed separately rather than folded into `vertex-buffer-complete-contract` because that rule's text describes the base contract, and what needed writing down was **why a derived-class declaration is answered by a base route** -- which is a different statement.",
+      "tests": "`VertexBufferSmoke.c` `validate_all_typed` covers all seven built-in vertex types through both the count and the source-window transfer, on dynamic as well as static buffers, which is exactly the set of overloads these declarations name.",
+      "status": "implemented",
+      "task": "CBIND-104",
+      "approved_symbols": [
+        "CPP-074BB6CC9DC0",
+        "CPP-5AFA44B3536E",
+        "CPP-7F0FAA828233",
+        "CPP-85210D78375E",
+        "CPP-A6EB39EA3A4F",
+        "CPP-AF728A50E712",
+        "CPP-B2408C94B703",
+        "CPP-BCB11700FC89",
+        "CPP-D16C7FD30AE7",
+        "CPP-D926EF94BB7C",
+        "CPP-DB4A440037AB",
+        "CPP-DDB2590D8250",
+        "CPP-F1160C75705F",
+        "CPP-F8EBD924D15A"
+      ]
+    },
+    {
+      "id": "vertex-buffer-raw-with-options",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::(?:VertexBuffer::SetDataRaw(?:At)?WithOptions|DynamicVertexBuffer::SetData)$",
+      "signature_regex": "^(?:\\(const void \\*data, int startIndex, int elementCount, int stride, SetDataOptions options\\)|\\(int offsetInBytes, const void \\*data, int startIndex, int elementCount, int stride, SetDataOptions options\\)|template<typename TVertex> \\(const TVertex \\*data, int count\\)|template<typename TVertex> \\(const TVertex \\*data, int startIndex, int elementCount, SetDataOptions options\\)|template<typename TVertex> \\(int offsetInBytes, const TVertex \\*data, int startIndex, int elementCount, int vertexStride, SetDataOptions options\\))$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_vertex_buffer_set_data_raw_with_options` and `cna_vertex_buffer_set_data_raw_at_with_options`, plus the existing `cna_vertex_buffer_set_data_raw` for the two-argument template.\n\nThe `SetData<TVertex>` templates are the public door to the two protected `SetDataRaw*WithOptions` methods, and they flatten in C the way `StorageBufferT<T>` did: an application-defined vertex type has no `CNA_VertexType`, so it is uploaded exactly as it sits in memory and the stride becomes an argument. The **windowed** template is what both new routes call, because it takes the stride as a parameter while the narrower one derives it from `sizeof(TVertex)` -- and a stride known only at run time cannot be a type's size.\n\n**A static buffer is refused.** These overloads are declared on `DynamicVertexBuffer`, a streaming hint means nothing without one, and accepting a static buffer would invent a path the canonical API does not have.\n\nThe two protected methods have no route of their own for the ordinary reason: they are not public, and what a caller reaches is the template above them.",
+      "tests": "`VertexBufferSmoke.c` `validate_raw_with_options` uploads through both routes on a dynamic buffer and reads the vertices back typed, checks the windowed form replaces one vertex and leaves the other, and drives the refusals -- an undefined option, a null source, a zero stride, a byte count short of the vertices described, a misaligned offset, and a **static** buffer answering `CNA_RESULT_NOT_SUPPORTED` for both routes, which is the arm that would pass silently if the dynamic requirement were dropped.",
+      "status": "implemented",
+      "task": "CBIND-104",
+      "approved_symbols": [
+        "CPP-0785B25EC8C3",
+        "CPP-2EEE0102E3F8",
+        "CPP-4C978529F372",
+        "CPP-6C8AEFADA468",
+        "CPP-A5E136BCC58C"
+      ]
+    },
+    {
+      "id": "effect-material-retained-textures",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::EffectMaterial::(?:RetainParameterTextureEXT|GetRetainedParameterTextureCountEXT)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_effect_material_retain_parameter_texture_ext` and `cna_effect_material_get_retained_parameter_texture_count_ext`. An `EffectMaterial` has no handle of its own -- it is a `CNA_EffectHandle` whose object happens to be one, which is what `cna_effect_material_create` hands back -- so both routes check what they were actually given rather than trusting the caller.\n\nThe texture arrives as a handle plus a `CNA_EffectTextureType`, the same discriminator `cna_effect_set_parameter_texture` already uses, because C has no single texture handle type. A null handle is ignored rather than refused, because the canonical method ignores a null pointer and the two must not disagree about the same input.\n\n**Retaining does not gate the texture's own destroy, and that is the contract rather than an omission.** `cna_effect_set_parameter_texture` gates one because a parameter holds a raw pointer nothing owns; retaining is precisely the mechanism that removes that hazard, so only the canonical texture is handed over and the caller may release its handle immediately afterwards.",
+      "tests": "`EffectSmoke.c` retains a real 1x1 texture, checks the count rises, **destroys the caller's handle and checks the count stays raised** -- which is the whole contract, and the arm a gate would have made unreachable. The create is deliberately not guarded on success, because a skipped check defends nothing. An Effect that is not an EffectMaterial, a texture type outside the named family and a null count output are each refused. Mutation-checked: removing the retain call fails.",
+      "status": "implemented",
+      "task": "CBIND-104",
+      "approved_symbols": [
+        "CPP-6134D2403453",
+        "CPP-7BB39EBD31F7"
+      ]
+    },
+    {
+      "id": "occlusion-query-pixel-count-precision",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::OcclusionQuery::isPixelCountPreciseEXT$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_occlusion_query_get_is_pixel_count_precise_ext`.\n\nOne boolean, and it exists because the pixel count beside it is not always a count: OpenGL ES 3.0 and WebGL 2 have only the boolean `GL_ANY_SAMPLES_PASSED`, so their query answers 0 or 1. A coverage ratio computed from that is `1/area` rather than a fraction, so a game that needs one has to be able to ask which it is holding rather than dividing and hoping.",
+      "tests": "`GraphicsDeviceSmoke.c` reads it beside the pixel count it qualifies and requires a canonical `CNA_Bool` -- not which of the two this build reports, because that is the backend's answer -- and requires the null output to be refused.",
+      "status": "implemented",
+      "task": "CBIND-104",
+      "approved_symbols": [
+        "CPP-147BC775F119"
+      ]
     }
   ]
 }

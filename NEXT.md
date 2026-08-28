@@ -150,14 +150,23 @@ to pointers. `Quaternion()` is all zeros, not the identity. Both properties are 
 both aliasing sides and mutation-checked, which is a stronger bar than `CBIND-081` set for the same
 shape.
 
-**Where it stands:** 536 headers / 8,812 symbols — 8,298 implemented, 15 approved partial, 39
-planned, 460 not applicable. ABI `0.15.0`, 4,018 exported symbols, the same set with `CNA_CNAEXT` on
+**`CBIND-104` then closed the graphics tail** with five routes, no new structures and no new handle
+kinds. Its lasting answer is the one the row asked for: **a `using` declaration introduces no
+operation, so it gets no route** — the fourteen `DynamicVertexBuffer::SetData` rows are
+`VertexBuffer`'s own families, and the C shape already had the reason, because a dynamic buffer is
+not a separate handle type here. Two real routes were needed for the options-carrying raw upload,
+which refuses a static buffer rather than inventing a path the canonical API does not have. And the
+`EffectMaterial` retained-texture pair deliberately does **not** gate the texture's own destroy:
+retaining is the mechanism that makes gating unnecessary, and the test destroys the caller's handle
+and checks the count stays raised.
+
+**Where it stands:** 536 headers / 8,812 symbols — 8,320 implemented, 15 approved partial, 17
+planned, 460 not applicable. ABI `0.16.0`, 4,023 exported symbols, the same set with `CNA_CNAEXT` on
 and off. 103/103 `CApi` tests in all three arms: `cmake-build-debug` (HEADLESS, `CNA_CNAEXT=OFF`),
 `cmake-build-cnaext` (OPENGLES3/EasyGL, `CNA_CNAEXT=ON`) and `build-probe` (HEADLESS,
 `CNA_CNAEXT=ON`). The not-applicable count moved for the first time this phase, by exactly one row —
 a `friend` declaration Doxygen reports as a member, named in `CBIND-111`. What remains in Phase B10
-is the graphics and reflective-reader tails (`CBIND-104` and `CBIND-105`, 39 rows) and the two
-closing tasks.
+is the reflective-reader tail (`CBIND-105`, 17 rows) and the two closing tasks.
 
 ## `SAMPLE-005` official XNA content fidelity (`ReachGraphicsDemo_4_0`, 2026-08-23)
 

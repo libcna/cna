@@ -1220,7 +1220,25 @@ applies unchanged. Three things are specific to this phase:
 **One thing the approvals machinery caught that a regex would not have.** `^Quaternion::Quaternion$` matches every constructor overload, and `quaternion-operations` already owns the parameterised ones; the deriving script's own overlap assertion fired rather than silently approving all of them. The rule now carries `signature_regex: ^\(\)$`, so its pattern says what it means instead of relying on the approval list to fix it afterwards. **`color-default-constructor` has the same latent looseness** — a broad pattern held correct only by its single approval — which is worth a look under `CBIND-112` rather than a change here.
 
 **Verified in all three arms**, each built whole and then run serially: 103/103 `CApi` tests in `cmake-build-debug`, `cmake-build-cnaext` and `build-probe`; all eight build-free gates green; declared and exported routes agreeing exactly at 4,018 in each tree. |
-| CBIND-104 | Bind the graphics tail | 22 | ⬜ | Seventeen of these are `DynamicVertexBuffer::SetData`. Fourteen are the base-class overloads that `using VertexBuffer::SetData;` makes declarations of the derived type too — the operations themselves are already bound on `VertexBuffer`, so the question is whether a `using` declaration deserves its own rule text or is answered by the base route, and the answer must be written down either way. The other three are real: two `SetData<TVertex>` templates for an application-defined vertex type, which flatten onto the existing element-size descriptor the way `StorageBufferT<T>` did in `CBIND-084A`, and the windowed overload that takes an explicit `offsetInBytes` and stride. Beneath them sit `VertexBuffer::SetDataRawWithOptions`/`SetDataRawAtWithOptions`, which are what those templates call. Also `EffectMaterial::RetainParameterTextureEXT`/`GetRetainedParameterTextureCountEXT` — a lifetime contract, so read `SAMPLE-028` before shaping it — and `OcclusionQuery::isPixelCountPreciseEXT`, one boolean. |
+| CBIND-104 | Bind the graphics tail | 22 | ✅ | **Done 2026-08-28.** Five routes, no new structures and no new handle kinds, close all 22 rows: implemented 8,298 → 8,320 and planned 39 → 17, ABI `0.15.0` → `0.16.0` and exports 4,018 → 4,023.
+
+**The `using` question is answered, and the answer is that a `using` declaration introduces no operation, so it gets no route.** The fourteen are `VertexBuffer`'s own seven typed families appearing on the derived type because `using VertexBuffer::SetData;` makes the base overloads declarations of it too. The C shape already carried the reason and it is now written down: **a dynamic buffer is not a separate handle type here** — `CNA_VertexBufferCreateInfo` has a `dynamic` flag and `CNA_VertexBufferInfo` reports it, so one `CNA_VertexBufferHandle` addresses both kinds and `cna_vertex_buffer_set_data` serves both. The transfer descriptor also carries `options`, which is why the same route answers these no-option overloads *and* the `SetDataOptions` overloads the derived type declares itself. They get their own rule rather than joining `vertex-buffer-complete-contract`, because that rule's text describes the base contract and what needed saying is a different statement.
+
+**Why they were `planned` at all is worth recording:** `vertex-buffer-complete-contract` is a `.*` rule whose `header_regex` already covers `DynamicVertexBuffer.hpp`, so the pattern always matched them — they fell through because the merge added the declarations and nothing had approved them. That is exactly the `CBIND-050` scenario the approval half of the matcher exists for, working as designed.
+
+**The three templates and the two protected methods beneath them needed two real routes.** `cna_vertex_buffer_set_data_raw_with_options` and `_raw_at_with_options`: the existing raw pair takes a stride but no streaming hint, and `SetDataRawWithOptions`/`SetDataRawAtWithOptions` are protected, so the templates are their only public door. Both new routes call the **windowed** template, because it takes the stride as an argument while the narrower one derives it from `sizeof(TVertex)` — and a stride known only at run time cannot be a type's size. The two-argument template is answered by the existing `cna_vertex_buffer_set_data_raw`. **A static buffer is refused**, since these overloads are declared on `DynamicVertexBuffer` and a streaming hint means nothing without one; the test measures that refusal, because a route that quietly accepted a static buffer would be inventing a path the canonical API does not have.
+
+**`EffectMaterial` has no handle of its own, so both routes check what they were given.** It is a `CNA_EffectHandle` whose object happens to be an `EffectMaterial` — which is what `cna_effect_material_create` hands back — so a plain Effect is refused rather than trusted. The texture arrives as a handle plus the `CNA_EffectTextureType` discriminator `cna_effect_set_parameter_texture` already uses; a null handle is ignored rather than refused, because the canonical method ignores a null pointer and the two must not disagree about the same input.
+
+**The lifetime decision, which `SAMPLE-028` is the reason for: retaining deliberately does *not* gate the texture's own destroy.** `cna_effect_set_parameter_texture` gates one because a parameter holds a raw pointer nothing owns; retaining is precisely the mechanism that removes that hazard. So only the canonical texture is handed over, and the test destroys the caller's handle and checks the count stays raised — the arm a gate would have made unreachable. Mutation-checked: removing the retain call fails.
+
+**One test guard removed on purpose.** The texture create was first written inside an `if`, which would have let the whole retained-texture contract stop being checked on any build that could not make a 1×1 texture. HEADLESS makes one — verified by instrumenting the branch rather than assuming — so the create is now required, because a skipped check defends nothing.
+
+**Throw/clamp survey: `VertexBuffer.cpp` 51 throws and 0 clamps; `EffectMaterial.cpp` and `OcclusionQuery.cpp` 0 and 0.** Nothing here had to choose between a canonical refusal and a softer C answer.
+
+**A second regex looseness caught the same way `CBIND-103`'s was.** The template overloads carry their `template<typename TVertex>` prefix in the recorded signature, so the first pattern matched only 19 of the 22 rows and the deriving script said so instead of writing a short approval set. The rule's `signature_regex` now names all five forms explicitly.
+
+**Verified in all three arms**, each built whole and then run serially: 103/103 `CApi` tests in `cmake-build-debug`, `cmake-build-cnaext` and `build-probe`; all eight build-free gates green; declared and exported routes agreeing exactly at 4,023 in each tree. |
 | CBIND-105 | Bind the reflective content readers and the `.cnb` loader hook | 17 | ⬜ | `ReflectiveTypeReader`, `EnumTypeReader` and `ReflectiveTypeReaderBuilder` are how a game declares a reflectively serialized XNB type's field list once and gets a reader for it (`SAMPLE-044`). The builder is a fluent C++ template — `Field`, `EnumField`, `Custom`, `Register` — so the C form is a descriptor plus an append route, not a chained call; the existing content-reader registration routes are the precedent to follow rather than a new mechanism. `ContentManager::RegisterCnbLoaderEXT` and its `CnbLoaderFn` alias are the callback seam the CNB tier loads through, and `cna_content_manager_register_cnj_loader_ext` is its exact sibling — match that route's shape, its context pointer and its lifetime rules. |
 | CBIND-106 | Bind the CNB container: identities, format, arithmetic, CRC-32C and read limits | 66 | ✅ | **Done 2026-08-28.** `CNA/C/cnb.h` and `CnaCApiCnb.cpp` add 24 routes, two identities, one versioned structure and 30 constants, closing all 66 rows: implemented 7,832 → 7,898 and planned 506 → 440, the delta this phase requires to equal the slice's row count.
 
@@ -1410,9 +1428,9 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-**Snapshot (2026-08-28, after `CBIND-103`):** 536 headers / 8,812 symbols —
-**8,298 implemented, 15 approved partial, 39 planned, 460 not applicable.** ABI `0.15.0`, 4,018
-exported symbols — the same 4,018 with `CNA_CNAEXT` on and off (measured symbol by symbol: zero
+**Snapshot (2026-08-28, after `CBIND-104`):** 536 headers / 8,812 symbols —
+**8,320 implemented, 15 approved partial, 17 planned, 460 not applicable.** ABI `0.16.0`, 4,023
+exported symbols — the same 4,023 with `CNA_CNAEXT` on and off (measured symbol by symbol: zero
 differ), which is the engine layer's ABI promise measured rather than asserted.
 
 The not-applicable count moved 459 → 460 for the first time in this phase, and the one row is named
@@ -1426,8 +1444,8 @@ no other. That is not a regression and not a document going stale: the sixth mer
 brought in 506 public symbols, 460 of them the `CNA::Content::Cnb` content format, and the owner
 ruled on 2026-08-28 that binding them belongs to a later pass — then asked for `CBIND-106`,
 `CBIND-107`–`CBIND-111` — the container, the document, every asset schema the format defines, and
-the compile path with the loader registry — and then `CBIND-103`'s math tail, which closed 467 of
-them and left 39. The gate says so out loud because
+the compile path with the loader registry — and then `CBIND-103`'s math tail and `CBIND-104`'s
+graphics tail, which closed 489 of them and left 17. The gate says so out loud because
 `CBIND-042B` built it to fail in both directions, and a deferral that only lives in somebody's
 memory is the thing it exists to prevent.
 
@@ -1457,7 +1475,7 @@ CNAEXT engine layer and the fifth merge's tail opened, and `CBIND-095` verified 
 
 ### What remains
 
-**Phase B10 — 39 rows left of 506, in two slices. `CBIND-103` and `CBIND-106`–`CBIND-111` are closed; `CBIND-104` and `CBIND-105` remain, with `CBIND-113` beside them and `CBIND-112` to close it.** The
+**Phase B10 — 17 rows left of 506, in one slice. `CBIND-103`, `CBIND-104` and `CBIND-106`–`CBIND-111` are closed; only `CBIND-105` remains, with `CBIND-113` beside it and `CBIND-112` to close the matrix.** The
 sixth reopening. `origin/next` merged on 2026-08-28 and brought in the **CNB content format**
 (`CNA::Content::Cnb`, 23 public headers, `plans/plan_cnb.md`'s `CNBF-002`–`CNBF-123`) — 460 of the
 506 rows — plus 46 ordinary XNA symbols: the math types' compound-assignment operators,

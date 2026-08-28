@@ -329,6 +329,64 @@ static int validate_base_effect(const CNA_Handle device)
                 cna_effect_get_type_name_byte_count, cna_effect_copy_type_name));
     REQUIRE(cna_effect_clone(material, &material_clone) == CNA_RESULT_SUCCESS &&
             cna_effect_apply(material_clone) == CNA_RESULT_SUCCESS);
+
+    /*
+     * CBIND-104: an EffectMaterial owns the textures its parameters point at, because a parameter
+     * stores a raw pointer and a content reader discards the values it loaded them into. The count
+     * exists so this can assert the ownership itself rather than infer it from a read through a
+     * pointer that may merely happen to still be readable.
+     */
+    {
+        uint64_t retained = UINT64_MAX;
+        REQUIRE(cna_effect_material_get_retained_parameter_texture_count_ext(
+                    material, &retained) == CNA_RESULT_SUCCESS && retained == UINT64_C(0));
+        /* A null handle is ignored rather than refused: the canonical method ignores a null
+           pointer, and the two must not disagree about the same input. */
+        REQUIRE(cna_effect_material_retain_parameter_texture_ext(
+                    material, CNA_EFFECT_TEXTURE_2D, CNA_INVALID_HANDLE) ==
+                CNA_RESULT_SUCCESS);
+        REQUIRE(cna_effect_material_get_retained_parameter_texture_count_ext(
+                    material, &retained) == CNA_RESULT_SUCCESS && retained == UINT64_C(0));
+
+        /* Retaining a real texture raises the count, and **releasing the caller's handle
+           afterwards leaves it raised** -- which is the whole contract: the material owns the
+           object outright, so the parameter cannot dangle. */
+        CNA_Handle texture = CNA_INVALID_HANDLE;
+        CNA_Texture2DCreateInfo texture_info;
+        memset(&texture_info, 0, sizeof(texture_info));
+        texture_info.struct_size = (uint32_t)sizeof(texture_info);
+        texture_info.struct_version = UINT32_C(1);
+        texture_info.width = 1;
+        texture_info.height = 1;
+        texture_info.format = CNA_SURFACE_FORMAT_COLOR;
+        /* Not guarded on the create succeeding: HEADLESS makes a 1x1 Color texture, and a build
+           that could not would be a reason to fail rather than to stop checking the contract. */
+        REQUIRE(cna_texture2d_create(device, &texture_info, &texture) == CNA_RESULT_SUCCESS);
+        REQUIRE(cna_effect_material_retain_parameter_texture_ext(
+                    material, CNA_EFFECT_TEXTURE_2D, texture) == CNA_RESULT_SUCCESS);
+        REQUIRE(cna_effect_material_get_retained_parameter_texture_count_ext(
+                    material, &retained) == CNA_RESULT_SUCCESS && retained == UINT64_C(1));
+        REQUIRE(cna_texture2d_destroy(texture) == CNA_RESULT_SUCCESS);
+        REQUIRE(cna_effect_material_get_retained_parameter_texture_count_ext(
+                    material, &retained) == CNA_RESULT_SUCCESS && retained == UINT64_C(1));
+        /* Retaining the same texture twice counts twice: the canonical list is a list. */
+        REQUIRE(cna_effect_material_retain_parameter_texture_ext(
+                    material, CNA_EFFECT_TEXTURE_BASE, CNA_INVALID_HANDLE) ==
+                CNA_RESULT_SUCCESS);
+
+        /* An Effect that is not an EffectMaterial is refused by both routes, and so is a texture
+           type outside the named family. */
+        REQUIRE(cna_effect_material_get_retained_parameter_texture_count_ext(
+                    effect, &retained) == CNA_RESULT_INVALID_ARGUMENT);
+        REQUIRE(cna_effect_material_retain_parameter_texture_ext(
+                    effect, CNA_EFFECT_TEXTURE_2D, CNA_INVALID_HANDLE) ==
+                CNA_RESULT_INVALID_ARGUMENT);
+        REQUIRE(cna_effect_material_retain_parameter_texture_ext(
+                    material, UINT32_C(99), CNA_INVALID_HANDLE) ==
+                CNA_RESULT_INVALID_ARGUMENT);
+        REQUIRE(cna_effect_material_get_retained_parameter_texture_count_ext(material, 0) ==
+                CNA_RESULT_INVALID_ARGUMENT);
+    }
     REQUIRE(cna_effect_dispose(clone) == CNA_RESULT_SUCCESS &&
             cna_graphics_resource_get_is_disposed(clone, &disposed) == CNA_RESULT_SUCCESS &&
             disposed == CNA_TRUE && cna_effect_apply(clone) == CNA_RESULT_INVALID_STATE);

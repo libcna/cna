@@ -2343,6 +2343,17 @@ CNA_Result cna_occlusion_query_get_pixel_count(
     });
 }
 
+// CBIND-104: whether the count above is a tally or a flag. A coverage ratio computed from a boolean
+// count is 1/area rather than a fraction, so a caller that divides has to be able to ask first.
+CNA_Result cna_occlusion_query_get_is_pixel_count_precise_ext(
+    const CNA_OcclusionQueryHandle occlusionQueryHandle,
+    CNA_Bool* const outIsPrecise)
+{
+    return OcclusionQueryValue(occlusionQueryHandle, outIsPrecise, [](OcclusionQuery& query) {
+        return query.isPixelCountPreciseEXT() ? CNA_TRUE : CNA_FALSE;
+    });
+}
+
 CNA_Result cna_occlusion_query_has_renderer(
     const CNA_OcclusionQueryHandle occlusionQueryHandle,
     CNA_Bool* const outHasRenderer)

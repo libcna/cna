@@ -1,10 +1,10 @@
 {
  "abi_version": {
-  "encoded": 3840,
+  "encoded": 4096,
   "major": 0,
-  "minor": 15,
+  "minor": 16,
   "patch": 0,
-  "runtime": 3840
+  "runtime": 4096
  },
  "colors": {
   "CNA_COLOR_ALICE_BLUE": [
@@ -2121,6 +2121,8 @@
   "cna_effect_lights_set_ambient_color",
   "cna_effect_lights_set_enabled",
   "cna_effect_material_create",
+  "cna_effect_material_get_retained_parameter_texture_count_ext",
+  "cna_effect_material_retain_parameter_texture_ext",
   "cna_effect_matrices_get_projection",
   "cna_effect_matrices_get_view",
   "cna_effect_matrices_get_world",
@@ -3617,6 +3619,7 @@
   "cna_occlusion_query_destroy",
   "cna_occlusion_query_end",
   "cna_occlusion_query_get_is_complete",
+  "cna_occlusion_query_get_is_pixel_count_precise_ext",
   "cna_occlusion_query_get_pixel_count",
   "cna_occlusion_query_has_renderer",
   "cna_packed_vector_equals",
@@ -4754,6 +4757,8 @@
   "cna_vertex_buffer_set_data",
   "cna_vertex_buffer_set_data_raw",
   "cna_vertex_buffer_set_data_raw_at",
+  "cna_vertex_buffer_set_data_raw_at_with_options",
+  "cna_vertex_buffer_set_data_raw_with_options",
   "cna_vertex_buffer_subscribe_content_lost",
   "cna_vertex_buffer_unsubscribe_content_lost",
   "cna_vertex_declaration_copy_elements",
@@ -4875,9 +4880,9 @@
   "cna_write_leaderboards_event_info_init"
  ],
  "integers": {
-  "CNA_ABI_VERSION": 3840,
+  "CNA_ABI_VERSION": 4096,
   "CNA_ABI_VERSION_MAJOR": 0,
-  "CNA_ABI_VERSION_MINOR": 15,
+  "CNA_ABI_VERSION_MINOR": 16,
   "CNA_ABI_VERSION_PATCH": 0,
   "CNA_ALPHA_MODE_BLEND_EXT": 2,
   "CNA_ALPHA_MODE_MASK_EXT": 1,

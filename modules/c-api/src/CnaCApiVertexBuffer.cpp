@@ -876,6 +876,51 @@ namespace {
     return CNA_RESULT_SUCCESS;
 }
 
+/*
+ * CBIND-104: the options-carrying raw upload.
+ *
+ * `SetDataRawWithOptions` and `SetDataRawAtWithOptions` are protected on `VertexBuffer`; their only
+ * public door is `DynamicVertexBuffer`'s `SetData<TVertex>` templates, which is also where the
+ * canonical API puts them -- a streaming hint means nothing on a static buffer. So this refuses a
+ * static one rather than inventing a reachable path the canonical layer does not have.
+ *
+ * The **windowed** template is the one used for both routes, because it takes the stride as an
+ * argument while the narrower template derives it from `sizeof(TVertex)` -- and a stride that is
+ * only known at run time cannot be a type's size. Instantiating it with a byte and passing
+ * `startIndex` 0 makes `data` the exact bytes to upload, which is what a caller-defined vertex type
+ * amounts to: uploaded exactly as it sits in memory.
+ */
+[[nodiscard]] CNA_Result RequireDynamicForOptions(
+    const VertexBufferResource& resource,
+    Microsoft::Xna::Framework::Graphics::DynamicVertexBuffer** const outDynamic)
+{
+    if (!resource.dynamic) {
+        return Fail(
+            CNA_RESULT_NOT_SUPPORTED,
+            CNA_ERROR_CATEGORY_NOT_SUPPORTED,
+            "A static VertexBuffer has no SetDataOptions overload.");
+    }
+    auto* const dynamic =
+        dynamic_cast<Microsoft::Xna::Framework::Graphics::DynamicVertexBuffer*>(
+            resource.value.get());
+    if (dynamic == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_STATE,
+            CNA_ERROR_CATEGORY_STATE,
+            "The VertexBuffer handle is marked dynamic but does not hold a DynamicVertexBuffer.");
+    }
+    *outDynamic = dynamic;
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result ValidateSetDataOptions(const CNA_SetDataOptions options)
+{
+    if (options > CNA_SET_DATA_NO_OVERWRITE) {
+        return InvalidArgument("The SetDataOptions value is not a defined option.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
 [[nodiscard]] CNA_Result ValidateBufferOffset(const uint64_t offsetInBytes)
 {
     if (offsetInBytes > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
@@ -1030,5 +1075,98 @@ CNA_Result cna_vertex_buffer_unsubscribe_content_lost(
             releaseResult,
             ErrorCategoryForResult(releaseResult),
             "The ContentLost registration handle could not be released.");
+    });
+}
+
+CNA_Result cna_vertex_buffer_set_data_raw_with_options(
+    const CNA_VertexBufferHandle vertexBufferHandle,
+    const void* const data,
+    const uint64_t dataByteCount,
+    const uint64_t vertexCount,
+    const uint32_t vertexStride,
+    const CNA_SetDataOptions options)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<VertexBufferResource> buffer;
+        if (const CNA_Result result = GetBuffer(vertexBufferHandle, &buffer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateUsable(*buffer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateSetDataOptions(options);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        Microsoft::Xna::Framework::Graphics::DynamicVertexBuffer* dynamic = nullptr;
+        if (const CNA_Result result = RequireDynamicForOptions(*buffer, &dynamic);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        uint64_t requiredBytes = 0U;
+        if (const CNA_Result result = ValidateRawWindow(
+                vertexCount, vertexStride, dataByteCount, data, &requiredBytes);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        dynamic->SetData<std::uint8_t>(
+            0,
+            static_cast<const std::uint8_t*>(data),
+            0,
+            static_cast<int>(vertexCount),
+            static_cast<int>(vertexStride),
+            static_cast<SetDataOptions>(options));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_vertex_buffer_set_data_raw_at_with_options(
+    const CNA_VertexBufferHandle vertexBufferHandle,
+    const uint64_t bufferOffsetInBytes,
+    const void* const data,
+    const uint64_t dataByteCount,
+    const uint64_t vertexCount,
+    const uint32_t vertexStride,
+    const CNA_SetDataOptions options)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<VertexBufferResource> buffer;
+        if (const CNA_Result result = GetBuffer(vertexBufferHandle, &buffer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateUsable(*buffer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateSetDataOptions(options);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateBufferOffset(bufferOffsetInBytes);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        Microsoft::Xna::Framework::Graphics::DynamicVertexBuffer* dynamic = nullptr;
+        if (const CNA_Result result = RequireDynamicForOptions(*buffer, &dynamic);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        uint64_t requiredBytes = 0U;
+        if (const CNA_Result result = ValidateRawWindow(
+                vertexCount, vertexStride, dataByteCount, data, &requiredBytes);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        dynamic->SetData<std::uint8_t>(
+            static_cast<int>(bufferOffsetInBytes),
+            static_cast<const std::uint8_t*>(data),
+            0,
+            static_cast<int>(vertexCount),
+            static_cast<int>(vertexStride),
+            static_cast<SetDataOptions>(options));
+        return CNA_RESULT_SUCCESS;
     });
 }

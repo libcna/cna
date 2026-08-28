@@ -1523,6 +1523,7 @@ static int validate_sprite_text_and_queries(CNA_Handle graphics_device)
     CNA_Bool has_renderer = CNA_FALSE;
     CNA_Bool complete = CNA_FALSE;
     int32_t pixels = -1;
+    CNA_Bool precise = UINT8_C(9);
     uint64_t query_type_bytes = 0U;
     ok = cna_occlusion_query_has_renderer(query, &has_renderer) == CNA_RESULT_SUCCESS &&
         cna_occlusion_query_has_renderer(query, 0) == CNA_RESULT_INVALID_ARGUMENT &&
@@ -1530,6 +1531,15 @@ static int validate_sprite_text_and_queries(CNA_Handle graphics_device)
         is_supported(cna_occlusion_query_end(query)) &&
         is_supported(cna_occlusion_query_get_is_complete(query, &complete)) &&
         is_supported(cna_occlusion_query_get_pixel_count(query, &pixels)) &&
+        /* CBIND-104: whether that count is a per-fragment tally or the boolean some backends can
+           only answer. A coverage ratio computed from the boolean is 1/area rather than a
+           fraction, so a caller has to be able to ask before dividing. The answer is the
+           backend's, so the test pins that it is a canonical CNA_Bool and that the null output is
+           refused -- not which of the two this build reports. */
+        is_supported(cna_occlusion_query_get_is_pixel_count_precise_ext(query, &precise)) &&
+        (precise == CNA_TRUE || precise == CNA_FALSE) &&
+        cna_occlusion_query_get_is_pixel_count_precise_ext(query, 0) ==
+            CNA_RESULT_INVALID_ARGUMENT &&
         /* An occlusion query is an ordinary graphics resource. */
         cna_graphics_resource_get_string_byte_count(query, &query_type_bytes) ==
             CNA_RESULT_SUCCESS &&
