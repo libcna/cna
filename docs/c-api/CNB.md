@@ -14,16 +14,18 @@ identifiers, external-reference name validation, the whole-file arithmetic a rea
 file-declared numbers, CRC-32C, the read limits, and chunk compression (`CBIND-106`); the parsed
 document, its bounded cursor, the primitive writer and the container writer (`CBIND-107`); and the
 texture pixel formats with the `Texture2D`, `TextureCube` and `Texture3D` schemas (`CBIND-108`);
-and the model schema, with its codec and the `.cnj` compile path (`CBIND-109`).
+and the model schema, with its codec and the `.cnj` compile path (`CBIND-109`); and the sprite-font,
+sound-effect, song, video, curve and animation-clip schemas (`CBIND-110`). **Every asset schema the
+format defines is bound.**
 
-**Not bound.** The loader registry, and the remaining asset schemas — sprite fonts, sound effects,
-media, curves and animation clips.
+**Not bound.** The loader registry and the two compilation front ends — the headless image, WAV,
+glTF and `.cnj` import paths.
 
 So a C application can **build a `.cnb` file and parse one back**, walk its table of contents, read
-any chunk's bytes, check its metadata and external references, and encode or decode a texture or a
-model. It still cannot load a `.cnb` asset through a `ContentManager`. `plans/plan_binding.md`
-Phase B10 is the backlog for the rest, and `docs/c-api/CONTENT.md` records the consequence from the
-`ContentManager` side.
+any chunk's bytes, check its metadata and external references, and encode or decode any asset type
+the format defines. It still cannot load a `.cnb` asset through a `ContentManager`.
+`plans/plan_binding.md` Phase B10 is the backlog for the rest, and `docs/c-api/CONTENT.md` records
+the consequence from the `ContentManager` side.
 
 ## Handles, and the parts that have none
 
@@ -33,9 +35,14 @@ is no lifetime to manage there, no thread affinity and no `_destroy`.
 
 The document, the writers and the two decoded descriptions do own something, so they are handles:
 `CNA_CnbDocumentHandle`, `CNA_CnbReaderHandle`, `CNA_CnbByteWriterHandle`, `CNA_CnbWriterHandle`,
-`CNA_CnbTextureDataHandle`, `CNA_CnbModelDataHandle` and `CNA_CnbModelFromCnjHandle`. One borrow
-relationship exists and it is the one to know about — see *Documents, cursors and who owns the
-bytes* below.
+`CNA_CnbTextureDataHandle`, `CNA_CnbModelDataHandle`, `CNA_CnbModelFromCnjHandle`,
+`CNA_CnbSpriteFontDataHandle`, `CNA_CnbSoundEffectDataHandle` and `CNA_CnbAnimationClipHandle`. One
+borrow relationship exists and it is the one to know about — see *Documents, cursors and who owns
+the bytes* below.
+
+A decoded **curve** is not on that list: it comes back as the `CNA_CurveHandle` the `cna_curve_*`
+family already owns, and is released with `cna_curve_destroy`. A **song** and a **video** have no
+handle at all — they are metadata, read field by field from the document.
 
 Every route in the family is named `cna_cnb_*` and none carries an `_ext` suffix. The whole of
 `CNA::Content::Cnb` is CNA-namespace surface with no XNA 4.0 counterpart, so — following
@@ -306,6 +313,106 @@ The result also carries two file lists a build system needs and that are deliber
 `external_reference` is what it left external, so the same graph knows those assets must also be
 compiled. The model is **taken** rather than borrowed so that releasing the result cannot destroy a
 model a caller is still holding; taking it twice is refused.
+
+## The other five schemas
+
+`CBIND-110` bound the rest of the format. The rule that shaped all of it: where another family
+already publishes the C value, that value is what these routes take and return. A parallel type
+would mean a caller moving an asset between the two families had to marshal between two spellings
+of the same thing.
+
+| Schema | The C value | Owned by |
+|---|---|---|
+| Sprite font | `CNA_SpriteFontGlyph` per glyph | `cna_sprite_font_*` |
+| Curve | `CNA_CurveHandle` | `cna_curve_*` |
+| Animation clip | `CNA_AnimationClipEXTDescriptor` in | `cna_skinned_model_ext_*` |
+| Video | `CNA_VideoSoundtrackType` | `cna_video_*` |
+
+### Sprite fonts
+
+A font owns its atlas, so it is a handle. Its four canonical per-glyph arrays — bounds, cropping,
+kerning, characters — are **one** indexed row here, because that is how the sprite-font family
+already spells a glyph and because the four are required to stay the same length:
+
+```c
+CNA_CnbSpriteFontDataHandle font;
+cna_cnb_sprite_font_data_create(&font);
+cna_cnb_sprite_font_data_set_atlas(font, atlas);   /* copied in */
+
+CNA_SpriteFontGlyph glyph = { .struct_size = sizeof glyph, .struct_version = 1 };
+/* fill bounds, cropping, character, kerning */
+cna_cnb_sprite_font_data_add_glyph(font, &glyph, NULL);
+```
+
+**The character map must be strictly ascending**, and that is checked when the font is *encoded*,
+not when a glyph is added — so you can build the table in any order and sort it. The check that
+matters is the one that stops a file no reader would accept from being written.
+
+`cna_cnb_sprite_font_data_copy_atlas` hands back a texture description of its own rather than a
+borrow: the atlas lives inside the font, and lending it would let you hold a handle the font's
+release had destroyed.
+
+### Sound effects
+
+Also a handle, because the samples are bulk data — a decode that returned them by copy would have
+to run twice for you to size the buffer.
+
+`samples` is **headerless little-endian PCM**, not a WAV or Ogg file's bytes. That is what the
+runtime's raw-buffer constructor takes.
+
+Four of the six `CNA_CnbAudioFormat` values have **no schema-1 codec**. They are named because a
+file may legally declare one and a reader must be able to say which it found — a description may
+hold one and the encoder refuses it. `cna_cnb_audio_frame_bytes` answers 0 for those, and for any
+number no enumerator names, because "no fixed frame size" is exactly true of a format that does not
+exist.
+
+### Songs and videos
+
+**Metadata plus a reference, never an embedded blob.** A song can be hundreds of megabytes and wants
+streaming; embedding it would force the whole thing through the container's chunk machinery to play
+its first second. The media stays beside the file as its single `XREF` entry.
+
+Neither has a handle — three scalars and two short strings for a song, five scalars and one string
+for a video. A song is written from loose arguments and read field by field; a video uses
+`CNA_CnbVideoInfo` in both directions.
+
+The stream reference is readable two ways: through the container's external-reference table, or
+through `cna_cnb_decode_song_stream_reference`, which also applies the schema's rule that there is
+**exactly one**.
+
+### Curves
+
+There is no compiled-curve description, in this ABI or in the canonical layer: a curve is small
+enough that the compiled form is the runtime form laid out flat. So `cna_cnb_decode_curve` hands
+back an ordinary `CNA_CurveHandle`, usable everywhere a built one is and released the same way.
+
+### Animation clips
+
+`cna_cnb_encode_animation_clip` takes the same borrowed descriptor the skinned-model routes take,
+with the **target space as a separate argument** for the reason a model's clips have it: the
+descriptor cannot carry one, a compiled clip may hold either a joint palette or a scene node, and
+applying one as the other is a silent corruption rather than a visible error.
+
+Decoding gives a `CNA_CnbAnimationClipHandle` read by index, because a decoded clip owns its
+keyframes.
+
+### One keyframe encoding, published
+
+There is exactly one keyframe layout in CNB — 48 bytes, `CNA_CNB_ANIMATION_KEY_STRIDE` — shared by a
+model's embedded clips and by a standalone clip. The three routines that read and write it are
+published rather than kept internal, so a caller writing a chunk of its own uses them instead of
+re-deriving the layout:
+
+```c
+cna_cnb_byte_writer_write_keyframe(writer, &key);
+cna_cnb_reader_read_keyframe(reader, &key);
+cna_cnb_reader_read_seconds(reader, name, &seconds);
+```
+
+`cna_cnb_reader_read_seconds` exists because a time no `TimeSpan` can hold must surface as a
+**content** failure naming the file, not as a numeric error from somewhere below. Writing such a
+time is your mistake (`CNA_RESULT_INVALID_ARGUMENT`); reading one out of a file is the file's
+(`CNA_RESULT_IO`).
 
 ## Which failure means what
 

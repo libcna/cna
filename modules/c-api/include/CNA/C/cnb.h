@@ -5,7 +5,10 @@
 
 #include "CNA/C/core.h"
 #include "CNA/C/graphics.h"
+#include "CNA/C/curve.h"
+#include "CNA/C/media.h"
 #include "CNA/C/models.h"
+#include "CNA/C/sprite_font.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -3918,6 +3921,810 @@ CNA_C_API CNA_Result cna_cnb_model_from_cnj_copy_external_reference(
     char* destination,
     uint64_t capacity,
     uint64_t* out_byte_count);
+
+/* --- CBIND-110: the font, audio, media, curve and animation schemas ---------------------------- */
+
+/**
+ * @brief The sample formats a `.cnb` sound effect stores.
+ *
+ * A serialization numbering of CNB's own, for the same reason `CNA_CnbTextureFormat` is one: a file
+ * format must not depend on the declaration order of a runtime enumeration, and no audio backend's
+ * identifiers are a serialisation ABI. **These values are wire format and never move.**
+ *
+ * Four of the six are identifiers with no schema-1 codec. They are named here because a file may
+ * legally declare one and a reader must be able to say which it found, not because this build can
+ * decode one.
+ */
+typedef uint32_t CNA_CnbAudioFormat;
+
+/** @brief Not a valid format; a file declaring it is rejected. */
+#define CNA_CNB_AUDIO_FORMAT_UNKNOWN UINT32_C(0)
+/** @brief Signed 16-bit little-endian PCM: the portable baseline and CNA's native form. */
+#define CNA_CNB_AUDIO_FORMAT_PCM16 UINT32_C(1)
+/** @brief Unsigned 8-bit PCM. Identifier reserved; no v1 codec. */
+#define CNA_CNB_AUDIO_FORMAT_PCM8 UINT32_C(2)
+/** @brief 32-bit float PCM. Identifier reserved; no v1 codec. */
+#define CNA_CNB_AUDIO_FORMAT_PCM_FLOAT32 UINT32_C(3)
+/** @brief IMA/MS ADPCM. Identifier reserved; no v1 codec. */
+#define CNA_CNB_AUDIO_FORMAT_ADPCM UINT32_C(4)
+/** @brief Vorbis in an Ogg container. Identifier reserved; no v1 codec. */
+#define CNA_CNB_AUDIO_FORMAT_VORBIS UINT32_C(5)
+/** @brief Highest audio format identifier this ABI names. */
+#define CNA_CNB_AUDIO_FORMAT_MAXIMUM CNA_CNB_AUDIO_FORMAT_VORBIS
+
+/** @brief `FONT` -- glyph count, spacing and the default character. */
+#define CNA_CNB_SPRITE_FONT_CHUNK_HEADER UINT32_C(0x544E4F46)
+/** @brief `GLYP` -- each glyph's source rectangle within the atlas. */
+#define CNA_CNB_SPRITE_FONT_CHUNK_GLYPH_BOUNDS UINT32_C(0x50594C47)
+/** @brief `CROP` -- each glyph's offset/cropping rectangle. */
+#define CNA_CNB_SPRITE_FONT_CHUNK_CROPPING UINT32_C(0x504F5243)
+/** @brief `KERN` -- each glyph's left bearing, width and right bearing. */
+#define CNA_CNB_SPRITE_FONT_CHUNK_KERNING UINT32_C(0x4E52454B)
+/** @brief `CHAR` -- the sorted character map. */
+#define CNA_CNB_SPRITE_FONT_CHUNK_CHARACTERS UINT32_C(0x52414843)
+
+/** @brief Highest `SpriteFont` schema version this build understands. */
+#define CNA_CNB_SPRITE_FONT_SCHEMA_VERSION UINT32_C(1)
+/** @brief Bytes the `FONT` chunk occupies. */
+#define CNA_CNB_SPRITE_FONT_HEADER_STRIDE UINT32_C(24)
+/** @brief Bytes one `GLYP` or `CROP` rectangle occupies. */
+#define CNA_CNB_SPRITE_FONT_RECTANGLE_STRIDE UINT32_C(16)
+/** @brief Bytes one `KERN` entry occupies. */
+#define CNA_CNB_SPRITE_FONT_KERNING_STRIDE UINT32_C(12)
+/** @brief Bytes one `CHAR` entry occupies. */
+#define CNA_CNB_SPRITE_FONT_CHARACTER_STRIDE UINT32_C(4)
+/**
+ * @brief Ceiling on the number of glyphs a file may declare.
+ *
+ * Above every real font by a wide margin, and low enough that a hostile count is refused before the
+ * reader multiplies it by four stride sizes.
+ */
+#define CNA_CNB_MAX_SPRITE_FONT_GLYPHS UINT32_C(65536)
+
+/** @brief `AUDH` -- format, rate, channels, frame count and loop points. */
+#define CNA_CNB_SOUND_EFFECT_CHUNK_HEADER UINT32_C(0x48445541)
+/** @brief `AUDD` -- the sample bytes. */
+#define CNA_CNB_SOUND_EFFECT_CHUNK_DATA UINT32_C(0x44445541)
+/** @brief Highest `SoundEffect` schema version this build understands. */
+#define CNA_CNB_SOUND_EFFECT_SCHEMA_VERSION UINT32_C(1)
+/** @brief Bytes the `AUDH` chunk occupies. */
+#define CNA_CNB_SOUND_EFFECT_HEADER_STRIDE UINT32_C(28)
+/** @brief Highest sample rate a file may declare, in Hz. */
+#define CNA_CNB_MAX_AUDIO_SAMPLE_RATE UINT32_C(384000)
+
+/** @brief `SNGH` -- a `Song`'s duration, flags and display name. */
+#define CNA_CNB_MEDIA_CHUNK_SONG_HEADER UINT32_C(0x48474E53)
+/** @brief `VIDH` -- a `Video`'s duration, frame size, rate and soundtrack type. */
+#define CNA_CNB_MEDIA_CHUNK_VIDEO_HEADER UINT32_C(0x48444956)
+/** @brief Highest `Song` and `Video` schema version this build understands. */
+#define CNA_CNB_MEDIA_SCHEMA_VERSION UINT32_C(1)
+/** @brief Bytes the fixed part of the `SNGH` chunk occupies, before the display name. */
+#define CNA_CNB_SONG_HEADER_FIXED_STRIDE UINT32_C(8)
+/** @brief Bytes the `VIDH` chunk occupies. */
+#define CNA_CNB_VIDEO_HEADER_STRIDE UINT32_C(24)
+/** @brief Highest frame dimension a `Video` may declare, in pixels. */
+#define CNA_CNB_MAX_VIDEO_DIMENSION UINT32_C(65536)
+
+/** @brief `CRVH` -- loop behaviour and the key count. */
+#define CNA_CNB_CURVE_CHUNK_HEADER UINT32_C(0x48565243)
+/** @brief `CRVK` -- the flat array of curve keys. */
+#define CNA_CNB_CURVE_CHUNK_KEYS UINT32_C(0x4B565243)
+/** @brief Highest `Curve` schema version this build understands. */
+#define CNA_CNB_CURVE_SCHEMA_VERSION UINT32_C(1)
+/** @brief Bytes one serialized curve key occupies in the `CRVK` chunk. */
+#define CNA_CNB_CURVE_KEY_STRIDE UINT32_C(20)
+
+/** @brief `ACLH` -- duration, target space and the two array counts. */
+#define CNA_CNB_ANIMATION_CLIP_CHUNK_HEADER UINT32_C(0x484C4341)
+/** @brief `ACLT` -- the track table; each row names a range of the key array. */
+#define CNA_CNB_ANIMATION_CLIP_CHUNK_TRACKS UINT32_C(0x544C4341)
+/** @brief `ACLK` -- one flat array holding every keyframe of every track. */
+#define CNA_CNB_ANIMATION_CLIP_CHUNK_KEYS UINT32_C(0x4B4C4341)
+/** @brief Highest `AnimationClip` schema version this build understands. */
+#define CNA_CNB_ANIMATION_CLIP_SCHEMA_VERSION UINT32_C(1)
+/** @brief Bytes one serialized track row occupies in the `ACLT` chunk. */
+#define CNA_CNB_ANIMATION_TRACK_STRIDE UINT32_C(12)
+/** @brief Bytes one serialized keyframe occupies in the `ACLK` chunk. */
+#define CNA_CNB_ANIMATION_KEY_STRIDE UINT32_C(48)
+
+/**
+ * @brief The decoded contents of a `SpriteFont` `.cnb`, independent of any GPU object.
+ *
+ * A handle because it owns its glyph atlas as well as its glyph table. Its glyphs are addressed by
+ * index and carried in `CNA_SpriteFontGlyph` -- the row type the `cna_sprite_font_*` family already
+ * publishes, which bundles the bounds, the cropping rectangle, the character and the kerning that
+ * the canonical description keeps as four parallel arrays. Reusing it is what keeps a caller from
+ * having to marshal between two spellings of the same glyph.
+ */
+typedef CNA_Handle CNA_CnbSpriteFontDataHandle;
+
+/**
+ * @brief The decoded contents of a `SoundEffect` `.cnb`.
+ *
+ * A handle because it owns its sample bytes: a decode that returned them by copy would have to run
+ * twice for a caller to size the buffer, and a sound effect is exactly the asset where that second
+ * pass is measured in megabytes.
+ */
+typedef CNA_Handle CNA_CnbSoundEffectDataHandle;
+
+/**
+ * @brief A decoded standalone `AnimationClipEXT`.
+ *
+ * A handle for the same reason a model's clips are read by index: the keyframes belong to the
+ * decoded clip, so they cannot be handed back as the borrowed `CNA_AnimationClipEXTDescriptor` the
+ * encode direction takes.
+ */
+typedef CNA_Handle CNA_CnbAnimationClipHandle;
+
+/** @brief Version of @ref CNA_CnbSpriteFontInfo this header declares. */
+#define CNA_CNB_SPRITE_FONT_INFO_STRUCT_VERSION UINT32_C(1)
+
+/** @brief A compiled font's glyph count and its whole-font metrics. */
+typedef struct CNA_CnbSpriteFontInfo {
+    /** @brief Size of this structure, in bytes. */
+    uint32_t struct_size;
+    /** @brief Structure version; `CNA_CNB_SPRITE_FONT_INFO_STRUCT_VERSION`. */
+    uint32_t struct_version;
+    /** @brief Number of glyphs. Ignored when the structure is used to set the metrics. */
+    uint64_t glyph_count;
+    /** @brief Vertical distance between text lines, in pixels. */
+    int32_t line_spacing;
+    /** @brief Extra horizontal spacing applied between characters. */
+    float spacing;
+    /** @brief Fallback glyph, meaningful only when @ref has_default_character is true. */
+    CNA_Char16 default_character;
+    /** @brief Whether the font has a fallback glyph, rather than throwing on a missing character. */
+    CNA_Bool has_default_character;
+    /** @brief Reserved; always written as zero. */
+    uint8_t reserved[5];
+} CNA_CnbSpriteFontInfo;
+
+/** @brief Version of @ref CNA_CnbSoundEffectInfo this header declares. */
+#define CNA_CNB_SOUND_EFFECT_INFO_STRUCT_VERSION UINT32_C(1)
+
+/** @brief A compiled sound's encoding, rate, shape and loop region, without its samples. */
+typedef struct CNA_CnbSoundEffectInfo {
+    /** @brief Size of this structure, in bytes. */
+    uint32_t struct_size;
+    /** @brief Structure version; `CNA_CNB_SOUND_EFFECT_INFO_STRUCT_VERSION`. */
+    uint32_t struct_version;
+    /** @brief The sample encoding. Schema 1 writes `CNA_CNB_AUDIO_FORMAT_PCM16`. */
+    CNA_CnbAudioFormat format;
+    /** @brief Sample rate in Hz; 1..`CNA_CNB_MAX_AUDIO_SAMPLE_RATE`. */
+    uint32_t sample_rate;
+    /** @brief Channel count: 1 for mono, 2 for stereo. */
+    uint32_t channels;
+    /** @brief Number of sample frames, that is, samples per channel. */
+    uint32_t frame_count;
+    /** @brief First frame of the loop region. */
+    uint32_t loop_start;
+    /** @brief Number of frames in the loop region; 0 means no loop. */
+    uint32_t loop_length;
+} CNA_CnbSoundEffectInfo;
+
+/** @brief Version of @ref CNA_CnbVideoInfo this header declares. */
+#define CNA_CNB_VIDEO_INFO_STRUCT_VERSION UINT32_C(1)
+
+/**
+ * @brief A compiled video's metadata, without its stream reference.
+ *
+ * The same structure is used to encode and to decode, because unlike a song's display name none of
+ * these fields is a string.
+ */
+typedef struct CNA_CnbVideoInfo {
+    /** @brief Size of this structure, in bytes. */
+    uint32_t struct_size;
+    /** @brief Structure version; `CNA_CNB_VIDEO_INFO_STRUCT_VERSION`. */
+    uint32_t struct_version;
+    /** @brief Duration in milliseconds; 0 when the compiler could not determine it. */
+    uint32_t duration_milliseconds;
+    /** @brief Frame width in pixels; 1..`CNA_CNB_MAX_VIDEO_DIMENSION`. */
+    uint32_t width;
+    /** @brief Frame height in pixels; 1..`CNA_CNB_MAX_VIDEO_DIMENSION`. */
+    uint32_t height;
+    /** @brief Frame rate; must be finite and greater than zero. */
+    float frames_per_second;
+    /** @brief One `CNA_VIDEO_SOUNDTRACK_TYPE_*` identity, as the media family already publishes it. */
+    CNA_VideoSoundtrackType soundtrack_type;
+    /** @brief Reserved; always written as zero. */
+    uint32_t reserved;
+} CNA_CnbVideoInfo;
+
+/**
+ * @brief Creates an empty compiled-font description.
+ *
+ * @param out_font Receives the new handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_sprite_font_data_create(CNA_CnbSpriteFontDataHandle* out_font);
+
+/**
+ * @brief Releases a compiled-font description.
+ *
+ * @param font The description to release.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_sprite_font_data_destroy(CNA_CnbSpriteFontDataHandle font);
+
+/**
+ * @brief Reads a compiled font's glyph count and whole-font metrics.
+ *
+ * @param font The description.
+ * @param out_info Receives the metrics; `struct_size` and `struct_version` must be set on input.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_sprite_font_data_get_info(
+    CNA_CnbSpriteFontDataHandle font,
+    CNA_CnbSpriteFontInfo* out_info);
+
+/**
+ * @brief Sets a compiled font's whole-font metrics, leaving its glyphs and atlas alone.
+ *
+ * `glyph_count` is an output of the glyph routes and is ignored here.
+ *
+ * @param font The description.
+ * @param info The metrics; `struct_size` and `struct_version` must be set.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_sprite_font_data_set_info(
+    CNA_CnbSpriteFontDataHandle font,
+    const CNA_CnbSpriteFontInfo* info);
+
+/**
+ * @brief Appends one glyph.
+ *
+ * The glyph carries its bounds, cropping rectangle, character and kerning together, which is how
+ * the `cna_sprite_font_*` family already spells a glyph; the canonical description keeps the same
+ * four as parallel arrays and this ABI does not publish a second spelling of them.
+ *
+ * The character map must be **strictly ascending**, and that is checked when the font is encoded
+ * rather than here, so a caller may build the table in any order and sort it before encoding.
+ *
+ * @param font The description.
+ * @param glyph The glyph; `struct_size` and `struct_version` must be set to 1 and `reserved` to
+ *              zero, exactly as the `cna_sprite_font_*` routes require.
+ * @param out_index Receives the new glyph's index; may be null.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_sprite_font_data_add_glyph(
+    CNA_CnbSpriteFontDataHandle font,
+    const CNA_SpriteFontGlyph* glyph,
+    uint64_t* out_index);
+
+/**
+ * @brief Reads one glyph.
+ *
+ * @param font The description.
+ * @param index Index into the font's glyphs.
+ * @param out_glyph Receives the glyph; `struct_size` and `struct_version` must be set to 1 on
+ *                  input, exactly as the `cna_sprite_font_*` routes require.
+ * @return A CNA result code; an out-of-range index is `CNA_RESULT_INVALID_ARGUMENT`.
+ */
+CNA_C_API CNA_Result cna_cnb_sprite_font_data_get_glyph(
+    CNA_CnbSpriteFontDataHandle font,
+    uint64_t index,
+    CNA_SpriteFontGlyph* out_glyph);
+
+/**
+ * @brief Replaces one glyph.
+ *
+ * @param font The description.
+ * @param index Index into the font's glyphs.
+ * @param glyph The glyph; `struct_size` and `struct_version` must be set to 1 and `reserved` to
+ *              zero, exactly as the `cna_sprite_font_*` routes require.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_sprite_font_data_set_glyph(
+    CNA_CnbSpriteFontDataHandle font,
+    uint64_t index,
+    const CNA_SpriteFontGlyph* glyph);
+
+/**
+ * @brief Sets the font's glyph atlas, copying it.
+ *
+ * @param font The description.
+ * @param atlas The atlas to copy in.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_sprite_font_data_set_atlas(
+    CNA_CnbSpriteFontDataHandle font,
+    CNA_CnbTextureDataHandle atlas);
+
+/**
+ * @brief Copies the font's glyph atlas out into a texture description of its own.
+ *
+ * A copy rather than a borrow: the atlas lives inside the font, and lending it would let a caller
+ * hold a texture handle the font's release had already destroyed.
+ *
+ * @param font The description.
+ * @param out_atlas Receives a new texture handle the caller releases.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_sprite_font_data_copy_atlas(
+    CNA_CnbSpriteFontDataHandle font,
+    CNA_CnbTextureDataHandle* out_atlas);
+
+/**
+ * @brief Encodes a `SpriteFont` as a complete `.cnb` byte image, atlas included.
+ *
+ * @param font The font to encode.
+ * @param content_name Logical content name recorded in the `CMET` chunk; may be empty.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write, and a character map
+ *         that is not strictly ascending, a default character that is not one of the characters,
+ *         or an inconsistent atlas is `CNA_RESULT_IO`.
+ */
+CNA_C_API CNA_Result cna_cnb_encode_sprite_font(
+    CNA_CnbSpriteFontDataHandle font,
+    CNA_StringView content_name,
+    uint8_t* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Decodes a `SpriteFont` from an open document.
+ *
+ * @param document The document; its asset type must be `CNA_CNB_ASSET_TYPE_SPRITE_FONT`.
+ * @param out_font Receives a new font handle the caller releases.
+ * @return A CNA result code; a document that is not a sprite font, or one whose chunks disagree,
+ *         is `CNA_RESULT_IO`.
+ */
+CNA_C_API CNA_Result cna_cnb_decode_sprite_font(
+    CNA_CnbDocumentHandle document,
+    CNA_CnbSpriteFontDataHandle* out_font);
+
+/**
+ * @brief Reports how many bytes one sample frame occupies in a format.
+ *
+ * @param format The sample encoding.
+ * @param channels The channel count.
+ * @param out_byte_count Receives the frame size, or 0 when @p format has no fixed frame size.
+ * @return A CNA result code; an identity outside the named set reports 0 rather than failing,
+ *         because "no fixed frame size" is exactly true of a format that does not exist.
+ */
+CNA_C_API CNA_Result cna_cnb_audio_frame_bytes(
+    CNA_CnbAudioFormat format,
+    uint32_t channels,
+    uint32_t* out_byte_count);
+
+/**
+ * @brief Reports the byte length of an audio format's diagnostic name.
+ *
+ * @param format The format to render.
+ * @param out_byte_count Receives the length, without a terminator.
+ * @return A CNA result code; an unnamed identity renders as `"unknown"` plus its value rather than
+ *         failing, because a corrupt file can contain any 32-bit number and a diagnostic must be
+ *         able to say which.
+ */
+CNA_C_API CNA_Result cna_cnb_get_audio_format_name_size(
+    CNA_CnbAudioFormat format,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies an audio format's diagnostic name.
+ *
+ * @param format The format to render.
+ * @param destination Destination bytes, or null only for zero capacity. Not terminated.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_cnb_copy_audio_format_name(
+    CNA_CnbAudioFormat format,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Creates a compiled-sound description from its shape and its samples.
+ *
+ * @param info The encoding, rate, shape and loop region; `struct_size` and `struct_version` must
+ *             be set.
+ * @param samples Headerless little-endian sample bytes in @p info's format, or null only for a
+ *                zero count. Copied.
+ * @param byte_count Number of sample bytes.
+ * @param out_sound Receives the new handle.
+ * @return A CNA result code. The description is stored as given; the encoder is what checks the
+ *         samples against the declared shape.
+ */
+CNA_C_API CNA_Result cna_cnb_sound_effect_data_create(
+    const CNA_CnbSoundEffectInfo* info,
+    const uint8_t* samples,
+    uint64_t byte_count,
+    CNA_CnbSoundEffectDataHandle* out_sound);
+
+/**
+ * @brief Releases a compiled-sound description.
+ *
+ * @param sound The description to release.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_sound_effect_data_destroy(CNA_CnbSoundEffectDataHandle sound);
+
+/**
+ * @brief Reads a compiled sound's encoding, rate, shape and loop region.
+ *
+ * @param sound The description.
+ * @param out_info Receives the shape; `struct_size` and `struct_version` must be set on input.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_sound_effect_data_get_info(
+    CNA_CnbSoundEffectDataHandle sound,
+    CNA_CnbSoundEffectInfo* out_info);
+
+/**
+ * @brief Copies a compiled sound's headerless sample bytes.
+ *
+ * @param sound The description.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_cnb_sound_effect_data_copy_samples(
+    CNA_CnbSoundEffectDataHandle sound,
+    uint8_t* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Encodes a `SoundEffect` as a complete `.cnb` byte image.
+ *
+ * @param sound The sound to encode.
+ * @param content_name Logical content name recorded in the `CMET` chunk; may be empty.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write, and an inconsistent
+ *         description, a loop region outside the sound, or a reserved format with no v1 codec is
+ *         `CNA_RESULT_IO`.
+ */
+CNA_C_API CNA_Result cna_cnb_encode_sound_effect(
+    CNA_CnbSoundEffectDataHandle sound,
+    CNA_StringView content_name,
+    uint8_t* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Decodes a `SoundEffect` from an open document.
+ *
+ * @param document The document; its asset type must be `CNA_CNB_ASSET_TYPE_SOUND_EFFECT`.
+ * @param out_sound Receives a new sound handle the caller releases.
+ * @return A CNA result code; a document that is not a sound effect, or one whose declared counts
+ *         disagree with its payload, is `CNA_RESULT_IO`.
+ */
+CNA_C_API CNA_Result cna_cnb_decode_sound_effect(
+    CNA_CnbDocumentHandle document,
+    CNA_CnbSoundEffectDataHandle* out_sound);
+
+/**
+ * @brief Encodes a `Song` as a complete `.cnb` byte image.
+ *
+ * A `Song` `.cnb` is **metadata plus a reference**, never an embedded audio blob: a song can be
+ * hundreds of megabytes and wants streaming, and embedding it would force the whole thing through
+ * the container's chunk machinery to play its first second. The media stays beside the file and is
+ * recorded as its single `XREF` entry, which is what makes the dependency visible to a tool.
+ *
+ * @param stream_reference Logical name of the media file to stream; must not be empty.
+ * @param name Display name of the song; may be empty.
+ * @param duration_milliseconds Duration; 0 when the compiler could not determine it.
+ * @param content_name Logical content name recorded in the `CMET` chunk; may be empty.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; an empty or invalid stream reference is `CNA_RESULT_IO`.
+ */
+CNA_C_API CNA_Result cna_cnb_encode_song(
+    CNA_StringView stream_reference,
+    CNA_StringView name,
+    uint32_t duration_milliseconds,
+    CNA_StringView content_name,
+    uint8_t* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Reads a compiled song's duration from an open document.
+ *
+ * @param document The document; its asset type must be `CNA_CNB_ASSET_TYPE_SONG`.
+ * @param out_duration_milliseconds Receives the duration.
+ * @return A CNA result code; a document that is not a song, or one that does not name exactly one
+ *         external reference, is `CNA_RESULT_IO`.
+ */
+CNA_C_API CNA_Result cna_cnb_decode_song_duration_milliseconds(
+    CNA_CnbDocumentHandle document,
+    uint32_t* out_duration_milliseconds);
+
+/**
+ * @brief Reports the byte length of a compiled song's stream reference.
+ *
+ * The reference is also the document's single `XREF` entry, so it can be read through the
+ * container routes; this route exists because reading it here also applies the schema's rule that
+ * a song names **exactly one**, which a caller walking the table itself would have to reimplement.
+ *
+ * @param document The document.
+ * @param out_byte_count Receives the length, without a terminator.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_decode_song_stream_reference_size(
+    CNA_CnbDocumentHandle document,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies a compiled song's stream reference.
+ *
+ * @param document The document.
+ * @param destination Destination bytes, or null only for zero capacity. Not terminated.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_cnb_decode_song_stream_reference(
+    CNA_CnbDocumentHandle document,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Reports the byte length of a compiled song's display name.
+ *
+ * @param document The document.
+ * @param out_byte_count Receives the length, without a terminator. Zero when the song has no name.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_decode_song_name_size(
+    CNA_CnbDocumentHandle document,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies a compiled song's display name.
+ *
+ * @param document The document.
+ * @param destination Destination bytes, or null only for zero capacity. Not terminated.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_cnb_decode_song_name(
+    CNA_CnbDocumentHandle document,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Encodes a `Video` as a complete `.cnb` byte image.
+ *
+ * Metadata plus a streaming reference, for the same reasons as a song.
+ *
+ * @param stream_reference Logical name of the media file to stream; must not be empty.
+ * @param info The frame size, rate, duration and soundtrack type; `struct_size` and
+ *             `struct_version` must be set.
+ * @param content_name Logical content name recorded in the `CMET` chunk; may be empty.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; an empty stream reference, an out-of-range dimension, a frame rate
+ *         that is not positive and finite, or an unknown soundtrack type is `CNA_RESULT_IO`.
+ */
+CNA_C_API CNA_Result cna_cnb_encode_video(
+    CNA_StringView stream_reference,
+    const CNA_CnbVideoInfo* info,
+    CNA_StringView content_name,
+    uint8_t* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Reads a compiled video's metadata from an open document.
+ *
+ * @param document The document; its asset type must be `CNA_CNB_ASSET_TYPE_VIDEO`.
+ * @param out_info Receives the metadata; `struct_size` and `struct_version` must be set on input.
+ * @return A CNA result code; a document that is not a video, or one whose declarations are out of
+ *         range, is `CNA_RESULT_IO`.
+ */
+CNA_C_API CNA_Result cna_cnb_decode_video(
+    CNA_CnbDocumentHandle document,
+    CNA_CnbVideoInfo* out_info);
+
+/**
+ * @brief Reports the byte length of a compiled video's stream reference.
+ *
+ * @param document The document.
+ * @param out_byte_count Receives the length, without a terminator.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_decode_video_stream_reference_size(
+    CNA_CnbDocumentHandle document,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies a compiled video's stream reference.
+ *
+ * @param document The document.
+ * @param destination Destination bytes, or null only for zero capacity. Not terminated.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_cnb_decode_video_stream_reference(
+    CNA_CnbDocumentHandle document,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Encodes a `Curve` as a complete `.cnb` byte image.
+ *
+ * The curve is the `CNA_CurveHandle` the `cna_curve_*` family already publishes -- there is no
+ * separate compiled-curve description, because a curve is small enough that the compiled form is
+ * the runtime form laid out flat.
+ *
+ * @param curve The curve to encode.
+ * @param content_name Logical content name recorded in the `CMET` chunk; may be empty.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write, and a curve the
+ *         format cannot represent is `CNA_RESULT_IO`.
+ */
+CNA_C_API CNA_Result cna_cnb_encode_curve(
+    CNA_CurveHandle curve,
+    CNA_StringView content_name,
+    uint8_t* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Decodes a `Curve` from an open document.
+ *
+ * @param document The document; its asset type must be `CNA_CNB_ASSET_TYPE_CURVE`.
+ * @param out_curve Receives a new `CNA_CurveHandle` the caller releases with
+ *                  `cna_curve_destroy`, so a decoded curve is usable everywhere a built one is.
+ * @return A CNA result code; a document that is not a curve, or one carrying an out-of-range
+ *         enumerator, is `CNA_RESULT_IO`.
+ */
+CNA_C_API CNA_Result cna_cnb_decode_curve(
+    CNA_CnbDocumentHandle document,
+    CNA_CurveHandle* out_curve);
+
+/**
+ * @brief Encodes an `AnimationClipEXT` as a complete `.cnb` byte image.
+ *
+ * The compiled form puts every keyframe of the whole clip into one flat, fixed-stride array and
+ * gives each track a range into it, so one contiguous read reaches every keyframe.
+ *
+ * @param clip The clip, in the borrowed descriptor form the skinned-model routes already use.
+ * @param target_space Which index space the tracks' bone indices live in. The descriptor does not
+ *                     carry it, and the two must never be silently interchanged.
+ * @param content_name Logical content name recorded in the `CMET` chunk; may be empty.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; an unknown target space or a non-finite time is
+ *         `CNA_RESULT_INVALID_ARGUMENT`, and a clip the format cannot represent is
+ *         `CNA_RESULT_IO`.
+ */
+CNA_C_API CNA_Result cna_cnb_encode_animation_clip(
+    const CNA_AnimationClipEXTDescriptor* clip,
+    CNA_ClipTargetSpaceEXT target_space,
+    CNA_StringView content_name,
+    uint8_t* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Decodes a standalone `AnimationClipEXT` from an open document.
+ *
+ * @param document The document; its asset type must be `CNA_CNB_ASSET_TYPE_ANIMATION_CLIP`.
+ * @param out_clip Receives a new clip handle the caller releases.
+ * @return A CNA result code; a document that is not an animation clip, one naming a key range
+ *         outside its key array, or one carrying a time no `TimeSpan` can hold, is
+ *         `CNA_RESULT_IO`.
+ */
+CNA_C_API CNA_Result cna_cnb_decode_animation_clip(
+    CNA_CnbDocumentHandle document,
+    CNA_CnbAnimationClipHandle* out_clip);
+
+/**
+ * @brief Releases a decoded animation clip.
+ *
+ * @param clip The clip to release.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_animation_clip_destroy(CNA_CnbAnimationClipHandle clip);
+
+/**
+ * @brief Reads a decoded clip's duration, track count and target space.
+ *
+ * @param clip The clip.
+ * @param out_duration_seconds Receives the duration; may be null.
+ * @param out_track_count Receives the number of bone tracks; may be null.
+ * @param out_target_space Receives one `CNA_CLIP_TARGET_SPACE_*_EXT` identity; may be null.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_animation_clip_get(
+    CNA_CnbAnimationClipHandle clip,
+    double* out_duration_seconds,
+    uint64_t* out_track_count,
+    CNA_ClipTargetSpaceEXT* out_target_space);
+
+/**
+ * @brief Reads one track's bone index and keyframe count.
+ *
+ * @param clip The clip.
+ * @param track Index into the clip's tracks.
+ * @param out_bone_index Receives the bone index; may be null.
+ * @param out_keyframe_count Receives the number of keyframes; may be null.
+ * @return A CNA result code; an out-of-range index is `CNA_RESULT_INVALID_ARGUMENT`.
+ */
+CNA_C_API CNA_Result cna_cnb_animation_clip_get_track(
+    CNA_CnbAnimationClipHandle clip,
+    uint64_t track,
+    int32_t* out_bone_index,
+    uint64_t* out_keyframe_count);
+
+/**
+ * @brief Copies one track's keyframes.
+ *
+ * @param clip The clip.
+ * @param track Index into the clip's tracks.
+ * @param destination Destination keyframes, or null only for zero capacity.
+ * @param capacity Destination capacity in keyframes.
+ * @param out_keyframe_count Receives the required count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_cnb_animation_clip_copy_keyframes(
+    CNA_CnbAnimationClipHandle clip,
+    uint64_t track,
+    CNA_KeyframeEXT* destination,
+    uint64_t capacity,
+    uint64_t* out_keyframe_count);
+
+/**
+ * @brief Reads a seconds value from a cursor and refuses anything a `TimeSpan` cannot hold.
+ *
+ * The canonical `TimeSpan` factory throws for a NaN or out-of-range value, and those exceptions are
+ * not what the content subsystem's callers catch: a malformed file must surface as a content
+ * failure naming the file. This checks the range before the value reaches `TimeSpan` at all.
+ *
+ * @param reader Cursor positioned at the 8-byte value.
+ * @param what Noun used in the failure message, for example `"the clip duration"`; may be empty.
+ * @param out_seconds Receives the value, guaranteed convertible to a `TimeSpan`.
+ * @return A CNA result code; a truncated read or an unrepresentable value is `CNA_RESULT_IO`.
+ */
+CNA_C_API CNA_Result cna_cnb_reader_read_seconds(
+    CNA_CnbReaderHandle reader,
+    CNA_StringView what,
+    double* out_seconds);
+
+/**
+ * @brief Reads one keyframe in the canonical 48-byte `.cnb` layout.
+ *
+ * @param reader Cursor positioned at the keyframe.
+ * @param out_keyframe Receives the keyframe.
+ * @return A CNA result code; a truncated read or a time no `TimeSpan` can hold is
+ *         `CNA_RESULT_IO`.
+ */
+CNA_C_API CNA_Result cna_cnb_reader_read_keyframe(
+    CNA_CnbReaderHandle reader,
+    CNA_KeyframeEXT* out_keyframe);
+
+/**
+ * @brief Writes one keyframe in the canonical 48-byte `.cnb` layout.
+ *
+ * Shared by the standalone `AnimationClip` schema and by a `Model`'s embedded clips, so both store
+ * keyframes identically -- there is exactly one keyframe encoding in CNB.
+ *
+ * @param writer Destination.
+ * @param keyframe The keyframe to write.
+ * @return A CNA result code; a time no `TimeSpan` can hold is `CNA_RESULT_INVALID_ARGUMENT`.
+ */
+CNA_C_API CNA_Result cna_cnb_byte_writer_write_keyframe(
+    CNA_CnbByteWriterHandle writer,
+    const CNA_KeyframeEXT* keyframe);
 
 #ifdef __cplusplus
 }

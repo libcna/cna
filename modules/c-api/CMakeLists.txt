@@ -860,6 +860,23 @@ if(CNA_BUILD_TESTS)
     cna_c_api_enable_strict_warnings(cna_c_api_cnb_model_smoke)
     add_test(NAME CApi_CnbModelSmoke COMMAND cna_c_api_cnb_model_smoke)
 
+    # CBIND-110: the five remaining asset schemas. One suite because three of them are bound to C
+    # values other families already publish -- CNA_SpriteFontGlyph, CNA_CurveHandle and
+    # CNA_AnimationClipEXTDescriptor -- so each round trip ends by reading the decoded asset back
+    # through the very routes the rest of the ABI uses, which a parallel set of types would not
+    # prove.
+    add_executable(cna_c_api_cnb_schema_smoke
+        tests/pure_c/CnbSchemaSmoke.c
+    )
+    set_target_properties(cna_c_api_cnb_schema_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_cnb_schema_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_cnb_schema_smoke)
+    add_test(NAME CApi_CnbSchemaSmoke COMMAND cna_c_api_cnb_schema_smoke)
+
     add_executable(cna_c_api_packed_vector_smoke
         tests/pure_c/PackedVectorSmoke.c
     )

@@ -119,11 +119,23 @@ which are given two separate index spaces on purpose, because a binding that cro
 round-trip perfectly with both halves wrong together. The suite writes a distinguishable value into
 all fifteen for exactly that reason.
 
-**Where it stands:** 536 headers / 8,812 symbols — 8,182 implemented, 15 approved partial, 156
-planned, 459 not applicable. ABI `0.13.0`, 3,949 exported symbols, the same set with `CNA_CNAEXT` on
-and off. 101/101 `CApi` tests in all three arms: `cmake-build-debug` (HEADLESS, `CNA_CNAEXT=OFF`),
+**`CBIND-110` then bound the remaining five schemas** — sprite font, sound effect, song, video,
+curve and animation clip; 41 routes, 85 rows, and **every asset schema the format defines is now
+bound**. Its lasting decision is the one the plan row asked for: where another family already
+publishes the C value, that value is what these routes take and return. A font's glyphs are
+`CNA_SpriteFontGlyph`; a decoded curve *is* a `CNA_CurveHandle`, released with `cna_curve_destroy`;
+a clip is encoded from `CNA_AnimationClipEXTDescriptor`. The tests prove the reuse rather than
+asserting it, by reading each decoded asset back through the other family's own routes. Songs and
+videos deliberately got **no** handle — they are metadata, and a handle would have added a lifetime
+to something that has none.
+
+**Where it stands:** 536 headers / 8,812 symbols — 8,267 implemented, 15 approved partial, 71
+planned, 459 not applicable. ABI `0.14.0`, 3,990 exported symbols, the same set with `CNA_CNAEXT` on
+and off. 102/102 `CApi` tests in all three arms: `cmake-build-debug` (HEADLESS, `CNA_CNAEXT=OFF`),
 `cmake-build-cnaext` (OPENGLES3/EasyGL, `CNA_CNAEXT=ON`) and `build-probe` (HEADLESS,
-`CNA_CNAEXT=ON`).
+`CNA_CNAEXT=ON`). What remains in Phase B10 is the loader registry and the two compilation front
+ends (`CBIND-111`), the math/graphics/reader tails (`CBIND-103`–`CBIND-105`), and the two closing
+tasks.
 
 ## `SAMPLE-005` official XNA content fidelity (`ReachGraphicsDemo_4_0`, 2026-08-23)
 

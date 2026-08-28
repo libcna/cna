@@ -8,7 +8,7 @@
 
 #include <cstddef>
 
-static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 13, 0));
+static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 14, 0));
 static_assert(sizeof(CNA_Result) == sizeof(uint32_t));
 static_assert(sizeof(CNA_Handle) == sizeof(uint64_t));
 static_assert(sizeof(CNA_GraphicsResourceTag) == sizeof(uint64_t));
@@ -1144,3 +1144,21 @@ static_assert(sizeof(CNA_CnbMorphInfo) == 48U);
 static_assert(sizeof(CNA_CnbMeshInfo) == 24U);
 static_assert(sizeof(CNA_CnbSkeletonInfo) == 24U);
 static_assert(sizeof(CNA_CnbMorphWeightKeyInfo) == 40U);
+
+// CBIND-110: the font, audio, media, curve and animation schemas.
+static_assert(CNA_CNB_AUDIO_FORMAT_MAXIMUM == UINT32_C(5));
+static_assert(CNA_CNB_SPRITE_FONT_CHUNK_HEADER == UINT32_C(0x544E4F46));
+static_assert(CNA_CNB_MAX_SPRITE_FONT_GLYPHS == UINT32_C(65536));
+static_assert(CNA_CNB_SOUND_EFFECT_HEADER_STRIDE == UINT32_C(28));
+static_assert(CNA_CNB_MAX_AUDIO_SAMPLE_RATE == UINT32_C(384000));
+static_assert(CNA_CNB_MEDIA_CHUNK_SONG_HEADER == UINT32_C(0x48474E53));
+static_assert(CNA_CNB_VIDEO_HEADER_STRIDE == UINT32_C(24));
+static_assert(CNA_CNB_CURVE_KEY_STRIDE == UINT32_C(20));
+static_assert(CNA_CNB_ANIMATION_KEY_STRIDE == UINT32_C(48));
+static_assert(sizeof(CNA_CnbSpriteFontInfo) == 32U);
+static_assert(alignof(CNA_CnbSpriteFontInfo) == 8U);
+static_assert(offsetof(CNA_CnbSpriteFontInfo, has_default_character) == 26U);
+static_assert(sizeof(CNA_CnbSoundEffectInfo) == 32U);
+static_assert(offsetof(CNA_CnbSoundEffectInfo, loop_length) == 28U);
+static_assert(sizeof(CNA_CnbVideoInfo) == 32U);
+static_assert(offsetof(CNA_CnbVideoInfo, soundtrack_type) == 24U);

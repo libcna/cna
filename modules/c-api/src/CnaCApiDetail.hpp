@@ -282,6 +282,13 @@ enum class ObjectKind : uint32_t {
     // carries a model plus the two file lists a build system needs alongside it.
     CnbModelData = 173,
     CnbModelFromCnj = 174,
+
+    // CBIND-110: the two schemas whose decoded form owns bulk data -- a font its atlas, a sound its
+    // samples -- plus a standalone clip, whose keyframes cannot be lent back as a borrowed
+    // descriptor. Curve decodes into ObjectKind::Curve, the handle the curve family already owns.
+    CnbSpriteFontData = 175,
+    CnbSoundEffectData = 176,
+    CnbAnimationClip = 177,
     Test = UINT32_MAX
 };
 

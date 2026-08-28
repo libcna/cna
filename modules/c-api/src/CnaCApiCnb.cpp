@@ -11,9 +11,14 @@
 #include "CNA/Content/Cnb/CnbCrc32c.hpp"
 #include "CNA/Content/Cnb/CnbDocument.hpp"
 #include "CNA/Content/Cnb/CnbFormat.hpp"
+#include "CNA/Content/Cnb/CnbAnimationClipCodec.hpp"
+#include "CNA/Content/Cnb/CnbCurveCodec.hpp"
+#include "CNA/Content/Cnb/CnbMediaCodec.hpp"
 #include "CNA/Content/Cnb/CnbModelCodec.hpp"
 #include "CNA/Content/Cnb/CnbModelData.hpp"
 #include "CNA/Content/Cnb/CnbModelFromCnj.hpp"
+#include "CNA/Content/Cnb/CnbSoundEffectCodec.hpp"
+#include "CNA/Content/Cnb/CnbSpriteFontCodec.hpp"
 #include "CNA/Content/Cnb/CnbReadLimits.hpp"
 #include "CNA/Content/Cnb/CnbTextureCodec.hpp"
 #include "CNA/Content/Cnb/CnbTextureFormat.hpp"
@@ -616,6 +621,211 @@ constexpr double MaxTimeSpanSeconds = 922337203685.0;
 [[nodiscard]] bool IsValidTimeSpanSeconds(const double value) noexcept
 {
     return std::isfinite(value) && value >= -MaxTimeSpanSeconds && value <= MaxTimeSpanSeconds;
+}
+
+
+/// CBIND-110: the compiled font. A handle because it owns its atlas as well as its glyph table.
+struct CnbSpriteFontResource final {
+    std::shared_ptr<Cnb::CnbSpriteFontData> value;
+};
+
+/// CBIND-110: the compiled sound. A handle because it owns bulk sample bytes.
+struct CnbSoundEffectResource final {
+    std::shared_ptr<Cnb::CnbSoundEffectData> value;
+};
+
+/// CBIND-110: a decoded standalone clip, whose keyframes it owns.
+struct CnbAnimationClipResource final {
+    std::shared_ptr<Microsoft::Xna::Framework::Graphics::AnimationClipEXT> value;
+};
+
+[[nodiscard]] CNA_Result GetSpriteFont(
+    const CNA_CnbSpriteFontDataHandle handle,
+    std::shared_ptr<CnbSpriteFontResource>* const outFont)
+{
+    const CNA_Result result =
+        GetRuntimeHandles().Get(handle, ObjectKind::CnbSpriteFontData, outFont);
+    if (result != CNA_RESULT_SUCCESS) {
+        return Fail(result, ErrorCategoryForResult(result), "The CNB font handle is invalid.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result GetSoundEffect(
+    const CNA_CnbSoundEffectDataHandle handle,
+    std::shared_ptr<CnbSoundEffectResource>* const outSound)
+{
+    const CNA_Result result =
+        GetRuntimeHandles().Get(handle, ObjectKind::CnbSoundEffectData, outSound);
+    if (result != CNA_RESULT_SUCCESS) {
+        return Fail(result, ErrorCategoryForResult(result), "The CNB sound handle is invalid.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result GetAnimationClip(
+    const CNA_CnbAnimationClipHandle handle,
+    std::shared_ptr<CnbAnimationClipResource>* const outClip)
+{
+    const CNA_Result result =
+        GetRuntimeHandles().Get(handle, ObjectKind::CnbAnimationClip, outClip);
+    if (result != CNA_RESULT_SUCCESS) {
+        return Fail(result, ErrorCategoryForResult(result), "The CNB clip handle is invalid.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result CreateSpriteFont(
+    Cnb::CnbSpriteFontData data,
+    CNA_CnbSpriteFontDataHandle* const outFont)
+{
+    const auto resource = std::make_shared<CnbSpriteFontResource>();
+    resource->value = std::make_shared<Cnb::CnbSpriteFontData>(std::move(data));
+    const CNA_Result result =
+        GetRuntimeHandles().Create(ObjectKind::CnbSpriteFontData, resource, outFont);
+    if (result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result, ErrorCategoryForResult(result), "The CNB font handle could not be created.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result CreateSoundEffect(
+    Cnb::CnbSoundEffectData data,
+    CNA_CnbSoundEffectDataHandle* const outSound)
+{
+    const auto resource = std::make_shared<CnbSoundEffectResource>();
+    resource->value = std::make_shared<Cnb::CnbSoundEffectData>(std::move(data));
+    const CNA_Result result =
+        GetRuntimeHandles().Create(ObjectKind::CnbSoundEffectData, resource, outSound);
+    if (result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result, ErrorCategoryForResult(result), "The CNB sound handle could not be created.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result CreateAnimationClip(
+    Microsoft::Xna::Framework::Graphics::AnimationClipEXT clip,
+    CNA_CnbAnimationClipHandle* const outClip)
+{
+    const auto resource = std::make_shared<CnbAnimationClipResource>();
+    resource->value =
+        std::make_shared<Microsoft::Xna::Framework::Graphics::AnimationClipEXT>(std::move(clip));
+    const CNA_Result result =
+        GetRuntimeHandles().Create(ObjectKind::CnbAnimationClip, resource, outClip);
+    if (result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result, ErrorCategoryForResult(result), "The CNB clip handle could not be created.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+/**
+ * The clip conversion both `add_animation` and `encode_animation_clip` need.
+ *
+ * Kept here rather than duplicated because the two directions of one wire format must agree about
+ * what a representable clip is: a time the encoder would accept and the model builder would not
+ * would be two different formats sharing a keyframe layout.
+ */
+[[nodiscard]] CNA_Result BorrowClip(
+    const CNA_AnimationClipEXTDescriptor* const descriptor,
+    const CNA_ClipTargetSpaceEXT targetSpace,
+    Microsoft::Xna::Framework::Graphics::AnimationClipEXT* const outClip)
+{
+    if (descriptor == nullptr) {
+        return InvalidArgument("The animation clip descriptor is null.");
+    }
+    if (targetSpace > CNA_CLIP_TARGET_SPACE_MAXIMUM_EXT) {
+        return InvalidArgument("The clip target space is not a ClipTargetSpaceEXT value.");
+    }
+    if (!IsValidTimeSpanSeconds(descriptor->duration_seconds)) {
+        return InvalidArgument("The clip duration must fit a finite TimeSpan.");
+    }
+    std::span<const CNA_BoneTrackEXTDescriptor> trackSpan;
+    if (const CNA_Result result =
+            BorrowElements(descriptor->tracks, descriptor->track_count, &trackSpan);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Microsoft::Xna::Framework::Graphics::AnimationClipEXT copied;
+    copied.Duration = System::TimeSpan::FromSeconds(descriptor->duration_seconds);
+    copied.TargetSpace =
+        static_cast<Microsoft::Xna::Framework::Graphics::ClipTargetSpaceEXT>(targetSpace);
+    copied.Tracks.reserve(trackSpan.size());
+    for (const CNA_BoneTrackEXTDescriptor& sourceTrack : trackSpan) {
+        if (sourceTrack.reserved != 0U) {
+            return InvalidArgument("CNA_BoneTrackEXTDescriptor.reserved must be zero.");
+        }
+        std::span<const CNA_KeyframeEXT> keySpan;
+        if (const CNA_Result result =
+                BorrowElements(sourceTrack.keyframes, sourceTrack.keyframe_count, &keySpan);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        Microsoft::Xna::Framework::Graphics::BoneTrackEXT track;
+        track.BoneIndex = sourceTrack.bone_index;
+        track.Keys.reserve(keySpan.size());
+        for (const CNA_KeyframeEXT& sourceKey : keySpan) {
+            if (!IsValidTimeSpanSeconds(sourceKey.time_seconds)) {
+                return InvalidArgument("A keyframe time must fit a finite TimeSpan.");
+            }
+            Microsoft::Xna::Framework::Graphics::KeyframeEXT key;
+            key.Time = System::TimeSpan::FromSeconds(sourceKey.time_seconds);
+            key.Translation = {
+                sourceKey.translation.x, sourceKey.translation.y, sourceKey.translation.z};
+            key.Rotation = {
+                sourceKey.rotation.x, sourceKey.rotation.y, sourceKey.rotation.z,
+                sourceKey.rotation.w};
+            key.Scale = {sourceKey.scale.x, sourceKey.scale.y, sourceKey.scale.z};
+            track.Keys.push_back(key);
+        }
+        copied.Tracks.push_back(std::move(track));
+    }
+    *outClip = std::move(copied);
+    return CNA_RESULT_SUCCESS;
+}
+
+/// Reading one track's keyframes out of a clip, shared by the model and the standalone clip.
+[[nodiscard]] CNA_Result CopyClipKeyframes(
+    const Microsoft::Xna::Framework::Graphics::AnimationClipEXT& clip,
+    const uint64_t track,
+    CNA_KeyframeEXT* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The keyframe output is invalid.");
+    }
+    if (const CNA_Result result =
+            RequireIndex(track, clip.Tracks.size(), "The animation track index is out of range.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto& keys = clip.Tracks[static_cast<std::size_t>(track)].Keys;
+    *outCount = static_cast<uint64_t>(keys.size());
+    if (capacity < static_cast<uint64_t>(keys.size())) {
+        return Fail(
+            CNA_RESULT_BUFFER_TOO_SMALL,
+            CNA_ERROR_CATEGORY_RANGE,
+            "The destination capacity is smaller than the keyframe count.");
+    }
+    for (std::size_t keyIndex = 0U; keyIndex < keys.size(); ++keyIndex) {
+        const auto& key = keys[keyIndex];
+        CNA_KeyframeEXT& out = destination[keyIndex];
+        out.time_seconds = key.Time.getTotalSecondsProperty();
+        out.translation.x = key.Translation.X;
+        out.translation.y = key.Translation.Y;
+        out.translation.z = key.Translation.Z;
+        out.rotation.x = key.Rotation.X;
+        out.rotation.y = key.Rotation.Y;
+        out.rotation.z = key.Rotation.Z;
+        out.rotation.w = key.Rotation.W;
+        out.scale.x = key.Scale.X;
+        out.scale.y = key.Scale.Y;
+        out.scale.z = key.Scale.Z;
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
 } // namespace
@@ -5340,5 +5550,988 @@ CNA_Result cna_cnb_model_from_cnj_copy_external_reference(
         return CopyText(
             compiled->value->externalReferences[static_cast<std::size_t>(index)],
             destination, capacity, outBytes);
+    });
+}
+
+/* --- CBIND-110: the font, audio, media, curve and animation schemas ---------------------------- */
+
+namespace {
+
+/// The version `CNA_SpriteFontGlyph` carries. Not a public macro: the `cna_sprite_font_*` family
+/// does not publish one either, and inventing one here would be a second spelling of the same
+/// number that could drift from the family's own.
+constexpr uint32_t SpriteFontGlyphStructVersion = UINT32_C(1);
+
+/// A glyph row carries what the canonical description keeps as four parallel arrays.
+[[nodiscard]] CNA_Result ReadGlyphRow(
+    const CNA_SpriteFontGlyph& glyph,
+    Cnb::CnbSpriteFontData* const font,
+    const std::size_t index)
+{
+    if (glyph.reserved != 0U) {
+        return InvalidArgument("CNA_SpriteFontGlyph.reserved must be zero.");
+    }
+    font->glyphBounds[index] = Microsoft::Xna::Framework::Rectangle(
+        glyph.glyph_bounds.x, glyph.glyph_bounds.y,
+        glyph.glyph_bounds.width, glyph.glyph_bounds.height);
+    font->cropping[index] = Microsoft::Xna::Framework::Rectangle(
+        glyph.cropping.x, glyph.cropping.y, glyph.cropping.width, glyph.cropping.height);
+    font->kerning[index] =
+        Microsoft::Xna::Framework::Vector3(glyph.kerning.x, glyph.kerning.y, glyph.kerning.z);
+    font->characters[index] = static_cast<SharpRuntime::charcs>(glyph.character);
+    return CNA_RESULT_SUCCESS;
+}
+
+void WriteGlyphRow(
+    const Cnb::CnbSpriteFontData& font,
+    const std::size_t index,
+    CNA_SpriteFontGlyph* const glyph)
+{
+    const Microsoft::Xna::Framework::Rectangle& bounds = font.glyphBounds[index];
+    glyph->glyph_bounds.x = bounds.X;
+    glyph->glyph_bounds.y = bounds.Y;
+    glyph->glyph_bounds.width = bounds.Width;
+    glyph->glyph_bounds.height = bounds.Height;
+    const Microsoft::Xna::Framework::Rectangle& crop = font.cropping[index];
+    glyph->cropping.x = crop.X;
+    glyph->cropping.y = crop.Y;
+    glyph->cropping.width = crop.Width;
+    glyph->cropping.height = crop.Height;
+    glyph->kerning.x = font.kerning[index].X;
+    glyph->kerning.y = font.kerning[index].Y;
+    glyph->kerning.z = font.kerning[index].Z;
+    glyph->character = static_cast<CNA_Char16>(font.characters[index]);
+    glyph->reserved = 0U;
+}
+
+/// The four arrays are parallel and stay that way; growing one grows all four.
+void ResizeGlyphArrays(Cnb::CnbSpriteFontData* const font, const std::size_t count)
+{
+    font->glyphBounds.resize(count);
+    font->cropping.resize(count);
+    font->kerning.resize(count);
+    font->characters.resize(count);
+}
+
+} // namespace
+
+CNA_Result cna_cnb_sprite_font_data_create(CNA_CnbSpriteFontDataHandle* const outFont)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outFont == nullptr) {
+            return InvalidArgument("The CNB font output handle is null.");
+        }
+        *outFont = CNA_INVALID_HANDLE;
+        return CreateSpriteFont(Cnb::CnbSpriteFontData{}, outFont);
+    });
+}
+
+CNA_Result cna_cnb_sprite_font_data_destroy(const CNA_CnbSpriteFontDataHandle fontHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbSpriteFontResource> font;
+        if (const CNA_Result result = GetSpriteFont(fontHandle, &font);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result result = GetRuntimeHandles().Release(fontHandle);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The CNB font handle could not be destroyed.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_sprite_font_data_get_info(
+    const CNA_CnbSpriteFontDataHandle fontHandle,
+    CNA_CnbSpriteFontInfo* const outInfo)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbSpriteFontResource> font;
+        if (const CNA_Result result = GetSpriteFont(fontHandle, &font);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = RequireStruct(
+                outInfo, CNA_CNB_SPRITE_FONT_INFO_STRUCT_VERSION,
+                "The font-info structure is not a known size and version.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const Cnb::CnbSpriteFontData& data = *font->value;
+        outInfo->glyph_count = static_cast<uint64_t>(data.characters.size());
+        outInfo->line_spacing = data.lineSpacing;
+        outInfo->spacing = data.spacing;
+        outInfo->default_character = data.defaultCharacter.has_value()
+            ? static_cast<CNA_Char16>(data.defaultCharacter.value())
+            : static_cast<CNA_Char16>(0);
+        outInfo->has_default_character = data.defaultCharacter.has_value() ? CNA_TRUE : CNA_FALSE;
+        std::memset(outInfo->reserved, 0, sizeof(outInfo->reserved));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_sprite_font_data_set_info(
+    const CNA_CnbSpriteFontDataHandle fontHandle,
+    const CNA_CnbSpriteFontInfo* const info)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (info == nullptr) {
+            return InvalidArgument("The font-info structure is null.");
+        }
+        if (const CNA_Result result =
+                ValidateCanonicalBool(info->has_default_character, "has_default_character");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<CnbSpriteFontResource> font;
+        if (const CNA_Result result = GetSpriteFont(fontHandle, &font);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = RequireStruct(
+                info, CNA_CNB_SPRITE_FONT_INFO_STRUCT_VERSION,
+                "The font-info structure is not a known size and version.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        Cnb::CnbSpriteFontData& data = *font->value;
+        data.lineSpacing = info->line_spacing;
+        data.spacing = info->spacing;
+        if (info->has_default_character != CNA_FALSE) {
+            data.defaultCharacter = static_cast<SharpRuntime::charcs>(info->default_character);
+        } else {
+            data.defaultCharacter.reset();
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_sprite_font_data_add_glyph(
+    const CNA_CnbSpriteFontDataHandle fontHandle,
+    const CNA_SpriteFontGlyph* const glyph,
+    uint64_t* const outIndex)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbSpriteFontResource> font;
+        if (const CNA_Result result = GetSpriteFont(fontHandle, &font);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = RequireStruct(
+                glyph, SpriteFontGlyphStructVersion,
+                "The glyph structure is not a known size and version.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        Cnb::CnbSpriteFontData& data = *font->value;
+        const std::size_t index = data.characters.size();
+        ResizeGlyphArrays(&data, index + 1U);
+        if (const CNA_Result result = ReadGlyphRow(*glyph, &data, index);
+            result != CNA_RESULT_SUCCESS) {
+            ResizeGlyphArrays(&data, index);
+            return result;
+        }
+        if (outIndex != nullptr) {
+            *outIndex = static_cast<uint64_t>(index);
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_sprite_font_data_get_glyph(
+    const CNA_CnbSpriteFontDataHandle fontHandle,
+    const uint64_t index,
+    CNA_SpriteFontGlyph* const outGlyph)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbSpriteFontResource> font;
+        if (const CNA_Result result = GetSpriteFont(fontHandle, &font);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = RequireStruct(
+                outGlyph, SpriteFontGlyphStructVersion,
+                "The glyph structure is not a known size and version.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = RequireIndex(
+                index, font->value->characters.size(), "The glyph index is out of range.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        WriteGlyphRow(*font->value, static_cast<std::size_t>(index), outGlyph);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_sprite_font_data_set_glyph(
+    const CNA_CnbSpriteFontDataHandle fontHandle,
+    const uint64_t index,
+    const CNA_SpriteFontGlyph* const glyph)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbSpriteFontResource> font;
+        if (const CNA_Result result = GetSpriteFont(fontHandle, &font);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = RequireStruct(
+                glyph, SpriteFontGlyphStructVersion,
+                "The glyph structure is not a known size and version.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = RequireIndex(
+                index, font->value->characters.size(), "The glyph index is out of range.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return ReadGlyphRow(*glyph, font->value.get(), static_cast<std::size_t>(index));
+    });
+}
+
+CNA_Result cna_cnb_sprite_font_data_set_atlas(
+    const CNA_CnbSpriteFontDataHandle fontHandle,
+    const CNA_CnbTextureDataHandle atlasHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbSpriteFontResource> font;
+        if (const CNA_Result result = GetSpriteFont(fontHandle, &font);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<CnbTextureDataResource> atlas;
+        if (const CNA_Result result = GetTextureData(atlasHandle, &atlas);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        font->value->atlas = *atlas->value;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_sprite_font_data_copy_atlas(
+    const CNA_CnbSpriteFontDataHandle fontHandle,
+    CNA_CnbTextureDataHandle* const outAtlas)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbSpriteFontResource> font;
+        if (const CNA_Result result = GetSpriteFont(fontHandle, &font);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (outAtlas == nullptr) {
+            return InvalidArgument("The atlas output handle is null.");
+        }
+        *outAtlas = CNA_INVALID_HANDLE;
+        return CreateTextureData(font->value->atlas, outAtlas);
+    });
+}
+
+CNA_Result cna_cnb_encode_sprite_font(
+    const CNA_CnbSpriteFontDataHandle fontHandle,
+    const CNA_StringView contentName,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbSpriteFontResource> font;
+        if (const CNA_Result result = GetSpriteFont(fontHandle, &font);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
+            return InvalidArgument("The encoded font output is invalid.");
+        }
+        std::string nameText;
+        if (const CNA_Result result = BorrowText(contentName, &nameText);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const std::vector<uint8_t> encoded = Cnb::EncodeSpriteFontToCnb(*font->value, nameText);
+        return CopyBytes(encoded, destination, capacity, outBytes);
+    });
+}
+
+CNA_Result cna_cnb_decode_sprite_font(
+    const CNA_CnbDocumentHandle documentHandle,
+    CNA_CnbSpriteFontDataHandle* const outFont)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbDocumentResource> document;
+        if (const CNA_Result result = GetDocument(documentHandle, &document);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (outFont == nullptr) {
+            return InvalidArgument("The CNB font output handle is null.");
+        }
+        *outFont = CNA_INVALID_HANDLE;
+        return CreateSpriteFont(Cnb::DecodeSpriteFontFromCnb(*document->value), outFont);
+    });
+}
+
+CNA_Result cna_cnb_audio_frame_bytes(
+    const CNA_CnbAudioFormat format,
+    const uint32_t channels,
+    uint32_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return InvalidArgument("The frame-size output is null.");
+        }
+        *outBytes = Cnb::CnbAudioFrameBytes(static_cast<Cnb::CnbAudioFormat>(format), channels);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_get_audio_format_name_size(
+    const CNA_CnbAudioFormat format,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ReportSize(
+            Cnb::CnbAudioFormatToString(static_cast<Cnb::CnbAudioFormat>(format)), outBytes);
+    });
+}
+
+CNA_Result cna_cnb_copy_audio_format_name(
+    const CNA_CnbAudioFormat format,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CopyText(
+            Cnb::CnbAudioFormatToString(static_cast<Cnb::CnbAudioFormat>(format)),
+            destination, capacity, outBytes);
+    });
+}
+
+CNA_Result cna_cnb_sound_effect_data_create(
+    const CNA_CnbSoundEffectInfo* const info,
+    const uint8_t* const samples,
+    const uint64_t byteCount,
+    CNA_CnbSoundEffectDataHandle* const outSound)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outSound == nullptr) {
+            return InvalidArgument("The CNB sound output handle is null.");
+        }
+        *outSound = CNA_INVALID_HANDLE;
+        if (const CNA_Result result = RequireStruct(
+                info, CNA_CNB_SOUND_EFFECT_INFO_STRUCT_VERSION,
+                "The sound-info structure is not a known size and version.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::span<const uint8_t> source;
+        if (const CNA_Result result = BorrowBytes(samples, byteCount, &source);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        Cnb::CnbSoundEffectData data;
+        data.format = static_cast<Cnb::CnbAudioFormat>(info->format);
+        data.sampleRate = info->sample_rate;
+        data.channels = info->channels;
+        data.frameCount = info->frame_count;
+        data.loopStart = info->loop_start;
+        data.loopLength = info->loop_length;
+        data.samples.assign(source.begin(), source.end());
+        return CreateSoundEffect(std::move(data), outSound);
+    });
+}
+
+CNA_Result cna_cnb_sound_effect_data_destroy(const CNA_CnbSoundEffectDataHandle soundHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbSoundEffectResource> sound;
+        if (const CNA_Result result = GetSoundEffect(soundHandle, &sound);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result result = GetRuntimeHandles().Release(soundHandle);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The CNB sound handle could not be destroyed.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_sound_effect_data_get_info(
+    const CNA_CnbSoundEffectDataHandle soundHandle,
+    CNA_CnbSoundEffectInfo* const outInfo)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbSoundEffectResource> sound;
+        if (const CNA_Result result = GetSoundEffect(soundHandle, &sound);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = RequireStruct(
+                outInfo, CNA_CNB_SOUND_EFFECT_INFO_STRUCT_VERSION,
+                "The sound-info structure is not a known size and version.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const Cnb::CnbSoundEffectData& data = *sound->value;
+        outInfo->format = static_cast<CNA_CnbAudioFormat>(data.format);
+        outInfo->sample_rate = data.sampleRate;
+        outInfo->channels = data.channels;
+        outInfo->frame_count = data.frameCount;
+        outInfo->loop_start = data.loopStart;
+        outInfo->loop_length = data.loopLength;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_sound_effect_data_copy_samples(
+    const CNA_CnbSoundEffectDataHandle soundHandle,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbSoundEffectResource> sound;
+        if (const CNA_Result result = GetSoundEffect(soundHandle, &sound);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
+            return InvalidArgument("The sample output is invalid.");
+        }
+        return CopyBytes(sound->value->samples, destination, capacity, outBytes);
+    });
+}
+
+CNA_Result cna_cnb_encode_sound_effect(
+    const CNA_CnbSoundEffectDataHandle soundHandle,
+    const CNA_StringView contentName,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbSoundEffectResource> sound;
+        if (const CNA_Result result = GetSoundEffect(soundHandle, &sound);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
+            return InvalidArgument("The encoded sound output is invalid.");
+        }
+        std::string nameText;
+        if (const CNA_Result result = BorrowText(contentName, &nameText);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const std::vector<uint8_t> encoded = Cnb::EncodeSoundEffectToCnb(*sound->value, nameText);
+        return CopyBytes(encoded, destination, capacity, outBytes);
+    });
+}
+
+CNA_Result cna_cnb_decode_sound_effect(
+    const CNA_CnbDocumentHandle documentHandle,
+    CNA_CnbSoundEffectDataHandle* const outSound)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbDocumentResource> document;
+        if (const CNA_Result result = GetDocument(documentHandle, &document);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (outSound == nullptr) {
+            return InvalidArgument("The CNB sound output handle is null.");
+        }
+        *outSound = CNA_INVALID_HANDLE;
+        return CreateSoundEffect(Cnb::DecodeSoundEffectFromCnb(*document->value), outSound);
+    });
+}
+
+CNA_Result cna_cnb_encode_song(
+    const CNA_StringView streamReference,
+    const CNA_StringView name,
+    const uint32_t durationMilliseconds,
+    const CNA_StringView contentName,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
+            return InvalidArgument("The encoded song output is invalid.");
+        }
+        Cnb::CnbSongData data;
+        if (const CNA_Result result = BorrowText(streamReference, &data.streamReference);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = BorrowText(name, &data.name);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        data.durationMs = durationMilliseconds;
+        std::string contentText;
+        if (const CNA_Result result = BorrowText(contentName, &contentText);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const std::vector<uint8_t> encoded = Cnb::EncodeSongToCnb(data, contentText);
+        return CopyBytes(encoded, destination, capacity, outBytes);
+    });
+}
+
+CNA_Result cna_cnb_decode_song_duration_milliseconds(
+    const CNA_CnbDocumentHandle documentHandle,
+    uint32_t* const outDuration)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbDocumentResource> document;
+        if (const CNA_Result result = GetDocument(documentHandle, &document);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (outDuration == nullptr) {
+            return InvalidArgument("The duration output is null.");
+        }
+        *outDuration = Cnb::DecodeSongFromCnb(*document->value).durationMs;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_decode_song_stream_reference_size(
+    const CNA_CnbDocumentHandle documentHandle,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbDocumentResource> document;
+        if (const CNA_Result result = GetDocument(documentHandle, &document);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return ReportSize(Cnb::DecodeSongFromCnb(*document->value).streamReference, outBytes);
+    });
+}
+
+CNA_Result cna_cnb_decode_song_stream_reference(
+    const CNA_CnbDocumentHandle documentHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbDocumentResource> document;
+        if (const CNA_Result result = GetDocument(documentHandle, &document);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyText(
+            Cnb::DecodeSongFromCnb(*document->value).streamReference,
+            destination, capacity, outBytes);
+    });
+}
+
+CNA_Result cna_cnb_decode_song_name_size(
+    const CNA_CnbDocumentHandle documentHandle,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbDocumentResource> document;
+        if (const CNA_Result result = GetDocument(documentHandle, &document);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return ReportSize(Cnb::DecodeSongFromCnb(*document->value).name, outBytes);
+    });
+}
+
+CNA_Result cna_cnb_decode_song_name(
+    const CNA_CnbDocumentHandle documentHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbDocumentResource> document;
+        if (const CNA_Result result = GetDocument(documentHandle, &document);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyText(
+            Cnb::DecodeSongFromCnb(*document->value).name, destination, capacity, outBytes);
+    });
+}
+
+CNA_Result cna_cnb_encode_video(
+    const CNA_StringView streamReference,
+    const CNA_CnbVideoInfo* const info,
+    const CNA_StringView contentName,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
+            return InvalidArgument("The encoded video output is invalid.");
+        }
+        if (const CNA_Result result = RequireStruct(
+                info, CNA_CNB_VIDEO_INFO_STRUCT_VERSION,
+                "The video-info structure is not a known size and version.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        Cnb::CnbVideoData data;
+        if (const CNA_Result result = BorrowText(streamReference, &data.streamReference);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        data.durationMs = info->duration_milliseconds;
+        data.width = info->width;
+        data.height = info->height;
+        data.framesPerSecond = info->frames_per_second;
+        data.soundtrackType = info->soundtrack_type;
+        std::string contentText;
+        if (const CNA_Result result = BorrowText(contentName, &contentText);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const std::vector<uint8_t> encoded = Cnb::EncodeVideoToCnb(data, contentText);
+        return CopyBytes(encoded, destination, capacity, outBytes);
+    });
+}
+
+CNA_Result cna_cnb_decode_video(
+    const CNA_CnbDocumentHandle documentHandle,
+    CNA_CnbVideoInfo* const outInfo)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbDocumentResource> document;
+        if (const CNA_Result result = GetDocument(documentHandle, &document);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = RequireStruct(
+                outInfo, CNA_CNB_VIDEO_INFO_STRUCT_VERSION,
+                "The video-info structure is not a known size and version.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const Cnb::CnbVideoData data = Cnb::DecodeVideoFromCnb(*document->value);
+        outInfo->duration_milliseconds = data.durationMs;
+        outInfo->width = data.width;
+        outInfo->height = data.height;
+        outInfo->frames_per_second = data.framesPerSecond;
+        outInfo->soundtrack_type = static_cast<CNA_VideoSoundtrackType>(data.soundtrackType);
+        outInfo->reserved = 0U;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_decode_video_stream_reference_size(
+    const CNA_CnbDocumentHandle documentHandle,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbDocumentResource> document;
+        if (const CNA_Result result = GetDocument(documentHandle, &document);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return ReportSize(Cnb::DecodeVideoFromCnb(*document->value).streamReference, outBytes);
+    });
+}
+
+CNA_Result cna_cnb_decode_video_stream_reference(
+    const CNA_CnbDocumentHandle documentHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbDocumentResource> document;
+        if (const CNA_Result result = GetDocument(documentHandle, &document);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyText(
+            Cnb::DecodeVideoFromCnb(*document->value).streamReference,
+            destination, capacity, outBytes);
+    });
+}
+
+CNA_Result cna_cnb_encode_curve(
+    const CNA_CurveHandle curveHandle,
+    const CNA_StringView contentName,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<Microsoft::Xna::Framework::Curve> curve;
+        if (const CNA_Result result =
+                GetRuntimeHandles().Get(curveHandle, ObjectKind::Curve, &curve);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(result, ErrorCategoryForResult(result), "The Curve handle is invalid.");
+        }
+        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
+            return InvalidArgument("The encoded curve output is invalid.");
+        }
+        std::string nameText;
+        if (const CNA_Result result = BorrowText(contentName, &nameText);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const std::vector<uint8_t> encoded = Cnb::EncodeCurveToCnb(*curve, nameText);
+        return CopyBytes(encoded, destination, capacity, outBytes);
+    });
+}
+
+CNA_Result cna_cnb_decode_curve(
+    const CNA_CnbDocumentHandle documentHandle,
+    CNA_CurveHandle* const outCurve)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbDocumentResource> document;
+        if (const CNA_Result result = GetDocument(documentHandle, &document);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (outCurve == nullptr) {
+            return InvalidArgument("The Curve output handle is null.");
+        }
+        *outCurve = CNA_INVALID_HANDLE;
+        const auto decoded = std::make_shared<Microsoft::Xna::Framework::Curve>(
+            Cnb::DecodeCurveFromCnb(*document->value));
+        const CNA_Result result =
+            GetRuntimeHandles().Create(ObjectKind::Curve, decoded, outCurve);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The Curve handle could not be created.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_encode_animation_clip(
+    const CNA_AnimationClipEXTDescriptor* const descriptor,
+    const CNA_ClipTargetSpaceEXT targetSpace,
+    const CNA_StringView contentName,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
+            return InvalidArgument("The encoded clip output is invalid.");
+        }
+        Microsoft::Xna::Framework::Graphics::AnimationClipEXT clip;
+        if (const CNA_Result result = BorrowClip(descriptor, targetSpace, &clip);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string nameText;
+        if (const CNA_Result result = BorrowText(contentName, &nameText);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const std::vector<uint8_t> encoded = Cnb::EncodeAnimationClipToCnb(clip, nameText);
+        return CopyBytes(encoded, destination, capacity, outBytes);
+    });
+}
+
+CNA_Result cna_cnb_decode_animation_clip(
+    const CNA_CnbDocumentHandle documentHandle,
+    CNA_CnbAnimationClipHandle* const outClip)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbDocumentResource> document;
+        if (const CNA_Result result = GetDocument(documentHandle, &document);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (outClip == nullptr) {
+            return InvalidArgument("The CNB clip output handle is null.");
+        }
+        *outClip = CNA_INVALID_HANDLE;
+        return CreateAnimationClip(Cnb::DecodeAnimationClipFromCnb(*document->value), outClip);
+    });
+}
+
+CNA_Result cna_cnb_animation_clip_destroy(const CNA_CnbAnimationClipHandle clipHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbAnimationClipResource> clip;
+        if (const CNA_Result result = GetAnimationClip(clipHandle, &clip);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result result = GetRuntimeHandles().Release(clipHandle);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The CNB clip handle could not be destroyed.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_animation_clip_get(
+    const CNA_CnbAnimationClipHandle clipHandle,
+    double* const outDurationSeconds,
+    uint64_t* const outTrackCount,
+    CNA_ClipTargetSpaceEXT* const outTargetSpace)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbAnimationClipResource> clip;
+        if (const CNA_Result result = GetAnimationClip(clipHandle, &clip);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (outDurationSeconds != nullptr) {
+            *outDurationSeconds = clip->value->Duration.getTotalSecondsProperty();
+        }
+        if (outTrackCount != nullptr) {
+            *outTrackCount = static_cast<uint64_t>(clip->value->Tracks.size());
+        }
+        if (outTargetSpace != nullptr) {
+            *outTargetSpace = static_cast<CNA_ClipTargetSpaceEXT>(clip->value->TargetSpace);
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_animation_clip_get_track(
+    const CNA_CnbAnimationClipHandle clipHandle,
+    const uint64_t track,
+    int32_t* const outBoneIndex,
+    uint64_t* const outKeyframeCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbAnimationClipResource> clip;
+        if (const CNA_Result result = GetAnimationClip(clipHandle, &clip);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = RequireIndex(
+                track, clip->value->Tracks.size(), "The animation track index is out of range.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto& stored = clip->value->Tracks[static_cast<std::size_t>(track)];
+        if (outBoneIndex != nullptr) {
+            *outBoneIndex = stored.BoneIndex;
+        }
+        if (outKeyframeCount != nullptr) {
+            *outKeyframeCount = static_cast<uint64_t>(stored.Keys.size());
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_animation_clip_copy_keyframes(
+    const CNA_CnbAnimationClipHandle clipHandle,
+    const uint64_t track,
+    CNA_KeyframeEXT* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbAnimationClipResource> clip;
+        if (const CNA_Result result = GetAnimationClip(clipHandle, &clip);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyClipKeyframes(*clip->value, track, destination, capacity, outCount);
+    });
+}
+
+CNA_Result cna_cnb_reader_read_seconds(
+    const CNA_CnbReaderHandle readerHandle,
+    const CNA_StringView what,
+    double* const outSeconds)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbReaderResource> reader;
+        if (const CNA_Result result = GetReader(readerHandle, &reader);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (outSeconds == nullptr) {
+            return InvalidArgument("The seconds output is null.");
+        }
+        std::string whatText;
+        if (const CNA_Result result = BorrowText(what, &whatText);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outSeconds = Cnb::ReadCnbSeconds(*reader->value, whatText.c_str());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_reader_read_keyframe(
+    const CNA_CnbReaderHandle readerHandle,
+    CNA_KeyframeEXT* const outKeyframe)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbReaderResource> reader;
+        if (const CNA_Result result = GetReader(readerHandle, &reader);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (outKeyframe == nullptr) {
+            return InvalidArgument("The keyframe output is null.");
+        }
+        const Microsoft::Xna::Framework::Graphics::KeyframeEXT key =
+            Cnb::ReadCnbKeyframe(*reader->value);
+        outKeyframe->time_seconds = key.Time.getTotalSecondsProperty();
+        outKeyframe->translation.x = key.Translation.X;
+        outKeyframe->translation.y = key.Translation.Y;
+        outKeyframe->translation.z = key.Translation.Z;
+        outKeyframe->rotation.x = key.Rotation.X;
+        outKeyframe->rotation.y = key.Rotation.Y;
+        outKeyframe->rotation.z = key.Rotation.Z;
+        outKeyframe->rotation.w = key.Rotation.W;
+        outKeyframe->scale.x = key.Scale.X;
+        outKeyframe->scale.y = key.Scale.Y;
+        outKeyframe->scale.z = key.Scale.Z;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_byte_writer_write_keyframe(
+    const CNA_CnbByteWriterHandle writerHandle,
+    const CNA_KeyframeEXT* const keyframe)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbByteWriterResource> writer;
+        if (const CNA_Result result = GetByteWriter(writerHandle, &writer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (keyframe == nullptr) {
+            return InvalidArgument("The keyframe is null.");
+        }
+        if (!IsValidTimeSpanSeconds(keyframe->time_seconds)) {
+            return InvalidArgument("A keyframe time must fit a finite TimeSpan.");
+        }
+        Microsoft::Xna::Framework::Graphics::KeyframeEXT key;
+        key.Time = System::TimeSpan::FromSeconds(keyframe->time_seconds);
+        key.Translation = {
+            keyframe->translation.x, keyframe->translation.y, keyframe->translation.z};
+        key.Rotation = {
+            keyframe->rotation.x, keyframe->rotation.y, keyframe->rotation.z,
+            keyframe->rotation.w};
+        key.Scale = {keyframe->scale.x, keyframe->scale.y, keyframe->scale.z};
+        Cnb::WriteCnbKeyframe(*writer->value, key);
+        return CNA_RESULT_SUCCESS;
     });
 }

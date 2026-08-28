@@ -1,10 +1,10 @@
 {
  "abi_version": {
-  "encoded": 3328,
+  "encoded": 3584,
   "major": 0,
-  "minor": 13,
+  "minor": 14,
   "patch": 0,
-  "runtime": 3328
+  "runtime": 3584
  },
  "colors": {
   "CNA_COLOR_ALICE_BLUE": [
@@ -1403,7 +1403,12 @@
   "cna_clustered_shadow_policy_select",
   "cna_clustered_shadow_policy_set_budget",
   "cna_clustered_shadow_policy_set_hysteresis",
+  "cna_cnb_animation_clip_copy_keyframes",
+  "cna_cnb_animation_clip_destroy",
+  "cna_cnb_animation_clip_get",
+  "cna_cnb_animation_clip_get_track",
   "cna_cnb_asset_type_id_from_name",
+  "cna_cnb_audio_frame_bytes",
   "cna_cnb_build_model_from_cnj",
   "cna_cnb_byte_writer_copy_bytes",
   "cna_cnb_byte_writer_create",
@@ -1415,6 +1420,7 @@
   "cna_cnb_byte_writer_write_f32",
   "cna_cnb_byte_writer_write_f64",
   "cna_cnb_byte_writer_write_i32",
+  "cna_cnb_byte_writer_write_keyframe",
   "cna_cnb_byte_writer_write_string",
   "cna_cnb_byte_writer_write_u16",
   "cna_cnb_byte_writer_write_u32",
@@ -1425,6 +1431,7 @@
   "cna_cnb_checked_multiply",
   "cna_cnb_chunk_entry_is_mandatory",
   "cna_cnb_copy_asset_type_name",
+  "cna_cnb_copy_audio_format_name",
   "cna_cnb_copy_chunk_id_string",
   "cna_cnb_copy_compressed",
   "cna_cnb_copy_compression_name",
@@ -1436,10 +1443,22 @@
   "cna_cnb_crc32c_continue",
   "cna_cnb_crc32c_portable",
   "cna_cnb_crc32c_uses_hardware",
+  "cna_cnb_decode_animation_clip",
+  "cna_cnb_decode_curve",
   "cna_cnb_decode_model",
+  "cna_cnb_decode_song_duration_milliseconds",
+  "cna_cnb_decode_song_name",
+  "cna_cnb_decode_song_name_size",
+  "cna_cnb_decode_song_stream_reference",
+  "cna_cnb_decode_song_stream_reference_size",
+  "cna_cnb_decode_sound_effect",
+  "cna_cnb_decode_sprite_font",
   "cna_cnb_decode_texture2d",
   "cna_cnb_decode_texture3d",
   "cna_cnb_decode_texture_cube",
+  "cna_cnb_decode_video",
+  "cna_cnb_decode_video_stream_reference",
+  "cna_cnb_decode_video_stream_reference_size",
   "cna_cnb_document_copy_chunk_data",
   "cna_cnb_document_copy_external_reference_name",
   "cna_cnb_document_copy_metadata_asset_type_name",
@@ -1469,11 +1488,18 @@
   "cna_cnb_document_require_asset",
   "cna_cnb_document_require_mandatory_chunks_understood",
   "cna_cnb_document_require_single",
+  "cna_cnb_encode_animation_clip",
+  "cna_cnb_encode_curve",
   "cna_cnb_encode_model",
+  "cna_cnb_encode_song",
+  "cna_cnb_encode_sound_effect",
+  "cna_cnb_encode_sprite_font",
   "cna_cnb_encode_texture2d",
   "cna_cnb_encode_texture3d",
   "cna_cnb_encode_texture_cube",
+  "cna_cnb_encode_video",
   "cna_cnb_get_asset_type_name_size",
+  "cna_cnb_get_audio_format_name_size",
   "cna_cnb_get_chunk_id_string_size",
   "cna_cnb_get_compressed_byte_count",
   "cna_cnb_get_compression_name_size",
@@ -1572,6 +1598,8 @@
   "cna_cnb_reader_read_f32",
   "cna_cnb_reader_read_f64",
   "cna_cnb_reader_read_i32",
+  "cna_cnb_reader_read_keyframe",
+  "cna_cnb_reader_read_seconds",
   "cna_cnb_reader_read_string",
   "cna_cnb_reader_read_u16",
   "cna_cnb_reader_read_u32",
@@ -1579,6 +1607,19 @@
   "cna_cnb_reader_read_u8",
   "cna_cnb_reader_require_exhausted",
   "cna_cnb_reader_skip",
+  "cna_cnb_sound_effect_data_copy_samples",
+  "cna_cnb_sound_effect_data_create",
+  "cna_cnb_sound_effect_data_destroy",
+  "cna_cnb_sound_effect_data_get_info",
+  "cna_cnb_sprite_font_data_add_glyph",
+  "cna_cnb_sprite_font_data_copy_atlas",
+  "cna_cnb_sprite_font_data_create",
+  "cna_cnb_sprite_font_data_destroy",
+  "cna_cnb_sprite_font_data_get_glyph",
+  "cna_cnb_sprite_font_data_get_info",
+  "cna_cnb_sprite_font_data_set_atlas",
+  "cna_cnb_sprite_font_data_set_glyph",
+  "cna_cnb_sprite_font_data_set_info",
   "cna_cnb_texture_data_add_representation",
   "cna_cnb_texture_data_copy_level",
   "cna_cnb_texture_data_create",
@@ -4806,9 +4847,9 @@
   "cna_write_leaderboards_event_info_init"
  ],
  "integers": {
-  "CNA_ABI_VERSION": 3328,
+  "CNA_ABI_VERSION": 3584,
   "CNA_ABI_VERSION_MAJOR": 0,
-  "CNA_ABI_VERSION_MINOR": 13,
+  "CNA_ABI_VERSION_MINOR": 14,
   "CNA_ABI_VERSION_PATCH": 0,
   "CNA_ALPHA_MODE_BLEND_EXT": 2,
   "CNA_ALPHA_MODE_MASK_EXT": 1,
@@ -5018,6 +5059,12 @@
   "CNA_CLUSTER_GRID_DEFAULT_TILES_Y_EXT": 8,
   "CNA_CLUSTER_GRID_MAX_SLICE_COUNT_EXT": 256,
   "CNA_CLUSTER_GRID_MAX_TILES_PER_AXIS_EXT": 128,
+  "CNA_CNB_ANIMATION_CLIP_CHUNK_HEADER": 1212957505,
+  "CNA_CNB_ANIMATION_CLIP_CHUNK_KEYS": 1263289153,
+  "CNA_CNB_ANIMATION_CLIP_CHUNK_TRACKS": 1414284097,
+  "CNA_CNB_ANIMATION_CLIP_SCHEMA_VERSION": 1,
+  "CNA_CNB_ANIMATION_KEY_STRIDE": 48,
+  "CNA_CNB_ANIMATION_TRACK_STRIDE": 12,
   "CNA_CNB_ASSET_TYPE_ANIMATION_CLIP": 6,
   "CNA_CNB_ASSET_TYPE_CURVE": 7,
   "CNA_CNB_ASSET_TYPE_CUSTOM_RANGE_FIRST": 2147483648,
@@ -5032,6 +5079,13 @@
   "CNA_CNB_ASSET_TYPE_TEXTURE3D": 2,
   "CNA_CNB_ASSET_TYPE_TEXTURE_CUBE": 3,
   "CNA_CNB_ASSET_TYPE_VIDEO": 10,
+  "CNA_CNB_AUDIO_FORMAT_ADPCM": 4,
+  "CNA_CNB_AUDIO_FORMAT_MAXIMUM": 5,
+  "CNA_CNB_AUDIO_FORMAT_PCM16": 1,
+  "CNA_CNB_AUDIO_FORMAT_PCM8": 2,
+  "CNA_CNB_AUDIO_FORMAT_PCM_FLOAT32": 3,
+  "CNA_CNB_AUDIO_FORMAT_UNKNOWN": 0,
+  "CNA_CNB_AUDIO_FORMAT_VORBIS": 5,
   "CNA_CNB_CHUNK_ENTRY_STRUCT_VERSION": 1,
   "CNA_CNB_CHUNK_FLAG_ALL": 1,
   "CNA_CNB_CHUNK_FLAG_MANDATORY": 1,
@@ -5044,6 +5098,10 @@
   "CNA_CNB_CONTAINER_CHUNK_EXTERNAL_REFERENCES": 1178948184,
   "CNA_CNB_CONTAINER_CHUNK_METADATA": 1413827907,
   "CNA_CNB_CRC32C_SEED": 0,
+  "CNA_CNB_CURVE_CHUNK_HEADER": 1213616707,
+  "CNA_CNB_CURVE_CHUNK_KEYS": 1263948355,
+  "CNA_CNB_CURVE_KEY_STRIDE": 20,
+  "CNA_CNB_CURVE_SCHEMA_VERSION": 1,
   "CNA_CNB_EFFECT_KIND_BASIC": 0,
   "CNA_CNB_EFFECT_KIND_DUAL_TEXTURE": 2,
   "CNA_CNB_EFFECT_KIND_EXTERNAL": 5,
@@ -5071,8 +5129,14 @@
   "CNA_CNB_MATERIAL_TEXTURE_SECOND": 1,
   "CNA_CNB_MATERIAL_TEXTURE_SPECULAR": 6,
   "CNA_CNB_MATERIAL_TEXTURE_SPECULAR_COLOR": 7,
+  "CNA_CNB_MAX_AUDIO_SAMPLE_RATE": 384000,
+  "CNA_CNB_MAX_SPRITE_FONT_GLYPHS": 65536,
   "CNA_CNB_MAX_TEXTURE_MIP_LEVELS": 16,
   "CNA_CNB_MAX_TEXTURE_REPRESENTATIONS": 8,
+  "CNA_CNB_MAX_VIDEO_DIMENSION": 65536,
+  "CNA_CNB_MEDIA_CHUNK_SONG_HEADER": 1212632659,
+  "CNA_CNB_MEDIA_CHUNK_VIDEO_HEADER": 1212434774,
+  "CNA_CNB_MEDIA_SCHEMA_VERSION": 1,
   "CNA_CNB_MESH_INFO_STRUCT_VERSION": 1,
   "CNA_CNB_METADATA_STRUCT_VERSION": 1,
   "CNA_CNB_MODEL_BONE_STRIDE": 72,
@@ -5111,6 +5175,23 @@
   "CNA_CNB_SKELETON_MATRIX_INVERSE_BIND_POSE": 1,
   "CNA_CNB_SKELETON_MATRIX_MAXIMUM": 2,
   "CNA_CNB_SKELETON_MATRIX_ROOT_PREFIX": 2,
+  "CNA_CNB_SONG_HEADER_FIXED_STRIDE": 8,
+  "CNA_CNB_SOUND_EFFECT_CHUNK_DATA": 1145328961,
+  "CNA_CNB_SOUND_EFFECT_CHUNK_HEADER": 1212437825,
+  "CNA_CNB_SOUND_EFFECT_HEADER_STRIDE": 28,
+  "CNA_CNB_SOUND_EFFECT_INFO_STRUCT_VERSION": 1,
+  "CNA_CNB_SOUND_EFFECT_SCHEMA_VERSION": 1,
+  "CNA_CNB_SPRITE_FONT_CHARACTER_STRIDE": 4,
+  "CNA_CNB_SPRITE_FONT_CHUNK_CHARACTERS": 1380010051,
+  "CNA_CNB_SPRITE_FONT_CHUNK_CROPPING": 1347375683,
+  "CNA_CNB_SPRITE_FONT_CHUNK_GLYPH_BOUNDS": 1348029511,
+  "CNA_CNB_SPRITE_FONT_CHUNK_HEADER": 1414418246,
+  "CNA_CNB_SPRITE_FONT_CHUNK_KERNING": 1314014539,
+  "CNA_CNB_SPRITE_FONT_HEADER_STRIDE": 24,
+  "CNA_CNB_SPRITE_FONT_INFO_STRUCT_VERSION": 1,
+  "CNA_CNB_SPRITE_FONT_KERNING_STRIDE": 12,
+  "CNA_CNB_SPRITE_FONT_RECTANGLE_STRIDE": 16,
+  "CNA_CNB_SPRITE_FONT_SCHEMA_VERSION": 1,
   "CNA_CNB_TEXTURE_CHUNK_HEADER": 1213744468,
   "CNA_CNB_TEXTURE_CHUNK_PAYLOAD": 1146635604,
   "CNA_CNB_TEXTURE_CHUNK_REPRESENTATIONS": 1381516628,
@@ -5149,6 +5230,8 @@
   "CNA_CNB_TEXTURE_REPRESENTATION_STRIDE": 24,
   "CNA_CNB_TEXTURE_SCHEMA_VERSION": 1,
   "CNA_CNB_TEXTURE_SLOT_COUNT": 7,
+  "CNA_CNB_VIDEO_HEADER_STRIDE": 24,
+  "CNA_CNB_VIDEO_INFO_STRUCT_VERSION": 1,
   "CNA_COLOR_GRADE_MAX_LUT_SIZE_EXT": 64,
   "CNA_COLOR_WRITE_ALL": 15,
   "CNA_COLOR_WRITE_ALPHA": 8,
@@ -6503,6 +6586,14 @@
    8,
    8
   ],
+  "CNA_CnbAnimationClipHandle": [
+   8,
+   8
+  ],
+  "CNA_CnbAudioFormat": [
+   4,
+   4
+  ],
   "CNA_CnbByteWriterHandle": [
    8,
    8
@@ -6550,6 +6641,14 @@
   "CNA_CnbSkeletonMatrixSet": [
    4,
    4
+  ],
+  "CNA_CnbSoundEffectDataHandle": [
+   8,
+   8
+  ],
+  "CNA_CnbSpriteFontDataHandle": [
+   8,
+   8
   ],
   "CNA_CnbTextureDataHandle": [
    8,
@@ -8990,6 +9089,82 @@
    },
    "size": 24
   },
+  "CNA_CnbSoundEffectInfo": {
+   "align": 4,
+   "fields": {
+    "channels": [
+     16,
+     4
+    ],
+    "format": [
+     8,
+     4
+    ],
+    "frame_count": [
+     20,
+     4
+    ],
+    "loop_length": [
+     28,
+     4
+    ],
+    "loop_start": [
+     24,
+     4
+    ],
+    "sample_rate": [
+     12,
+     4
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 32
+  },
+  "CNA_CnbSpriteFontInfo": {
+   "align": 8,
+   "fields": {
+    "default_character": [
+     24,
+     2
+    ],
+    "glyph_count": [
+     8,
+     8
+    ],
+    "has_default_character": [
+     26,
+     1
+    ],
+    "line_spacing": [
+     16,
+     4
+    ],
+    "reserved": [
+     27,
+     5
+    ],
+    "spacing": [
+     20,
+     4
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 32
+  },
   "CNA_CnbTextureInfo": {
    "align": 4,
    "fields": {
@@ -9053,6 +9228,44 @@
     ]
    },
    "size": 20
+  },
+  "CNA_CnbVideoInfo": {
+   "align": 4,
+   "fields": {
+    "duration_milliseconds": [
+     8,
+     4
+    ],
+    "frames_per_second": [
+     20,
+     4
+    ],
+    "height": [
+     16,
+     4
+    ],
+    "reserved": [
+     28,
+     4
+    ],
+    "soundtrack_type": [
+     24,
+     4
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "width": [
+     12,
+     4
+    ]
+   },
+   "size": 32
   },
   "CNA_Color": {
    "align": 1,

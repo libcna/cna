@@ -8,7 +8,7 @@
 
 #include <stddef.h>
 
-_Static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 13, 0),
+_Static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 14, 0),
                "CNA C ABI version encoding must remain stable");
 _Static_assert(sizeof(CNA_Result) == sizeof(uint32_t),
                "CNA_Result must have a fixed-width representation");
@@ -1906,3 +1906,80 @@ _Static_assert(sizeof(CNA_CnbMorphWeightKeyInfo) == 40U &&
                    offsetof(CNA_CnbMorphWeightKeyInfo, out_tangent_count) == 32U &&
                    CNA_CNB_MORPH_WEIGHT_KEY_INFO_STRUCT_VERSION == UINT32_C(1),
                "CNA_CnbMorphWeightKeyInfo layout must remain stable");
+
+/* CBIND-110: the font, audio, media, curve and animation schemas. */
+_Static_assert(CNA_CNB_AUDIO_FORMAT_UNKNOWN == UINT32_C(0) &&
+                   CNA_CNB_AUDIO_FORMAT_PCM16 == UINT32_C(1) &&
+                   CNA_CNB_AUDIO_FORMAT_PCM8 == UINT32_C(2) &&
+                   CNA_CNB_AUDIO_FORMAT_PCM_FLOAT32 == UINT32_C(3) &&
+                   CNA_CNB_AUDIO_FORMAT_ADPCM == UINT32_C(4) &&
+                   CNA_CNB_AUDIO_FORMAT_VORBIS == UINT32_C(5) &&
+                   CNA_CNB_AUDIO_FORMAT_MAXIMUM == UINT32_C(5),
+               "CNB audio format identifiers are wire format and must remain stable");
+_Static_assert(CNA_CNB_SPRITE_FONT_CHUNK_HEADER == UINT32_C(0x544E4F46) &&
+                   CNA_CNB_SPRITE_FONT_CHUNK_GLYPH_BOUNDS == UINT32_C(0x50594C47) &&
+                   CNA_CNB_SPRITE_FONT_CHUNK_CROPPING == UINT32_C(0x504F5243) &&
+                   CNA_CNB_SPRITE_FONT_CHUNK_KERNING == UINT32_C(0x4E52454B) &&
+                   CNA_CNB_SPRITE_FONT_CHUNK_CHARACTERS == UINT32_C(0x52414843) &&
+                   CNA_CNB_SPRITE_FONT_SCHEMA_VERSION == UINT32_C(1) &&
+                   CNA_CNB_SPRITE_FONT_HEADER_STRIDE == UINT32_C(24) &&
+                   CNA_CNB_SPRITE_FONT_RECTANGLE_STRIDE == UINT32_C(16) &&
+                   CNA_CNB_SPRITE_FONT_KERNING_STRIDE == UINT32_C(12) &&
+                   CNA_CNB_SPRITE_FONT_CHARACTER_STRIDE == UINT32_C(4) &&
+                   CNA_CNB_MAX_SPRITE_FONT_GLYPHS == UINT32_C(65536),
+               "CNB sprite-font schema constants are wire format and must remain stable");
+_Static_assert(CNA_CNB_SOUND_EFFECT_CHUNK_HEADER == UINT32_C(0x48445541) &&
+                   CNA_CNB_SOUND_EFFECT_CHUNK_DATA == UINT32_C(0x44445541) &&
+                   CNA_CNB_SOUND_EFFECT_SCHEMA_VERSION == UINT32_C(1) &&
+                   CNA_CNB_SOUND_EFFECT_HEADER_STRIDE == UINT32_C(28) &&
+                   CNA_CNB_MAX_AUDIO_SAMPLE_RATE == UINT32_C(384000),
+               "CNB sound-effect schema constants are wire format and must remain stable");
+_Static_assert(CNA_CNB_MEDIA_CHUNK_SONG_HEADER == UINT32_C(0x48474E53) &&
+                   CNA_CNB_MEDIA_CHUNK_VIDEO_HEADER == UINT32_C(0x48444956) &&
+                   CNA_CNB_MEDIA_SCHEMA_VERSION == UINT32_C(1) &&
+                   CNA_CNB_SONG_HEADER_FIXED_STRIDE == UINT32_C(8) &&
+                   CNA_CNB_VIDEO_HEADER_STRIDE == UINT32_C(24) &&
+                   CNA_CNB_MAX_VIDEO_DIMENSION == UINT32_C(65536),
+               "CNB media schema constants are wire format and must remain stable");
+_Static_assert(CNA_CNB_CURVE_CHUNK_HEADER == UINT32_C(0x48565243) &&
+                   CNA_CNB_CURVE_CHUNK_KEYS == UINT32_C(0x4B565243) &&
+                   CNA_CNB_CURVE_SCHEMA_VERSION == UINT32_C(1) &&
+                   CNA_CNB_CURVE_KEY_STRIDE == UINT32_C(20),
+               "CNB curve schema constants are wire format and must remain stable");
+_Static_assert(CNA_CNB_ANIMATION_CLIP_CHUNK_HEADER == UINT32_C(0x484C4341) &&
+                   CNA_CNB_ANIMATION_CLIP_CHUNK_TRACKS == UINT32_C(0x544C4341) &&
+                   CNA_CNB_ANIMATION_CLIP_CHUNK_KEYS == UINT32_C(0x4B4C4341) &&
+                   CNA_CNB_ANIMATION_CLIP_SCHEMA_VERSION == UINT32_C(1) &&
+                   CNA_CNB_ANIMATION_TRACK_STRIDE == UINT32_C(12) &&
+                   CNA_CNB_ANIMATION_KEY_STRIDE == UINT32_C(48),
+               "CNB animation-clip schema constants are wire format and must remain stable");
+_Static_assert(sizeof(CNA_CnbSpriteFontInfo) == 32U &&
+                   _Alignof(CNA_CnbSpriteFontInfo) == 8U &&
+                   offsetof(CNA_CnbSpriteFontInfo, glyph_count) == 8U &&
+                   offsetof(CNA_CnbSpriteFontInfo, line_spacing) == 16U &&
+                   offsetof(CNA_CnbSpriteFontInfo, spacing) == 20U &&
+                   offsetof(CNA_CnbSpriteFontInfo, default_character) == 24U &&
+                   offsetof(CNA_CnbSpriteFontInfo, has_default_character) == 26U &&
+                   offsetof(CNA_CnbSpriteFontInfo, reserved) == 27U &&
+                   CNA_CNB_SPRITE_FONT_INFO_STRUCT_VERSION == UINT32_C(1),
+               "CNA_CnbSpriteFontInfo layout must remain stable");
+_Static_assert(sizeof(CNA_CnbSoundEffectInfo) == 32U &&
+                   _Alignof(CNA_CnbSoundEffectInfo) == 4U &&
+                   offsetof(CNA_CnbSoundEffectInfo, format) == 8U &&
+                   offsetof(CNA_CnbSoundEffectInfo, sample_rate) == 12U &&
+                   offsetof(CNA_CnbSoundEffectInfo, channels) == 16U &&
+                   offsetof(CNA_CnbSoundEffectInfo, frame_count) == 20U &&
+                   offsetof(CNA_CnbSoundEffectInfo, loop_start) == 24U &&
+                   offsetof(CNA_CnbSoundEffectInfo, loop_length) == 28U &&
+                   CNA_CNB_SOUND_EFFECT_INFO_STRUCT_VERSION == UINT32_C(1),
+               "CNA_CnbSoundEffectInfo layout must remain stable");
+_Static_assert(sizeof(CNA_CnbVideoInfo) == 32U &&
+                   _Alignof(CNA_CnbVideoInfo) == 4U &&
+                   offsetof(CNA_CnbVideoInfo, duration_milliseconds) == 8U &&
+                   offsetof(CNA_CnbVideoInfo, width) == 12U &&
+                   offsetof(CNA_CnbVideoInfo, height) == 16U &&
+                   offsetof(CNA_CnbVideoInfo, frames_per_second) == 20U &&
+                   offsetof(CNA_CnbVideoInfo, soundtrack_type) == 24U &&
+                   offsetof(CNA_CnbVideoInfo, reserved) == 28U &&
+                   CNA_CNB_VIDEO_INFO_STRUCT_VERSION == UINT32_C(1),
+               "CNA_CnbVideoInfo layout must remain stable");
