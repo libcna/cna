@@ -127,6 +127,8 @@ namespace CNA::Content::Pipeline
         imported.width = static_cast<std::uint32_t>(image.width);
         imported.height = static_cast<std::uint32_t>(image.height);
         imported.rgbaPixels = std::move(image.pixels);
+        context.LogInfo("decoded " + std::to_string(imported.width) + "x" +
+                        std::to_string(imported.height) + " Rgba8 image.");
         return ContentValue::Create(ImportedImageType, std::move(imported));
     }
 
@@ -179,6 +181,7 @@ namespace CNA::Content::Pipeline
 
         Cnb::CnbTextureData texture =
             Cnb::MakeRgba8Texture2DData(image.width, image.height, std::move(pixels));
+        context.LogInfo("prepared Texture2D Rgba8 level 0 for CNB encoding.");
         return ContentValue::Create(ProcessedTexture2DType, std::move(texture));
     }
 

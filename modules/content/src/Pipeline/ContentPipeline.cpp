@@ -20,6 +20,30 @@ namespace CNA::Content::Pipeline
             void Log(const ContentLogMessage&) override {}
         };
 
+        class RecordingContentBuildLogger final : public ContentBuildLogger
+        {
+        public:
+            explicit RecordingContentBuildLogger(ContentBuildLogger& downstream)
+                : downstream_(&downstream)
+            {
+            }
+
+            void Log(const ContentLogMessage& message) override
+            {
+                messages_.push_back(message);
+                downstream_->Log(message);
+            }
+
+            [[nodiscard]] std::vector<ContentLogMessage> TakeMessages()
+            {
+                return std::move(messages_);
+            }
+
+        private:
+            ContentBuildLogger* downstream_;
+            std::vector<ContentLogMessage> messages_;
+        };
+
         ContentBuildLogger& NullLogger()
         {
             static NullContentBuildLogger logger;
@@ -569,7 +593,9 @@ namespace CNA::Content::Pipeline
         std::filesystem::path source = request.source;
         std::filesystem::path root = request.sourceRoot;
         const std::string logicalName = request.logicalName;
-        ContentBuildLogger& logger = request.logger == nullptr ? NullLogger() : *request.logger;
+        ContentBuildLogger& downstreamLogger =
+            request.logger == nullptr ? NullLogger() : *request.logger;
+        RecordingContentBuildLogger logger(downstreamLogger);
 
         try
         {
@@ -707,6 +733,7 @@ namespace CNA::Content::Pipeline
         result.parameters = request.parameters;
         result.dependencies = dependencies.Dependencies();
         result.runtimeReferences = dependencies.RuntimeReferences();
+        result.messages = logger.TakeMessages();
         result.output = std::move(output);
         return result;
     }

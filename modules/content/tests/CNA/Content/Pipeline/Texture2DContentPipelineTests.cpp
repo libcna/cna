@@ -157,6 +157,11 @@ TEST(Texture2DContentPipelineTest, BuildsHeadlesslyThroughDistinctImporterProces
     ASSERT_EQ(result.dependencies.size(), 1u);
     EXPECT_EQ(result.dependencies[0].kind, Pipeline::ContentDependencyKind::PrimarySource);
     EXPECT_TRUE(result.runtimeReferences.empty());
+    ASSERT_EQ(result.messages.size(), 2u);
+    EXPECT_EQ(result.messages[0].stage, Pipeline::ContentPipelineStage::Import);
+    EXPECT_EQ(result.messages[0].component, "CNA.ImageImporter");
+    EXPECT_EQ(result.messages[1].stage, Pipeline::ContentPipelineStage::Process);
+    EXPECT_EQ(result.messages[1].component, "CNA.TextureProcessor");
 
     const Cnb::CnbDocument document =
         Cnb::CnbDocument::Parse(result.output.bytes, "pipeline wall.cnb");

@@ -1,6 +1,6 @@
 # plan_content_pipeline.md — CNA Content Pipeline
 
-> **Status (2026-08-28):** `CP-001` through `CP-006` are complete. `CP-007` is current. The
+> **Status (2026-08-28):** `CP-001` through `CP-007` are complete. `CP-008` is current. The
 > project starts from the existing `content-pipeline` branch at `0e6899f17017c03c0e23d575d25cd70c678e2781`.
 > That commit contains the completed CNB baseline through `CNBF-123`. Local `next` was actually
 > `4ab1859dc8a540af1bd326df0fa816579adf7027`, two unrelated platform/binding commits ahead; the
@@ -345,10 +345,19 @@ Dependencies are explicit records, not inferred from XREF:
 * generated dependency;
 * runtime content reference (XREF).
 
-Paths are canonical native paths internally; manifest paths are normalized relative to the declared
-root. Runtime references remain logical forward-slash names. `ContentBuildResult` records source,
-logical name, output, component identities, parameters, categorized dependencies/references,
-warnings, byte count, built/skipped state and fingerprint information once available.
+Paths are canonical native paths internally; manifest paths will be normalized relative to the
+declared root. Runtime references remain logical forward-slash names. `ContentBuildResult` now
+records source, logical name, output, component identities, parameters, categorized
+dependencies/references, the ordered info/warning messages emitted by successful stages, and a
+built/skipped state. Fingerprint/cache fields will be added only with `CP-008`.
+
+The coordinator places the primary source in the dependency set before importing. Context methods
+are the only component-facing way to add contained source, content-build, generated, and runtime
+reference records. A per-build recording logger forwards each message to the caller's optional sink
+while retaining the same contextual message in the successful result. Image/WAV importers and
+Texture/SoundEffect processors now emit concrete stage messages; tests assert both the stage and
+stable component identities. This makes built-in flows observable without a global logger and keeps
+runtime XREFs absent from the build-dependency list.
 
 ### 5.9 Writer and runtime mapping
 
@@ -589,8 +598,8 @@ Required before the corresponding task closes:
 | `CP-004` | **completed** | Added `ImportedImage`, `ImageImporter`, `TextureProcessor`, and `Texture2DContentWriter`; the writer calls the existing encoder. Five slice tests prove strict parameter validation, stage identities/dependencies, repeated determinism, typed decode, runtime loading, and default/color-key byte equality against both the unchanged producer library path and real `cna_tool_source_to_cnb` subprocess. The focused original producer/tool/codec and all golden-vector regressions passed. |
 | `CP-005` | **completed** | Split the existing bounded RIFF parser to source-oriented `ImportedSound`, shared its one exact PCM processing helper with the compatibility API, and added `WavImporter`, `SoundEffectProcessor`, and a writer that calls the existing encoder. Six new tests and 66 focused old/new regressions pass; pre/post-refactor real-tool bytes also match exactly. No build component initializes audio. |
 | `CP-006` | **completed** | Added the `cna-content` executable with single/directory builds, deterministic discovery, relative logical/output preservation, explicit built-in selection diagnostics, wide Windows entry point, safe output layouts and the shared audited atomic publisher. Six subprocess tests prove the CLI contract and failed-rebuild preservation. |
-| `CP-007` | **current** | Make categorized dependency collection and the build result complete/observable for built-in flows. |
-| `CP-008` | future | Add deterministic inspectable manifest and content fingerprints; prove no-op and precise invalidation behavior. |
+| `CP-007` | **completed** | Completed the observable build result: categorized build dependencies and separate runtime XREFs are returned with ordered contextual messages. The coordinator records while forwarding to an optional scoped logger; image/WAV importers and Texture/SoundEffect processors expose their actual stages. The fresh HEADLESS Debug targets built and the 38-case combined pipeline/CLI/golden selection passed. |
+| `CP-008` | **current** | Add deterministic inspectable manifest and content fingerprints; prove no-op and precise invalidation behavior. |
 | `CP-009` | future | Integrate glTF/Model without a second interpretation; retain direct-vs-CNJ byte oracle and report glTF dependencies. |
 | `CP-010` | future | Integrate CNJ as a front-end that converges on shared processors/writers; remove build-time ContentManager shortcut and preserve sidecar safety/equivalence. |
 | `CP-011` | future | Add realistic custom importer/processor/writer plus custom runtime loader end-to-end example/test; review experimental API. |

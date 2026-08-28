@@ -77,6 +77,9 @@ namespace CNA::Content::Pipeline
 
         /** @brief Human-readable message text. */
         std::string text;
+
+        /** @brief Compares every contextual message field. */
+        bool operator==(const ContentLogMessage&) const = default;
     };
 
     /** @brief Scoped logging sink for content builds. */
@@ -676,6 +679,9 @@ namespace CNA::Content::Pipeline
 
         /** @brief Sorted runtime content references, distinct from dependencies. */
         std::vector<RuntimeContentReference> runtimeReferences;
+
+        /** @brief Ordered informational and warning messages emitted by the successful build. */
+        std::vector<ContentLogMessage> messages;
 
         /** @brief Complete compiled CNB bytes, not yet published. */
         ContentWriteResult output;

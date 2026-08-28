@@ -35,8 +35,12 @@ namespace CNA::Content::Pipeline
 
     ContentValue WavImporter::Import(ContentImporterContext& context) const
     {
-        return ContentValue::Create(
-            ImportedSoundType, Cnb::ImportWavAsImportedSound(context.SourcePath().string()));
+        CNA::Content::Import::ImportedSound imported =
+            Cnb::ImportWavAsImportedSound(context.SourcePath().string());
+        context.LogInfo("decoded WAV with " + std::to_string(imported.frameCount) +
+                        " frames, " + std::to_string(imported.channels) + " channel(s), and " +
+                        std::to_string(imported.sampleRate) + " Hz sample rate.");
+        return ContentValue::Create(ImportedSoundType, std::move(imported));
     }
 
     ContentComponentIdentity SoundEffectProcessor::Identity() const
@@ -65,12 +69,13 @@ namespace CNA::Content::Pipeline
     }
 
     ContentValue SoundEffectProcessor::Process(const ContentValue& input,
-                                               ContentProcessorContext&) const
+                                               ContentProcessorContext& context) const
     {
         const CNA::Content::Import::ImportedSound& imported =
             input.Get<CNA::Content::Import::ImportedSound>();
-        return ContentValue::Create(ProcessedSoundEffectType,
-                                    Cnb::ProcessImportedSoundEffect(imported));
+        Cnb::CnbSoundEffectData sound = Cnb::ProcessImportedSoundEffect(imported);
+        context.LogInfo("prepared SoundEffect Pcm16 data for CNB encoding.");
+        return ContentValue::Create(ProcessedSoundEffectType, std::move(sound));
     }
 
     ContentComponentIdentity SoundEffectContentWriter::Identity() const

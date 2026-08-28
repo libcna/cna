@@ -233,6 +233,11 @@ TEST(SoundEffectContentPipelineTest, IsDeterministicAndByteIdenticalToTheExistin
     EXPECT_EQ(first.importer, (Pipeline::ContentComponentIdentity{"CNA.WavImporter", "1"}));
     EXPECT_EQ(first.processor,
               (Pipeline::ContentComponentIdentity{"CNA.SoundEffectProcessor", "1"}));
+    ASSERT_EQ(first.messages.size(), 2u);
+    EXPECT_EQ(first.messages[0].stage, Pipeline::ContentPipelineStage::Import);
+    EXPECT_EQ(first.messages[0].component, "CNA.WavImporter");
+    EXPECT_EQ(first.messages[1].stage, Pipeline::ContentPipelineStage::Process);
+    EXPECT_EQ(first.messages[1].component, "CNA.SoundEffectProcessor");
     EXPECT_EQ(first.writer,
               (Pipeline::ContentComponentIdentity{"CNA.SoundEffectContentWriter", "1"}));
     EXPECT_EQ(first.output.assetTypeId, Cnb::CnbAssetTypeId::SoundEffect);

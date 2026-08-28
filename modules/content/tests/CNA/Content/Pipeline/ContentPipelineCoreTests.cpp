@@ -353,6 +353,7 @@ TEST(ContentPipelineCoreTest, BuildReportsComponentsParametersDependenciesRefere
         << "runtime XREF leaked into the build-dependency list";
 
     ASSERT_EQ(logger.messages.size(), 2u);
+    EXPECT_EQ(result.messages, logger.messages);
     EXPECT_EQ(logger.messages[0].stage, Pipeline::ContentPipelineStage::Import);
     EXPECT_EQ(logger.messages[0].component, "test.NumberImporter");
     EXPECT_EQ(logger.messages[1].stage, Pipeline::ContentPipelineStage::Process);
