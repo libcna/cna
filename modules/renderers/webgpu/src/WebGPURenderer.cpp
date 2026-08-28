@@ -3366,6 +3366,67 @@ namespace CNA::Internal::Renderers::WebGPU
             throw std::runtime_error("CNA WebGPU: failed to create Colored3D GPU resources");
     }
 
+    // WEBGPU-29: the one WGPURenderPipelineDescriptor assembly shared by all 12 GetOrCreatePipeline*3D
+    // families. The colour target (surfaceFormat_ + CurrentWriteMask() + InitStockColorTargetsEXT MRT),
+    // vs/fs entry points, CCW front face, ToWGPUCullMode, the baked blend (WEBGPU-78), the
+    // renderer-global multisample state (WEBGPU-58), the depth-bias scale (WEBGPU-41/79) and the
+    // depth-format + stencil gating (WEBGPU-39/83) were previously copy-pasted, character-for-character,
+    // into each of the 12 functions; this is that block, verbatim, in one place. Only the per-family
+    // vertex layout, shader module(s), pipeline layout and label are inputs (Pipeline3DDescEXT); the
+    // cache key and cache map stay in each caller.
+    WGPURenderPipeline WebGPURenderer::Build3DPipelineEXT(const Pipeline3DDescEXT& d)
+    {
+        std::array<WGPUColorTargetState, 4> mrtColorTargets{};
+        const int mrtColorCount = InitStockColorTargetsEXT(mrtColorTargets);
+        WGPUColorTargetState& target = mrtColorTargets[0];
+        target.format = surfaceFormat_;
+        target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
+        WGPUFragmentState fragment{};
+        fragment.module = d.fragmentModule;
+        fragment.entryPoint = StringView("fs_main");
+        fragment.targetCount = static_cast<std::size_t>(mrtColorCount);
+        fragment.targets = mrtColorTargets.data();
+
+        WGPURenderPipelineDescriptor pipeline{};
+        pipeline.label = StringView(d.label);
+        pipeline.layout = d.layout;
+        pipeline.vertex.module = d.vertexModule;
+        pipeline.vertex.entryPoint = StringView("vs_main");
+        pipeline.vertex.bufferCount = d.vertexBufferCount;
+        pipeline.vertex.buffers = d.vertexBuffers;
+        pipeline.primitive.topology = d.topology;
+        pipeline.primitive.stripIndexFormat = d.stripIndexFormat;
+        pipeline.primitive.frontFace = WGPUFrontFace_CCW;
+        pipeline.primitive.cullMode = ToWGPUCullMode(d.cullMode);
+        // WEBGPU-78: blend baked into the pipeline object (no dynamic WGPU blend override) --
+        // target.blend stays null (opaque overwrite) when blend is disabled.
+        WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
+        FillWGPUBlendState(blendState, d.blendParams);
+        target.blend = d.blend ? &blendState : nullptr;
+        // WEBGPU-58: this renderer's single renderer-GLOBAL MSAA sample count (1 outside MSAA).
+        pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
+        pipeline.multisample.mask = CurrentSampleMask(); // REMED-GFX-077: BlendState.MultiSampleMask
+        pipeline.multisample.alphaToCoverageEnabled = false;
+        pipeline.fragment = &fragment;
+
+        WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
+        depthStencil.format = replayDepthFormat_;  // WEBGPU-39: match the active pass's depth format
+        depthStencil.depthWriteEnabled = d.depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
+        depthStencil.depthCompare = d.depthTest ? ToWGPUCompareFunction(d.depthFunc) : WGPUCompareFunction_Always;
+        // WEBGPU-41/79: DepthBias/SlopeScaleDepthBias baked in (wgpu-native has no per-draw override).
+        // Scale matches FNA's XNAToGL_DepthBiasScale for a 24-bit depth format ((1<<24)-1).
+        depthStencil.depthBias = static_cast<std::int32_t>(d.depthBias * 16777215.0f);
+        depthStencil.depthBiasSlopeScale = d.slopeScaleDepthBias;
+        if (replayDepthHasStencil_) FillWGPUStencilState(depthStencil, d.stencil);  // WEBGPU-39/83
+        pipeline.depthStencil = (replayDepthFormat_ != WGPUTextureFormat_Undefined) ? &depthStencil : nullptr;  // WEBGPU-39
+
+        WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
+        if (created == nullptr)
+            throw std::runtime_error(std::string("CNA WebGPU: failed to create 3D pipeline: ") +
+                                     (d.label != nullptr ? d.label : "?"));
+        return created;
+    }
+
     WGPURenderPipeline WebGPURenderer::GetOrCreatePipelineColored3D(WGPUPrimitiveTopology topology,
                                                                             WGPUIndexFormat stripIndexFormat,
                                                                             bool depthTest, bool depthWrite,
@@ -3399,61 +3460,25 @@ namespace CNA::Internal::Renderers::WebGPU
         vertexBufferLayout.attributeCount = attributes.size();
         vertexBufferLayout.attributes = attributes.data();
 
-        std::array<WGPUColorTargetState, 4> mrtColorTargets{};
-        const int mrtColorCount = InitStockColorTargetsEXT(mrtColorTargets);
-        WGPUColorTargetState& target = mrtColorTargets[0];
-        target.format = surfaceFormat_;
-        target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
-        WGPUFragmentState fragment{};
-        fragment.module = coloredShader_;
-        fragment.entryPoint = StringView("fs_main");
-        fragment.targetCount = static_cast<std::size_t>(mrtColorCount);
-        fragment.targets = mrtColorTargets.data();
-
-        WGPURenderPipelineDescriptor pipeline{};
-        pipeline.label = StringView("CNA WebGPU Colored3D Pipeline");
-        pipeline.layout = coloredPipelineLayout_;
-        pipeline.vertex.module = coloredShader_;
-        pipeline.vertex.entryPoint = StringView("vs_main");
-        pipeline.vertex.bufferCount = 1;
-        pipeline.vertex.buffers = &vertexBufferLayout;
-        pipeline.primitive.topology = topology;
-        pipeline.primitive.stripIndexFormat = stripIndexFormat;
-        pipeline.primitive.frontFace = WGPUFrontFace_CCW;
-        pipeline.primitive.cullMode = ToWGPUCullMode(cullMode);
-        // WEBGPU-78: baked into the pipeline object (no dynamic WGPU blend override) --
-        // target.blend stays null (opaque overwrite) when blend is disabled, matching
-        // WGPUColorTargetState::blend's own "absent = no blending" semantics.
-        WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
-        FillWGPUBlendState(blendState, blendParams);
-        target.blend = blend ? &blendState : nullptr;
-        // WEBGPU-58: this renderer's single renderer-GLOBAL MSAA sample count (see sampleCount_'s
-        // own comment) -- 1 outside MSAA, identical to every one of these pipelines' behaviour
-        // before MSAA existed.
-        pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
-        pipeline.multisample.mask = CurrentSampleMask(); // REMED-GFX-077: BlendState.MultiSampleMask
-        pipeline.multisample.alphaToCoverageEnabled = false;
-        pipeline.fragment = &fragment;
-
-        WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
-        depthStencil.format = replayDepthFormat_;  // WEBGPU-39: match the active pass's depth format
-        depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
-        depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
-        // WEBGPU-41/79: DepthBias/SlopeScaleDepthBias baked into the pipeline object --
-        // wgpu-native has no per-draw depth-bias override (unlike Vulkan's vkCmdSetDepthBias).
-        // Scale matches FNA's own FNA3D_Driver_OpenGL.c XNAToGL_DepthBiasScale for a 24-bit
-        // depth format ((1<<24)-1): XNA's DepthBias is a fraction of the depth range,
-        // WGPUDepthStencilState::depthBias is an integer count of smallest-representable-
-        // depth-buffer units, exactly like D3D/GL's own "scaled by format precision"
-        // interpretation (this renderer's depth attachment is always Depth24PlusStencil8).
-        depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
-        depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
-        if (replayDepthHasStencil_) FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-39/83  // WEBGPU-83
-        pipeline.depthStencil = (replayDepthFormat_ != WGPUTextureFormat_Undefined) ? &depthStencil : nullptr;  // WEBGPU-39
-
-        WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
-        if (created == nullptr)
-            throw std::runtime_error("CNA WebGPU: failed to create Colored3D pipeline");
+        Pipeline3DDescEXT desc;
+        desc.label = "CNA WebGPU Colored3D Pipeline";
+        desc.layout = coloredPipelineLayout_;
+        desc.vertexModule = coloredShader_;
+        desc.fragmentModule = coloredShader_;
+        desc.vertexBuffers = &vertexBufferLayout;
+        desc.vertexBufferCount = 1;
+        desc.topology = topology;
+        desc.stripIndexFormat = stripIndexFormat;
+        desc.depthTest = depthTest;
+        desc.depthWrite = depthWrite;
+        desc.depthFunc = depthFunc;
+        desc.depthBias = depthBias;
+        desc.slopeScaleDepthBias = slopeScaleDepthBias;
+        desc.blend = blend;
+        desc.blendParams = blendParams;
+        desc.cullMode = cullMode;
+        desc.stencil = stencil;
+        WGPURenderPipeline created = Build3DPipelineEXT(desc);
         coloredPipelines_[key] = created;
         return created;
     }
@@ -3572,61 +3597,25 @@ namespace CNA::Internal::Renderers::WebGPU
         vertexBufferLayout.attributeCount = attributes.size();
         vertexBufferLayout.attributes = attributes.data();
 
-        std::array<WGPUColorTargetState, 4> mrtColorTargets{};
-        const int mrtColorCount = InitStockColorTargetsEXT(mrtColorTargets);
-        WGPUColorTargetState& target = mrtColorTargets[0];
-        target.format = surfaceFormat_;
-        target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
-        WGPUFragmentState fragment{};
-        fragment.module = texturedShader_;
-        fragment.entryPoint = StringView("fs_main");
-        fragment.targetCount = static_cast<std::size_t>(mrtColorCount);
-        fragment.targets = mrtColorTargets.data();
-
-        WGPURenderPipelineDescriptor pipeline{};
-        pipeline.label = StringView("CNA WebGPU Textured3D Pipeline");
-        pipeline.layout = texturedPipelineLayout_;
-        pipeline.vertex.module = texturedShader_;
-        pipeline.vertex.entryPoint = StringView("vs_main");
-        pipeline.vertex.bufferCount = 1;
-        pipeline.vertex.buffers = &vertexBufferLayout;
-        pipeline.primitive.topology = topology;
-        pipeline.primitive.stripIndexFormat = stripIndexFormat;
-        pipeline.primitive.frontFace = WGPUFrontFace_CCW;
-        pipeline.primitive.cullMode = ToWGPUCullMode(cullMode);
-        // WEBGPU-78: baked into the pipeline object (no dynamic WGPU blend override) --
-        // target.blend stays null (opaque overwrite) when blend is disabled, matching
-        // WGPUColorTargetState::blend's own "absent = no blending" semantics.
-        WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
-        FillWGPUBlendState(blendState, blendParams);
-        target.blend = blend ? &blendState : nullptr;
-        // WEBGPU-58: this renderer's single renderer-GLOBAL MSAA sample count (see sampleCount_'s
-        // own comment) -- 1 outside MSAA, identical to every one of these pipelines' behaviour
-        // before MSAA existed.
-        pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
-        pipeline.multisample.mask = CurrentSampleMask(); // REMED-GFX-077: BlendState.MultiSampleMask
-        pipeline.multisample.alphaToCoverageEnabled = false;
-        pipeline.fragment = &fragment;
-
-        WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
-        depthStencil.format = replayDepthFormat_;  // WEBGPU-39: match the active pass's depth format
-        depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
-        depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
-        // WEBGPU-41/79: DepthBias/SlopeScaleDepthBias baked into the pipeline object --
-        // wgpu-native has no per-draw depth-bias override (unlike Vulkan's vkCmdSetDepthBias).
-        // Scale matches FNA's own FNA3D_Driver_OpenGL.c XNAToGL_DepthBiasScale for a 24-bit
-        // depth format ((1<<24)-1): XNA's DepthBias is a fraction of the depth range,
-        // WGPUDepthStencilState::depthBias is an integer count of smallest-representable-
-        // depth-buffer units, exactly like D3D/GL's own "scaled by format precision"
-        // interpretation (this renderer's depth attachment is always Depth24PlusStencil8).
-        depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
-        depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
-        if (replayDepthHasStencil_) FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-39/83  // WEBGPU-83
-        pipeline.depthStencil = (replayDepthFormat_ != WGPUTextureFormat_Undefined) ? &depthStencil : nullptr;  // WEBGPU-39
-
-        WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
-        if (created == nullptr)
-            throw std::runtime_error("CNA WebGPU: failed to create Textured3D pipeline");
+        Pipeline3DDescEXT desc;
+        desc.label = "CNA WebGPU Textured3D Pipeline";
+        desc.layout = texturedPipelineLayout_;
+        desc.vertexModule = texturedShader_;
+        desc.fragmentModule = texturedShader_;
+        desc.vertexBuffers = &vertexBufferLayout;
+        desc.vertexBufferCount = 1;
+        desc.topology = topology;
+        desc.stripIndexFormat = stripIndexFormat;
+        desc.depthTest = depthTest;
+        desc.depthWrite = depthWrite;
+        desc.depthFunc = depthFunc;
+        desc.depthBias = depthBias;
+        desc.slopeScaleDepthBias = slopeScaleDepthBias;
+        desc.blend = blend;
+        desc.blendParams = blendParams;
+        desc.cullMode = cullMode;
+        desc.stencil = stencil;
+        WGPURenderPipeline created = Build3DPipelineEXT(desc);
         texturedPipelines_[key] = created;
         return created;
     }
@@ -3665,61 +3654,25 @@ namespace CNA::Internal::Renderers::WebGPU
         vertexBufferLayout.attributeCount = attributes.size();
         vertexBufferLayout.attributes = attributes.data();
 
-        std::array<WGPUColorTargetState, 4> mrtColorTargets{};
-        const int mrtColorCount = InitStockColorTargetsEXT(mrtColorTargets);
-        WGPUColorTargetState& target = mrtColorTargets[0];
-        target.format = surfaceFormat_;
-        target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
-        WGPUFragmentState fragment{};
-        fragment.module = coloredTexturedShader_;
-        fragment.entryPoint = StringView("fs_main");
-        fragment.targetCount = static_cast<std::size_t>(mrtColorCount);
-        fragment.targets = mrtColorTargets.data();
-
-        WGPURenderPipelineDescriptor pipeline{};
-        pipeline.label = StringView("CNA WebGPU ColoredTextured3D Pipeline");
-        pipeline.layout = texturedPipelineLayout_;
-        pipeline.vertex.module = coloredTexturedShader_;
-        pipeline.vertex.entryPoint = StringView("vs_main");
-        pipeline.vertex.bufferCount = 1;
-        pipeline.vertex.buffers = &vertexBufferLayout;
-        pipeline.primitive.topology = topology;
-        pipeline.primitive.stripIndexFormat = stripIndexFormat;
-        pipeline.primitive.frontFace = WGPUFrontFace_CCW;
-        pipeline.primitive.cullMode = ToWGPUCullMode(cullMode);
-        // WEBGPU-78: baked into the pipeline object (no dynamic WGPU blend override) --
-        // target.blend stays null (opaque overwrite) when blend is disabled, matching
-        // WGPUColorTargetState::blend's own "absent = no blending" semantics.
-        WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
-        FillWGPUBlendState(blendState, blendParams);
-        target.blend = blend ? &blendState : nullptr;
-        // WEBGPU-58: this renderer's single renderer-GLOBAL MSAA sample count (see sampleCount_'s
-        // own comment) -- 1 outside MSAA, identical to every one of these pipelines' behaviour
-        // before MSAA existed.
-        pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
-        pipeline.multisample.mask = CurrentSampleMask(); // REMED-GFX-077: BlendState.MultiSampleMask
-        pipeline.multisample.alphaToCoverageEnabled = false;
-        pipeline.fragment = &fragment;
-
-        WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
-        depthStencil.format = replayDepthFormat_;  // WEBGPU-39: match the active pass's depth format
-        depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
-        depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
-        // WEBGPU-41/79: DepthBias/SlopeScaleDepthBias baked into the pipeline object --
-        // wgpu-native has no per-draw depth-bias override (unlike Vulkan's vkCmdSetDepthBias).
-        // Scale matches FNA's own FNA3D_Driver_OpenGL.c XNAToGL_DepthBiasScale for a 24-bit
-        // depth format ((1<<24)-1): XNA's DepthBias is a fraction of the depth range,
-        // WGPUDepthStencilState::depthBias is an integer count of smallest-representable-
-        // depth-buffer units, exactly like D3D/GL's own "scaled by format precision"
-        // interpretation (this renderer's depth attachment is always Depth24PlusStencil8).
-        depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
-        depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
-        if (replayDepthHasStencil_) FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-39/83  // WEBGPU-83
-        pipeline.depthStencil = (replayDepthFormat_ != WGPUTextureFormat_Undefined) ? &depthStencil : nullptr;  // WEBGPU-39
-
-        WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
-        if (created == nullptr)
-            throw std::runtime_error("CNA WebGPU: failed to create ColoredTextured3D pipeline");
+        Pipeline3DDescEXT desc;
+        desc.label = "CNA WebGPU ColoredTextured3D Pipeline";
+        desc.layout = texturedPipelineLayout_;
+        desc.vertexModule = coloredTexturedShader_;
+        desc.fragmentModule = coloredTexturedShader_;
+        desc.vertexBuffers = &vertexBufferLayout;
+        desc.vertexBufferCount = 1;
+        desc.topology = topology;
+        desc.stripIndexFormat = stripIndexFormat;
+        desc.depthTest = depthTest;
+        desc.depthWrite = depthWrite;
+        desc.depthFunc = depthFunc;
+        desc.depthBias = depthBias;
+        desc.slopeScaleDepthBias = slopeScaleDepthBias;
+        desc.blend = blend;
+        desc.blendParams = blendParams;
+        desc.cullMode = cullMode;
+        desc.stencil = stencil;
+        WGPURenderPipeline created = Build3DPipelineEXT(desc);
         coloredTexturedPipelines_[key] = created;
         return created;
     }
@@ -3853,61 +3806,25 @@ namespace CNA::Internal::Renderers::WebGPU
         vertexBufferLayout.attributeCount = attributes.size();
         vertexBufferLayout.attributes = attributes.data();
 
-        std::array<WGPUColorTargetState, 4> mrtColorTargets{};
-        const int mrtColorCount = InitStockColorTargetsEXT(mrtColorTargets);
-        WGPUColorTargetState& target = mrtColorTargets[0];
-        target.format = surfaceFormat_;
-        target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
-        WGPUFragmentState fragment{};
-        fragment.module = litTexturedShader_;
-        fragment.entryPoint = StringView("fs_main");
-        fragment.targetCount = static_cast<std::size_t>(mrtColorCount);
-        fragment.targets = mrtColorTargets.data();
-
-        WGPURenderPipelineDescriptor pipeline{};
-        pipeline.label = StringView("CNA WebGPU LitTextured3D Pipeline");
-        pipeline.layout = litPipelineLayout_;
-        pipeline.vertex.module = litTexturedShader_;
-        pipeline.vertex.entryPoint = StringView("vs_main");
-        pipeline.vertex.bufferCount = 1;
-        pipeline.vertex.buffers = &vertexBufferLayout;
-        pipeline.primitive.topology = topology;
-        pipeline.primitive.stripIndexFormat = stripIndexFormat;
-        pipeline.primitive.frontFace = WGPUFrontFace_CCW;
-        pipeline.primitive.cullMode = ToWGPUCullMode(cullMode);
-        // WEBGPU-78: baked into the pipeline object (no dynamic WGPU blend override) --
-        // target.blend stays null (opaque overwrite) when blend is disabled, matching
-        // WGPUColorTargetState::blend's own "absent = no blending" semantics.
-        WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
-        FillWGPUBlendState(blendState, blendParams);
-        target.blend = blend ? &blendState : nullptr;
-        // WEBGPU-58: this renderer's single renderer-GLOBAL MSAA sample count (see sampleCount_'s
-        // own comment) -- 1 outside MSAA, identical to every one of these pipelines' behaviour
-        // before MSAA existed.
-        pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
-        pipeline.multisample.mask = CurrentSampleMask(); // REMED-GFX-077: BlendState.MultiSampleMask
-        pipeline.multisample.alphaToCoverageEnabled = false;
-        pipeline.fragment = &fragment;
-
-        WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
-        depthStencil.format = replayDepthFormat_;  // WEBGPU-39: match the active pass's depth format
-        depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
-        depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
-        // WEBGPU-41/79: DepthBias/SlopeScaleDepthBias baked into the pipeline object --
-        // wgpu-native has no per-draw depth-bias override (unlike Vulkan's vkCmdSetDepthBias).
-        // Scale matches FNA's own FNA3D_Driver_OpenGL.c XNAToGL_DepthBiasScale for a 24-bit
-        // depth format ((1<<24)-1): XNA's DepthBias is a fraction of the depth range,
-        // WGPUDepthStencilState::depthBias is an integer count of smallest-representable-
-        // depth-buffer units, exactly like D3D/GL's own "scaled by format precision"
-        // interpretation (this renderer's depth attachment is always Depth24PlusStencil8).
-        depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
-        depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
-        if (replayDepthHasStencil_) FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-39/83  // WEBGPU-83
-        pipeline.depthStencil = (replayDepthFormat_ != WGPUTextureFormat_Undefined) ? &depthStencil : nullptr;  // WEBGPU-39
-
-        WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
-        if (created == nullptr)
-            throw std::runtime_error("CNA WebGPU: failed to create LitTextured3D pipeline");
+        Pipeline3DDescEXT desc;
+        desc.label = "CNA WebGPU LitTextured3D Pipeline";
+        desc.layout = litPipelineLayout_;
+        desc.vertexModule = litTexturedShader_;
+        desc.fragmentModule = litTexturedShader_;
+        desc.vertexBuffers = &vertexBufferLayout;
+        desc.vertexBufferCount = 1;
+        desc.topology = topology;
+        desc.stripIndexFormat = stripIndexFormat;
+        desc.depthTest = depthTest;
+        desc.depthWrite = depthWrite;
+        desc.depthFunc = depthFunc;
+        desc.depthBias = depthBias;
+        desc.slopeScaleDepthBias = slopeScaleDepthBias;
+        desc.blend = blend;
+        desc.blendParams = blendParams;
+        desc.cullMode = cullMode;
+        desc.stencil = stencil;
+        WGPURenderPipeline created = Build3DPipelineEXT(desc);
         litTexturedPipelines_[key] = created;
         return created;
     }
@@ -3945,61 +3862,25 @@ namespace CNA::Internal::Renderers::WebGPU
         vertexBufferLayout.attributeCount = attributes.size();
         vertexBufferLayout.attributes = attributes.data();
 
-        std::array<WGPUColorTargetState, 4> mrtColorTargets{};
-        const int mrtColorCount = InitStockColorTargetsEXT(mrtColorTargets);
-        WGPUColorTargetState& target = mrtColorTargets[0];
-        target.format = surfaceFormat_;
-        target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
-        WGPUFragmentState fragment{};
-        fragment.module = litTexturedVertexLitShader_;
-        fragment.entryPoint = StringView("fs_main");
-        fragment.targetCount = static_cast<std::size_t>(mrtColorCount);
-        fragment.targets = mrtColorTargets.data();
-
-        WGPURenderPipelineDescriptor pipeline{};
-        pipeline.label = StringView("CNA WebGPU LitTextured3D VertexLit Pipeline");
-        pipeline.layout = litPipelineLayout_;
-        pipeline.vertex.module = litTexturedVertexLitShader_;
-        pipeline.vertex.entryPoint = StringView("vs_main");
-        pipeline.vertex.bufferCount = 1;
-        pipeline.vertex.buffers = &vertexBufferLayout;
-        pipeline.primitive.topology = topology;
-        pipeline.primitive.stripIndexFormat = stripIndexFormat;
-        pipeline.primitive.frontFace = WGPUFrontFace_CCW;
-        pipeline.primitive.cullMode = ToWGPUCullMode(cullMode);
-        // WEBGPU-78: baked into the pipeline object (no dynamic WGPU blend override) --
-        // target.blend stays null (opaque overwrite) when blend is disabled, matching
-        // WGPUColorTargetState::blend's own "absent = no blending" semantics.
-        WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
-        FillWGPUBlendState(blendState, blendParams);
-        target.blend = blend ? &blendState : nullptr;
-        // WEBGPU-58: this renderer's single renderer-GLOBAL MSAA sample count (see sampleCount_'s
-        // own comment) -- 1 outside MSAA, identical to every one of these pipelines' behaviour
-        // before MSAA existed.
-        pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
-        pipeline.multisample.mask = CurrentSampleMask(); // REMED-GFX-077: BlendState.MultiSampleMask
-        pipeline.multisample.alphaToCoverageEnabled = false;
-        pipeline.fragment = &fragment;
-
-        WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
-        depthStencil.format = replayDepthFormat_;  // WEBGPU-39: match the active pass's depth format
-        depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
-        depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
-        // WEBGPU-41/79: DepthBias/SlopeScaleDepthBias baked into the pipeline object --
-        // wgpu-native has no per-draw depth-bias override (unlike Vulkan's vkCmdSetDepthBias).
-        // Scale matches FNA's own FNA3D_Driver_OpenGL.c XNAToGL_DepthBiasScale for a 24-bit
-        // depth format ((1<<24)-1): XNA's DepthBias is a fraction of the depth range,
-        // WGPUDepthStencilState::depthBias is an integer count of smallest-representable-
-        // depth-buffer units, exactly like D3D/GL's own "scaled by format precision"
-        // interpretation (this renderer's depth attachment is always Depth24PlusStencil8).
-        depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
-        depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
-        if (replayDepthHasStencil_) FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-39/83  // WEBGPU-83
-        pipeline.depthStencil = (replayDepthFormat_ != WGPUTextureFormat_Undefined) ? &depthStencil : nullptr;  // WEBGPU-39
-
-        WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
-        if (created == nullptr)
-            throw std::runtime_error("CNA WebGPU: failed to create LitTextured3D VertexLit pipeline");
+        Pipeline3DDescEXT desc;
+        desc.label = "CNA WebGPU LitTextured3D VertexLit Pipeline";
+        desc.layout = litPipelineLayout_;
+        desc.vertexModule = litTexturedVertexLitShader_;
+        desc.fragmentModule = litTexturedVertexLitShader_;
+        desc.vertexBuffers = &vertexBufferLayout;
+        desc.vertexBufferCount = 1;
+        desc.topology = topology;
+        desc.stripIndexFormat = stripIndexFormat;
+        desc.depthTest = depthTest;
+        desc.depthWrite = depthWrite;
+        desc.depthFunc = depthFunc;
+        desc.depthBias = depthBias;
+        desc.slopeScaleDepthBias = slopeScaleDepthBias;
+        desc.blend = blend;
+        desc.blendParams = blendParams;
+        desc.cullMode = cullMode;
+        desc.stencil = stencil;
+        WGPURenderPipeline created = Build3DPipelineEXT(desc);
         litTexturedVertexLitPipelines_[key] = created;
         return created;
     }
@@ -4137,61 +4018,25 @@ namespace CNA::Internal::Renderers::WebGPU
         vertexBufferLayout.attributeCount = attributeCount;
         vertexBufferLayout.attributes = attributes;
 
-        std::array<WGPUColorTargetState, 4> mrtColorTargets{};
-        const int mrtColorCount = InitStockColorTargetsEXT(mrtColorTargets);
-        WGPUColorTargetState& target = mrtColorTargets[0];
-        target.format = surfaceFormat_;
-        target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
-        WGPUFragmentState fragment{};
-        fragment.module = shaderModule;
-        fragment.entryPoint = StringView("fs_main");
-        fragment.targetCount = static_cast<std::size_t>(mrtColorCount);
-        fragment.targets = mrtColorTargets.data();
-
-        WGPURenderPipelineDescriptor pipeline{};
-        pipeline.label = StringView("CNA WebGPU AlphaTest3D Pipeline");
-        pipeline.layout = texturedPipelineLayout_;
-        pipeline.vertex.module = shaderModule;
-        pipeline.vertex.entryPoint = StringView("vs_main");
-        pipeline.vertex.bufferCount = 1;
-        pipeline.vertex.buffers = &vertexBufferLayout;
-        pipeline.primitive.topology = topology;
-        pipeline.primitive.stripIndexFormat = stripIndexFormat;
-        pipeline.primitive.frontFace = WGPUFrontFace_CCW;
-        pipeline.primitive.cullMode = ToWGPUCullMode(cullMode);
-        // WEBGPU-78: baked into the pipeline object (no dynamic WGPU blend override) --
-        // target.blend stays null (opaque overwrite) when blend is disabled, matching
-        // WGPUColorTargetState::blend's own "absent = no blending" semantics.
-        WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
-        FillWGPUBlendState(blendState, blendParams);
-        target.blend = blend ? &blendState : nullptr;
-        // WEBGPU-58: this renderer's single renderer-GLOBAL MSAA sample count (see sampleCount_'s
-        // own comment) -- 1 outside MSAA, identical to every one of these pipelines' behaviour
-        // before MSAA existed.
-        pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
-        pipeline.multisample.mask = CurrentSampleMask(); // REMED-GFX-077: BlendState.MultiSampleMask
-        pipeline.multisample.alphaToCoverageEnabled = false;
-        pipeline.fragment = &fragment;
-
-        WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
-        depthStencil.format = replayDepthFormat_;  // WEBGPU-39: match the active pass's depth format
-        depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
-        depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
-        // WEBGPU-41/79: DepthBias/SlopeScaleDepthBias baked into the pipeline object --
-        // wgpu-native has no per-draw depth-bias override (unlike Vulkan's vkCmdSetDepthBias).
-        // Scale matches FNA's own FNA3D_Driver_OpenGL.c XNAToGL_DepthBiasScale for a 24-bit
-        // depth format ((1<<24)-1): XNA's DepthBias is a fraction of the depth range,
-        // WGPUDepthStencilState::depthBias is an integer count of smallest-representable-
-        // depth-buffer units, exactly like D3D/GL's own "scaled by format precision"
-        // interpretation (this renderer's depth attachment is always Depth24PlusStencil8).
-        depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
-        depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
-        if (replayDepthHasStencil_) FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-39/83  // WEBGPU-83
-        pipeline.depthStencil = (replayDepthFormat_ != WGPUTextureFormat_Undefined) ? &depthStencil : nullptr;  // WEBGPU-39
-
-        WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
-        if (created == nullptr)
-            throw std::runtime_error("CNA WebGPU: failed to create AlphaTest3D pipeline");
+        Pipeline3DDescEXT desc;
+        desc.label = "CNA WebGPU AlphaTest3D Pipeline";
+        desc.layout = texturedPipelineLayout_;
+        desc.vertexModule = shaderModule;
+        desc.fragmentModule = shaderModule;
+        desc.vertexBuffers = &vertexBufferLayout;
+        desc.vertexBufferCount = 1;
+        desc.topology = topology;
+        desc.stripIndexFormat = stripIndexFormat;
+        desc.depthTest = depthTest;
+        desc.depthWrite = depthWrite;
+        desc.depthFunc = depthFunc;
+        desc.depthBias = depthBias;
+        desc.slopeScaleDepthBias = slopeScaleDepthBias;
+        desc.blend = blend;
+        desc.blendParams = blendParams;
+        desc.cullMode = cullMode;
+        desc.stencil = stencil;
+        WGPURenderPipeline created = Build3DPipelineEXT(desc);
         cache[key] = created;
         return created;
     }
@@ -4355,61 +4200,25 @@ namespace CNA::Internal::Renderers::WebGPU
         vertexBufferLayout.attributeCount = attributeCount;
         vertexBufferLayout.attributes = attributes;
 
-        std::array<WGPUColorTargetState, 4> mrtColorTargets{};
-        const int mrtColorCount = InitStockColorTargetsEXT(mrtColorTargets);
-        WGPUColorTargetState& target = mrtColorTargets[0];
-        target.format = surfaceFormat_;
-        target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
-        WGPUFragmentState fragment{};
-        fragment.module = shaderModule;
-        fragment.entryPoint = StringView("fs_main");
-        fragment.targetCount = static_cast<std::size_t>(mrtColorCount);
-        fragment.targets = mrtColorTargets.data();
-
-        WGPURenderPipelineDescriptor pipeline{};
-        pipeline.label = StringView("CNA WebGPU DualTexture3D Pipeline");
-        pipeline.layout = dualTexturePipelineLayout_;
-        pipeline.vertex.module = shaderModule;
-        pipeline.vertex.entryPoint = StringView("vs_main");
-        pipeline.vertex.bufferCount = 1;
-        pipeline.vertex.buffers = &vertexBufferLayout;
-        pipeline.primitive.topology = topology;
-        pipeline.primitive.stripIndexFormat = stripIndexFormat;
-        pipeline.primitive.frontFace = WGPUFrontFace_CCW;
-        pipeline.primitive.cullMode = ToWGPUCullMode(cullMode);
-        // WEBGPU-78: baked into the pipeline object (no dynamic WGPU blend override) --
-        // target.blend stays null (opaque overwrite) when blend is disabled, matching
-        // WGPUColorTargetState::blend's own "absent = no blending" semantics.
-        WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
-        FillWGPUBlendState(blendState, blendParams);
-        target.blend = blend ? &blendState : nullptr;
-        // WEBGPU-58: this renderer's single renderer-GLOBAL MSAA sample count (see sampleCount_'s
-        // own comment) -- 1 outside MSAA, identical to every one of these pipelines' behaviour
-        // before MSAA existed.
-        pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
-        pipeline.multisample.mask = CurrentSampleMask(); // REMED-GFX-077: BlendState.MultiSampleMask
-        pipeline.multisample.alphaToCoverageEnabled = false;
-        pipeline.fragment = &fragment;
-
-        WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
-        depthStencil.format = replayDepthFormat_;  // WEBGPU-39: match the active pass's depth format
-        depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
-        depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
-        // WEBGPU-41/79: DepthBias/SlopeScaleDepthBias baked into the pipeline object --
-        // wgpu-native has no per-draw depth-bias override (unlike Vulkan's vkCmdSetDepthBias).
-        // Scale matches FNA's own FNA3D_Driver_OpenGL.c XNAToGL_DepthBiasScale for a 24-bit
-        // depth format ((1<<24)-1): XNA's DepthBias is a fraction of the depth range,
-        // WGPUDepthStencilState::depthBias is an integer count of smallest-representable-
-        // depth-buffer units, exactly like D3D/GL's own "scaled by format precision"
-        // interpretation (this renderer's depth attachment is always Depth24PlusStencil8).
-        depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
-        depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
-        if (replayDepthHasStencil_) FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-39/83  // WEBGPU-83
-        pipeline.depthStencil = (replayDepthFormat_ != WGPUTextureFormat_Undefined) ? &depthStencil : nullptr;  // WEBGPU-39
-
-        WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
-        if (created == nullptr)
-            throw std::runtime_error("CNA WebGPU: failed to create DualTexture3D pipeline");
+        Pipeline3DDescEXT desc;
+        desc.label = "CNA WebGPU DualTexture3D Pipeline";
+        desc.layout = dualTexturePipelineLayout_;
+        desc.vertexModule = shaderModule;
+        desc.fragmentModule = shaderModule;
+        desc.vertexBuffers = &vertexBufferLayout;
+        desc.vertexBufferCount = 1;
+        desc.topology = topology;
+        desc.stripIndexFormat = stripIndexFormat;
+        desc.depthTest = depthTest;
+        desc.depthWrite = depthWrite;
+        desc.depthFunc = depthFunc;
+        desc.depthBias = depthBias;
+        desc.slopeScaleDepthBias = slopeScaleDepthBias;
+        desc.blend = blend;
+        desc.blendParams = blendParams;
+        desc.cullMode = cullMode;
+        desc.stencil = stencil;
+        WGPURenderPipeline created = Build3DPipelineEXT(desc);
         cache[key] = created;
         return created;
     }
@@ -4576,48 +4385,25 @@ namespace CNA::Internal::Renderers::WebGPU
         vertexBufferLayout.attributeCount = attributes.size();
         vertexBufferLayout.attributes = attributes.data();
 
-        std::array<WGPUColorTargetState, 4> mrtColorTargets{};
-        const int mrtColorCount = InitStockColorTargetsEXT(mrtColorTargets);
-        WGPUColorTargetState& target = mrtColorTargets[0];
-        target.format = surfaceFormat_;
-        target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
-        WGPUFragmentState fragment{};
-        fragment.module = envMapShader_;
-        fragment.entryPoint = StringView("fs_main");
-        fragment.targetCount = static_cast<std::size_t>(mrtColorCount);
-        fragment.targets = mrtColorTargets.data();
-
-        WGPURenderPipelineDescriptor pipeline{};
-        pipeline.label = StringView("CNA WebGPU EnvMap3D Pipeline");
-        pipeline.layout = envMapPipelineLayout_;
-        pipeline.vertex.module = envMapShader_;
-        pipeline.vertex.entryPoint = StringView("vs_main");
-        pipeline.vertex.bufferCount = 1;
-        pipeline.vertex.buffers = &vertexBufferLayout;
-        pipeline.primitive.topology = topology;
-        pipeline.primitive.stripIndexFormat = stripIndexFormat;
-        pipeline.primitive.frontFace = WGPUFrontFace_CCW;
-        pipeline.primitive.cullMode = ToWGPUCullMode(cullMode);
-        WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
-        FillWGPUBlendState(blendState, blendParams);
-        target.blend = blend ? &blendState : nullptr;
-        pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
-        pipeline.multisample.mask = CurrentSampleMask(); // REMED-GFX-077: BlendState.MultiSampleMask
-        pipeline.multisample.alphaToCoverageEnabled = false;
-        pipeline.fragment = &fragment;
-
-        WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
-        depthStencil.format = replayDepthFormat_;  // WEBGPU-39: match the active pass's depth format
-        depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
-        depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
-        depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
-        depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
-        if (replayDepthHasStencil_) FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-39/83  // WEBGPU-83
-        pipeline.depthStencil = (replayDepthFormat_ != WGPUTextureFormat_Undefined) ? &depthStencil : nullptr;  // WEBGPU-39
-
-        WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
-        if (created == nullptr)
-            throw std::runtime_error("CNA WebGPU: failed to create EnvMap3D pipeline");
+        Pipeline3DDescEXT desc;
+        desc.label = "CNA WebGPU EnvMap3D Pipeline";
+        desc.layout = envMapPipelineLayout_;
+        desc.vertexModule = envMapShader_;
+        desc.fragmentModule = envMapShader_;
+        desc.vertexBuffers = &vertexBufferLayout;
+        desc.vertexBufferCount = 1;
+        desc.topology = topology;
+        desc.stripIndexFormat = stripIndexFormat;
+        desc.depthTest = depthTest;
+        desc.depthWrite = depthWrite;
+        desc.depthFunc = depthFunc;
+        desc.depthBias = depthBias;
+        desc.slopeScaleDepthBias = slopeScaleDepthBias;
+        desc.blend = blend;
+        desc.blendParams = blendParams;
+        desc.cullMode = cullMode;
+        desc.stencil = stencil;
+        WGPURenderPipeline created = Build3DPipelineEXT(desc);
         envMapPipelines_[key] = created;
         return created;
     }
@@ -4960,53 +4746,26 @@ namespace CNA::Internal::Renderers::WebGPU
         vertexBufferLayouts[1].attributeCount = instanceAttrs.size();
         vertexBufferLayouts[1].attributes = instanceAttrs.data();
 
-        std::array<WGPUColorTargetState, 4> mrtColorTargets{};
-        const int mrtColorCount = InitStockColorTargetsEXT(mrtColorTargets);
-        WGPUColorTargetState& target = mrtColorTargets[0];
-        target.format = surfaceFormat_;
-        target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
-        WGPUFragmentState fragment{};
-        // REMED-GFX-212: the geometry stride's own packed layout selects the module, the same way
-        // the ordinary route picks colored3d/textured3d/colored_textured3d by stride. Both modules
-        // declare the same single `@location(0) color: vec4f` fragment input, so the fragment
-        // entry point is unchanged either way.
-        WGPUShaderModule instancedModule = hasPackedColor ? instancedColoredShader_ : instancedShader_;
-        fragment.module = instancedModule;
-        fragment.entryPoint = StringView("fs_main");
-        fragment.targetCount = static_cast<std::size_t>(mrtColorCount);
-        fragment.targets = mrtColorTargets.data();
-
-        WGPURenderPipelineDescriptor pipeline{};
-        pipeline.label = StringView("CNA WebGPU Instanced3D Pipeline");
-        pipeline.layout = coloredPipelineLayout_;
-        pipeline.vertex.module = instancedModule;
-        pipeline.vertex.entryPoint = StringView("vs_main");
-        pipeline.vertex.bufferCount = vertexBufferLayouts.size();
-        pipeline.vertex.buffers = vertexBufferLayouts.data();
-        pipeline.primitive.topology = topology;
-        pipeline.primitive.stripIndexFormat = stripIndexFormat;
-        pipeline.primitive.frontFace = WGPUFrontFace_CCW;
-        pipeline.primitive.cullMode = ToWGPUCullMode(cullMode);
-        WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
-        FillWGPUBlendState(blendState, blendParams);
-        target.blend = blend ? &blendState : nullptr;
-        pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
-        pipeline.multisample.mask = CurrentSampleMask(); // REMED-GFX-077: BlendState.MultiSampleMask
-        pipeline.multisample.alphaToCoverageEnabled = false;
-        pipeline.fragment = &fragment;
-
-        WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
-        depthStencil.format = replayDepthFormat_;  // WEBGPU-39: match the active pass's depth format
-        depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
-        depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
-        depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
-        depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
-        if (replayDepthHasStencil_) FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-39/83  // WEBGPU-83
-        pipeline.depthStencil = (replayDepthFormat_ != WGPUTextureFormat_Undefined) ? &depthStencil : nullptr;  // WEBGPU-39
-
-        WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
-        if (created == nullptr)
-            throw std::runtime_error("CNA WebGPU: failed to create Instanced3D pipeline");
+        const WGPUShaderModule instancedModule = hasPackedColor ? instancedColoredShader_ : instancedShader_;
+        Pipeline3DDescEXT desc;
+        desc.label = "CNA WebGPU Instanced3D Pipeline";
+        desc.layout = coloredPipelineLayout_;
+        desc.vertexModule = instancedModule;
+        desc.fragmentModule = instancedModule;
+        desc.vertexBuffers = vertexBufferLayouts.data();
+        desc.vertexBufferCount = vertexBufferLayouts.size();
+        desc.topology = topology;
+        desc.stripIndexFormat = stripIndexFormat;
+        desc.depthTest = depthTest;
+        desc.depthWrite = depthWrite;
+        desc.depthFunc = depthFunc;
+        desc.depthBias = depthBias;
+        desc.slopeScaleDepthBias = slopeScaleDepthBias;
+        desc.blend = blend;
+        desc.blendParams = blendParams;
+        desc.cullMode = cullMode;
+        desc.stencil = stencil;
+        WGPURenderPipeline created = Build3DPipelineEXT(desc);
         instancedPipelines_[key] = created;
         return created;
     }
@@ -9843,61 +9602,25 @@ namespace
         vertexBufferLayout.attributeCount = colored ? 5u : 4u;
         vertexBufferLayout.attributes = attributes.data();
 
-        std::array<WGPUColorTargetState, 4> mrtColorTargets{};
-        const int mrtColorCount = InitStockColorTargetsEXT(mrtColorTargets);
-        WGPUColorTargetState& target = mrtColorTargets[0];
-        target.format = surfaceFormat_;
-        target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
-        WGPUFragmentState fragment{};
-        fragment.module = colored ? pbrColorShader_ : pbrShader_;
-        fragment.entryPoint = StringView("fs_main");
-        fragment.targetCount = static_cast<std::size_t>(mrtColorCount);
-        fragment.targets = mrtColorTargets.data();
-
-        WGPURenderPipelineDescriptor pipeline{};
-        pipeline.label = StringView("CNA WebGPU Pbr3D Pipeline");
-        pipeline.layout = pbrPipelineLayout_;
-        pipeline.vertex.module = colored ? pbrColorShader_ : pbrShader_;
-        pipeline.vertex.entryPoint = StringView("vs_main");
-        pipeline.vertex.bufferCount = 1;
-        pipeline.vertex.buffers = &vertexBufferLayout;
-        pipeline.primitive.topology = topology;
-        pipeline.primitive.stripIndexFormat = stripIndexFormat;
-        pipeline.primitive.frontFace = WGPUFrontFace_CCW;
-        pipeline.primitive.cullMode = ToWGPUCullMode(cullMode);
-        // WEBGPU-78: baked into the pipeline object (no dynamic WGPU blend override) --
-        // target.blend stays null (opaque overwrite) when blend is disabled, matching
-        // WGPUColorTargetState::blend's own "absent = no blending" semantics.
-        WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
-        FillWGPUBlendState(blendState, blendParams);
-        target.blend = blend ? &blendState : nullptr;
-        // WEBGPU-58: this renderer's single renderer-GLOBAL MSAA sample count (see sampleCount_'s
-        // own comment) -- 1 outside MSAA, identical to every one of these pipelines' behaviour
-        // before MSAA existed.
-        pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
-        pipeline.multisample.mask = CurrentSampleMask(); // REMED-GFX-077: BlendState.MultiSampleMask
-        pipeline.multisample.alphaToCoverageEnabled = false;
-        pipeline.fragment = &fragment;
-
-        WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
-        depthStencil.format = replayDepthFormat_;  // WEBGPU-39: match the active pass's depth format
-        depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
-        depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
-        // WEBGPU-41/79: DepthBias/SlopeScaleDepthBias baked into the pipeline object --
-        // wgpu-native has no per-draw depth-bias override (unlike Vulkan's vkCmdSetDepthBias).
-        // Scale matches FNA's own FNA3D_Driver_OpenGL.c XNAToGL_DepthBiasScale for a 24-bit
-        // depth format ((1<<24)-1): XNA's DepthBias is a fraction of the depth range,
-        // WGPUDepthStencilState::depthBias is an integer count of smallest-representable-
-        // depth-buffer units, exactly like D3D/GL's own "scaled by format precision"
-        // interpretation (this renderer's depth attachment is always Depth24PlusStencil8).
-        depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
-        depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
-        if (replayDepthHasStencil_) FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-39/83  // WEBGPU-83
-        pipeline.depthStencil = (replayDepthFormat_ != WGPUTextureFormat_Undefined) ? &depthStencil : nullptr;  // WEBGPU-39
-
-        WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
-        if (created == nullptr)
-            throw std::runtime_error("CNA WebGPU: failed to create Pbr3D pipeline");
+        Pipeline3DDescEXT desc;
+        desc.label = "CNA WebGPU Pbr3D Pipeline";
+        desc.layout = pbrPipelineLayout_;
+        desc.vertexModule = colored ? pbrColorShader_ : pbrShader_;
+        desc.fragmentModule = colored ? pbrColorShader_ : pbrShader_;
+        desc.vertexBuffers = &vertexBufferLayout;
+        desc.vertexBufferCount = 1;
+        desc.topology = topology;
+        desc.stripIndexFormat = stripIndexFormat;
+        desc.depthTest = depthTest;
+        desc.depthWrite = depthWrite;
+        desc.depthFunc = depthFunc;
+        desc.depthBias = depthBias;
+        desc.slopeScaleDepthBias = slopeScaleDepthBias;
+        desc.blend = blend;
+        desc.blendParams = blendParams;
+        desc.cullMode = cullMode;
+        desc.stencil = stencil;
+        WGPURenderPipeline created = Build3DPipelineEXT(desc);
         cache[key] = created;
         return created;
     }
@@ -10371,61 +10094,25 @@ namespace
         vertexBufferLayout.attributeCount = attributeCount;
         vertexBufferLayout.attributes = attributes.data();
 
-        std::array<WGPUColorTargetState, 4> mrtColorTargets{};
-        const int mrtColorCount = InitStockColorTargetsEXT(mrtColorTargets);
-        WGPUColorTargetState& target = mrtColorTargets[0];
-        target.format = surfaceFormat_;
-        target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
-        WGPUFragmentState fragment{};
-        fragment.module = shaderModule;
-        fragment.entryPoint = StringView("fs_main");
-        fragment.targetCount = static_cast<std::size_t>(mrtColorCount);
-        fragment.targets = mrtColorTargets.data();
-
-        WGPURenderPipelineDescriptor pipeline{};
-        pipeline.label = StringView("CNA WebGPU Skinned3D Pipeline");
-        pipeline.layout = skinnedPipelineLayout_;
-        pipeline.vertex.module = shaderModule;
-        pipeline.vertex.entryPoint = StringView("vs_main");
-        pipeline.vertex.bufferCount = 1;
-        pipeline.vertex.buffers = &vertexBufferLayout;
-        pipeline.primitive.topology = topology;
-        pipeline.primitive.stripIndexFormat = stripIndexFormat;
-        pipeline.primitive.frontFace = WGPUFrontFace_CCW;
-        pipeline.primitive.cullMode = ToWGPUCullMode(cullMode);
-        // WEBGPU-78: baked into the pipeline object (no dynamic WGPU blend override) --
-        // target.blend stays null (opaque overwrite) when blend is disabled, matching
-        // WGPUColorTargetState::blend's own "absent = no blending" semantics.
-        WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
-        FillWGPUBlendState(blendState, blendParams);
-        target.blend = blend ? &blendState : nullptr;
-        // WEBGPU-58: this renderer's single renderer-GLOBAL MSAA sample count (see sampleCount_'s
-        // own comment) -- 1 outside MSAA, identical to every one of these pipelines' behaviour
-        // before MSAA existed.
-        pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
-        pipeline.multisample.mask = CurrentSampleMask(); // REMED-GFX-077: BlendState.MultiSampleMask
-        pipeline.multisample.alphaToCoverageEnabled = false;
-        pipeline.fragment = &fragment;
-
-        WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
-        depthStencil.format = replayDepthFormat_;  // WEBGPU-39: match the active pass's depth format
-        depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
-        depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
-        // WEBGPU-41/79: DepthBias/SlopeScaleDepthBias baked into the pipeline object --
-        // wgpu-native has no per-draw depth-bias override (unlike Vulkan's vkCmdSetDepthBias).
-        // Scale matches FNA's own FNA3D_Driver_OpenGL.c XNAToGL_DepthBiasScale for a 24-bit
-        // depth format ((1<<24)-1): XNA's DepthBias is a fraction of the depth range,
-        // WGPUDepthStencilState::depthBias is an integer count of smallest-representable-
-        // depth-buffer units, exactly like D3D/GL's own "scaled by format precision"
-        // interpretation (this renderer's depth attachment is always Depth24PlusStencil8).
-        depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
-        depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
-        if (replayDepthHasStencil_) FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-39/83  // WEBGPU-83
-        pipeline.depthStencil = (replayDepthFormat_ != WGPUTextureFormat_Undefined) ? &depthStencil : nullptr;  // WEBGPU-39
-
-        WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
-        if (created == nullptr)
-            throw std::runtime_error("CNA WebGPU: failed to create Skinned3D pipeline");
+        Pipeline3DDescEXT desc;
+        desc.label = "CNA WebGPU Skinned3D Pipeline";
+        desc.layout = skinnedPipelineLayout_;
+        desc.vertexModule = shaderModule;
+        desc.fragmentModule = shaderModule;
+        desc.vertexBuffers = &vertexBufferLayout;
+        desc.vertexBufferCount = 1;
+        desc.topology = topology;
+        desc.stripIndexFormat = stripIndexFormat;
+        desc.depthTest = depthTest;
+        desc.depthWrite = depthWrite;
+        desc.depthFunc = depthFunc;
+        desc.depthBias = depthBias;
+        desc.slopeScaleDepthBias = slopeScaleDepthBias;
+        desc.blend = blend;
+        desc.blendParams = blendParams;
+        desc.cullMode = cullMode;
+        desc.stencil = stencil;
+        WGPURenderPipeline created = Build3DPipelineEXT(desc);
         cache[key] = created;
         return created;
     }
@@ -10791,61 +10478,25 @@ namespace
         vertexBufferLayout.attributeCount = colored ? 7u : 6u;
         vertexBufferLayout.attributes = attributes.data();
 
-        std::array<WGPUColorTargetState, 4> mrtColorTargets{};
-        const int mrtColorCount = InitStockColorTargetsEXT(mrtColorTargets);
-        WGPUColorTargetState& target = mrtColorTargets[0];
-        target.format = surfaceFormat_;
-        target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
-        WGPUFragmentState fragment{};
-        fragment.module = colored ? skinnedPbrColorShader_ : skinnedPbrShader_;
-        fragment.entryPoint = StringView("fs_main");
-        fragment.targetCount = static_cast<std::size_t>(mrtColorCount);
-        fragment.targets = mrtColorTargets.data();
-
-        WGPURenderPipelineDescriptor pipeline{};
-        pipeline.label = StringView("CNA WebGPU SkinnedPbr3D Pipeline");
-        pipeline.layout = skinnedPbrPipelineLayout_;
-        pipeline.vertex.module = colored ? skinnedPbrColorShader_ : skinnedPbrShader_;
-        pipeline.vertex.entryPoint = StringView("vs_main");
-        pipeline.vertex.bufferCount = 1;
-        pipeline.vertex.buffers = &vertexBufferLayout;
-        pipeline.primitive.topology = topology;
-        pipeline.primitive.stripIndexFormat = stripIndexFormat;
-        pipeline.primitive.frontFace = WGPUFrontFace_CCW;
-        pipeline.primitive.cullMode = ToWGPUCullMode(cullMode);
-        // WEBGPU-78: baked into the pipeline object (no dynamic WGPU blend override) --
-        // target.blend stays null (opaque overwrite) when blend is disabled, matching
-        // WGPUColorTargetState::blend's own "absent = no blending" semantics.
-        WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
-        FillWGPUBlendState(blendState, blendParams);
-        target.blend = blend ? &blendState : nullptr;
-        // WEBGPU-58: this renderer's single renderer-GLOBAL MSAA sample count (see sampleCount_'s
-        // own comment) -- 1 outside MSAA, identical to every one of these pipelines' behaviour
-        // before MSAA existed.
-        pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
-        pipeline.multisample.mask = CurrentSampleMask(); // REMED-GFX-077: BlendState.MultiSampleMask
-        pipeline.multisample.alphaToCoverageEnabled = false;
-        pipeline.fragment = &fragment;
-
-        WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
-        depthStencil.format = replayDepthFormat_;  // WEBGPU-39: match the active pass's depth format
-        depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
-        depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
-        // WEBGPU-41/79: DepthBias/SlopeScaleDepthBias baked into the pipeline object --
-        // wgpu-native has no per-draw depth-bias override (unlike Vulkan's vkCmdSetDepthBias).
-        // Scale matches FNA's own FNA3D_Driver_OpenGL.c XNAToGL_DepthBiasScale for a 24-bit
-        // depth format ((1<<24)-1): XNA's DepthBias is a fraction of the depth range,
-        // WGPUDepthStencilState::depthBias is an integer count of smallest-representable-
-        // depth-buffer units, exactly like D3D/GL's own "scaled by format precision"
-        // interpretation (this renderer's depth attachment is always Depth24PlusStencil8).
-        depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
-        depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
-        if (replayDepthHasStencil_) FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-39/83  // WEBGPU-83
-        pipeline.depthStencil = (replayDepthFormat_ != WGPUTextureFormat_Undefined) ? &depthStencil : nullptr;  // WEBGPU-39
-
-        WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
-        if (created == nullptr)
-            throw std::runtime_error("CNA WebGPU: failed to create SkinnedPbr3D pipeline");
+        Pipeline3DDescEXT desc;
+        desc.label = "CNA WebGPU SkinnedPbr3D Pipeline";
+        desc.layout = skinnedPbrPipelineLayout_;
+        desc.vertexModule = colored ? skinnedPbrColorShader_ : skinnedPbrShader_;
+        desc.fragmentModule = colored ? skinnedPbrColorShader_ : skinnedPbrShader_;
+        desc.vertexBuffers = &vertexBufferLayout;
+        desc.vertexBufferCount = 1;
+        desc.topology = topology;
+        desc.stripIndexFormat = stripIndexFormat;
+        desc.depthTest = depthTest;
+        desc.depthWrite = depthWrite;
+        desc.depthFunc = depthFunc;
+        desc.depthBias = depthBias;
+        desc.slopeScaleDepthBias = slopeScaleDepthBias;
+        desc.blend = blend;
+        desc.blendParams = blendParams;
+        desc.cullMode = cullMode;
+        desc.stencil = stencil;
+        WGPURenderPipeline created = Build3DPipelineEXT(desc);
         cache[key] = created;
         return created;
     }

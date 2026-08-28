@@ -1800,6 +1800,37 @@ namespace CNA::Internal::Renderers::WebGPU
          * @param snapshot The scissor state captured when the draw was queued.
          */
         void ApplyDrawScissor(WGPURenderPassEncoder pass, const WebGPUScissorSnapshot& snapshot);
+
+        /// WEBGPU-29: the inputs that vary between the 12 GetOrCreatePipeline*3D families. Everything
+        /// else in a 3D WGPURenderPipelineDescriptor -- colour target (surfaceFormat_ + CurrentWriteMask
+        /// + MRT via InitStockColorTargetsEXT), fragment/vertex entry points, CCW front face,
+        /// ToWGPUCullMode, the baked blend/multisample/depth-bias/stencil state and the depth-format
+        /// gating -- is identical across all 12 and is assembled by Build3DPipelineEXT. The per-family
+        /// vertex layout, cache key and cache map stay in each GetOrCreatePipeline* function.
+        struct Pipeline3DDescEXT
+        {
+            const char* label = nullptr;                 ///< Pipeline debug label.
+            WGPUPipelineLayout layout = nullptr;         ///< The family's bind-group pipeline layout.
+            WGPUShaderModule vertexModule = nullptr;     ///< vs_main provider.
+            WGPUShaderModule fragmentModule = nullptr;   ///< fs_main provider (often the same module).
+            const WGPUVertexBufferLayout* vertexBuffers = nullptr;  ///< Already-assembled layout(s).
+            std::size_t vertexBufferCount = 0;           ///< 1 for most, 2 for the instanced family.
+            WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
+            WGPUIndexFormat stripIndexFormat = WGPUIndexFormat_Undefined;
+            bool depthTest = true;
+            bool depthWrite = true;
+            int depthFunc = 0;
+            float depthBias = 0.0f;
+            float slopeScaleDepthBias = 0.0f;
+            bool blend = false;
+            BlendKeyParams blendParams{};
+            int cullMode = 0;
+            StencilKeyParams stencil{};
+        };
+        /// WEBGPU-29: assembles the shared 3D WGPURenderPipelineDescriptor from @p desc and creates
+        /// the pipeline. Byte-identical to the former per-function assembly. Throws on failure.
+        [[nodiscard]] WGPURenderPipeline Build3DPipelineEXT(const Pipeline3DDescEXT& desc);
+
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineColored3D(WGPUPrimitiveTopology topology,
                                                                        WGPUIndexFormat stripIndexFormat,
                                                                        bool depthTest, bool depthWrite,

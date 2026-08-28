@@ -2,9 +2,10 @@
 
 ## Status summary (2026-08-27)
 
-**144 rows — ✅ 139 · 🟨 4 · ⬜ 1** (counted from the row tables by `tools/count_webgpu_plan_status.sh`,
-not by hand). The **5 open rows** are the only WebGPU work not at ✅:
-`WEBGPU-1, 12, 29, 59, 107`. (Closed 2026-08-28: `WEBGPU-28` all WGSL extracted to
+**144 rows — ✅ 140 · 🟨 3 · ⬜ 1** (counted from the row tables by `tools/count_webgpu_plan_status.sh`,
+not by hand). The **4 open rows** are the only WebGPU work not at ✅:
+`WEBGPU-1, 12, 59, 107`. (Closed 2026-08-28: `WEBGPU-29` shared `Build3DPipelineEXT()` descriptor
+builder for all 12 3D families (behaviour-preserving, −318 lines, suite still 104/104); `WEBGPU-28` all WGSL extracted to
 `webgpu_shaders.hpp` + `ValidateAllShadersEXT()` whole-set validation + `WebGPU_ShaderValidation`
 test + `CNA_WEBGPU_VALIDATE_SHADERS` startup gate. Closed 2026-08-27: `WEBGPU-114` RenderTargetCube per-face MSAA
 resolve + `mipMap=true` mip-chain regeneration + `WebGPU_RenderTargetCube` Checks E/F; `WEBGPU-39`
@@ -21,9 +22,6 @@ build/link/runtime verification.)
   Windows/macOS/linux-aarch64 packages have pinned hashes but no build/link/runtime verification here.
 - **`WEBGPU-12` 🟨** — one fresh per-*draw* uniform `WGPUBuffer` (correct, GPU-validated), not the
   per-frame/ring-buffer design this row describes.
-- **`WEBGPU-29` 🟨** — no single reusable `WGPURenderPipelineDescriptor` builder for the 3D families
-  (blend/cull/depth-bias are already shared via `Make3DPipelineKey`, but vertex/fragment/multisample
-  assembly is still per-function).
 - **`WEBGPU-59` 🟨** — the SpriteBatch dynamic vertex buffer grows in place; no 3-frame ring/fencing.
 - **`WEBGPU-107` ⬜** — `DebugSimulateContextLoss` is an inherited no-op (a real device
   destroy+recreate plus re-init of every live GPU resource is a large GL-flavoured feature the Vulkan
@@ -184,20 +182,18 @@ Phase 64.1.
 
 ## Active execution order — do this one task at a time
 
-**Current open tasks (2026-08-28)** — only these **5** rows are not ✅
-(`WEBGPU-1, 12, 29, 59, 107`); do one at a time, each its own commit, never mark ✅ from
+**Current open tasks (2026-08-28)** — only these **4** rows are not ✅
+(`WEBGPU-1, 12, 59, 107`); do one at a time, each its own commit, never mark ✅ from
 source inspection.
 
 1. **`WEBGPU-1`** — build/link/run the Windows/macOS/aarch64 packages (whose hashes are now pinned) on
    an appropriate CI/platform, so package integrity becomes a full non-Linux verification.
-2. **`WEBGPU-29`** — a shared pipeline descriptor/key builder, behaviour-preserving; land it as its own
-   commit, never mixed with a functional fix. (Refactor.)
-3. **`WEBGPU-12` / `WEBGPU-59`** — bounded, aligned ring-buffer uniform/vertex allocation with safe
+2. **`WEBGPU-12` / `WEBGPU-59`** — bounded, aligned ring-buffer uniform/vertex allocation with safe
    lifetime across in-flight frames + a stress test. (Larger, separate task.)
-4. **`WEBGPU-107`** — real device/context loss recovery + resource re-init, or keep it open with the
+3. **`WEBGPU-107`** — real device/context loss recovery + resource re-init, or keep it open with the
    exact lifetime contract (a no-op must not be marked as an implementation).
 
-(Five open rows: `WEBGPU-1, 12, 29, 59, 107`; `12` and `59` share item 3. Matches the
+(Four open rows: `WEBGPU-1, 12, 59, 107`; `12` and `59` share item 2. Matches the
 "Status summary" and "Current limitations" at the top.)
 
 The dated chronology of completed 2D/3D work below is **archival** — read the "Status summary" and
@@ -506,7 +502,7 @@ mark it ✅ from source inspection alone.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| WEBGPU-29 | `WGPURenderPipelineDescriptor` builder helper: vertex state, primitive state, depth-stencil state, multisample state, fragment state | 🟨 | Re-audited 2026-08-26 -- still 🟨, gap unchanged. The concrete SpriteBatch descriptor is runtime-verified (`WEBGPU-126`/`130`); a reusable all-pipeline builder for the 3D families in Phase 59 onward remains open. 2026-07-17: `Make3DPipelineKey()`/`FillWGPUBlendState()`/`ToWGPUCullMode()`/`FillWGPUSamplerDescriptor()` (see `WEBGPU-30`/`41`/`78`/`79`/`82`) are a real step toward this row's "reusable builder" — every 3D `GetOrCreatePipeline*()` now shares the exact same blend/cull/depth-bias construction logic instead of ten independently-hardcoded copies — but the full `WGPURenderPipelineDescriptor` assembly (vertex/fragment/multisample state) itself remains per-function, not yet factored into one shared builder; stays 🟨. |
+| WEBGPU-29 | `WGPURenderPipelineDescriptor` builder helper: vertex state, primitive state, depth-stencil state, multisample state, fragment state | ✅ | **DONE 2026-08-28.** `WebGPURenderer::Build3DPipelineEXT(const Pipeline3DDescEXT&)` is the one shared `WGPURenderPipelineDescriptor` assembly for all 12 `GetOrCreatePipeline*3D` families: it builds the colour target (`surfaceFormat_` + `CurrentWriteMask()` + MRT via `InitStockColorTargetsEXT`), the `vs_main`/`fs_main` entry points, CCW front face, `ToWGPUCullMode`, the baked blend (`WEBGPU-78`), the renderer-global multisample state (`WEBGPU-58`), the depth-bias scale (`WEBGPU-41`/`79`) and the depth-format + stencil gating (`WEBGPU-39`/`83`), then creates the pipeline. Each caller now passes only its per-family bits (`Pipeline3DDescEXT`: vertex-buffer layout(s), shader module(s), pipeline layout, label) and keeps its own cache key/map. The former block -- character-identical across all 12 (verified field-by-field before extraction) -- is gone: −318 lines net. Behaviour-preserving: the full WebGPU suite is still **104/104** on `:131`, including every 3D/effect/instancing/skinned/pbr pixel test. Earlier steps toward this (`Make3DPipelineKey()`/`FillWGPUBlendState()`/`ToWGPUCullMode()` — `WEBGPU-30`/`41`/`78`/`79`/`82`) already shared the blend/cull/depth-bias logic; this closes the row by factoring the descriptor assembly itself. The SpriteBatch and MipBlit pipelines keep their own builders (they are not 3D families -- SpriteBatch uses a per-snapshot sample count and no depth bias; MipBlit is single-sample colour-only). |
 | WEBGPU-30 | Pipeline cache: `std::unordered_map<uint64_t, WGPURenderPipeline>` with MakeKey(topo, depth, blend, cull, stride, wireframe, msaa) | ✅ | Verified 2026-07-17: `Make3DPipelineKey()` (shared anonymous-namespace helper) builds exactly this shape — topology, depthTest/Write/Func, blend enable+real factors (collapsed to fixed bits when disabled, matching `VulkanGraphicsBackend::PackBlendBits()`'s own precedent so different disabled `BlendState`s don't create duplicate pipelines), cullMode, wireframe, depthBias/slopeScaleDepthBias (`std::bit_cast` into the key — wgpu-native has no dynamic depth-bias override, so this is a real, honestly-documented pipeline-permutation cost, not hidden), plus a per-family salt (stride for `AlphaTest3D`/`DualTexture3D`). All 15 pipeline cache maps switched from `unordered_map<int,...>` to `unordered_map<std::uint64_t,...>`. `msaa` is not part of this backend's key — this backend has no MSAA pipeline variant at all yet (unlike Vulkan's own `MakeKey`), a real, narrower scope, not silently pretended otherwise. |
 | WEBGPU-31 | `GetOrCreatePipeline2D()` — sprite pipeline (stride=24, Sprite2DVertex layout, no depth) | ✅ | Opaque and premultiplied-alpha variants are runtime-verified: `WEBGPU-126`'s validation scene and `WEBGPU-130`'s independent `../mobile-eggbert` application both render correctly through this pipeline. |
 | WEBGPU-32 | `GetOrCreatePipelineColored3D()` — stride=16, VPC layout | ✅ | Verified 2026-07-12: cached by `(topology, depthFunc, depthTest, depthWrite)`, `Float32x3` position + `Unorm8x4` color at stride 16. `WebGPU_Colored3D`'s two depth-order checks (far-then-near and near-then-far both correctly resolve to the near quad, not "last draw wins") prove genuine `WGPUCompareFunction` depth comparison, not just "a pipeline was created." |

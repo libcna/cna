@@ -786,7 +786,11 @@ line-by-line Vulkan translation:
 - WebGPU uses WGSL shader modules rather than CNA's Vulkan SPIR-V modules.
 - Resource bindings use bind-group layouts and bind groups rather than Vulkan descriptor sets.
 - WebGPU has no push constants, so future 3D effect data will use uniform buffers.
-- Pipeline state is largely immutable and must eventually be represented in a pipeline cache.
+- Pipeline state is largely immutable and cached per family. All 12 3D pipeline families
+  (`GetOrCreatePipeline*3D`) share ONE `WGPURenderPipelineDescriptor` assembly,
+  `Build3DPipelineEXT(Pipeline3DDescEXT)` (`WEBGPU-29`): each family passes only its vertex layout,
+  shader module(s), pipeline layout and label, and keeps its own cache key/map. The SpriteBatch and
+  MipBlit pipelines keep their own builders (not 3D families).
 - Native surface creation is performed directly from SDL3 window properties; CNA does not require
   the separate `sdl3webgpu` compatibility library.
 
