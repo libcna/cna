@@ -1,10 +1,14 @@
 # WebGPU Backend Implementation Plan
 
-## Status summary (2026-08-27)
+## Status summary (2026-08-28)
 
 **144 rows — ✅ 142 · 🟨 1 · ⬜ 1** (counted from the row tables by `tools/count_webgpu_plan_status.sh`,
-not by hand). The **2 open rows** are the only WebGPU work not at ✅:
-`WEBGPU-1, 107`. (Closed 2026-08-28: `WEBGPU-12`/`WEBGPU-59` transient per-draw buffer pool (recycle,
+not by hand). The **2 open rows** are the only WebGPU work not at ✅, and both are blocked on resources
+outside this development environment rather than on renderer work: `WEBGPU-1` needs the
+Windows/macOS/aarch64 packages built/linked/run on a real CI or those platforms (their hashes are
+already pinned here), and `WEBGPU-107` needs a real device-loss scenario to drive and verify a
+destroy+recreate path — a large GL-flavoured feature the Vulkan renderer also leaves unimplemented.
+Every WebGPU task that could be completed and verified in this environment is done. (Closed 2026-08-28: `WEBGPU-12`/`WEBGPU-59` transient per-draw buffer pool (recycle,
 don't churn) + 3-slot SpriteBatch vertex ring + `WebGPU_BufferPoolStress` (create count plateaus,
 reuse climbs, zero GPU errors); `WEBGPU-29` shared `Build3DPipelineEXT()` descriptor
 builder for all 12 3D families (behaviour-preserving, −318 lines, suite still 104/104); `WEBGPU-28` all WGSL extracted to
