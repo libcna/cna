@@ -1110,3 +1110,494 @@ CNA_Result cna_content_type_reader_destroy(const CNA_ContentTypeReaderHandle typ
             "The owned content type-reader handle could not be released.");
     });
 }
+
+/* --- CBIND-105: the reflective content readers ------------------------------------------------- */
+
+namespace {
+
+/// One declared member: either an inline value at a byte offset, or a caller callback.
+struct ReflectiveField final {
+    CNA_ContentFieldKind kind;
+    uint64_t offset;
+    CNA_ReflectiveFieldCallback callback;
+    void* context;
+};
+
+struct ReflectiveRegistration final {
+    std::string targetTypeName;
+    CNA_ReflectiveObjectCreateCallback create;
+    void* createContext;
+    std::vector<ReflectiveField> fields;
+};
+
+/// The kind used to mark a caller callback rather than an inline value.
+constexpr CNA_ContentFieldKind ReflectiveCustomFieldKind = UINT32_MAX;
+
+/// Writes one inline value at its declared offset, in the layout the caller's own struct has.
+void StoreReflectiveField(
+    void* const object,
+    const ReflectiveField& field,
+    ContentReader& input)
+{
+    auto* const bytes = static_cast<std::uint8_t*>(object) + field.offset;
+    switch (field.kind) {
+    case CNA_CONTENT_FIELD_BOOLEAN: {
+        const bool value = input.ReadBoolean();
+        std::memcpy(bytes, &value, sizeof(value));
+        break;
+    }
+    case CNA_CONTENT_FIELD_SINGLE: {
+        const float value = input.ReadSingle();
+        std::memcpy(bytes, &value, sizeof(value));
+        break;
+    }
+    case CNA_CONTENT_FIELD_DOUBLE: {
+        const double value = input.ReadDouble();
+        std::memcpy(bytes, &value, sizeof(value));
+        break;
+    }
+    case CNA_CONTENT_FIELD_INT32: {
+        const std::int32_t value = input.ReadInt32();
+        std::memcpy(bytes, &value, sizeof(value));
+        break;
+    }
+    case CNA_CONTENT_FIELD_UINT32: {
+        const std::uint32_t value = input.ReadUInt32();
+        std::memcpy(bytes, &value, sizeof(value));
+        break;
+    }
+    case CNA_CONTENT_FIELD_INT64: {
+        const std::int64_t value = input.ReadInt64();
+        std::memcpy(bytes, &value, sizeof(value));
+        break;
+    }
+    case CNA_CONTENT_FIELD_BYTE: {
+        const std::uint8_t value = input.ReadByte();
+        std::memcpy(bytes, &value, sizeof(value));
+        break;
+    }
+    case CNA_CONTENT_FIELD_VECTOR2: {
+        const auto value = input.ReadVector2();
+        const float pair[2] = {value.X, value.Y};
+        std::memcpy(bytes, pair, sizeof(pair));
+        break;
+    }
+    case CNA_CONTENT_FIELD_VECTOR3: {
+        const auto value = input.ReadVector3();
+        const float triple[3] = {value.X, value.Y, value.Z};
+        std::memcpy(bytes, triple, sizeof(triple));
+        break;
+    }
+    case CNA_CONTENT_FIELD_VECTOR4: {
+        const auto value = input.ReadVector4();
+        const float quad[4] = {value.X, value.Y, value.Z, value.W};
+        std::memcpy(bytes, quad, sizeof(quad));
+        break;
+    }
+    case CNA_CONTENT_FIELD_MATRIX: {
+        const auto value = input.ReadMatrix();
+        const float cells[16] = {
+            value.M11, value.M12, value.M13, value.M14,
+            value.M21, value.M22, value.M23, value.M24,
+            value.M31, value.M32, value.M33, value.M34,
+            value.M41, value.M42, value.M43, value.M44};
+        std::memcpy(bytes, cells, sizeof(cells));
+        break;
+    }
+    case CNA_CONTENT_FIELD_QUATERNION: {
+        const auto value = input.ReadQuaternion();
+        const float quad[4] = {value.X, value.Y, value.Z, value.W};
+        std::memcpy(bytes, quad, sizeof(quad));
+        break;
+    }
+    case CNA_CONTENT_FIELD_COLOR: {
+        const auto value = input.ReadColor();
+        const std::uint8_t channels[4] = {
+            value.getRProperty(), value.getGProperty(),
+            value.getBProperty(), value.getAProperty()};
+        std::memcpy(bytes, channels, sizeof(channels));
+        break;
+    }
+    default: {
+        // A .NET TimeSpan is a value type written as its Int64 tick count, and it lands as ticks:
+        // C has no TimeSpan value and inventing one here would be a second spelling of int64.
+        const std::int64_t ticks = input.ReadInt64();
+        std::memcpy(bytes, &ticks, sizeof(ticks));
+        break;
+    }
+    }
+}
+
+/**
+ * The reader a C-declared reflective type registers.
+ *
+ * It is not `ReflectiveTypeReader<T>` and cannot be: that template needs a C++ `T` to
+ * default-construct and to hold member pointers into, and a C caller has neither. What is bound is
+ * the **contract** -- the canonical reader name, the declared wire order, and value types read
+ * inline -- and this implements the same one against a caller-made object and byte offsets.
+ */
+class ReflectiveForeignReader final : public ContentTypeReaderBase {
+public:
+    explicit ReflectiveForeignReader(std::shared_ptr<ReflectiveRegistration> registration)
+        : ContentTypeReaderBase(registration->targetTypeName)
+        , registration_(std::move(registration))
+    {
+    }
+
+    [[nodiscard]] bool getCanDeserializeIntoExistingObjectProperty() const override
+    {
+        // The canonical reflective reader takes an existing instance and fills it, so this does.
+        return true;
+    }
+
+    std::any ReadUntyped(ContentReader& input, std::any existingInstance) override
+    {
+        void* object = nullptr;
+        if (existingInstance.has_value()) {
+            const auto* const existing = std::any_cast<ForeignContentObjectEXT>(&existingInstance);
+            if (existing == nullptr) {
+                throw Microsoft::Xna::Framework::Content::ContentLoadException(
+                    "The existing instance offered to the reflective reader for '" +
+                    registration_->targetTypeName + "' was produced by a different reader.");
+            }
+            object = existing->value;
+        }
+        if (object == nullptr) {
+            const CNA_Result result =
+                registration_->create(registration_->createContext, &object);
+            if (result != CNA_RESULT_SUCCESS || object == nullptr) {
+                throw Microsoft::Xna::Framework::Content::ContentLoadException(
+                    "The object factory for the reflective reader registered as '" +
+                    registration_->targetTypeName + "' failed (CNA_Result " +
+                    std::to_string(result) + ").");
+            }
+        }
+
+        for (const ReflectiveField& field : registration_->fields) {
+            if (field.kind != ReflectiveCustomFieldKind) {
+                StoreReflectiveField(object, field, input);
+                continue;
+            }
+            // Same borrowed-handle discipline the caller-supplied reader path uses: created over
+            // CNA's own mid-stream reader with a no-op deleter, and released on every path.
+            const auto resource = std::make_shared<ContentReaderResource>();
+            resource->value = std::shared_ptr<ContentReader>(&input, [](ContentReader*) {});
+            resource->isBorrowed = true;
+            CNA_Handle readerHandle = CNA_INVALID_HANDLE;
+            if (GetRuntimeHandles().Create(
+                    ObjectKind::ContentReader, resource, &readerHandle) !=
+                CNA_RESULT_SUCCESS) {
+                throw Microsoft::Xna::Framework::Content::ContentLoadException(
+                    "A borrowed ContentReader handle could not be created for the reflective "
+                    "reader registered as '" + registration_->targetTypeName + "'.");
+            }
+            const CNA_Result result = field.callback(field.context, object, readerHandle);
+            static_cast<void>(GetRuntimeHandles().Release(readerHandle));
+            if (result != CNA_RESULT_SUCCESS) {
+                throw Microsoft::Xna::Framework::Content::ContentLoadException(
+                    "A custom member of the reflective reader registered as '" +
+                    registration_->targetTypeName + "' failed to read (CNA_Result " +
+                    std::to_string(result) + ").");
+            }
+        }
+        return std::any(ForeignContentObjectEXT{object});
+    }
+
+private:
+    std::shared_ptr<ReflectiveRegistration> registration_;
+};
+
+/// One enum reader the builder registers alongside, so the `.xnb`'s table resolves in full.
+class ReflectiveEnumReader final : public ContentTypeReaderBase {
+public:
+    explicit ReflectiveEnumReader(std::string targetTypeName)
+        : ContentTypeReaderBase(std::move(targetTypeName))
+    {
+    }
+
+    std::any ReadUntyped(ContentReader& input, std::any) override
+    {
+        return std::any(static_cast<std::int32_t>(input.ReadInt32()));
+    }
+};
+
+struct ReflectiveBuilderResource final {
+    std::shared_ptr<ReflectiveRegistration> registration;
+    std::vector<std::string> enumTypeNames;
+};
+
+[[nodiscard]] CNA_Result GetReflectiveBuilder(
+    const CNA_ReflectiveTypeReaderBuilderHandle handle,
+    std::shared_ptr<ReflectiveBuilderResource>* const outBuilder)
+{
+    const CNA_Result result = GetRuntimeHandles().Get(
+        handle, ObjectKind::ReflectiveTypeReaderBuilder, outBuilder);
+    if (result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result, ErrorCategoryForResult(result),
+            "The reflective type-reader builder handle is invalid.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] std::string ReflectiveCanonicalName(const std::string& targetTypeName)
+{
+    return "Microsoft.Xna.Framework.Content.ReflectiveReader`1[[" + targetTypeName + "]]";
+}
+
+[[nodiscard]] std::string EnumCanonicalName(const std::string& targetTypeName)
+{
+    return "Microsoft.Xna.Framework.Content.EnumReader`1[[" + targetTypeName + "]]";
+}
+
+[[nodiscard]] CNA_Result CanonicalNameSize(
+    const CNA_StringView targetTypeName,
+    std::string (*compose)(const std::string&),
+    uint64_t* const outBytes)
+{
+    if (outBytes == nullptr) {
+        return InvalidArgument("The canonical-name byte-count output is null.");
+    }
+    std::string nameText;
+    if (const CNA_Result result = CopyStringView(targetTypeName, true, &nameText);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result, ErrorCategoryForResult(result),
+            "The target type name is not valid UTF-8.");
+    }
+    *outBytes = static_cast<uint64_t>(compose(nameText).size());
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result CanonicalNameCopy(
+    const CNA_StringView targetTypeName,
+    std::string (*compose)(const std::string&),
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The canonical-name output is invalid.");
+    }
+    std::string nameText;
+    if (const CNA_Result result = CopyStringView(targetTypeName, true, &nameText);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result, ErrorCategoryForResult(result),
+            "The target type name is not valid UTF-8.");
+    }
+    const std::string composed = compose(nameText);
+    *outBytes = static_cast<uint64_t>(composed.size());
+    if (capacity < static_cast<uint64_t>(composed.size())) {
+        return Fail(
+            CNA_RESULT_BUFFER_TOO_SMALL,
+            CNA_ERROR_CATEGORY_RANGE,
+            "The destination capacity is smaller than the canonical name.");
+    }
+    if (!composed.empty()) {
+        std::memcpy(destination, composed.data(), composed.size());
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+CNA_Result cna_reflective_type_reader_builder_create(
+    const CNA_StringView targetTypeName,
+    const CNA_ReflectiveObjectCreateCallback createCallback,
+    void* const context,
+    CNA_ReflectiveTypeReaderBuilderHandle* const outBuilder)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBuilder == nullptr) {
+            return InvalidArgument("The reflective builder output handle is null.");
+        }
+        *outBuilder = CNA_INVALID_HANDLE;
+        if (createCallback == nullptr) {
+            return InvalidArgument("The reflective object factory is null.");
+        }
+        const auto resource = std::make_shared<ReflectiveBuilderResource>();
+        resource->registration = std::make_shared<ReflectiveRegistration>();
+        if (const CNA_Result result = CopyStringView(
+                targetTypeName, true, &resource->registration->targetTypeName);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The target type name is not valid UTF-8.");
+        }
+        if (resource->registration->targetTypeName.empty()) {
+            return InvalidArgument("The target type name must not be empty.");
+        }
+        resource->registration->create = createCallback;
+        resource->registration->createContext = context;
+        const CNA_Result result = GetRuntimeHandles().Create(
+            ObjectKind::ReflectiveTypeReaderBuilder, resource, outBuilder);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The reflective builder handle could not be created.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_reflective_type_reader_builder_destroy(
+    const CNA_ReflectiveTypeReaderBuilderHandle builderHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ReflectiveBuilderResource> builder;
+        if (const CNA_Result result = GetReflectiveBuilder(builderHandle, &builder);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result result = GetRuntimeHandles().Release(builderHandle);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The reflective builder handle could not be destroyed.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_reflective_type_reader_builder_add_field(
+    const CNA_ReflectiveTypeReaderBuilderHandle builderHandle,
+    const CNA_ContentFieldKind kind,
+    const uint64_t offsetInBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ReflectiveBuilderResource> builder;
+        if (const CNA_Result result = GetReflectiveBuilder(builderHandle, &builder);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (kind > CNA_CONTENT_FIELD_MAXIMUM) {
+            return InvalidArgument("The content field kind is not a defined kind.");
+        }
+        builder->registration->fields.push_back(
+            ReflectiveField{kind, offsetInBytes, nullptr, nullptr});
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_reflective_type_reader_builder_add_enum_field(
+    const CNA_ReflectiveTypeReaderBuilderHandle builderHandle,
+    const uint64_t offsetInBytes,
+    const CNA_StringView enumTypeName)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ReflectiveBuilderResource> builder;
+        if (const CNA_Result result = GetReflectiveBuilder(builderHandle, &builder);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string enumText;
+        if (const CNA_Result result = CopyStringView(enumTypeName, true, &enumText);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The enum type name is not valid UTF-8.");
+        }
+        if (enumText.empty()) {
+            return InvalidArgument("The enum type name must not be empty.");
+        }
+        // An enum is written inline as its Int32; the reader registered under its name exists so
+        // the file's type-reader table resolves in full, not because this dispatches to it.
+        builder->registration->fields.push_back(
+            ReflectiveField{CNA_CONTENT_FIELD_INT32, offsetInBytes, nullptr, nullptr});
+        builder->enumTypeNames.push_back(std::move(enumText));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_reflective_type_reader_builder_add_custom(
+    const CNA_ReflectiveTypeReaderBuilderHandle builderHandle,
+    const CNA_ReflectiveFieldCallback callback,
+    void* const context)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ReflectiveBuilderResource> builder;
+        if (const CNA_Result result = GetReflectiveBuilder(builderHandle, &builder);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (callback == nullptr) {
+            return InvalidArgument("The custom member callback is null.");
+        }
+        builder->registration->fields.push_back(
+            ReflectiveField{ReflectiveCustomFieldKind, 0U, callback, context});
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_reflective_type_reader_builder_register(
+    const CNA_ReflectiveTypeReaderBuilderHandle builderHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ReflectiveBuilderResource> builder;
+        if (const CNA_Result result = GetReflectiveBuilder(builderHandle, &builder);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        for (const std::string& enumTypeName : builder->enumTypeNames) {
+            ContentTypeReaderManager::AddTypeCreator(
+                EnumCanonicalName(enumTypeName),
+                [name = enumTypeName] {
+                    return std::unique_ptr<ContentTypeReaderBase>(
+                        std::make_unique<ReflectiveEnumReader>(name));
+                });
+        }
+        // A snapshot, so a builder that keeps being appended to after registering does not change
+        // what the table already holds -- the canonical Register() copies its field list too.
+        const auto snapshot = std::make_shared<ReflectiveRegistration>(*builder->registration);
+        ContentTypeReaderManager::AddTypeCreator(
+            ReflectiveCanonicalName(snapshot->targetTypeName),
+            [snapshot] {
+                return std::unique_ptr<ContentTypeReaderBase>(
+                    std::make_unique<ReflectiveForeignReader>(snapshot));
+            });
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_reflective_type_reader_get_canonical_name_size(
+    const CNA_StringView targetTypeName,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CanonicalNameSize(targetTypeName, ReflectiveCanonicalName, outBytes);
+    });
+}
+
+CNA_Result cna_reflective_type_reader_copy_canonical_name(
+    const CNA_StringView targetTypeName,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CanonicalNameCopy(
+            targetTypeName, ReflectiveCanonicalName, destination, capacity, outBytes);
+    });
+}
+
+CNA_Result cna_enum_type_reader_get_canonical_name_size(
+    const CNA_StringView targetTypeName,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CanonicalNameSize(targetTypeName, EnumCanonicalName, outBytes);
+    });
+}
+
+CNA_Result cna_enum_type_reader_copy_canonical_name(
+    const CNA_StringView targetTypeName,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CanonicalNameCopy(
+            targetTypeName, EnumCanonicalName, destination, capacity, outBytes);
+    });
+}

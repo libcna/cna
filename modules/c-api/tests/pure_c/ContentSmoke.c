@@ -2,6 +2,7 @@
 
 #include <CNA/C/cna.h>
 
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 #include <threads.h>
@@ -487,6 +488,13 @@ static const char FontDescriptorPath[] = "cna_c_api_content_font.cnj";
 static const char ForeignAssetName[] = "cna_c_api_content_foreign";
 static const char ForeignAssetPath[] = "cna_c_api_content_foreign.xnb";
 static const char ForeignLoadReaderName[] = "CNA.Test.ContentSmoke.ForeignReader";
+static const char ReflectiveAssetName[] = "cna_c_api_content_reflective";
+static const char ReflectiveAssetPath[] = "cna_c_api_content_reflective.xnb";
+static const char ReflectiveTypeName[] = "CNA.Test.ContentSmoke.Settings";
+static const char ReflectiveEnumName[] = "CNA.Test.ContentSmoke.Mode";
+static const char CnbAssetName[] = "cna_c_api_content_level";
+static const char CnbAssetPath[] = "cna_c_api_content_level.cnb";
+static const char CnbTypeName[] = "CNA.Test.ContentSmoke.Level";
 
 static int write_text_file(const char* const path, const char* const text)
 {
@@ -678,6 +686,323 @@ static int write_foreign_asset(void)
     asset[8] = (uint8_t)((total >> 16U) & UINT32_C(0xff));
     asset[9] = (uint8_t)((total >> 24U) & UINT32_C(0xff));
     return write_binary_file(ForeignAssetPath, asset, offset);
+}
+
+/*
+ * CBIND-105: a reflectively-serialized type declared from C.
+ *
+ * XNA compiles a type with no explicit writer through an implicit `ReflectiveReader<T>` that walks
+ * the type's fields with .NET reflection. CNA has no runtime reflection, so the game supplies the
+ * one thing reflection provided -- its own field list. The canonical builder captures a
+ * pointer-to-member per field; C has no such thing, so a field is a **kind and a byte offset**,
+ * which carries the same information.
+ *
+ * This fixture is a hand-written `.xnb` whose type-reader table names the reflective reader and the
+ * enum reader, so the declaration is proved against a real file rather than against a mock.
+ */
+typedef struct ReflectiveSettings {
+    int32_t count;
+    float scale;
+    int32_t mode;
+    uint8_t flag;
+    uint8_t padding[3];
+    int32_t custom;
+    int32_t created;
+} ReflectiveSettings;
+
+static ReflectiveSettings g_reflective_object;
+
+static CNA_Result reflective_create(void* const context, void** const out_object)
+{
+    ReflectiveSettings* const settings = (ReflectiveSettings*)context;
+    memset(settings, 0, sizeof(*settings));
+    settings->created = 1;
+    *out_object = settings;
+    return CNA_RESULT_SUCCESS;
+}
+
+/* A member the wire format does not map onto an offset is read by the caller, positionally. */
+static CNA_Result reflective_custom(
+    void* const context,
+    void* const object,
+    const CNA_ContentReaderHandle input)
+{
+    uint8_t raw[4];
+    uint64_t produced = 0U;
+    ReflectiveSettings* const settings = (ReflectiveSettings*)object;
+    (void)context;
+    if (cna_content_reader_read_bytes_exact(
+            input, 4, view("reflective-custom"), raw, sizeof(raw), &produced) !=
+        CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_IO;
+    }
+    /* Stored doubled, so the test can tell a value this callback wrote from one CNA wrote. */
+    settings->custom = 2 * (int32_t)((uint32_t)raw[0] | ((uint32_t)raw[1] << 8U) |
+                                     ((uint32_t)raw[2] << 16U) | ((uint32_t)raw[3] << 24U));
+    return CNA_RESULT_SUCCESS;
+}
+
+static size_t push_u32_le(uint8_t* const data, size_t offset, const uint32_t value)
+{
+    data[offset++] = (uint8_t)(value & UINT32_C(0xff));
+    data[offset++] = (uint8_t)((value >> 8U) & UINT32_C(0xff));
+    data[offset++] = (uint8_t)((value >> 16U) & UINT32_C(0xff));
+    data[offset++] = (uint8_t)((value >> 24U) & UINT32_C(0xff));
+    return offset;
+}
+
+static size_t push_reader_name(uint8_t* const data, size_t offset, const char* const name)
+{
+    const size_t length = strlen(name);
+    offset = push_seven_bit(data, offset, (uint32_t)length);
+    memcpy(data + offset, name, length);
+    offset += length;
+    return push_u32_le(data, offset, UINT32_C(0));   /* reader version 0 */
+}
+
+static int write_reflective_asset(void)
+{
+    uint8_t asset[512];
+    char reflective_name[256];
+    char enum_name[256];
+    uint64_t reflective_bytes = 0U;
+    uint64_t enum_bytes = 0U;
+    size_t offset = 10U;
+    uint32_t total = 0U;
+    float scale = 2.5f;
+    uint32_t scale_bits = 0U;
+
+    /* The canonical names come from the ABI rather than being transcribed, which is what makes
+       them worth publishing: they are the keys the reader table is looked up by. */
+    if (cna_reflective_type_reader_copy_canonical_name(
+            view(ReflectiveTypeName), reflective_name, sizeof(reflective_name),
+            &reflective_bytes) != CNA_RESULT_SUCCESS ||
+        cna_enum_type_reader_copy_canonical_name(
+            view(ReflectiveEnumName), enum_name, sizeof(enum_name), &enum_bytes) !=
+            CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    reflective_name[reflective_bytes] = '\0';
+    enum_name[enum_bytes] = '\0';
+
+    offset = push_seven_bit(asset, offset, UINT32_C(2));   /* two type readers */
+    offset = push_reader_name(asset, offset, reflective_name);
+    offset = push_reader_name(asset, offset, enum_name);
+    offset = push_seven_bit(asset, offset, UINT32_C(0));   /* no shared resources */
+    offset = push_seven_bit(asset, offset, UINT32_C(1));   /* root object: reader 1 */
+
+    /* The payload, in the order the fields are declared: every value type written inline. */
+    offset = push_u32_le(asset, offset, UINT32_C(7));      /* count */
+    memcpy(&scale_bits, &scale, sizeof(scale_bits));
+    offset = push_u32_le(asset, offset, scale_bits);       /* scale */
+    offset = push_u32_le(asset, offset, UINT32_C(2));      /* mode, an enum written inline */
+    asset[offset++] = 1U;                                  /* flag */
+    offset = push_u32_le(asset, offset, UINT32_C(21));     /* the custom member */
+
+    total = (uint32_t)offset;
+    asset[0] = (uint8_t)'X';
+    asset[1] = (uint8_t)'N';
+    asset[2] = (uint8_t)'B';
+    asset[3] = (uint8_t)'w';
+    asset[4] = 5U;
+    asset[5] = 0U;
+    (void)push_u32_le(asset, 6U, total);
+    return write_binary_file(ReflectiveAssetPath, asset, offset);
+}
+
+static int validate_reflective_reader(const CNA_Handle manager)
+{
+    CNA_ReflectiveTypeReaderBuilderHandle builder = CNA_INVALID_HANDLE;
+    void* object = 0;
+    uint64_t bytes = 0U;
+    char name[256];
+
+    /* The canonical names are the reader table's keys, and both are published. */
+    if (cna_reflective_type_reader_get_canonical_name_size(view("A.B"), &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        cna_reflective_type_reader_copy_canonical_name(
+            view("A.B"), name, sizeof(name), &bytes) != CNA_RESULT_SUCCESS ||
+        bytes != strlen("Microsoft.Xna.Framework.Content.ReflectiveReader`1[[A.B]]") ||
+        memcmp(name, "Microsoft.Xna.Framework.Content.ReflectiveReader`1[[A.B]]",
+               (size_t)bytes) != 0 ||
+        cna_enum_type_reader_get_canonical_name_size(view("A.B"), &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        bytes != strlen("Microsoft.Xna.Framework.Content.EnumReader`1[[A.B]]") ||
+        cna_enum_type_reader_copy_canonical_name(
+            view("A.B"), name, sizeof(name), &bytes) != CNA_RESULT_SUCCESS ||
+        bytes != strlen("Microsoft.Xna.Framework.Content.EnumReader`1[[A.B]]") ||
+        memcmp(name, "Microsoft.Xna.Framework.Content.EnumReader`1[[A.B]]",
+               (size_t)bytes) != 0 ||
+        /* A short destination writes nothing and still reports the size needed. */
+        cna_reflective_type_reader_copy_canonical_name(view("A.B"), name, 4U, &bytes) !=
+            CNA_RESULT_BUFFER_TOO_SMALL) {
+        return 0;
+    }
+
+    if (!write_reflective_asset()) {
+        return 0;
+    }
+
+    if (cna_reflective_type_reader_builder_create(
+            view(ReflectiveTypeName), reflective_create, &g_reflective_object, &builder) !=
+            CNA_RESULT_SUCCESS ||
+        builder == CNA_INVALID_HANDLE) {
+        return 0;
+    }
+
+    /* Declared in wire order -- which is not necessarily the C struct's field order, and is why
+       the header says to check it against a decoded file. */
+    if (cna_reflective_type_reader_builder_add_field(
+            builder, CNA_CONTENT_FIELD_INT32, offsetof(ReflectiveSettings, count)) !=
+            CNA_RESULT_SUCCESS ||
+        cna_reflective_type_reader_builder_add_field(
+            builder, CNA_CONTENT_FIELD_SINGLE, offsetof(ReflectiveSettings, scale)) !=
+            CNA_RESULT_SUCCESS ||
+        cna_reflective_type_reader_builder_add_enum_field(
+            builder, offsetof(ReflectiveSettings, mode), view(ReflectiveEnumName)) !=
+            CNA_RESULT_SUCCESS ||
+        cna_reflective_type_reader_builder_add_field(
+            builder, CNA_CONTENT_FIELD_BOOLEAN, offsetof(ReflectiveSettings, flag)) !=
+            CNA_RESULT_SUCCESS ||
+        cna_reflective_type_reader_builder_add_custom(builder, reflective_custom, 0) !=
+            CNA_RESULT_SUCCESS) {
+        (void)cna_reflective_type_reader_builder_destroy(builder);
+        return 0;
+    }
+
+    /* Refusals: an undefined kind, a null callback, and a null factory at creation. */
+    {
+        CNA_ReflectiveTypeReaderBuilderHandle rejected = UINT64_MAX;
+        if (cna_reflective_type_reader_builder_add_field(
+                builder, CNA_CONTENT_FIELD_MAXIMUM + 1U, 0U) != CNA_RESULT_INVALID_ARGUMENT ||
+            cna_reflective_type_reader_builder_add_custom(builder, 0, 0) !=
+                CNA_RESULT_INVALID_ARGUMENT ||
+            cna_reflective_type_reader_builder_add_enum_field(
+                builder, 0U, (CNA_StringView){0, 0U}) != CNA_RESULT_INVALID_ARGUMENT ||
+            cna_reflective_type_reader_builder_create(
+                view(ReflectiveTypeName), 0, 0, &rejected) != CNA_RESULT_INVALID_ARGUMENT ||
+            rejected != CNA_INVALID_HANDLE ||
+            cna_reflective_type_reader_builder_create(
+                (CNA_StringView){0, 0U}, reflective_create, 0, &rejected) !=
+                CNA_RESULT_INVALID_ARGUMENT) {
+            (void)cna_reflective_type_reader_builder_destroy(builder);
+            return 0;
+        }
+    }
+
+    if (cna_reflective_type_reader_builder_register(builder) != CNA_RESULT_SUCCESS ||
+        /* Registering twice replaces the entry rather than failing, as the canonical does. */
+        cna_reflective_type_reader_builder_register(builder) != CNA_RESULT_SUCCESS) {
+        (void)cna_reflective_type_reader_builder_destroy(builder);
+        return 0;
+    }
+
+    /* The object comes out through the same foreign route a caller-supplied reader's does. */
+    if (cna_content_manager_load_foreign_ext(manager, view(ReflectiveAssetName), &object) !=
+            CNA_RESULT_SUCCESS ||
+        object != &g_reflective_object) {
+        (void)cna_reflective_type_reader_builder_destroy(builder);
+        return 0;
+    }
+
+    if (g_reflective_object.created != 1 ||
+        g_reflective_object.count != 7 ||
+        g_reflective_object.scale < 2.4f || g_reflective_object.scale > 2.6f ||
+        g_reflective_object.mode != 2 ||
+        g_reflective_object.flag != 1U ||
+        /* Doubled by the callback, so this cannot be a value CNA stored inline. */
+        g_reflective_object.custom != 42) {
+        (void)cna_reflective_type_reader_builder_destroy(builder);
+        return 0;
+    }
+
+    /* Releasing the builder does not withdraw the registration it made. */
+    if (cna_reflective_type_reader_builder_destroy(builder) != CNA_RESULT_SUCCESS ||
+        cna_reflective_type_reader_builder_destroy(builder) != CNA_RESULT_INVALID_HANDLE ||
+        cna_reflective_type_reader_builder_add_field(
+            builder, CNA_CONTENT_FIELD_INT32, 0U) != CNA_RESULT_INVALID_HANDLE) {
+        return 0;
+    }
+    return 1;
+}
+
+/*
+ * CBIND-105: `ContentManager::RegisterCnbLoaderEXT` is a static wrapper over the registry route
+ * `CBIND-111` already bound -- it drops the asset name and boxes the result -- so it adds no second
+ * C route. What it *does* claim is that a registered loader is reached by an ordinary load, and
+ * `CBIND-111` could only say a C loader was invoked directly. This proves the manager route: a
+ * `.cnb` on disk, a C loader registered for its type, and the object arriving through the same
+ * foreign door a caller-supplied `.xnb` reader's object comes out of.
+ */
+static int g_cnb_level = 0;
+
+static CNA_Result on_level_load(
+    void* const context,
+    const CNA_CnbDocumentHandle document,
+    const CNA_Handle content_manager,
+    const CNA_StringView asset_name,
+    void** const out_object)
+{
+    uint32_t asset_type = 0U;
+    (void)content_manager;
+    (void)asset_name;
+    if (cna_cnb_document_get_asset_type_id(document, &asset_type) != CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_IO;
+    }
+    *(int*)context = 1;
+    *out_object = context;
+    return CNA_RESULT_SUCCESS;
+}
+
+static int validate_cnb_loader_through_manager(const CNA_Handle manager)
+{
+    CNA_CnbWriterHandle writer = CNA_INVALID_HANDLE;
+    static uint8_t bytes[4096];
+    static const uint8_t payload[4] = {1U, 2U, 3U, 4U};
+    uint64_t produced = 0U;
+    uint32_t asset_type = 0U;
+    CNA_CnbChunkId chunk = 0U;
+    void* object = 0;
+
+    if (cna_cnb_asset_type_id_from_name(view(CnbTypeName), &asset_type) != CNA_RESULT_SUCCESS ||
+        cna_cnb_writer_create(asset_type, 1U, &writer) != CNA_RESULT_SUCCESS ||
+        cna_cnb_writer_set_metadata(writer, view(CnbTypeName), view(CnbAssetName)) !=
+            CNA_RESULT_SUCCESS ||
+        cna_cnb_make_chunk_id('L', 'V', 'L', 'D', &chunk) != CNA_RESULT_SUCCESS ||
+        cna_cnb_writer_add_chunk(
+            writer, chunk, payload, sizeof(payload), CNA_CNB_CHUNK_FLAG_MANDATORY, 4U) !=
+            CNA_RESULT_SUCCESS ||
+        cna_cnb_writer_build(writer, bytes, sizeof(bytes), &produced) != CNA_RESULT_SUCCESS ||
+        cna_cnb_writer_destroy(writer) != CNA_RESULT_SUCCESS ||
+        !write_binary_file(CnbAssetPath, bytes, (size_t)produced)) {
+        return 0;
+    }
+
+    g_cnb_level = 0;
+    if (cna_cnb_loader_registry_register(
+            asset_type, view(CnbTypeName), on_level_load, &g_cnb_level) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    /* The manager finds the `.cnb` beside the name, resolves the loader by the file's own asset
+       type, and hands the object out through the foreign route. */
+    if (cna_content_manager_load_foreign_ext(manager, view(CnbAssetName), &object) !=
+            CNA_RESULT_SUCCESS ||
+        object != &g_cnb_level || g_cnb_level != 1) {
+        (void)cna_cnb_loader_registry_remove(asset_type, 0);
+        return 0;
+    }
+
+    /* Withdrawing the registration makes the next load of a fresh name fail rather than fall
+       back -- the same rule an `.xnb` naming an unregistered reader follows. */
+    {
+        CNA_Bool removed = CNA_FALSE;
+        if (cna_cnb_loader_registry_remove(asset_type, &removed) != CNA_RESULT_SUCCESS ||
+            removed != CNA_TRUE) {
+            return 0;
+        }
+    }
+    return 1;
 }
 
 static int validate_foreign_load(const CNA_Handle manager)
@@ -1011,6 +1336,8 @@ static CNA_Result on_load(
         !validate_resource_manager(graphics_device) ||
         !validate_font_load(state->content_manager) ||
         !validate_foreign_load(state->content_manager) ||
+        !validate_reflective_reader(state->content_manager) ||
+        !validate_cnb_loader_through_manager(state->content_manager) ||
         !validate_effect_load(state->content_manager) ||
         !validate_cnj_loader(state->content_manager)) {
         return CNA_RESULT_INVALID_STATE;
@@ -1102,6 +1429,8 @@ int main(void)
     (void)remove(FontAtlasPath);
     (void)remove(FontDescriptorPath);
     (void)remove(ForeignAssetPath);
+    (void)remove(ReflectiveAssetPath);
+    (void)remove(CnbAssetPath);
     (void)remove(EffectDescriptorPath);
     (void)remove(CnjDescriptorPath);
 

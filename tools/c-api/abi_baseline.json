@@ -1,10 +1,10 @@
 {
  "abi_version": {
-  "encoded": 4096,
+  "encoded": 4352,
   "major": 0,
-  "minor": 16,
+  "minor": 17,
   "patch": 0,
-  "runtime": 4096
+  "runtime": 4352
  },
  "colors": {
   "CNA_COLOR_ALICE_BLUE": [
@@ -2197,6 +2197,8 @@
   "cna_effect_technique_get_passes",
   "cna_engine_layer_copy_version_string",
   "cna_engine_layer_get_version",
+  "cna_enum_type_reader_copy_canonical_name",
+  "cna_enum_type_reader_get_canonical_name_size",
   "cna_environment_map_effect_create",
   "cna_environment_map_effect_get_alpha",
   "cna_environment_map_effect_get_amount",
@@ -4012,6 +4014,14 @@
   "cna_rectangle_offset_xy",
   "cna_rectangle_set_location",
   "cna_rectangle_union",
+  "cna_reflective_type_reader_builder_add_custom",
+  "cna_reflective_type_reader_builder_add_enum_field",
+  "cna_reflective_type_reader_builder_add_field",
+  "cna_reflective_type_reader_builder_create",
+  "cna_reflective_type_reader_builder_destroy",
+  "cna_reflective_type_reader_builder_register",
+  "cna_reflective_type_reader_copy_canonical_name",
+  "cna_reflective_type_reader_get_canonical_name_size",
   "cna_render_pipeline_add_user_pass",
   "cna_render_pipeline_begin",
   "cna_render_pipeline_clear_user_passes",
@@ -4880,9 +4890,9 @@
   "cna_write_leaderboards_event_info_init"
  ],
  "integers": {
-  "CNA_ABI_VERSION": 4096,
+  "CNA_ABI_VERSION": 4352,
   "CNA_ABI_VERSION_MAJOR": 0,
-  "CNA_ABI_VERSION_MINOR": 16,
+  "CNA_ABI_VERSION_MINOR": 17,
   "CNA_ABI_VERSION_PATCH": 0,
   "CNA_ALPHA_MODE_BLEND_EXT": 2,
   "CNA_ALPHA_MODE_MASK_EXT": 1,
@@ -5284,6 +5294,21 @@
   "CNA_CONTAINMENT_CONTAINS": 1,
   "CNA_CONTAINMENT_DISJOINT": 0,
   "CNA_CONTAINMENT_INTERSECTS": 2,
+  "CNA_CONTENT_FIELD_BOOLEAN": 0,
+  "CNA_CONTENT_FIELD_BYTE": 6,
+  "CNA_CONTENT_FIELD_COLOR": 12,
+  "CNA_CONTENT_FIELD_DOUBLE": 2,
+  "CNA_CONTENT_FIELD_INT32": 3,
+  "CNA_CONTENT_FIELD_INT64": 5,
+  "CNA_CONTENT_FIELD_MATRIX": 10,
+  "CNA_CONTENT_FIELD_MAXIMUM": 13,
+  "CNA_CONTENT_FIELD_QUATERNION": 11,
+  "CNA_CONTENT_FIELD_SINGLE": 1,
+  "CNA_CONTENT_FIELD_TIMESPAN": 13,
+  "CNA_CONTENT_FIELD_UINT32": 4,
+  "CNA_CONTENT_FIELD_VECTOR2": 7,
+  "CNA_CONTENT_FIELD_VECTOR3": 8,
+  "CNA_CONTENT_FIELD_VECTOR4": 9,
   "CNA_CONTROLLER_SENSITIVITY_HIGH": 2,
   "CNA_CONTROLLER_SENSITIVITY_LOW": 0,
   "CNA_CONTROLLER_SENSITIVITY_MAXIMUM": 2,
@@ -6724,6 +6749,10 @@
    4,
    4
   ],
+  "CNA_ContentFieldKind": [
+   4,
+   4
+  ],
   "CNA_ContentReaderHandle": [
    8,
    8
@@ -7535,6 +7564,10 @@
   "CNA_RasterizerStatePreset": [
    4,
    4
+  ],
+  "CNA_ReflectiveTypeReaderBuilderHandle": [
+   8,
+   8
   ],
   "CNA_RenderPipelineHandle": [
    8,

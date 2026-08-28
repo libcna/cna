@@ -294,6 +294,10 @@ enum class ObjectKind : uint32_t {
     // object rather than a cursor into the table; a compile result holds bytes and two file lists.
     CnbLoader = 178,
     CnjToCnbResult = 179,
+
+    // CBIND-105: a reflective reader's field list, held while it is being declared. The reader it
+    // registers is owned by the canonical reader table, not by a handle.
+    ReflectiveTypeReaderBuilder = 180,
     Test = UINT32_MAX
 };
 

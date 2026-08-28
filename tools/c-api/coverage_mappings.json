@@ -18816,6 +18816,83 @@
       "approved_symbols": [
         "CPP-147BC775F119"
       ]
+    },
+    {
+      "id": "reflective-type-reader-builder",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ReflectiveTypeReaderBuilder(?:::(?:ReflectiveTypeReaderBuilder|Field|EnumField|Custom|Register))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
+      "mapping": "`CNA_ReflectiveTypeReaderBuilderHandle` and six `cna_reflective_type_reader_builder_*` routes.\n\nThe canonical builder is a fluent template whose `Field(&T::member)` captures a **pointer-to-member**, and C has no such thing. A field therefore becomes a **kind and a byte offset**, which carries the same information in the form C can hold: `add_field` for the value types XNA writes inline, `add_enum_field` for an enum, `add_custom` for a member the wire format does not map onto an offset. Chaining becomes a handle plus append routes, following `cna_content_type_reader_manager_register` rather than inventing a mechanism.\n\nTwo things the C form must supply that C++ took from `T`. The object is made by a caller callback, because the canonical reader default-constructs its `T` -- and that also settles ownership without an allocator crossing the ABI: the object is the caller's, allocated and freed by the caller, and CNA only writes the declared fields into it. And a **reference-type** member cannot land in a byte offset at all, because XNA writes it with its own reader index in front; that is what `add_custom` is for, and the header says so rather than leaving a caller to discover it.\n\n`Register()` returns no handle, because the canonical one has no undo: registering the same canonical name again replaces the entry, which is what both sides rely on, and a withdrawal route here would be surface the canonical layer does not have.",
+      "tests": "`ContentSmoke.c` `validate_reflective_reader` declares a five-member type -- an int, a float, an enum, a bool and a custom member -- against a **hand-written `.xnb`** whose type-reader table names both readers, and checks every field of the object the load produced. The custom callback stores its value *doubled*, so a value it wrote cannot be confused with one CNA stored inline. Mutation-checked twice: expecting the undoubled value fails, and dropping the enum reader registration fails -- which is what proves the `.xnb`'s table must resolve in full before any object is read, even for a reader this one never dispatches to. An undefined field kind, a null callback, a null factory and an empty type name are each refused, and a released builder refuses further appends while the registration it made keeps working.",
+      "status": "implemented",
+      "task": "CBIND-105",
+      "approved_symbols": [
+        "CPP-13D3ECA10DDF",
+        "CPP-6BEF953DB7A2",
+        "CPP-8E7B06045778",
+        "CPP-958C0C76CA6E",
+        "CPP-BCA8863A0B4F",
+        "CPP-DA9105F5AF12"
+      ]
+    },
+    {
+      "id": "reflective-type-reader",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ReflectiveTypeReader(?:::(?:ReflectiveTypeReader|FieldReader|Read|CanonicalReaderName))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "alias",
+        "method"
+      ],
+      "mapping": "The reader the builder registers, plus `cna_reflective_type_reader_get_canonical_name_size` / `_copy_canonical_name`.\n\n**It is not this template that gets instantiated, and it could not be**: `ReflectiveTypeReader<T>` needs a C++ `T` to default-construct and to hold member pointers into, and a C caller has neither. What is bound is the **contract** -- the canonical reader name, the declared wire order, and value types read inline -- implemented against a caller-made object and byte offsets. Recording that plainly is better than implying a template was reached from C.\n\n`FieldReader`, a `std::function<void(T&, ContentReader&)>`, is `CNA_ReflectiveFieldCallback`, with the ContentReader arriving as the **callback-scoped borrowed handle** the caller-supplied reader path already uses. `Read` is the override the reader table calls, reached by loading rather than by a route. `CanonicalReaderName` is published because it is the key the table is looked up by -- a caller checking a manifest wants the same string CNA computes.",
+      "tests": "`ContentSmoke.c` builds its fixture's type-reader table **from these routes** rather than transcribing the name, so a change to the composition would break the file rather than pass unnoticed, and checks the composed name against the literal both ways. A short destination writes nothing and still reports the size needed. The read path itself is covered by the builder's fixture above.",
+      "status": "implemented",
+      "task": "CBIND-105",
+      "approved_symbols": [
+        "CPP-09F8D426369F",
+        "CPP-3BE11F5524B5",
+        "CPP-8CFE0971200E",
+        "CPP-AD878A828305",
+        "CPP-B05F4DF8284A"
+      ]
+    },
+    {
+      "id": "enum-type-reader",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::EnumTypeReader(?:::(?:EnumTypeReader|Read|CanonicalReaderName))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
+      "mapping": "Registered by `cna_reflective_type_reader_builder_add_enum_field`, with its name published by `cna_enum_type_reader_get_canonical_name_size` / `_copy_canonical_name`.\n\nIt gets no construction route of its own for the reason the canonical class exists at all: it is never dispatched to. A reflective payload writes an enum **inline** as its `Int32`; this reader exists so the `.xnb`'s type-reader table resolves in full, which it must do before any object is read. Publishing a way to make one by hand would suggest a use it does not have.",
+      "tests": "`ContentSmoke.c` names it in the fixture's reader table using the canonical-name route, and the mutation that stops registering it makes the load fail -- so the reader is proved load-bearing rather than assumed to be.",
+      "status": "implemented",
+      "task": "CBIND-105",
+      "approved_symbols": [
+        "CPP-07B276A48B0C",
+        "CPP-4E9F84E62F5A",
+        "CPP-9DD01785B424",
+        "CPP-A6C4833A7DA5"
+      ]
+    },
+    {
+      "id": "content-manager-cnb-loader-hook",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentManager::(?:CnbLoaderFn|RegisterCnbLoaderEXT)$",
+      "kinds": [
+        "alias",
+        "method"
+      ],
+      "mapping": "`cna_cnb_loader_registry_register`, from `CBIND-111`, and **no second route**.\n\nThe canonical method is a `static` wrapper whose whole body forwards to `CnbLoaderRegistry::Register` after dropping the asset name and boxing the result in a `std::any`. The C callback already receives the asset name and already produces the object the C layer boxes, so a route differing only in a parameter the callback would not get would be a second spelling of one operation -- the thing this campaign refuses to publish.\n\n**The plan row's premise that `cna_content_manager_register_cnj_loader_ext` is its exact sibling does not hold**, and that is worth recording: the `.cnj` route is per-manager because `RegisterCnjLoader<T>` is a non-static member, while this is process-wide because `RegisterCnbLoaderEXT` is static. Matching the sibling's shape would have meant giving a process-wide registration a manager argument it does not use.\n\n`CnbLoaderFn<T>` is `CNA_CnbLoaderCallback`, already published.",
+      "tests": "`ContentSmoke.c` `validate_cnb_loader_through_manager` settles what `CBIND-111` could only leave open: it writes a real custom-typed `.cnb` beside the content root, registers a C loader for its type, and loads it **by asset name through `cna_content_manager_load_foreign_ext`** -- so a C-registered CNB loader is reached by an ordinary content load, not only by invoking it directly. Withdrawing the registration is checked to report that it removed one. Mutation-checked: registering the loader under a different asset type makes the load fail.",
+      "status": "implemented",
+      "task": "CBIND-105",
+      "approved_symbols": [
+        "CPP-6B69258118AC",
+        "CPP-E79A0F65AB65"
+      ]
     }
   ]
 }

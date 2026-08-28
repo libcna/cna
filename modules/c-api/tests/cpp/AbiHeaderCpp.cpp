@@ -8,7 +8,7 @@
 
 #include <cstddef>
 
-static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 16, 0));
+static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 17, 0));
 static_assert(sizeof(CNA_Result) == sizeof(uint32_t));
 static_assert(sizeof(CNA_Handle) == sizeof(uint64_t));
 static_assert(sizeof(CNA_GraphicsResourceTag) == sizeof(uint64_t));
@@ -1168,3 +1168,9 @@ static_assert(sizeof(CNA_CnbImageImportOptions) == 12U);
 static_assert(alignof(CNA_CnbImageImportOptions) == 4U);
 static_assert(offsetof(CNA_CnbImageImportOptions, has_color_key) == 11U);
 static_assert(CNA_CNB_IMAGE_IMPORT_OPTIONS_STRUCT_VERSION == UINT32_C(1));
+
+// CBIND-105: the reflective content readers.
+static_assert(CNA_CONTENT_FIELD_BOOLEAN == UINT32_C(0));
+static_assert(CNA_CONTENT_FIELD_TIMESPAN == UINT32_C(13));
+static_assert(CNA_CONTENT_FIELD_MAXIMUM == CNA_CONTENT_FIELD_TIMESPAN);
+static_assert(sizeof(CNA_ContentFieldKind) == sizeof(uint32_t));

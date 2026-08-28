@@ -8,7 +8,7 @@
 
 #include <stddef.h>
 
-_Static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 16, 0),
+_Static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 17, 0),
                "CNA C ABI version encoding must remain stable");
 _Static_assert(sizeof(CNA_Result) == sizeof(uint32_t),
                "CNA_Result must have a fixed-width representation");
@@ -1993,3 +1993,25 @@ _Static_assert(sizeof(CNA_CnbImageImportOptions) == 12U &&
                "CNA_CnbImageImportOptions layout must remain stable");
 _Static_assert(sizeof(CNA_CnbLoaderCallback) == sizeof(void (*)(void)),
                "CNA_CnbLoaderCallback must remain a plain function pointer");
+
+/* CBIND-105: the reflective content readers. */
+_Static_assert(CNA_CONTENT_FIELD_BOOLEAN == UINT32_C(0) &&
+                   CNA_CONTENT_FIELD_SINGLE == UINT32_C(1) &&
+                   CNA_CONTENT_FIELD_DOUBLE == UINT32_C(2) &&
+                   CNA_CONTENT_FIELD_INT32 == UINT32_C(3) &&
+                   CNA_CONTENT_FIELD_UINT32 == UINT32_C(4) &&
+                   CNA_CONTENT_FIELD_INT64 == UINT32_C(5) &&
+                   CNA_CONTENT_FIELD_BYTE == UINT32_C(6) &&
+                   CNA_CONTENT_FIELD_VECTOR2 == UINT32_C(7) &&
+                   CNA_CONTENT_FIELD_VECTOR3 == UINT32_C(8) &&
+                   CNA_CONTENT_FIELD_VECTOR4 == UINT32_C(9) &&
+                   CNA_CONTENT_FIELD_MATRIX == UINT32_C(10) &&
+                   CNA_CONTENT_FIELD_QUATERNION == UINT32_C(11) &&
+                   CNA_CONTENT_FIELD_COLOR == UINT32_C(12) &&
+                   CNA_CONTENT_FIELD_TIMESPAN == UINT32_C(13) &&
+                   CNA_CONTENT_FIELD_MAXIMUM == UINT32_C(13),
+               "CNB reflective field kinds must remain stable");
+_Static_assert(sizeof(CNA_ContentFieldKind) == sizeof(uint32_t) &&
+                   sizeof(CNA_ReflectiveObjectCreateCallback) == sizeof(void (*)(void)) &&
+                   sizeof(CNA_ReflectiveFieldCallback) == sizeof(void (*)(void)),
+               "reflective reader identities and callbacks must remain fixed width");

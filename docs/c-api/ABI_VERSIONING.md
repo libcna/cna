@@ -2,7 +2,12 @@
 
 ## ABI identity
 
-The ABI is `0.16.0`. It adds the **graphics tail** from `plans/plan_binding.md` `CBIND-104`: five
+The ABI is `0.17.0`. It adds the **reflective content readers** from `plans/plan_binding.md`
+`CBIND-105`: ten routes over one new handle kind (`CNA_ReflectiveTypeReaderBuilderHandle`), the
+`CNA_ContentFieldKind` identity and two callback types. With it a game can declare a reflectively
+serialized `.xnb` type's field list from C and have CNA read it.
+
+`0.16.0` added the **graphics tail** from `plans/plan_binding.md` `CBIND-104`: five
 routes — the options-carrying raw vertex upload in both its whole-buffer and windowed forms, the
 `EffectMaterial` retained-texture pair, and the flag that says whether an occlusion query's pixel
 count is a tally or a boolean. No new structures and no new handle kinds.
@@ -43,10 +48,10 @@ checksums, whole-file arithmetic, read limits and chunk compression, the `CNA_Cn
 `CNA_CnbCompression` identities, the versioned `CNA_CnbReadLimits` structure, and the format's
 byte-level constants.
 
-**All seven generations are purely additive** -- no existing route, constant, structure field or error
+**All eight generations are purely additive** -- no existing route, constant, structure field or error
 rule changed, and the four evolution paths below are the ones taken. The minor moves anyway,
 because that is what this project has done for every additive generation since `0.4.0`: a consumer
-needs a number it can require, and `find_package(CNA 0.16 CONFIG)` is what asks for these routes.
+needs a number it can require, and `find_package(CNA 0.17 CONFIG)` is what asks for these routes.
 
 A C application can now compile source files into `.cnb`, build and parse a container, read its
 chunks, encode and decode every asset schema the format defines, and register a loader for an asset
@@ -258,7 +263,7 @@ Recording the baseline needs the library:
 python3 tools/c-api/generate_abi_baseline.py --write --library <build>/modules/c-api/libcna_c_api.so
 ```
 
-All four build configurations export the same 4,023 symbols. That is itself part of the contract:
+All four build configurations export the same 4,033 symbols. That is itself part of the contract:
 the ABI **surface** does not vary with the renderer, with `CNA_DEVICES`, or with `CNA_CNAEXT` —
 only the answers do. A route whose backend or layer is absent exists and refuses, rather than
 disappearing from the library. `CNA_CNAEXT` is the newest member of that list and the one with the

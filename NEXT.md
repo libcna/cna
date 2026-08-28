@@ -160,13 +160,28 @@ which refuses a static buffer rather than inventing a path the canonical API doe
 retaining is the mechanism that makes gating unnecessary, and the test destroys the caller's handle
 and checks the count stays raised.
 
-**Where it stands:** 536 headers / 8,812 symbols — 8,320 implemented, 15 approved partial, 17
-planned, 460 not applicable. ABI `0.16.0`, 4,023 exported symbols, the same set with `CNA_CNAEXT` on
-and off. 103/103 `CApi` tests in all three arms: `cmake-build-debug` (HEADLESS, `CNA_CNAEXT=OFF`),
+**`CBIND-105` then closed the reflective-reader tail, and with it the matrix.** A pointer-to-member
+becomes a kind and a byte offset; the object is made by a caller callback, which settles ownership
+without an allocator crossing the ABI; and `ReflectiveTypeReader<T>` is deliberately **not**
+instantiated, because it needs a C++ `T` — what is bound is its contract, implemented in the C layer
+against a caller-made object. The row's premise that `RegisterCnbLoaderEXT` is the `.cnj` loader's
+exact sibling turned out to be wrong in the one respect that decides the shape (that one is
+per-manager, this one static and process-wide), so it maps to `CBIND-111`'s registry route with no
+second spelling published — and the thing `CBIND-111` left open is now **measured**: a C-registered
+CNB loader *is* reached by an ordinary `cna_content_manager_load_foreign_ext` load.
+
+**The matrix is closed: 0 planned rows, and `docs/c-api/RELEASE_GATE.md` reads `Ready` on all ten
+criteria** for the first time since the sixth merge reopened it. That verdict is measured rather
+than asserted — and it is not the closure: `CBIND-112` still owes the four independent checks, and
+its own rule is not to close on a green `--check`.
+
+**Where it stands:** 536 headers / 8,812 symbols — 8,337 implemented, 15 approved partial, **0
+planned**, 460 not applicable. ABI `0.17.0`, 4,033 exported symbols, the same set with `CNA_CNAEXT`
+on and off. 103/103 `CApi` tests in all three arms: `cmake-build-debug` (HEADLESS, `CNA_CNAEXT=OFF`),
 `cmake-build-cnaext` (OPENGLES3/EasyGL, `CNA_CNAEXT=ON`) and `build-probe` (HEADLESS,
 `CNA_CNAEXT=ON`). The not-applicable count moved for the first time this phase, by exactly one row —
 a `friend` declaration Doxygen reports as a member, named in `CBIND-111`. What remains in Phase B10
-is the reflective-reader tail (`CBIND-105`, 17 rows) and the two closing tasks.
+is `CBIND-112`, which verifies the closure rather than asserting it, and `CBIND-113`.
 
 ## `SAMPLE-005` official XNA content fidelity (`ReachGraphicsDemo_4_0`, 2026-08-23)
 

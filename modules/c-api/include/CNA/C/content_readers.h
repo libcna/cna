@@ -607,6 +607,240 @@ CNA_C_API CNA_Result cna_content_type_reader_read_untyped(
  */
 CNA_C_API CNA_Result cna_content_type_reader_destroy(CNA_ContentTypeReaderHandle type_reader);
 
+/* --- CBIND-105: the reflective content readers ------------------------------------------------- */
+
+/**
+ * @brief Which value one declared field of a reflectively-serialized type holds.
+ *
+ * These are the types XNA writes **inline**, as a value type. A .NET *reference* type -- a string,
+ * a nested object, a list -- is written with its own type-reader index in front and read back as an
+ * object, which a C caller cannot receive into a byte offset; declare one with
+ * @ref cna_reflective_type_reader_builder_add_custom and read it yourself.
+ */
+typedef uint32_t CNA_ContentFieldKind;
+
+/** @brief A `bool`, one byte. */
+#define CNA_CONTENT_FIELD_BOOLEAN UINT32_C(0)
+/** @brief A 32-bit float. */
+#define CNA_CONTENT_FIELD_SINGLE UINT32_C(1)
+/** @brief A 64-bit float. */
+#define CNA_CONTENT_FIELD_DOUBLE UINT32_C(2)
+/** @brief A signed 32-bit integer. */
+#define CNA_CONTENT_FIELD_INT32 UINT32_C(3)
+/** @brief An unsigned 32-bit integer. */
+#define CNA_CONTENT_FIELD_UINT32 UINT32_C(4)
+/** @brief A signed 64-bit integer. */
+#define CNA_CONTENT_FIELD_INT64 UINT32_C(5)
+/** @brief An unsigned byte. */
+#define CNA_CONTENT_FIELD_BYTE UINT32_C(6)
+/** @brief A `CNA_Vector2`. */
+#define CNA_CONTENT_FIELD_VECTOR2 UINT32_C(7)
+/** @brief A `CNA_Vector3`. */
+#define CNA_CONTENT_FIELD_VECTOR3 UINT32_C(8)
+/** @brief A `CNA_Vector4`. */
+#define CNA_CONTENT_FIELD_VECTOR4 UINT32_C(9)
+/** @brief A `CNA_Matrix`. */
+#define CNA_CONTENT_FIELD_MATRIX UINT32_C(10)
+/** @brief A `CNA_Quaternion`. */
+#define CNA_CONTENT_FIELD_QUATERNION UINT32_C(11)
+/** @brief A `CNA_Color`. */
+#define CNA_CONTENT_FIELD_COLOR UINT32_C(12)
+/** @brief A .NET `TimeSpan`, written as its `Int64` tick count and stored as `int64_t` ticks. */
+#define CNA_CONTENT_FIELD_TIMESPAN UINT32_C(13)
+/** @brief Highest field kind this ABI names. */
+#define CNA_CONTENT_FIELD_MAXIMUM CNA_CONTENT_FIELD_TIMESPAN
+
+/**
+ * @brief Declares a reflectively-serialized type's fields and registers the readers it needs.
+ *
+ * The canonical builder is a fluent C++ template whose `Field(&T::member)` captures a
+ * pointer-to-member. C has no member pointer, so a field is declared by **kind and byte offset**
+ * instead -- which is the same information, expressed the way C can carry it.
+ */
+typedef CNA_Handle CNA_ReflectiveTypeReaderBuilderHandle;
+
+/**
+ * @brief Creates the object a reflective read is about to fill.
+ *
+ * The canonical reader default-constructs its `T`; C has no such type, so the caller makes one.
+ * That also settles ownership without an allocator crossing the ABI: whatever this returns is the
+ * caller's, allocated and freed by the caller, and CNA only writes the declared fields into it.
+ *
+ * @param context The context supplied at builder creation.
+ * @param out_object Receives the object. It must be at least as large as the highest declared field
+ *        offset plus that field's size.
+ * @return `CNA_RESULT_SUCCESS`, or any documented result code to fail the load.
+ */
+typedef CNA_Result (*CNA_ReflectiveObjectCreateCallback)(
+    void* context,
+    void** out_object);
+
+/**
+ * @brief Reads one member the wire format does not map onto a plain offset.
+ *
+ * @param context The context supplied with this field.
+ * @param object The object being filled, from @ref CNA_ReflectiveObjectCreateCallback.
+ * @param input **Callback-scoped borrowed** ContentReader handle, positioned at this member's
+ *        value. It is invalidated before this callback returns and has no destroy operation.
+ * @return `CNA_RESULT_SUCCESS`, or any documented result code to fail the load.
+ *
+ * The payload is positional, so what matters is where this sits in the declaration chain: read
+ * exactly one value's worth and store whatever it means.
+ */
+typedef CNA_Result (*CNA_ReflectiveFieldCallback)(
+    void* context,
+    void* object,
+    CNA_ContentReaderHandle input);
+
+/**
+ * @brief Begins describing a reflectively-serialized type.
+ *
+ * @param target_type_name The .NET name of the type, as the `.xnb` spells it. Must not be empty.
+ * @param create_callback Non-null; makes the object each read fills.
+ * @param context Caller-owned context passed back to @p create_callback; it must outlive the
+ *        registration.
+ * @param out_builder Receives the new builder handle.
+ * @return A CNA result code.
+ *
+ * **Declare the fields in wire order, which is not the type's field order.** The content pipeline
+ * writes the serialized *properties* first and then the public fields, each group in declaration
+ * order. Check the order against a decoded file rather than against the source type.
+ */
+CNA_C_API CNA_Result cna_reflective_type_reader_builder_create(
+    CNA_StringView target_type_name,
+    CNA_ReflectiveObjectCreateCallback create_callback,
+    void* context,
+    CNA_ReflectiveTypeReaderBuilderHandle* out_builder);
+
+/**
+ * @brief Releases a builder.
+ *
+ * A builder describes a registration; releasing it does not withdraw one already made.
+ *
+ * @param builder The builder to release.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_reflective_type_reader_builder_destroy(
+    CNA_ReflectiveTypeReaderBuilderHandle builder);
+
+/**
+ * @brief Declares the next field, read inline at a byte offset in the object.
+ *
+ * @param builder The builder.
+ * @param kind Which value the field holds.
+ * @param offset_in_bytes Where to store it in the object.
+ * @return A CNA result code; a kind above `CNA_CONTENT_FIELD_MAXIMUM` is
+ *         `CNA_RESULT_INVALID_ARGUMENT`.
+ */
+CNA_C_API CNA_Result cna_reflective_type_reader_builder_add_field(
+    CNA_ReflectiveTypeReaderBuilderHandle builder,
+    CNA_ContentFieldKind kind,
+    uint64_t offset_in_bytes);
+
+/**
+ * @brief Declares the next field, which is an enum stored as an `int32_t`.
+ *
+ * @param builder The builder.
+ * @param offset_in_bytes Where to store the value in the object.
+ * @param enum_type_name The .NET name of the enum, as the `.xnb` spells it. Must not be empty.
+ * @return A CNA result code.
+ *
+ * An enum needs its own route because its .NET name cannot be recovered from the value: registering
+ * the reflective reader also registers an enum reader under that name, which a game would otherwise
+ * have to do by hand. **An `.xnb`'s type-reader table must resolve in full before any object is
+ * read**, even for readers this one never dispatches to -- the reflective payload writes enums
+ * inline and never reaches the enum reader at all.
+ */
+CNA_C_API CNA_Result cna_reflective_type_reader_builder_add_enum_field(
+    CNA_ReflectiveTypeReaderBuilderHandle builder,
+    uint64_t offset_in_bytes,
+    CNA_StringView enum_type_name);
+
+/**
+ * @brief Declares the next member, read by a caller-supplied callback.
+ *
+ * This is how a reference-type member is read -- a string, a nested object, a list -- since those
+ * are written with their own reader index and cannot land in a byte offset.
+ *
+ * @param builder The builder.
+ * @param callback Non-null; reads the value and stores what it means.
+ * @param context Caller-owned context passed back to @p callback; it must outlive the registration.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_reflective_type_reader_builder_add_custom(
+    CNA_ReflectiveTypeReaderBuilderHandle builder,
+    CNA_ReflectiveFieldCallback callback,
+    void* context);
+
+/**
+ * @brief Registers the reflective reader and every enum reader the type needs.
+ *
+ * @param builder The builder.
+ * @return A CNA result code.
+ *
+ * **No registration handle, because the canonical `Register()` has no undo either.** Registering
+ * the same canonical name again replaces the entry, which is what both sides rely on, and a
+ * withdrawal route here would be surface the canonical layer does not have. Safe to call more than
+ * once.
+ */
+CNA_C_API CNA_Result cna_reflective_type_reader_builder_register(
+    CNA_ReflectiveTypeReaderBuilderHandle builder);
+
+/**
+ * @brief Reports the byte length of the canonical name a reflectively-read type is written under.
+ *
+ * @param target_type_name The .NET name of the serialized type.
+ * @param out_byte_count Receives the length, without a terminator.
+ * @return A CNA result code.
+ *
+ * CNA normalizes an `.xnb`'s assembly-qualified name down to this, so it is the key the reader
+ * table is looking for -- which is what makes it worth publishing rather than keeping private.
+ */
+CNA_C_API CNA_Result cna_reflective_type_reader_get_canonical_name_size(
+    CNA_StringView target_type_name,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies the canonical name a reflectively-read type is written under.
+ *
+ * @param target_type_name The .NET name of the serialized type.
+ * @param destination Destination bytes, or null only for zero capacity. Not terminated.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_reflective_type_reader_copy_canonical_name(
+    CNA_StringView target_type_name,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Reports the byte length of the canonical name an enum is written under.
+ *
+ * @param target_type_name The .NET name of the enum.
+ * @param out_byte_count Receives the length, without a terminator.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_enum_type_reader_get_canonical_name_size(
+    CNA_StringView target_type_name,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies the canonical name an enum is written under.
+ *
+ * @param target_type_name The .NET name of the enum.
+ * @param destination Destination bytes, or null only for zero capacity. Not terminated.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_enum_type_reader_copy_canonical_name(
+    CNA_StringView target_type_name,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
 #ifdef __cplusplus
 }
 #endif

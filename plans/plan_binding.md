@@ -1239,7 +1239,29 @@ applies unchanged. Three things are specific to this phase:
 **A second regex looseness caught the same way `CBIND-103`'s was.** The template overloads carry their `template<typename TVertex>` prefix in the recorded signature, so the first pattern matched only 19 of the 22 rows and the deriving script said so instead of writing a short approval set. The rule's `signature_regex` now names all five forms explicitly.
 
 **Verified in all three arms**, each built whole and then run serially: 103/103 `CApi` tests in `cmake-build-debug`, `cmake-build-cnaext` and `build-probe`; all eight build-free gates green; declared and exported routes agreeing exactly at 4,023 in each tree. |
-| CBIND-105 | Bind the reflective content readers and the `.cnb` loader hook | 17 | ⬜ | `ReflectiveTypeReader`, `EnumTypeReader` and `ReflectiveTypeReaderBuilder` are how a game declares a reflectively serialized XNB type's field list once and gets a reader for it (`SAMPLE-044`). The builder is a fluent C++ template — `Field`, `EnumField`, `Custom`, `Register` — so the C form is a descriptor plus an append route, not a chained call; the existing content-reader registration routes are the precedent to follow rather than a new mechanism. `ContentManager::RegisterCnbLoaderEXT` and its `CnbLoaderFn` alias are the callback seam the CNB tier loads through, and `cna_content_manager_register_cnj_loader_ext` is its exact sibling — match that route's shape, its context pointer and its lifetime rules. |
+| CBIND-105 | Bind the reflective content readers and the `.cnb` loader hook | 17 | ✅ | **Done 2026-08-28.** Ten routes over one new handle kind close all 17 rows: implemented 8,320 → 8,337 and **planned 17 → 0**. ABI `0.16.0` → `0.17.0`, exports 4,023 → 4,033.
+
+**A pointer-to-member becomes a kind and a byte offset.** The canonical builder's `Field(&T::member)` captures a member pointer, which C cannot name; the same information is a field's *kind* and *where it goes in the object*, and that is what `add_field` takes. Chaining becomes a handle plus append routes, following `cna_content_type_reader_manager_register` as the row asked rather than inventing a mechanism.
+
+**Two things the C form must supply that C++ took from `T`, and both are decisions rather than transcriptions.** The object is made by a **caller callback**, because the canonical reader default-constructs its `T` — and that settles ownership without an allocator crossing the ABI: the object is allocated and freed by the caller, and CNA only writes the declared fields into it. And a **reference-type member cannot land in a byte offset at all**, because XNA writes it with its own reader index in front; `add_custom` is what reads one, and the header says so rather than leaving a caller to find out.
+
+**`ReflectiveTypeReader<T>` is not instantiated and could not be.** It needs a C++ `T` to default-construct and to hold member pointers into. What is bound is the **contract** — the canonical reader name, the declared wire order, value types read inline — implemented in the C layer against a caller-made object. Recording that plainly is better than implying a template was reached from C.
+
+**`Register()` returns no handle, because the canonical one has no undo.** Registering the same name again replaces the entry, which is what both sides rely on; a withdrawal route would be surface the canonical layer does not have.
+
+**The row's premise about the `.cnj` sibling does not hold, and that is the finding.** `cna_content_manager_register_cnj_loader_ext` is **per-manager**, because `RegisterCnjLoader<T>` is a non-static member; `RegisterCnbLoaderEXT` is **static** and process-wide. Matching the sibling's shape would have given a process-wide registration a manager argument it does not use. And the canonical method's whole body forwards to `CnbLoaderRegistry::Register` after dropping the asset name — which the C callback already receives — so it maps to `CBIND-111`'s route with **no second spelling published**.
+
+**What `CBIND-111` left open is now settled by measurement rather than argument.** That row said a C-registered CNB loader is invoked directly rather than reached through a manager. It is reached through a manager: `validate_cnb_loader_through_manager` writes a real custom-typed `.cnb`, registers a C loader for its type, and loads it **by asset name through `cna_content_manager_load_foreign_ext`**. Mutation-checked by registering the loader under a different asset type, which makes the load fail.
+
+**The reflective reader is proved against a hand-written `.xnb`, not a mock**, whose type-reader table is built **from the canonical-name routes** rather than transcribed — so a change to the name composition breaks the file instead of passing unnoticed. Three mutations were run: expecting the custom callback's undoubled value fails; dropping the enum-reader registration fails, which is what proves an `.xnb`'s table must resolve in full before any object is read even for a reader nothing dispatches to; and registering the CNB loader for the wrong type fails.
+
+**One mutation check that did not mutate, caught and redone.** The first attempt used a `str.replace` with no assertion and silently changed nothing, so the "failure" it reported was a pass. The second attempt failed to compile under `-Werror` and re-ran the **stale binary**. Only the third — registering under a different asset type, which compiles — actually bit. A mutation check that does not mutate proves exactly as much as a skipped test.
+
+**The route-coverage gate found a real gap.** `cna_enum_type_reader_get_canonical_name_size` was published and never called; the gate refused the slice until a test named it. That is the gate doing the job the plan gave it — a matrix row saying `implemented` is not evidence anything calls the route.
+
+**The matrix is closed: 0 planned rows, and `docs/c-api/RELEASE_GATE.md` now reads `Ready` on all ten criteria.** That verdict is *measured*, not asserted, and it is **not** this row's closure claim: `CBIND-112` still owes the four independent checks, and its own rule says not to close on a green `--check`.
+
+**Verified in all three arms**, each built whole and then run serially: 103/103 `CApi` tests in `cmake-build-debug`, `cmake-build-cnaext` and `build-probe`; all eight build-free gates green; declared and exported routes agreeing exactly at 4,033 in each tree. |
 | CBIND-106 | Bind the CNB container: identities, format, arithmetic, CRC-32C and read limits | 66 | ✅ | **Done 2026-08-28.** `CNA/C/cnb.h` and `CnaCApiCnb.cpp` add 24 routes, two identities, one versioned structure and 30 constants, closing all 66 rows: implemented 7,832 → 7,898 and planned 506 → 440, the delta this phase requires to equal the slice's row count.
 
 **The family owns no handle, and saying so is a design decision rather than an accident.** Everything here is a pure function over caller-owned bytes plus `CNA_CnbReadLimits`, so there is no lifetime to manage, no thread affinity and no `_destroy`. `ObjectKind`'s next free number is untouched. Nothing in `CNA::Content::Cnb` has an XNA 4.0 counterpart, so no route carries an `_ext` suffix — `core_ext.h`'s rule that a whole header of CNA-namespace surface is its own marker, applied to the two canonical members (`Crc32cUsesHardwareEXT`, `Crc32cPortableEXT`) that do carry one.
@@ -1428,9 +1450,9 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-**Snapshot (2026-08-28, after `CBIND-104`):** 536 headers / 8,812 symbols —
-**8,320 implemented, 15 approved partial, 17 planned, 460 not applicable.** ABI `0.16.0`, 4,023
-exported symbols — the same 4,023 with `CNA_CNAEXT` on and off (measured symbol by symbol: zero
+**Snapshot (2026-08-28, after `CBIND-105`):** 536 headers / 8,812 symbols —
+**8,337 implemented, 15 approved partial, 0 planned, 460 not applicable.** ABI `0.17.0`, 4,033
+exported symbols — the same 4,033 with `CNA_CNAEXT` on and off (measured symbol by symbol: zero
 differ), which is the engine layer's ABI promise measured rather than asserted.
 
 The not-applicable count moved 459 → 460 for the first time in this phase, and the one row is named
@@ -1438,16 +1460,22 @@ in `CBIND-111`: a `friend` declaration Doxygen reports as a member. Every other 
 closed was **bound**.
 Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.
 
-**The matrix is open, and Phase B10 is the backlog that closes it.** `docs/c-api/RELEASE_GATE.md`
-reads **Not ready**, on exactly one criterion — *No public C++ symbol is unaccounted for* — and on
-no other. That is not a regression and not a document going stale: the sixth merge of `next`
-brought in 506 public symbols, 460 of them the `CNA::Content::Cnb` content format, and the owner
-ruled on 2026-08-28 that binding them belongs to a later pass — then asked for `CBIND-106`,
-`CBIND-107`–`CBIND-111` — the container, the document, every asset schema the format defines, and
-the compile path with the loader registry — and then `CBIND-103`'s math tail and `CBIND-104`'s
-graphics tail, which closed 489 of them and left 17. The gate says so out loud because
-`CBIND-042B` built it to fail in both directions, and a deferral that only lives in somebody's
-memory is the thing it exists to prevent.
+**Phase B10 closed the matrix it was opened to close.** The sixth merge of `next` brought in 506
+public symbols, 460 of them the `CNA::Content::Cnb` content format, and the owner ruled on
+2026-08-28 that binding them belonged to a later pass — then asked for that pass. `CBIND-106`–
+`CBIND-111` bound the container, the document, every asset schema the format defines and the
+compile path with the loader registry; `CBIND-103`, `CBIND-104` and `CBIND-105` bound the math,
+graphics and reflective-reader tails. **All 506 are accounted for, and exactly one of them was
+dispositioned `not-applicable`** — a `friend` declaration Doxygen reports as a member, named in
+`CBIND-111`.
+
+`docs/c-api/RELEASE_GATE.md` therefore reads **Ready** again, on all ten criteria. It read **Not
+ready** on exactly one — *No public C++ symbol is unaccounted for* — for the whole of this phase,
+which is `CBIND-042B`'s design working: a deferral that only lives in somebody's memory is the thing
+that gate exists to prevent, and it stayed visible until the rows were actually bound.
+
+**The verdict is not the closure.** `CBIND-112` is what checks that the rows were bound rather than
+reclassified, and its own rule is explicit: do not close on a green `--check`.
 
 **Read this before rewriting this block.** The snapshot that stood here before `CBIND-079` — *0
 planned, ABI 0.2.0, the gate reads ready* — was accurate on 2026-08-19 and stayed in the file while
@@ -1475,7 +1503,7 @@ CNAEXT engine layer and the fifth merge's tail opened, and `CBIND-095` verified 
 
 ### What remains
 
-**Phase B10 — 17 rows left of 506, in one slice. `CBIND-103`, `CBIND-104` and `CBIND-106`–`CBIND-111` are closed; only `CBIND-105` remains, with `CBIND-113` beside it and `CBIND-112` to close the matrix.** The
+**Phase B10 — 0 rows left of 506. Every binding slice is closed: `CBIND-103`–`CBIND-111`. What remains is `CBIND-112`, which verifies the closure rather than asserting it, and `CBIND-113` beside it.** The
 sixth reopening. `origin/next` merged on 2026-08-28 and brought in the **CNB content format**
 (`CNA::Content::Cnb`, 23 public headers, `plans/plan_cnb.md`'s `CNBF-002`–`CNBF-123`) — 460 of the
 506 rows — plus 46 ordinary XNA symbols: the math types' compound-assignment operators,
