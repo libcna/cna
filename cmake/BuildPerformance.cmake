@@ -310,6 +310,92 @@ endfunction()
 option(CNA_ENABLE_IPO
     "Enable IPO/LTO for CNA-owned release artifacts (not compatible with the static C API package)" OFF)
 
+option(CNA_ENABLE_UNITY_BUILD
+    "Enable the measured clean-CI unity-build pilot for the core and math modules" OFF)
+
+function(cna_apply_unity_to_pilot_targets)
+    if(NOT CNA_ENABLE_UNITY_BUILD)
+        return()
+    endif()
+    if(EMSCRIPTEN OR CMAKE_CROSSCOMPILING)
+        message(FATAL_ERROR
+            "CNA_ENABLE_UNITY_BUILD is currently a native clean-CI experiment; disable it for "
+            "Emscripten and cross-compiles.")
+    endif()
+    set(_cna_unity_targets cna_core cna_math)
+    foreach(_cna_unity_target IN LISTS _cna_unity_targets)
+        if(NOT TARGET "${_cna_unity_target}")
+            message(FATAL_ERROR
+                "CNA unity pilot target '${_cna_unity_target}' was not created.")
+        endif()
+        set_target_properties("${_cna_unity_target}" PROPERTIES
+            UNITY_BUILD ON
+            UNITY_BUILD_MODE GROUP)
+    endforeach()
+
+    # Anonymous namespaces from separately compiled files merge inside a unity TU. Keep the
+    # six math files that deliberately use the same helper names in different groups; distribute
+    # the remaining sources so every math unity file contains at most three implementation files.
+    set_source_files_properties(
+        "${CMAKE_SOURCE_DIR}/modules/math/src/BoundingBox.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/math/src/Matrix.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/math/src/Point.cpp"
+        DIRECTORY "${CMAKE_SOURCE_DIR}/modules/math" PROPERTIES UNITY_GROUP cna_math_unity_0)
+    set_source_files_properties(
+        "${CMAKE_SOURCE_DIR}/modules/math/src/BoundingFrustum.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/math/src/Plane.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/math/src/Quaternion.cpp"
+        DIRECTORY "${CMAKE_SOURCE_DIR}/modules/math" PROPERTIES UNITY_GROUP cna_math_unity_1)
+    set_source_files_properties(
+        "${CMAKE_SOURCE_DIR}/modules/math/src/BoundingSphere.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/math/src/Ray.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/math/src/Vector2.cpp"
+        DIRECTORY "${CMAKE_SOURCE_DIR}/modules/math" PROPERTIES UNITY_GROUP cna_math_unity_2)
+    set_source_files_properties(
+        "${CMAKE_SOURCE_DIR}/modules/math/src/Color.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/math/src/Rectangle.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/math/src/Vector3.cpp"
+        DIRECTORY "${CMAKE_SOURCE_DIR}/modules/math" PROPERTIES UNITY_GROUP cna_math_unity_3)
+    set_source_files_properties(
+        "${CMAKE_SOURCE_DIR}/modules/math/src/Curve.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/math/src/MathHelper.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/math/src/Vector4.cpp"
+        DIRECTORY "${CMAKE_SOURCE_DIR}/modules/math" PROPERTIES UNITY_GROUP cna_math_unity_4)
+    set_source_files_properties(
+        "${CMAKE_SOURCE_DIR}/modules/math/src/CurveKey.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/math/src/CurveKeyCollection.cpp"
+        DIRECTORY "${CMAKE_SOURCE_DIR}/modules/math" PROPERTIES UNITY_GROUP cna_math_unity_5)
+
+    # The eight core sources have disjoint internal helper names and form one bounded group.
+    get_target_property(_cna_core_unity_sources cna_core SOURCES)
+    set_source_files_properties(${_cna_core_unity_sources}
+        DIRECTORY "${CMAKE_SOURCE_DIR}/modules/core" PROPERTIES UNITY_GROUP cna_core_unity_0)
+
+    # Focused test object libraries are leaf-only and dominate this preset after the module
+    # sources are merged. Keep batches small to bound diagnostics, memory and collision scope.
+    set(_cna_unity_test_targets cna_core_test_objects cna_math_test_objects)
+    foreach(_cna_unity_test_target IN LISTS _cna_unity_test_targets)
+        if(TARGET "${_cna_unity_test_target}")
+            set_target_properties("${_cna_unity_test_target}" PROPERTIES
+                UNITY_BUILD ON
+                UNITY_BUILD_BATCH_SIZE 8)
+        endif()
+    endforeach()
+    if(TARGET cna_math_test_objects)
+        # Seven independent test files use the conventional anonymous-namespace name kEps.
+        # CMake's per-source unity identifier gives each generated include a unique spelling,
+        # avoiding a merged-namespace collision without changing the normal test sources.
+        set_target_properties(cna_math_test_objects PROPERTIES
+            UNITY_BUILD_MODE BATCH
+            UNITY_BUILD_UNIQUE_ID CNA_UNITY_MATH_TEST_ID
+            UNITY_BUILD_CODE_BEFORE_INCLUDE "#define kEps CNA_UNITY_MATH_TEST_ID"
+            UNITY_BUILD_CODE_AFTER_INCLUDE "#undef kEps")
+    endif()
+    message(STATUS
+        "CNA: collision-aware unity-build pilot enabled for ${_cna_unity_targets} "
+        "(core group: 8 sources; math groups: at most 3 sources; test batches: 8 sources)")
+endfunction()
+
 function(cna_apply_ipo_to_cna_targets)
     if(NOT CNA_ENABLE_IPO)
         return()

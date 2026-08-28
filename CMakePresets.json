@@ -70,6 +70,16 @@
       }
     },
     {
+      "name": "unit-unity",
+      "displayName": "Focused core/math tests with the clean-CI unity pilot",
+      "description": "Opt-in COMP-007 clean-build experiment. Unity batches are limited to the stable cna_core and cna_math modules; normal incremental unit builds remain non-unity.",
+      "inherits": "unit",
+      "binaryDir": "${sourceDir}/cmake-build-unit-unity",
+      "cacheVariables": {
+        "CNA_ENABLE_UNITY_BUILD": "ON"
+      }
+    },
+    {
       "name": "release-modules",
       "displayName": "Focused release modules (STUB)",
       "description": "A portable Release configuration for checking optimized CNA module and content-tool builds without test/demo/C API volume.",
@@ -273,6 +283,15 @@
       "displayName": "Build focused math tests",
       "configurePreset": "unit",
       "targets": [
+        "CnaMathTests"
+      ]
+    },
+    {
+      "name": "unit-core-math-unity",
+      "displayName": "Build focused core and math tests with the unity pilot",
+      "configurePreset": "unit-unity",
+      "targets": [
+        "CnaCoreTests",
         "CnaMathTests"
       ]
     },

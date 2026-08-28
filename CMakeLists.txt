@@ -271,3 +271,4 @@ cna_apple_configure_all_bundles()
 # target-scoped and excludes vendored projects while still covering tools, tests, and applications.
 cna_apply_build_support_to_cna_targets()
 cna_apply_ipo_to_cna_targets()
+cna_apply_unity_to_pilot_targets()

@@ -17,6 +17,7 @@ All new performance-oriented presets use Ninja and write `compile_commands.json`
 | `dev-fast-debug` | Same edit loop with line-table-only debug information | Same as `dev`; local-variable/type debugger detail |
 | `unit` | Portable complete unit-test suite; builds `CnaTests` | Demos, C API, networking, FFmpeg, Draco |
 | `unit-pch` | Opt-in content-test PCH pilot; builds `CnaContentTests` | Same as `unit`; PCH is limited to the content test object group |
+| `unit-unity` | Opt-in clean-CI core/math unity pilot | Same as `unit`; unity is limited to core/math libraries and focused test objects |
 | `release-modules` | Optimized module/content-tool validation | Tests, demos, C API, networking, FFmpeg, Draco |
 | `release-ipo` | Explicit IPO/LTO measurement build | Same as `release-modules`; IPO is opt-in |
 
@@ -227,6 +228,43 @@ speed metric. Split DWARF provided no meaningful controlled compile gain and mad
 larger, so it has no preset. Both modes remain selectable for other machines. The line-table tool
 contains 18,922 decoded source-line rows and runs normally; Clang 19.1.7 also builds and runs the
 same preset with `-gline-tables-only`.
+
+## Clean-CI unity pilot
+
+`CNA_ENABLE_UNITY_BUILD=ON` is deliberately narrow and defaults to `OFF`. It merges only `cna_core`,
+`cna_math`, and their two focused test object targets. Production math sources use six explicit
+groups of at most three files so repeated anonymous helpers such as `FloatHash` never share a TU;
+the eight core sources form one verified group. Focused tests use batches of at most eight files.
+Several math tests independently call their tolerance `kEps`, so the generated unity wrapper uses
+CMake's per-source unique identifier to rename that internal symbol only during unity compilation.
+Normal source files and public API remain unchanged.
+
+The dedicated preset is intended for a clean, constrained CI worker, not the normal edit loop:
+
+```sh
+cmake --preset unit-unity
+cmake --build --preset unit-core-math-unity --parallel 4
+SDL_AUDIODRIVER=dummy ./cmake-build-unit-unity/CnaCoreTests
+SDL_AUDIODRIVER=dummy ./cmake-build-unit-unity/CnaMathTests
+```
+
+Two clean GCC 14.2.0 Debug/STUB/Mold builds with ccache off and four jobs measured 45.67/46.08 s
+without unity and 34.14/34.09 s with unity. The means are 45.88 s versus 34.12 s, a 25.6%
+improvement that meets the pilot threshold. Compile edges fell from 145 to 101 (30.3%), selected
+object size from 40.75 MB to 23.18 MB (43.1%), and the build tree from 197.57 MB to 173.26 MB
+(12.3%). Peak RSS rose from about 465 MiB to 502 MiB (8.0%), within the reference worker limit.
+
+At 12 jobs the same clean closure improved only from 28.51 s to 23.07 s (19.1%): wide ordinary
+parallelism reduces unity's benefit. Rebuilding just the 25 production core/math sources improved
+from 7.51 s to 1.65 s (78.0%). A one-source `Vector3.cpp` edit was slightly worse (0.87 s to
+0.92 s), while a public `Vector3.hpp` rebuild improved from 1.74 s to 1.47 s. Final relinking
+(0.19/0.20 s) and no-op builds (0.13 s each) were unchanged. These tradeoffs are why unity remains
+opt-in and why the preset documents four-way clean CI rather than replacing `unit`.
+
+All 63 core and 840 math tests pass with GCC 14.2.0 and Clang 19.1.7. The same suites pass under
+GCC AddressSanitizer; leak detection alone was disabled because the execution sandbox runs under
+ptrace, while address/ODR instrumentation remained active. Third-party targets, other modules,
+cross-builds, Emscripten, installed consumers, and ordinary presets are unaffected.
 
 ## Compiler-policy layers
 

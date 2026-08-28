@@ -62,7 +62,7 @@ must not be compared with the new post-reset counters.
 | COMP-004 | Benchmark Mold and LLD final linking | COMP-001 | ⬜ |
 | COMP-005 | Reduce CMake configure/regeneration cost | COMP-001 | ✅ |
 | COMP-006 | Reduce measured header and translation-unit cost | COMP-001 | ✅ |
-| COMP-007 | Add an opt-in CI unity-build experiment | COMP-002, COMP-006 | ⬜ |
+| COMP-007 | Add an opt-in CI unity-build experiment | COMP-002, COMP-006 | ✅ |
 | COMP-008 | Publish results and add regression guardrails | COMP-002–COMP-007 | ⬜ |
 | COMP-009 | Add an opt-in fast-debug preset | COMP-001 | ✅ |
 
@@ -350,6 +350,25 @@ foundation work.
   documented worker limit, and the complete selected test suite passes.
 - Unity remains opt-in unless a later project-owner decision accepts its incremental-build and
   diagnostic tradeoffs.
+
+### Completion evidence (2026-08-29)
+
+- `CNA_ENABLE_UNITY_BUILD`, default `OFF`, is limited to `cna_core`, `cna_math`, and their focused
+  test object targets. Production math sources use six collision-aware groups of at most three;
+  core uses one verified eight-source group; test batches contain at most eight sources. Repeated
+  test-local `kEps` names are isolated by CMake's generated per-source unity identifier rather than
+  by changing production or test source semantics.
+- On two clean GCC 14.2.0 Debug/STUB/Mold builds with ccache off and four jobs, the complete
+  `CnaCoreTests` + `CnaMathTests` closure averaged 45.88 s without unity and 34.12 s with unity:
+  25.6% faster. Compile edges fell 30.3%, selected objects 43.1%, and tree size 12.3%; peak RSS rose
+  8.0% to about 502 MiB. The 25 production module sources alone improved 78.0% (7.51 to 1.65 s).
+- At 12 jobs the clean-closure gain was only 19.1%, so `unit-unity` is documented for constrained
+  four-job clean CI and does not replace `unit`. A one-source edit regressed 5.7%, a public-header
+  rebuild improved 15.5%, and final relink/no-op time was unchanged, reinforcing the opt-in scope.
+- GCC 14.2.0 and Clang 19.1.7 both pass all 63 core and 840 math tests. GCC AddressSanitizer also
+  passes both suites with only leak detection disabled for the ptrace-based sandbox; address and
+  ODR instrumentation remain enabled. Emscripten/cross builds reject the experiment, and all
+  third-party targets, other CNA modules, consumers, and default presets remain non-unity.
 
 ## 12. COMP-008 — results and regression guardrails
 
