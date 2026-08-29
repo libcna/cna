@@ -8,7 +8,7 @@
 
 #include <stddef.h>
 
-_Static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 18, 0),
+_Static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 19, 0),
                "CNA C ABI version encoding must remain stable");
 _Static_assert(sizeof(CNA_Result) == sizeof(uint32_t),
                "CNA_Result must have a fixed-width representation");
@@ -2035,3 +2035,10 @@ _Static_assert(sizeof(CNA_ObjectDictionaryEntry) == 24U &&
                    offsetof(CNA_ObjectDictionaryEntry, is_array) == 12U &&
                    offsetof(CNA_ObjectDictionaryEntry, element_count) == 16U,
                "CNA_ObjectDictionaryEntry layout must remain stable");
+
+/* CBIND-118: loading a Model from content adds routes only -- no structure and no handle kind, so
+   what there is to pin is that the model and dictionary handles stay the plain handle type the
+   rest of the ABI uses. */
+_Static_assert(sizeof(CNA_ModelHandle) == sizeof(CNA_Handle) &&
+                   sizeof(CNA_ObjectDictionaryHandle) == sizeof(CNA_Handle),
+               "the Model and object-dictionary handles must remain plain CNA_Handle values");

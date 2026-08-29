@@ -11,6 +11,14 @@ namespace Microsoft::Xna::Framework::Content {
 class ContentManager;
 }
 
+namespace CNA::Content {
+class ObjectDictionaryEXT;
+}
+
+namespace System {
+class Object;
+}
+
 namespace CNA::C::Detail {
 
 // The canonical ContentReader takes a raw ContentManager pointer that may be null. The reader
@@ -27,6 +35,19 @@ struct BorrowedContentManager final {
 [[nodiscard]] CNA_Result BorrowContentManager(
     CNA_Handle handle,
     BorrowedContentManager* outContentManager);
+
+// CBIND-118: the two seams the Model.Tag routes ask through. Both answer about types that stay
+// private to the content-reader translation unit -- the dictionary's resource record, and the
+// carrier a caller-made object arrives in -- so the model translation unit asks rather than
+// includes.
+//
+// The dictionary shared_ptr may be an aliasing one that keeps the loaded Model alive, which is what
+// lets a tag handle outlive the model handle without dangling.
+[[nodiscard]] CNA_Result PublishObjectDictionary(
+    std::shared_ptr<CNA::Content::ObjectDictionaryEXT> dictionary,
+    CNA_Handle* outHandle);
+
+[[nodiscard]] bool TryGetForeignReferenceObject(const System::Object* tag, void** outObject);
 
 } // namespace CNA::C::Detail
 

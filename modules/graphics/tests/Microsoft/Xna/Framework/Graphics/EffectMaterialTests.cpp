@@ -19,6 +19,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
+#include "CNA/TestSupport/TestPaths.hpp"
 
 using Microsoft::Xna::Framework::Graphics::BasicEffect;
 using Microsoft::Xna::Framework::Graphics::Effect;
@@ -46,8 +47,8 @@ namespace
     // binary, so a clone has something with parameters to carry across.
     std::vector<SharpRuntime::bytecs> LoadCompiledEffectFixture()
     {
-        const std::filesystem::path path = std::filesystem::path(__FILE__).parent_path() /
-            "../../../../../../renderers/fna3d/effects/BasicEffect.fxb";
+        const std::filesystem::path path =
+            CNA::TestSupport::CompiledEffectDirectory() / "BasicEffect.fxb";
         std::ifstream input(path, std::ios::binary);
         return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
     }

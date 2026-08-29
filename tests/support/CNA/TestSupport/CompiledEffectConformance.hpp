@@ -4,6 +4,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/TestSupport/TestPaths.hpp"
 #include "CNA/TestSupport/CompiledEffectFixtures.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -1669,8 +1670,8 @@ namespace CNA::TestSupport
         // exists for. The synthetic effect is refused earlier every time, so a sweep over it would
         // pass without ever exercising the thing being claimed. Falls back to the synthetic effect
         // only if the fixture is missing, and says so rather than silently covering less.
-        const std::filesystem::path fixture = std::filesystem::path(__FILE__).parent_path() /
-            "../../../../modules/renderers/fna3d/effects/CnaConformanceEffect.fxb";
+        const std::filesystem::path fixture =
+            CNA::TestSupport::CompiledEffectDirectory() / "CnaConformanceEffect.fxb";
         std::vector<std::uint8_t> whole;
         {
             std::ifstream input(fixture, std::ios::binary);

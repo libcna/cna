@@ -855,20 +855,22 @@ CNA_C_API CNA_Result cna_enum_type_reader_copy_canonical_name(
  * a container that knows the C++ type it expects chooses how to read the payload by whether that
  * type is reference-shaped. This route registers the reference-shaped reader for those places.
  *
- * **Measured boundary, because the two are closer together here than in C++.** A
+ * **Measured boundary, because the two are closer together on one path than in C++.** A
  * `Dictionary<string, object>` value reaches its reader through type-erased dispatch that consumes
- * the reader index whichever shape the reader produces, so on that path both registrations read the
- * payload correctly and differ only in the C++ type the entry ends up holding. The container that
- * does refuse the wrong shape is `ModelReader`'s tag path, and no route in this ABI loads a `Model`
- * from content, so that refusal is not reachable from C today. Register the shape that matches
- * where the payload sits; do not expect a wrong choice to fail loudly on the paths C can reach.
+ * the reader index whichever shape the reader produces, so on *that* path both registrations read
+ * the payload correctly and differ only in the C++ type the entry ends up holding -- a wrong choice
+ * there does not fail loudly. `Model.Tag` is the other case and it does refuse: `ModelReader` takes
+ * a reference and accepts nothing else, so a type registered value-shaped makes
+ * @ref cna_content_manager_load_model fail the whole asset with `CNA_RESULT_IO`. Register the shape
+ * that matches where the payload sits.
  *
  * Both forms register under the **same canonical name**, and the canonical table keeps the **first**
  * entry registered under a name, so a second call in the other shape is silently ignored.
  *
  * The object still comes from @ref CNA_ReflectiveObjectCreateCallback and is still the caller's:
  * what changes is the wire form, not the ownership. An object read this way is reachable through
- * @ref cna_object_dictionary_ext_get_foreign_object when it arrived as a dictionary entry.
+ * @ref cna_object_dictionary_ext_get_foreign_object when it arrived as a dictionary entry, and
+ * through @ref cna_model_get_content_tag_foreign_object_ext when it arrived as a `Model.Tag`.
  */
 CNA_C_API CNA_Result cna_reflective_type_reader_builder_register_shared(
     CNA_ReflectiveTypeReaderBuilderHandle builder);
@@ -882,13 +884,11 @@ CNA_C_API CNA_Result cna_reflective_type_reader_builder_register_shared(
  * type for -- XNA's own `TrianglePickingSample` tags every model with its world-space triangle
  * vertices and a `BoundingSphere` that way, and the game casts the tag back to read them.
  *
- * **Where the C surface stops today.** In C++ such a dictionary is reached through `Model.Tag`,
- * and this ABI has no route that loads a `Model` from content at all -- every `CNA_ModelHandle`
- * is built by hand from `cna_model_create_*`. So the tag path is not reachable from C, and this
- * ABI reaches the same data the other way: @ref cna_content_manager_load_object_dictionary_ext
- * loads an asset whose root object *is* the dictionary. Binding `Model` loading is separate work,
- * and until it lands a C caller reads a processor's side data from its own `.xnb` rather than
- * from the model's tag.
+ * **Two ways in.** The canonical one is `Model.Tag`, reachable since `CBIND-118` bound
+ * @ref cna_content_manager_load_model: load the model, then take
+ * @ref cna_model_get_content_tag_dictionary_ext. That is what `TrianglePickingSample` does. The
+ * other is @ref cna_content_manager_load_object_dictionary_ext, for an asset whose root object *is*
+ * the dictionary rather than a model carrying one.
  *
  * Its .NET type is always
  * `System.Collections.Generic.Dictionary`2[System.String,System.Object]`, which is why no route

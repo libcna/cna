@@ -53,7 +53,18 @@ if(DEFINED CNA_C_COMPILER AND NOT CNA_C_COMPILER STREQUAL "")
     list(APPEND _configure_arguments -DCMAKE_C_COMPILER=${CNA_C_COMPILER})
 endif()
 if(DEFINED CNA_C_COMPILER_LAUNCHER AND NOT CNA_C_COMPILER_LAUNCHER STREQUAL "")
-    list(APPEND _configure_arguments -DCMAKE_C_COMPILER_LAUNCHER=${CNA_C_COMPILER_LAUNCHER})
+    # CBIND-119: a compiler launcher is a LIST, and since the compilation-profile work made it
+    # `cmake -E env CCACHE_BASEDIR=... ccache` it can no longer travel as a `-D` argument. Every
+    # unquoted `${...}` between here and execute_process re-splits it, so the consumer was being
+    # configured with just its first word and compiled with `cmake -c hello_cna.c`.
+    #
+    # A preloaded cache script sidesteps the whole problem: the value is written once, as CMake
+    # source, and never passes through argument expansion again. Escaping the separators instead
+    # would have to survive three expansions and be right at every one of them.
+    set(_launcher_cache "${CNA_WORK_DIR}/launcher-cache.cmake")
+    file(WRITE "${_launcher_cache}"
+        "set(CMAKE_C_COMPILER_LAUNCHER \"${CNA_C_COMPILER_LAUNCHER}\" CACHE STRING \"\" FORCE)\n")
+    list(APPEND _configure_arguments -C "${_launcher_cache}")
 endif()
 # CBIND-045: nothing about SDL is passed here any more, and that is the assertion. The package
 # installs the SDL3 libraries beside libcna_c_api.so and the library's INSTALL_RPATH is $ORIGIN, so

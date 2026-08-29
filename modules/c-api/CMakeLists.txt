@@ -2067,7 +2067,12 @@ if(CNA_BUILD_TESTS)
                 -DCNA_EXAMPLE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/examples/c
                 -DCNA_WORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/installed-consumer
                 -DCNA_C_COMPILER=${CMAKE_C_COMPILER}
-                -DCNA_C_COMPILER_LAUNCHER=${CMAKE_C_COMPILER_LAUNCHER}
+                # CBIND-119: quoted, because a compiler launcher is a LIST. Since the compilation
+                # profiles work made it `cmake -E env CCACHE_BASEDIR=... ccache`, an unquoted
+                # expansion split it into five separate add_test arguments -- the consumer then
+                # compiled with `cmake -c hello_cna.c` and this test failed on a defect that was
+                # entirely in how it passes its own arguments.
+                "-DCNA_C_COMPILER_LAUNCHER=${CMAKE_C_COMPILER_LAUNCHER}"
                 -DCNA_SANITIZE=${CNA_SANITIZE}
                 -DCNA_EXPECT_STATIC=$<BOOL:${CNA_C_API_BUILD_STATIC}>
                 -DCNA_CONSUMER_VIDEODRIVER=x11

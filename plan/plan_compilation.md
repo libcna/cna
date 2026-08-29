@@ -67,6 +67,7 @@ must not be compared with the new post-reset counters.
 | COMP-007 | Add an opt-in CI unity-build experiment | COMP-002, COMP-006 | ✅ |
 | COMP-008 | Publish results and add regression guardrails | COMP-002–COMP-007 | 🟨 |
 | COMP-009 | Add an opt-in fast-debug preset | COMP-001 | ✅ |
+| COMP-010 | Restore fixture lookup after source-path normalization | COMP-001 | ✅ |
 
 `COMP-003`, `COMP-004`, `COMP-005`, and `COMP-006` may proceed independently after their stated
 dependencies. `COMP-007` must remain last among compilation-technique experiments because unity
@@ -476,7 +477,55 @@ foundation work, but both are now available on the reference host.
   cannot be caused by its implementation; nevertheless the task remains 🟨 rather than claiming
   the plan's full-test acceptance criterion passed.
 
-## 13. Explicit non-goals
+## 13. COMP-010 — restore fixture lookup after source-path normalization
+
+### Work
+
+- `CNA_CCACHE_BASEDIR` (COMP-001) lets ccache normalize source paths so the four worktrees of this
+  repository share cache entries. ccache does that by handing the compiler a path **relative to the
+  build directory**, which also changes `__FILE__`.
+- Ten fixture lookups located their data with `std::filesystem::path(__FILE__).parent_path()`. That
+  held while `__FILE__` was absolute. It stopped holding the moment the launcher changed, because
+  `gtest_discover_tests` runs the suite from the **repository root**, one level beside where the
+  relative path resolves.
+- Replace every one of them with a lookup that depends on neither, and keep the normalization.
+
+### Acceptance
+
+- No `path(__FILE__)` remains in a fixture lookup.
+- The affected tests produce the same result run from the repository root, from a build directory,
+  or from anywhere below either, and the cache normalization stays on.
+
+### Completion evidence (2026-08-29)
+
+- **Measured, not inferred.** `strings cmake-build-debug/CnaTests | grep 'Tests\.cpp$'` returned
+  `../modules/...` rather than an absolute path. A probe compiled through the same launcher with a
+  source inside the basedir confirmed the split responsibility: `__FILE__` was rewritten to
+  `../cna_ccache_probe.c`, while an absolute path passed as `-D` was **not** rewritten. So the
+  normalization touches the source argument only, and a `-D`-carried source directory would have
+  been a valid fix too — it was rejected because it puts a per-worktree absolute path back on the
+  command line and re-fragments the cache this task exists to keep whole.
+- The chosen fix is `tests/support/CNA/TestSupport/TestPaths.hpp`: `RepositoryRoot()` walks up from
+  the working directory looking for `CHECKLIST.md` beside a `modules/` directory, and two accessors
+  build the compiled-effect and fixture directories from it. Nothing reaches the compiler's command
+  line, so there is nothing left for path normalization to rewrite.
+- Ten call sites in nine files converted. Same filter, same binary: **37/62 passing from the
+  repository root before, 66/67 after** (the 67th is a `GTEST_SKIP`), and identical from the build
+  directory. From `/tmp` — genuinely outside any checkout — the lookup answers empty and the tests
+  report a missing fixture, which is the documented behaviour rather than a silent wrong answer.
+- Full suite: **52 serial failures before, 29 after**. The 24 that went green are exactly the
+  `EffectTest`, `EasyGLCompiledEffect*`, `EffectMaterial*` and `EffectContentTypeReaderTest` set.
+  The remaining 29 are this tree's pre-existing Mesa/llvmpipe baseline (27),
+  `GltfFixtureCorpus.InlineGltfDocumentsDoNotGrowWithoutADecision` (CP-009's ceiling, a separate
+  decision) and one llvmpipe flake, `GltfConformanceL6.ViewAndProjectionReachEveryDrawUnaltered`,
+  green 6/6 in isolation.
+- Three of the four renderer test files compiled here (`EasyGL`, `Vulkan`, `SdlGpu`);
+  `Fna3dEffectStateOracleTests.cpp` syntax-checks clean with a sibling's flags.
+  `Fna3dCompiledEffectTests.cpp` cannot be compiled in this configuration at all — `FNA3D.h` is
+  absent — so its two conversions are inspected rather than compiled, and they are the same shape as
+  the eight that were.
+
+## 14. Explicit non-goals
 
 - No global `-march=native`, `-Ofast`, or `-ffast-math`; distribution portability and XNA numerical
   behavior take priority.

@@ -8746,6 +8746,23 @@ CNA_GL_PUNCTUAL_DECL
         default_flat_normal_texture_ready_ = true;
     }
 
+    /// REMED-GFX-234: does the declaration name this usage at all?
+    ///
+    /// The stock program a draw gets is still chosen by byte stride (REMED-GFX-217 is open), while
+    /// its attributes are bound from the declaration's own offsets (REMED-GFX-218 landed). Where a
+    /// stride is ambiguous, that pair silently drops whatever the chosen program has no input for,
+    /// so the stride cases that can be ambiguous ask the declaration first.
+    [[nodiscard]] bool DeclarationNamesUsage(
+        const std::vector<VertexElement>& declaredElements,
+        Microsoft::Xna::Framework::Graphics::VertexElementUsage usage)
+    {
+        for (const VertexElement& element : declaredElements)
+        {
+            if (element.getVertexElementUsageProperty() == usage) { return true; }
+        }
+        return false;
+    }
+
     // REMED-GFX-218 / REMED-GFX-DECL-GUARD: the ONE place that decides which stock program a draw
     // gets. SelectProgram() below and StockProgramInputsEXT() both read this, so the program a
     // draw is bound to and the input shape it is checked against can never drift apart.
@@ -8813,6 +8830,18 @@ CNA_GL_PUNCTUAL_DECL
         case 20: return StockProgramShape::Textured;
         case 24: return StockProgramShape::ColoredTextured;
         case 32:
+            // REMED-GFX-234: stride 32 is VertexPositionNormalTexture's, and this branch assumed
+            // that was the only way to reach it. A Position+Colour vertex padded to 32 reaches it
+            // too, and the lit programs take {aPos, aNormal, aUV} -- no colour input -- so the
+            // declared Colour element had nothing to bind to and the draw rendered correct
+            // geometry with its colour silently dropped. A declaration that names no normal cannot
+            // be a lit vertex whatever its stride, so ask it. An absent declaration keeps the
+            // stride's answer, which is the only thing there is to go on.
+            if (!declaredElements.empty() &&
+                !DeclarationNamesUsage(declaredElements, VertexElementUsage::Normal))
+            {
+                return StockProgramShape::Colored;
+            }
             // Task 1102 (plans/plan_dx9.md Divergence 1): real XNA's BasicEffect defaults
             // PreferPerPixelLighting=false (per-vertex/Gouraud-shaded lighting), the opposite of
             // what this renderer rendered unconditionally before this task. Only meaningfully

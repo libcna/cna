@@ -143,6 +143,24 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
                            Vulkan, WebGPU, Software, SdlGpu, Wicked);
 }
 
+/// REMED-GFX-234: does this renderer derive its native layout from the DECLARATION?
+///
+/// One predicate, because the refusal arms below and their translating control are two halves of
+/// the same statement and must never disagree about which renderer is which. bgfx has always
+/// translated (REMED-GFX-216). EasyGL now does too: `ConfigureDeclarationForStockProgramEXT` binds
+/// every stock attribute at the declared element's own `getOffsetProperty()`, so a declaration
+/// whose element ORDER differs from the stock program's input order is read from its own bytes
+/// rather than reinterpreted. All five GL profiles share that one implementation; the reading was
+/// taken on OPENGLES3, and a profile that diverges fails its own run and says so.
+///
+/// This is not the same as "the stock program is chosen from the declaration". It is not --
+/// REMED-GFX-217 is still open, and the stride cases that can be ambiguous have to ask the
+/// declaration by hand (see REMED-GFX-234's stride-32 case).
+[[nodiscard]] inline bool TranslatesDeclarations()
+{
+    return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2);
+}
+
 
 namespace
 {
@@ -658,7 +676,7 @@ protected:
         {
             // plans/plan_runtimerenderer.md RTR-P9-6: bgfx infers no byte-stride table, so this expectation
             // is not its contract. Asked at runtime, it steps aside for whichever renderer is active.
-            if (!CNA_RENDERER_IS(Bgfx))
+            if (!TranslatesDeclarations())
             {
                 if (c.deviatesElsewhere)
                 {
@@ -951,8 +969,9 @@ TEST_F(DeclarationGuardTest, ARefusedDeclarationRasterizesNothing)
     // plans/plan_runtimerenderer.md RTR-P9-6: bgfx TRANSLATES a colliding declaration rather than
     // refusing it, so the refusal contract below is not its contract -- see
     // TheTranslatingRendererStillRendersEveryCollidingDeclaration for what it does instead.
-    if (CNA_RENDERER_IS(Bgfx))
-        GTEST_SKIP() << "bgfx translates colliding declarations instead of refusing them";
+    if (TranslatesDeclarations())
+        GTEST_SKIP() << RendererName()
+                     << " translates colliding declarations instead of refusing them";
     // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!DeclarationLayout())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
@@ -978,8 +997,9 @@ TEST_F(DeclarationGuardTest, AValidDrawAfterARefusedOneStillRenders)
     // plans/plan_runtimerenderer.md RTR-P9-6: bgfx TRANSLATES a colliding declaration rather than
     // refusing it, so the refusal contract below is not its contract -- see
     // TheTranslatingRendererStillRendersEveryCollidingDeclaration for what it does instead.
-    if (CNA_RENDERER_IS(Bgfx))
-        GTEST_SKIP() << "bgfx translates colliding declarations instead of refusing them";
+    if (TranslatesDeclarations())
+        GTEST_SKIP() << RendererName()
+                     << " translates colliding declarations instead of refusing them";
     // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!DeclarationLayout())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
@@ -1015,8 +1035,9 @@ TEST_F(DeclarationGuardTest, EveryUploadAndIndexWidthReachesTheSameBoundary)
     // plans/plan_runtimerenderer.md RTR-P9-6: bgfx TRANSLATES a colliding declaration rather than
     // refusing it, so the refusal contract below is not its contract -- see
     // TheTranslatingRendererStillRendersEveryCollidingDeclaration for what it does instead.
-    if (CNA_RENDERER_IS(Bgfx))
-        GTEST_SKIP() << "bgfx translates colliding declarations instead of refusing them";
+    if (TranslatesDeclarations())
+        GTEST_SKIP() << RendererName()
+                     << " translates colliding declarations instead of refusing them";
     // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!DeclarationLayout())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
@@ -1048,8 +1069,9 @@ TEST_F(DeclarationGuardTest, DrawUserPrimitivesReachesTheSameBoundary)
     // plans/plan_runtimerenderer.md RTR-P9-6: bgfx TRANSLATES a colliding declaration rather than
     // refusing it, so the refusal contract below is not its contract -- see
     // TheTranslatingRendererStillRendersEveryCollidingDeclaration for what it does instead.
-    if (CNA_RENDERER_IS(Bgfx))
-        GTEST_SKIP() << "bgfx translates colliding declarations instead of refusing them";
+    if (TranslatesDeclarations())
+        GTEST_SKIP() << RendererName()
+                     << " translates colliding declarations instead of refusing them";
     // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!DeclarationLayout())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
@@ -1100,8 +1122,10 @@ TEST_F(DeclarationGuardTest, DrawUserPrimitivesReachesTheSameBoundary)
 // declarations are invalid.
 TEST_F(DeclarationGuardTest, TheTranslatingRendererStillRendersEveryCollidingDeclaration)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-6: this is bgfx's own contract, asked at runtime.
-    CNA_SKIP_IF_RENDERER_IS_NOT(Bgfx);
+    // plans/plan_runtimerenderer.md RTR-P9-6 / REMED-GFX-234: the contract of whichever renderer
+    // translates, asked at runtime rather than named.
+    if (!TranslatesDeclarations())
+        GTEST_SKIP() << RendererName() << " refuses colliding declarations rather than translating";
     // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!DeclarationLayout())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
@@ -1111,12 +1135,13 @@ TEST_F(DeclarationGuardTest, TheTranslatingRendererStillRendersEveryCollidingDec
     {
         RenderTarget2D target = MakeTarget();
         const GuardedDraw got = DrawInto(target, c, false, false);
-        std::cout << "[ DECL-GUARD ] bgfx control " << c.name << ": "
+        std::cout << "[ DECL-GUARD ] translating control " << RendererName() << ' ' << c.name << ": "
                   << (got.rendered ? "rendered" : '"' + got.rejection + '"') << std::endl;
         ASSERT_TRUE(got.rendered)
             << c.name
-            << " was refused on bgfx. bgfx translates the declaration, so the checkpoint guard "
-               "must never fire here: " << got.rejection;
+            << " was refused on " << RendererName()
+            << ", which translates the declaration, so the checkpoint guard must never fire "
+               "here: " << got.rejection;
         ExpectContract(got.frame, c, c.name);
     }
 }

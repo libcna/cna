@@ -1311,7 +1311,10 @@ namespace
             "device.set_cull_face(cullMode == 1 ? ::easygl::CullFace::Back : ::easygl::CullFace::Front)",
             "if (params.pbr && params.skinned) return StockProgramShape::PbrSkinned",
             "if (params.pbr) return StockProgramShape::Pbr",
-            "Prog3D& p = SelectProgram(layoutStride, params)"}}},
+            // SAMPLE-002 gave SelectProgram the declaration as a third argument. What this row
+            // asserts is that the caller's `params` reach program selection, so it stops at
+            // the comma rather than pinning an argument list that keeps growing.
+            "Prog3D& p = SelectProgram(layoutStride, params,"}}},
         // plans/plan_igl.md: IGL bakes the cull mode into its pipeline key, so the caller's
         // RasterizerState reaches the draw through the pipeline cache rather than through a
         // per-draw state call -- and a PBR draw is a feature-flag variant of the same shader, so
@@ -1424,8 +1427,10 @@ namespace
         {"easygl",
          "glUniformMatrix4fv(::metagl::UniformLocation{p.loc_bones}, params.boneCount, 0, params.boneTransforms)",
          "p.prog.set_uniform(p.loc_weightsPerVertex, params.weightsPerVertex)",
-         "if(uWeightsPerVertex>=2) skinMat+=uBones[aBoneIndices.y]*aBoneWeights.y",
-         "if(uWeightsPerVertex>=4) skinMat+=uBones[aBoneIndices.z]*aBoneWeights.z"},
+         // FX-127 made BLENDINDICES readable as Vector4 as well as Byte4, which put an int() cast
+         // around the index in EasyGL's own skinning GLSL. The rule is unchanged.
+         "if(uWeightsPerVertex>=2) skinMat+=uBones[int(aBoneIndices.y)]*aBoneWeights.y",
+         "if(uWeightsPerVertex>=4) skinMat+=uBones[int(aBoneIndices.z)]*aBoneWeights.z"},
         {"llgl",
          "std::memcpy(bones, params.boneTransforms",
          "uniforms[45] = static_cast<float>(params.weightsPerVertex)",
@@ -2467,16 +2472,21 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrVertexPathConsumesWorldViewProjectio
         }
     }
 
-    // The two WebGPU programs are inline in one translation unit and share common expression
-    // spellings with other stock shaders. Scope both PBR owners explicitly so a non-PBR WGSL
-    // occurrence cannot keep this test green after either path drifts.
+    // The WebGPU programs share common expression spellings with other stock shaders, so scope
+    // both PBR owners explicitly: a non-PBR WGSL occurrence must not keep this green after either
+    // path drifts. WEBGPU-28 moved every WGSL literal out of WebGPURenderer.cpp into
+    // webgpu_shaders.hpp, and the C++ function markers this used to scope by stayed behind -- so
+    // the ASSERTs still passed, the region they framed no longer held any shader, and the
+    // assertion read as a policy violation for a policy that was never broken. Scope by the
+    // shader constants instead, which is where the WGSL now is and what it is named by.
     const std::string webgpu = Normalize(ReadFile(
-        renderers / "webgpu" / "src" / "WebGPURenderer.cpp"));
+        renderers / "webgpu" / "include" / "CNA" / "Internal" / "Renderers" / "WebGPU" /
+        "webgpu_shaders.hpp"));
     for (const auto& markers : {
-             std::pair{"void WebGPURenderer::CreatePbrResources()",
-                       "WGPURenderPipeline WebGPURenderer::GetOrCreatePipelinePbr3D"},
-             std::pair{"void WebGPURenderer::CreateSkinnedPbrResources()",
-                       "WGPURenderPipeline WebGPURenderer::GetOrCreatePipelineSkinnedPbr3D"}})
+             std::pair{"inline constexpr char kPbr[] = R\"WGSL(",
+                       "inline constexpr char kSkinned[] = R\"WGSL("},
+             std::pair{"inline constexpr char kSkinnedPbr[] = R\"WGSL(",
+                       "/// Directly-compilable WGSL sources"}})
     {
         const std::size_t begin = webgpu.find(Normalize(markers.first));
         const std::size_t end = webgpu.find(Normalize(markers.second), begin);
@@ -2560,13 +2570,20 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrRendererHonorsCallerOwnedCullState)
                  "void WebGPURenderer::QueuePbrDraw(",
                  {"Make3DPipelineKey(topology, stripIndexFormat, depthTest, depthWrite, depthFunc,"
                   "blend, blendParams, cullMode, wireframe,",
-                  "pipeline.primitive.cullMode = ToWGPUCullMode(cullMode)"});
+                  "desc.cullMode = cullMode"});
     expectScoped(webgpu,
                  "WGPURenderPipeline WebGPURenderer::GetOrCreatePipelineSkinnedPbr3D(",
                  "void WebGPURenderer::QueueSkinnedPbrDraw(",
                  {"Make3DPipelineKey(topology, stripIndexFormat, depthTest, depthWrite, depthFunc,"
                   "blend, blendParams, cullMode, wireframe,",
-                  "pipeline.primitive.cullMode = ToWGPUCullMode(cullMode)"});
+                  "desc.cullMode = cullMode"});
+    // The two scoped rows above prove the PBR paths FORWARD the caller's cull mode -- into the
+    // pipeline key and into the descriptor. Applying it moved into the shared builder, which no
+    // per-path scope can see, so that half is asserted on the file: scoping it would have made
+    // this test unsatisfiable, and dropping it would have left forwarding-to-nowhere green.
+    EXPECT_NE(std::string::npos, webgpu.find(Normalize(
+        "pipeline.primitive.cullMode = ToWGPUCullMode(d.cullMode)")))
+        << "WebGPU's shared 3D pipeline builder must apply the descriptor's cull mode";
 }
 
 TEST(GltfRendererPbrFallbackPolicy, EverySkinnedPbrShaderInverseTransposesTheJointMatrix)
@@ -2609,12 +2626,12 @@ TEST(GltfRendererPbrFallbackPolicy, EverySkinnedPbrShaderInverseTransposesTheJoi
     // Scope this assertion to CreateSkinnedPbrResources so that fixing only the stock program
     // cannot satisfy the PBR audit (the first implementation of this gate made exactly that
     // mistake).
+    // WEBGPU-28 moved the WGSL into webgpu_shaders.hpp; scope by the shader constant it lives in.
     const std::string webgpu = Normalize(ReadFile(
-        renderers / "webgpu" / "src" / "WebGPURenderer.cpp"));
-    const std::string beginMarker = Normalize(
-        "void WebGPURenderer::CreateSkinnedPbrResources()");
-    const std::string endMarker = Normalize(
-        "WGPURenderPipeline WebGPURenderer::GetOrCreatePipelineSkinnedPbr3D");
+        renderers / "webgpu" / "include" / "CNA" / "Internal" / "Renderers" / "WebGPU" /
+        "webgpu_shaders.hpp"));
+    const std::string beginMarker = Normalize("inline constexpr char kSkinnedPbr[] = R\"WGSL(");
+    const std::string endMarker = Normalize("/// Directly-compilable WGSL sources");
     const std::size_t begin = webgpu.find(beginMarker);
     const std::size_t end = webgpu.find(endMarker, begin);
     ASSERT_NE(std::string::npos, begin);
