@@ -1312,9 +1312,22 @@ namespace CNA::Internal::Xnb
                 break;
             }
             case XnbCompression::Lz4:
-                throw ContentLoadException(
-                    "'" + origin +
-                    "' uses MonoGame LZ4 compression, which CNA does not support.");
+            {
+                if (file.size() < 14u)
+                {
+                    throw ContentLoadException(
+                        "'" + origin + "' is truncated before its decompressed-size field.");
+                }
+                System::IO::MemoryStream sizeStream(file.data() + 10u, 4);
+                System::IO::BinaryReader sizeReader(&sizeStream, true);
+                const std::int32_t decompressedSize = sizeReader.ReadInt32();
+                ownedBody = DecompressXnbLz4Payload(
+                    file.data() + 14u, static_cast<std::int32_t>(file.size() - 14u),
+                    decompressedSize, origin, limits);
+                body = ownedBody.data();
+                bodySize = ownedBody.size();
+                break;
+            }
             case XnbCompression::Unknown:
             default:
                 throw ContentLoadException(

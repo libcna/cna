@@ -565,7 +565,7 @@ namespace Microsoft::Xna::Framework::Content
         /**
          * @brief Loads @p assetName as a real `.xnb` binary asset from @p xnbPath
          *        (plans/plan_xnb.md XNB-17B), via ContentReader's root-object dispatch. LZX-compressed
-         *        files (plans/plan_xnb.md XNB-28/29) are decompressed first.
+         *        and MonoGame LZ4 files are decompressed first.
          *
          * @tparam T        Requested asset type; must match (via `std::any_cast`) whatever the
          *                  file's root type-reader actually produces.
@@ -604,6 +604,13 @@ namespace Microsoft::Xna::Framework::Content
                     "'" + xnbPath + "' declares a totalLength (" + std::to_string(header.totalLength) +
                     ") inconsistent with its actual file size (" + std::to_string(bytes.size()) + ").");
             }
+            if (header.compression != CNA::Internal::Xnb::XnbCompression::None &&
+                header.totalLength < 14)
+            {
+                throw ContentLoadException(
+                    "'" + xnbPath +
+                    "' is truncated before its compressed-payload size field.");
+            }
 
             switch (header.compression)
             {
@@ -632,9 +639,22 @@ namespace Microsoft::Xna::Framework::Content
                     return contentReader.ReadAsset<T>();
                 }
                 case CNA::Internal::Xnb::XnbCompression::Lz4:
-                    throw ContentLoadException(
-                        "'" + xnbPath + "' uses MonoGame's Lz4 compression, which CNA does not yet "
-                        "support (plans/plan_xnb.md XNB-30C).");
+                {
+                    System::IO::MemoryStream sizeStream(
+                        reinterpret_cast<const uint8_t*>(bytes.data()) + 10, 4);
+                    System::IO::BinaryReader sizeReader(&sizeStream, true);
+                    const int32_t decompressedSize = sizeReader.ReadInt32();
+                    const int32_t compressedSize = header.totalLength - 14;
+                    const auto decompressed = CNA::Internal::Xnb::DecompressXnbLz4Payload(
+                        reinterpret_cast<const uint8_t*>(bytes.data()) + 14,
+                        compressedSize, decompressedSize, xnbPath);
+
+                    System::IO::MemoryStream bodyStream(
+                        decompressed.data(), static_cast<int32_t>(decompressed.size()));
+                    ContentReader contentReader(
+                        this, &bodyStream, assetName, header.version, header.platform);
+                    return contentReader.ReadAsset<T>();
+                }
                 case CNA::Internal::Xnb::XnbCompression::Unknown:
                 default:
                     throw ContentLoadException(

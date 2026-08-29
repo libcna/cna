@@ -19,7 +19,7 @@ namespace CNA::Internal::Xnb
         /** @brief Largest `.xnb` file this reader will attempt to open, in bytes. */
         int32_t maxFileSize = 64 * 1024 * 1024;
 
-        /** @brief Largest LZX-decompressed payload size this reader will allocate, in bytes (Phase D). */
+        /** @brief Largest decompressed XNB payload this reader will allocate, in bytes. */
         int32_t maxDecompressedSize = 256 * 1024 * 1024;
 
         /** @brief Largest single string this reader will allocate, in bytes. */

@@ -884,8 +884,8 @@ does not preserve XNB bytes. The frozen Model schema remains version 1. General 
 require a separately reviewed future schema carrying explicit declarations, part windows, bounds,
 root semantics, sharing identity, stable tags and complete stock/custom effect state.
 
-None and LZX compression and XNB versions 4/5 are supported through CNA's existing container code.
-LZ4 is recognized but CNA has no decoder, so it fails clearly. The existing 16 platform header
+None, LZX, and MonoGame raw-block LZ4 compression and XNB versions 4/5 are supported through CNA's
+shared container code. The existing 16 platform header
 identifiers remain valid, but Xbox-swizzled texture/sample payloads are not transcoded without a
 proven byte-order path. Frozen CNB schema 1 cannot preserve BGRA or NormalizedByte2/4 texture format
 identity, so those formats are rejected rather than silently changed. XMA2 and unknown audio codecs

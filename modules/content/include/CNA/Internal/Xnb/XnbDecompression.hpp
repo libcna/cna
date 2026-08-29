@@ -38,4 +38,28 @@ namespace CNA::Internal::Xnb
         int32_t decompressedSize,
         const std::string& path,
         const XnbReadLimits& limits = DefaultXnbReadLimits());
+
+    /**
+     * @brief Decompresses MonoGame's raw-LZ4 `.xnb` payload exactly to its declared size.
+     *
+     * MonoGame writes a single raw LZ4 block after the 10-byte XNB header and 4-byte
+     * little-endian decompressed-size field. This is deliberately not an LZ4 frame decoder:
+     * frame magic, checksums, dictionaries, and concatenated blocks are not part of the XNB
+     * representation emitted by MonoGame's ContentWriter.
+     *
+     * @param compressedData Pointer to the raw LZ4 block bytes.
+     * @param compressedSize Number of bytes available at @p compressedData.
+     * @param decompressedSize Exact output size recorded in the XNB container.
+     * @param path File path used only in diagnostics.
+     * @param limits Bounds applied before allocation and throughout decoding.
+     * @return The decompressed XNB body, exactly @p decompressedSize bytes long.
+     * @throws Microsoft::Xna::Framework::Content::ContentLoadException if a length, offset,
+     *         input extent, output extent, or final size is invalid.
+     */
+    [[nodiscard]] std::vector<uint8_t> DecompressXnbLz4Payload(
+        const uint8_t* compressedData,
+        int32_t compressedSize,
+        int32_t decompressedSize,
+        const std::string& path,
+        const XnbReadLimits& limits = DefaultXnbReadLimits());
 }

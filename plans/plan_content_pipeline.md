@@ -1188,7 +1188,7 @@ carrying forward task-local results:
 | `CP-044` | **completed** | Added an explicit bounded deployment-file result separate from CNB writer outputs and runtime XREFs. Song/Video and XNB Song/Video register their canonical media source and final XREF path; manifest v4 stores contained source/path/SHA-256 ownership. Preparation and publication stream through the existing atomic helper with a 1 MiB buffer, skip checks verify support digests, reservations reject compiled/cross-node collisions, and CP-043 GC handles renamed/removed support paths. In-place single-file media is never copied or owned; every other destination inside the source root is rejected. Tests cover direct and XNB routes, overrides, tamper repair, source change, removal/rename GC, manual-file survival, collision/escape guards, failed-publication recovery and workers 1/2/4 deterministic trees. Importer/processor identities moved to version 2; frozen Song/Video CNB bytes remain identical. The generated inventory now records 9,298 symbols with all 467 experimental pipeline rows planned under `CBIND-117`; no C route, export or ABI version changed. |
 | `CP-045` | **completed** | Added sorted `ContentWriterSchemaIdentity` declarations containing asset ID/name, native schema version and explicit codec name/version. The core rejects incomplete/duplicate/undeclared identities; manifest v5 persists and fingerprints declarations plus per-output schema/name, and versions 1–4 rebuild safely. The skip path compares the current declaration without executing the writer. All ten built-ins declare their frozen schema-1 encoders, and the real custom compiler proves independently stale asset ID, type name, schema and codec records all force rebuild while unchanged identities skip. The generated inventory records 9,319 symbols/488 experimental pipeline rows under `CBIND-117`; no RTTI, C API route/export/version, CNB schema or encoder byte changed. |
 | `CP-046` | **completed** | Audited scenes, skin/static Model groups, embedded/standalone clips, external/data-URI textures and the existing output graph. A single animated Model now builds normally with identical primary bytes. Optional bool `generateChildAssets` publishes canonical additional Models, standalone AnimationClips and remapped native Texture2D children through the existing typed encoders; multi-Model input requires this explicit mode. Default-scene selection remains unchanged, the lexicographically first generated Model is primary, sanitized group/clip name collisions fail before overwrite, and ordinary reservations/atomic staging/manifest ownership/CP-043 contraction GC govern the bundle. Real fixtures prove embedded/child clip equivalence, external/embedded texture decode, multi-Model semantics, default producer bytes, no-op/incremental contraction and workers 1/2/4 identical trees. The inventory now records 9,332 symbols/501 pipeline rows under `CBIND-117`; no C route/export/version, frozen schema or default glTF byte changed. |
-| `CP-047` | **planned** | Audit MonoGame XNB LZ4 framing/dependencies and implement bounded decoding only if the exact variant can be supported safely without a bespoke unproven codec. |
+| `CP-047` | **completed** | Confirmed from MonoGame `ContentWriter`/`Lz4DecoderStream` that flag `0x40` carries one raw LZ4 block after the ordinary decompressed-size field, never an LZ4 frame. Added one bounds-checked shared decoder used by runtime and canonical compiler paths with no runtime dependency. A fixture whose real MonoGame body was compressed by upstream liblz4 proves exact bytes; runtime and headless XNB-to-CNB pixels agree. Negative tests cover every token/length/offset/input/output boundary, size limits and 1,500 deterministic whole-container mutations. Both compression bits remain invalid. |
 | `CP-048` | **planned** | Fix the MinGW `wmain` entry-point link seam if locally owned, then close the continuation with portability, sanitizer, determinism, security, CMake/C-API and documentation verification. |
 
 Tasks are intentionally vertical/coherent. The ledger is revised when implementation evidence makes
@@ -1296,12 +1296,12 @@ known built-in .xnb
     -> native .cnb
 ```
 
-`XnbImporter` parses with the existing `XnbHeader`, `XnbDecompression`/`LzxDecoder`,
+`XnbImporter` parses with the existing `XnbHeader`, shared `XnbDecompression` decoders,
 `XnbTypeReaderTable`, `ContentReader` primitives and `XnbReadLimits`. Its canonical table mode does
 not instantiate runtime readers through the mutable process-global `ContentTypeReaderManager`.
 Root and nested references are 1-based validated table indices; reader version zero is required.
-None and LZX compression are accepted. LZ4 is recognized but rejected because CNA's existing XNB
-stack has no LZ4 decoder. Versions 4/5 and the same 16 platform bytes as runtime are container-valid;
+None, LZX, and MonoGame's single raw-LZ4-block representation are accepted. Versions 4/5 and the
+same 16 platform bytes as runtime are container-valid;
 individual routes can impose stricter semantic rules (notably Xbox texture/audio payloads).
 
 Shared resources are parsed and bounded. Generic shared-resource graphs remain rejected; the Model
@@ -1776,3 +1776,46 @@ external and data-URI textures, collision rejection, semantic child decoding, de
 byte equality, cold/no-op builds, successful child-set contraction, and byte-identical output trees
 and manifests under workers 1, 2, and 4. No container, asset schema, chunk, CRC, golden vector, or
 default direct-glTF byte changed.
+
+---
+
+## 23. MonoGame raw-LZ4 XNB decoding (`CP-047`)
+
+The format audit used MonoGame's own `ContentWriter.WriteCompressedStream`, runtime
+`ContentManager.GetContentReaderFromXnb`, and `Lz4DecoderStream`. Flag `0x40` has the same outer
+layout as compressed XNB generally: the 10-byte header is followed by a little-endian declared
+decompressed size. Every remaining byte is one raw LZ4 block. There is no frame magic, block-size
+table, checksum, dictionary ID, concatenation, or LZX-style 32 KiB framing.
+
+The implementation therefore adds one narrow `DecompressXnbLz4Payload` beside the existing LZX
+function. It decodes raw sequences directly into the exact declared output allocation and rejects:
+
+* non-positive/over-limit compressed sizes and negative/over-limit decompressed sizes;
+* truncated extended literal or match lengths, literal input overruns, and output overruns;
+* truncated, zero, or pre-history 16-bit little-endian match offsets;
+* match output overruns, trailing undecoded input, and final-size mismatches.
+
+The shared `XnbReadLimits` cap is checked before allocation, so output work and memory remain
+bounded by the same 256 MiB default used for LZX. Match copying is bytewise to preserve LZ4's
+required overlapping-copy semantics. Runtime `ContentManager` and canonical headless decoding call
+this same function; neither initializes a graphics/audio device merely to decompress. Both bits
+set still map to `XnbCompression::Unknown` and fail before either decoder.
+
+No system or fetched runtime dependency was added. The system here has upstream liblz4 1.10.0 at
+runtime but no development headers, and relying on it would make support host-dependent; vendoring
+the full optimizing encoder/decoder was disproportionate for the six raw decode operations CNA
+needs. Independence is retained in the oracle: the exact body of MonoGame's externally-produced
+`white-1.xnb` was compressed by upstream `LZ4_compress_HC` and wrapped according to MonoGame's
+writer. CNA's decoder reproduces the original body byte for byte.
+
+The fixture loads through the ordinary runtime Texture2D reader and through `XnbImporter` to native
+Texture2D CNB; the runtime XNB and transcoded-CNB pixels match. Unit tests cover each malformed
+token/length/offset/extent class and decompression limits, while the whole-container fuzzer adds
+1,500 deterministic mutations of the LZ4 container. This changes no CNB container, schema, chunk,
+CRC, encoder, golden vector, or output byte.
+
+A 125-test normal XNB/LZX/LZ4/runtime/pipeline selection passes. The focused nine-test
+runtime/compiler/decoder/fuzz selection also passes under combined ASan+UBSan and under TSan with
+`halt_on_error=1`; no sanitizer report occurred. The sanitizer build had to set
+`ASAN_OPTIONS=detect_leaks=0` for build-time content generation because this runner's `ptrace`
+environment makes LeakSanitizer abort, so no LSan coverage is claimed.

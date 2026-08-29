@@ -1,5 +1,11 @@
 # XNB binary content pipeline: task plan
 
+> **LZ4 update (2026-08-30, Content Pipeline `CP-047`):** XNB-30C is complete. Inspection of
+> MonoGame's `ContentWriter.WriteCompressedStream` and `Lz4DecoderStream` proved that flag `0x40`
+> stores one raw LZ4 block after the usual decompressed-size field, not a generic LZ4 frame. CNA's
+> shared bounded decoder now serves both runtime XNB loading and headless XNB-to-CNB transcoding.
+> The historical status prose below is retained as session history; the Phase D table is current.
+
 > **Compiled-effect update (2026-08-13):** XNB-14B/XNB-32A's historical unsupported placeholder
 > has been replaced by the canonical general `EffectReader`. It performs bounded exact reads and
 > constructs compiled XNA/FNA Effect Framework effects on renderers that advertise
@@ -504,8 +510,7 @@ entirely the second one.
 > **Fully complete 2026-07-16** — un-frozen the same day, in two rounds: first LZX decompression
 > itself (XNB-28/29/30/30B), then the two remaining gaps (XNB-27's real compression enum, XNB-30A's
 > fuzz/differential tests) once CNA's owner explicitly asked for them to be closed out. XNB-30C
-> (MonoGame's alternate compression variants) remains deliberately deferred to Phase G -- see that
-> row's own note.
+> was subsequently completed by Content Pipeline CP-047 on 2026-08-30.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
@@ -515,7 +520,7 @@ entirely the second one.
 | XNB-30 | Malformed/truncated/adversarial-input hardening for the decompressor: bounds checks, integer-overflow guards on decompressed-size fields, decompression-bomb output-size limits, no OOB reads on corrupt input | ✅ | **Implemented 2026-07-16, completed via XNB-30A the same day**: `XnbReadLimits` consulted on both compressed and decompressed sizes before any allocation (decompression-bomb guard); an out-of-range LZX `match_offset` is explicitly rejected (found during the initial port). The one gap this row originally flagged as unaudited -- `MakeDecodeTable`'s long-code table-growth path -- was found and fixed by XNB-30A's fuzz test the same day (a real heap-buffer-overflow), closing this row out completely rather than leaving it narrowed |
 | XNB-30A | Fuzz tests + differential tests against a reference LZX implementation for the decompressor | ✅ | **Implemented 2026-07-16**: `LzxDecoderDifferentialTests.cpp` compares CNA's output byte-for-byte against FNA's own, unmodified `LzxDecoder.cs` run under Mono (`mcs`/`mono`, both available in this environment) -- a genuine independent cross-implementation check, not a re-derivation; both real fixtures match exactly (SHA-256-identical), reference bytes vendored under `tests/assets/xnb/monogame/windows/lzx/reference-decompressed/` with a reproduction README. `LzxDecoderFuzzTests.cpp` adds a deterministic mutation fuzzer over the same real payloads. This **found and fixed a real heap-buffer-overflow** in `MakeDecodeTable()`'s long-code table-growth path -- exactly the array-access gap XNB-30's own commit flagged as unaudited; confirmed clean afterward under an `-DCNA_SANITIZE=address,undefined` build. Closes out Phase D with no open tasks (besides XNB-30C, deferred by design) |
 | XNB-30B | Re-run every Phase B/C fixture through its compressed form and confirm identical results | ✅ | **Implemented 2026-07-16, with a scope note**: verified against 2 *real, externally-produced* LZX-compressed fixtures (MonoGame's own `Explosion.xnb`/`FontCalibri14.xnb`, `tests/assets/xnb/monogame/windows/lzx/`) rather than re-compressing the existing synthetic Phase B/C test fixtures — CNA has no LZX *encoder* (by design; writing `.xnb` is permanently out of scope) to compress them with, and real external fixtures are stronger evidence of true format compatibility than self-compressed ones would be anyway. `Explosion.xnb` verifies a single-block decode end-to-end through `content.Load<Texture2D>()` with real non-uniform pixel data; `FontCalibri14.xnb` verifies multi-block state persistence and recovers the exact reader set (including nested generic names) a real `SpriteFont` needs |
-| XNB-30C | Phase D2 — investigate/implement MonoGame-supported alternative compression variants under the `XnbCompression` enum from XNB-27 | ⏸ | Deferred until broad MonoGame compatibility work (Phase G/XNB-44); explicitly optional for the first working loader and not required by any milestone M1-M5 — the enum from XNB-27 just needs to not preclude it later |
+| XNB-30C | Phase D2 — investigate/implement MonoGame-supported alternative compression variants under the `XnbCompression` enum from XNB-27 | ✅ | **Implemented 2026-08-30 by Content Pipeline CP-047:** MonoGame's writer emits one raw LZ4 block after the 10-byte header and 4-byte decompressed size. `DecompressXnbLz4Payload` implements only that exact representation with checked extended lengths, input/output extents, nonzero in-history offsets, exact input consumption/output size, and `XnbReadLimits` before allocation. Runtime and canonical compiler paths share it. The oracle keeps the exact externally-produced MonoGame `white-1.xnb` body, compressed independently by upstream liblz4 1.10.0; runtime load, headless transcode, semantic pixels, malformed vectors, bomb limits, and 1,500 deterministic container mutations pass. No generic LZ4 frame parser or runtime library dependency was added. |
 
 ---
 

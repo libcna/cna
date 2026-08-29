@@ -15,8 +15,8 @@ namespace CNA::Internal::Xnb
      *
      * Both bit values are real, confirmed against MonoGame's own `ContentManager.cs`
      * (`ContentCompressedLzx = 0x80`, `ContentCompressedLz4 = 0x40`) -- FNA itself only ever
-     * produces/reads `Lzx`/`None` (it has no LZ4 decoder), but MonoGame's content pipeline can
-     * emit either. Deliberately a real enum rather than a bool so the rest of the architecture
+     * produces/reads `Lzx`/`None`, while MonoGame's content pipeline can emit raw-block `Lz4`.
+     * Deliberately a real enum rather than a bool so the rest of the architecture
      * (`ContentManager::LoadXnbAsset<T>()`, `ScanXnbReaderNames()`) branches on the actual scheme
      * instead of assuming `compressed == true` always means LZX.
      */
@@ -26,7 +26,7 @@ namespace CNA::Internal::Xnb
         None,
         /** @brief Flags bit `0x80` -- FNA's own decoder, implemented (plans/plan_xnb.md XNB-28/29). */
         Lzx,
-        /** @brief Flags bit `0x40` -- a MonoGame-specific scheme, not yet implemented (plans/plan_xnb.md XNB-30C). */
+        /** @brief Flags bit `0x40` -- MonoGame's single raw-LZ4-block XNB representation. */
         Lz4,
         /** @brief Both compression bits set simultaneously -- not a real scheme either format defines. */
         Unknown,

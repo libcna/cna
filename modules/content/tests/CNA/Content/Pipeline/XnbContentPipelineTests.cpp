@@ -498,11 +498,12 @@ namespace
     }
 }
 
-TEST(XnbContentPipelineTest, Texture2DUncompressedAndLzxProduceCanonicalNativeCnbDeterministically)
+TEST(XnbContentPipelineTest, Texture2DContainerCompressionVariantsProduceCanonicalNativeCnbDeterministically)
 {
     for (const std::string& relative : {
              "monogame/windows/uncompressed/white-1.xnb",
-             "monogame/windows/lzx/Explosion.xnb"})
+             "monogame/windows/lzx/Explosion.xnb",
+             "monogame/windows/lz4/white-1.xnb"})
     {
         const std::filesystem::path fixture = FindXnbFixture(relative);
         ASSERT_FALSE(fixture.empty());
@@ -518,10 +519,13 @@ TEST(XnbContentPipelineTest, Texture2DUncompressedAndLzxProduceCanonicalNativeCn
                   (Pipeline::ContentComponentIdentity{"CNA.TextureProcessor", "1"}));
         EXPECT_EQ(first.output.bytes, second.output.bytes);
         ExpectTextureEqual(expected, Cnb::DecodeTexture2DFromCnb(ParseOutput(first)));
-        EXPECT_EQ(canonical.compression,
-                  relative.find("/lzx/") == std::string::npos
-                      ? Xnb::XnbCompression::None
-                      : Xnb::XnbCompression::Lzx);
+        const Xnb::XnbCompression expectedCompression =
+            relative.find("/lzx/") != std::string::npos
+                ? Xnb::XnbCompression::Lzx
+                : relative.find("/lz4/") != std::string::npos
+                    ? Xnb::XnbCompression::Lz4
+                    : Xnb::XnbCompression::None;
+        EXPECT_EQ(canonical.compression, expectedCompression);
     }
 }
 
@@ -563,12 +567,40 @@ TEST(XnbContentPipelineTest, ContainerVariantsAndMalformedTexturePayloadsAreHand
     try
     {
         static_cast<void>(Build(scratch.Path(), "lz4.xnb", "lz4"));
-        FAIL() << "LZ4 must not be mistaken for the implemented LZX format";
+        FAIL() << "malformed LZ4 container was accepted";
     }
     catch (const Pipeline::ContentPipelineError& error)
     {
         EXPECT_NE(std::string(error.what()).find("LZ4"), std::string::npos);
     }
+}
+
+TEST(XnbContentPipelineTest, Lz4RuntimeXnbAndTranscodedCnbHaveIdenticalPixels)
+{
+    const std::filesystem::path fixture =
+        FindXnbFixture("monogame/windows/lz4/white-1.xnb");
+    ASSERT_FALSE(fixture.empty());
+    const Pipeline::ContentBuildResult built = BuildFixture(fixture, "white-1");
+    ScratchDirectory scratch("runtime_lz4_texture");
+    WriteBytes(scratch.Path() / "white-1.cnb", built.output.bytes);
+
+    GraphicsDevice device;
+    Xnb::RegisterAllBuiltInXnbReaders();
+    ContentManager xnbContent(nullptr, fixture.parent_path().string());
+    xnbContent.setGraphicsDevice(device);
+    const Texture2D xnbTexture = xnbContent.Load<Texture2D>("white-1");
+    ContentManager cnbContent(nullptr, scratch.Path().string());
+    cnbContent.setGraphicsDevice(device);
+    const Texture2D cnbTexture = cnbContent.Load<Texture2D>("white-1");
+
+    std::vector<Color> xnbPixels(1u);
+    std::vector<Color> cnbPixels(1u);
+    xnbTexture.GetData(xnbPixels.data(), 1);
+    cnbTexture.GetData(cnbPixels.data(), 1);
+    EXPECT_EQ(cnbTexture.getWidthProperty(), xnbTexture.getWidthProperty());
+    EXPECT_EQ(cnbTexture.getHeightProperty(), xnbTexture.getHeightProperty());
+    EXPECT_EQ(cnbTexture.getFormatProperty(), xnbTexture.getFormatProperty());
+    EXPECT_EQ(cnbPixels, xnbPixels);
 }
 
 TEST(XnbContentPipelineTest, Texture2DRuntimeXnbAndTranscodedCnbHaveIdenticalPixels)
