@@ -4,7 +4,7 @@
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
 #include "Microsoft/Xna/Framework/Curve.hpp"
-#include "Microsoft/Xna/Framework/CurveKey.hpp"
+#include "CNA/Internal/Xnb/XnbCanonicalData.hpp"
 
 // plans/plan_xnb.md XNB-20: see PrimitiveContentTypeReaders.hpp's own note on why this lives in
 // CNA::Internal::Xnb (FNA's CurveReader is `internal class` too).
@@ -29,28 +29,7 @@ namespace CNA::Internal::Xnb
         Microsoft::Xna::Framework::Curve Read(
             ContentReader& input, std::optional<Microsoft::Xna::Framework::Curve> existingInstance) override
         {
-            using Microsoft::Xna::Framework::Curve;
-            using Microsoft::Xna::Framework::CurveContinuity;
-            using Microsoft::Xna::Framework::CurveKey;
-            using Microsoft::Xna::Framework::CurveLoopType;
-
-            Curve curve = existingInstance.value_or(Curve{});
-
-            curve.setPreLoopProperty(static_cast<CurveLoopType>(input.ReadInt32()));
-            curve.setPostLoopProperty(static_cast<CurveLoopType>(input.ReadInt32()));
-
-            const int32_t keyCount = input.ReadInt32();
-            for (int32_t i = 0; i < keyCount; ++i)
-            {
-                const float position = input.ReadSingle();
-                const float value = input.ReadSingle();
-                const float tangentIn = input.ReadSingle();
-                const float tangentOut = input.ReadSingle();
-                const auto continuity = static_cast<CurveContinuity>(input.ReadInt32());
-                curve.getKeysProperty().Add(CurveKey(position, value, tangentIn, tangentOut, continuity));
-            }
-
-            return curve;
+            return DecodeCurveXnbData(input, std::move(existingInstance));
         }
     };
 

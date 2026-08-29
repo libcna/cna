@@ -1,0 +1,916 @@
+// SPDX-License-Identifier: MS-PL
+#include "CNA/Internal/Xnb/XnbCanonicalData.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <fstream>
+#include <limits>
+#include <sstream>
+#include <stdexcept>
+
+#include "CNA/Internal/Audio/WavDecoder.hpp"
+#include "CNA/Internal/Audio/WavWrapper.hpp"
+#include "CNA/Internal/ContentPath.hpp"
+#include "CNA/Internal/Graphics/DxtUtil.hpp"
+#include "CNA/Internal/Xnb/XnbArithmetic.hpp"
+#include "CNA/Internal/Xnb/XnbDecompression.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
+#include "Microsoft/Xna/Framework/CurveKey.hpp"
+#include "System/IO/BinaryReader.hpp"
+#include "System/IO/MemoryStream.hpp"
+
+namespace CNA::Internal::Xnb
+{
+    using Microsoft::Xna::Framework::Content::ContentLoadException;
+    using Microsoft::Xna::Framework::Content::ContentReader;
+    using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+
+    namespace
+    {
+        constexpr std::uint16_t WaveFormatPcm = 0x0001u;
+        constexpr std::uint16_t WaveFormatMsAdpcm = 0x0002u;
+        constexpr std::uint16_t WaveFormatIeeeFloat = 0x0003u;
+        constexpr std::uint16_t WaveFormatImaAdpcm = 0x0011u;
+        constexpr std::uint16_t WaveFormatXma2 = 0x0166u;
+        constexpr std::size_t MinRealMsAdpcmExtensionSize = 32u;
+
+        [[nodiscard]] bool IsDxt(const SurfaceFormat format)
+        {
+            return format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+                   format == SurfaceFormat::Dxt5;
+        }
+
+        [[nodiscard]] std::uint16_t Swap16(const bool swap, const std::uint16_t value)
+        {
+            if (!swap) { return value; }
+            return static_cast<std::uint16_t>((value >> 8u) | (value << 8u));
+        }
+
+        [[nodiscard]] std::uint32_t Swap32(const bool swap, const std::uint32_t value)
+        {
+            if (!swap) { return value; }
+            return ((value >> 24u) & 0x000000FFu) | ((value >> 8u) & 0x0000FF00u) |
+                   ((value << 8u) & 0x00FF0000u) | ((value << 24u) & 0xFF000000u);
+        }
+
+        [[nodiscard]] std::uint32_t MaxMipCount(
+            std::uint32_t width, std::uint32_t height, std::uint32_t depth)
+        {
+            std::uint32_t count = 1u;
+            while (width > 1u || height > 1u || depth > 1u)
+            {
+                width = std::max(1u, width / 2u);
+                height = std::max(1u, height / 2u);
+                depth = std::max(1u, depth / 2u);
+                ++count;
+            }
+            return count;
+        }
+
+        void ValidateMipCount(const char* readerName, const XnbTextureData& data,
+                              const bool requireCompleteChain)
+        {
+            // Texture3D's established XNA/FNA allocation derives its level count from width and
+            // height; depth shrinks per level but does not extend the number of allocated levels.
+            const std::uint32_t maximum = MaxMipCount(
+                data.width, data.height,
+                data.kind == XnbTextureKind::Texture3D ? 1u : data.depth);
+            if (data.mipCount == 0u || data.mipCount > maximum)
+            {
+                throw ContentLoadException(
+                    std::string(readerName) + ": declared mip level count (" +
+                    std::to_string(data.mipCount) + ") is outside 1.." +
+                    std::to_string(maximum) + ".");
+            }
+            if (requireCompleteChain && data.mipCount != 1u && data.mipCount != maximum)
+            {
+                throw ContentLoadException(
+                    std::string(readerName) +
+                    ": incomplete mip chain; expected level zero only or all " +
+                    std::to_string(maximum) + " levels.");
+            }
+        }
+
+        [[nodiscard]] std::size_t DxtLevelBytes(
+            const SurfaceFormat format, const std::uint32_t width,
+            const std::uint32_t height, const std::uint32_t depth = 1u)
+        {
+            const std::size_t blocksWide = (static_cast<std::size_t>(width) + 3u) / 4u;
+            const std::size_t blocksHigh = (static_cast<std::size_t>(height) + 3u) / 4u;
+            const std::size_t bytesPerBlock = format == SurfaceFormat::Dxt1 ? 8u : 16u;
+            return blocksWide * blocksHigh * bytesPerBlock * depth;
+        }
+
+        [[nodiscard]] std::size_t RawLevelBytes(
+            const SurfaceFormat format, const std::uint32_t width,
+            const std::uint32_t height, const std::uint32_t depth)
+        {
+            if (IsDxt(format)) { return DxtLevelBytes(format, width, height, depth); }
+            const std::size_t bytesPerPixel = format == SurfaceFormat::NormalizedByte2 ? 2u : 4u;
+            return static_cast<std::size_t>(width) * height * depth * bytesPerPixel;
+        }
+
+        [[nodiscard]] SurfaceFormat ReadTexture2DFormat(ContentReader& input)
+        {
+            if (input.getVersionProperty() >= 5)
+            {
+                return static_cast<SurfaceFormat>(input.ReadInt32());
+            }
+            switch (input.ReadInt32())
+            {
+                case 1: return SurfaceFormat::ColorBgraEXT;
+                case 28: return SurfaceFormat::Dxt1;
+                case 30: return SurfaceFormat::Dxt3;
+                case 32: return SurfaceFormat::Dxt5;
+                default:
+                    throw ContentLoadException(
+                        "Texture2DReader: unsupported legacy surface format.");
+            }
+        }
+
+        void RequireTextureFormat(const char* readerName, const SurfaceFormat format,
+                                  const bool texture2D)
+        {
+            if (format == SurfaceFormat::Color || IsDxt(format) ||
+                (texture2D && (format == SurfaceFormat::ColorBgraEXT ||
+                               format == SurfaceFormat::NormalizedByte2 ||
+                               format == SurfaceFormat::NormalizedByte4)))
+            {
+                return;
+            }
+            throw ContentLoadException(
+                std::string(readerName) +
+                ": SurfaceFormat is not supported by CNA's .xnb reader.");
+        }
+
+        [[nodiscard]] std::uint32_t PositiveDimension(
+            const std::int32_t value, const char* readerName, const char* field)
+        {
+            if (value <= 0)
+            {
+                throw ContentLoadException(
+                    std::string(readerName) + ": invalid " + field + ".");
+            }
+            return static_cast<std::uint32_t>(value);
+        }
+
+        void ReadTextureLevels(ContentReader& input, XnbTextureData& data,
+                               const char* readerName)
+        {
+            data.levels.reserve(static_cast<std::size_t>(data.faceCount) * data.mipCount);
+            std::int64_t cumulativeDecodedBytes = 0;
+            for (std::uint32_t face = 0u; face < data.faceCount; ++face)
+            {
+                std::uint32_t width = data.width;
+                std::uint32_t height = data.height;
+                std::uint32_t depth = data.depth;
+                for (std::uint32_t mip = 0u; mip < data.mipCount; ++mip)
+                {
+                    const std::int32_t byteCount = input.ReadInt32();
+                    std::vector<std::uint8_t> bytes =
+                        input.ReadBytesExactOrThrow(byteCount, readerName);
+                    const std::size_t expected =
+                        RawLevelBytes(data.surfaceFormat, width, height, depth);
+                    if (bytes.size() != expected)
+                    {
+                        throw ContentLoadException(
+                            std::string(readerName) + ": face " + std::to_string(face) +
+                            " level " + std::to_string(mip) + " byte count (" +
+                            std::to_string(bytes.size()) + ") does not match the required " +
+                            std::to_string(expected) + " bytes.");
+                    }
+                    const std::int64_t decodedLevelBytes = CheckedMultiplyOrThrow(
+                        {width, height, depth,
+                         data.surfaceFormat == SurfaceFormat::NormalizedByte2 ? 2 : 4},
+                        readerName);
+                    if (cumulativeDecodedBytes >
+                        std::numeric_limits<std::int64_t>::max() - decodedLevelBytes)
+                    {
+                        throw ContentLoadException(
+                            std::string(readerName) +
+                            ": cumulative decoded texture byte size overflows.");
+                    }
+                    cumulativeDecodedBytes += decodedLevelBytes;
+                    input.CheckDecodedByteSize(cumulativeDecodedBytes, readerName);
+                    data.levels.push_back(std::move(bytes));
+                    width = std::max(1u, width / 2u);
+                    height = std::max(1u, height / 2u);
+                    depth = std::max(1u, depth / 2u);
+                }
+            }
+        }
+
+        void RequireReader(const XnbTypeReaderTableEntry& entry, const std::string& expected,
+                           const std::string& asset)
+        {
+            if (entry.normalizedName != expected)
+            {
+                throw ContentLoadException(
+                    "'" + asset + "' requires nested ContentTypeReader '" + expected +
+                    "', but the object references '" + entry.normalizedName + "'.");
+            }
+            if (entry.version != 0)
+            {
+                throw ContentLoadException(
+                    "'" + asset + "' uses reader '" + entry.normalizedName +
+                    "' at unsupported version (" + std::to_string(entry.version) + ").");
+            }
+        }
+
+        template<typename T, typename ReadElement>
+        [[nodiscard]] std::vector<T> ReadList(
+            ContentReader& input, const std::string& expectedReader, ReadElement readElement)
+        {
+            RequireReader(input.ReadCanonicalTypeReaderReferenceEXT(), expectedReader,
+                          input.getAssetNameProperty());
+            const std::int32_t count = input.ReadInt32();
+            input.CheckCollectionElementCount(count, expectedReader);
+            std::vector<T> values;
+            values.reserve(static_cast<std::size_t>(count));
+            for (std::int32_t index = 0; index < count; ++index)
+            {
+                values.push_back(readElement());
+            }
+            return values;
+        }
+
+        [[nodiscard]] std::vector<std::uint8_t> DecompressDxtLevel(
+            const SurfaceFormat format, const std::vector<std::uint8_t>& bytes,
+            const std::uint32_t width, const std::uint32_t height, const std::uint32_t depth)
+        {
+            std::vector<std::uint8_t> rgba;
+            rgba.reserve(static_cast<std::size_t>(width) * height * depth * 4u);
+            const std::size_t sliceBytes = DxtLevelBytes(format, width, height);
+            for (std::uint32_t slice = 0u; slice < depth; ++slice)
+            {
+                const std::uint8_t* source = bytes.data() + slice * sliceBytes;
+                std::vector<std::uint8_t> decoded;
+                switch (format)
+                {
+                    case SurfaceFormat::Dxt1:
+                        decoded = Graphics::DxtUtil::DecompressDxt1(
+                            source, sliceBytes, static_cast<int>(width), static_cast<int>(height));
+                        break;
+                    case SurfaceFormat::Dxt3:
+                        decoded = Graphics::DxtUtil::DecompressDxt3(
+                            source, sliceBytes, static_cast<int>(width), static_cast<int>(height));
+                        break;
+                    case SurfaceFormat::Dxt5:
+                        decoded = Graphics::DxtUtil::DecompressDxt5(
+                            source, sliceBytes, static_cast<int>(width), static_cast<int>(height));
+                        break;
+                    default:
+                        throw ContentLoadException("XNB texture: unsupported DXT format.");
+                }
+                rgba.insert(rgba.end(), decoded.begin(), decoded.end());
+            }
+            return rgba;
+        }
+
+        [[nodiscard]] std::uint16_t ComputeMsAdpcmSamplesPerBlock(
+            const std::uint16_t blockAlign, const std::uint16_t channels)
+        {
+            const std::uint32_t channelCount = channels == 0u ? 1u : channels;
+            const std::uint32_t headerBits = channelCount * 7u * 8u;
+            const std::uint32_t blockBits = static_cast<std::uint32_t>(blockAlign) * 8u;
+            const std::uint32_t available = blockBits > headerBits ? blockBits - headerBits : 0u;
+            return static_cast<std::uint16_t>(available / (4u * channelCount) + 2u);
+        }
+
+#ifdef SOUND_ENABLED
+        [[nodiscard]] std::vector<std::uint8_t> DecodeWaveToPcm16(
+            const XnbSoundEffectData& source, const std::string& origin,
+            std::uint32_t& frameCount)
+        {
+            const bool synthesizeMsAdpcm =
+                source.formatTag == WaveFormatMsAdpcm &&
+                source.extensionData.size() < MinRealMsAdpcmExtensionSize;
+            const std::vector<std::uint8_t> wav = Audio::BuildWavFromWaveFormatEx(
+                source.samples.data(), static_cast<std::uint32_t>(source.samples.size()),
+                source.formatTag, source.channels, source.sampleRate,
+                source.averageBytesPerSecond, source.blockAlign, source.bitsPerSample,
+                synthesizeMsAdpcm
+                    ? Audio::BuildStandardMsAdpcmExtension(
+                          ComputeMsAdpcmSamplesPerBlock(source.blockAlign, source.channels))
+                    : source.extensionData,
+                0u);
+
+            try
+            {
+                Audio::DecodedWavPcm16 decoded = Audio::DecodeWavToPcm16(wav, origin);
+                if (decoded.sampleRate != source.sampleRate ||
+                    decoded.channels != source.channels)
+                {
+                    throw ContentLoadException(
+                        "'" + origin +
+                        "': decoded SoundEffect rate/channels disagree with its XNB WAVEFORMATEX.");
+                }
+                frameCount = decoded.frameCount;
+                return std::move(decoded.samples);
+            }
+            catch (const ContentLoadException&)
+            {
+                throw;
+            }
+            catch (const std::exception& inner)
+            {
+                throw ContentLoadException(
+                    "'" + origin + "': headless XNB SoundEffect decode failed.", inner);
+            }
+        }
+#endif
+
+        void ValidateSoundMetadata(const XnbSoundEffectData& source,
+                                   const std::uint32_t frameCount,
+                                   const std::string& origin)
+        {
+            if (source.loopStart < 0 || source.loopLength < 0 ||
+                static_cast<std::uint64_t>(source.loopStart) +
+                        static_cast<std::uint64_t>(source.loopLength) > frameCount)
+            {
+                throw ContentLoadException(
+                    "'" + origin + "': SoundEffect loop region lies outside decoded frames.");
+            }
+            if (source.storedDurationMs == 0u || frameCount == 0u) { return; }
+            const double decodedMs =
+                static_cast<double>(frameCount) * 1000.0 / source.sampleRate;
+            const double ratio = decodedMs / source.storedDurationMs;
+            if (ratio > 2.0 || ratio < 0.5)
+            {
+                throw ContentLoadException(
+                    "'" + origin + "': decoded audio duration (" +
+                    std::to_string(decodedMs) +
+                    "ms) disagrees drastically with the .xnb's own stored duration (" +
+                    std::to_string(source.storedDurationMs) + "ms).");
+            }
+        }
+
+        [[nodiscard]] std::vector<std::uint8_t> ReadFile(
+            const std::filesystem::path& path, const XnbReadLimits& limits)
+        {
+            std::error_code error;
+            const std::uintmax_t size = std::filesystem::file_size(path, error);
+            if (error)
+            {
+                throw ContentLoadException(
+                    "cannot inspect XNB source '" + ContentPathToUtf8(path) + "': " +
+                    error.message() + ".");
+            }
+            if (size > static_cast<std::uintmax_t>(limits.maxFileSize))
+            {
+                throw ContentLoadException(
+                    "XNB source '" + ContentPathToUtf8(path) + "' exceeds the maximum file size.");
+            }
+            std::ifstream stream(path, std::ios::binary);
+            if (!stream)
+            {
+                throw ContentLoadException(
+                    "cannot open XNB source '" + ContentPathToUtf8(path) + "'.");
+            }
+            return {std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
+        }
+    }
+
+    XnbTextureData DecodeTexture2DXnbData(
+        ContentReader& input, const std::uint32_t maximumDimension)
+    {
+        XnbTextureData data;
+        data.kind = XnbTextureKind::Texture2D;
+        data.surfaceFormat = ReadTexture2DFormat(input);
+        RequireTextureFormat("Texture2DReader", data.surfaceFormat, true);
+        data.width = PositiveDimension(input.ReadInt32(), "Texture2DReader", "width");
+        data.height = PositiveDimension(input.ReadInt32(), "Texture2DReader", "height");
+        data.depth = 1u;
+        data.faceCount = 1u;
+        const std::int32_t mipCount = input.ReadInt32();
+        if (mipCount <= 0)
+        {
+            throw ContentLoadException("Texture2DReader: invalid mip level count.");
+        }
+        data.mipCount = static_cast<std::uint32_t>(mipCount);
+        data.platform = input.getPlatformProperty();
+        if (data.width > maximumDimension || data.height > maximumDimension)
+        {
+            throw ContentLoadException(
+                "Texture2DReader: " + std::to_string(data.width) + "x" +
+                std::to_string(data.height) +
+                " exceeds the target's maximum texture dimension of " +
+                std::to_string(maximumDimension) + ".");
+        }
+        input.CheckDecodedByteSize(
+            CheckedMultiplyOrThrow(
+                {data.width, data.height,
+                 data.surfaceFormat == SurfaceFormat::NormalizedByte2 ? 2u : 4u},
+                "Texture2DReader"),
+            "Texture2DReader");
+        ValidateMipCount("Texture2DReader", data, true);
+        ReadTextureLevels(input, data, "Texture2DReader");
+        return data;
+    }
+
+    XnbTextureData DecodeTexture3DXnbData(ContentReader& input)
+    {
+        XnbTextureData data;
+        data.kind = XnbTextureKind::Texture3D;
+        data.surfaceFormat = static_cast<SurfaceFormat>(input.ReadInt32());
+        RequireTextureFormat("Texture3DReader", data.surfaceFormat, false);
+        data.width = PositiveDimension(input.ReadInt32(), "Texture3DReader", "width");
+        data.height = PositiveDimension(input.ReadInt32(), "Texture3DReader", "height");
+        data.depth = PositiveDimension(input.ReadInt32(), "Texture3DReader", "depth");
+        data.faceCount = 1u;
+        const std::int32_t mipCount = input.ReadInt32();
+        if (mipCount <= 0)
+        {
+            throw ContentLoadException("Texture3DReader: invalid mip level count.");
+        }
+        data.mipCount = static_cast<std::uint32_t>(mipCount);
+        data.platform = input.getPlatformProperty();
+        input.CheckDecodedByteSize(
+            CheckedMultiplyOrThrow(
+                {data.width, data.height, data.depth, 4u}, "Texture3DReader"),
+            "Texture3DReader");
+        ValidateMipCount("Texture3DReader", data, false);
+        ReadTextureLevels(input, data, "Texture3DReader");
+        return data;
+    }
+
+    XnbTextureData DecodeTextureCubeXnbData(ContentReader& input)
+    {
+        XnbTextureData data;
+        data.kind = XnbTextureKind::TextureCube;
+        data.surfaceFormat = static_cast<SurfaceFormat>(input.ReadInt32());
+        RequireTextureFormat("TextureCubeReader", data.surfaceFormat, false);
+        data.width = PositiveDimension(input.ReadInt32(), "TextureCubeReader", "size");
+        data.height = data.width;
+        data.depth = 1u;
+        data.faceCount = 6u;
+        const std::int32_t mipCount = input.ReadInt32();
+        if (mipCount <= 0)
+        {
+            throw ContentLoadException("TextureCubeReader: invalid mip level count.");
+        }
+        data.mipCount = static_cast<std::uint32_t>(mipCount);
+        data.platform = input.getPlatformProperty();
+        input.CheckDecodedByteSize(
+            CheckedMultiplyOrThrow({data.width, data.height, 4u}, "TextureCubeReader"),
+            "TextureCubeReader");
+        ValidateMipCount("TextureCubeReader", data, false);
+        ReadTextureLevels(input, data, "TextureCubeReader");
+        return data;
+    }
+
+    XnbSpriteFontData DecodeSpriteFontXnbData(
+        ContentReader& input, const std::uint32_t maximumTextureDimension)
+    {
+        RequireReader(
+            input.ReadCanonicalTypeReaderReferenceEXT(),
+            "Microsoft.Xna.Framework.Content.Texture2DReader",
+            input.getAssetNameProperty());
+
+        XnbSpriteFontData font;
+        font.atlas = DecodeTexture2DXnbData(input, maximumTextureDimension);
+        font.glyphs = ReadList<Microsoft::Xna::Framework::Rectangle>(
+            input,
+            "Microsoft.Xna.Framework.Content.ListReader`1[[Microsoft.Xna.Framework.Rectangle]]",
+            [&input]
+            {
+                const std::int32_t x = input.ReadInt32();
+                const std::int32_t y = input.ReadInt32();
+                const std::int32_t width = input.ReadInt32();
+                const std::int32_t height = input.ReadInt32();
+                return Microsoft::Xna::Framework::Rectangle(x, y, width, height);
+            });
+        font.cropping = ReadList<Microsoft::Xna::Framework::Rectangle>(
+            input,
+            "Microsoft.Xna.Framework.Content.ListReader`1[[Microsoft.Xna.Framework.Rectangle]]",
+            [&input]
+            {
+                const std::int32_t x = input.ReadInt32();
+                const std::int32_t y = input.ReadInt32();
+                const std::int32_t width = input.ReadInt32();
+                const std::int32_t height = input.ReadInt32();
+                return Microsoft::Xna::Framework::Rectangle(x, y, width, height);
+            });
+        font.characters = ReadList<SharpRuntime::charcs>(
+            input, "Microsoft.Xna.Framework.Content.ListReader`1[[System.Char]]",
+            [&input] { return input.ReadChar(); });
+        font.lineSpacing = input.ReadInt32();
+        font.spacing = input.ReadSingle();
+        font.kerning = ReadList<Microsoft::Xna::Framework::Vector3>(
+            input,
+            "Microsoft.Xna.Framework.Content.ListReader`1[[Microsoft.Xna.Framework.Vector3]]",
+            [&input] { return input.ReadVector3(); });
+        if (input.ReadBoolean()) { font.defaultCharacter = input.ReadChar(); }
+        if (font.glyphs.size() != font.cropping.size() ||
+            font.glyphs.size() != font.characters.size() ||
+            font.glyphs.size() != font.kerning.size())
+        {
+            throw ContentLoadException(
+                "SpriteFontReader: glyph, cropping, character, and kerning counts differ.");
+        }
+        return font;
+    }
+
+    XnbSoundEffectData DecodeSoundEffectXnbData(ContentReader& input)
+    {
+        XnbSoundEffectData result;
+        result.platform = input.getPlatformProperty();
+        const bool swap = input.getPlatformProperty() == 'x';
+        const std::uint32_t formatLength = input.ReadUInt32();
+        if (formatLength < 16u || formatLength >
+                static_cast<std::uint32_t>(DefaultXnbReadLimits().maxStringBytes))
+        {
+            throw ContentLoadException(
+                "'" + input.getAssetNameProperty() +
+                "': SoundEffectReader has an invalid format block length.");
+        }
+        result.formatTag = Swap16(swap, input.ReadUInt16());
+        result.channels = Swap16(swap, input.ReadUInt16());
+        result.sampleRate = Swap32(swap, input.ReadUInt32());
+        result.averageBytesPerSecond = Swap32(swap, input.ReadUInt32());
+        result.blockAlign = Swap16(swap, input.ReadUInt16());
+        result.bitsPerSample = Swap16(swap, input.ReadUInt16());
+
+        if (formatLength > 16u)
+        {
+            const std::uint16_t extensionSize = Swap16(swap, input.ReadUInt16());
+            const std::int64_t remaining = static_cast<std::int64_t>(formatLength) - 18;
+            if (remaining < 0 || static_cast<std::uint64_t>(remaining) >
+                    static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max()))
+            {
+                throw ContentLoadException(
+                    "'" + input.getAssetNameProperty() +
+                    "': SoundEffectReader formatLength is too small for its extension.");
+            }
+            result.extensionData = input.ReadBytesExactOrThrow(
+                static_cast<std::int32_t>(remaining), "SoundEffectReader");
+            if (result.formatTag != WaveFormatXma2 && extensionSize > result.extensionData.size())
+            {
+                throw ContentLoadException(
+                    "'" + input.getAssetNameProperty() +
+                    "': SoundEffectReader cbSize exceeds its format block.");
+            }
+        }
+
+        result.samples =
+            input.ReadBytesExactOrThrow(input.ReadInt32(), "SoundEffectReader");
+        result.loopStart = input.ReadInt32();
+        result.loopLength = input.ReadInt32();
+        result.storedDurationMs = input.ReadUInt32();
+        return result;
+    }
+
+    Microsoft::Xna::Framework::Curve DecodeCurveXnbData(
+        ContentReader& input, std::optional<Microsoft::Xna::Framework::Curve> existing)
+    {
+        using Microsoft::Xna::Framework::Curve;
+        using Microsoft::Xna::Framework::CurveContinuity;
+        using Microsoft::Xna::Framework::CurveKey;
+        using Microsoft::Xna::Framework::CurveLoopType;
+
+        Curve curve = existing.value_or(Curve{});
+        curve.setPreLoopProperty(static_cast<CurveLoopType>(input.ReadInt32()));
+        curve.setPostLoopProperty(static_cast<CurveLoopType>(input.ReadInt32()));
+        const std::int32_t count = input.ReadInt32();
+        input.CheckCollectionElementCount(count, "Microsoft.Xna.Framework.Content.CurveReader");
+        for (std::int32_t index = 0; index < count; ++index)
+        {
+            // Read the wire fields in sequence: C++ does not define function-argument evaluation
+            // order, while the XNB representation is strictly position, value, tangents, continuity.
+            const float position = input.ReadSingle();
+            const float value = input.ReadSingle();
+            const float tangentIn = input.ReadSingle();
+            const float tangentOut = input.ReadSingle();
+            const auto continuity = static_cast<CurveContinuity>(input.ReadInt32());
+            curve.getKeysProperty().Add(
+                CurveKey(position, value, tangentIn, tangentOut, continuity));
+        }
+        return curve;
+    }
+
+    XnbSongData DecodeSongXnbData(ContentReader& input)
+    {
+        return {input.ReadString(), input.ReadInt32()};
+    }
+
+    XnbVideoData DecodeVideoXnbData(ContentReader& input, const bool objectReferences)
+    {
+        XnbVideoData result;
+        if (!objectReferences)
+        {
+            // CNA's established runtime reader used direct fields, including in its historical
+            // full-container fixtures. Keep that behavior while the pipeline's strict path below
+            // accepts FNA's actual ReadObject<T> wire representation.
+            result.mediaPath = input.ReadString();
+            result.durationMs = input.ReadInt32();
+            result.width = input.ReadInt32();
+            result.height = input.ReadInt32();
+            result.framesPerSecond = input.ReadSingle();
+            result.soundtrackType = input.ReadInt32();
+            return result;
+        }
+
+        RequireReader(
+            input.ReadCanonicalTypeReaderReferenceEXT(),
+            "Microsoft.Xna.Framework.Content.StringReader",
+            input.getAssetNameProperty());
+        result.mediaPath = input.ReadString();
+        const auto readInt32Object = [&input]
+        {
+            RequireReader(
+                input.ReadCanonicalTypeReaderReferenceEXT(),
+                "Microsoft.Xna.Framework.Content.Int32Reader",
+                input.getAssetNameProperty());
+            return input.ReadInt32();
+        };
+        result.durationMs = readInt32Object();
+        result.width = readInt32Object();
+        result.height = readInt32Object();
+        RequireReader(
+            input.ReadCanonicalTypeReaderReferenceEXT(),
+            "Microsoft.Xna.Framework.Content.SingleReader",
+            input.getAssetNameProperty());
+        result.framesPerSecond = input.ReadSingle();
+        result.soundtrackType = readInt32Object();
+        return result;
+    }
+
+    CNA::Content::Cnb::CnbTextureData ConvertXnbTextureToCnbRgba8(
+        const XnbTextureData& source, const bool allowXboxPayload)
+    {
+        if (source.platform == 'x' && !allowXboxPayload)
+        {
+            throw ContentLoadException(
+                "XNB texture transcoding does not support Xbox 360 byte-swizzled payloads.");
+        }
+        if (source.surfaceFormat != SurfaceFormat::Color && !IsDxt(source.surfaceFormat))
+        {
+            throw ContentLoadException(
+                "XNB texture surface format cannot be represented by frozen CNB schema 1 "
+                "without changing its observable format; only Color and Dxt1/Dxt3/Dxt5 are "
+                "transcodable.");
+        }
+
+        CNA::Content::Cnb::CnbTextureData result;
+        result.width = source.width;
+        result.height = source.height;
+        result.depth = source.depth;
+        result.faceCount = source.faceCount;
+        result.mipCount = source.mipCount;
+        CNA::Content::Cnb::CnbTextureRepresentation representation;
+        representation.format = CNA::Content::Cnb::CnbTextureFormat::Rgba8;
+        representation.levels.reserve(source.levels.size());
+
+        for (std::uint32_t face = 0u; face < source.faceCount; ++face)
+        {
+            std::uint32_t width = source.width;
+            std::uint32_t height = source.height;
+            std::uint32_t depth = source.depth;
+            for (std::uint32_t mip = 0u; mip < source.mipCount; ++mip)
+            {
+                const std::size_t index = static_cast<std::size_t>(face) * source.mipCount + mip;
+                representation.levels.push_back(
+                    IsDxt(source.surfaceFormat)
+                        ? DecompressDxtLevel(
+                              source.surfaceFormat, source.levels.at(index), width, height, depth)
+                        : source.levels.at(index));
+                width = std::max(1u, width / 2u);
+                height = std::max(1u, height / 2u);
+                depth = std::max(1u, depth / 2u);
+            }
+        }
+        result.representations.push_back(std::move(representation));
+        return result;
+    }
+
+    CNA::Content::Import::ImportedSound ConvertXnbSoundToImportedSound(
+        const XnbSoundEffectData& source, const std::string& origin,
+        const bool allowXboxPayload)
+    {
+        if (source.platform == 'x' && !allowXboxPayload)
+        {
+            throw ContentLoadException(
+                "'" + origin +
+                "': Xbox 360 SoundEffect sample byte order is not supported for native CNB "
+                "transcoding.");
+        }
+        if (source.channels != 1u && source.channels != 2u)
+        {
+            throw ContentLoadException(
+                "'" + origin + "': unsupported SoundEffect channel count (" +
+                std::to_string(source.channels) + "); only mono and stereo are supported.");
+        }
+        if (source.sampleRate == 0u)
+        {
+            throw ContentLoadException(
+                "'" + origin + "': SoundEffect sample rate must not be zero.");
+        }
+
+        CNA::Content::Import::ImportedSound imported;
+        imported.sampleRate = source.sampleRate;
+        imported.channels = source.channels;
+        if (source.formatTag == WaveFormatPcm && source.bitsPerSample == 16u)
+        {
+            imported.encoding = CNA::Content::Import::ImportedPcmEncoding::Signed16LittleEndian;
+            imported.samples = source.samples;
+            const std::uint32_t frameBytes = source.channels * 2u;
+            if (source.samples.size() % frameBytes != 0u ||
+                source.samples.size() / frameBytes > std::numeric_limits<std::uint32_t>::max())
+            {
+                throw ContentLoadException(
+                    "'" + origin + "': PCM16 SoundEffect byte count is not frame-aligned.");
+            }
+            imported.frameCount =
+                static_cast<std::uint32_t>(source.samples.size() / frameBytes);
+        }
+        else if (source.formatTag == WaveFormatPcm && source.bitsPerSample == 8u)
+        {
+            imported.encoding = CNA::Content::Import::ImportedPcmEncoding::Unsigned8;
+            imported.samples = source.samples;
+            if (source.samples.size() % source.channels != 0u ||
+                source.samples.size() / source.channels >
+                    std::numeric_limits<std::uint32_t>::max())
+            {
+                throw ContentLoadException(
+                    "'" + origin + "': PCM8 SoundEffect byte count is not frame-aligned.");
+            }
+            imported.frameCount =
+                static_cast<std::uint32_t>(source.samples.size() / source.channels);
+        }
+        else if ((source.formatTag == WaveFormatIeeeFloat && source.bitsPerSample == 32u) ||
+                 (source.formatTag == WaveFormatMsAdpcm && source.bitsPerSample == 4u) ||
+                 (source.formatTag == WaveFormatImaAdpcm && source.bitsPerSample == 4u))
+        {
+#ifdef SOUND_ENABLED
+            imported.encoding = CNA::Content::Import::ImportedPcmEncoding::Signed16LittleEndian;
+            imported.samples = DecodeWaveToPcm16(source, origin, imported.frameCount);
+#else
+            throw ContentLoadException(
+                "'" + origin + "': compressed/float XNB SoundEffect transcoding requires "
+                "CNA_AUDIO_PLATFORM=SDL3 because no decoder is available in this build.");
+#endif
+        }
+        else
+        {
+            throw ContentLoadException(
+                "'" + origin + "': unsupported SoundEffect wave format (formatTag=" +
+                std::to_string(source.formatTag) + ", bitsPerSample=" +
+                std::to_string(source.bitsPerSample) + ", channels=" +
+                std::to_string(source.channels) + ", sampleRate=" +
+                std::to_string(source.sampleRate) + "). XMA2 and unknown codecs have no "
+                "native CNB decode path.");
+        }
+        imported.loopStart = static_cast<std::uint32_t>(std::max(0, source.loopStart));
+        imported.loopLength = static_cast<std::uint32_t>(std::max(0, source.loopLength));
+        ValidateSoundMetadata(source, imported.frameCount, origin);
+        return imported;
+    }
+
+    XnbCanonicalAsset DecodeXnbCanonicalAsset(
+        const std::filesystem::path& path, const XnbReadLimits& limits)
+    {
+        const std::string origin = ContentPathToUtf8(path);
+        const std::vector<std::uint8_t> file = ReadFile(path, limits);
+        if (file.size() < 10u)
+        {
+            throw ContentLoadException("'" + origin + "' is truncated before its XNB header.");
+        }
+
+        System::IO::MemoryStream headerStream(file.data(), static_cast<std::int32_t>(file.size()));
+        System::IO::BinaryReader headerReader(&headerStream, true);
+        const XnbHeader header = ParseXnbHeader(headerReader, origin);
+        if (header.totalLength != static_cast<std::int32_t>(file.size()))
+        {
+            throw ContentLoadException(
+                "'" + origin + "' declares totalLength " +
+                std::to_string(header.totalLength) + ", but the file contains " +
+                std::to_string(file.size()) + " bytes.");
+        }
+
+        std::vector<std::uint8_t> ownedBody;
+        const std::uint8_t* body = nullptr;
+        std::size_t bodySize = 0u;
+        switch (header.compression)
+        {
+            case XnbCompression::None:
+                body = file.data() + 10u;
+                bodySize = file.size() - 10u;
+                break;
+            case XnbCompression::Lzx:
+            {
+                if (file.size() < 14u)
+                {
+                    throw ContentLoadException(
+                        "'" + origin + "' is truncated before its decompressed-size field.");
+                }
+                System::IO::MemoryStream sizeStream(file.data() + 10u, 4);
+                System::IO::BinaryReader sizeReader(&sizeStream, true);
+                const std::int32_t decompressedSize = sizeReader.ReadInt32();
+                ownedBody = DecompressXnbPayload(
+                    file.data() + 14u, static_cast<std::int32_t>(file.size() - 14u),
+                    decompressedSize, origin, limits);
+                body = ownedBody.data();
+                bodySize = ownedBody.size();
+                break;
+            }
+            case XnbCompression::Lz4:
+                throw ContentLoadException(
+                    "'" + origin +
+                    "' uses MonoGame LZ4 compression, which CNA does not support.");
+            case XnbCompression::Unknown:
+            default:
+                throw ContentLoadException(
+                    "'" + origin + "' has an unrecognized compression flag combination.");
+        }
+        if (bodySize > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max()))
+        {
+            throw ContentLoadException("'" + origin + "' has an oversized XNB body.");
+        }
+
+        System::IO::MemoryStream bodyStream(body, static_cast<std::int32_t>(bodySize));
+        ContentReader reader(
+            nullptr, &bodyStream, origin, header.version, header.platform, nullptr, limits);
+        reader.InitializeCanonicalTypeReadersEXT();
+        const XnbTypeReaderTableEntry& root = reader.ReadCanonicalTypeReaderReferenceEXT();
+        if (root.version != 0)
+        {
+            throw ContentLoadException(
+                "'" + origin + "' uses root ContentTypeReader '" + root.normalizedName +
+                "' at unsupported version (" + std::to_string(root.version) + ").");
+        }
+        if (reader.getSharedResourceCountEXT() != 0)
+        {
+            throw ContentLoadException(
+                "'" + origin + "' root ContentTypeReader '" + root.normalizedName +
+                "' uses " + std::to_string(reader.getSharedResourceCountEXT()) +
+                " shared resource(s); that reader graph is not supported for native CNB "
+                "transcoding.");
+        }
+
+        XnbCanonicalAsset result;
+        result.rootReader = root.normalizedName;
+        result.platform = header.platform;
+        result.version = header.version;
+        result.compression = header.compression;
+        if (root.normalizedName == "Microsoft.Xna.Framework.Content.Texture2DReader")
+        {
+            result.value = DecodeTexture2DXnbData(reader);
+        }
+        else if (root.normalizedName == "Microsoft.Xna.Framework.Content.Texture3DReader")
+        {
+            result.value = DecodeTexture3DXnbData(reader);
+        }
+        else if (root.normalizedName == "Microsoft.Xna.Framework.Content.TextureCubeReader")
+        {
+            result.value = DecodeTextureCubeXnbData(reader);
+        }
+        else if (root.normalizedName == "Microsoft.Xna.Framework.Content.SpriteFontReader")
+        {
+            result.value = DecodeSpriteFontXnbData(reader);
+        }
+        else if (root.normalizedName == "Microsoft.Xna.Framework.Content.SoundEffectReader")
+        {
+            result.value = DecodeSoundEffectXnbData(reader);
+        }
+        else if (root.normalizedName == "Microsoft.Xna.Framework.Content.CurveReader")
+        {
+            result.value = DecodeCurveXnbData(reader);
+        }
+        else if (root.normalizedName == "Microsoft.Xna.Framework.Content.SongReader")
+        {
+            result.value = DecodeSongXnbData(reader);
+        }
+        else if (root.normalizedName == "Microsoft.Xna.Framework.Content.VideoReader")
+        {
+            result.value = DecodeVideoXnbData(reader, true);
+        }
+        else
+        {
+            throw ContentLoadException(
+                "'" + origin + "' root ContentTypeReader '" + root.normalizedName +
+                "' is not supported for native CNB transcoding.");
+        }
+
+        const std::int32_t remaining =
+            static_cast<std::int32_t>(bodySize) - bodyStream.getPositionProperty();
+        if (remaining > 0 && remaining <= 3)
+        {
+            for (std::int32_t index = 0; index < remaining; ++index)
+            {
+                if (reader.ReadByte() != 0u)
+                {
+                    throw ContentLoadException(
+                        "'" + origin + "' has non-zero trailing bytes after its supported root "
+                        "object.");
+                }
+            }
+        }
+        if (bodyStream.getPositionProperty() != static_cast<std::int32_t>(bodySize))
+        {
+            throw ContentLoadException(
+                "'" + origin + "' has trailing or unconsumed bytes after its supported root "
+                "object.");
+        }
+        return result;
+    }
+}

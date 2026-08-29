@@ -3,7 +3,12 @@
 
 #include "CNA/Internal/Xnb/CollectionContentTypeReaders.hpp"
 #include "CNA/Internal/Xnb/MathContentTypeReaders.hpp"
+#include "CNA/Internal/Xnb/Texture2DContentTypeReader.hpp"
+#include "CNA/Internal/Xnb/XnbCanonicalData.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "System/NotImplementedException.hpp"
 
 namespace CNA::Internal::Xnb
@@ -31,21 +36,21 @@ namespace CNA::Internal::Xnb
                 "supported (CanDeserializeIntoExistingObject is false, matching FNA).");
         }
 
-        Texture2D texture = input.ReadObject<Texture2D>();
-        std::vector<Rectangle> glyphs = input.ReadObject<std::vector<Rectangle>>();
-        std::vector<Rectangle> cropping = input.ReadObject<std::vector<Rectangle>>();
-        std::vector<char16_t> charMap = input.ReadObject<std::vector<char16_t>>();
-        const int32_t lineSpacing = input.ReadInt32();
-        const float spacing = input.ReadSingle();
-        std::vector<Vector3> kerning = input.ReadObject<std::vector<Vector3>>();
-        std::optional<char16_t> defaultCharacter;
-        if (input.ReadBoolean())
+        if (!input.getContentManagerProperty())
         {
-            defaultCharacter = input.ReadChar();
+            throw Microsoft::Xna::Framework::Content::ContentLoadException(
+                "SpriteFontReader: no GraphicsDevice available (ContentManager was not set on "
+                "this ContentReader).");
         }
+        const auto maximumDimension = static_cast<std::uint32_t>(
+            input.getContentManagerProperty()->getGraphicsDeviceInternal()
+                .GetMaxTextureDimension());
+        XnbSpriteFontData decoded = DecodeSpriteFontXnbData(input, maximumDimension);
+        Texture2D texture = CreateTexture2DFromXnbData(input, decoded.atlas);
 
         return SpriteFont(
-            texture, glyphs, cropping, charMap, lineSpacing, spacing, kerning, defaultCharacter);
+            texture, decoded.glyphs, decoded.cropping, decoded.characters,
+            decoded.lineSpacing, decoded.spacing, decoded.kerning, decoded.defaultCharacter);
     }
 
     void RegisterSpriteFontXnbReader()

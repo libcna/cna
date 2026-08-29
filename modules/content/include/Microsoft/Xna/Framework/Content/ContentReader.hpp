@@ -11,6 +11,7 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "CNA/Internal/Xnb/XnbReadLimits.hpp"
+#include "CNA/Internal/Xnb/XnbTypeReaderTable.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
 #include "System/IDisposable.hpp"
@@ -275,6 +276,49 @@ namespace Microsoft::Xna::Framework::Content
         void InitializeTypeReaders();
 
         /**
+         * @brief Initializes only the validated XNB reader table for a headless canonical decode.
+         *
+         * This CNA extension parses the same table and shared-resource count as
+         * InitializeTypeReaders(), but deliberately does not instantiate runtime
+         * ContentTypeReader objects through the process-global factory registry. It is used by
+         * build-time XNB compatibility import, whose decoders are fixed, reentrant, and must not
+         * construct runtime devices or mutate global reader registration.
+         *
+         * @throws ContentLoadException if the reader table or shared-resource count is malformed.
+         */
+        CNAEXT void InitializeCanonicalTypeReadersEXT();
+
+        /**
+         * @brief Reads one 1-based object reader reference and returns its validated table entry.
+         *
+         * The canonical decoder uses this for root and nested built-in dispatch without creating
+         * a runtime ContentTypeReader. A zero/null object reference is rejected because supported
+         * native CNB roots and their required nested values cannot be null.
+         *
+         * @return The referenced reader-table entry.
+         * @throws ContentLoadException if the index is null or outside the initialized table.
+         */
+        CNAEXT [[nodiscard]] const CNA::Internal::Xnb::XnbTypeReaderTableEntry&
+            ReadCanonicalTypeReaderReferenceEXT();
+
+        /**
+         * @brief Returns the number of entries in the parsed XNB type-reader table.
+         *
+         * @return The table size, or zero for a raw reader-level test stream.
+         */
+        CNAEXT [[nodiscard]] std::size_t getCanonicalTypeReaderCountEXT() const;
+
+        /**
+         * @brief Returns the shared-resource count read by the most recent initialization.
+         *
+         * @return The validated XNB shared-resource count.
+         */
+        CNAEXT [[nodiscard]] int32_t getSharedResourceCountEXT() const noexcept
+        {
+            return sharedResourceCount_;
+        }
+
+        /**
          * @brief FNA's internal `void ReadSharedResources()`: reads every shared resource (in
          *        file order), then runs every queued fixup for each one, in that order --
          *        matching FNA's own two-pass comment ("we have to read _all_ the objects first,
@@ -466,6 +510,7 @@ namespace Microsoft::Xna::Framework::Content
         CNA::Internal::Xnb::XnbReadLimits limits_;
 
         std::vector<std::unique_ptr<ContentTypeReaderBase>> typeReaders_;
+        std::vector<CNA::Internal::Xnb::XnbTypeReaderTableEntry> typeReaderTable_;
         int32_t sharedResourceCount_ = 0;
         std::vector<std::any> sharedResources_;
         std::vector<std::vector<std::function<void(const std::any&)>>> sharedResourceFixups_;

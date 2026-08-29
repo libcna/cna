@@ -5620,20 +5620,26 @@ namespace Microsoft::Xna::Framework::Content
         // ---------------------------------------------------------------------------
 
         std::shared_ptr<Audio::SoundEffect> BuildSoundEffectFromCnbEXT(
-            const CNA::Content::Cnb::CnbSoundEffectData& data, const std::string&)
+            const CNA::Content::Cnb::CnbSoundEffectData& data, const std::string& assetName)
         {
             const auto channels = data.channels == 2u ? Audio::AudioChannels::Stereo
                                                       : Audio::AudioChannels::Mono;
+            std::shared_ptr<Audio::SoundEffect> result;
             if (data.loopLength == 0u)
             {
-                return std::make_shared<Audio::SoundEffect>(
+                result = std::make_shared<Audio::SoundEffect>(
                     data.samples, static_cast<SharpRuntime::intcs>(data.sampleRate), channels);
             }
-            return std::make_shared<Audio::SoundEffect>(
-                data.samples, 0, static_cast<SharpRuntime::intcs>(data.samples.size()),
-                static_cast<SharpRuntime::intcs>(data.sampleRate), channels,
-                static_cast<SharpRuntime::intcs>(data.loopStart),
-                static_cast<SharpRuntime::intcs>(data.loopLength));
+            else
+            {
+                result = std::make_shared<Audio::SoundEffect>(
+                    data.samples, 0, static_cast<SharpRuntime::intcs>(data.samples.size()),
+                    static_cast<SharpRuntime::intcs>(data.sampleRate), channels,
+                    static_cast<SharpRuntime::intcs>(data.loopStart),
+                    static_cast<SharpRuntime::intcs>(data.loopLength));
+            }
+            result->setNameProperty(assetName);
+            return result;
         }
 
         // ---------------------------------------------------------------------------

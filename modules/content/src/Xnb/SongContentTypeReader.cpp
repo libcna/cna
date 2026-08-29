@@ -5,6 +5,7 @@
 #include <filesystem>
 
 #include "CNA/Internal/PathContainment.hpp"
+#include "CNA/Internal/Xnb/XnbCanonicalData.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
@@ -60,6 +61,7 @@ namespace CNA::Internal::Xnb
     Song SongReader::Read(ContentReader& input, std::optional<Song> existingInstance)
     {
         (void)existingInstance; // never provided: CanDeserializeIntoExistingObject defaults false, matching FNA
+        const XnbSongData decoded = DecodeSongXnbData(input);
 
         auto* contentManager = input.getContentManagerProperty();
         if (!contentManager)
@@ -73,7 +75,7 @@ namespace CNA::Internal::Xnb
         fs::path assetPath = fs::path(contentRoot) / input.getAssetNameProperty();
         assetPath += ".xnb";
         std::string path = ResolveRelativeFilePath(
-            contentRoot, assetPath.string(), input.ReadString());
+            contentRoot, assetPath.string(), decoded.mediaPath);
 
         if (path.size() > 4)
         {
@@ -92,8 +94,7 @@ namespace CNA::Internal::Xnb
         path = ResolveRelativeFilePath(
             contentRoot, assetPath.string(), selectedRelative.generic_string());
 
-        const int32_t durationMs = input.ReadInt32();
-        return Song(path, input.getAssetNameProperty(), durationMs);
+        return Song(path, input.getAssetNameProperty(), decoded.durationMs);
     }
 
     void RegisterSongXnbReader()

@@ -5,6 +5,7 @@
 #include <filesystem>
 
 #include "CNA/Internal/PathContainment.hpp"
+#include "CNA/Internal/Xnb/XnbCanonicalData.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
@@ -63,6 +64,8 @@ namespace CNA::Internal::Xnb
     Video VideoReader::Read(ContentReader& input, std::optional<Video> existingInstance)
     {
         (void)existingInstance; // never provided: CanDeserializeIntoExistingObject defaults false, matching FNA
+        const XnbVideoData decoded = DecodeVideoXnbData(
+            input, input.getCanonicalTypeReaderCountEXT() > 1u);
 
         auto* contentManager = input.getContentManagerProperty();
         if (!contentManager)
@@ -76,7 +79,7 @@ namespace CNA::Internal::Xnb
         fs::path assetPath = fs::path(contentRoot) / input.getAssetNameProperty();
         assetPath += ".xnb";
         std::string path = ResolveRelativeFilePath(
-            contentRoot, assetPath.string(), input.ReadString());
+            contentRoot, assetPath.string(), decoded.mediaPath);
 
         if (path.size() > 4)
         {
@@ -95,14 +98,11 @@ namespace CNA::Internal::Xnb
         path = ResolveRelativeFilePath(
             contentRoot, assetPath.string(), selectedRelative.generic_string());
 
-        const int32_t durationMs = input.ReadInt32();
-        const int32_t width = input.ReadInt32();
-        const int32_t height = input.ReadInt32();
-        const float framesPerSecond = input.ReadSingle();
-        const auto soundTrackType = static_cast<VideoSoundtrackType>(input.ReadInt32());
-
         GraphicsDevice* device = &contentManager->getGraphicsDeviceInternal();
-        return Video(path, device, durationMs, width, height, framesPerSecond, soundTrackType);
+        return Video(
+            path, device, decoded.durationMs, decoded.width, decoded.height,
+            decoded.framesPerSecond,
+            static_cast<VideoSoundtrackType>(decoded.soundtrackType));
     }
 
     void RegisterVideoXnbReader()
