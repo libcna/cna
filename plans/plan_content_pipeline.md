@@ -17,6 +17,9 @@
 > `content-pipeline` branch agree. New work is isolated on `content-pipeline-next`; it will not be
 > merged into `next` or pushed by this plan. `CP-016` records the continuation audit, and
 > `CP-017` onward consume the remaining backlog without reopening `CP-001` through `CP-015`.
+> `CP-016` through `CP-030` are now complete on that continuation branch. `CP-031` through
+> `CP-038` are the deliberately deferred XNB-to-native-CNB compatibility phase, not part of the
+> completed continuation implementation.
 >
 > **Boundary:** this plan owns the build-time CNA Content Pipeline. `plans/plan_cnb.md` remains the
 > engineering record for the frozen CNB compiled format. The pipeline consumes the existing CNB
@@ -1075,6 +1078,48 @@ The completed feature branch was synchronized without reopening `CP-001` through
   project format, target profile, parallel scheduler, Song/Video importer, Effect or package work
   was added.
 
+### 11.4 Extended-pipeline final verification (`CP-030`)
+
+The continuation was closed with fresh evidence over the final implementation rather than only
+carrying forward task-local results:
+
+* The complete configured HEADLESS Debug tree built successfully. A 273-test selection spanning
+  the extended pipeline, CLI, configuration, manifests, custom compiler, graph/scheduler,
+  Song/Video/Model routes, legacy producers, CNJ equivalence, all 11 frozen golden vectors, and path
+  containment passed 273/273 normally and again with combined ASan+UBSan and `halt_on_error=1`. The
+  initial O1 sanitizer build encountered a GCC 14 `std::regex` `-Wmaybe-uninitialized` false positive
+  in the unchanged SharpRuntime dependency, so the successful sanitizer build used O0.
+  LeakSanitizer explicitly refused the subprocess runner under `ptrace`; the green run used
+  `detect_leaks=0` and is not LSan evidence.
+* A freshly reconfigured GCC ThreadSanitizer HEADLESS tree passed 107/107 pipeline/configuration/
+  manifest/custom/CMake tests with `halt_on_error=1` and no TSan report. The opt-in large-file case
+  was excluded because its purpose is I/O-size coverage rather than concurrency; it passed
+  separately in the normal tree.
+* The sparse 2 GiB+1-byte SHA-256 regression ran with `CNA_RUN_LARGE_FILE_TESTS=1` and passed in
+  48.7 seconds without a repository fixture. File hashing remains the original SHA-256 semantics in
+  bounded 1 MiB updates.
+* A fresh MinGW-w64 Windows-target configuration compiled and linked the complete `cna_content`
+  static target, covering native-path pipeline and scheduler sources. This is cross-compile
+  evidence only: neither native MSVC nor Windows execution was available, so the Unicode runtime
+  seam remains explicitly unverified on Windows.
+* The normal 256-test compatibility/security selection produced 254 passes, the expected
+  default-disabled large-file skip, and the known pre-existing HEADLESS TextureCube runtime upload
+  failure. Repeating that one case confirmed the HEADLESS renderer does not retain the complete
+  requested cube-face region; it is outside the build pipeline. An unfiltered content runner also
+  reached an existing PulseAudio fixture and could not wake its mainloop in this restricted
+  environment, so it was interrupted rather than reported as a pipeline regression.
+* The generated C API coverage/compatibility/header/limitations/export/route/bool/release/ABI gates
+  all pass. The inventory sees the experimental C++ declarations but exposes no pipeline C ABI;
+  `CBIND-117` remains the separate planning boundary.
+* The final `cna-content` executable's dynamic dependencies are zstd and the standard C/C++ runtime
+  only. Symbol and dynamic-section inspection found no `GraphicsDevice`, renderer, SDL/audio,
+  FFmpeg, audio-device or `ContentManager::Load` dependency. No private staging directories were
+  left under the tested temporary root.
+* `next...content-pipeline-next` changes no frozen codec, container/schema definition, asset/chunk
+  identifier, CRC implementation, golden vector, `plans/plan_cnb.md`, or atomic publication helper.
+  Built-in writers still delegate to the existing ten typed encoders, and every final producer
+  still reaches the one shared atomic publication implementation.
+
 ---
 
 ## 12. Task ledger
@@ -1110,7 +1155,7 @@ The completed feature branch was synchronized without reopening `CP-001` through
 | `CP-027` | **completed** | Added strict `--workers 1..64` with a true synchronous fallback, bounded parallel preparation/staging, dependency-ready execution and coordinator-only deterministic integration. Shared nodes dispatch once, failures propagate without dependent publication, and private staged outputs are size/digest verified before the sole atomic publisher commits them. Worker counts 1, 2 and 4 produce byte-identical mixed cold, no-op and shared-dependency rebuild trees, manifests and logs; long-cycle diagnostics are identical between serial and four-worker runs. The 174-test normal pipeline/producer/CNJ/golden selection passed 173 with only the expected large-file skip. A fresh GCC ThreadSanitizer HEADLESS build passed 106/107 pipeline/config/manifest/custom/media/model tests, with only that same opt-in >2 GiB test skipped and no TSan report. |
 | `CP-028` | **completed** | Added a reproducible fail-fast benchmark harness for 128 mixed PNG/WAV/glTF/CNJ nodes and a 97-node shared-dependency custom graph. It alternates serial/parallel order, excludes fixture/seed/verification work, emits machine-readable samples, and proves complete tree/manifest equality. Seven-sample HEADLESS Debug medians for workers 1 versus 4 measured 2.662x cold, 2.243x no-op, 2.177x one-change and 1.241x shared-change speedups on the recorded 8-core host. The conservative default remains one worker and results are documented as host-specific evidence, not a CI threshold. |
 | `CP-029` | **completed** | Extended the thin `cna_add_content()` wrapper with configure-time-checked `CONFIG_FILE` and strict `WORKERS 1..64`, defaulting to serial and forwarding both to the selected stock/custom compiler. The real CLI still solely owns containment, JSON parsing, fingerprints, graph/cache and atomic publication. Generated stock and user-linked custom targets prove `--config ... --workers 2`: one changes a Curve logical output through explicit stable components; the other is accepted only by the `.greeting` compiler and verifies its custom primary/child outputs, component identities and typed parameter. Native/cross host-tool separation is unchanged. The 175-test normal compatibility selection passed 174 with only the expected >2 GiB skip. |
-| `CP-030` | **pending** | Complete cross-platform/security/HEADLESS review, normal and sanitizer gates, documentation, stable/experimental/future labels and the final frozen-CNB compatibility audit. |
+| `CP-030` | **completed** | Closed the extended pipeline with a complete HEADLESS Debug build, the same 273/273 compatibility/security selection normally and under ASan+UBSan, a 107/107 TSan pipeline/concurrency selection, and the real opt-in sparse 2 GiB+1-byte hash test. MinGW-w64 compiled and linked the complete `cna_content` target; native Windows/MSVC execution remains unclaimed. All nine C-API gates pass with no pipeline export. `cna-content` has no renderer/SDL/audio/FFmpeg/runtime-loader dependency, no staging residue remained, and the final diff changes no frozen CNB definition, byte oracle or atomic publisher. The known HEADLESS TextureCube runtime failure, ptrace-disabled LSan, and restricted PulseAudio full-run block are recorded separately from pipeline results. |
 | `CP-031` | **pending** | Audit the existing XNB container, decompression and built-in ContentTypeReader implementations for reuse by a HEADLESS build importer. Publish an exact XNB-to-native-CNB support matrix and identify runtime-object/device seams that must be split into canonical CPU data rather than invoked by the compiler. |
 | `CP-032` | **pending** | Define `XnbImporter` as a compatibility source front end that emits existing imported/canonical pipeline types and routes through existing processors and CNB writers. Selection must use validated XNB reader/type identity, reject unknown/custom readers clearly, preserve source dependencies, and add no XNB bytes or decoder tables to CNB. |
 | `CP-033` | **pending** | Implement XNB Texture2D to native Texture2D CNB, including supported surface formats and mip levels, through the authoritative Texture2D writer/codec. Compare decoded source-XNB data with the resulting CNB runtime data and keep the compiler HEADLESS. |

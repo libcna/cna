@@ -539,8 +539,8 @@ rebuilds every transitive dependent even when its own source and direct hash are
 direct input or configuration changes, the node runs first to discover its new edge set, so a
 removed stale edge cannot block the rebuild.
 
-The visiting-state guard refuses cycles before recursive overflow. Diagnostics print the exact
-logical cycle once, for example:
+The visiting-state guard refuses cycles during graph preflight instead of recursively executing
+them. Diagnostics print the exact logical cycle once, for example:
 
 ```text
 content-build dependency cycle:
@@ -629,11 +629,11 @@ sidecars without narrowing; its string overload remains only for existing narrow
 
 A POSIX regression test builds a model whose source root, nested directories, `.gltf`, external
 `.bin`, and external texture all contain non-ASCII characters, repeats the build byte-identically,
-and validates both source dependencies and the resulting CNB. The four affected conversion sources
-also pass a MinGW Windows-target syntax compilation. Neither result is evidence of a native
-MSVC/Windows runtime execution; that platform run remains an explicit verification gap rather than
-an advertised result. Existing direct glTF producer and pinned Model-byte equivalence tests remain
-unchanged.
+and validates both source dependencies and the resulting CNB. A fresh MinGW-w64 configuration also
+compiles and links the complete `cna_content` Windows-target static library, including the native
+path and scheduler sources. Neither result is evidence of a native MSVC/Windows runtime execution;
+that platform run remains an explicit verification gap rather than an advertised result. Existing
+direct glTF producer and pinned Model-byte equivalence tests remain unchanged.
 
 ## Custom extensions
 
@@ -801,6 +801,33 @@ cna_add_content(
 
 Without `CONTENT_EXECUTABLE`, cross-compiling fails at configure time with a specific diagnostic.
 No `cna_add_game()` convenience layer is defined yet.
+
+## Verification and current limitations
+
+The final extended-pipeline checkpoint built the complete HEADLESS Debug configuration and reran
+the compatibility boundary on the finished implementation:
+
+- 273 pipeline, configuration, manifest, graph, scheduler, custom-tool, source-route, producer,
+  CNJ, golden-vector, and containment tests passed normally and again under combined ASan+UBSan;
+- 107 concurrency-relevant tests passed under ThreadSanitizer with no report;
+- the opt-in sparse 2 GiB+1-byte streaming-hash test passed without storing a giant fixture;
+- the generated C-API coverage, compatibility, header, export, route, release, and ABI gates pass,
+  and no Content Pipeline C ABI is exported;
+- dynamic dependency and symbol inspection confirms `cna-content` does not initialize or depend on
+  a renderer, window, graphics device, SDL/audio device, FFmpeg, or runtime ContentManager load.
+
+LeakSanitizer cannot run the subprocess-heavy selection in the current `ptrace` environment, so
+the successful ASan+UBSan run used `detect_leaks=0` and is not leak evidence. Native Windows/MSVC
+execution is still required to close the last platform-verification gap. The graph's cycle
+preflight uses recursive DFS; an extraordinarily deep acyclic graph may consume the process stack
+even though build execution itself is iterative and worker-bounded.
+
+Multi-file publication is recoverable, not a portable filesystem transaction. Prepared cold
+outputs can temporarily consume disk space comparable to the compiled output set, and an abrupt
+termination may leave an owner-only staging directory. The next build repairs digest/manifest
+mismatches, but automatic staging cleanup and stale-output garbage collection are not implemented.
+Song and Video CNBs retain streaming XREFs; deployment must place the media at those referenced
+paths because the compiler does not copy raw media support files.
 
 ## Stability summary
 
