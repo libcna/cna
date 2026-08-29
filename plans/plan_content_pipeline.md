@@ -568,6 +568,22 @@ manifest and logs are byte-identical. Strict CLI tests reject missing, duplicate
 non-numeric and out-of-range counts. The long-cycle diagnostic is also identical between serial and
 four-worker runs.
 
+### 5.17 Representative scheduler benchmark (`CP-028`)
+
+`tools/content/benchmark_content_pipeline.py` builds temporary repository-derived fixtures and
+compares `--workers 1` with a chosen parallel count. It times only compiler subprocesses, alternates
+worker order, records every sample/median/p95 in optional JSON, and rejects any worker-dependent
+SHA-256 of the complete artifact/manifest tree. It covers a 128-node equal mix of Texture2D,
+SoundEffect, valid skinned Model and Curve CNJ sources plus a 97-node custom graph in which 96
+parents share one dependency.
+
+On revision `191b56de7`, a HEADLESS GCC 14.2 Debug build on an 8-core/16-thread Ryzen 7 PRO 7840U
+measured seven-sample median speedups for four workers of 2.662x cold, 2.243x no-op, 2.177x for one
+changed image, and 1.241x for one changed shared dependency. Every serial/parallel output-tree hash
+matched. The tiny custom nodes show the scheduler overhead boundary; no automatic worker default or
+CI threshold is inferred. `docs/content-pipeline-benchmark.md` records full methodology, medians,
+p95 values and limitations.
+
 ---
 
 ## 6. First vertical slices
@@ -1074,7 +1090,7 @@ The completed feature branch was synchronized without reopening `CP-001` through
 | `CP-025` | **completed** | Added an active-stack cycle detector that reports the complete logical chain with its repeated start node. Sorted root/edge traversal makes selection deterministic; a dedicated error avoids nested duplicate chains while every affected node still fails. Self, two-node and three-node subprocess tests prove exact chains, one diagnostic, no publication/manifest replacement, correct failure counts and byte-identical repeated output. |
 | `CP-026` | **completed** | Added a permanent mutex-protected registry freeze, invoked before CLI discovery and by direct coordinators, with deterministic late-registration refusal through retained aliases. Public component/logger contracts now state their concurrency obligations. The audit found built-ins invocation-local, cgltf per-call, stb thread-local, and staging/publication names exclusively claimed; it confines manifest, ownership, graph states, counters and terminal diagnostics to a deterministic coordinator. Tests prove all late registration families fail and sixteen direct builds share a frozen registry safely. The 149-test pipeline/producer/CNJ/golden selection passed 148 with only the expected large-file skip, and all seven generated C-API consistency gates pass; the two new experimental declarations are planned under `CBIND-117` with no C export. CP-027 owns the bounded node-local scheduler implementation. |
 | `CP-027` | **completed** | Added strict `--workers 1..64` with a true synchronous fallback, bounded parallel preparation/staging, dependency-ready execution and coordinator-only deterministic integration. Shared nodes dispatch once, failures propagate without dependent publication, and private staged outputs are size/digest verified before the sole atomic publisher commits them. Worker counts 1, 2 and 4 produce byte-identical mixed cold, no-op and shared-dependency rebuild trees, manifests and logs; long-cycle diagnostics are identical between serial and four-worker runs. The 174-test normal pipeline/producer/CNJ/golden selection passed 173 with only the expected large-file skip. A fresh GCC ThreadSanitizer HEADLESS build passed 106/107 pipeline/config/manifest/custom/media/model tests, with only that same opt-in >2 GiB test skipped and no TSan report. |
-| `CP-028` | **pending** | Benchmark representative cold, no-op, one-change and shared-dependency builds before/after parallel execution; retain correctness-first defaults. |
+| `CP-028` | **completed** | Added a reproducible fail-fast benchmark harness for 128 mixed PNG/WAV/glTF/CNJ nodes and a 97-node shared-dependency custom graph. It alternates serial/parallel order, excludes fixture/seed/verification work, emits machine-readable samples, and proves complete tree/manifest equality. Seven-sample HEADLESS Debug medians for workers 1 versus 4 measured 2.662x cold, 2.243x no-op, 2.177x one-change and 1.241x shared-change speedups on the recorded 8-core host. The conservative default remains one worker and results are documented as host-specific evidence, not a CI threshold. |
 | `CP-029` | **pending** | Follow stable CLI/config/custom-tool behavior through `cna_add_content()`, preserving host-tool separation and one real cache/build implementation. |
 | `CP-030` | **pending** | Complete cross-platform/security/HEADLESS review, normal and sanitizer gates, documentation, stable/experimental/future labels and the final frozen-CNB compatibility audit. |
 | `CP-031` | **pending** | Audit the existing XNB container, decompression and built-in ContentTypeReader implementations for reuse by a HEADLESS build importer. Publish an exact XNB-to-native-CNB support matrix and identify runtime-object/device seams that must be split into canonical CPU data rather than invoked by the compiler. |

@@ -585,6 +585,9 @@ Only the coordinator owns output reservations, graph state, effective fingerprin
 manifest mutation, counters, and stdout/stderr. Ready lists and result integration use stable
 logical-name order. Tests compare worker counts 1, 2, and 4 across cold, no-op, and shared-input
 rebuilds and require identical CNB/output trees, manifest bytes, diagnostics, and summaries.
+The reproducible methodology and current Debug/HEADLESS measurements are recorded in
+[`content-pipeline-benchmark.md`](content-pipeline-benchmark.md); performance is evidence, not a
+cross-machine guarantee or correctness threshold.
 
 ## Determinism and publication
 
