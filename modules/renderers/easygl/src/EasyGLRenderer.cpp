@@ -9290,8 +9290,35 @@ CNA_GL_PUNCTUAL_DECL
         // row-vector WVP by this clip-space translation produces clip.xy += offset * clip.w.
         int viewportX = 0, viewportY = 0, viewportWidth = 0, viewportHeight = 0;
         device.get_viewport(viewportX, viewportY, viewportWidth, viewportHeight);
+        // REMED-GFX-235: not while the destination is multisampled.
+        //
+        // The correction above is a GEOMETRY translation, and that is only equivalent to what it
+        // means at ONE sample per pixel. There it decides which side of the fill edge the pixel
+        // CENTRE lands on, and 63/128 is deliberately just under half a pixel so the centre stays
+        // covered -- that margin is the whole design. At four samples the outer sample positions
+        // sit at a quarter of a pixel, inside that margin, so the same translation also removes
+        // coverage: the outermost row and column lose two of four samples and the corner three of
+        // four, measured as exactly 1/2 and exactly 1/4 of the expected colour.
+        //
+        // Suppressing it here keeps the correction doing the job it was tuned for and stops it
+        // doing one it was not. The cost is real and deliberate: geometry differs by ~0.49px
+        // between a multisampled destination and a single-sampled one, so a game toggling MSAA
+        // sees a sub-pixel shift. The alternative was to weaken four fixtures that seven renderers
+        // share, only one of which applies this correction at all.
+        bool multisampledDestination = false;
+        if (bound_)
+        {
+            if (bound_->rt2D != nullptr && bound_->rt2D->GetMultiSampleCount() > 0)
+                multisampledDestination = true;
+            if (bound_->cube != nullptr && bound_->cube->GetMultiSampleCount() > 0)
+                multisampledDestination = true;
+            for (int slot = 0; slot < bound_->mrtCount; ++slot)
+                if (bound_->mrt[static_cast<std::size_t>(slot)] != nullptr &&
+                    bound_->mrt[static_cast<std::size_t>(slot)]->GetMultiSampleCount() > 0)
+                    multisampledDestination = true;
+        }
         Matrix xnaPixelCenter = Matrix::getIdentityProperty();
-        if (viewportWidth > 0 && viewportHeight > 0)
+        if (viewportWidth > 0 && viewportHeight > 0 && !multisampledDestination)
         {
             xnaPixelCenter = Matrix::CreateTranslation(
                 xnaPixelCenterScale_ / static_cast<float>(viewportWidth),

@@ -2359,7 +2359,52 @@ test change is what turns a stale refusal expectation into an assertion that nam
 
 ---
 
-## 32. `REMED-BUILD-017` — the native GDI workflow omitted three correctness targets
+## 32. `REMED-GFX-235` — the XNA pixel-centre correction removed multisample coverage
+
+**Status:** **CLOSED — owner chose this of two measured options, 2026-08-29** ·
+**Pre-existing since `SAMPLE-001`; a side effect of a deliberate correction, not a defect in it**
+
+**Defect.** `EasyGLRenderer::BindDrawParams` post-multiplies WVP by `xnaPixelCenter`, a clip-space
+translation of `xnaPixelCenterScale_ = 63/64` over the viewport extent — **63/128 ≈ 0.492 window
+pixels** — reproducing XNA 4.0's Direct3D 9 pixel-CENTRE addressing on a GL that addresses pixel
+CORNERS. `SAMPLE-001` added it so the Primitives sample's 1×1 right triangles cover a pixel, and the
+value is deliberately just under half a pixel so the centre stays on the covered side.
+
+That margin is exactly what multisampling defeats. At four samples the outer sample positions sit at
+a quarter of a pixel, inside the margin, so the same translation stops being a fill-rule decision
+and starts removing coverage.
+
+**Measured, in this order, and each step narrowed the next.** The 15 wrong texels of an 8×8 are row 0
+(8) plus column 0 (7). `texel(0,0)` is **exactly ¼** of the expected colour and the other 14 exactly
+½ — one and two of four samples. A quad drawn to NDC ±1.125, half a pixel outward, takes every
+failure to zero, while ±1.0625 does not, so the shift is between a quarter and a half pixel. A quad
+covering only NDC `x ∈ [-1,0]` leaves the **interior** seam at window x=4 half-covered too, so it is
+a uniform geometry shift and not an edge artefact. Setting `xnaPixelCenterScale_ = 0` takes both
+fixtures to zero. And the same failures reproduce byte-identically on real AMD hardware
+(`DISPLAY=:0`, Radeon 780M/radeonsi), so no part of it is a llvmpipe artefact.
+
+**Fix.** The correction is skipped while the destination is multisampled — asked of the bound
+`rt2D`, `cube` and every live MRT slot, so no path is missed. It keeps doing the job it was tuned
+for and stops doing one it was not.
+
+**The cost is real and was accepted deliberately.** Geometry now differs by ~0.49px between a
+multisampled destination and a single-sampled one, so a game toggling MSAA sees a sub-pixel shift.
+
+**The alternative, and why it lost.** The four failing fixtures could have been taught to tolerate
+partial coverage instead. But `rendertarget_msaa_first_readback_test.cpp` and
+`rendertarget_msaa_mip_readback_test.cpp` are registered for **seven renderers** — bgfx, easygl,
+headless, sdl-gpu, software, vulkan, webgpu — and only EasyGL applies this correction. Weakening
+them would blind a cross-renderer contract on the other six, where full coverage is achievable and a
+genuine edge-coverage defect would then pass unnoticed. That option was not measured on those six;
+this configuration builds EasyGL only.
+
+**Evidence.** `EasyGL_GFX164_BoundMsaaAlpha`, `EasyGL_MsaaFirstReadback`, `EasyGL_MsaaMipReadback`
+and `EasyGL_InvalidMipLevel` all go to zero failures. `EasyGL_XnaPixelCenter` — `SAMPLE-001`'s own
+guard, and the reason the correction exists — stays green, because it is not multisampled.
+
+---
+
+## 33. `REMED-BUILD-017` — the native GDI workflow omitted three correctness targets
 
 **Status:** **CLOSED — DISCOVERED AND RESOLVED in the GDI adaptation, 2026-08-08** ·
 **Build/evidence inventory defect, not a renderer defect**
@@ -2376,7 +2421,7 @@ inventory defect.
 
 ---
 
-## 33. `REMED-BUILD-018` — the capability test used an incomplete backend type
+## 34. `REMED-BUILD-018` — the capability test used an incomplete backend type
 
 **Status:** **CLOSED — DISCOVERED AND RESOLVED in the GDI adaptation, 2026-08-08** ·
 **Shared test-build defect, not a renderer defect**
