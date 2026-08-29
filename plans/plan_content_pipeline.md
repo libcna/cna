@@ -1173,6 +1173,15 @@ carrying forward task-local results:
 | `CP-037` | **completed** | Added a permanent fixture matrix covering container variants, all supported roots, negative/truncated/custom/shared graphs and deterministic bytes. Runtime-XNB versus transcoded-CNB oracles compare Texture2D pixels/format/mips, every SpriteFont field and atlas, SoundEffect duration/name plus canonical PCM for all codecs, Curve keys, and Song/Video metadata/path semantics. Texture3D/Cube use canonical CPU level/face byte comparison because HEADLESS deliberately has no safe runtime GPU storage/readback. Existing runtime XNB regressions remain gates. |
 | `CP-038` | **completed** | Registered `.xnb` in the stock frozen registry and ordinary single/directory discovery. CLI tests prove single-file build, directory layouts, worker 1/2/4 byte-identical trees/manifests, no-op skip, source change, output-tamper repair, configuration fingerprint invalidation and unsupported-reader non-publication. XNB nodes use the existing manifest, graph, scheduler, staging and atomic publisher without a separate build path. |
 | `CP-039` | **completed** | Post-XNB review selected the recursive cycle preflight as the highest-value unambiguous risk. Replaced recursive DFS with an explicit frame/active-position stack while preserving sorted traversal, exact cycle chains and one shared diagnostic per cycle. A 4,096-node acyclic graph builds under workers 4, the same graph closed into a 4,096-node cycle fails deterministically without replacing its prior manifest, all three legacy cycle oracles remain exact, and the deep case passes ASan+UBSan. |
+| `CP-040` | **completed** | Audited the complete FNA/CNA XNB Model graph against frozen Model schema 1. Section 17 records the field-level representability proof, the deliberately narrow useful subset, the two demonstrated blockers in the existing Blender cube fixture plus its remaining bounds gate, and the separately reviewable schema-2 requirements. No Model codec, schema, runtime path or byte changed. |
+| `CP-041` | **planned** | Extract one canonical CPU Model/shared-resource decode used by both the existing runtime adapters and `XnbImporter`; transcode only the CP-040 subset through `ImportedModelDocument` -> existing `ModelProcessor` -> existing writer, with exact negative diagnostics and semantic equivalence coverage. |
+| `CP-042` | **planned** | Add conservative abandoned staging-directory scavenging with bounded work, strong name/metadata validation, a stale threshold and an active-owner rule that does not trust PID alone. |
+| `CP-043` | **planned** | Add manifest-proven orphan-output collection after a complete successful build; never infer ownership from an extension and preserve old outputs on failed/corrupt-manifest runs. |
+| `CP-044` | **planned** | Define compiled versus deployment-support artifacts and implement contained, hashed, atomic Song/Video media deployment through the existing manifest/publisher/scheduler. |
+| `CP-045` | **planned** | Harden custom writer fingerprints with explicit stable writer/asset/schema/codec identity and tests proving semantic writer evolution invalidates cached output without RTTI names. |
+| `CP-046` | **planned** | Audit real glTF multi-Model/generated-child cases against the existing graph; implement only deterministic optional output behavior that preserves default direct-glTF bytes. |
+| `CP-047` | **planned** | Audit MonoGame XNB LZ4 framing/dependencies and implement bounded decoding only if the exact variant can be supported safely without a bespoke unproven codec. |
+| `CP-048` | **planned** | Fix the MinGW `wmain` entry-point link seam if locally owned, then close the continuation with portability, sanitizer, determinism, security, CMake/C-API and documentation verification. |
 
 Tasks are intentionally vertical/coherent. The ledger is revised when implementation evidence makes
 the ordering wrong; it is not a promise to build speculative abstractions.
@@ -1417,3 +1426,70 @@ live-owner protocol; orphan-output collection needs an explicit ownership/retent
 Song/Video support-file copying needs deployment semantics; and glTF child/multi-Model output or
 custom schema-version fingerprints change component contracts. None was guessed as a side effect
 of the XNB phase.
+
+---
+
+## 17. XNB Model representability (`CP-040`)
+
+This audit compares FNA's complete `ModelReader`, `VertexBufferReader`, `IndexBufferReader`,
+`VertexDeclarationReader` and stock-effect readers with CNA's runtime readers, `CnbModelData`,
+Model schema 1 codec, CNJ/glTF processor, and CNB runtime adapter. The conclusion is deliberately
+not "Model fits": a useful subset fits only when every value omitted by schema 1 is either a
+proved runtime default or exactly recoverable from retained data.
+
+| XNB field or semantic | Model schema-1 equivalent | Classification | Required rule |
+|---|---|---|---|
+| bone name | `CnbModelBone::name` | **EXACT** | preserve UTF-8 name |
+| bone transform | `CnbModelBone::transform` | **SUPPORTED-SUBSET** | every non-root transform is exact; bone 0 must be identity because the current CNB runtime adapter intentionally ignores its stored transform |
+| parent and child lists | `CnbModelBone::parent` | **NORMALIZABLE** | source lists must agree, have one root, and already be parent-before-child; CNB reconstructs children from parents |
+| root bone | implicit bone 0 | **SUPPORTED-SUBSET** | serialized root must be bone 0 |
+| mesh name / parent bone | `CnbModelMesh::name` / `parentBone` | **EXACT** | parent must be valid |
+| mesh bounding sphere | recomputed by CNB runtime from retained positions | **SUPPORTED-SUBSET** | serialized sphere must equal the deterministic recomputation; otherwise the public property would change |
+| mesh, part and Model `Tag` | none | **UNSUPPORTED** | all three tag levels must be null; arbitrary CLR graphs are never persisted |
+| part primitive count | `CnbModelPart::primitiveCount` | **EXACT** | XNB Model topology is triangle-list and count must match the retained indices |
+| `VertexOffset`, `StartIndex`, `NumVertices` | none; CNB creates one whole buffer per part at offset zero | **SUPPORTED-SUBSET** | both offsets must be zero and `NumVertices` must cover the complete referenced vertex buffer |
+| vertex bytes / count / stride | `vertexBytes`, `vertexCount`, `vertexStride` | **SUPPORTED-SUBSET** | byte sizes must be exact and bounded |
+| vertex declaration elements | not serialized; runtime infers one fixed layout from stride | **SUPPORTED-SUBSET** | usage, usage index, format and offset must exactly equal CNA's canonical table for that stride; no element is dropped or repacked |
+| canonical declarations | inferred stride table | **EXACT within subset** | admitted strides are 16, 20, 24, 32, 48, 52, 56, 60, 68, 76 and 80 only when every declared element exactly matches that stride's table row |
+| 16/32-bit index bytes | `indexElementSize`, `indexBytes`, `indexCount` | **EXACT** | payload length must be a multiple of 2/4 and every index must be in range |
+| shared vertex/index buffers | no sharing identity; one buffer is built per CNB part | **SUPPORTED-SUBSET** | each shared buffer may be referenced by exactly one part; otherwise public pointer identity and mutation behavior change |
+| `BasicEffect` type | `CnbEffectKind::BasicEffect` | **EXACT within subset** | no other effect reader in the initial slice |
+| diffuse/emissive/specular colour and alpha | existing material factors | **NORMALIZABLE** | the CNB runtime adapter must apply these existing schema-1 fields to BasicEffect; no wire change is needed |
+| `BasicEffect.SpecularPower` | none | **SUPPORTED-SUBSET** | must equal the constructed XNA/CNA default 16 exactly |
+| BasicEffect texture and `TextureEnabled` | base-colour XREF; enabled iff non-null | **NORMALIZABLE** | relative logical reference must remain contained and resolve to the same content identity |
+| `VertexColorEnabled` | part flag | **EXACT** | declaration must also contain the matching canonical colour element when enabled |
+| World/View/Projection, lighting rig, fog, per-pixel preference | not serialized by `BasicEffectReader` | **RUNTIME-ONLY** | both paths retain constructor defaults; callers set draw-time state after load |
+| shared BasicEffect identity | no sharing identity; one effect is built per CNB part | **SUPPORTED-SUBSET** | each effect resource may be referenced by exactly one part |
+| AlphaTest/DualTexture/EnvironmentMap/Skinned/custom `Effect` graphs | partial or no schema concepts | **UNSUPPORTED** | reject by exact reader identity until every field and sharing behavior is proved |
+| external texture object loading | CNB XREF and `ContentManager` cache | **NORMALIZABLE** | store the resolved root-relative logical asset name, never source bytes or an embedded XNB |
+| GPU object construction | none in canonical data | **RUNTIME-ONLY** | compiler parses declarations/buffers/effects as CPU data only |
+
+The existing real `BlenderDefaultCube.xnb` is a valuable negative fixture, not a positive oracle.
+It cannot pass schema 1 losslessly because (1) stride 24 means Position+Normal in that file while
+CNA's schema-1 runtime infers Position+Color+TextureCoordinate for stride 24, (2) its
+`SpecularPower` is `9.607843399047852` rather than the only representable value 16. Independently,
+its serialized mesh sphere is not itself carried by schema 1 and would also have to pass the
+recomputation equality gate before conversion. No one of those conditions may be silently ignored.
+
+### 17.1 Initial useful subset
+
+`CP-041` may support uncompressed or already-supported LZX XNB v4/v5 Models containing a valid
+parent-before-child hierarchy rooted at bone 0, identity bone-0 transform, null tags, triangle-list
+parts that consume unique whole vertex/index buffers, an exact canonical CNA vertex declaration,
+16- or 32-bit indices, and one uniquely referenced `BasicEffect` per part with default
+`SpecularPower`. Texture references, colours, alpha and vertex-colour enablement are retained
+through fields schema 1 already has. Every failed condition names the mesh/part/resource and the
+first incompatible semantic. This is narrow but useful for conventional
+`VertexPositionNormalTexture` and other already-native CNA layouts; it is not described as general
+XNA Model compatibility.
+
+### 17.2 Possible Model schema 2 requirements (not authorized here)
+
+A future schema able to claim general XNB Model fidelity would need, at minimum: the complete
+vertex declaration (usage, usage index, format, offset and stride); part vertex/index windows;
+serialized mesh bounding spheres; explicit root-bone identity plus preservation of root transform;
+a stable policy for supported tag values; a resource table capable of distinguishing shared from
+distinct buffers/effects; complete discriminated stock-effect records including SpecularPower,
+SkinnedEffect weights, alpha-test and environment-map fields; and a deliberate policy for embedded
+custom Effect bytecode versus external Effect assets. Those requirements are documented for a
+separate architectural review. `CP-040` neither changes nor reinterprets frozen Model schema 1.

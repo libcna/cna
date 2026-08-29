@@ -751,11 +751,17 @@ supported built-in XNB
 | `SongReader` | Song | path/duration metadata plus contained external media dependency/XREF |
 | `VideoReader` | Video | FNA String/Int32/Single object-reference graph plus contained external media dependency/XREF |
 
-`ModelReader` is explicitly unsupported. Its real graph uses shared VertexBuffer, IndexBuffer and
-BasicEffect resources and performs GPU construction; the current native Model schema cannot prove
-lossless preservation of arbitrary effect/tag graphs. Every other custom/unknown root is also
-rejected with its normalized reader identity. Shared-resource graphs and generic external object
-references are not claimed merely because supported roots use fixed nested built-in readers.
+`ModelReader` remains unsupported until `CP-041` lands. The completed `CP-040` field audit proves a
+narrow schema-1 subset: canonical CNA vertex declarations only; triangle-list parts consuming
+unique whole buffers; bone 0 as an identity root; null tags; unique BasicEffect resources with
+default `SpecularPower`; and serialized mesh bounds equal to the bounds deterministically rebuilt
+from retained positions. Colours, alpha, vertex-colour enablement and contained texture references
+fit existing schema-1 fields. Arbitrary declarations, buffer/effect sharing, part windows,
+non-default SpecularPower, other effect types, non-null tags, other root bones or non-reproducible
+bounding spheres do not fit and must fail rather than degrade. The real Blender cube fixture is
+outside the subset because its stride-24 Position+Normal declaration conflicts with CNA's
+stride-24 canonical layout and its SpecularPower is non-default. Every other custom/unknown root
+is rejected with its normalized reader identity.
 
 None and LZX compression and XNB versions 4/5 are supported through CNA's existing container code.
 LZ4 is recognized but CNA has no decoder, so it fails clearly. The existing 16 platform header
