@@ -1,7 +1,7 @@
 # CNA compilation-performance plan
 
 > **Status:** ACTIVE — the safe build-policy foundation is complete; measured follow-up work is
-> pending. This plan turns [`misc/cnacomp.md`](misc/cnacomp.md) into an executable task sequence.
+> pending. This plan turns [`misc/cnacomp.md`](../misc/cnacomp.md) into an executable task sequence.
 >
 > **Goal:** shorten the edit/build/test loop without weakening XNA/FNA compatibility, diagnostics,
 > platform coverage, installed-package compatibility, or reproducibility.

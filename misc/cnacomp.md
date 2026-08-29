@@ -2,7 +2,8 @@
 
 > **Historical baseline:** this audit describes the tree before commit `b3db5701b`
 > (`build: optimize compilation profiles and flag policy`). The implemented foundation and the
-> remaining measured optimization work are tracked in [`../plan_compilation.md`](../plan_compilation.md).
+> remaining measured optimization work is tracked in
+> [`../plan/plan_compilation.md`](../plan/plan_compilation.md).
 
 Date: 2026-08-28
 Scope: local build-system audit only. No CNA source, CMake, preset, or CI configuration was changed.

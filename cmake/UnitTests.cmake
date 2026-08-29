@@ -272,7 +272,7 @@ if(CNA_BUILD_TESTS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Renderers/Fna3d/.*\\.cpp$")
     endif()
 
-    # plan_compilation.md COMP-002: compile each module's test sources through one object library.
+    # plan/plan_compilation.md COMP-002: compile each module's test sources through one object library.
     # The legacy CnaTests executable consumes every group, preserving its complete test inventory,
     # while focused executables consume one group and avoid compiling unrelated test translation
     # units. Object libraries are intentional: ordinary static archives can discard GoogleTest's
