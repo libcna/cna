@@ -712,3 +712,87 @@ TEST(ContentPipelineCliTest, SongSingleAndDirectoryBuildsPreserveExternalMediaSe
     EXPECT_NE(changed.find("[SKIP] Textures/wall"), std::string::npos) << changed;
     EXPECT_EQ(ReadBytes(songOutput), songBytes);
 }
+
+TEST(ContentPipelineCliTest, VideoBuildRequiresExplicitFrameMetadata)
+{
+    ScratchDirectory scratch("video_metadata_required");
+    const std::filesystem::path source = scratch.Path() / "intro.mp4";
+    const std::filesystem::path output = scratch.Path() / "intro.cnb";
+    WriteBytes(source, {0u, 0u, 0u, 24u, 'f', 't', 'y', 'p'});
+
+    std::string log;
+    EXPECT_NE(RunTool({"build", source.string(), "-o", output.string()}, log), 0);
+    EXPECT_NE(log.find("Process (CNA.VideoProcessor)"), std::string::npos) << log;
+    EXPECT_NE(log.find("requires u64 parameter 'width'"), std::string::npos) << log;
+    EXPECT_FALSE(std::filesystem::exists(output));
+}
+
+TEST(ContentPipelineCliTest, VideoSingleAndDirectoryBuildsUseConfiguredMetadataAndXref)
+{
+    ScratchDirectory scratch("video_routes");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    const std::filesystem::path media = source / "Movies" / "intro.mp4";
+    WriteBytes(media, {0u, 0u, 0u, 24u, 'f', 't', 'y', 'p'});
+    WriteBytes(source / "Textures" / "wall.png", MakePng(2, 2));
+    const std::string metadata =
+        R"json("durationMs":{"type":"u64","value":"42000"},"width":{"type":"u64","value":"1920"},"height":{"type":"u64","value":"1080"},"framesPerSecond":{"type":"f64","value":"29.97"},"soundtrackType":{"type":"u64","value":"2"})json";
+    WriteText(source / Pipeline::ContentBuildConfigurationFileName,
+              std::string(R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"Movies/intro.mp4":{"parameters":{)json") +
+                  metadata + "}}}}");
+    WriteText(media.parent_path() / Pipeline::ContentBuildConfigurationFileName,
+              std::string(R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"intro.mp4":{"parameters":{"streamReference":{"type":"string","value":"Movies/intro.mp4"},)json") +
+                  metadata + "}}}}");
+
+    const std::filesystem::path single = scratch.Path() / "Single" / "intro.cnb";
+    std::string singleLog;
+    ASSERT_EQ(RunTool({"build", media.string(), "-o", single.string()}, singleLog), 0)
+        << singleLog;
+    const Cnb::CnbVideoData singleVideo = Cnb::DecodeVideoFromCnb(
+        Cnb::CnbDocument::Parse(ReadBytes(single), "single Video route"));
+    EXPECT_EQ(singleVideo.streamReference, "Movies/intro.mp4");
+    EXPECT_EQ(singleVideo.width, 1920u);
+    EXPECT_EQ(singleVideo.height, 1080u);
+    EXPECT_FLOAT_EQ(singleVideo.framesPerSecond, 29.97f);
+    EXPECT_EQ(singleVideo.soundtrackType, 2u);
+
+    std::string first;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, first), 0) << first;
+    EXPECT_NE(first.find("[BUILD] Movies/intro"), std::string::npos) << first;
+    EXPECT_NE(first.find("[BUILD] Textures/wall"), std::string::npos) << first;
+    const std::filesystem::path videoOutput = output / "Movies" / "intro.cnb";
+    EXPECT_TRUE(std::filesystem::is_regular_file(videoOutput));
+    EXPECT_FALSE(std::filesystem::exists(output / "Movies" / "intro.mp4"));
+
+    const std::vector<std::uint8_t> videoBytes = ReadBytes(videoOutput);
+    Cnb::CnbVideoData expected;
+    expected.streamReference = "Movies/intro.mp4";
+    expected.durationMs = 42000u;
+    expected.width = 1920u;
+    expected.height = 1080u;
+    expected.framesPerSecond = 29.97f;
+    expected.soundtrackType = 2u;
+    EXPECT_EQ(videoBytes, Cnb::EncodeVideoToCnb(expected, "Movies/intro"));
+
+    const std::vector<std::uint8_t> manifestBytes =
+        ReadBytes(output / Pipeline::ContentBuildManifestFileName);
+    const Pipeline::ContentBuildManifest manifest = Pipeline::ContentBuildManifest::Parse(
+        std::string(manifestBytes.begin(), manifestBytes.end()));
+    const Pipeline::ContentBuildManifestEntry* entry = manifest.Find("Movies/intro");
+    ASSERT_NE(entry, nullptr);
+    ASSERT_EQ(entry->runtimeReferences.size(), 1u);
+    EXPECT_EQ(entry->runtimeReferences.front().logicalName, "Movies/intro.mp4");
+
+    std::string second;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, second), 0) << second;
+    EXPECT_NE(second.find("[SKIP] Movies/intro"), std::string::npos) << second;
+    EXPECT_NE(second.find("[SKIP] Textures/wall"), std::string::npos) << second;
+
+    WriteBytes(media, {0u, 0u, 0u, 24u, 'f', 't', 'y', 'p', 9u});
+    std::string changed;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, changed), 0)
+        << changed;
+    EXPECT_NE(changed.find("[BUILD] Movies/intro"), std::string::npos) << changed;
+    EXPECT_NE(changed.find("[SKIP] Textures/wall"), std::string::npos) << changed;
+    EXPECT_EQ(ReadBytes(videoOutput), videoBytes);
+}

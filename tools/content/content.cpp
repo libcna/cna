@@ -21,6 +21,7 @@
 #include "CNA/Content/Pipeline/SongContentPipeline.hpp"
 #include "CNA/Content/Pipeline/SoundEffectContentPipeline.hpp"
 #include "CNA/Content/Pipeline/Texture2DContentPipeline.hpp"
+#include "CNA/Content/Pipeline/VideoContentPipeline.hpp"
 #include "CNA/Internal/ContentPath.hpp"
 #include "CnaToolAtomicWrite.hpp"
 
@@ -224,6 +225,7 @@ namespace
         Pipeline::RegisterTexture2DContentPipeline(*registry);
         Pipeline::RegisterSoundEffectContentPipeline(*registry);
         Pipeline::RegisterSongContentPipeline(*registry);
+        Pipeline::RegisterVideoContentPipeline(*registry);
         Pipeline::RegisterModelContentPipeline(*registry);
         Pipeline::RegisterCnjContentPipeline(*registry);
         return registry;

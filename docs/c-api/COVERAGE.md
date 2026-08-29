@@ -21,7 +21,7 @@ subset; `planned` is not coverage and names the task that owns its design; and
 behavior to expose. Nothing is treated as implemented merely because a related C
 operation exists.
 
-Snapshot: **546 headers**, **9212 symbols**, **8352 implemented**, **15 partial**, **381 planned**, **464 not applicable**. Explicitly excluded internal/detail headers: **130**.
+Snapshot: **547 headers**, **9240 symbols**, **8352 implemented**, **15 partial**, **409 planned**, **464 not applicable**. Explicitly excluded internal/detail headers: **130**.
 
 Regenerate with:
 
@@ -39,7 +39,7 @@ python3 tools/c-api/generate_coverage_inventory.py --check
 | Module | Headers | Symbols | Implemented | Partial | Planned | N/A |
 |---|---:|---:|---:|---:|---:|---:|
 | `audio` | 22 | 310 | 217 | 0 | 0 | 93 |
-| `content` | 43 | 981 | 561 | 10 | 381 | 29 |
+| `content` | 44 | 1009 | 561 | 10 | 409 | 29 |
 | `core` | 15 | 168 | 162 | 0 | 0 | 6 |
 | `devices` | 18 | 209 | 182 | 0 | 0 | 27 |
 | `devices-ext` | 17 | 84 | 79 | 0 | 0 | 5 |
@@ -1506,6 +1506,39 @@ python3 tools/c-api/generate_coverage_inventory.py --check
 | `CPP-43C69C44A4EB` | 113 | public method | `CNA::Content::Pipeline::Texture2DContentWriter::InputType() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
 | `CPP-6BD952168C51` | 122 | public method | `CNA::Content::Pipeline::Texture2DContentWriter::Write(const ContentValue &input, const std::string &logicalName) const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
 | `CPP-462F396F45E9` | 131 | public function | `CNA::Content::Pipeline::RegisterTexture2DContentPipeline(ContentPipelineRegistry &registry)` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+
+#### `modules/content/include/CNA/Content/Pipeline/VideoContentPipeline.hpp`
+
+| ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
+|---|---:|---|---|---|---|---|
+| `CPP-EA0A77AEFB08` | 12 | public field | `CNA::Content::Pipeline::ImportedVideoSourceType = "CNA.Content.Pipeline.ImportedVideoSource"` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-E02B06DE5DF5` | 16 | public field | `CNA::Content::Pipeline::ProcessedVideoType = "CNA.Content.Cnb.VideoData"` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-04E168448FF2` | 19 | public field | `CNA::Content::Pipeline::VideoStreamReferenceParameter = "streamReference"` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-4811FF2B6B4F` | 22 | public field | `CNA::Content::Pipeline::VideoDurationMsParameter = "durationMs"` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-F899E278C934` | 25 | public field | `CNA::Content::Pipeline::VideoWidthParameter = "width"` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-EC4A5F69E300` | 28 | public field | `CNA::Content::Pipeline::VideoHeightParameter = "height"` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-4CA85284C7F2` | 31 | public field | `CNA::Content::Pipeline::VideoFramesPerSecondParameter = "framesPerSecond"` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-1CE5D2708271` | 34 | public field | `CNA::Content::Pipeline::VideoSoundtrackTypeParameter = "soundtrackType"` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-51B3BE4F4FDA` | 37 | public struct | `CNA::Content::Pipeline::ImportedVideoSource` | Planned `CNA_*` POD or validated handle design (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-ED8840C45624` | 40 | public field | `CNA::Content::Pipeline::ImportedVideoSource::streamReference` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-DC8592E32DE1` | 43 | public field | `CNA::Content::Pipeline::ImportedVideoSource::byteSize = 0u` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-3655EF2480ED` | 46 | public operator | `CNA::Content::Pipeline::ImportedVideoSource::operator==(const ImportedVideoSource &) const =default` | Planned named `cna_*` value operation (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-1A930A9B8699` | 50 | public class | `CNA::Content::Pipeline::VideoImporter` | Planned `CNA_*` POD or validated handle design (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-E6BE47B65B30` | 54 | public method | `CNA::Content::Pipeline::VideoImporter::Identity() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-F939AB23C970` | 57 | public method | `CNA::Content::Pipeline::VideoImporter::SourceExtensions() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-2A5833405E5D` | 63 | public method | `CNA::Content::Pipeline::VideoImporter::OutputTypes() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-C14F77B0E312` | 71 | public method | `CNA::Content::Pipeline::VideoImporter::Import(ContentImporterContext &context) const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-994ACEB732A5` | 75 | public class | `CNA::Content::Pipeline::VideoProcessor` | Planned `CNA_*` POD or validated handle design (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-44E809CC4148` | 79 | public method | `CNA::Content::Pipeline::VideoProcessor::Identity() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-757FD7BE7DBF` | 82 | public method | `CNA::Content::Pipeline::VideoProcessor::InputType() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-186B7313FFA5` | 85 | public method | `CNA::Content::Pipeline::VideoProcessor::OutputType() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-068C6788F844` | 92 | public method | `CNA::Content::Pipeline::VideoProcessor::ValidateParameters(const ContentProcessorParameters &parameters) const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-A211A0973382` | 101 | public method | `CNA::Content::Pipeline::VideoProcessor::Process(const ContentValue &input, ContentProcessorContext &context) const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-E6CA27764267` | 106 | public class | `CNA::Content::Pipeline::VideoContentWriter` | Planned `CNA_*` POD or validated handle design (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-1EBE1DE40602` | 110 | public method | `CNA::Content::Pipeline::VideoContentWriter::Identity() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-B5C6A35DB0F7` | 113 | public method | `CNA::Content::Pipeline::VideoContentWriter::InputType() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-17F9659B394D` | 122 | public method | `CNA::Content::Pipeline::VideoContentWriter::Write(const ContentValue &input, const std::string &logicalName) const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-9331D2D6C2A1` | 131 | public function | `CNA::Content::Pipeline::RegisterVideoContentPipeline(ContentPipelineRegistry &registry)` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
 
 #### `modules/content/include/Microsoft/Xna/Framework/Content/ContentLoadException.hpp`
 

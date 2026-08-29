@@ -208,7 +208,8 @@ effective parameter participates in the build fingerprint. Library callers set p
 `ContentBuildRequest`; the optional strict `.cna-content.json` maps the same typed values into CLI
 builds. `TextureProcessor` accepts the string parameter `colorKey` in `R,G,B` decimal form.
 `SongProcessor` accepts `streamReference` and `name` strings plus a `durationMs` u64. Texture2D CNJ
-can also author its existing color-key field.
+can also author its existing color-key field. `VideoProcessor` requires u64 `width`/`height` and
+f64 `framesPerSecond`; `streamReference`, u64 `durationMs`, and u64 `soundtrackType` are optional.
 
 ### ContentProcessorContext
 
@@ -233,6 +234,7 @@ Every built-in writer is a small adapter:
 Texture2DContentWriter    -> EncodeTexture2DToCnb()
 SoundEffectContentWriter -> EncodeSoundEffectToCnb()
 SongContentWriter        -> EncodeSongToCnb()
+VideoContentWriter       -> EncodeVideoToCnb()
 ModelContentWriter       -> EncodeModelToCnb()
 Texture3DContentWriter    -> EncodeTexture3DToCnb()
 TextureCubeContentWriter -> EncodeTextureCubeToCnb()
@@ -265,6 +267,7 @@ canonical type name, and loader through `ContentManager::RegisterCnbLoaderEXT<T>
 | `.png`, `.jpg`, `.jpeg`, `.bmp`, `.tga`, `.gif`, `.psd`, `.hdr`, `.pic`, `.pnm` | `CNA.ImageImporter/1` | `ImportedImage` | `CNA.TextureProcessor/1` | `CNA.Texture2DContentWriter/1` |
 | `.wav` | `CNA.WavImporter/1` | `ImportedSound` | `CNA.SoundEffectProcessor/1` | `CNA.SoundEffectContentWriter/1` |
 | `.mp3`, `.ogg`, `.oga`, `.qoa`, `.flac`, `.opus`, `.aac`, `.wma` | `CNA.SongImporter/1` | `ImportedSongSource` | `CNA.SongProcessor/1` | `CNA.SongContentWriter/1` |
+| `.mp4`, `.ogv`, `.webm`, `.mkv`, `.avi`, `.mov` | `CNA.VideoImporter/1` | `ImportedVideoSource` | `CNA.VideoProcessor/1` | `CNA.VideoContentWriter/1` |
 | `.gltf`, `.glb` | `CNA.GltfImporter/1` | `ImportedModelDocument` | `CNA.ModelProcessor/1` | `CNA.ModelContentWriter/1` |
 | `.cnj` Texture2D | `CNA.CnjImporter/1` | `ImportedImage` | same texture processor | same Texture2D writer |
 | `.cnj` SoundEffect | `CNA.CnjImporter/1` | `ImportedSound` | same sound processor | same SoundEffect writer |
@@ -276,18 +279,20 @@ canonical type name, and loader through `ContentManager::RegisterCnbLoaderEXT<T>
 | `.cnj` AnimationClip | `CNA.CnjImporter/1` | `ImportedAnimationClip` | `CNA.AnimationClipProcessor/1` | `CNA.AnimationClipContentWriter/1` |
 
 DDS is currently a contained TextureCube CNJ sidecar, not a direct default route. `.wav` remains
-the unambiguous SoundEffect route; it is not also registered as Song. Video has a frozen CNB codec
-and legacy producer but does not yet have a source importer in `cna-content`. Effect remains
-intentionally outside this project until CNA's shader/FX architecture is settled.
+the unambiguous SoundEffect route; it is not also registered as Song. `.ogg` remains the
+unambiguous Song route even though FNA's legacy Video reader can probe one; ordinary Video formats
+use the non-colliding route above. Effect remains intentionally outside this project until CNA's
+shader/FX architecture is settled.
 
-### Streaming Song sources
+### Streaming Song and Video sources
 
-`SongImporter` never decodes or buffers the audio payload. It validates that the primary source is
-non-empty, retains its normalized root-relative path as the default stream reference, and relies on
-the normal primary-source fingerprint for byte dependency tracking. `SongProcessor` produces only
-`CnbSongData`, records the media path as a runtime reference with unconstrained asset type, and the
-writer delegates to `EncodeSongToCnb()`. This keeps build dependencies and runtime XREFs separate
-while preserving bounded compiler memory and HEADLESS operation.
+`SongImporter` and `VideoImporter` never decode or buffer the media payload. They validate that the
+primary source is non-empty, retain its normalized root-relative path as the default stream
+reference, and rely on the normal primary-source fingerprint for byte dependency tracking. Their
+processors produce only `CnbSongData`/`CnbVideoData`, record the media path as a runtime reference
+with unconstrained asset type, and their writers delegate to the existing media encoders. This
+keeps build dependencies and runtime XREFs separate while preserving bounded compiler memory and
+HEADLESS operation.
 
 Duration cannot be inferred without introducing a media decoder into the build tool, so it defaults
 to zero (unknown). The optional display name defaults empty, which makes the runtime use the asset
@@ -299,6 +304,21 @@ name. Both can be authored per asset:
     "name": { "type": "string", "value": "Main Theme" },
     "durationMs": { "type": "u64", "value": "185000" },
     "streamReference": { "type": "string", "value": "Music/theme.ogg" }
+  }
+}
+```
+
+Video frame dimensions and rate cannot safely default, so the route refuses to build until they are
+configured. Duration remains zero when unknown, and soundtrack type defaults to `0` (Music):
+
+```json
+{
+  "parameters": {
+    "durationMs": { "type": "u64", "value": "42000" },
+    "width": { "type": "u64", "value": "1920" },
+    "height": { "type": "u64", "value": "1080" },
+    "framesPerSecond": { "type": "f64", "value": "29.97" },
+    "soundtrackType": { "type": "u64", "value": "2" }
   }
 }
 ```
