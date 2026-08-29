@@ -37,10 +37,13 @@ if(CNA_BUILD_EXAMPLES)
             target_link_libraries(cna_demo_sound PRIVATE SDL3::SDL3main)
         endif()
         add_custom_command(TARGET cna_demo_sound POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${CMAKE_CURRENT_SOURCE_DIR}/demo_sound/Content"
-                "$<TARGET_FILE_DIR:cna_demo_sound>/Content"
-            COMMENT "Copying Content next to cna_demo_sound executable")
+            COMMAND ${CMAKE_COMMAND}
+                -DCNA_COPY_SOURCE=${CMAKE_CURRENT_SOURCE_DIR}/demo_sound/Content
+                -DCNA_COPY_DESTINATION=$<TARGET_FILE_DIR:cna_demo_sound>/Content
+                -DCNA_COPY_LOCK=${CMAKE_BINARY_DIR}/CMakeFiles/cna-example-content.lock
+                -P ${CMAKE_SOURCE_DIR}/cmake/CopyDirectoryLocked.cmake
+            COMMENT "Copying Content next to cna_demo_sound executable"
+            VERBATIM)
         if(WIN32)
             set_target_properties(cna_demo_sound PROPERTIES WIN32_EXECUTABLE TRUE)
             cna_copy_sdl_runtime(cna_demo_sound)

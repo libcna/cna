@@ -48,7 +48,7 @@ static std::vector<VertexPositionColor> makeVerts(int count)
     std::vector<VertexPositionColor> v(count);
     for (int i = 0; i < count; ++i) {
         v[i].Position = Vector3(static_cast<float>(i), 0.f, 0.f);
-        v[i].Color    = Color(static_cast<std::uint8_t>(i * 20), 0, 0, 255);
+        v[i].Color    = Color(i * 20, 0, 0, 255);
     }
     return v;
 }

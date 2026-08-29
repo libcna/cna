@@ -12,7 +12,7 @@
 namespace Microsoft::Xna::Framework::Graphics {
 class ModelMeshPart;
 class SkinnedModelEXT;
-class VertexElement;
+struct VertexElement;
 class SpriteBatch;
 class Effect;
 class OcclusionQuery;

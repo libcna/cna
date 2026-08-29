@@ -8,6 +8,9 @@
 # The CROSSCOMPILING_EMULATOR chain further down is deliberately NOT converted: a target carries one
 # emulator property, so it can only ever describe one renderer, and the default is the honest choice.
 
+option(CNA_ENABLE_PCH
+    "Enable the measured precompiled-header pilot for the content unit-test object target" OFF)
+
 if(CNA_BUILD_TESTS)
     # Task DEVPERF-001: fail fast with an actionable message rather than
     # CMake's own generic "add_subdirectory given source ... which is not an
@@ -272,14 +275,161 @@ if(CNA_BUILD_TESTS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Renderers/Fna3d/.*\\.cpp$")
     endif()
 
-    add_executable(CnaTests
-            ${CNA_TEST_SOURCES}
-    )
+    # plan/plan_compilation.md COMP-002: compile each module's test sources through one object library.
+    # The legacy CnaTests executable consumes every group, preserving its complete test inventory,
+    # while focused executables consume one group and avoid compiling unrelated test translation
+    # units. Object libraries are intentional: ordinary static archives can discard GoogleTest's
+    # self-registering objects when no symbol is referenced directly.
+    add_library(cna_test_build_config INTERFACE)
+    target_link_libraries(cna_test_build_config INTERFACE
+        SHARP_RUNTIME
+        gtest)
+
+    # CnaTests historically compiled through the CNA umbrella and therefore saw every public
+    # module include root. A few contract tests intentionally include a second subsystem's public
+    # header without calling into that subsystem. Preserve that compile-only visibility without
+    # linking/building every module into every focused executable.
+    foreach(_cna_test_include_module IN ITEMS
+            audio content core devices devices-ext gamer-services graphics graphics-ext input math
+            media net platform runtime storage)
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/modules/${_cna_test_include_module}/include")
+            target_include_directories(cna_test_build_config INTERFACE
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/${_cna_test_include_module}/include")
+        endif()
+    endforeach()
+
+    # The focused executables link only their owning module's public dependency closure. The
+    # renderer-policy and cross-module groups retain the CNA umbrella because their purpose is to
+    # exercise the aggregate. This makes a clean CnaMathTests/CnaCoreTests build genuinely focused,
+    # rather than merely omitting unrelated test sources while still building every CNA module.
+    set(CNA_TEST_GROUP_DEPENDENCY_audio cna_audio cna_input cna_media)
+    set(CNA_TEST_GROUP_DEPENDENCY_content cna_content)
+    set(CNA_TEST_GROUP_DEPENDENCY_core cna_core)
+    set(CNA_TEST_GROUP_DEPENDENCY_devices cna_devices)
+    set(CNA_TEST_GROUP_DEPENDENCY_devices_ext cna_devices_ext)
+    set(CNA_TEST_GROUP_DEPENDENCY_gamer_services CNA_GamerServices)
+    set(CNA_TEST_GROUP_DEPENDENCY_graphics cna_graphics_core)
+    set(CNA_TEST_GROUP_DEPENDENCY_graphics_ext cna_graphics_ext)
+    set(CNA_TEST_GROUP_DEPENDENCY_input cna_input)
+    set(CNA_TEST_GROUP_DEPENDENCY_integration CNA)
+    set(CNA_TEST_GROUP_DEPENDENCY_math cna_math)
+    set(CNA_TEST_GROUP_DEPENDENCY_media cna_media)
+    set(CNA_TEST_GROUP_DEPENDENCY_net CNA_Net)
+    set(CNA_TEST_GROUP_DEPENDENCY_platform cna_platform)
+    set(CNA_TEST_GROUP_DEPENDENCY_renderers CNA)
+    set(CNA_TEST_GROUP_DEPENDENCY_runtime cna_runtime)
+    set(CNA_TEST_GROUP_DEPENDENCY_storage cna_storage)
+
+    set(CNA_TEST_FOCUSED_TARGET_audio CnaAudioTests)
+    set(CNA_TEST_FOCUSED_TARGET_content CnaContentTests)
+    set(CNA_TEST_FOCUSED_TARGET_core CnaCoreTests)
+    set(CNA_TEST_FOCUSED_TARGET_devices CnaDevicesTests)
+    set(CNA_TEST_FOCUSED_TARGET_devices_ext CnaDevicesExtTests)
+    set(CNA_TEST_FOCUSED_TARGET_gamer_services CnaGamerServicesTests)
+    set(CNA_TEST_FOCUSED_TARGET_graphics CnaGraphicsTests)
+    set(CNA_TEST_FOCUSED_TARGET_graphics_ext CnaGraphicsExtTests)
+    set(CNA_TEST_FOCUSED_TARGET_input CnaInputModuleTests)
+    set(CNA_TEST_FOCUSED_TARGET_integration CnaIntegrationTests)
+    set(CNA_TEST_FOCUSED_TARGET_math CnaMathTests)
+    set(CNA_TEST_FOCUSED_TARGET_media CnaMediaTests)
+    set(CNA_TEST_FOCUSED_TARGET_net CnaNetTests)
+    set(CNA_TEST_FOCUSED_TARGET_platform CnaPlatformModuleTests)
+    set(CNA_TEST_FOCUSED_TARGET_renderers CnaRendererTests)
+    set(CNA_TEST_FOCUSED_TARGET_runtime CnaRuntimeTests)
+    set(CNA_TEST_FOCUSED_TARGET_storage CnaStorageTests)
+
+    set(_cna_test_groups)
+    foreach(_cna_test_source IN LISTS CNA_TEST_SOURCES)
+        if(_cna_test_source MATCHES "/modules/renderers/")
+            set(_cna_test_group renderers)
+        elseif(_cna_test_source MATCHES "/modules/([^/]+)/tests/")
+            set(_cna_test_group "${CMAKE_MATCH_1}")
+            string(REPLACE "-" "_" _cna_test_group "${_cna_test_group}")
+        else()
+            set(_cna_test_group integration)
+        endif()
+        list(APPEND "CNA_TEST_GROUP_${_cna_test_group}" "${_cna_test_source}")
+        list(APPEND _cna_test_groups "${_cna_test_group}")
+    endforeach()
+    list(REMOVE_DUPLICATES _cna_test_groups)
+    list(SORT _cna_test_groups)
+
+    add_executable(CnaTests)
+    set(CNA_FOCUSED_TEST_TARGETS)
+    foreach(_cna_test_group IN LISTS _cna_test_groups)
+        set(_cna_test_object_target "cna_${_cna_test_group}_test_objects")
+        set(_cna_focused_test_target "${CNA_TEST_FOCUSED_TARGET_${_cna_test_group}}")
+        set(_cna_test_group_dependencies ${CNA_TEST_GROUP_DEPENDENCY_${_cna_test_group}})
+        if(NOT _cna_focused_test_target)
+            message(FATAL_ERROR
+                "No focused test target name is defined for group '${_cna_test_group}'.")
+        endif()
+        foreach(_cna_test_group_dependency IN LISTS _cna_test_group_dependencies)
+            if(NOT TARGET ${_cna_test_group_dependency})
+                message(FATAL_ERROR
+                    "Test group '${_cna_test_group}' requires missing target "
+                    "'${_cna_test_group_dependency}'.")
+            endif()
+        endforeach()
+
+        add_library(${_cna_test_object_target} OBJECT EXCLUDE_FROM_ALL
+            ${CNA_TEST_GROUP_${_cna_test_group}})
+        target_link_libraries(${_cna_test_object_target} PRIVATE
+            cna_test_build_config
+            ${_cna_test_group_dependencies})
+        if(CNA_ENABLE_PCH AND _cna_test_group STREQUAL "content")
+            # COMP-003 deliberately pilots only stable standard-library and GoogleTest headers.
+            # CNA public headers stay textual so editing the framework API does not rebuild a
+            # large project-owned PCH before every content test translation unit can proceed.
+            target_precompile_headers(${_cna_test_object_target} PRIVATE
+                <algorithm>
+                <array>
+                <cstdint>
+                <filesystem>
+                <memory>
+                <optional>
+                <span>
+                <string>
+                <string_view>
+                <unordered_map>
+                <utility>
+                <vector>
+                <gtest/gtest.h>)
+
+            # Safe ccache support for PCH requires relaxed pch_defines/time_macros correctness
+            # checks. CNA does not impose those global tradeoffs, so only this experimental object
+            # target bypasses the inherited launcher; every dependency remains cacheable normally.
+            if(CNA_USE_CCACHE AND CNA_CCACHE_PROGRAM)
+                set_property(TARGET ${_cna_test_object_target} PROPERTY CXX_COMPILER_LAUNCHER "")
+                message(STATUS
+                    "CNA: content-test PCH bypasses ccache; no unsafe sloppiness was enabled")
+            endif()
+        endif()
+        target_sources(CnaTests PRIVATE "$<TARGET_OBJECTS:${_cna_test_object_target}>")
+        set("CNA_TEST_OBJECT_TARGET_${_cna_test_group}" "${_cna_test_object_target}")
+
+        # Focused executables are developer iteration targets, not additional CTest registrations;
+        # the full CnaTests discovery remains the single default suite and is therefore not run
+        # twice in CI.
+        add_executable(${_cna_focused_test_target} EXCLUDE_FROM_ALL
+            "$<TARGET_OBJECTS:${_cna_test_object_target}>")
+        target_link_libraries(${_cna_focused_test_target} PRIVATE
+            cna_test_build_config
+            ${_cna_test_group_dependencies}
+            gtest_main)
+        list(APPEND CNA_FOCUSED_TEST_TARGETS "${_cna_focused_test_target}")
+    endforeach()
+    message(STATUS "CNA: focused unit-test targets: ${CNA_FOCUSED_TEST_TARGETS}")
+
+    target_link_libraries(CnaTests PRIVATE
+        cna_test_build_config
+        CNA
+        gtest_main)
 
     # mingw-w64's <cmath> only exposes M_PI when _USE_MATH_DEFINES is set (unlike glibc, which
     # defines it unconditionally) — a handful of test files use M_PI directly as a reference value.
     if(MINGW)
-        target_compile_definitions(CnaTests PRIVATE _USE_MATH_DEFINES)
+        target_compile_definitions(cna_test_build_config INTERFACE _USE_MATH_DEFINES)
         # Known mingw-w64/GCC PE-COFF toolchain limitation: std::type_info::operator== is emitted
         # as vague linkage (COMDAT) in libstdc++.a, but a test binary this large (many RTTI-using
         # TUs) trips a case where the linker fails to fold it against the identical libstdc++
@@ -306,13 +456,6 @@ if(CNA_BUILD_TESTS)
         target_link_options(CnaTests PRIVATE -sJSPI=1)
     endif()
 
-    target_link_libraries(CnaTests
-            PRIVATE
-            CNA
-            SHARP_RUNTIME
-            gtest_main
-    )
-
     # plans/plan_platform.md PLAT-SDL2-6: SDL3 is a test-fixture dependency here (native renderer and
     # audio fixtures), not a framework one -- CNA's own modules link their platform library
     # privately and conditionally since PLAT-122. Under an SDL2-only selection every source that
@@ -320,7 +463,7 @@ if(CNA_BUILD_TESTS)
     # libraries exporting the same entry points into one process; see
     # cmake/Sdl2OnlyConfiguration.cmake for why that silently invalidates the conformance run.
     if(NOT CNA_SDL2_ONLY_CONFIGURATION)
-        target_link_libraries(CnaTests PRIVATE SDL3::SDL3)
+        target_link_libraries(cna_test_build_config INTERFACE SDL3::SDL3)
     endif()
 
     # The Draco corpus owns one test-only encoder oracle: it recreates the committed compressed
@@ -328,9 +471,11 @@ if(CNA_BUILD_TESTS)
     # library-only Python generator never needs to execute a native tool. Production content code
     # keeps Draco PRIVATE; expose it only to CnaTests when that optional decoder is configured.
     if(CNA_DRACO_AVAILABLE)
+        target_link_libraries(${CNA_TEST_OBJECT_TARGET_content} PRIVATE cna_draco)
+        target_link_libraries(CnaContentTests PRIVATE cna_draco)
         target_link_libraries(CnaTests PRIVATE cna_draco)
         if(NOT CNA_USE_SYSTEM_DRACO)
-            target_compile_definitions(CnaTests PRIVATE CNA_VENDORED_DRACO)
+            target_compile_definitions(${CNA_TEST_OBJECT_TARGET_content} PRIVATE CNA_VENDORED_DRACO)
         endif()
     endif()
 
@@ -363,13 +508,15 @@ if(CNA_BUILD_TESTS)
     # The metal and glide policy suites deliberately compile on every renderer (see their own
     # header comments); their policy headers ride the unconditional header-interface targets
     # those renderer modules always define.
-    target_link_libraries(CnaTests PRIVATE cna_renderer_metal_headers cna_renderer_glide_headers)
+    target_link_libraries(cna_test_build_config INTERFACE
+        cna_renderer_metal_headers
+        cna_renderer_glide_headers)
 
     # GltfImportCoreTests.cpp includes CNA/Internal/GltfImport/GltfImportCore.hpp directly (to call
     # ExtractMesh() without spawning the CLI tool), which itself includes cgltf.h -- CNA's own
     # target_include_directories for that path is PRIVATE (see cmake/CnaLibrary.cmake), so it does
     # not propagate to CnaTests via target_link_libraries and must be added here too.
-    target_include_directories(CnaTests PRIVATE
+    target_include_directories(cna_test_build_config INTERFACE
             ${CMAKE_CURRENT_SOURCE_DIR}/third_party/cgltf
             # plans/plan_runtimerenderer.md RTR-P9-2: shared test-support headers reached by their
             # namespace path (CNA/RendererTestGate.hpp), matching how every module's public headers
@@ -397,7 +544,7 @@ if(CNA_BUILD_TESTS)
     # (fixtures plus the contract assertions every CompiledEffects backend must satisfy). It lives
     # under the top-level tests/ tree because it belongs to no single renderer module -- the point
     # is that a new backend runs the identical contract with only its own device setup.
-    target_include_directories(CnaTests PRIVATE
+    target_include_directories(cna_test_build_config INTERFACE
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/support
     )
 
@@ -414,7 +561,8 @@ if(CNA_BUILD_TESTS)
     # macros and does not disturb the exactly-one invariant GraphicsRendererCompileDefinitionTests
     # asserts.
     foreach(_cna_present_identity IN LISTS CNA_RENDERER_IDENTITIES)
-        target_compile_definitions(CnaTests PRIVATE "CNA_RENDERER_PRESENT_${_cna_present_identity}")
+        target_compile_definitions(cna_test_build_config INTERFACE
+            "CNA_RENDERER_PRESENT_${_cna_present_identity}")
     endforeach()
 
     # ...and each compiled-in renderer's own public include root, for the same reason: those suites
@@ -423,7 +571,7 @@ if(CNA_BUILD_TESTS)
     # the define without the include root just moves the failure from "no tests" to "no such file".
     foreach(_cna_present_dir IN LISTS CNA_RENDERER_DIRS)
         if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${_cna_present_dir}/include")
-            target_include_directories(CnaTests PRIVATE
+            target_include_directories(cna_test_build_config INTERFACE
                 "${CMAKE_CURRENT_SOURCE_DIR}/${_cna_present_dir}/include")
         endif()
     endforeach()
@@ -441,10 +589,18 @@ if(CNA_BUILD_TESTS)
     # without this file having to know which third-party library each family uses.
     foreach(_cna_present_target IN LISTS CNA_RENDERER_TARGETS)
         if(TARGET ${_cna_present_target})
-            target_include_directories(CnaTests PRIVATE
+            target_include_directories(cna_test_build_config INTERFACE
                 "$<TARGET_PROPERTY:${_cna_present_target},INCLUDE_DIRECTORIES>")
         endif()
     endforeach()
+
+    # COMP-001 full-build regression: EasyGL's compiled-effect public headers include
+    # mojoshader.h. The focused object groups copy renderer include directories above, but include
+    # directories alone do not carry MojoShader's required public compile definitions (notably
+    # MOJOSHADER_NO_VERSION_INCLUDE for its ungenerated source-tree version header).
+    if(CNA_EASYGL_COMPILED_EFFECTS AND TARGET cna_mojoshader)
+        target_link_libraries(cna_test_build_config INTERFACE cna_mojoshader)
+    endif()
 
     # REMED-GFX-054's WebGPU-only IndexBuffer regression opens native error scopes around the
     # public operation. CNA's renderer intentionally keeps wgpu-native PRIVATE, so expose it only
@@ -456,11 +612,11 @@ if(CNA_BUILD_TESTS)
     # generated one it pulls in. The include root alone is not the whole surface a family's suites
     # compile against; its switches are part of it.
     if("FNA3D" IN_LIST CNA_RENDERER_IDENTITIES AND TARGET cna_fna3d)
-        target_link_libraries(CnaTests PRIVATE cna_fna3d)
+        target_link_libraries(cna_test_build_config INTERFACE cna_fna3d)
     endif()
 
     if("WEBGPU" IN_LIST CNA_RENDERER_IDENTITIES)
-        target_link_libraries(CnaTests PRIVATE WebGPU::WebGPU)
+        target_link_libraries(cna_test_build_config INTERFACE WebGPU::WebGPU)
     endif()
 
     # plans/plan_magnum.md MAGNUM-40: the MAGNUM renderer's own tests exercise its XNA-ordinal -> Magnum-enum
@@ -468,14 +624,16 @@ if(CNA_BUILD_TESTS)
     # Magnum PRIVATE on the renderer target (same discipline as wgpu-native above), so it is exposed
     # to this test executable only, and only in the Magnum configuration.
     if("MAGNUM" IN_LIST CNA_RENDERER_IDENTITIES)
-        target_link_libraries(CnaTests PRIVATE Magnum::GL Magnum::Magnum)
+        target_link_libraries(cna_test_build_config INTERFACE Magnum::GL Magnum::Magnum)
     endif()
 
     # plans/plan_diligent.md DILIGENT-15: DiligentDeviceSelectionTests.cpp includes the renderer header,
     # which includes DiligentCore's own headers. cna_link_diligent() keeps those PRIVATE to the
     # renderer target (same discipline as WebGPU just above), so expose them here too.
     if("DILIGENT" IN_LIST CNA_RENDERER_IDENTITIES)
+        cna_link_diligent(${CNA_TEST_OBJECT_TARGET_renderers})
         cna_link_diligent(CnaTests)
+        cna_link_diligent(CnaRendererTests)
     endif()
 
     if(CNA_ENABLE_NET)
@@ -483,27 +641,26 @@ if(CNA_BUILD_TESTS)
     endif()
 
     if(TARGET cna_net_two_process_harness)
-        # Building CnaTests must also build the harness it spawns at test time (they're separate
-        # executables, so CMake won't infer this dependency on its own), and the orchestrator test
-        # needs the harness's real built path baked in at compile time.
-        add_dependencies(CnaTests cna_net_two_process_harness)
-        target_compile_definitions(CnaTests PRIVATE
+        # The net test object group owns the subprocess path so both the focused executable and
+        # the full CnaTests compatibility executable build the harness before compiling it.
+        add_dependencies(${CNA_TEST_OBJECT_TARGET_net} cna_net_two_process_harness)
+        target_compile_definitions(${CNA_TEST_OBJECT_TARGET_net} PRIVATE
             CNA_NET_HARNESS_PATH="$<TARGET_FILE:cna_net_two_process_harness>"
         )
     endif()
 
     if(TARGET cna_net_gamerservices_dispatcher_harness)
         # Same reasoning as cna_net_two_process_harness just above.
-        add_dependencies(CnaTests cna_net_gamerservices_dispatcher_harness)
-        target_compile_definitions(CnaTests PRIVATE
+        add_dependencies(${CNA_TEST_OBJECT_TARGET_net} cna_net_gamerservices_dispatcher_harness)
+        target_compile_definitions(${CNA_TEST_OBJECT_TARGET_net} PRIVATE
             CNA_NET_GAMERSERVICES_HANG_HARNESS_PATH="$<TARGET_FILE:cna_net_gamerservices_dispatcher_harness>"
         )
     endif()
 
     if(TARGET cna_audio_no_hardware_harness)
         # Same reasoning as cna_net_two_process_harness above, for AudioMixerTests.cpp.
-        add_dependencies(CnaTests cna_audio_no_hardware_harness)
-        target_compile_definitions(CnaTests PRIVATE
+        add_dependencies(${CNA_TEST_OBJECT_TARGET_audio} cna_audio_no_hardware_harness)
+        target_compile_definitions(${CNA_TEST_OBJECT_TARGET_audio} PRIVATE
             CNA_AUDIO_NO_HARDWARE_HARNESS_PATH="$<TARGET_FILE:cna_audio_no_hardware_harness>"
         )
     endif()
@@ -512,7 +669,7 @@ if(CNA_BUILD_TESTS)
     # own sources, so it needs the tools tree by absolute path rather than by guessing at the
     # working directory. Baked in so the check can never silently skip itself in a build-directory
     # run -- a source-level invariant that skips is an invariant nobody is enforcing.
-    target_compile_definitions(CnaTests PRIVATE
+    target_compile_definitions(${CNA_TEST_OBJECT_TARGET_content} PRIVATE
         CNA_TOOLS_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tools"
     )
 
@@ -521,8 +678,8 @@ if(CNA_BUILD_TESTS)
         # subprocess (same reasoning as cna_net_two_process_harness above -- a separate
         # executable with its own main(), not a library call) and needs its real built path
         # baked in at compile time.
-        add_dependencies(CnaTests cna_tool_gltf_to_cnj)
-        target_compile_definitions(CnaTests PRIVATE
+        add_dependencies(${CNA_TEST_OBJECT_TARGET_content} cna_tool_gltf_to_cnj)
+        target_compile_definitions(${CNA_TEST_OBJECT_TARGET_content} PRIVATE
             CNA_GLTF_TO_CNJ_TOOL_PATH="$<TARGET_FILE:cna_tool_gltf_to_cnj>"
         )
     endif()
@@ -532,8 +689,8 @@ if(CNA_BUILD_TESTS)
         # compiler as a subprocess, for the same reason GltfToCnjToolTests.cpp spawns its own
         # tool -- proving cross-process determinism means two genuinely separate processes, not
         # two calls inside one.
-        add_dependencies(CnaTests cna_tool_cnj_to_cnb)
-        target_compile_definitions(CnaTests PRIVATE
+        add_dependencies(${CNA_TEST_OBJECT_TARGET_content} cna_tool_cnj_to_cnb)
+        target_compile_definitions(${CNA_TEST_OBJECT_TARGET_content} PRIVATE
             CNA_CNJ_TO_CNB_TOOL_PATH="$<TARGET_FILE:cna_tool_cnj_to_cnb>"
         )
     endif()
@@ -542,8 +699,8 @@ if(CNA_BUILD_TESTS)
         # plans/plan_cnb.md CNBF-106: CnbGltfDirectToolTests.cpp spawns the direct compiler and
         # compares its output against the two-step route byte for byte. Two separate processes,
         # for the same reason the suites above use them.
-        add_dependencies(CnaTests cna_tool_gltf_to_cnb)
-        target_compile_definitions(CnaTests PRIVATE
+        add_dependencies(${CNA_TEST_OBJECT_TARGET_content} cna_tool_gltf_to_cnb)
+        target_compile_definitions(${CNA_TEST_OBJECT_TARGET_content} PRIVATE
             CNA_GLTF_TO_CNB_TOOL_PATH="$<TARGET_FILE:cna_tool_gltf_to_cnb>"
         )
     endif()
@@ -553,16 +710,16 @@ if(CNA_BUILD_TESTS)
         # subprocess, for the same reason the suites above do -- its contract is its exit code, its
         # stderr and the bytes it leaves on disk, none of which a library call exercises. It was the
         # only CNB tool with no such wiring, so the executable had never been run by a test at all.
-        add_dependencies(CnaTests cna_tool_source_to_cnb)
-        target_compile_definitions(CnaTests PRIVATE
+        add_dependencies(${CNA_TEST_OBJECT_TARGET_content} cna_tool_source_to_cnb)
+        target_compile_definitions(${CNA_TEST_OBJECT_TARGET_content} PRIVATE
             CNA_SOURCE_TO_CNB_TOOL_PATH="$<TARGET_FILE:cna_tool_source_to_cnb>"
         )
     endif()
 
     if(TARGET cna_content_tool)
         # plans/plan_content_pipeline.md CP-006: run the real unified front end as a subprocess.
-        add_dependencies(CnaTests cna_content_tool)
-        target_compile_definitions(CnaTests PRIVATE
+        add_dependencies(${CNA_TEST_OBJECT_TARGET_content} cna_content_tool)
+        target_compile_definitions(${CNA_TEST_OBJECT_TARGET_content} PRIVATE
             CNA_CONTENT_TOOL_PATH="$<TARGET_FILE:cna_content_tool>"
         )
 
@@ -579,7 +736,7 @@ if(CNA_BUILD_TESTS)
                 OUTPUT_DIR "${_cna_content_cmake_fixture_output}"
                 QUIET
             )
-            add_dependencies(CnaTests cna_content_cmake_fixture)
+            add_dependencies(${CNA_TEST_OBJECT_TARGET_content} cna_content_cmake_fixture)
             file(TO_CMAKE_PATH "${_cna_content_cmake_fixture_output}"
                 _cna_content_cmake_fixture_output_definition)
             set_source_files_properties(
@@ -596,8 +753,8 @@ if(CNA_BUILD_TESTS)
         # plans/plan_cnb.md CNBF-H013: CnbInfoToolTests.cpp spawns the inspector as a subprocess, for
         # the same reason the other tool suites do -- it has its own main() and its contract is its
         # stdout and its exit code, neither of which a library call exercises.
-        add_dependencies(CnaTests cna_tool_cnb_info)
-        target_compile_definitions(CnaTests PRIVATE
+        add_dependencies(${CNA_TEST_OBJECT_TARGET_content} cna_tool_cnb_info)
+        target_compile_definitions(${CNA_TEST_OBJECT_TARGET_content} PRIVATE
             CNA_CNB_INFO_TOOL_PATH="$<TARGET_FILE:cna_tool_cnb_info>"
         )
     endif()
@@ -606,8 +763,8 @@ if(CNA_BUILD_TESTS)
         # Same reasoning as cna_net_two_process_harness above, for
         # DevicesShutdownOrderingTests.cpp (Task SDLCORE-011) -- calls the real SDL_Quit(),
         # which must not run inside the shared CnaTests process itself.
-        add_dependencies(CnaTests cna_devices_shutdown_ordering_harness)
-        target_compile_definitions(CnaTests PRIVATE
+        add_dependencies(${CNA_TEST_OBJECT_TARGET_devices} cna_devices_shutdown_ordering_harness)
+        target_compile_definitions(${CNA_TEST_OBJECT_TARGET_devices} PRIVATE
             CNA_DEVICES_SHUTDOWN_ORDERING_HARNESS_PATH="$<TARGET_FILE:cna_devices_shutdown_ordering_harness>"
         )
     endif()
@@ -616,38 +773,38 @@ if(CNA_BUILD_TESTS)
         # plans/plan_platform.md PLAT-131: same reasoning as cna_net_two_process_harness above, and more
         # sharply -- four of the five exit paths TerminalSession must restore on destroy the
         # process, so they cannot be asserted inside this binary at all.
-        add_dependencies(CnaTests cna_platform_terminal_restoration_harness)
-        target_compile_definitions(CnaTests PRIVATE
+        add_dependencies(${CNA_TEST_OBJECT_TARGET_platform} cna_platform_terminal_restoration_harness)
+        target_compile_definitions(${CNA_TEST_OBJECT_TARGET_platform} PRIVATE
             CNA_PLATFORM_TERMINAL_RESTORATION_HARNESS_PATH="$<TARGET_FILE:cna_platform_terminal_restoration_harness>"
         )
     endif()
 
     if(TARGET cna_platform_terminal_resize_harness)
         # plans/plan_platform.md PLAT-136: see cna_platform_terminal_restoration_harness above.
-        add_dependencies(CnaTests cna_platform_terminal_resize_harness)
-        target_compile_definitions(CnaTests PRIVATE
+        add_dependencies(${CNA_TEST_OBJECT_TARGET_platform} cna_platform_terminal_resize_harness)
+        target_compile_definitions(${CNA_TEST_OBJECT_TARGET_platform} PRIVATE
             CNA_PLATFORM_TERMINAL_RESIZE_HARNESS_PATH="$<TARGET_FILE:cna_platform_terminal_resize_harness>"
         )
     endif()
 
     if(TARGET cna_audio_mixer_destroy_active_static_voice_harness)
         # Task AUD-04-008: same reasoning as cna_net_two_process_harness above.
-        add_dependencies(CnaTests cna_audio_mixer_destroy_active_static_voice_harness)
-        target_compile_definitions(CnaTests PRIVATE
+        add_dependencies(${CNA_TEST_OBJECT_TARGET_audio} cna_audio_mixer_destroy_active_static_voice_harness)
+        target_compile_definitions(${CNA_TEST_OBJECT_TARGET_audio} PRIVATE
             CNA_AUDIO_MIXER_DESTROY_ACTIVE_STATIC_VOICE_HARNESS_PATH="$<TARGET_FILE:cna_audio_mixer_destroy_active_static_voice_harness>"
         )
     endif()
 
     if(TARGET cna_audio_mixer_destroy_active_dynamic_voice_harness)
         # Task AUD-04-009: same reasoning as cna_net_two_process_harness above.
-        add_dependencies(CnaTests cna_audio_mixer_destroy_active_dynamic_voice_harness)
-        target_compile_definitions(CnaTests PRIVATE
+        add_dependencies(${CNA_TEST_OBJECT_TARGET_audio} cna_audio_mixer_destroy_active_dynamic_voice_harness)
+        target_compile_definitions(${CNA_TEST_OBJECT_TARGET_audio} PRIVATE
             CNA_AUDIO_MIXER_DESTROY_ACTIVE_DYNAMIC_VOICE_HARNESS_PATH="$<TARGET_FILE:cna_audio_mixer_destroy_active_dynamic_voice_harness>"
         )
     endif()
 
     if(TARGET easy-gl)
-        target_link_libraries(CnaTests PRIVATE easy-gl)
+        target_link_libraries(cna_test_build_config INTERFACE easy-gl)
     endif()
 
     # plans/plan_dx.md DX-15 follow-up + plans/plan_dx9.md D9-123 follow-up (merge-reconciled 2026-07-16):

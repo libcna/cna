@@ -1116,7 +1116,7 @@ endforeach()
 set(CNA_GRAPHICS_RENDERER "${_cna_default_renderer_identity}")
 list(GET CNA_RENDERER_TARGETS 0 RENDERER_TARGET)
 list(GET CNA_RENDERER_DIRS 0 RENDERER_DIR)
-# CNA_RENDERER_DEFINE rides cna_build_flags INTERFACE, so it reaches EVERY module and every
+# CNA_RENDERER_DEFINE rides cna_build_config INTERFACE, so it reaches EVERY module and every
 # consumer. After the loop it would otherwise hold the LAST identity's macro rather than the
 # default's -- which in a HEADLESS;SOFTWARE;STUB build meant the whole project compiled as though
 # STUB were selected. It names the default renderer, like the two scalars above.

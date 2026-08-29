@@ -11,17 +11,21 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "CNA/Internal/Xnb/XnbReadLimits.hpp"
-#include "Microsoft/Xna/Framework/BoundingSphere.hpp"
-#include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
-#include "Microsoft/Xna/Framework/Matrix.hpp"
-#include "Microsoft/Xna/Framework/Quaternion.hpp"
-#include "Microsoft/Xna/Framework/Vector2.hpp"
-#include "Microsoft/Xna/Framework/Vector3.hpp"
-#include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "System/IDisposable.hpp"
 #include "System/IO/BinaryReader.hpp"
+
+namespace Microsoft::Xna::Framework
+{
+    struct BoundingSphere;
+    struct Color;
+    struct Matrix;
+    struct Quaternion;
+    struct Vector2;
+    struct Vector3;
+    struct Vector4;
+}
 
 namespace Microsoft::Xna::Framework::Content
 {

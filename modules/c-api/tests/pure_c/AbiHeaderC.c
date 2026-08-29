@@ -8,7 +8,7 @@
 
 #include <stddef.h>
 
-_Static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 17, 0),
+_Static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 18, 0),
                "CNA C ABI version encoding must remain stable");
 _Static_assert(sizeof(CNA_Result) == sizeof(uint32_t),
                "CNA_Result must have a fixed-width representation");
@@ -2015,3 +2015,23 @@ _Static_assert(sizeof(CNA_ContentFieldKind) == sizeof(uint32_t) &&
                    sizeof(CNA_ReflectiveObjectCreateCallback) == sizeof(void (*)(void)) &&
                    sizeof(CNA_ReflectiveFieldCallback) == sizeof(void (*)(void)),
                "reflective reader identities and callbacks must remain fixed width");
+
+/* CBIND-116: the Dictionary<string, object> a content processor writes. Its 64-bit member is
+   placed last, after the four 32-bit ones, so the layout carries no padding on any supported
+   target -- the same rule CNA_CnbReadLimits follows. */
+_Static_assert(CNA_OBJECT_DICTIONARY_VALUE_UNKNOWN == UINT32_C(0) &&
+                   CNA_OBJECT_DICTIONARY_VALUE_BOOLEAN == UINT32_C(1) &&
+                   CNA_OBJECT_DICTIONARY_VALUE_FOREIGN_OBJECT == UINT32_C(14) &&
+                   CNA_OBJECT_DICTIONARY_VALUE_MAXIMUM ==
+                       CNA_OBJECT_DICTIONARY_VALUE_FOREIGN_OBJECT,
+               "object-dictionary value kinds must remain stable");
+_Static_assert(sizeof(CNA_ObjectDictionaryValueKind) == sizeof(uint32_t),
+               "the object-dictionary value kind must remain fixed width");
+_Static_assert(sizeof(CNA_ObjectDictionaryEntry) == 24U &&
+                   _Alignof(CNA_ObjectDictionaryEntry) == 8U &&
+                   offsetof(CNA_ObjectDictionaryEntry, struct_size) == 0U &&
+                   offsetof(CNA_ObjectDictionaryEntry, struct_version) == 4U &&
+                   offsetof(CNA_ObjectDictionaryEntry, kind) == 8U &&
+                   offsetof(CNA_ObjectDictionaryEntry, is_array) == 12U &&
+                   offsetof(CNA_ObjectDictionaryEntry, element_count) == 16U,
+               "CNA_ObjectDictionaryEntry layout must remain stable");

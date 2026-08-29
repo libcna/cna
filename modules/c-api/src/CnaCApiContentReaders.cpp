@@ -8,11 +8,14 @@
 #include "Microsoft/Xna/Framework/BoundingSphere.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "Microsoft/Xna/Framework/Content/KnownUnsupportedContentTypeReader.hpp"
 #include "CNA/Content/ForeignContentObjectEXT.hpp"
+#include "CNA/Content/ObjectDictionaryEXT.hpp"
+#include "Microsoft/Xna/Framework/BoundingBox.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
@@ -21,9 +24,11 @@
 
 #include <any>
 #include <cstring>
+#include <map>
 #include <memory>
 #include <string>
 #include <type_traits>
+#include <typeindex>
 #include <utility>
 #include <vector>
 
@@ -1236,6 +1241,54 @@ void StoreReflectiveField(
  * the **contract** -- the canonical reader name, the declared wire order, and value types read
  * inline -- and this implements the same one against a caller-made object and byte offsets.
  */
+// CBIND-116: the field walk both reflective readers run. Extracted rather than duplicated,
+// because the value-shaped and reference-shaped readers differ in exactly one thing -- the type
+// the returned `std::any` carries -- and duplicating the walk would let those two drift apart.
+[[nodiscard]] void* ReadReflectiveObject(
+    const ReflectiveRegistration& registration,
+    ContentReader& input,
+    void* existingObject)
+{
+    void* object = existingObject;
+    if (object == nullptr) {
+        const CNA_Result result = registration.create(registration.createContext, &object);
+        if (result != CNA_RESULT_SUCCESS || object == nullptr) {
+            throw Microsoft::Xna::Framework::Content::ContentLoadException(
+                "The object factory for the reflective reader registered as '" +
+                registration.targetTypeName + "' failed (CNA_Result " +
+                std::to_string(result) + ").");
+        }
+    }
+
+    for (const ReflectiveField& field : registration.fields) {
+        if (field.kind != ReflectiveCustomFieldKind) {
+            StoreReflectiveField(object, field, input);
+            continue;
+        }
+        // Same borrowed-handle discipline the caller-supplied reader path uses: created over
+        // CNA's own mid-stream reader with a no-op deleter, and released on every path.
+        const auto resource = std::make_shared<ContentReaderResource>();
+        resource->value = std::shared_ptr<ContentReader>(&input, [](ContentReader*) {});
+        resource->isBorrowed = true;
+        CNA_Handle readerHandle = CNA_INVALID_HANDLE;
+        if (GetRuntimeHandles().Create(ObjectKind::ContentReader, resource, &readerHandle) !=
+            CNA_RESULT_SUCCESS) {
+            throw Microsoft::Xna::Framework::Content::ContentLoadException(
+                "A borrowed ContentReader handle could not be created for the reflective "
+                "reader registered as '" + registration.targetTypeName + "'.");
+        }
+        const CNA_Result result = field.callback(field.context, object, readerHandle);
+        static_cast<void>(GetRuntimeHandles().Release(readerHandle));
+        if (result != CNA_RESULT_SUCCESS) {
+            throw Microsoft::Xna::Framework::Content::ContentLoadException(
+                "A custom member of the reflective reader registered as '" +
+                registration.targetTypeName + "' failed to read (CNA_Result " +
+                std::to_string(result) + ").");
+        }
+    }
+    return object;
+}
+
 class ReflectiveForeignReader final : public ContentTypeReaderBase {
 public:
     explicit ReflectiveForeignReader(std::shared_ptr<ReflectiveRegistration> registration)
@@ -1252,55 +1305,18 @@ public:
 
     std::any ReadUntyped(ContentReader& input, std::any existingInstance) override
     {
-        void* object = nullptr;
+        void* existing = nullptr;
         if (existingInstance.has_value()) {
-            const auto* const existing = std::any_cast<ForeignContentObjectEXT>(&existingInstance);
-            if (existing == nullptr) {
+            const auto* const offered = std::any_cast<ForeignContentObjectEXT>(&existingInstance);
+            if (offered == nullptr) {
                 throw Microsoft::Xna::Framework::Content::ContentLoadException(
                     "The existing instance offered to the reflective reader for '" +
                     registration_->targetTypeName + "' was produced by a different reader.");
             }
-            object = existing->value;
+            existing = offered->value;
         }
-        if (object == nullptr) {
-            const CNA_Result result =
-                registration_->create(registration_->createContext, &object);
-            if (result != CNA_RESULT_SUCCESS || object == nullptr) {
-                throw Microsoft::Xna::Framework::Content::ContentLoadException(
-                    "The object factory for the reflective reader registered as '" +
-                    registration_->targetTypeName + "' failed (CNA_Result " +
-                    std::to_string(result) + ").");
-            }
-        }
-
-        for (const ReflectiveField& field : registration_->fields) {
-            if (field.kind != ReflectiveCustomFieldKind) {
-                StoreReflectiveField(object, field, input);
-                continue;
-            }
-            // Same borrowed-handle discipline the caller-supplied reader path uses: created over
-            // CNA's own mid-stream reader with a no-op deleter, and released on every path.
-            const auto resource = std::make_shared<ContentReaderResource>();
-            resource->value = std::shared_ptr<ContentReader>(&input, [](ContentReader*) {});
-            resource->isBorrowed = true;
-            CNA_Handle readerHandle = CNA_INVALID_HANDLE;
-            if (GetRuntimeHandles().Create(
-                    ObjectKind::ContentReader, resource, &readerHandle) !=
-                CNA_RESULT_SUCCESS) {
-                throw Microsoft::Xna::Framework::Content::ContentLoadException(
-                    "A borrowed ContentReader handle could not be created for the reflective "
-                    "reader registered as '" + registration_->targetTypeName + "'.");
-            }
-            const CNA_Result result = field.callback(field.context, object, readerHandle);
-            static_cast<void>(GetRuntimeHandles().Release(readerHandle));
-            if (result != CNA_RESULT_SUCCESS) {
-                throw Microsoft::Xna::Framework::Content::ContentLoadException(
-                    "A custom member of the reflective reader registered as '" +
-                    registration_->targetTypeName + "' failed to read (CNA_Result " +
-                    std::to_string(result) + ").");
-            }
-        }
-        return std::any(ForeignContentObjectEXT{object});
+        return std::any(
+            ForeignContentObjectEXT{ReadReflectiveObject(*registration_, input, existing)});
     }
 
 private:
@@ -1599,5 +1615,849 @@ CNA_Result cna_enum_type_reader_copy_canonical_name(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         return CanonicalNameCopy(
             targetTypeName, EnumCanonicalName, destination, capacity, outBytes);
+    });
+}
+
+/* --- CBIND-116: the reference-shaped reflective reader, and the dictionary a Model.Tag holds --- */
+
+namespace {
+
+/// Carries a caller-made object where the canonical layer requires a `System::Object` reference.
+///
+/// `ModelReader::ReadTag` accepts exactly `std::shared_ptr<System::Object>`, and the collection
+/// readers dispatch on the same shape. A C caller has no C++ type to derive from, so this is the
+/// one CNA supplies: it holds the opaque pointer the caller's factory returned and nothing else.
+/// It is deliberately not public C++ surface -- it exists to satisfy a canonical signature, and a
+/// game written in C++ would use its own type instead.
+class ForeignReferenceObject final : public System::Object {
+public:
+    explicit ForeignReferenceObject(std::string typeName, void* const object)
+        : typeName_(std::move(typeName))
+        , value_(object)
+    {
+    }
+
+    [[nodiscard]] const std::string& GetTypeName() const override { return typeName_; }
+
+    [[nodiscard]] void* getValue() const { return value_; }
+
+private:
+    std::string typeName_;
+    void* value_;
+};
+
+/// The reference-shaped twin of ReflectiveForeignReader: same field walk, `shared_ptr` result.
+///
+/// The whole difference is the type the `std::any` carries, because that is the whole difference
+/// on the wire too -- the container reader chooses inline or dispatched by the shape of what the
+/// reader produces, so producing a reference is what makes the payload read at the right offset.
+class ReflectiveForeignSharedReader final : public ContentTypeReaderBase {
+public:
+    explicit ReflectiveForeignSharedReader(std::shared_ptr<ReflectiveRegistration> registration)
+        : ContentTypeReaderBase(registration->targetTypeName)
+        , registration_(std::move(registration))
+    {
+    }
+
+    std::any ReadUntyped(ContentReader& input, std::any) override
+    {
+        void* const object = ReadReflectiveObject(*registration_, input, nullptr);
+        auto carrier = std::make_shared<ForeignReferenceObject>(
+            registration_->targetTypeName, object);
+        return std::any(std::static_pointer_cast<System::Object>(std::move(carrier)));
+    }
+
+private:
+    std::shared_ptr<ReflectiveRegistration> registration_;
+};
+
+} // namespace
+
+CNA_Result cna_reflective_type_reader_builder_register_shared(
+    const CNA_ReflectiveTypeReaderBuilderHandle builderHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ReflectiveBuilderResource> builder;
+        if (const CNA_Result result = GetReflectiveBuilder(builderHandle, &builder);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        for (const std::string& enumTypeName : builder->enumTypeNames) {
+            ContentTypeReaderManager::AddTypeCreator(
+                EnumCanonicalName(enumTypeName),
+                [name = enumTypeName] {
+                    return std::unique_ptr<ContentTypeReaderBase>(
+                        std::make_unique<ReflectiveEnumReader>(name));
+                });
+        }
+        // Snapshotted for the same reason the value-shaped registration snapshots: a builder that
+        // keeps being appended to after registering must not change what the table already holds.
+        const auto snapshot = std::make_shared<ReflectiveRegistration>(*builder->registration);
+        ContentTypeReaderManager::AddTypeCreator(
+            ReflectiveCanonicalName(snapshot->targetTypeName),
+            [snapshot] {
+                return std::unique_ptr<ContentTypeReaderBase>(
+                    std::make_unique<ReflectiveForeignSharedReader>(snapshot));
+            });
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+namespace {
+
+using Microsoft::Xna::Framework::BoundingBox;
+
+// CBIND-116: the handle owns its dictionary. The canonical container is reached through Model.Tag,
+// which this ABI cannot load, so what a C caller gets is a dictionary built from an asset whose
+// root object is one -- and building it is what makes the handle the owner rather than a borrower.
+struct ObjectDictionaryResource final {
+    std::shared_ptr<CNA::Content::ObjectDictionaryEXT> value;
+};
+
+/// What one entry holds, and the packed C size of a single element of it.
+struct DictionaryValueShape final {
+    CNA_ObjectDictionaryValueKind kind;
+    bool isArray;
+    std::uint64_t elementCount;
+    std::uint64_t elementByteSize;
+};
+
+/// The scalar C++ types this ABI names, and the C size each one copies out as.
+///
+/// Sizes are written out rather than taken from `sizeof` on the C++ type: `Color` and the vector
+/// types are the same bytes either way today, and asserting that here is what would notice if one
+/// of them stopped being.
+template <typename T>
+[[nodiscard]] bool AnyHolds(const std::any& value)
+{
+    return value.type() == typeid(T);
+}
+
+[[nodiscard]] bool ScalarShape(const std::any& value, DictionaryValueShape* const outShape)
+{
+    const auto set = [outShape](
+        const CNA_ObjectDictionaryValueKind kind, const std::uint64_t bytes) {
+        *outShape = DictionaryValueShape{kind, false, 1U, bytes};
+        return true;
+    };
+    if (AnyHolds<bool>(value)) return set(CNA_OBJECT_DICTIONARY_VALUE_BOOLEAN, sizeof(CNA_Bool));
+    if (AnyHolds<std::int32_t>(value)) return set(CNA_OBJECT_DICTIONARY_VALUE_INT32, 4U);
+    if (AnyHolds<float>(value)) return set(CNA_OBJECT_DICTIONARY_VALUE_SINGLE, 4U);
+    if (AnyHolds<double>(value)) return set(CNA_OBJECT_DICTIONARY_VALUE_DOUBLE, 8U);
+    if (AnyHolds<std::string>(value)) return set(CNA_OBJECT_DICTIONARY_VALUE_STRING, 0U);
+    if (AnyHolds<Vector2>(value)) return set(CNA_OBJECT_DICTIONARY_VALUE_VECTOR2, sizeof(CNA_Vector2));
+    if (AnyHolds<Vector3>(value)) return set(CNA_OBJECT_DICTIONARY_VALUE_VECTOR3, sizeof(CNA_Vector3));
+    if (AnyHolds<Vector4>(value)) return set(CNA_OBJECT_DICTIONARY_VALUE_VECTOR4, sizeof(CNA_Vector4));
+    if (AnyHolds<Matrix>(value)) return set(CNA_OBJECT_DICTIONARY_VALUE_MATRIX, sizeof(CNA_Matrix));
+    if (AnyHolds<Quaternion>(value)) {
+        return set(CNA_OBJECT_DICTIONARY_VALUE_QUATERNION, sizeof(CNA_Quaternion));
+    }
+    if (AnyHolds<Color>(value)) return set(CNA_OBJECT_DICTIONARY_VALUE_COLOR, sizeof(CNA_Color));
+    if (AnyHolds<BoundingSphere>(value)) {
+        return set(CNA_OBJECT_DICTIONARY_VALUE_BOUNDING_SPHERE, sizeof(CNA_BoundingSphere));
+    }
+    if (AnyHolds<BoundingBox>(value)) {
+        return set(CNA_OBJECT_DICTIONARY_VALUE_BOUNDING_BOX, sizeof(CNA_BoundingBox));
+    }
+    if (AnyHolds<ForeignContentObjectEXT>(value)) {
+        return set(CNA_OBJECT_DICTIONARY_VALUE_FOREIGN_OBJECT, 0U);
+    }
+    if (AnyHolds<std::shared_ptr<System::Object>>(value)) {
+        const auto& stored = std::any_cast<const std::shared_ptr<System::Object>&>(value);
+        if (dynamic_cast<const ForeignReferenceObject*>(stored.get()) != nullptr) {
+            return set(CNA_OBJECT_DICTIONARY_VALUE_FOREIGN_OBJECT, 0U);
+        }
+    }
+    return false;
+}
+
+template <typename T>
+[[nodiscard]] bool VectorShape(
+    const std::any& value,
+    const CNA_ObjectDictionaryValueKind kind,
+    const std::uint64_t elementBytes,
+    DictionaryValueShape* const outShape)
+{
+    if (!AnyHolds<std::vector<T>>(value)) {
+        return false;
+    }
+    const auto& stored = std::any_cast<const std::vector<T>&>(value);
+    *outShape = DictionaryValueShape{
+        kind, true, static_cast<std::uint64_t>(stored.size()), elementBytes};
+    return true;
+}
+
+[[nodiscard]] bool ArrayShape(const std::any& value, DictionaryValueShape* const outShape)
+{
+    return VectorShape<std::int32_t>(value, CNA_OBJECT_DICTIONARY_VALUE_INT32, 4U, outShape)
+        || VectorShape<float>(value, CNA_OBJECT_DICTIONARY_VALUE_SINGLE, 4U, outShape)
+        || VectorShape<double>(value, CNA_OBJECT_DICTIONARY_VALUE_DOUBLE, 8U, outShape)
+        || VectorShape<Vector2>(
+               value, CNA_OBJECT_DICTIONARY_VALUE_VECTOR2, sizeof(CNA_Vector2), outShape)
+        || VectorShape<Vector3>(
+               value, CNA_OBJECT_DICTIONARY_VALUE_VECTOR3, sizeof(CNA_Vector3), outShape)
+        || VectorShape<Vector4>(
+               value, CNA_OBJECT_DICTIONARY_VALUE_VECTOR4, sizeof(CNA_Vector4), outShape)
+        || VectorShape<Matrix>(
+               value, CNA_OBJECT_DICTIONARY_VALUE_MATRIX, sizeof(CNA_Matrix), outShape)
+        || VectorShape<Quaternion>(
+               value, CNA_OBJECT_DICTIONARY_VALUE_QUATERNION, sizeof(CNA_Quaternion), outShape)
+        || VectorShape<Color>(
+               value, CNA_OBJECT_DICTIONARY_VALUE_COLOR, sizeof(CNA_Color), outShape)
+        || VectorShape<BoundingSphere>(
+               value, CNA_OBJECT_DICTIONARY_VALUE_BOUNDING_SPHERE,
+               sizeof(CNA_BoundingSphere), outShape)
+        || VectorShape<BoundingBox>(
+               value, CNA_OBJECT_DICTIONARY_VALUE_BOUNDING_BOX,
+               sizeof(CNA_BoundingBox), outShape);
+}
+
+[[nodiscard]] DictionaryValueShape ShapeOf(const std::any& value)
+{
+    DictionaryValueShape shape{CNA_OBJECT_DICTIONARY_VALUE_UNKNOWN, false, 1U, 0U};
+    if (ScalarShape(value, &shape) || ArrayShape(value, &shape)) {
+        return shape;
+    }
+    return shape;
+}
+
+/// Writes one element in the packed C layout its kind names.
+void WriteDictionaryElement(
+    std::uint8_t* const destination,
+    const CNA_ObjectDictionaryValueKind kind,
+    const void* const source)
+{
+    switch (kind) {
+    case CNA_OBJECT_DICTIONARY_VALUE_BOOLEAN: {
+        const CNA_Bool value = *static_cast<const bool*>(source) ? CNA_TRUE : CNA_FALSE;
+        std::memcpy(destination, &value, sizeof(value));
+        break;
+    }
+    case CNA_OBJECT_DICTIONARY_VALUE_INT32:
+        std::memcpy(destination, source, 4U);
+        break;
+    case CNA_OBJECT_DICTIONARY_VALUE_SINGLE:
+        std::memcpy(destination, source, 4U);
+        break;
+    case CNA_OBJECT_DICTIONARY_VALUE_DOUBLE:
+        std::memcpy(destination, source, 8U);
+        break;
+    case CNA_OBJECT_DICTIONARY_VALUE_VECTOR2: {
+        const auto& value = *static_cast<const Vector2*>(source);
+        const CNA_Vector2 packed{value.X, value.Y};
+        std::memcpy(destination, &packed, sizeof(packed));
+        break;
+    }
+    case CNA_OBJECT_DICTIONARY_VALUE_VECTOR3: {
+        const auto& value = *static_cast<const Vector3*>(source);
+        const CNA_Vector3 packed{value.X, value.Y, value.Z};
+        std::memcpy(destination, &packed, sizeof(packed));
+        break;
+    }
+    case CNA_OBJECT_DICTIONARY_VALUE_VECTOR4: {
+        const auto& value = *static_cast<const Vector4*>(source);
+        const CNA_Vector4 packed{value.X, value.Y, value.Z, value.W};
+        std::memcpy(destination, &packed, sizeof(packed));
+        break;
+    }
+    case CNA_OBJECT_DICTIONARY_VALUE_MATRIX: {
+        const auto& value = *static_cast<const Matrix*>(source);
+        const CNA_Matrix packed{
+            value.M11, value.M12, value.M13, value.M14,
+            value.M21, value.M22, value.M23, value.M24,
+            value.M31, value.M32, value.M33, value.M34,
+            value.M41, value.M42, value.M43, value.M44};
+        std::memcpy(destination, &packed, sizeof(packed));
+        break;
+    }
+    case CNA_OBJECT_DICTIONARY_VALUE_QUATERNION: {
+        const auto& value = *static_cast<const Quaternion*>(source);
+        const CNA_Quaternion packed{value.X, value.Y, value.Z, value.W};
+        std::memcpy(destination, &packed, sizeof(packed));
+        break;
+    }
+    case CNA_OBJECT_DICTIONARY_VALUE_COLOR: {
+        const auto& value = *static_cast<const Color*>(source);
+        const CNA_Color packed{
+            value.getRProperty(), value.getGProperty(),
+            value.getBProperty(), value.getAProperty()};
+        std::memcpy(destination, &packed, sizeof(packed));
+        break;
+    }
+    case CNA_OBJECT_DICTIONARY_VALUE_BOUNDING_SPHERE: {
+        const auto& value = *static_cast<const BoundingSphere*>(source);
+        const CNA_BoundingSphere packed{
+            CNA_Vector3{value.Center.X, value.Center.Y, value.Center.Z}, value.Radius};
+        std::memcpy(destination, &packed, sizeof(packed));
+        break;
+    }
+    case CNA_OBJECT_DICTIONARY_VALUE_BOUNDING_BOX: {
+        const auto& value = *static_cast<const BoundingBox*>(source);
+        const CNA_BoundingBox packed{
+            CNA_Vector3{value.Min.X, value.Min.Y, value.Min.Z},
+            CNA_Vector3{value.Max.X, value.Max.Y, value.Max.Z}};
+        std::memcpy(destination, &packed, sizeof(packed));
+        break;
+    }
+    default:
+        break;
+    }
+}
+
+template <typename T>
+[[nodiscard]] bool WriteVectorIfHeld(
+    const std::any& value,
+    const CNA_ObjectDictionaryValueKind kind,
+    const std::uint64_t elementBytes,
+    std::uint8_t* const destination)
+{
+    if (!AnyHolds<std::vector<T>>(value)) {
+        return false;
+    }
+    const auto& stored = std::any_cast<const std::vector<T>&>(value);
+    std::uint8_t* cursor = destination;
+    for (const T& element : stored) {
+        WriteDictionaryElement(cursor, kind, &element);
+        cursor += elementBytes;
+    }
+    return true;
+}
+
+[[nodiscard]] CNA_Result GetObjectDictionary(
+    const CNA_ObjectDictionaryHandle handle,
+    std::shared_ptr<ObjectDictionaryResource>* const outDictionary)
+{
+    const CNA_Result result =
+        GetRuntimeHandles().Get(handle, ObjectKind::ObjectDictionaryEXT, outDictionary);
+    if (result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result, ErrorCategoryForResult(result), "The object-dictionary handle is invalid.");
+    }
+    if (!(*outDictionary)->value) {
+        return Fail(
+            CNA_RESULT_INVALID_HANDLE, CNA_ERROR_CATEGORY_STATE,
+            "The object dictionary this handle borrowed is gone.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+/// Resolves a handle and a key together, since every entry route needs exactly that pair.
+[[nodiscard]] CNA_Result GetDictionaryEntry(
+    const CNA_ObjectDictionaryHandle handle,
+    const CNA_StringView key,
+    std::shared_ptr<ObjectDictionaryResource>* const outDictionary,
+    const std::any** const outValue)
+{
+    if (const CNA_Result result = GetObjectDictionary(handle, outDictionary);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::string keyText;
+    if (const CNA_Result result = CopyStringView(key, true, &keyText);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result, ErrorCategoryForResult(result), "The dictionary key is not valid UTF-8.");
+    }
+    const auto& values = (*outDictionary)->value->getValuesProperty();
+    const auto found = values.find(keyText);
+    if (found == values.end()) {
+        // The canonical KeyNotFoundException and InvalidCastException are one result code here;
+        // the message is what tells a caller which of the two it hit.
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
+            "No dictionary entry has that key.");
+    }
+    *outValue = &found->second;
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+CNA_Result cna_object_dictionary_ext_get_count(
+    const CNA_ObjectDictionaryHandle dictionaryHandle,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCount == nullptr) {
+            return InvalidArgument("The dictionary count output is null.");
+        }
+        std::shared_ptr<ObjectDictionaryResource> dictionary;
+        if (const CNA_Result result = GetObjectDictionary(dictionaryHandle, &dictionary);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outCount = static_cast<uint64_t>(dictionary->value->getValuesProperty().size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_object_dictionary_ext_contains_key(
+    const CNA_ObjectDictionaryHandle dictionaryHandle,
+    const CNA_StringView key,
+    CNA_Bool* const outContains)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outContains == nullptr) {
+            return InvalidArgument("The dictionary containment output is null.");
+        }
+        std::shared_ptr<ObjectDictionaryResource> dictionary;
+        if (const CNA_Result result = GetObjectDictionary(dictionaryHandle, &dictionary);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string keyText;
+        if (const CNA_Result result = CopyStringView(key, true, &keyText);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result), "The dictionary key is not valid UTF-8.");
+        }
+        *outContains = dictionary->value->ContainsKey(keyText) ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_object_dictionary_ext_get_key_size_at(
+    const CNA_ObjectDictionaryHandle dictionaryHandle,
+    const uint64_t index,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return InvalidArgument("The dictionary key-size output is null.");
+        }
+        std::shared_ptr<ObjectDictionaryResource> dictionary;
+        if (const CNA_Result result = GetObjectDictionary(dictionaryHandle, &dictionary);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto& values = dictionary->value->getValuesProperty();
+        if (index >= static_cast<uint64_t>(values.size())) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_RANGE,
+                "The dictionary key index is past the end.");
+        }
+        auto entry = values.begin();
+        std::advance(entry, static_cast<std::ptrdiff_t>(index));
+        *outBytes = static_cast<uint64_t>(entry->first.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_object_dictionary_ext_copy_key_at(
+    const CNA_ObjectDictionaryHandle dictionaryHandle,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
+            return InvalidArgument("The dictionary key output is invalid.");
+        }
+        std::shared_ptr<ObjectDictionaryResource> dictionary;
+        if (const CNA_Result result = GetObjectDictionary(dictionaryHandle, &dictionary);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto& values = dictionary->value->getValuesProperty();
+        if (index >= static_cast<uint64_t>(values.size())) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_RANGE,
+                "The dictionary key index is past the end.");
+        }
+        auto entry = values.begin();
+        std::advance(entry, static_cast<std::ptrdiff_t>(index));
+        const std::string& name = entry->first;
+        *outBytes = static_cast<uint64_t>(name.size());
+        if (capacity < static_cast<uint64_t>(name.size())) {
+            return Fail(
+                CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE,
+                "The destination capacity is smaller than the dictionary key.");
+        }
+        if (!name.empty()) {
+            std::memcpy(destination, name.data(), name.size());
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_object_dictionary_ext_get_entry(
+    const CNA_ObjectDictionaryHandle dictionaryHandle,
+    const CNA_StringView key,
+    CNA_ObjectDictionaryEntry* const outEntry)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEntry == nullptr || outEntry->struct_size < sizeof(CNA_ObjectDictionaryEntry)) {
+            return InvalidArgument("The dictionary entry output is invalid.");
+        }
+        std::shared_ptr<ObjectDictionaryResource> dictionary;
+        const std::any* value = nullptr;
+        if (const CNA_Result result =
+                GetDictionaryEntry(dictionaryHandle, key, &dictionary, &value);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const DictionaryValueShape shape = ShapeOf(*value);
+        outEntry->struct_size = static_cast<uint32_t>(sizeof(CNA_ObjectDictionaryEntry));
+        outEntry->struct_version = UINT32_C(1);
+        outEntry->kind = shape.kind;
+        outEntry->is_array = shape.isArray ? CNA_TRUE : CNA_FALSE;
+        outEntry->element_count = shape.elementCount;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_object_dictionary_ext_get_type_name_size(
+    const CNA_ObjectDictionaryHandle dictionaryHandle,
+    const CNA_StringView key,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return InvalidArgument("The dictionary type-name size output is null.");
+        }
+        std::shared_ptr<ObjectDictionaryResource> dictionary;
+        const std::any* value = nullptr;
+        if (const CNA_Result result =
+                GetDictionaryEntry(dictionaryHandle, key, &dictionary, &value);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBytes = static_cast<uint64_t>(std::strlen(value->type().name()));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_object_dictionary_ext_copy_type_name(
+    const CNA_ObjectDictionaryHandle dictionaryHandle,
+    const CNA_StringView key,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
+            return InvalidArgument("The dictionary type-name output is invalid.");
+        }
+        std::shared_ptr<ObjectDictionaryResource> dictionary;
+        const std::any* value = nullptr;
+        if (const CNA_Result result =
+                GetDictionaryEntry(dictionaryHandle, key, &dictionary, &value);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const char* const name = value->type().name();
+        const std::size_t length = std::strlen(name);
+        *outBytes = static_cast<uint64_t>(length);
+        if (capacity < static_cast<uint64_t>(length)) {
+            return Fail(
+                CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE,
+                "The destination capacity is smaller than the entry type name.");
+        }
+        if (length != 0U) {
+            std::memcpy(destination, name, length);
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_object_dictionary_ext_copy_value(
+    const CNA_ObjectDictionaryHandle dictionaryHandle,
+    const CNA_StringView key,
+    const CNA_ObjectDictionaryValueKind kind,
+    void* const destination,
+    const uint64_t capacity)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (destination == nullptr) {
+            return InvalidArgument("The dictionary value destination is null.");
+        }
+        std::shared_ptr<ObjectDictionaryResource> dictionary;
+        const std::any* value = nullptr;
+        if (const CNA_Result result =
+                GetDictionaryEntry(dictionaryHandle, key, &dictionary, &value);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const DictionaryValueShape shape = ShapeOf(*value);
+        if (shape.isArray) {
+            return InvalidArgument(
+                "That dictionary entry is an array; read it with "
+                "cna_object_dictionary_ext_copy_array.");
+        }
+        if (shape.kind == CNA_OBJECT_DICTIONARY_VALUE_STRING ||
+            shape.kind == CNA_OBJECT_DICTIONARY_VALUE_FOREIGN_OBJECT ||
+            shape.kind == CNA_OBJECT_DICTIONARY_VALUE_UNKNOWN) {
+            return InvalidArgument(
+                "That dictionary entry has no fixed-layout value; use the route for its kind.");
+        }
+        if (kind != shape.kind) {
+            // Naming the kind is the cast, and this is the C form of InvalidCastException.
+            return InvalidArgument("That dictionary entry does not hold the requested kind.");
+        }
+        if (capacity < shape.elementByteSize) {
+            return Fail(
+                CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE,
+                "The destination capacity is smaller than the entry value.");
+        }
+        const void* source = nullptr;
+        bool booleanValue = false;
+        switch (shape.kind) {
+        case CNA_OBJECT_DICTIONARY_VALUE_BOOLEAN:
+            booleanValue = std::any_cast<bool>(*value);
+            source = &booleanValue;
+            break;
+        case CNA_OBJECT_DICTIONARY_VALUE_INT32:
+            source = std::any_cast<std::int32_t>(value);
+            break;
+        case CNA_OBJECT_DICTIONARY_VALUE_SINGLE:
+            source = std::any_cast<float>(value);
+            break;
+        case CNA_OBJECT_DICTIONARY_VALUE_DOUBLE:
+            source = std::any_cast<double>(value);
+            break;
+        case CNA_OBJECT_DICTIONARY_VALUE_VECTOR2:
+            source = std::any_cast<Vector2>(value);
+            break;
+        case CNA_OBJECT_DICTIONARY_VALUE_VECTOR3:
+            source = std::any_cast<Vector3>(value);
+            break;
+        case CNA_OBJECT_DICTIONARY_VALUE_VECTOR4:
+            source = std::any_cast<Vector4>(value);
+            break;
+        case CNA_OBJECT_DICTIONARY_VALUE_MATRIX:
+            source = std::any_cast<Matrix>(value);
+            break;
+        case CNA_OBJECT_DICTIONARY_VALUE_QUATERNION:
+            source = std::any_cast<Quaternion>(value);
+            break;
+        case CNA_OBJECT_DICTIONARY_VALUE_COLOR:
+            source = std::any_cast<Color>(value);
+            break;
+        case CNA_OBJECT_DICTIONARY_VALUE_BOUNDING_SPHERE:
+            source = std::any_cast<BoundingSphere>(value);
+            break;
+        case CNA_OBJECT_DICTIONARY_VALUE_BOUNDING_BOX:
+            source = std::any_cast<BoundingBox>(value);
+            break;
+        default:
+            return InvalidArgument("That dictionary entry kind has no fixed-layout value.");
+        }
+        WriteDictionaryElement(static_cast<std::uint8_t*>(destination), shape.kind, source);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_object_dictionary_ext_copy_array(
+    const CNA_ObjectDictionaryHandle dictionaryHandle,
+    const CNA_StringView key,
+    const CNA_ObjectDictionaryValueKind kind,
+    void* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
+            return InvalidArgument("The dictionary array output is invalid.");
+        }
+        std::shared_ptr<ObjectDictionaryResource> dictionary;
+        const std::any* value = nullptr;
+        if (const CNA_Result result =
+                GetDictionaryEntry(dictionaryHandle, key, &dictionary, &value);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const DictionaryValueShape shape = ShapeOf(*value);
+        if (!shape.isArray) {
+            return InvalidArgument(
+                "That dictionary entry is not an array; read it with "
+                "cna_object_dictionary_ext_copy_value.");
+        }
+        if (kind != shape.kind) {
+            return InvalidArgument("That dictionary array does not hold the requested kind.");
+        }
+        const uint64_t required = shape.elementCount * shape.elementByteSize;
+        *outBytes = required;
+        if (capacity < required) {
+            return Fail(
+                CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE,
+                "The destination capacity is smaller than the entry array.");
+        }
+        auto* const bytes = static_cast<std::uint8_t*>(destination);
+        const bool written =
+            WriteVectorIfHeld<std::int32_t>(*value, shape.kind, shape.elementByteSize, bytes)
+            || WriteVectorIfHeld<float>(*value, shape.kind, shape.elementByteSize, bytes)
+            || WriteVectorIfHeld<double>(*value, shape.kind, shape.elementByteSize, bytes)
+            || WriteVectorIfHeld<Vector2>(*value, shape.kind, shape.elementByteSize, bytes)
+            || WriteVectorIfHeld<Vector3>(*value, shape.kind, shape.elementByteSize, bytes)
+            || WriteVectorIfHeld<Vector4>(*value, shape.kind, shape.elementByteSize, bytes)
+            || WriteVectorIfHeld<Matrix>(*value, shape.kind, shape.elementByteSize, bytes)
+            || WriteVectorIfHeld<Quaternion>(*value, shape.kind, shape.elementByteSize, bytes)
+            || WriteVectorIfHeld<Color>(*value, shape.kind, shape.elementByteSize, bytes)
+            || WriteVectorIfHeld<BoundingSphere>(*value, shape.kind, shape.elementByteSize, bytes)
+            || WriteVectorIfHeld<BoundingBox>(*value, shape.kind, shape.elementByteSize, bytes);
+        if (!written) {
+            return Fail(
+                CNA_RESULT_INTERNAL, CNA_ERROR_CATEGORY_STATE,
+                "The dictionary array was described but could not be copied.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_object_dictionary_ext_get_string_size(
+    const CNA_ObjectDictionaryHandle dictionaryHandle,
+    const CNA_StringView key,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return InvalidArgument("The dictionary string-size output is null.");
+        }
+        std::shared_ptr<ObjectDictionaryResource> dictionary;
+        const std::any* value = nullptr;
+        if (const CNA_Result result =
+                GetDictionaryEntry(dictionaryHandle, key, &dictionary, &value);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (!AnyHolds<std::string>(*value)) {
+            return InvalidArgument("That dictionary entry does not hold a string.");
+        }
+        *outBytes =
+            static_cast<uint64_t>(std::any_cast<const std::string&>(*value).size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_object_dictionary_ext_copy_string(
+    const CNA_ObjectDictionaryHandle dictionaryHandle,
+    const CNA_StringView key,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
+            return InvalidArgument("The dictionary string output is invalid.");
+        }
+        std::shared_ptr<ObjectDictionaryResource> dictionary;
+        const std::any* value = nullptr;
+        if (const CNA_Result result =
+                GetDictionaryEntry(dictionaryHandle, key, &dictionary, &value);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (!AnyHolds<std::string>(*value)) {
+            return InvalidArgument("That dictionary entry does not hold a string.");
+        }
+        const auto& text = std::any_cast<const std::string&>(*value);
+        *outBytes = static_cast<uint64_t>(text.size());
+        if (capacity < static_cast<uint64_t>(text.size())) {
+            return Fail(
+                CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE,
+                "The destination capacity is smaller than the entry string.");
+        }
+        if (!text.empty()) {
+            std::memcpy(destination, text.data(), text.size());
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_object_dictionary_ext_get_foreign_object(
+    const CNA_ObjectDictionaryHandle dictionaryHandle,
+    const CNA_StringView key,
+    void** const outObject)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outObject == nullptr) {
+            return InvalidArgument("The dictionary foreign-object output is null.");
+        }
+        std::shared_ptr<ObjectDictionaryResource> dictionary;
+        const std::any* value = nullptr;
+        if (const CNA_Result result =
+                GetDictionaryEntry(dictionaryHandle, key, &dictionary, &value);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (AnyHolds<ForeignContentObjectEXT>(*value)) {
+            *outObject = std::any_cast<const ForeignContentObjectEXT&>(*value).value;
+            return CNA_RESULT_SUCCESS;
+        }
+        if (AnyHolds<std::shared_ptr<System::Object>>(*value)) {
+            const auto& stored = std::any_cast<const std::shared_ptr<System::Object>&>(*value);
+            if (const auto* const carrier =
+                    dynamic_cast<const ForeignReferenceObject*>(stored.get());
+                carrier != nullptr) {
+                *outObject = carrier->getValue();
+                return CNA_RESULT_SUCCESS;
+            }
+        }
+        return InvalidArgument("That dictionary entry does not hold a caller-made object.");
+    });
+}
+
+CNA_Result cna_content_manager_load_object_dictionary_ext(
+    const CNA_Handle contentManagerHandle,
+    const CNA_StringView assetName,
+    CNA_ObjectDictionaryHandle* const outDictionary)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outDictionary == nullptr) {
+            return InvalidArgument("The object-dictionary output handle is null.");
+        }
+        *outDictionary = CNA_INVALID_HANDLE;
+        std::string assetNameText;
+        if (const CNA_Result result = CopyStringView(assetName, true, &assetNameText);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The content asset name is not valid UTF-8.");
+        }
+        if (assetNameText.empty()) {
+            return InvalidArgument("The content asset name must not be empty.");
+        }
+        BorrowedContentManager contentManager;
+        if (const CNA_Result result =
+                BorrowContentManager(contentManagerHandle, &contentManager);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (contentManager.value == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_HANDLE, CNA_ERROR_CATEGORY_STATE,
+                "The content manager handle does not name a manager.");
+        }
+        auto resource = std::make_shared<ObjectDictionaryResource>();
+        try {
+            // The dictionary reader's own product. Boxing it is the canonical constructor, which
+            // is also the only way this type is ever made: ModelReader does exactly this when the
+            // same payload arrives as a Model.Tag.
+            resource->value = std::make_shared<CNA::Content::ObjectDictionaryEXT>(
+                contentManager.value->Load<std::map<std::string, std::any>>(assetNameText));
+        } catch (const Microsoft::Xna::Framework::Content::ContentLoadException& exception) {
+            return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
+        }
+        if (const CNA_Result result = GetRuntimeHandles().Create(
+                ObjectKind::ObjectDictionaryEXT, resource, outDictionary);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The loaded object dictionary could not be published as a handle.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_object_dictionary_ext_destroy(const CNA_ObjectDictionaryHandle dictionaryHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ObjectDictionaryResource> dictionary;
+        if (const CNA_Result result = GetObjectDictionary(dictionaryHandle, &dictionary);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return GetRuntimeHandles().Release(dictionaryHandle);
     });
 }

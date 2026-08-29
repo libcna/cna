@@ -769,12 +769,29 @@ B11_SLICE_OWNERS: dict[str, str] = {
 }
 
 
+# CBIND-117, 2026-08-29: integrating the completed C++ Content Pipeline adds a build-time,
+# experimental extension/import surface plus seven source-import declarations. The complete-public-API
+# inventory must record those declarations, but recording them does not authorize inventing C ABI
+# routes during an integration-only task. Keep the new unmapped rows on an explicit open binding
+# task instead of handing them back to the completed CBIND-036/CBIND-111 slices.
+B12_SLICE_OWNERS: dict[str, str] = {
+    "content/CnbSourceImport": "CBIND-117",
+}
+
+
 def owner_task(symbol: Symbol) -> str:
     override = SYMBOL_OWNER_OVERRIDES.get(symbol.qualified_name)
     if override is not None:
         return override
     header = Path(symbol.header)
     key = f"{header.parts[1]}/{header.stem}"
+    if header.parts[1] == "content" and (
+        "Pipeline" in header.parts or "Import" in header.parts
+    ):
+        return "CBIND-117"
+    b12_owner = B12_SLICE_OWNERS.get(key)
+    if b12_owner is not None:
+        return b12_owner
     b11_owner = B11_SLICE_OWNERS.get(key)
     if b11_owner is not None:
         return b11_owner

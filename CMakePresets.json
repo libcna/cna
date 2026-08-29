@@ -7,6 +7,106 @@
   },
   "configurePresets": [
     {
+      "name": "base-ninja",
+      "hidden": true,
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CNA_EXPORT_COMPILE_COMMANDS": "ON",
+        "CNA_USE_CCACHE": "ON"
+      }
+    },
+    {
+      "name": "dev",
+      "displayName": "Fast local development (STUB, Debug)",
+      "description": "A focused Debug build for editing CNA itself. It omits tests, examples, the C API, networking, FFmpeg, and Draco; use the unit or an integration preset before merging.",
+      "inherits": "base-ninja",
+      "binaryDir": "${sourceDir}/cmake-build-dev",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CNA_GRAPHICS_RENDERER": "STUB",
+        "CNA_BUILD_TESTS": "OFF",
+        "CNA_BUILD_EXAMPLES": "OFF",
+        "CNA_BUILD_C_API": "OFF",
+        "CNA_ENABLE_NET": "OFF",
+        "CNA_ENABLE_VIDEO": "OFF",
+        "CNA_ENABLE_DRACO": "OFF"
+      }
+    },
+    {
+      "name": "dev-fast-debug",
+      "displayName": "Fast local development with line-table debug info",
+      "description": "Opt-in COMP-009 build using line tables instead of full variable/type debug information. Keeps source-level stacks and breakpoints while reducing compile/link I/O; use dev for full debugger inspection.",
+      "inherits": "dev",
+      "binaryDir": "${sourceDir}/cmake-build-dev-fast-debug",
+      "cacheVariables": {
+        "CNA_DEBUG_INFO": "LINE_TABLES"
+      }
+    },
+    {
+      "name": "unit",
+      "displayName": "Focused unit tests (STUB, Debug)",
+      "description": "Builds CnaTests without demos, the C API, networking, FFmpeg, or Draco. Use the renderer-specific and integration presets for coverage that requires those components.",
+      "inherits": "base-ninja",
+      "binaryDir": "${sourceDir}/cmake-build-unit",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CNA_GRAPHICS_RENDERER": "STUB",
+        "CNA_BUILD_TESTS": "ON",
+        "CNA_BUILD_EXAMPLES": "OFF",
+        "CNA_BUILD_C_API": "OFF",
+        "CNA_ENABLE_NET": "OFF",
+        "CNA_ENABLE_VIDEO": "OFF",
+        "CNA_ENABLE_DRACO": "OFF"
+      }
+    },
+    {
+      "name": "unit-pch",
+      "displayName": "Focused content tests with PCH (STUB, Debug)",
+      "description": "Opt-in COMP-003 pilot. Builds the content-test object group with a private standard-library/GoogleTest PCH; CNA public headers remain textual.",
+      "inherits": "unit",
+      "binaryDir": "${sourceDir}/cmake-build-unit-pch",
+      "cacheVariables": {
+        "CNA_ENABLE_PCH": "ON"
+      }
+    },
+    {
+      "name": "unit-unity",
+      "displayName": "Focused core/math tests with the clean-CI unity pilot",
+      "description": "Opt-in COMP-007 clean-build experiment. Unity batches are limited to the stable cna_core and cna_math modules; normal incremental unit builds remain non-unity.",
+      "inherits": "unit",
+      "binaryDir": "${sourceDir}/cmake-build-unit-unity",
+      "cacheVariables": {
+        "CNA_ENABLE_UNITY_BUILD": "ON"
+      }
+    },
+    {
+      "name": "release-modules",
+      "displayName": "Focused release modules (STUB)",
+      "description": "A portable Release configuration for checking optimized CNA module and content-tool builds without test/demo/C API volume.",
+      "inherits": "base-ninja",
+      "binaryDir": "${sourceDir}/cmake-build-release-modules",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CNA_GRAPHICS_RENDERER": "STUB",
+        "CNA_BUILD_TESTS": "OFF",
+        "CNA_BUILD_EXAMPLES": "OFF",
+        "CNA_BUILD_C_API": "OFF",
+        "CNA_ENABLE_NET": "OFF",
+        "CNA_ENABLE_VIDEO": "OFF",
+        "CNA_ENABLE_DRACO": "OFF"
+      }
+    },
+    {
+      "name": "release-ipo",
+      "displayName": "Focused release modules with IPO/LTO (STUB)",
+      "description": "Opt-in IPO/LTO measurement configuration. It is deliberately separate because LTO improves some final artifacts at the cost of compile/link time.",
+      "inherits": "release-modules",
+      "binaryDir": "${sourceDir}/cmake-build-release-ipo",
+      "cacheVariables": {
+        "CNA_ENABLE_IPO": "ON"
+      }
+    },
+    {
       "name": "web",
       "displayName": "Emscripten (WebAssembly / house3d_demo)",
       "description": "Builds house3d_demo as a self-contained HTML page via Emscripten. Requires EMSDK to be active (source emsdk_env.sh). Run with: emcmake cmake --preset web",
@@ -31,8 +131,8 @@
         "CNA_GRAPHICS_RENDERER": "OPENGLES3",
         "CNA_BUILD_TESTS": "ON",
         "CNA_DEVICES": "ON",
-        "CMAKE_CXX_FLAGS": "-fsanitize=address -fno-omit-frame-pointer -g -O0",
-        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address"
+        "CNA_SANITIZE": "address",
+        "CNA_SANITIZE_OPTIMIZATION": "O0"
       }
     },
     {
@@ -45,8 +145,8 @@
         "CNA_GRAPHICS_RENDERER": "OPENGLES3",
         "CNA_BUILD_TESTS": "ON",
         "CNA_DEVICES": "ON",
-        "CMAKE_CXX_FLAGS": "-fsanitize=thread -fno-omit-frame-pointer -g -O1",
-        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=thread"
+        "CNA_SANITIZE": "thread",
+        "CNA_SANITIZE_OPTIMIZATION": "O1"
       }
     },
     {
@@ -59,8 +159,8 @@
         "CNA_GRAPHICS_RENDERER": "OPENGLES3",
         "CNA_BUILD_TESTS": "ON",
         "CNA_DEVICES": "ON",
-        "CMAKE_CXX_FLAGS": "-fsanitize=undefined -fno-omit-frame-pointer -g -O1",
-        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=undefined"
+        "CNA_SANITIZE": "undefined",
+        "CNA_SANITIZE_OPTIMIZATION": "O1"
       }
     },
     {
@@ -122,21 +222,19 @@
       "name": "multi-renderer",
       "displayName": "Multi-renderer (HEADLESS + SOFTWARE + STUB)",
       "description": "plans/plan_runtimerenderer.md reference multi-renderer set: no window, no GPU dependency, no third-party closure, so it runs anywhere including CI with no display server. The renderer is chosen at runtime via CNA::GraphicsRendererSelection.",
-      "generator": "Ninja",
+      "inherits": "base-ninja",
       "binaryDir": "${sourceDir}/cmake-build-multi",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CNA_GRAPHICS_RENDERER": "HEADLESS",
-        "CNA_GRAPHICS_RENDERERS": "HEADLESS;SOFTWARE;STUB",
-        "CMAKE_CXX_COMPILER_LAUNCHER": "ccache",
-        "CMAKE_C_COMPILER_LAUNCHER": "ccache"
+        "CNA_GRAPHICS_RENDERERS": "HEADLESS;SOFTWARE;STUB"
       }
     },
     {
       "name": "cnaext",
       "displayName": "CNAEXT engine layer (OpenGL ES renderer, Debug)",
       "description": "plans/plan_modern.md MOD-2: native debug build with the CNA::Graphics extended engine layer enabled (CNA_CNAEXT=ON) plus tests -- the build every plans/plan_modern.md task is verified in. Without CNA_CNAEXT the whole CNA::Graphics layer (RenderPipelineSettings, PbrMaterial, DepthEffect, CRTEffect, AsciiPostProcessEffect, and everything plans/plan_modern.md adds on top) compiles to nothing, so the default build cannot verify it. Same submodule/SDL prerequisites as the 'tests' preset above. Run: cmake --preset cnaext && cmake --build --preset cnaext --target CnaTests && SDL_AUDIODRIVER=dummy ./cmake-build-cnaext/CnaTests --gtest_filter='CnaExt*:DepthEffect*:CRTEffect*:AsciiPostProcess*'",
-      "generator": "Ninja",
+      "inherits": "base-ninja",
       "binaryDir": "${sourceDir}/cmake-build-cnaext",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
@@ -148,6 +246,95 @@
     }
   ],
   "buildPresets": [
+    {
+      "name": "dev",
+      "displayName": "Build the fast local-development content tool",
+      "configurePreset": "dev",
+      "targets": [
+        "cna_tool_cnb_info"
+      ]
+    },
+    {
+      "name": "dev-fast-debug",
+      "displayName": "Build the fast-debug content tool",
+      "configurePreset": "dev-fast-debug",
+      "targets": [
+        "cna_tool_cnb_info"
+      ]
+    },
+    {
+      "name": "unit",
+      "displayName": "Build the complete CnaTests suite",
+      "configurePreset": "unit",
+      "targets": [
+        "CnaTests"
+      ]
+    },
+    {
+      "name": "unit-core",
+      "displayName": "Build focused core tests",
+      "configurePreset": "unit",
+      "targets": [
+        "CnaCoreTests"
+      ]
+    },
+    {
+      "name": "unit-math",
+      "displayName": "Build focused math tests",
+      "configurePreset": "unit",
+      "targets": [
+        "CnaMathTests"
+      ]
+    },
+    {
+      "name": "unit-core-math-unity",
+      "displayName": "Build focused core and math tests with the unity pilot",
+      "configurePreset": "unit-unity",
+      "targets": [
+        "CnaCoreTests",
+        "CnaMathTests"
+      ]
+    },
+    {
+      "name": "unit-content",
+      "displayName": "Build focused content tests",
+      "configurePreset": "unit",
+      "targets": [
+        "CnaContentTests"
+      ]
+    },
+    {
+      "name": "unit-content-pch",
+      "displayName": "Build focused content tests with the PCH pilot",
+      "configurePreset": "unit-pch",
+      "targets": [
+        "CnaContentTests"
+      ]
+    },
+    {
+      "name": "unit-graphics",
+      "displayName": "Build focused graphics tests",
+      "configurePreset": "unit",
+      "targets": [
+        "CnaGraphicsTests"
+      ]
+    },
+    {
+      "name": "release-modules",
+      "displayName": "Build the focused release content tool",
+      "configurePreset": "release-modules",
+      "targets": [
+        "cna_tool_cnb_info"
+      ]
+    },
+    {
+      "name": "release-ipo",
+      "displayName": "Build the IPO/LTO content-tool measurement target",
+      "configurePreset": "release-ipo",
+      "targets": [
+        "cna_tool_cnb_info"
+      ]
+    },
     {
       "name": "web",
       "displayName": "Build house3d_demo for web",

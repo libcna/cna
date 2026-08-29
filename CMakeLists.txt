@@ -39,38 +39,44 @@ if(CNA_BUILD_C_API)
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 endif()
 
+include(cmake/BuildPerformance.cmake)
+cna_configure_linker()
+
 # Reuse compiler output across build directories when ccache is available.
 # This is intentionally configured before sharp-runtime is added so the cache
-# also covers that comparatively large dependency. Disable with
-# -DCNA_USE_CCACHE=OFF when diagnosing compiler-launcher issues.
+# also covers that comparatively large dependency. The launcher supplies a stable base directory
+# on every compile invocation, allowing ccache to normalize source paths shared by CNA and the
+# sibling Sharp Runtime checkout. Disable with -DCNA_USE_CCACHE=OFF when diagnosing launcher issues.
 option(CNA_USE_CCACHE "Use ccache for CNA and sharp-runtime builds when available" ON)
+set(CNA_CCACHE_BASEDIR "${CMAKE_CURRENT_SOURCE_DIR}/.." CACHE PATH
+    "Stable source parent supplied to ccache for path normalization")
 if(CNA_USE_CCACHE)
     find_program(CNA_CCACHE_PROGRAM ccache)
     if(CNA_CCACHE_PROGRAM)
-        if(NOT CMAKE_C_COMPILER_LAUNCHER)
-            set(CMAKE_C_COMPILER_LAUNCHER "${CNA_CCACHE_PROGRAM}" CACHE STRING "C compiler launcher")
-        endif()
-        if(NOT CMAKE_CXX_COMPILER_LAUNCHER)
-            set(CMAKE_CXX_COMPILER_LAUNCHER "${CNA_CCACHE_PROGRAM}" CACHE STRING "C++ compiler launcher")
-        endif()
-        message(STATUS "CNA: compiler cache available (${CNA_CCACHE_PROGRAM}); existing compiler launchers are preserved")
+        get_filename_component(_cna_ccache_basedir "${CNA_CCACHE_BASEDIR}" ABSOLUTE
+            BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+        set(CNA_CCACHE_BASEDIR "${_cna_ccache_basedir}" CACHE PATH
+            "Stable source parent supplied to ccache for path normalization" FORCE)
+        set(_cna_ccache_launcher
+            "${CMAKE_COMMAND};-E;env;CCACHE_BASEDIR=${CNA_CCACHE_BASEDIR};${CNA_CCACHE_PROGRAM}")
+        foreach(_cna_language IN ITEMS C CXX)
+            set(_cna_launcher_variable "CMAKE_${_cna_language}_COMPILER_LAUNCHER")
+            if(NOT DEFINED ${_cna_launcher_variable} OR "${${_cna_launcher_variable}}" STREQUAL "" OR
+               "${${_cna_launcher_variable}}" STREQUAL "ccache" OR
+               "${${_cna_launcher_variable}}" STREQUAL "${CNA_CCACHE_PROGRAM}")
+                set(${_cna_launcher_variable} "${_cna_ccache_launcher}" CACHE STRING
+                    "${_cna_language} compiler launcher" FORCE)
+            endif()
+        endforeach()
+        add_custom_target(cna_ccache_stats
+            COMMAND "${CNA_CCACHE_PROGRAM}" --show-stats
+            COMMENT "Showing CNA compiler-cache statistics"
+            VERBATIM)
+        message(STATUS
+            "CNA: compiler cache available (${CNA_CCACHE_PROGRAM}; base directory: ${CNA_CCACHE_BASEDIR})")
     else()
         message(STATUS "CNA: ccache not found; using the build directory's normal incremental object cache")
     endif()
-endif()
-
-# Emscripten disables C++ exception throw/catch support by default (an uncaught throw aborts
-# the whole runtime instead of unwinding) - this codebase relies on exceptions pervasively
-# (System::Exception hierarchy, EXPECT_THROW tests, etc.), so it must be enabled globally,
-# before sharp-runtime is added below, since unwinding requires every frame in the call chain
-# to agree on the same exception-handling ABI.
-#
-# Emscripten's native Wasm exception ABI cannot be combined with Asyncify in the supported
-# Binaryen toolchain. CNA needs Asyncify to retain XNA's blocking Game::Run() call across browser
-# frames on Firefox as well as Chromium, so every object uses the JS-lowered exception ABI.
-if(EMSCRIPTEN)
-    add_compile_options(-fexceptions)
-    add_link_options(-fexceptions -sDISABLE_EXCEPTION_CATCHING=0 -sASYNCIFY=1)
 endif()
 
 option(CNA_BUILD_TESTS "Build CNA tests" ON)
@@ -118,16 +124,10 @@ if(CNA_ENABLE_NET)
     cna_configure_vendored_enet()
 endif()
 
-# Optional sanitizers (INPUT-BUILD-006 / INPUT-CI-005). Empty = off. Comma-separated clang/gcc
-# sanitizer list, e.g. -DCNA_SANITIZE=address,undefined. Applied from here on, so CNA, sharp-runtime,
-# and the tests are instrumented; the vendored SDL/ENet builds above stay uninstrumented (ASan/UBSan
-# tolerate mixing). For diagnostics/CI only — never ship a sanitized build.
-set(CNA_SANITIZE "" CACHE STRING "Comma-separated sanitizers to enable (e.g. address,undefined); empty disables")
-if(CNA_SANITIZE)
-    message(STATUS "CNA: sanitizers enabled: ${CNA_SANITIZE}")
-    add_compile_options(-fsanitize=${CNA_SANITIZE} -fno-omit-frame-pointer -g)
-    add_link_options(-fsanitize=${CNA_SANITIZE})
-endif()
+# Optional sanitizers are modeled by CNA::Instrumentation so they apply to CNA, Sharp Runtime,
+# and the final test/tool executables while remaining outside vendored SDL/ENet sub-builds.
+cna_configure_instrumentation()
+cna_configure_debug_info()
 
 set(SHARP_RUNTIME_BUILD_TESTS OFF CACHE BOOL "Build sharp-runtime tests" FORCE)
 # Load CNA's component closure before adding the sibling. Without an explicit selection the
@@ -170,6 +170,7 @@ if(CNA_SHARP_RUNTIME_IS_MODULAR AND NOT TARGET SHARP_RUNTIME)
     add_library(SHARP_RUNTIME INTERFACE)
     cna_link_sharp_runtime(SHARP_RUNTIME INTERFACE)
 endif()
+cna_apply_sharp_runtime_build_support()
 
 #find_package(SDL3_ttf REQUIRED)
 
@@ -266,3 +267,9 @@ include(cmake/Tests/ModuleProbes.cmake)
 # to editing ~200 module-local example registrations that know nothing about Apple. No-op on
 # every non-Apple target, and on macOS unless CNA_APPLE_BUNDLE_MACOS_EXECUTABLES is on.
 cna_apple_configure_all_bundles()
+
+# Build policy is attached only after every CNA target exists. This keeps compiler/linker flags
+# target-scoped and excludes vendored projects while still covering tools, tests, and applications.
+cna_apply_build_support_to_cna_targets()
+cna_apply_ipo_to_cna_targets()
+cna_apply_unity_to_pilot_targets()

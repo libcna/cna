@@ -298,6 +298,10 @@ enum class ObjectKind : uint32_t {
     // CBIND-105: a reflective reader's field list, held while it is being declared. The reader it
     // registers is owned by the canonical reader table, not by a handle.
     ReflectiveTypeReaderBuilder = 180,
+
+    // CBIND-116: a Dictionary<string, object> read out of an .xnb. Borrowed rather than owned --
+    // the loaded Model owns it, so the handle carries a weak view and no destroy route exists.
+    ObjectDictionaryEXT = 181,
     Test = UINT32_MAX
 };
 

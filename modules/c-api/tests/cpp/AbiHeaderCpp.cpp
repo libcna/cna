@@ -8,7 +8,7 @@
 
 #include <cstddef>
 
-static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 17, 0));
+static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 18, 0));
 static_assert(sizeof(CNA_Result) == sizeof(uint32_t));
 static_assert(sizeof(CNA_Handle) == sizeof(uint64_t));
 static_assert(sizeof(CNA_GraphicsResourceTag) == sizeof(uint64_t));
@@ -1174,3 +1174,11 @@ static_assert(CNA_CONTENT_FIELD_BOOLEAN == UINT32_C(0));
 static_assert(CNA_CONTENT_FIELD_TIMESPAN == UINT32_C(13));
 static_assert(CNA_CONTENT_FIELD_MAXIMUM == CNA_CONTENT_FIELD_TIMESPAN);
 static_assert(sizeof(CNA_ContentFieldKind) == sizeof(uint32_t));
+
+// CBIND-116: the Dictionary<string, object> a content processor writes.
+static_assert(CNA_OBJECT_DICTIONARY_VALUE_UNKNOWN == UINT32_C(0));
+static_assert(CNA_OBJECT_DICTIONARY_VALUE_FOREIGN_OBJECT == UINT32_C(14));
+static_assert(CNA_OBJECT_DICTIONARY_VALUE_MAXIMUM == CNA_OBJECT_DICTIONARY_VALUE_FOREIGN_OBJECT);
+static_assert(sizeof(CNA_ObjectDictionaryValueKind) == sizeof(uint32_t));
+static_assert(sizeof(CNA_ObjectDictionaryEntry) == 24U);
+static_assert(alignof(CNA_ObjectDictionaryEntry) == 8U);

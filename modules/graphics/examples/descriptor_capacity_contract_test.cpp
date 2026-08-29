@@ -164,9 +164,7 @@ namespace
             const int r = ((id >> (t * 3 + 0)) & 1) ? 255 : 0;
             const int g = ((id >> (t * 3 + 1)) & 1) ? 255 : 0;
             const int b = ((id >> (t * 3 + 2)) & 1) ? 255 : 0;
-            texels[static_cast<std::size_t>(t)] =
-                Color(static_cast<std::uint8_t>(r), static_cast<std::uint8_t>(g),
-                      static_cast<std::uint8_t>(b), 255);
+            texels[static_cast<std::size_t>(t)] = Color(r, g, b, 255);
         }
         return texels;
     }

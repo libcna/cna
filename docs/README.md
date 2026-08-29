@@ -1,6 +1,6 @@
 # docs/ index
 
-233 Markdown documents in `docs/` (including this index) — this index exists so a reader (human or
+234 Markdown documents in `docs/` (including this index) — this index exists so a reader (human or
 AI agent) can tell what's current without opening every file. It groups files by topic and flags
 which ones are known-current vs. historical/dated. Entries not explicitly flagged have not been
 individually re-verified in the 2026-07-11 documentation pass that produced this index — treat
@@ -185,6 +185,9 @@ scope for the 2026-07-11 Graphics documentation-accuracy pass; check each file's
   …)` plus `CNA_VERSION_PRERELEASE`), what derives from it, which numbers are deliberately *not*
   the product version (the C ABI version, XNA 4.0), and the step-by-step release checklist.
   Written 2026-08-20 for the first tag, `v0.1.0-alpha.1`.
+- **[`build-performance.md`](build-performance.md)** — fast local/unit/release presets, the
+  target-scoped compiler/linker/instrumentation policy, ccache operation, and the benchmark
+  protocol for evaluating further build-speed work.
 
 ---
 

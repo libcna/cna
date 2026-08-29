@@ -185,17 +185,13 @@ else()
     # Draco 1.5.7 predates libc++'s transitive-include cleanup: src/draco/io/ply_reader.cc calls
     # std::all_of while including only <array> and <regex>, which libstdc++ still pulls in for it
     # and a current libc++ does not. GCC hosts therefore build it and every clang build fails --
-    # an Emscripten build is where CNA first meets one. Exactly one production file in the tree
-    # does this (the only other is a test, and DRACO_TESTS is off above), and the submodule must
-    # stay byte-identical to the pinned google/draco 1.5.7, so the header is supplied from outside
-    # for this subtree alone and the flag is put back immediately afterwards.
-    set(_cna_saved_cxx_flags "${CMAKE_CXX_FLAGS}")
-    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -include algorithm")
-    endif()
+    # an Emscripten build is where CNA first meets one. The submodule must remain byte-identical,
+    # so attach the compatibility include to its owning object target after it is created rather
+    # than changing CMAKE_CXX_FLAGS for the whole configure scope.
     add_subdirectory("${_cna_draco_dir}" "${CMAKE_CURRENT_BINARY_DIR}/draco" EXCLUDE_FROM_ALL)
-    set(CMAKE_CXX_FLAGS "${_cna_saved_cxx_flags}")
-    unset(_cna_saved_cxx_flags)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        target_compile_options(draco_io PRIVATE -include algorithm)
+    endif()
     set(CNA_DRACO_AVAILABLE ON)
     message(STATUS "CNA: Using pinned vendored Draco 1.5.7 (8786740086a9f4d83f44aa83badfbea4dce7a1b5)")
 endif()
@@ -219,14 +215,16 @@ endif()
 set(CNA_FFMPEG_AVAILABLE ${CNA_FFMPEG_AVAILABLE} PARENT_SCOPE)
 set(CNA_DRACO_AVAILABLE ${CNA_DRACO_AVAILABLE} PARENT_SCOPE)
 
-# Common public build surface shared by every CNA module and, transitively, by every
-# consumer of any module: the public compile definitions the monolithic CNA target used
-# to carry PUBLIC. Public include paths deliberately do NOT live here any more -- each
-# module target exposes its own include/ root, and consumers reach the aggregate surface
+# Public build facts shared by every CNA module and, transitively, by every consumer of a
+# module. Keep this surface to ABI/header requirements only: warnings, instrumentation, linker
+# selection, and other project-local policy live in private support targets from
+# cmake/BuildPerformance.cmake. Public include paths deliberately do NOT live here any more --
+# each module target exposes its own include/ root, and consumers reach the aggregate surface
 # through target composition (the CNA umbrella, or the specific modules they link).
-add_library(cna_build_flags INTERFACE)
-add_library(CNA::BuildFlags ALIAS cna_build_flags)
-target_compile_definitions(cna_build_flags INTERFACE
+add_library(cna_build_config INTERFACE)
+add_library(CNA::BuildConfig ALIAS cna_build_config)
+target_compile_features(cna_build_config INTERFACE cxx_std_23)
+target_compile_definitions(cna_build_config INTERFACE
         XNA5
         ${CNA_RENDERER_DEFINE}
         $<$<BOOL:${CNA_CNAEXT}>:CNA_CNAEXT>
@@ -242,21 +240,24 @@ if(EMSCRIPTEN)
     # (native Wasm EH is not), and Asyncify lets Game::Run() suspend and restore its caller while
     # the browser owns frame scheduling. Together they preserve XNA's blocking lifetime contract
     # across the browser versions supported by Emscripten without legacy Wasm `try` instructions.
-    target_compile_options(cna_build_flags INTERFACE
-            -fexceptions)
-    target_link_options(cna_build_flags INTERFACE
-            -fexceptions
-            -sDISABLE_EXCEPTION_CATCHING=0
-            -sASYNCIFY=1
-            -sSTACK_SIZE=1048576)
+    target_link_libraries(cna_build_config INTERFACE cna_emscripten_abi)
+    target_link_options(cna_build_config INTERFACE -sSTACK_SIZE=1048576)
 endif()
 
 # The current high-level mixer is SDL3_mixer based.  Do not advertise sound support in a
 # configuration which deliberately selected a non-SDL3 audio transport: that would compile
 # the XNA facade against an implementation which cannot exist in the resulting binary.
 if(CNA_AUDIO_PLATFORM STREQUAL "SDL3")
-    target_compile_definitions(cna_build_flags INTERFACE SOUND_ENABLED)
+    target_compile_definitions(cna_build_config INTERFACE SOUND_ENABLED)
 endif()
+
+# Non-ABI compiler policy for CNA-owned targets. This target is linked privately after every CNA
+# target has been declared, so it cannot become an installed consumer requirement. `/utf-8` makes
+# MSVC decode the repository's UTF-8 C++ sources deterministically; GCC and Clang already do so.
+add_library(cna_project_options INTERFACE)
+add_library(CNA::ProjectOptions ALIAS cna_project_options)
+target_compile_options(cna_project_options INTERFACE
+    "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
 
 # Defines one CNA module: a STATIC library named cna_<name> with alias CNA::<Alias>, the
 # shared public build surface, and the calling module's own public include/ root. No module
@@ -267,7 +268,7 @@ endif()
 function(cna_add_module target alias)
     add_library(${target} STATIC ${ARGN})
     add_library(CNA::${alias} ALIAS ${target})
-    target_link_libraries(${target} PUBLIC cna_build_flags)
+    target_link_libraries(${target} PUBLIC cna_build_config)
     target_include_directories(${target} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 endfunction()
 
@@ -335,7 +336,7 @@ target_link_libraries(CNA INTERFACE
         cna_core
         cna_math
         cna_platform
-        cna_build_flags
+        cna_build_config
         ${RENDERER_TARGET}
 )
 
@@ -365,21 +366,14 @@ set(_cna_renderer_modules
     opengl2 opengl4 opengles1 openvg pixijs portablegl sdl-gpu sdl-renderer skia software sokol
     stub svg-dom tinygl vulkan
     webgpu wicked common/d3d common/mojoshader)
+string(JOIN "|" _cna_framework_module_pattern ${_cna_framework_modules})
+string(JOIN "|" _cna_renderer_module_pattern ${_cna_renderer_modules})
 file(GLOB_RECURSE _cna_all_module_tus RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
     CONFIGURE_DEPENDS "*.cpp" "*.mm")
 foreach(_cna_tu IN LISTS _cna_all_module_tus)
-    set(_cna_tu_ok FALSE)
-    foreach(_cna_m IN LISTS _cna_framework_modules)
-        if(_cna_tu MATCHES "^${_cna_m}/(src|tests|examples)/")
-            set(_cna_tu_ok TRUE)
-        endif()
-    endforeach()
-    foreach(_cna_m IN LISTS _cna_renderer_modules)
-        if(_cna_tu MATCHES "^renderers/${_cna_m}/(src|tests|examples)/")
-            set(_cna_tu_ok TRUE)
-        endif()
-    endforeach()
-    if(NOT _cna_tu_ok)
+    if(NOT _cna_tu MATCHES "^(${_cna_framework_module_pattern})/(src|tests|examples)/"
+            AND NOT _cna_tu MATCHES
+                "^renderers/(${_cna_renderer_module_pattern})/(src|tests|examples)/")
         message(FATAL_ERROR
             "CNA: translation unit outside every declared physical module src/tests/examples "
             "tree: modules/${_cna_tu} -- add it to a module (modules/<name>/src) or extend "
@@ -387,6 +381,8 @@ foreach(_cna_tu IN LISTS _cna_all_module_tus)
     endif()
 endforeach()
 unset(_cna_all_module_tus)
+unset(_cna_framework_module_pattern)
+unset(_cna_renderer_module_pattern)
 
 # The legacy global trees must not silently come back. Anchored on CNA_SOURCE_DIR (this
 # repository's own root, from project(CNA)) and NOT on CMAKE_SOURCE_DIR: when CNA is consumed

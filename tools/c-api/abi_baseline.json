@@ -1,10 +1,10 @@
 {
  "abi_version": {
-  "encoded": 4352,
+  "encoded": 4608,
   "major": 0,
-  "minor": 17,
+  "minor": 18,
   "patch": 0,
-  "runtime": 4352
+  "runtime": 4608
  },
  "colors": {
   "CNA_COLOR_ALICE_BLUE": [
@@ -1793,6 +1793,7 @@
   "cna_content_manager_get_xnb_reader_usage_count",
   "cna_content_manager_load_effect",
   "cna_content_manager_load_foreign_ext",
+  "cna_content_manager_load_object_dictionary_ext",
   "cna_content_manager_load_sound_effect",
   "cna_content_manager_load_sprite_font",
   "cna_content_manager_load_texture2d",
@@ -3616,6 +3617,19 @@
   "cna_network_session_subscribe_write_unarbitrated_leaderboard",
   "cna_network_session_unsubscribe",
   "cna_network_session_update",
+  "cna_object_dictionary_ext_contains_key",
+  "cna_object_dictionary_ext_copy_array",
+  "cna_object_dictionary_ext_copy_key_at",
+  "cna_object_dictionary_ext_copy_string",
+  "cna_object_dictionary_ext_copy_type_name",
+  "cna_object_dictionary_ext_copy_value",
+  "cna_object_dictionary_ext_destroy",
+  "cna_object_dictionary_ext_get_count",
+  "cna_object_dictionary_ext_get_entry",
+  "cna_object_dictionary_ext_get_foreign_object",
+  "cna_object_dictionary_ext_get_key_size_at",
+  "cna_object_dictionary_ext_get_string_size",
+  "cna_object_dictionary_ext_get_type_name_size",
   "cna_occlusion_query_begin",
   "cna_occlusion_query_create",
   "cna_occlusion_query_destroy",
@@ -4020,6 +4034,7 @@
   "cna_reflective_type_reader_builder_create",
   "cna_reflective_type_reader_builder_destroy",
   "cna_reflective_type_reader_builder_register",
+  "cna_reflective_type_reader_builder_register_shared",
   "cna_reflective_type_reader_copy_canonical_name",
   "cna_reflective_type_reader_get_canonical_name_size",
   "cna_render_pipeline_add_user_pass",
@@ -4890,9 +4905,9 @@
   "cna_write_leaderboards_event_info_init"
  ],
  "integers": {
-  "CNA_ABI_VERSION": 4352,
+  "CNA_ABI_VERSION": 4608,
   "CNA_ABI_VERSION_MAJOR": 0,
-  "CNA_ABI_VERSION_MINOR": 17,
+  "CNA_ABI_VERSION_MINOR": 18,
   "CNA_ABI_VERSION_PATCH": 0,
   "CNA_ALPHA_MODE_BLEND_EXT": 2,
   "CNA_ALPHA_MODE_MASK_EXT": 1,
@@ -6078,6 +6093,22 @@
   "CNA_NOTIFICATION_POSITION_TOP_CENTER": 1,
   "CNA_NOTIFICATION_POSITION_TOP_LEFT": 0,
   "CNA_NOTIFICATION_POSITION_TOP_RIGHT": 2,
+  "CNA_OBJECT_DICTIONARY_VALUE_BOOLEAN": 1,
+  "CNA_OBJECT_DICTIONARY_VALUE_BOUNDING_BOX": 13,
+  "CNA_OBJECT_DICTIONARY_VALUE_BOUNDING_SPHERE": 12,
+  "CNA_OBJECT_DICTIONARY_VALUE_COLOR": 11,
+  "CNA_OBJECT_DICTIONARY_VALUE_DOUBLE": 4,
+  "CNA_OBJECT_DICTIONARY_VALUE_FOREIGN_OBJECT": 14,
+  "CNA_OBJECT_DICTIONARY_VALUE_INT32": 2,
+  "CNA_OBJECT_DICTIONARY_VALUE_MATRIX": 9,
+  "CNA_OBJECT_DICTIONARY_VALUE_MAXIMUM": 14,
+  "CNA_OBJECT_DICTIONARY_VALUE_QUATERNION": 10,
+  "CNA_OBJECT_DICTIONARY_VALUE_SINGLE": 3,
+  "CNA_OBJECT_DICTIONARY_VALUE_STRING": 5,
+  "CNA_OBJECT_DICTIONARY_VALUE_UNKNOWN": 0,
+  "CNA_OBJECT_DICTIONARY_VALUE_VECTOR2": 6,
+  "CNA_OBJECT_DICTIONARY_VALUE_VECTOR3": 7,
+  "CNA_OBJECT_DICTIONARY_VALUE_VECTOR4": 8,
   "CNA_PACKED_VECTOR_FORMAT_ALPHA8": 0,
   "CNA_PACKED_VECTOR_FORMAT_BGR565": 1,
   "CNA_PACKED_VECTOR_FORMAT_BGRA4444": 2,
@@ -7386,6 +7417,14 @@
    4
   ],
   "CNA_NotificationPosition": [
+   4,
+   4
+  ],
+  "CNA_ObjectDictionaryHandle": [
+   8,
+   8
+  ],
+  "CNA_ObjectDictionaryValueKind": [
    4,
    4
   ],
@@ -12483,6 +12522,32 @@
     ]
    },
    "size": 16
+  },
+  "CNA_ObjectDictionaryEntry": {
+   "align": 8,
+   "fields": {
+    "element_count": [
+     16,
+     8
+    ],
+    "is_array": [
+     12,
+     1
+    ],
+    "kind": [
+     8,
+     4
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 24
   },
   "CNA_OptionalInt32": {
    "align": 4,

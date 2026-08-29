@@ -1,12 +1,16 @@
 # plan_content_pipeline.md — CNA Content Pipeline
 
-> **Status (2026-08-28):** `CP-001` through `CP-015` are complete. The implemented initial CNA
-> Content Pipeline project is at a clean architectural checkpoint. The
+> **Status (2026-08-29):** `CP-001` through `CP-015` remain complete. The implemented initial CNA
+> Content Pipeline v1 scope is integration-stabilized against `next` at
+> `909e5adab95d38b5514dd99e89e316592fe53362`; this synchronization did not reopen a CP task or add
+> a pipeline feature. The
 > project starts from the existing `content-pipeline` branch at `0e6899f17017c03c0e23d575d25cd70c678e2781`.
 > That commit contains the completed CNB baseline through `CNBF-123`. Local `next` was actually
 > `4ab1859dc8a540af1bd326df0fa816579adf7027`, two unrelated platform/binding commits ahead; the
-> verified merge base was the starting commit. The existing branch was preserved: no merge,
-> reset, rewrite or push was performed.
+> verified original merge base was the starting commit. The historical branch audit and final v1
+> verification below record the pre-integration state; the completed branch was subsequently
+> preserved through a normal merge of current `next`, without reset, rebase, squash, history
+> rewrite or push.
 >
 > **Boundary:** this plan owns the build-time CNA Content Pipeline. `plans/plan_cnb.md` remains the
 > engineering record for the frozen CNB compiled format. The pipeline consumes the existing CNB
@@ -852,6 +856,46 @@ listed under current risks and unresolved questions: multi-output build graphs, 
 loading for the stock CLI, remaining Windows Model/glTF Unicode seams, optional configuration and
 profiles, and only then parallel scheduling. Song/Video source import routes can be added when
 their authoring semantics are specified; Effect remains outside this project.
+
+### 11.3 Integration stabilization against current `next`
+
+The completed feature branch was synchronized without reopening `CP-001` through `CP-015`:
+
+* Starting `content-pipeline` was `7f7739d81ff4c042566e19bf9d7493ceff8f3386`; current `next` was
+  `909e5adab95d38b5514dd99e89e316592fe53362`, with original merge base
+  `0e6899f17017c03c0e23d575d25cd70c678e2781`. The normal merge was textually conflict-free. The
+  one semantic CMake seam was the newer focused-test split: tool-path definitions and the generated
+  `cna_add_content` fixture now attach to the content test object target, so both `CnaContentTests`
+  and aggregate `CnaTests` receive them.
+* The newer complete-public-header C-ABI inventory correctly discovers the experimental pipeline
+  surface. Its generated snapshot is 544 headers / 9,173 symbols: 8,352 implemented, 15 approved
+  partial, 342 planned under future `CBIND-117`, and 464 not applicable. No C route, ABI version or
+  export was changed; all nine build-free C-API inventory/compatibility/release-gate tests pass.
+* A fresh HEADLESS Debug Ninja tree configured and built completely. The required integration gate
+  ran 563 tests from 60 content/CNB/CNJ/pipeline suites: 561 passed and two optional large-fixture
+  tests skipped. It includes old/new Texture2D (including color key), SoundEffect, Model/direct
+  glTF, direct glTF versus glTF-to-CNJ, all eight CNJ compiler routes, dependency/XREF separation,
+  incremental invalidation, atomic artifact/manifest publication, custom extension, CMake helper,
+  runtime decode and 11/11 frozen golden vectors.
+* The broader focused content runner ran 1,446 tests from 172 suites: 1,431 passed, seven skipped
+  and eight failed. Three are the already recorded HEADLESS Texture3D/TextureCube upload boundary.
+  Five are pre-existing broad glTF corpus/renderer-source policy failures; neither their tests nor
+  the inspected renderer sources changed in this merge. They are reported rather than folded into
+  the green pipeline gate.
+* A fresh ASan+UBSan HEADLESS Debug tree built `CnaContentTests`, `cna-content` and all legacy CNB
+  producers. With `halt_on_error=1`, the same 563-test gate passed (561 passed, two environment-
+  gated skips). LeakSanitizer again refused the subprocess fixture under this runner's `ptrace`, so
+  the successful run used `detect_leaks=0` and is not claimed as LSan evidence. TSan remains not
+  applicable because v1 adds no parallel scheduler or concurrently mutable registry.
+* `cna-content` now links the specific `cna_content` target instead of the aggregate `CNA` facade.
+  The legacy static-module closure still lists platform archives as possible link inputs, but the
+  resulting executable has no renderer, SDL/audio, `GraphicsDevice`, audio-device or
+  `ContentManager::Load` runtime dependency/symbol and initializes none of them. Its sources contain
+  no runtime compiler shortcut. Writers still call only the existing typed `Encode*ToCnb()` APIs,
+  and all four producer front ends still publish through the single `CnaToolAtomicWrite.hpp` helper.
+* No frozen CNB codec, schema, asset ID, format document or golden asset changed. No future CP item,
+  project format, target profile, parallel scheduler, Song/Video importer, Effect or package work
+  was added.
 
 ---
 

@@ -233,6 +233,14 @@ static int validate_properties(
             cna_effect_fog_set_end(basic, 20.0F) == CNA_RESULT_SUCCESS);
     REQUIRE(cna_basic_effect_get_vertex_color_enabled(basic, &boolean) ==
                 CNA_RESULT_SUCCESS && boolean == CNA_TRUE);
+    /* CBIND-116: back to false as well. FX-125 gave BasicEffect the getVertexColorEnabledProperty
+       pair the XNA API names, beside the public field these routes already bound; both spellings
+       are one storage, so one setter has to be seen moving it in both directions rather than only
+       into the state the effect did not start in. */
+    REQUIRE(cna_basic_effect_set_vertex_color_enabled(basic, CNA_FALSE) == CNA_RESULT_SUCCESS);
+    REQUIRE(cna_basic_effect_get_vertex_color_enabled(basic, &boolean) ==
+                CNA_RESULT_SUCCESS && boolean == CNA_FALSE);
+    REQUIRE(cna_basic_effect_set_vertex_color_enabled(basic, CNA_TRUE) == CNA_RESULT_SUCCESS);
     REQUIRE(cna_basic_effect_get_prefer_per_pixel_lighting(basic, &boolean) ==
                 CNA_RESULT_SUCCESS && boolean == CNA_TRUE);
     REQUIRE(cna_effect_lights_get_ambient_color(basic, &vector) == CNA_RESULT_SUCCESS &&

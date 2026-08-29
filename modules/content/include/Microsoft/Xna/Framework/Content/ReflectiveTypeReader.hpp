@@ -337,7 +337,10 @@ namespace Microsoft::Xna::Framework::Content
          *     .RegisterShared<System::Object>();
          * ```
          *
-         * Safe to call more than once: `AddTypeCreator` replaces an entry of the same name.
+         * Safe to call more than once, but **the first registration for a canonical name is the
+         * one that stays**: `AddTypeCreator` keeps an existing entry rather than replacing it, so
+         * registering the other shape afterwards is silently ignored. Use
+         * `ContentTypeReaderManager::RemoveTypeCreatorEXT` first when the entry must change.
          *
          * @tparam TStored The pointee the reader hands back: `T` itself, or a base of it.
          */
@@ -358,7 +361,10 @@ namespace Microsoft::Xna::Framework::Content
         /**
          * @brief Registers the reflective reader and every enum reader the type needs.
          *
-         * Safe to call more than once: `AddTypeCreator` replaces an entry of the same name.
+         * Safe to call more than once, but **the first registration for a canonical name is the
+         * one that stays**: `AddTypeCreator` keeps an existing entry rather than replacing it, so
+         * registering the other shape afterwards is silently ignored. Use
+         * `ContentTypeReaderManager::RemoveTypeCreatorEXT` first when the entry must change.
          */
         void Register()
         {

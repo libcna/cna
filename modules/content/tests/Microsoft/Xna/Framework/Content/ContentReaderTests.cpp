@@ -7,9 +7,11 @@
 #include <fstream>
 #include <sstream>
 
+#include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "CNA/Internal/Xnb/XnbHeader.hpp"
 #include "System/IO/BinaryWriter.hpp"
 #include "System/IO/EndOfStreamException.hpp"

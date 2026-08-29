@@ -33,7 +33,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32 AND CNA_GRAPHICS_RENDERER ST
             "-Wl,--start-group"
             cna_runtime cna_devices cna_devices_ext cna_graphics_ext cna_cnaext cna_storage
             cna_content cna_media cna_audio cna_input cna_graphics_core cna_core cna_math
-            cna_build_flags ${RENDERER_TARGET}
+            cna_build_config ${RENDERER_TARGET}
             "-Wl,--end-group"
             SHARP_RUNTIME SDL3::SDL3)
         if(TARGET SDL3::SDL3main)

@@ -91,10 +91,13 @@ if(CNA_BUILD_EXAMPLES)
             target_link_libraries(cna_demo_2d PRIVATE SDL3::SDL3main)
         endif()
         add_custom_command(TARGET cna_demo_2d POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${CMAKE_CURRENT_SOURCE_DIR}/demo_2d/Content"
-                "$<TARGET_FILE_DIR:cna_demo_2d>/Content"
-            COMMENT "Copying Content next to cna_demo_2d executable")
+            COMMAND ${CMAKE_COMMAND}
+                -DCNA_COPY_SOURCE=${CMAKE_CURRENT_SOURCE_DIR}/demo_2d/Content
+                -DCNA_COPY_DESTINATION=$<TARGET_FILE_DIR:cna_demo_2d>/Content
+                -DCNA_COPY_LOCK=${CMAKE_BINARY_DIR}/CMakeFiles/cna-example-content.lock
+                -P ${CMAKE_SOURCE_DIR}/cmake/CopyDirectoryLocked.cmake
+            COMMENT "Copying Content next to cna_demo_2d executable"
+            VERBATIM)
         if("WEBGPU" IN_LIST CNA_RENDERER_IDENTITIES AND CNA_WEBGPU_RUNTIME_LIBRARY)
             add_custom_command(TARGET cna_demo_2d POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different

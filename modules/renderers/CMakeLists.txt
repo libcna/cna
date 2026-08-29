@@ -14,7 +14,7 @@
 # ride the owning module targets now -- renderers reach the graphics/math/core headers
 # through their declared reverse edges below, not through a global include directory.
 add_library(cna_renderer_common INTERFACE)
-target_link_libraries(cna_renderer_common INTERFACE cna_build_flags)
+target_link_libraries(cna_renderer_common INTERFACE cna_build_config)
 
 # plans/plan_runtimerenderer.md RTR-P6-6: this family's target name, derived from its own directory.
 #

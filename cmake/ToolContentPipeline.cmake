@@ -6,7 +6,7 @@ set_target_properties(cna_content_tool PROPERTIES OUTPUT_NAME "cna-content")
 target_include_directories(cna_content_tool PRIVATE
     ${CNA_SOURCE_DIR}/tools/common
 )
-target_link_libraries(cna_content_tool PRIVATE CNA)
+target_link_libraries(cna_content_tool PRIVATE cna_content)
 cna_link_sharp_runtime(cna_content_tool PRIVATE)
 
 # Adds a build target that delegates content compilation to the same cna-content executable users

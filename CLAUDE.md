@@ -341,31 +341,9 @@ const Color Color::CornflowerBlue{…};
 
 ## Porting Workflow — Per-file Checklist
 
-Every `.cs` file ported from FNA to CNA **must be complete** — not partial. "Make and forget" means the file is
-done in one pass. Do not skip any checklist item and come back later.
-
-The full per-file checklist is in:
-
-```text
-CHECKLIST.md
-```
-
-Use it for every file. The minimum requirements are:
-
-- `// SPDX-License-Identifier: MS-PL` at the top of both `.hpp` **and** `.cpp`.
-- `#include "CNA/CNAHelper.hpp"` in `.hpp` if `CNAEXT` is used anywhere in that file.
-- Every method body verified **line-by-line** against the FNA equivalent.
-- Every intentional deviation from FNA logic documented with a `//` comment in the source.
-- Concrete classes that inherit `System::Object` **must** override `GetTypeName()` with `CNAEXT`:
-  ```cpp
-  CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
-  ```
-  The return value is the fully-qualified .NET name, e.g. `"Microsoft.Xna.Framework.Game"`.
-- Tests: every public method, operator, and constant covered. Out-ref overloads tested separately.
-  See CHECKLIST.md for the complete test requirements.
-
-The table of known acceptable C++ deviations from FNA/XNA (e.g. `GetHashCode()` returning `std::size_t`,
-`ref`/`out` → value-ref pairs, null guards omitted for C++ references) is maintained in `CHECKLIST.md`.
+Porting a `.cs` file from FNA to CNA end-to-end is the `port-fna-file` skill — invoke it for the
+per-file checklist (SPDX headers, CNAEXT include, line-by-line FNA verification, GetTypeName
+override, tests). The full checklist is also always in `CHECKLIST.md`.
 
 ---
 
@@ -533,32 +511,11 @@ Renderer selection is compile-time via `CNA_GRAPHICS_RENDERER` CMake option
 public identities; EasyGL remains an internal implementation shared by five GL profiles. The former
 `ASCII` renderer identity was removed in favor of a renderer-neutral post-process effect,
 `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`) -- see `docs/ascii-post-process-effect.md`.
-`WEBGPU`
-is experimental but well past a 2D baseline: on desktop (wgpu-native) it has 3D with every stock
-effect, real instancing, `RenderTarget2D`/`RenderTargetCube`, MSAA, `Texture3D`, GPU occlusion
-queries, custom WGSL `ShaderEffect`s on the 3D route (`WEBGPU-76`,
-`ExecutesShaderEffectSourceEXT()`→true, dialect `Wgsl`) and multiple render targets (`WEBGPU-85/86/87`:
-2..4 targets, a custom `@location(0..N-1)` shader fans out to every slot, a stock draw writes
-attachment 0) and custom WGSL `ShaderEffect`s on the SpriteBatch route too (`WEBGPU-142`). Since
-2026-08-27 **every FNA stock effect's fog is at parity** (`WEBGPU-145`–`148`: BasicEffect, AlphaTest,
-DualTexture, Skinned join the pre-existing EnvironmentMapEffect fog) — the shared primary UBO carries
-the FNA view-space `fogVector`+`fogColor` and each WGSL family applies `ApplyFog`. Since
-2026-08-26 it also runs in the browser through Emscripten's emdawnwebgpu port (2D + 3D, its pixels
-byte-identical to the native Vulkan renderer's). It is also the first CNA renderer to upload
-GPU-native block-compressed textures (`WEBGPU-144`: DXT1/3/5 + BC7 to `WGPUTextureFormat_BC*`, no CPU
-decompress) via the direct `Texture2D`+`SetData` API. `DepthStencilState` **stencil ops**
-(`WEBGPU-83`) now bake into `WGPUStencilFaceState` across **every 3D family** (colored3d plus
-textured/lit/skinned/PBR/env-map/dual-texture/alpha-test/instanced): a stamp-then-gate sequence
-works within one render-target bind cycle, proven on the real GPU by three tests: the shared
-`rendertarget_depthstencil_usage` acceptance test (colored3d), the WebGPU-local `WebGPU_StencilFamily`
-test (Textured3D) and `WebGPU_StencilTwoSided` (`TwoSidedStencilMode` front/back winding, matching
-the EasyGL parity contract) -- so `WEBGPU-83` is complete. Since 2026-08-27 the XNB/DDS content
-loaders also reach the native compressed path (`WEBGPU-144` Phase 2 / XNB-24): `Texture2D::FromStream`
-(DDS) and the `.xnb` `Texture2DReader` keep DXT blocks compressed and upload them GPU-natively
-instead of CPU-decoding to Color, gated on a new renderer-opt-in capability
-`LoadsCompressedContentNativelyEXT()` (WebGPU-only; every other renderer, Skia included, keeps its
-existing decode-to-Color loaders) AND the per-format `IsCompressedTransferFormatEXT`. See
-`docs/webgpu-renderer.md` and `plans/plan_webgpu.md`.
+`WEBGPU` is experimental but past a 2D baseline, with a real 3D route (stock effects, instancing,
+render targets, MSAA, fog parity, GPU-native compressed textures, stencil ops) and Emscripten
+browser support. `plans/plan_webgpu.md`'s top-of-file status summary is the single source of truth
+for current `WEBGPU-*` task status — do not duplicate it here. See `docs/webgpu-renderer.md` for
+the capability boundary.
 `MAGNUM` is a desktop-OpenGL renderer built on mosra/magnum -- see `docs/magnum-renderer.md` and
 `plans/plan_magnum.md` for its own capability boundary.
 `DILIGENT` is experimental too, and is the one renderer whose native API is chosen at **runtime**

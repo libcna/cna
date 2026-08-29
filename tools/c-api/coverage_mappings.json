@@ -1659,6 +1659,8 @@
         "CPP-A1E7C655C06D",
         "CPP-A32C9BD657A3",
         "CPP-A3CB7512458A",
+        "CPP-A3FC4D239E3E",
+        "CPP-A5F813485FA7",
         "CPP-A808F9D92EE5",
         "CPP-A8C8B720DA80",
         "CPP-AC01EBFCE11F",
@@ -18892,6 +18894,51 @@
       "approved_symbols": [
         "CPP-6B69258118AC",
         "CPP-E79A0F65AB65"
+      ]
+    },
+    {
+      "id": "reflective-shared-type-reader",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::(?:ReflectiveSharedTypeReader(?:::(?:ReflectiveSharedTypeReader|FieldReader|CanonicalReaderName|Read))?|ReflectiveTypeReaderBuilder::RegisterShared)$",
+      "kinds": [
+        "class",
+        "constructor",
+        "alias",
+        "method"
+      ],
+      "mapping": "`cna_reflective_type_reader_builder_register_shared`, the reference-shaped twin of `cna_reflective_type_reader_builder_register`.\n\nThe same argument `CBIND-105` made for `ReflectiveTypeReader` applies here and for the same reason: the template cannot be instantiated from C, because `ReflectiveSharedTypeReader<T, TStored>` needs a C++ `T` to construct and a `TStored` to hand back. What is bound is the **contract** -- the same field declaration, registered so the reader produces a reference rather than a value -- against the caller-made object and byte offsets the builder already uses. `FieldReader` is the same `CNA_ReflectiveFieldCallback`, `CanonicalReaderName` composes the same name the value-shaped reader is looked up by (which is why one pair of canonical-name routes answers for both), and `Read` is reached by loading rather than by a route.\n\n**The boundary is measured, not assumed, and it is narrower than the C++ documentation implies.** A `Dictionary<string, object>` value reaches its reader through type-erased dispatch that consumes the reader index whichever shape the reader produces, so on the path C can reach, both registrations read the payload correctly and differ only in the C++ type the entry holds. The container that does refuse the wrong shape is `ModelReader`'s tag path, and no route in this ABI loads a `Model` from content, so that refusal is unreachable from C today. The header says exactly this rather than repeating a warning a C caller cannot observe.",
+      "tests": "`ContentSmoke.c` `compare_registration_shapes` declares the **same two-field type twice under two canonical names**, one registered through each route, and reads both out of one hand-written `.xnb`. It asserts the two entries hold **different C++ types** while both come back as the caller's own object with the fields the file declared -- an inequality this ABI can observe, in place of a failure it cannot produce. Mutation-checked: swapping which route registers first makes the two types equal and fails the suite, which is simultaneously the proof that **the first registration for a name is the one that stays** -- `AddTypeCreator` keeps an existing entry rather than replacing it, contradicting what the canonical header and `CBIND-105`'s own C documentation both claimed until this task corrected them. A released builder refuses further registration while the registration it made keeps working.",
+      "status": "implemented",
+      "task": "CBIND-116",
+      "approved_symbols": [
+        "CPP-10B2307B2873",
+        "CPP-131D4C5DC327",
+        "CPP-325191BD26B5",
+        "CPP-6492BA70E92A",
+        "CPP-C4F2E40ABB62",
+        "CPP-C7FA67B36BE3"
+      ]
+    },
+    {
+      "id": "object-dictionary-extension",
+      "qualified_name_regex": "^CNA::Content::ObjectDictionaryEXT(?:::(?:ObjectDictionaryEXT|GetTypeName|ContainsKey|Get|operator\\[\\]|getValuesProperty))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method",
+        "operator"
+      ],
+      "mapping": "`CNA_ObjectDictionaryHandle` with `cna_content_manager_load_object_dictionary_ext`, `cna_object_dictionary_ext_destroy` and eleven reading routes.\n\nThe constructor is the loader: this type is only ever made by boxing what `DictionaryReader<String, Object>` produced, which is what `ModelReader` does for a `Model.Tag` and what the loader route does for an asset whose root object is the dictionary. `ContainsKey` is `cna_object_dictionary_ext_contains_key`; `getValuesProperty` becomes `_get_count` with indexed `_get_key_size_at`/`_copy_key_at`, because a C caller enumerates a map by index rather than by iterator, and the canonical container is ordered so the order is stable. `GetTypeName` is not a route: it answers the same fixed .NET name for every instance of this type, so publishing it would add a call whose result the header can simply state.\n\n**`Get<T>` and `operator[]` are one pair of routes with a kind argument, because C has no `T`.** `_get_entry` reports what an entry holds -- which is `operator[]`'s type-erased answer, made useful -- and `_copy_value`/`_copy_array`/`_copy_string`/`_get_foreign_object` read it. Naming the wrong kind is refused rather than reinterpreted, which is the C form of the `InvalidCastException` `Get<T>` throws; the canonical `KeyNotFoundException` shares that result code and is separated by the message. A type this ABI does not name reports `UNKNOWN` with its C++ type name still readable, so an unexpected entry can be described rather than merely failing.\n\n**Where the C surface stops:** in C++ this dictionary is reached through `Model.Tag`, and no route in this ABI loads a `Model` from content -- every `CNA_ModelHandle` is built by hand. The loader route reaches the same reader's product from an asset of its own instead. Binding `Model` loading is separate work and the header says so rather than implying the tag path works.",
+      "tests": "`ContentSmoke.c` `validate_object_dictionary` loads a **hand-written `.xnb`** whose root is a five-entry dictionary -- a `BoundingSphere`, a `Vector3[]`, a string and two types declared from C -- the shape XNA's own `TrianglePickingSample` writes. Every route is exercised: the count, containment both ways, indexed keys in the container's order with a short destination reporting the size it needed, the entry description of a scalar, an array and a foreign object, the values themselves against the bytes the fixture wrote, the string, and the caller's own object identity. Refusals are covered separately: a wrong kind, an array through the scalar route and a scalar through the array route, an absent key, an undersized destination, an undersized `CNA_ObjectDictionaryEntry`, an index past the end, and a released handle. Mutation-checked twice -- changing the expected `magic` and changing an expected vertex each fail the suite -- so the assertions are read from the file rather than from the fixture's own constants. The entry type name is asserted present and non-empty but never spelled, because it is the toolchain's rather than this ABI's.",
+      "status": "implemented",
+      "task": "CBIND-116",
+      "approved_symbols": [
+        "CPP-21F231C5C74D",
+        "CPP-60765ECF552B",
+        "CPP-65DC4D18FC58",
+        "CPP-C70CB76938DF",
+        "CPP-CAA858FE9FF3",
+        "CPP-E3D095C0C473",
+        "CPP-FA742DF14CAE"
       ]
     }
   ]
