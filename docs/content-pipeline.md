@@ -1010,20 +1010,27 @@ No `cna_add_game()` convenience layer is defined yet.
 
 ## Verification and current limitations
 
-The final extended-pipeline checkpoint built the complete HEADLESS Debug configuration and reran
-the compatibility boundary on the finished implementation:
+The final post-XNB checkpoint built the complete HEADLESS Debug configuration and reran the broad
+compatibility boundary on the finished implementation:
 
-- 273 pipeline, configuration, manifest, graph, scheduler, custom-tool, source-route, producer,
-  CNJ, golden-vector, and containment tests passed normally and again under combined ASan+UBSan;
-- 107 concurrency-relevant tests passed under ThreadSanitizer with no report;
-- the opt-in sparse 2 GiB+1-byte streaming-hash test passed without storing a giant fixture;
-- all nine generated C-API consistency gates pass and no Content Pipeline C ABI is exported; the
-  new/changed experimental declarations remain planned under open `CBIND-117`;
+- the passing boundary ran 1,535 tests: 1,527 passed and eight opt-in/external-fixture cases
+  skipped. An unfiltered run separately reproduced exactly the three known HEADLESS runtime
+  TextureCube/Texture3D storage failures; no pipeline regression was hidden in the exclusion;
+- independent selections passed CNB 371/371, CNJ 137 with two fixture skips, XNB pipeline/runtime
+  readers 221 with four HEADLESS skips, glTF/Model 608 with three external-fixture skips, and all 11
+  frozen CNB golden vectors;
+- a rebuilt combined ASan+UBSan configuration passed 1,537 tests with eight skips and no report;
+  91 concurrency-relevant tests passed under TSan with only the large-file case skipped and no
+  report;
+- the opt-in sparse 2 GiB+1-byte streaming-hash test passed in 30.0 seconds without storing a
+  repository fixture;
+- both CMake integration fixtures and all nine generated C-API consistency gates pass. The
+  inventory remains 549 headers and 9,332 symbols, with 501 experimental pipeline declarations
+  planned under open `CBIND-117` and no Content Pipeline C ABI export;
 - focused symbol inspection confirms the XNB audio decoder object references only SDL's in-memory
   WAVE load/conversion functions, not SDL initialization, device-open, graphics-device, window, or
-  runtime ContentManager load paths. The monolithic content/tool link can still carry SDL/audio and
-  FFmpeg libraries transitively; HEADLESS is an execution/ownership invariant, not a claim that
-  those shared objects are absent from the executable.
+  runtime ContentManager load paths. HEADLESS is an execution/ownership invariant, not a claim that
+  every transitive shared library is absent from a monolithic link.
 
 LeakSanitizer cannot run the subprocess-heavy selection in the current `ptrace` environment, so
 the successful ASan+UBSan run used `detect_leaks=0` and is not leak evidence. Native Windows/MSVC
@@ -1042,6 +1049,13 @@ tree or extension scan.
 Song and Video CNBs retain streaming XREFs, while the compiler now deploys the referenced media as
 separately fingerprinted/owned support files without embedding it in CNB.
 
+The representative scheduler benchmark again proved complete-tree equality between workers 1 and
+4 over 128 mixed assets and a 97-node shared graph. A separate 1,024-output cleanup benchmark
+preflighted and removed about 480 MiB of manifest-owned compiled data in 7.05 seconds while leaving
+the persistent lease marker. These are host-specific measurements, not compatibility thresholds.
+MinGW links both Unicode-entry-point compiler executables, and Wine 10 exercises stock/custom build
+plus clean through a non-ASCII path. Native Windows and MSVC remain untested and unclaimed.
+
 ## Stability summary
 
 **Stable/frozen:**
@@ -1054,7 +1068,8 @@ separately fingerprinted/owned support files without embedding it in CNB.
   unrepresentable declaration, effect/material field, tag, sharing semantic, or reference rejected;
 - build/runtime separation, deterministic selection, categorized dependencies versus XREFs,
   content-hashed skips, logical path preservation, bounded output ownership, and per-artifact
-  atomic publication.
+  atomic publication;
+- manifest-proven orphan collection and explicit clean without output-tree or extension scanning.
 
 **Experimental:**
 
@@ -1071,8 +1086,12 @@ separately fingerprinted/owned support files without embedding it in CNB.
 - optional target profiles, if a concrete portable-output policy requires them;
 - independently scheduled glTF generated assets only if a concrete cache-isolation benefit
   justifies a generated-source graph contract;
-- broader XNB Model support only through a separately reviewed Model schema revision that can preserve
-  the unsupported vertex, effect/material, tag, shared-resource, and external-reference semantics.
+- broader XNB Model support only through a separately reviewed Model schema revision that can
+  preserve the unsupported vertex, effect/material, tag, shared-resource, and external-reference
+  semantics;
+- a detailed `--explain` mode only with a stable persisted reason breakdown. The current manifest
+  can distinguish broad direct, effective-dependency and output-integrity changes, but cannot
+  attribute every direct field change precisely without executing components or guessing.
 
 **Not provided:**
 
@@ -1084,8 +1103,12 @@ separately fingerprinted/owned support files without embedding it in CNB.
 - `ContentValue` type-erasure mechanics and process-local RTTI guard;
 - the exact manifest JSON layout and cache implementation;
 - glTF's temporary canonical CNJ staging representation;
-- temporary-file naming used by atomic publication.
+- temporary-file naming used by atomic publication;
 - the persistent output-lease filename and exact OS locking mechanism.
+
+Output-root locking is cooperative among current compiler binaries. Concurrently mixing a build or
+clean with an older compiler that predates `.cna-content.lock` is unsupported because that older
+binary cannot honor the lease.
 
 The engineering decisions, rejected alternatives, current risks, and CP task ledger are maintained
 separately in [`plans/plan_content_pipeline.md`](../plans/plan_content_pipeline.md).

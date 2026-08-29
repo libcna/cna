@@ -34,7 +34,9 @@
 > Existing `content-pipeline-model-next` already preserved the XNB/CP-039 head
 > `d86a402d14aa376ace990d63fc9a60b1bbbc53df`; a normal, non-rewriting merge produced the safe
 > combined baseline `8029488d02d561d35bad8509941aa679e2ac6ab1`. `next` remains untouched.
-> `CP-040` and later work continue only on that dedicated branch.
+> `CP-040` through `CP-050` are complete only on that dedicated branch. During final verification,
+> local `next` advanced independently by two unrelated `SAMPLE-001` spike commits; they were not
+> merged, rebased, rewritten, or otherwise folded into this work.
 >
 > **Boundary:** this plan owns the build-time CNA Content Pipeline. `plans/plan_cnb.md` remains the
 > engineering record for the frozen CNB compiled format. The pipeline consumes the existing CNB
@@ -1191,6 +1193,7 @@ carrying forward task-local results:
 | `CP-047` | **completed** | Confirmed from MonoGame `ContentWriter`/`Lz4DecoderStream` that flag `0x40` carries one raw LZ4 block after the ordinary decompressed-size field, never an LZ4 frame. Added one bounds-checked shared decoder used by runtime and canonical compiler paths with no runtime dependency. A fixture whose real MonoGame body was compressed by upstream liblz4 proves exact bytes; runtime and headless XNB-to-CNB pixels agree. Negative tests cover every token/length/offset/input/output boundary, size limits and 1,500 deterministic whole-container mutations. Both compression bits remain invalid. |
 | `CP-048` | **completed** | Added MinGW's Unicode-console startup option only to the stock and custom content compiler executables that define `wmain`. Both link as x86-64 PE console programs; Wine 10 runs each, the stock tool builds through a native non-ASCII path, and the custom tool publishes its two-output fixture. A Windows-target Curve CNB is byte-identical to the Linux build. Linux entry points still build/run normally. Native Windows and MSVC remain untested and unclaimed. |
 | `CP-049` | **completed** | Added `clean <output-directory> [--quiet]` as an empty-next-manifest call through CP-043's exact sorted digest/containment preflight; it removes the valid manifest last and never scans or prunes the tree. Builds and cleans now hold one persistent per-output-root OS lease, so an active operation, unsafe lease, corrupt/symlinked manifest, changed output, or symlinked path fails before destructive work. Compiled, generated and deployment outputs are covered; manual/source files survive. The 53-test CLI suite and focused ASan+UBSan/TSan selections pass, and the MinGW build plus Wine build/clean route succeeds. |
+| `CP-050` | **completed** | Closed the post-XNB continuation with a complete HEADLESS Debug build and a 1,535-case passing boundary (1,527 pass/eight opt-in or fixture skips) after separately reproducing the three known renderer-only HEADLESS TextureCube/Texture3D failures. Independent gates pass for CNB 371/371, CNJ 137 plus two skips, XNB/runtime readers 221 plus four skips, glTF/Model 608 plus three skips, and all 11 frozen golden vectors. Combined ASan+UBSan passes 1,537 plus eight skips (`detect_leaks=0`; no LSan claim), TSan passes 91 plus the large-file skip, the opt-in >2 GiB hash passes, both CMake fixtures and all nine C-API gates pass. Representative workers 1/4 trees remain identical; a 1,024-output ownership-clean benchmark removes about 480 MiB in 7.05 seconds and preserves only the lease. No frozen CNB definition, byte, default glTF output, C ABI, merge, or push changed. |
 
 Tasks are intentionally vertical/coherent. The ledger is revised when implementation evidence makes
 the ordering wrong; it is not a promise to build speculative abstractions.
@@ -1233,6 +1236,9 @@ the ordering wrong; it is not a promise to build speculative abstractions.
   owning node. CP-043 likewise removes obsolete manifest-owned files before manifest replacement,
   so a crash can leave already-removed old outputs named by the previous manifest; the next build
   treats those missing stale files as already clean and retries publication.
+* Output-root serialization is cooperative among compiler binaries that implement
+  `.cna-content.lock`. A concurrently running older compiler that predates CP-049 does not honor
+  the marker; mixed-version concurrent build/clean operation against one root is unsupported.
 * Windows Unicode paths stay native through CLI discovery, manifests, image/WAV/DDS/CNJ and
   Model/glTF flows. cgltf and authored/generated JSON names cross one explicit generic-UTF-8
   boundary backed by a native file callback. Portable tests cover the complete non-ASCII Model
@@ -1279,6 +1285,10 @@ the ordering wrong; it is not a promise to build speculative abstractions.
   closure and consumer set are measured.
 * Whether a future build dependency may intentionally live outside source root, and what explicit
   capability grants that access.
+* Whether a future `--explain` mode should persist a stable reason breakdown. Current output says
+  `BUILD` or `SKIP`, and current manifests can distinguish direct, effective-dependency and output
+  integrity changes, but they do not preserve enough field-level prior identity to attribute every
+  direct change precisely without executing components or inventing an unstable heuristic.
 
 ---
 
@@ -1891,3 +1901,50 @@ and link after the change; Wine performs a real Windows-target build followed by
 manual file and the persistent lease survive. The generated C-API inventory remains 9,332 symbols
 with 501 experimental pipeline rows planned under `CBIND-117`, and all nine C-API consistency gates
 pass; no C route/export/version or CNB definition/byte changed.
+
+---
+
+## 26. Post-XNB hardening and final verification (`CP-050`)
+
+The final continuation checkpoint rebuilt the complete configured HEADLESS Debug tree, then ran
+the unfiltered `CnaContentTests` binary. It executed 1,538 cases: 1,527 passed, eight were expected
+opt-in/external-fixture skips, and exactly three failed at the already documented HEADLESS runtime
+storage boundary (`TextureCube` face upload twice and `Texture3D` volume upload once). Repeating the
+same boundary with only those three non-pipeline cases excluded passed 1,527 and skipped eight.
+Independent category gates make the result attributable: CNB passed 371/371, CNJ passed 137 with
+two fixture skips, the XNB pipeline/runtime-reader selection passed 221 with four HEADLESS skips,
+and glTF/Model passed 608 with three external-fixture skips. All 11 frozen CNB golden vectors pass.
+
+A rebuilt O0 HEADLESS configuration with combined AddressSanitizer and UndefinedBehaviorSanitizer
+ran its broader 1,545-case boundary: 1,537 passed and eight skipped with halt-on-first-error and no
+report. LeakSanitizer itself again aborted compiler subprocesses under the runner's `ptrace`, so the
+successful build and run used `detect_leaks=0` and provide no LSan evidence. A rebuilt O1
+ThreadSanitizer tree ran the complete configuration/manifest/CMake/CLI/core/custom concurrency
+boundary: 91 passed and only the default-disabled >2 GiB I/O case skipped, with no TSan report. That
+sparse-file case passed separately in 30.0 seconds in the normal tree. Both CMake integration
+fixtures and all nine C-API inventory/compatibility/release gates pass; the inventory remains 549
+headers and 9,332 symbols (8,352 implemented, 15 partial, 501 planned, 464 not applicable).
+
+The repository benchmark regenerated 128 mixed PNG/WAV/glTF/CNJ nodes and a 97-node shared graph,
+alternated workers 1 and 4 for two samples each, and rejected any complete-tree difference. Median
+speedups on this run were 2.545x cold, 1.938x no-op, 1.917x after one image change and 1.215x after a
+shared dependency change. A separate 1,024-Texture2D output tree contained about 480 MiB of compiled
+data; four-worker build took 14.42 seconds and manifest/digest-proven clean took 7.05 seconds with a
+41 MiB maximum resident set, leaving only `.cna-content.lock`. These are host-specific engineering
+measurements, not performance thresholds. No private staging session remained after verification.
+
+CP-048/CP-049 already rebuilt both MinGW executables and exercised stock/custom compilation plus
+clean under Wine 10, including a non-ASCII native path and a Curve CNB byte-identical to Linux.
+That is cross-compile and Wine execution evidence, not native Windows or MSVC evidence. The final
+review also evaluated the proposed `--explain` UX: current manifests can reliably classify broad
+direct/effective/output-integrity changes, but not every field-level direct cause without running
+components or persisting a new stable reason breakdown. The ordinary log already reports each
+`BUILD`/`SKIP`; an explain mode remains future work rather than shipping a heuristic reason.
+
+No changed path is a frozen CNB codec, container/schema specification, asset/chunk identifier, CRC
+implementation, or existing golden asset. Default glTF mode remains byte-compatible; optional
+generated children remain explicitly configured. No pipeline C route/export/version was added.
+Local `next` advanced from the verified starting `ffd32388b220ddd47669bbd90a794100afa6fd1a`
+to `91be3f7a8f5cb3fe343f78adb9034aad7b0cb6a7` through two unrelated `SAMPLE-001` commits during
+the session; this branch deliberately did not absorb them and nothing was merged into `next` or
+pushed.
