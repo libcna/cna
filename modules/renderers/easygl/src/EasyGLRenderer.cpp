@@ -5617,6 +5617,8 @@ if (!ProfileIsEs2ApiGeneration())
         // function call with a new reference. Recorded even when the stencil test is off, because
         // the reference survives a disabled state and applies again when one re-enables it.
         stencilEnabled_   = stencilEnable;
+        depthWriteEnabled_ = depthWriteEnable;   // REMED-GFX-237
+        stencilWriteMask_  = stencilWriteMask;   // REMED-GFX-237
         stencilTwoSided_  = twoSidedStencilMode;
         stencilFunc_      = stencilFunc;
         stencilCcwFunc_   = ccwStencilFunc;
@@ -9945,6 +9947,33 @@ if (ProfileIsEs2ApiGeneration())
                 p.loc_rt_flip_v_hi, rtFlipV[4], rtFlipV[5], rtFlipV[6], 0.0f);
     }
 
+    /// REMED-GFX-237: puts back what a clear had to override.
+    ///
+    /// XNA's `Clear` ignores the depth and stencil WRITE masks; `glClear` obeys them, so every
+    /// clear path forces them open first. Restoring was left to "ApplyDepthStencilState reissues
+    /// the real mask before the next draw anyway" -- true only if the game reassigns its
+    /// DepthStencilState between the clear and that draw, which nothing requires it to do.
+    ///
+    /// The stencil mask is only put back while the stencil test is on, matching
+    /// ApplyDepthStencilState, which does not install one otherwise.
+    void EasyGLRenderer::RestoreWriteMasksAfterClear(bool depth, bool stencil)
+    {
+        if (depth && !depthWriteEnabled_) device.set_depth_mask(false);
+        if (stencil && stencilEnabled_)
+        {
+            const auto mask = static_cast<unsigned int>(stencilWriteMask_);
+            if (stencilTwoSided_)
+            {
+                device.set_stencil_mask_separate(::easygl::CullFace::Front, mask);
+                device.set_stencil_mask_separate(::easygl::CullFace::Back, mask);
+            }
+            else
+            {
+                device.set_stencil_mask(mask);
+            }
+        }
+    }
+
     void EasyGLRenderer::ClearColorAndDepth(float r, float g, float b, float a, float depth)
     {
         if (metagl::IsContextLost()) return;
@@ -9959,6 +9988,7 @@ if (ProfileIsEs2ApiGeneration())
         if (maskActive) ForceAllColorWriteMasks();
         device.clear(::easygl::ClearFlags::Color | ::easygl::ClearFlags::Depth);
         if (maskActive) ApplyCurrentColorWriteMasks();
+        RestoreWriteMasksAfterClear(true, false);
     }
 
     // Task 871: glClear(GL_STENCIL_BUFFER_BIT) is itself masked by the currently-active
@@ -9972,6 +10002,7 @@ if (ProfileIsEs2ApiGeneration())
         device.set_clear_stencil(stencil);
         device.set_stencil_mask(0xFFFFFFFFu);
         device.clear(::easygl::ClearFlags::Stencil);
+        RestoreWriteMasksAfterClear(false, true);
     }
 
     void EasyGLRenderer::ClearDepthAndStencil(float depth, int stencil)
@@ -9982,6 +10013,7 @@ if (ProfileIsEs2ApiGeneration())
         device.set_depth_mask(true);
         device.set_stencil_mask(0xFFFFFFFFu);
         device.clear(::easygl::ClearFlags::Depth | ::easygl::ClearFlags::Stencil);
+        RestoreWriteMasksAfterClear(true, true);
     }
 
     void EasyGLRenderer::ClearColorAndStencil(float r, float g, float b, float a, int stencil)
@@ -10010,6 +10042,7 @@ if (ProfileIsEs2ApiGeneration())
         const bool maskActive = HasRestrictedActiveColorWriteMask();
         if (maskActive) ForceAllColorWriteMasks();
         device.clear(::easygl::ClearFlags::Color | ::easygl::ClearFlags::Depth | ::easygl::ClearFlags::Stencil);
+        RestoreWriteMasksAfterClear(true, true);
         if (maskActive) ApplyCurrentColorWriteMasks();
     }
 
@@ -10019,6 +10052,7 @@ if (ProfileIsEs2ApiGeneration())
         device.set_clear_depth(depth);
         device.set_depth_mask(true);
         device.clear(::easygl::ClearFlags::Depth);
+        RestoreWriteMasksAfterClear(true, false);
     }
 
     void EasyGLRenderer::SetDepthTestEnabled(bool enabled)
@@ -10027,6 +10061,7 @@ if (ProfileIsEs2ApiGeneration())
         if (enabled)
         {
             device.set_depth_func(::easygl::CompareFunc::Lequal);
+            depthWriteEnabled_ = true;   // REMED-GFX-237: this really does install the mask.
             device.set_depth_mask(true);
         }
     }
@@ -10041,6 +10076,7 @@ if (ProfileIsEs2ApiGeneration())
 
     void EasyGLRenderer::SetDepthWriteEnabled(bool enabled)
     {
+        depthWriteEnabled_ = enabled;   // REMED-GFX-237: what a clear must put back.
         device.set_depth_mask(enabled);
     }
 

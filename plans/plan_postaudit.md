@@ -2447,7 +2447,49 @@ dropping the back face fails leg B.
 
 ---
 
-## 34. `REMED-BUILD-017` — the native GDI workflow omitted three correctness targets
+## 34. `REMED-GFX-237` — a clear opened the depth and stencil write masks and left them open
+
+**Status:** **CLOSED, 2026-08-29** · **Pre-existing; the restore half of a correct override was
+never written**
+
+**Defect.** XNA's `Clear` ignores `DepthBufferWriteEnable` and `StencilWriteMask`; `glClear` obeys
+both. EasyGL therefore forces `glDepthMask(true)` and `glStencilMask(0xFFFFFFFF)` around every
+clear, which is right. It never put them back.
+
+**The assumption that made that look safe is written in the source.** `ClearStencil`'s own comment
+says *"ApplyDepthStencilState() reissues the real write mask before the next draw anyway"* — true
+only if the game reassigns its `DepthStencilState` between the clear and that draw, and nothing
+requires it to. `Clear` immediately followed by a draw through the state that was already active
+drew with the wrong masks: depth writes that the state disabled, stencil bits that its write mask
+forbade.
+
+Note the same file already got this right for the COLOUR write mask (`REMED-GFX-077`): force,
+clear, `ApplyCurrentColorWriteMasks()`. The depth and stencil halves of the same idea were missing
+the third step.
+
+**Fix.** `ApplyDepthStencilState` records `depthWriteEnable` and `stencilWriteMask` (joining the
+function/mask state `REMED-GFX-236` already caches), `SetDepthWriteEnabled` and
+`SetDepthTestEnabled` keep the depth value in step, and every clear path that forces a mask calls
+`RestoreWriteMasksAfterClear`. All five do: `ClearDepth`, `ClearStencil`, `ClearColorAndDepth`,
+`ClearDepthAndStencil`, `ClearColorDepthAndStencil`. The stencil mask is restored only while the
+stencil test is on, matching `ApplyDepthStencilState`, which installs one only then; two-sided state
+restores both faces.
+
+**The stencil half was a latent hole nothing would have caught.** Only the depth half had a failing
+test. Deleting the stencil restore left **all 65 stencil tests passing**, so it was measured before
+being shipped and a leg was written for it: `EasyGL_GraphicsDevice_ClearStencil` Check D stamps
+0x05, assigns a state with `StencilWriteMask=0x00`, clears the stencil to 0x05 — which only lands
+because the clear forces the mask open — draws through that state, and compares. Restored, the
+buffer still reads 0x05 and the compare draws green; not restored, the draw replaced it with its own
+reference.
+
+**Evidence.** `EasyGL_DepthStencilState_WriteEnable_Golden` FAIL → PASS;
+`EasyGL_GraphicsDevice_ClearStencil` 3/3 → 4/4. Mutation-checked both halves: deleting the depth
+restore fails the golden test, deleting the stencil restore fails Check D.
+
+---
+
+## 35. `REMED-BUILD-017` — the native GDI workflow omitted three correctness targets
 
 **Status:** **CLOSED — DISCOVERED AND RESOLVED in the GDI adaptation, 2026-08-08** ·
 **Build/evidence inventory defect, not a renderer defect**
@@ -2464,7 +2506,7 @@ inventory defect.
 
 ---
 
-## 35. `REMED-BUILD-018` — the capability test used an incomplete backend type
+## 36. `REMED-BUILD-018` — the capability test used an incomplete backend type
 
 **Status:** **CLOSED — DISCOVERED AND RESOLVED in the GDI adaptation, 2026-08-08** ·
 **Shared test-build defect, not a renderer defect**

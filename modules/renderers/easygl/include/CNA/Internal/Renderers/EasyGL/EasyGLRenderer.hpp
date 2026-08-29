@@ -1097,6 +1097,13 @@ namespace CNA::Internal::Renderers::EasyGL
         /// reissue `glStencilFunc` with a new reference. GL binds function, reference and mask in
         /// one call, so the other two have to be remembered to change the one.
         bool stencilEnabled_ = false;
+
+        /// REMED-GFX-237: the WRITE masks a clear has to force and then put back. XNA's Clear
+        /// ignores both, `glClear` obeys both, so each clear overrides them -- and the next draw
+        /// only gets the real values again if the game happens to reassign its DepthStencilState,
+        /// which it need not. Initialised to GL's own defaults.
+        bool depthWriteEnabled_ = true;
+        int  stencilWriteMask_ = static_cast<int>(0xFFFFFFFF);
         bool stencilTwoSided_ = false;
         int  stencilFunc_ = 0;
         int  stencilCcwFunc_ = 0;
@@ -1625,6 +1632,12 @@ namespace CNA::Internal::Renderers::EasyGL
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;
         void ClearStencil(int stencil) override;
+        /**
+         * @brief REMED-GFX-237: restores the write masks a clear had to force open.
+         * @param depth Restore the depth write mask.
+         * @param stencil Restore the stencil write mask (only while the stencil test is on).
+         */
+        void RestoreWriteMasksAfterClear(bool depth, bool stencil);
         void ClearDepthAndStencil(float depth, int stencil) override;
         void ClearColorAndStencil(float r, float g, float b, float a, int stencil) override;
         void ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil) override;
