@@ -859,16 +859,21 @@ the compatibility boundary on the finished implementation:
   CNJ, golden-vector, and containment tests passed normally and again under combined ASan+UBSan;
 - 107 concurrency-relevant tests passed under ThreadSanitizer with no report;
 - the opt-in sparse 2 GiB+1-byte streaming-hash test passed without storing a giant fixture;
-- the generated C-API coverage, compatibility, header, export, route, release, and ABI gates pass,
-  and no Content Pipeline C ABI is exported;
-- dynamic dependency and symbol inspection confirms `cna-content` does not initialize or depend on
-  a renderer, window, graphics device, SDL/audio device, FFmpeg, or runtime ContentManager load.
+- eight of nine generated C-API consistency gates pass and no Content Pipeline C ABI is exported;
+  the coverage gate reports four pre-existing planned rows still assigned to completed
+  `CBIND-036`;
+- focused symbol inspection confirms the XNB audio decoder object references only SDL's in-memory
+  WAVE load/conversion functions, not SDL initialization, device-open, graphics-device, window, or
+  runtime ContentManager load paths. The monolithic content/tool link can still carry SDL/audio and
+  FFmpeg libraries transitively; HEADLESS is an execution/ownership invariant, not a claim that
+  those shared objects are absent from the executable.
 
 LeakSanitizer cannot run the subprocess-heavy selection in the current `ptrace` environment, so
 the successful ASan+UBSan run used `detect_leaks=0` and is not leak evidence. Native Windows/MSVC
-execution is still required to close the last platform-verification gap. The graph's cycle
-preflight uses recursive DFS; an extraordinarily deep acyclic graph may consume the process stack
-even though build execution itself is iterative and worker-bounded.
+execution is still required to close the last platform-verification gap. Cycle preflight now uses
+an explicit visit stack: a 4,096-node acyclic chain builds with four workers and the same graph
+closed into a 4,096-node cycle retains deterministic diagnostics without replacing the prior
+manifest.
 
 Multi-file publication is recoverable, not a portable filesystem transaction. Prepared cold
 outputs can temporarily consume disk space comparable to the compiled output set, and an abrupt
@@ -895,7 +900,7 @@ paths because the compiler does not copy raw media support files.
 - the C++ multi-output writer result and custom output generation surface;
 - custom registration and the user-built `CNA::ContentCompiler` embedding surface;
 - component names/versions as user configuration identifiers;
-- content-build edges, recursive dependency builds, and bounded parallel scheduling.
+- content-build edges, dependency builds, and bounded parallel scheduling.
 
 **Future:**
 

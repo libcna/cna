@@ -1378,6 +1378,79 @@ TEST(ContentPipelineCliTest, ContentBuildDependencyMustNameADiscoveredPrimaryNod
     EXPECT_FALSE(std::filesystem::exists(output / Pipeline::ContentBuildManifestFileName));
 }
 
+TEST(ContentPipelineCliTest, VeryDeepAcyclicGraphBuildsAndDeepCycleRemainsDeterministic)
+{
+    constexpr std::size_t depth = 4096u;
+    ScratchDirectory scratch("content_build_deep_graph");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    const std::filesystem::path configuration =
+        source / Pipeline::ContentBuildConfigurationFileName;
+
+    for (std::size_t index = 0u; index < depth; ++index)
+    {
+        WriteText(source / ("N" + std::to_string(index) + ".greeting"), "node\n");
+    }
+    const auto writeConfiguration = [&](bool closeCycle)
+    {
+        std::ostringstream text;
+        text << R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{)json";
+        for (std::size_t index = 0u; index < depth; ++index)
+        {
+            if (index + 1u == depth && !closeCycle) { break; }
+            if (index != 0u) { text << ','; }
+            const std::size_t dependency = index + 1u == depth ? 0u : index + 1u;
+            text << "\"N" << index
+                 << ".greeting\":{\"parameters\":{\"dependsOn\":{\"type\":\"string\","
+                    "\"value\":\"N"
+                 << dependency << "\"}}}";
+        }
+        text << "}}";
+        WriteText(configuration, text.str());
+    };
+
+    writeConfiguration(false);
+    std::string builtLog;
+    ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
+                            {"build", source.string(), "-o", output.string(),
+                             "--workers", "4", "--quiet"},
+                            builtLog),
+              0)
+        << builtLog;
+    EXPECT_TRUE(std::filesystem::is_regular_file(output / "N0.cnb"));
+    EXPECT_TRUE(std::filesystem::is_regular_file(
+        output / ("N" + std::to_string(depth - 1u) + ".cnb")));
+    const std::filesystem::path manifestPath =
+        output / Pipeline::ContentBuildManifestFileName;
+    const std::vector<std::uint8_t> manifestBeforeCycle = ReadBytes(manifestPath);
+    EXPECT_EQ(Pipeline::ContentBuildManifest::Parse(
+                  std::string(manifestBeforeCycle.begin(), manifestBeforeCycle.end()))
+                  .Entries()
+                  .size(),
+              depth);
+
+    writeConfiguration(true);
+    std::string cycleLog;
+    EXPECT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
+                            {"build", source.string(), "-o", output.string(),
+                             "--workers", "4", "--quiet"},
+                            cycleLog),
+              1)
+        << cycleLog;
+    EXPECT_EQ(CountOccurrences(cycleLog, "content-build dependency cycle:"), 1u)
+        << cycleLog;
+    EXPECT_NE(cycleLog.find("content-build dependency cycle:\n  N0\n  -> N1"),
+              std::string::npos)
+        << cycleLog;
+    EXPECT_NE(cycleLog.find("  -> N" + std::to_string(depth - 1u) + "\n  -> N0"),
+              std::string::npos)
+        << cycleLog;
+    EXPECT_NE(cycleLog.find("Built: 0  Skipped: 0  Failed: " + std::to_string(depth)),
+              std::string::npos)
+        << cycleLog;
+    EXPECT_EQ(ReadBytes(manifestPath), manifestBeforeCycle);
+}
+
 TEST(ContentPipelineCliTest, ContentBuildGraphReportsASelfCycleChainOnce)
 {
     ScratchDirectory scratch("content_build_self_cycle");

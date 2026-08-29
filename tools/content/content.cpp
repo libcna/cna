@@ -6,7 +6,6 @@
 #include <exception>
 #include <filesystem>
 #include <fstream>
-#include <functional>
 #include <future>
 #include <iostream>
 #include <map>
@@ -1099,49 +1098,68 @@ namespace
         };
         std::map<std::string, VisitState> visitStates;
         std::vector<std::string> activeNodes;
+        std::map<std::string, std::size_t> activePositions;
         std::map<std::string, std::string> cycleFailures;
-        std::function<void(const std::string&)> visit;
-        visit = [&](const std::string& nodeId)
+        struct VisitFrame
         {
-            BuildNodePlan& plan = plans[plansByNode.at(nodeId)];
-            if (!plan.failure.empty() || !plan.hasManifest) { return; }
-            VisitState& state = visitStates[nodeId];
-            if (state == VisitState::Done) { return; }
-            state = VisitState::Visiting;
+            std::string nodeId;
+            std::vector<std::string> dependencies;
+            std::size_t nextDependency = 0u;
+        };
+        std::vector<VisitFrame> visitStack;
+        const auto pushVisit = [&](const std::string& nodeId)
+        {
+            visitStates[nodeId] = VisitState::Visiting;
+            activePositions.emplace(nodeId, activeNodes.size());
             activeNodes.push_back(nodeId);
-            for (const std::string& dependency : ContentBuildDependencies(plan.manifest))
+            visitStack.push_back(
+                {nodeId, ContentBuildDependencies(plans[plansByNode.at(nodeId)].manifest)});
+        };
+        for (const BuildNodePlan& rootPlan : plans)
+        {
+            const std::string& rootId = rootPlan.item->logicalName;
+            if (visitStates[rootId] != VisitState::Unvisited || !rootPlan.failure.empty() ||
+                !rootPlan.hasManifest)
             {
+                continue;
+            }
+            pushVisit(rootId);
+            while (!visitStack.empty())
+            {
+                VisitFrame& frame = visitStack.back();
+                if (frame.nextDependency == frame.dependencies.size())
+                {
+                    activePositions.erase(frame.nodeId);
+                    activeNodes.pop_back();
+                    visitStates[frame.nodeId] = VisitState::Done;
+                    visitStack.pop_back();
+                    continue;
+                }
+
+                const std::string dependency =
+                    frame.dependencies[frame.nextDependency++];
                 BuildNodePlan& dependencyPlan = plans[plansByNode.at(dependency)];
                 if (!dependencyPlan.failure.empty() || !dependencyPlan.hasManifest) { continue; }
                 if (visitStates[dependency] == VisitState::Visiting)
                 {
-                    const auto cycleStart =
-                        std::find(activeNodes.begin(), activeNodes.end(), dependency);
+                    const std::size_t cycleStart = activePositions.at(dependency);
                     std::ostringstream reason;
                     reason << "content-build dependency cycle:";
-                    for (auto node = cycleStart; node != activeNodes.end(); ++node)
+                    for (std::size_t node = cycleStart; node < activeNodes.size(); ++node)
                     {
-                        reason << "\n  " << (node == cycleStart ? "" : "-> ") << *node;
+                        reason << "\n  " << (node == cycleStart ? "" : "-> ")
+                               << activeNodes[node];
                     }
                     reason << "\n  -> " << dependency;
                     const std::string message =
                         ContentBuildCycleError(*dependencyPlan.item, reason.str()).what();
-                    for (auto node = cycleStart; node != activeNodes.end(); ++node)
+                    for (std::size_t node = cycleStart; node < activeNodes.size(); ++node)
                     {
-                        cycleFailures.try_emplace(*node, message);
+                        cycleFailures.try_emplace(activeNodes[node], message);
                     }
                     continue;
                 }
-                if (visitStates[dependency] == VisitState::Unvisited) { visit(dependency); }
-            }
-            activeNodes.pop_back();
-            state = VisitState::Done;
-        };
-        for (const BuildNodePlan& plan : plans)
-        {
-            if (visitStates[plan.item->logicalName] == VisitState::Unvisited)
-            {
-                visit(plan.item->logicalName);
+                if (visitStates[dependency] == VisitState::Unvisited) { pushVisit(dependency); }
             }
         }
         for (const auto& [nodeId, message] : cycleFailures)

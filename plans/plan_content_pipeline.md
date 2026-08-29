@@ -26,6 +26,8 @@
 > supported built-in roots are decoded to canonical CPU data, passed through the existing
 > processors/writers, and emitted as ordinary native CNB. No XNB payload, reader identity, new
 > chunk, or frozen-schema change is present in the output.
+> `CP-039` is the focused post-XNB follow-on: iterative validation removes the remaining process
+> stack dependency from very deep content-build graphs.
 >
 > **Boundary:** this plan owns the build-time CNA Content Pipeline. `plans/plan_cnb.md` remains the
 > engineering record for the frozen CNB compiled format. The pipeline consumes the existing CNB
@@ -1170,6 +1172,7 @@ carrying forward task-local results:
 | `CP-036` | **completed** | Added headless Texture3D, TextureCube, Curve, Song and FNA-layout Video routes through their existing native processors/writers. Song/Video retain external media as contained byte dependencies plus XREFs. Model remains intentionally unsupported: its real fixture uses three shared resources and runtime VertexBuffer/IndexBuffer/BasicEffect construction, while current native Model cannot prove arbitrary effect/tag graph equivalence without silent loss. |
 | `CP-037` | **completed** | Added a permanent fixture matrix covering container variants, all supported roots, negative/truncated/custom/shared graphs and deterministic bytes. Runtime-XNB versus transcoded-CNB oracles compare Texture2D pixels/format/mips, every SpriteFont field and atlas, SoundEffect duration/name plus canonical PCM for all codecs, Curve keys, and Song/Video metadata/path semantics. Texture3D/Cube use canonical CPU level/face byte comparison because HEADLESS deliberately has no safe runtime GPU storage/readback. Existing runtime XNB regressions remain gates. |
 | `CP-038` | **completed** | Registered `.xnb` in the stock frozen registry and ordinary single/directory discovery. CLI tests prove single-file build, directory layouts, worker 1/2/4 byte-identical trees/manifests, no-op skip, source change, output-tamper repair, configuration fingerprint invalidation and unsupported-reader non-publication. XNB nodes use the existing manifest, graph, scheduler, staging and atomic publisher without a separate build path. |
+| `CP-039` | **completed** | Post-XNB review selected the recursive cycle preflight as the highest-value unambiguous risk. Replaced recursive DFS with an explicit frame/active-position stack while preserving sorted traversal, exact cycle chains and one shared diagnostic per cycle. A 4,096-node acyclic graph builds under workers 4, the same graph closed into a 4,096-node cycle fails deterministically without replacing its prior manifest, all three legacy cycle oracles remain exact, and the deep case passes ASan+UBSan. |
 
 Tasks are intentionally vertical/coherent. The ledger is revised when implementation evidence makes
 the ordering wrong; it is not a promise to build speculative abstractions.
@@ -1197,10 +1200,6 @@ the ordering wrong; it is not a promise to build speculative abstractions.
 * The public SharpRuntime SHA-256 convenience call remains `intcs`-bounded, but CP-017's internal
   streaming adapter feeds bounded chunks through the same implementation. Content files are no
   longer capped at 2 GiB and no second SHA-256 algorithm was introduced.
-* Content-to-content dependencies are dependency-ready scheduled and fingerprinted, with
-  deterministic cycle-chain rejection. The cycle-validation preflight still uses a recursive DFS;
-  very deep acyclic graphs can therefore consume the process call stack even though execution is
-  iterative and bounded.
 * Parallel work is opt-in and built-ins are audited reentrant. A custom component or logger with
   unsynchronized mutable per-instance state is safe with the default `--workers 1` but violates the
   documented contract when the user explicitly enables multiple workers.
@@ -1363,7 +1362,7 @@ reentrant; there is no mutable reader registration during a build.
 
 The final HEADLESS Debug gate built the complete configuration. Focused XNB conversion tests are
 18/18; the existing XNB/container/reader selection is 197 passed with five expected HEADLESS skips;
-the complete pipeline selection is 125 passed with only the opt-in greater-than-2-GiB fixture
+the complete pipeline selection is 126 passed with only the opt-in greater-than-2-GiB fixture
 skipped. CNB is 370/370 after excluding the three known HEADLESS Texture3D/TextureCube runtime
 storage tests, CNJ is 108/108, and the glTF selection is 589 passed with three opt-in large-fixture
 skips. The platform SDL ownership ratchet remains at zero files/references.
@@ -1378,7 +1377,7 @@ device-open calls.
 MinGW-w64 compiles every modified source, including `cna_content`, `cna_audio`, the compiler and the
 tool entry point. Linking the executable reaches the pre-existing `wmain` configuration defect: the
 target omits `-municode`, so MinGW's CRT asks for `WinMain`. Native Windows/MSVC execution is not
-available and is not claimed. Seven of the eight build-free C-API consistency gates pass; the
+available and is not claimed. Eight of the nine build-free C-API consistency gates pass; the
 coverage gate reports the pre-existing four planned rows still owned by completed `CBIND-036`.
 Neither issue is caused by this phase's diff.
 
@@ -1397,3 +1396,23 @@ deliberately **not implemented**. It would retain the full XNB runtime layer and
 compression and dispatch over XNB's own container machinery. Reconsider it only for a concrete
 deployment/interchange requirement that cannot be served more directly by a future package format;
 bit-preserving wrapping is not a fallback for an unsupported native conversion.
+
+---
+
+## 16. Focused post-XNB review (`CP-039`)
+
+The review selected iterative cycle validation because the risk was already demonstrated by the
+architecture: graph execution is iterative, but its preflight still consumed one C++ call frame per
+dependency level. The replacement uses explicit visit frames, the same sorted dependency lists and
+an active-node position map. It preserves the established self/two/three-node diagnostic bytes and
+removes process-stack depth from graph correctness. The permanent integration oracle builds a
+4,096-node acyclic chain with four workers, then closes its last edge into a 4,096-node cycle and
+proves one complete deterministic chain, 4,096 failed nodes, no publication, and preservation of
+the last valid manifest. The same case passes combined ASan+UBSan.
+
+The other reviewed risks remain open because they require separate policy, not merely a safer
+implementation of existing semantics: scavenging abandoned staging directories needs an age and
+live-owner protocol; orphan-output collection needs an explicit ownership/retention policy; raw
+Song/Video support-file copying needs deployment semantics; and glTF child/multi-Model output or
+custom schema-version fingerprints change component contracts. None was guessed as a side effect
+of the XNB phase.
