@@ -218,10 +218,15 @@ resolution, categorized content-build/generated dependency registration, separat
 registration, and scoped logging. It does not duplicate the importer's source-path getters or
 expose runtime services.
 
-Content-to-content build dependencies have manifest fingerprint semantics, but the serial CLI does
-not schedule them yet. It refuses such a result instead of risking an incorrectly ordered build.
-`BuildAsset`/`BuildAndLoadAsset` equivalents will not be added until graph identity, cycles,
-ownership, and cache behavior are specified.
+Content-to-content build dependencies are scheduled as explicit graph edges by the serial CLI.
+`AddContentBuildDependency("Shared/material")` names the stable primary build-node ID, not an output
+path or runtime XREF. The target must be another primary node discovered in the same invocation;
+additional outputs do not become implicit source nodes. Shared dependencies execute once, complete
+before their dependents publish, and propagate failures and effective fingerprint changes.
+
+The pipeline still does not expose an XNA-style `BuildAsset`/`BuildAndLoadAsset` operation that
+returns a dependency's runtime object during processing. Current processors declare the edge; the
+orchestrator schedules and fingerprints it after the writer has produced the in-memory result.
 
 ## Content Type Writers and CNB codecs
 
@@ -477,10 +482,10 @@ invalidates that asset without treating the entire configuration file as a share
 an unrelated entry change leaves other assets eligible for `SKIP`.
 
 The manifest JSON layout is versioned internal build state, not a hand-edited project format.
-Version 2 gives each entry a stable build-node ID plus an ordered output ownership list. Version 1
-cannot represent that relationship, so it is rejected as incompatible and causes a safe rebuild;
-there is no ambiguous in-place migration. A corrupt or future incompatible manifest is handled the
-same way.
+Version 3 gives each entry a stable build-node ID, an ordered output ownership list, a direct
+fingerprint, and an effective graph fingerprint. Versions 1 and 2 cannot represent all of those
+relationships, so they are rejected as incompatible and cause a safe rebuild; there is no
+ambiguous in-place migration. A corrupt or future incompatible manifest is handled the same way.
 
 ## Multi-output nodes and ownership
 
@@ -497,9 +502,32 @@ source asset. Duplicate names, duplicate paths, absolute names, traversal, and o
 are errors.
 
 The manifest owns all output digests under the producing node. Tampering with any child rebuilds
-that node rather than treating the child as an independent source node. This output model is the
-foundation for graph dependencies, but it does not yet schedule content-to-content edges; that
-remains the next phase.
+that node rather than treating the child as an independent source node.
+
+## Content-to-content build graph
+
+Directory discovery still creates the bounded set of primary nodes in sorted logical-name order.
+The serial graph coordinator then uses deterministic depth-first scheduling: each dependency is
+completed before its dependent, and a shared dependency has one state/result regardless of how many
+parents name it. A missing target is a Graph-stage error identifying the dependent and dependency;
+a failed target prevents every dependent from publishing. Independent successful nodes may still
+publish, but the manifest is replaced only when the complete requested graph succeeds.
+
+Each manifest node has two hashes:
+
+- `directFingerprint` covers the source bytes, source/generated file dependencies, components,
+  parameters, output identities/types, and content-build edge identities;
+- `fingerprint` combines that direct hash with every dependency node's effective fingerprint.
+
+If the direct fingerprint still matches, the previous edge set is safe to traverse without
+rerunning the importer/processor merely to rediscover it. After dependencies complete, the
+effective hash and all owned output digests decide `SKIP`. Changing a shared dependency therefore
+rebuilds every transitive dependent even when its own source and direct hash are unchanged. If a
+direct input or configuration changes, the node runs first to discover its new edge set, so a
+removed stale edge cannot block the rebuild.
+
+The current visiting-state guard refuses cycles without recursive overflow. CP-025 owns the final
+stable cycle-chain diagnostic and exhaustive self/two-node/long-cycle coverage.
 
 ## Determinism and publication
 
@@ -599,7 +627,9 @@ primary greeting and a generated reply CNB through that same codec. A subprocess
 mixed custom/PNG directory, checks both custom CNBs and the built-in Texture2D output, verifies
 manifest ownership and component/parameter identity, proves a byte-preserving no-op, repairs a
 tampered child, rejects collision with another primary node, and covers recoverable partial
-publication failure.
+publication failure. Its optional string `dependsOn` parameter also exercises real graph edges:
+tests prove dependency-first ordering, one execution of a shared dependency, no-op reuse,
+transitive invalidation, missing-target diagnostics, failure propagation, and recovery.
 
 This is a **source/toolchain compatibility model**, not a plugin ABI. The custom executable and CNA
 must be compiled and linked as compatible C++; applications should rebuild their compiler when CNA
@@ -631,8 +661,9 @@ There is no platform ID or target profile in CNB v1 processing. Current schemas 
 portable representations. A future profile can be added only when a demonstrated policy needs it;
 it must participate in fingerprints.
 
-Build scheduling is serial. Registries are configured explicitly and components are intended to be
-reentrant, leaving room for later parallel scheduling without committing to thread complexity now.
+Build-graph scheduling is serial and deterministic. Registries are configured explicitly and
+components are intended to be reentrant, leaving room for later bounded parallel scheduling without
+committing to thread complexity now.
 
 CMake can create a content target with the helper defined alongside the CNA tool:
 

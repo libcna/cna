@@ -233,6 +233,7 @@ namespace CNA::Content::Pipeline
             case ContentPipelineStage::Import: return "Import";
             case ContentPipelineStage::Process: return "Process";
             case ContentPipelineStage::Write: return "Write";
+            case ContentPipelineStage::Graph: return "Graph";
             case ContentPipelineStage::Publish: return "Publish";
         }
         return "Unknown";

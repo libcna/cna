@@ -12,7 +12,7 @@
 namespace CNA::Content::Pipeline
 {
     /** @brief Current on-disk CNA Content Pipeline manifest format version. */
-    inline constexpr std::uint32_t ContentBuildManifestVersion = 2u;
+    inline constexpr std::uint32_t ContentBuildManifestVersion = 3u;
 
     /** @brief File name used for the inspectable manifest below a content output
      * root. */
@@ -67,6 +67,9 @@ namespace CNA::Content::Pipeline
 
         /** @brief Outputs owned by this node, including exactly one named @ref nodeId. */
         std::vector<ContentBuildManifestOutput> outputs;
+
+        /** @brief SHA-256 of direct inputs and dependency-edge identities. */
+        std::string directFingerprint;
 
         /** @brief SHA-256 of all effective build inputs and component identities. */
         std::string fingerprint;
@@ -144,6 +147,35 @@ namespace CNA::Content::Pipeline
     [[nodiscard]] std::string ContentFileSha256(const std::filesystem::path& path);
 
     /**
+     * @brief Computes the direct-input and graph-topology fingerprint for one node.
+     *
+     * Primary/source/generated dependency files are resolved below @p sourceRoot and hashed by
+     * bytes. Content-build dependency identities participate, but their effective fingerprints do
+     * not. This allows a previous edge set to be reused only while every input that could have
+     * changed dependency discovery is unchanged.
+     *
+     * @param entry Record containing current components, parameters and dependencies.
+     * @param sourceRoot Root under which every file dependency must resolve.
+     * @return Lowercase SHA-256 of canonical length-prefixed fields.
+     * @throws std::runtime_error for missing, unreadable or escaping file dependencies.
+     */
+    [[nodiscard]] std::string ComputeContentBuildDirectFingerprint(
+        const ContentBuildManifestEntry& entry, const std::filesystem::path& sourceRoot);
+
+    /**
+     * @brief Combines a node's current direct fingerprint with effective dependency results.
+     *
+     * @param entry Record whose @ref ContentBuildManifestEntry::directFingerprint is current.
+     * @param contentBuildFingerprints Effective fingerprints keyed by dependency node ID.
+     * @return Lowercase SHA-256 of the direct fingerprint and sorted content-build edges.
+     * @throws std::runtime_error when the direct fingerprint or a dependency fingerprint is
+     * invalid or absent.
+     */
+    [[nodiscard]] std::string ComputeContentBuildEffectiveFingerprint(
+        const ContentBuildManifestEntry& entry,
+        const std::map<std::string, std::string>& contentBuildFingerprints = {});
+
+    /**
      * @brief Computes the canonical effective-input fingerprint for one manifest
      * record.
      *
@@ -175,8 +207,8 @@ namespace CNA::Content::Pipeline
      * Additional outputs use their logical names below @p outputRoot with a `.cnb` suffix. The
      * primary output keeps the caller-selected path, which matters for single-file builds.
      *
-     * @return Record with normalized output identities/digests and an empty effective-input
-     *         fingerprint for the caller to fill.
+     * @return Record with normalized output identities/digests and empty direct/effective
+     *         fingerprints for the caller to fill.
      */
     [[nodiscard]] ContentBuildManifestEntry MakeContentBuildManifestEntry(
         const ContentBuildResult& result, const std::filesystem::path& sourceRoot,

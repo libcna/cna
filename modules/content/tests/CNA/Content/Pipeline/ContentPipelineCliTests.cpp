@@ -77,6 +77,18 @@ namespace
         return {std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
     }
 
+    std::size_t CountOccurrences(const std::string& text, const std::string& needle)
+    {
+        std::size_t count = 0u;
+        std::size_t position = 0u;
+        while ((position = text.find(needle, position)) != std::string::npos)
+        {
+            ++count;
+            position += needle.size();
+        }
+        return count;
+    }
+
     std::vector<std::uint8_t> MakePng(int width, int height)
     {
         std::vector<std::uint8_t> pixels(static_cast<std::size_t>(width) * height * 4u);
@@ -927,6 +939,134 @@ TEST(ContentPipelineCliTest, AdditionalOutputCannotClaimAnotherBuildNodesIdentit
         << log;
     EXPECT_FALSE(std::filesystem::exists(output / Pipeline::ContentBuildManifestFileName));
     EXPECT_FALSE(std::filesystem::exists(output / "welcome.cnb"));
+}
+
+TEST(ContentPipelineCliTest, ContentBuildGraphOrdersSharedDependenciesAndPropagatesChanges)
+{
+    ScratchDirectory scratch("content_build_graph");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    WriteText(source / "A" / "first.greeting", "first\n");
+    WriteText(source / "B" / "second.greeting", "second\n");
+    WriteText(source / "Z" / "shared.greeting", "shared-v1\n");
+    WriteText(
+        source / Pipeline::ContentBuildConfigurationFileName,
+        R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"A/first.greeting":{"parameters":{"dependsOn":{"type":"string","value":"Z/shared"}}},"B/second.greeting":{"parameters":{"dependsOn":{"type":"string","value":"Z/shared"}}}}})json");
+
+    std::string firstLog;
+    ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
+                            {"build", source.string(), "-o", output.string()}, firstLog),
+              0)
+        << firstLog;
+    const std::size_t sharedPosition = firstLog.find("[BUILD] Z/shared");
+    const std::size_t firstPosition = firstLog.find("[BUILD] A/first");
+    const std::size_t secondPosition = firstLog.find("[BUILD] B/second");
+    ASSERT_NE(sharedPosition, std::string::npos) << firstLog;
+    ASSERT_NE(firstPosition, std::string::npos) << firstLog;
+    ASSERT_NE(secondPosition, std::string::npos) << firstLog;
+    EXPECT_LT(sharedPosition, firstPosition);
+    EXPECT_LT(sharedPosition, secondPosition);
+    EXPECT_EQ(CountOccurrences(firstLog, "[BUILD] Z/shared"), 1u);
+
+    const std::filesystem::path manifestPath =
+        output / Pipeline::ContentBuildManifestFileName;
+    const auto readManifest = [&]()
+    {
+        const std::vector<std::uint8_t> bytes = ReadBytes(manifestPath);
+        return Pipeline::ContentBuildManifest::Parse(
+            std::string(bytes.begin(), bytes.end()));
+    };
+    const Pipeline::ContentBuildManifest initial = readManifest();
+    const Pipeline::ContentBuildManifestEntry* initialFirst = initial.Find("A/first");
+    ASSERT_NE(initialFirst, nullptr);
+    EXPECT_NE(std::find(initialFirst->dependencies.begin(), initialFirst->dependencies.end(),
+                        Pipeline::ContentDependency{
+                            Pipeline::ContentDependencyKind::ContentBuild, "Z/shared"}),
+              initialFirst->dependencies.end());
+    const std::string firstDirectFingerprint = initialFirst->directFingerprint;
+    const std::string firstEffectiveFingerprint = initialFirst->fingerprint;
+    const std::vector<std::uint8_t> firstOutput = ReadBytes(output / "A" / "first.cnb");
+
+    std::string skipLog;
+    ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
+                            {"build", source.string(), "-o", output.string()}, skipLog),
+              0)
+        << skipLog;
+    EXPECT_EQ(CountOccurrences(skipLog, "[SKIP] Z/shared"), 1u) << skipLog;
+    EXPECT_NE(skipLog.find("[SKIP] A/first"), std::string::npos) << skipLog;
+    EXPECT_NE(skipLog.find("[SKIP] B/second"), std::string::npos) << skipLog;
+
+    WriteText(source / "Z" / "shared.greeting", "shared-v2\n");
+    std::string changedLog;
+    ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
+                            {"build", source.string(), "-o", output.string()}, changedLog),
+              0)
+        << changedLog;
+    EXPECT_EQ(CountOccurrences(changedLog, "[BUILD] Z/shared"), 1u) << changedLog;
+    EXPECT_EQ(CountOccurrences(changedLog, "[BUILD] A/first"), 1u) << changedLog;
+    EXPECT_EQ(CountOccurrences(changedLog, "[BUILD] B/second"), 1u) << changedLog;
+    EXPECT_EQ(ReadBytes(output / "A" / "first.cnb"), firstOutput);
+
+    const Pipeline::ContentBuildManifest changed = readManifest();
+    const Pipeline::ContentBuildManifestEntry* changedFirst = changed.Find("A/first");
+    ASSERT_NE(changedFirst, nullptr);
+    EXPECT_EQ(changedFirst->directFingerprint, firstDirectFingerprint);
+    EXPECT_NE(changedFirst->fingerprint, firstEffectiveFingerprint);
+}
+
+TEST(ContentPipelineCliTest, ContentBuildDependencyFailurePropagatesWithoutPublication)
+{
+    ScratchDirectory scratch("content_build_failure");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    WriteText(source / "A" / "dependent.greeting", "dependent\n");
+    WriteText(source / "Z" / "broken.greeting", "\n");
+    WriteText(
+        source / Pipeline::ContentBuildConfigurationFileName,
+        R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"A/dependent.greeting":{"parameters":{"dependsOn":{"type":"string","value":"Z/broken"}}}}})json");
+
+    std::string failedLog;
+    EXPECT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
+                            {"build", source.string(), "-o", output.string()}, failedLog),
+              1)
+        << failedLog;
+    EXPECT_NE(failedLog.find("Graph (CNA.ContentBuildGraph)"), std::string::npos) << failedLog;
+    EXPECT_NE(failedLog.find("dependency 'Z/broken' failed"), std::string::npos) << failedLog;
+    EXPECT_NE(failedLog.find("Import (ExampleGame.GreetingImporter)"), std::string::npos)
+        << failedLog;
+    EXPECT_FALSE(std::filesystem::exists(output / "A" / "dependent.cnb"));
+    EXPECT_FALSE(std::filesystem::exists(output / Pipeline::ContentBuildManifestFileName));
+
+    WriteText(source / "Z" / "broken.greeting", "repaired\n");
+    std::string recoveredLog;
+    ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
+                            {"build", source.string(), "-o", output.string()}, recoveredLog),
+              0)
+        << recoveredLog;
+    EXPECT_NE(recoveredLog.find("[BUILD] Z/broken"), std::string::npos) << recoveredLog;
+    EXPECT_NE(recoveredLog.find("[BUILD] A/dependent"), std::string::npos) << recoveredLog;
+}
+
+TEST(ContentPipelineCliTest, ContentBuildDependencyMustNameADiscoveredPrimaryNode)
+{
+    ScratchDirectory scratch("content_build_missing");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    WriteText(source / "dependent.greeting", "dependent\n");
+    WriteText(
+        source / Pipeline::ContentBuildConfigurationFileName,
+        R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"dependent.greeting":{"parameters":{"dependsOn":{"type":"string","value":"Generated/not-a-node"}}}}})json");
+
+    std::string log;
+    EXPECT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
+                            {"build", source.string(), "-o", output.string()}, log),
+              1)
+        << log;
+    EXPECT_NE(log.find("Graph (CNA.ContentBuildGraph)"), std::string::npos) << log;
+    EXPECT_NE(log.find("does not name a discovered primary build node"), std::string::npos)
+        << log;
+    EXPECT_FALSE(std::filesystem::exists(output / "dependent.cnb"));
+    EXPECT_FALSE(std::filesystem::exists(output / Pipeline::ContentBuildManifestFileName));
 }
 
 TEST(ContentPipelineCliTest, MultiOutputFailureLeavesTheOldManifestAndRecoversSafely)

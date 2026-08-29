@@ -5,6 +5,7 @@
 #include <exception>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <map>
 #include <memory>
@@ -360,13 +361,20 @@ namespace
         }
     }
 
-    bool HasContentBuildDependency(const Pipeline::ContentBuildManifestEntry& entry)
+    std::vector<std::string> ContentBuildDependencies(
+        const Pipeline::ContentBuildManifestEntry& entry)
     {
-        return std::any_of(entry.dependencies.begin(), entry.dependencies.end(),
-                           [](const Pipeline::ContentDependency& dependency)
+        std::vector<std::string> result;
+        for (const Pipeline::ContentDependency& dependency : entry.dependencies)
         {
-            return dependency.kind == Pipeline::ContentDependencyKind::ContentBuild;
-        });
+            if (dependency.kind == Pipeline::ContentDependencyKind::ContentBuild)
+            {
+                result.push_back(dependency.identity);
+            }
+        }
+        std::sort(result.begin(), result.end());
+        result.erase(std::unique(result.begin(), result.end()), result.end());
+        return result;
     }
 
     bool IsCurrentRoute(const Pipeline::ContentBuildManifestEntry& entry,
@@ -412,14 +420,14 @@ namespace
         }
     }
 
-    bool CanSkip(const Pipeline::ContentBuildManifestEntry& entry,
-                 const Pipeline::ContentPipelineRegistry& registry,
-                 const BuildItem& item, const std::filesystem::path& sourceRoot,
-                 const std::filesystem::path& outputRoot)
+    bool IsPreviousGraphCurrent(const Pipeline::ContentBuildManifestEntry& entry,
+                                const Pipeline::ContentPipelineRegistry& registry,
+                                const BuildItem& item,
+                                const std::filesystem::path& sourceRoot,
+                                const std::filesystem::path& outputRoot)
     {
         try
         {
-            if (HasContentBuildDependency(entry)) { return false; }
             const auto primaryOutput = std::find_if(
                 entry.outputs.begin(), entry.outputs.end(), [&](const auto& output)
             {
@@ -439,7 +447,24 @@ namespace
             {
                 return false;
             }
-            if (Pipeline::ComputeContentBuildFingerprint(entry, sourceRoot) != entry.fingerprint)
+            return Pipeline::ComputeContentBuildDirectFingerprint(entry, sourceRoot) ==
+                   entry.directFingerprint;
+        }
+        catch (...)
+        {
+            return false;
+        }
+    }
+
+    bool CanSkipEffective(
+        const Pipeline::ContentBuildManifestEntry& entry,
+        const std::filesystem::path& outputRoot,
+        const std::map<std::string, std::string>& contentBuildFingerprints)
+    {
+        try
+        {
+            if (Pipeline::ComputeContentBuildEffectiveFingerprint(
+                    entry, contentBuildFingerprints) != entry.fingerprint)
             {
                 return false;
             }
@@ -598,31 +623,91 @@ namespace
         std::size_t failed = 0u;
         std::map<std::string, std::string> logicalOwners;
         std::map<std::string, std::string> pathOwners;
+        std::map<std::string, const BuildItem*> itemsByNode;
         for (const BuildItem& item : builds)
         {
             logicalOwners.emplace(item.logicalName, item.relativeSource);
             pathOwners.emplace(CNA::Internal::ContentPathToUtf8(WeaklyCanonical(item.output)),
                                item.relativeSource);
+            itemsByNode.emplace(item.logicalName, &item);
         }
-        for (const BuildItem& item : builds)
+
+        enum class BuildState
         {
+            Unvisited,
+            Visiting,
+            Done,
+            Failed,
+        };
+        std::map<std::string, BuildState> states;
+        std::map<std::string, std::string> effectiveFingerprints;
+        std::map<std::string, std::string> failureMessages;
+        constexpr const char* graphComponent = "CNA.ContentBuildGraph";
+
+        std::function<void(const std::string&)> buildNode;
+        buildNode = [&](const std::string& nodeId)
+        {
+            const auto itemFound = itemsByNode.find(nodeId);
+            if (itemFound == itemsByNode.end())
+            {
+                throw std::runtime_error("content-build dependency '" + nodeId +
+                                         "' does not name a discovered primary build node.");
+            }
+            const BuildItem& item = *itemFound->second;
+            BuildState& state = states[nodeId];
+            if (state == BuildState::Done) { return; }
+            if (state == BuildState::Failed)
+            {
+                throw std::runtime_error(failureMessages.at(nodeId));
+            }
+            if (state == BuildState::Visiting)
+            {
+                throw Pipeline::ContentPipelineError(
+                    item.source, item.logicalName, Pipeline::ContentPipelineStage::Graph,
+                    graphComponent,
+                    "content-build dependency cycle detected at node '" + nodeId + "'.");
+            }
+            state = BuildState::Visiting;
+
             try
             {
                 const Pipeline::ContentBuildManifestEntry* previous =
                     previousManifest.Find(item.logicalName);
-                if (previous != nullptr &&
-                    CanSkip(*previous, *registry, item, sourceRoot, outputRoot))
+                const bool previousGraphCurrent =
+                    previous != nullptr && IsPreviousGraphCurrent(
+                                               *previous, *registry, item, sourceRoot, outputRoot);
+                if (previousGraphCurrent)
                 {
-                    ReserveOutputs(*previous, item.relativeSource, outputRoot, logicalOwners,
-                                   pathOwners);
-                    nextManifest.Set(*previous);
-                    ++skipped;
-                    if (!command.quiet)
+                    for (const std::string& dependency : ContentBuildDependencies(*previous))
                     {
-                        std::cout << "[SKIP] " << item.logicalName << " -> "
-                                  << CNA::Internal::ContentPathToUtf8(item.output) << "\n";
+                        try
+                        {
+                            buildNode(dependency);
+                        }
+                        catch (const std::exception& error)
+                        {
+                            throw Pipeline::ContentPipelineError(
+                                item.source, item.logicalName,
+                                Pipeline::ContentPipelineStage::Graph, graphComponent,
+                                "dependency '" + dependency + "' failed: " + error.what());
+                        }
                     }
-                    continue;
+                    if (CanSkipEffective(*previous, outputRoot, effectiveFingerprints))
+                    {
+                        ReserveOutputs(*previous, item.relativeSource, outputRoot, logicalOwners,
+                                       pathOwners);
+                        nextManifest.Set(*previous);
+                        effectiveFingerprints.insert_or_assign(item.logicalName,
+                                                              previous->fingerprint);
+                        state = BuildState::Done;
+                        ++skipped;
+                        if (!command.quiet)
+                        {
+                            std::cout << "[SKIP] " << item.logicalName << " -> "
+                                      << CNA::Internal::ContentPathToUtf8(item.output) << "\n";
+                        }
+                        return;
+                    }
                 }
 
                 Pipeline::ContentBuildRequest request;
@@ -638,14 +723,24 @@ namespace
                 Pipeline::ContentBuildManifestEntry manifestEntry =
                     Pipeline::MakeContentBuildManifestEntry(
                         result, sourceRoot, outputRoot, item.output);
-                if (HasContentBuildDependency(manifestEntry))
+                for (const std::string& dependency : ContentBuildDependencies(manifestEntry))
                 {
-                    throw std::runtime_error(
-                        "content-build dependencies require graph fingerprint scheduling, which "
-                        "is not enabled in this serial CLI yet.");
+                    try
+                    {
+                        buildNode(dependency);
+                    }
+                    catch (const std::exception& error)
+                    {
+                        throw Pipeline::ContentPipelineError(
+                            item.source, item.logicalName, Pipeline::ContentPipelineStage::Graph,
+                            graphComponent,
+                            "dependency '" + dependency + "' failed: " + error.what());
+                    }
                 }
-                manifestEntry.fingerprint =
-                    Pipeline::ComputeContentBuildFingerprint(manifestEntry, sourceRoot);
+                manifestEntry.directFingerprint =
+                    Pipeline::ComputeContentBuildDirectFingerprint(manifestEntry, sourceRoot);
+                manifestEntry.fingerprint = Pipeline::ComputeContentBuildEffectiveFingerprint(
+                    manifestEntry, effectiveFingerprints);
                 ReserveOutputs(manifestEntry, item.relativeSource, outputRoot, logicalOwners,
                                pathOwners);
 
@@ -683,8 +778,11 @@ namespace
                     manifestEntry.outputs.begin(), manifestEntry.outputs.end(), std::size_t{0u},
                     [&](std::size_t total, const auto& output)
                     { return total + OutputBytes(result, output).size(); });
+                effectiveFingerprints.insert_or_assign(item.logicalName,
+                                                       manifestEntry.fingerprint);
                 nextManifest.Set(std::move(manifestEntry));
 
+                state = BuildState::Done;
                 ++built;
                 if (!command.quiet)
                 {
@@ -695,6 +793,20 @@ namespace
                               << result.importer.name << " -> " << result.processor.name << " -> "
                               << result.writer.name << ")\n";
                 }
+            }
+            catch (const std::exception& error)
+            {
+                state = BuildState::Failed;
+                failureMessages.insert_or_assign(nodeId, error.what());
+                throw;
+            }
+        };
+
+        for (const BuildItem& item : builds)
+        {
+            try
+            {
+                buildNode(item.logicalName);
             }
             catch (const std::exception& error)
             {

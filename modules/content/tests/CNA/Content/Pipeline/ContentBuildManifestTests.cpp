@@ -81,7 +81,9 @@ namespace
             {"Generated/asset-index", "Generated/asset-index.cnb", 43u,
              Pipeline::ContentSha256({10u, 11u})},
         };
-        entry.fingerprint = Pipeline::ComputeContentBuildFingerprint(entry, sourceRoot);
+        entry.directFingerprint =
+            Pipeline::ComputeContentBuildDirectFingerprint(entry, sourceRoot);
+        entry.fingerprint = Pipeline::ComputeContentBuildEffectiveFingerprint(entry);
         return entry;
     }
 } // namespace
@@ -159,14 +161,18 @@ TEST(ContentBuildManifestTest, RoundTripsEveryStableFieldDeterministically)
     EXPECT_NE(first.find("source-file"), std::string::npos);
     EXPECT_NE(first.find("runtimeReferences"), std::string::npos);
     EXPECT_NE(first.find("Generated/asset-index.cnb"), std::string::npos);
-    EXPECT_NE(first.find("\"version\":2"), std::string::npos);
+    EXPECT_NE(first.find("\"version\":3"), std::string::npos);
 }
 
-TEST(ContentBuildManifestTest, VersionOneIsRejectedSoTheCliCanRebuildSafely)
+TEST(ContentBuildManifestTest, EarlierVersionsAreRejectedSoTheCliCanRebuildSafely)
 {
-    EXPECT_THROW((void)Pipeline::ContentBuildManifest::Parse(
-                     R"json({"format":"CNA.ContentPipeline.Manifest","version":1,"assets":[]})json"),
-                 std::runtime_error);
+    for (const std::uint32_t version : {1u, 2u})
+    {
+        EXPECT_THROW((void)Pipeline::ContentBuildManifest::Parse(
+                         "{\"format\":\"CNA.ContentPipeline.Manifest\",\"version\":" +
+                         std::to_string(version) + ",\"assets\":[]}"),
+                     std::runtime_error);
+    }
 }
 
 TEST(ContentBuildManifestTest, FingerprintUsesBytesNotModificationTimes)
@@ -234,14 +240,18 @@ TEST(ContentBuildManifestTest, ContentBuildDependencyRequiresAndUsesAnEffectiveF
     Pipeline::ContentBuildManifestEntry entry = MakeEntry(scratch.Path());
     entry.dependencies.push_back(
         {Pipeline::ContentDependencyKind::ContentBuild, "Shared/material"});
+    entry.directFingerprint =
+        Pipeline::ComputeContentBuildDirectFingerprint(entry, scratch.Path());
 
-    EXPECT_THROW((void)Pipeline::ComputeContentBuildFingerprint(entry, scratch.Path()),
+    EXPECT_THROW((void)Pipeline::ComputeContentBuildEffectiveFingerprint(entry),
                  std::runtime_error);
-    const std::string first = Pipeline::ComputeContentBuildFingerprint(
-        entry, scratch.Path(), {{"Shared/material", std::string(64u, '1')}});
-    const std::string second = Pipeline::ComputeContentBuildFingerprint(
-        entry, scratch.Path(), {{"Shared/material", std::string(64u, '2')}});
+    const std::string first = Pipeline::ComputeContentBuildEffectiveFingerprint(
+        entry, {{"Shared/material", std::string(64u, '1')}});
+    const std::string second = Pipeline::ComputeContentBuildEffectiveFingerprint(
+        entry, {{"Shared/material", std::string(64u, '2')}});
     EXPECT_NE(first, second);
+    EXPECT_EQ(entry.directFingerprint,
+              Pipeline::ComputeContentBuildDirectFingerprint(entry, scratch.Path()));
 }
 
 TEST(ContentBuildManifestTest, RejectsTraversalAndSymlinkEscapes)

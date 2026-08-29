@@ -100,7 +100,7 @@ namespace
     public:
         [[nodiscard]] Pipeline::ContentComponentIdentity Identity() const override
         {
-            return {"ExampleGame.GreetingProcessor", "1"};
+            return {"ExampleGame.GreetingProcessor", "2"};
         }
 
         [[nodiscard]] std::string InputType() const override { return kImportedType; }
@@ -112,10 +112,12 @@ namespace
         {
             for (const auto& [name, value] : parameters.Values())
             {
-                if (name != "prefix" || !std::holds_alternative<std::string>(value))
+                if ((name != "prefix" && name != "dependsOn") ||
+                    !std::holds_alternative<std::string>(value))
                 {
                     throw std::invalid_argument(
-                        "GreetingProcessor accepts only the string parameter 'prefix'.");
+                        "GreetingProcessor accepts only the string parameters 'prefix' and "
+                        "'dependsOn'.");
                 }
             }
         }
@@ -131,6 +133,11 @@ namespace
                 text = std::get<std::string>(*prefix);
             }
             text += input.Get<ImportedGreeting>().text;
+            if (const Pipeline::ContentProcessorParameterValue* dependency =
+                    context.Parameters().Find("dependsOn"))
+            {
+                context.AddContentBuildDependency(std::get<std::string>(*dependency));
+            }
             context.LogInfo("applied the custom greeting policy.");
             return Pipeline::ContentValue::Create(kProcessedType,
                                                   ProcessedGreeting{std::move(text)});

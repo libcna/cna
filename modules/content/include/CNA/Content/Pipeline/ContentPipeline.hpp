@@ -35,10 +35,22 @@ namespace CNA::Content::Pipeline
     /** @brief Pipeline stages reported by diagnostics and build logging. */
     enum class ContentPipelineStage
     {
+        /** @brief Component or route selection. */
         Selection,
+
+        /** @brief Source import and validation. */
         Import,
+
+        /** @brief Imported-value processing. */
         Process,
+
+        /** @brief CNB writer adaptation. */
         Write,
+
+        /** @brief Build-graph scheduling and dependency resolution. */
+        Graph,
+
+        /** @brief Atomic artifact or manifest publication. */
         Publish,
     };
 
