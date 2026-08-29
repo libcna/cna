@@ -325,28 +325,66 @@ namespace CNA::Content::Pipeline
             return resolved;
         }
 
-        std::vector<std::uint8_t> ReadAllBytes(const std::filesystem::path& path)
+        // SharpRuntime deliberately omits ComputeHash(Stream), but its protected hash core is
+        // incremental. This adapter keeps one SHA-256 implementation while feeding bounded chunks.
+        class StreamingSha256 final : public System::Security::Cryptography::SHA256
         {
-            std::ifstream stream(path, std::ios::binary | std::ios::ate);
+        public:
+            void Append(const std::vector<std::uint8_t>& bytes, std::size_t count)
+            {
+                if (count > bytes.size() ||
+                    count > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max()))
+                {
+                    throw std::invalid_argument(
+                        "StreamingSha256::Append(): count is outside the input buffer.");
+                }
+                HashCore(bytes, 0, static_cast<SharpRuntime::intcs>(count));
+            }
+
+            [[nodiscard]] std::vector<std::uint8_t> Finish()
+            {
+                std::vector<std::uint8_t> digest = HashFinal();
+                Initialize();
+                return digest;
+            }
+        };
+
+        std::string LowerHex(const std::vector<std::uint8_t>& bytes)
+        {
+            constexpr char digits[] = "0123456789abcdef";
+            std::string result;
+            result.reserve(bytes.size() * 2u);
+            for (std::uint8_t byte : bytes)
+            {
+                result.push_back(digits[byte >> 4u]);
+                result.push_back(digits[byte & 0x0Fu]);
+            }
+            return result;
+        }
+
+        std::string HashFileStreaming(const std::filesystem::path& path)
+        {
+            std::ifstream stream(path, std::ios::binary);
             if (!stream)
             {
                 throw std::runtime_error("cannot open '" +
                                          CNA::Internal::ContentPathToUtf8(path) +
                                          "' for hashing.");
             }
-            const std::streamoff size = stream.tellg();
-            if (size < 0 ||
-                static_cast<std::uint64_t>(size) >
-                    static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max()))
+
+            constexpr std::size_t kBufferSize = 1024u * 1024u;
+            std::vector<std::uint8_t> buffer(kBufferSize);
+            StreamingSha256 sha256;
+            for (;;)
             {
-                throw std::runtime_error("file '" + CNA::Internal::ContentPathToUtf8(path) +
-                                         "' is too large for the current SHA-256 API.");
-            }
-            stream.seekg(0, std::ios::beg);
-            std::vector<std::uint8_t> bytes(static_cast<std::size_t>(size));
-            if (!bytes.empty())
-            {
-                stream.read(reinterpret_cast<char*>(bytes.data()), size);
+                stream.read(reinterpret_cast<char*>(buffer.data()),
+                            static_cast<std::streamsize>(buffer.size()));
+                const std::streamsize count = stream.gcount();
+                if (count > 0)
+                {
+                    sha256.Append(buffer, static_cast<std::size_t>(count));
+                }
+                if (stream.eof()) { break; }
                 if (!stream)
                 {
                     throw std::runtime_error("cannot read '" +
@@ -354,7 +392,7 @@ namespace CNA::Content::Pipeline
                                              "' completely for hashing.");
                 }
             }
-            return bytes;
+            return LowerHex(sha256.Finish());
         }
 
         class CanonicalFingerprint
@@ -630,21 +668,12 @@ namespace CNA::Content::Pipeline
             throw std::runtime_error("byte sequence is too large for the current SHA-256 API.");
         }
         System::Security::Cryptography::SHA256 sha256;
-        const std::vector<std::uint8_t> digest = sha256.ComputeHash(bytes);
-        constexpr char digits[] = "0123456789abcdef";
-        std::string result;
-        result.reserve(digest.size() * 2u);
-        for (std::uint8_t byte : digest)
-        {
-            result.push_back(digits[byte >> 4u]);
-            result.push_back(digits[byte & 0x0Fu]);
-        }
-        return result;
+        return LowerHex(sha256.ComputeHash(bytes));
     }
 
     std::string ContentFileSha256(const std::filesystem::path& path)
     {
-        return ContentSha256(ReadAllBytes(path));
+        return HashFileStreaming(path);
     }
 
     std::string ComputeContentBuildFingerprint(

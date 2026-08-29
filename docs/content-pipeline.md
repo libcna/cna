@@ -354,6 +354,12 @@ manifest, changed component version, changed parameter, or changed dependency fo
 Identical effective inputs and intact output produce `SKIP`. Runtime XREF records are outputs rather
 than independent inputs; the source/dependency/component inputs that produced them are fingerprinted.
 
+Primary sources, file dependencies, generated-file dependencies, and existing output verification
+are hashed in 1 MiB chunks. Hashing therefore uses bounded memory and accepts individual files above
+2 GiB while producing the same SHA-256 and version-1 fingerprint semantics as the original one-shot
+implementation. The ordinary test gate pins cross-chunk equivalence; an opt-in sparse 2 GiB+1-byte
+test (`CNA_RUN_LARGE_FILE_TESTS=1`) pins the full large-file path without storing a giant fixture.
+
 The manifest JSON layout is versioned internal build state, not a hand-edited project format. A
 corrupt or incompatible manifest is ignored safely and rebuilt.
 

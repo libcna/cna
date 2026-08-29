@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <chrono>
+#include <cstdlib>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -86,6 +88,47 @@ TEST(ContentBuildManifestTest, UsesTheKnownSha256Digest)
 {
     EXPECT_EQ(Pipeline::ContentSha256({'a', 'b', 'c'}),
               "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+}
+
+TEST(ContentBuildManifestTest, StreamingFileHashMatchesTheInMemoryDigestAcrossReadChunks)
+{
+    ScratchDirectory scratch("streaming");
+    std::vector<std::uint8_t> bytes(3u * 1024u * 1024u + 17u);
+    for (std::size_t index = 0u; index < bytes.size(); ++index)
+    {
+        bytes[index] = static_cast<std::uint8_t>((index * 37u + 11u) & 0xFFu);
+    }
+    const std::filesystem::path source = scratch.Path() / "large-enough-for-chunks.bin";
+    WriteBytes(source, bytes);
+
+    EXPECT_EQ(Pipeline::ContentFileSha256(source), Pipeline::ContentSha256(bytes));
+    EXPECT_THROW((void)Pipeline::ContentFileSha256(scratch.Path() / "missing.bin"),
+                 std::runtime_error);
+    EXPECT_THROW((void)Pipeline::ContentFileSha256(scratch.Path()), std::runtime_error);
+}
+
+TEST(ContentBuildManifestTest, StreamingFileHashAcceptsAFileLargerThanTwoGiB)
+{
+    const char* enabled = std::getenv("CNA_RUN_LARGE_FILE_TESTS");
+    if (enabled == nullptr || std::string(enabled) != "1")
+    {
+        GTEST_SKIP() << "set CNA_RUN_LARGE_FILE_TESTS=1 for the sparse >2 GiB hashing gate";
+    }
+
+    ScratchDirectory scratch("over_2gib");
+    const std::filesystem::path source = scratch.Path() / "zeros.bin";
+    constexpr std::uint64_t size =
+        static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max()) + 2u;
+    std::ofstream stream(source, std::ios::binary | std::ios::trunc);
+    ASSERT_TRUE(stream);
+    stream.seekp(static_cast<std::streamoff>(size - 1u));
+    stream.put('\0');
+    stream.close();
+    ASSERT_TRUE(stream);
+    ASSERT_EQ(std::filesystem::file_size(source), size);
+
+    EXPECT_EQ(Pipeline::ContentFileSha256(source),
+              "b8030a8ab89280935633d8d991da3d9907c0f12e8b6fc3bfc515f4d440872b6e");
 }
 
 TEST(ContentBuildManifestTest, PersistentPathTextRoundTripsNativeNonAsciiNamesAsUtf8)

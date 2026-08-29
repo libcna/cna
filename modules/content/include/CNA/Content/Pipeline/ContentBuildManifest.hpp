@@ -123,11 +123,11 @@ namespace CNA::Content::Pipeline
     [[nodiscard]] std::string ContentSha256(const std::vector<std::uint8_t>& bytes);
 
     /**
-     * @brief Reads and hashes one regular file.
+     * @brief Streams and hashes one regular file with bounded memory.
      *
      * @param path Native path to hash.
      * @return Sixty-four lowercase hexadecimal characters.
-     * @throws std::runtime_error if the file cannot be read completely.
+     * @throws std::runtime_error if the file cannot be opened or read completely.
      */
     [[nodiscard]] std::string ContentFileSha256(const std::filesystem::path& path);
 
