@@ -8,6 +8,7 @@
 #include <cmath>
 #include <fstream>
 #include <limits>
+#include <set>
 #include <stdexcept>
 #include <string_view>
 #include <type_traits>
@@ -454,15 +455,25 @@ namespace CNA::Content::Pipeline
                 throw std::runtime_error("content manifest asset entry must be an object.");
             }
             ContentBuildManifestEntry entry;
-            entry.logicalName = RequireString(value, "logicalName");
+            entry.nodeId = RequireString(value, "nodeId");
             entry.source = RequireString(value, "source");
-            entry.output = RequireString(value, "output");
             entry.importer = ParseComponent(value, "importer");
             entry.processor = ParseComponent(value, "processor");
             entry.writer = ParseComponent(value, "writer");
-            entry.assetTypeId = RequireUInt32(value, "assetTypeId");
             entry.fingerprint = RequireString(value, "fingerprint");
-            entry.outputSha256 = RequireString(value, "outputSha256");
+
+            for (const JsonValue& output :
+                 RequireMember(value, "outputs", JsonType::Array).arrayValue)
+            {
+                if (output.type != JsonType::Object)
+                {
+                    throw std::runtime_error("content manifest output must be an object.");
+                }
+                entry.outputs.push_back({RequireString(output, "logicalName"),
+                                         RequireString(output, "path"),
+                                         RequireUInt32(output, "assetTypeId"),
+                                         RequireString(output, "sha256")});
+            }
 
             for (const JsonValue& parameter :
                  RequireMember(value, "parameters", JsonType::Array).arrayValue)
@@ -507,10 +518,10 @@ namespace CNA::Content::Pipeline
                      RequireUInt32(reference, "expectedAssetTypeId")});
             }
             std::sort(entry.runtimeReferences.begin(), entry.runtimeReferences.end());
-            if (manifest.Find(entry.logicalName) != nullptr)
+            if (manifest.Find(entry.nodeId) != nullptr)
             {
-                throw std::runtime_error("content manifest repeats logical asset '" +
-                                         entry.logicalName + "'.");
+                throw std::runtime_error("content manifest repeats build node '" + entry.nodeId +
+                                         "'.");
             }
             manifest.Set(std::move(entry));
         }
@@ -527,12 +538,23 @@ namespace CNA::Content::Pipeline
         {
             static_cast<void>(logicalName);
             JsonValue value = JsonValue::MakeObject();
-            value.Set("logicalName", StringValue(entry.logicalName));
+            value.Set("nodeId", StringValue(entry.nodeId));
             value.Set("source", StringValue(entry.source));
-            value.Set("output", StringValue(entry.output));
             value.Set("importer", ComponentValue(entry.importer));
             value.Set("processor", ComponentValue(entry.processor));
             value.Set("writer", ComponentValue(entry.writer));
+
+            JsonValue outputs = JsonValue::MakeArray();
+            for (const ContentBuildManifestOutput& output : entry.outputs)
+            {
+                JsonValue item = JsonValue::MakeObject();
+                item.Set("logicalName", StringValue(output.logicalName));
+                item.Set("path", StringValue(output.path));
+                item.Set("assetTypeId", JsonValue::MakeNumber(output.assetTypeId));
+                item.Set("sha256", StringValue(output.sha256));
+                outputs.arrayValue.push_back(std::move(item));
+            }
+            value.Set("outputs", std::move(outputs));
 
             JsonValue parameters = JsonValue::MakeArray();
             for (const auto& [name, parameterValue] : entry.parameters.Values())
@@ -565,9 +587,7 @@ namespace CNA::Content::Pipeline
                 references.arrayValue.push_back(std::move(item));
             }
             value.Set("runtimeReferences", std::move(references));
-            value.Set("assetTypeId", JsonValue::MakeNumber(entry.assetTypeId));
             value.Set("fingerprint", StringValue(entry.fingerprint));
-            value.Set("outputSha256", StringValue(entry.outputSha256));
             assets.arrayValue.push_back(std::move(value));
         }
         root.Set("assets", std::move(assets));
@@ -575,36 +595,75 @@ namespace CNA::Content::Pipeline
     }
 
     const ContentBuildManifestEntry*
-    ContentBuildManifest::Find(const std::string& logicalName) const
+    ContentBuildManifest::Find(const std::string& nodeId) const
     {
-        const auto found = entries_.find(logicalName);
+        const auto found = entries_.find(nodeId);
         return found == entries_.end() ? nullptr : &found->second;
     }
 
     void ContentBuildManifest::Set(ContentBuildManifestEntry entry)
     {
-        const std::string logicalProblem = Cnb::CnbLogicalNameProblem(entry.logicalName);
+        const std::string logicalProblem = Cnb::CnbLogicalNameProblem(entry.nodeId);
         if (!logicalProblem.empty())
         {
-            throw std::invalid_argument("content manifest logical name '" + entry.logicalName +
+            throw std::invalid_argument("content manifest node id '" + entry.nodeId +
                                         "' is invalid: " + logicalProblem + ".");
         }
         RequireSafeRelativePath(entry.source, "source");
-        RequireSafeRelativePath(entry.output, "output");
         if (entry.importer.name.empty() || entry.importer.version.empty() ||
             entry.processor.name.empty() || entry.processor.version.empty() ||
             entry.writer.name.empty() || entry.writer.version.empty())
         {
             throw std::invalid_argument("content manifest component identities must not be empty.");
         }
-        if (entry.assetTypeId == 0u)
-        {
-            throw std::invalid_argument("content manifest asset type id must not be zero.");
-        }
-        if (!IsLowerHexDigest(entry.fingerprint) || !IsLowerHexDigest(entry.outputSha256))
+        if (entry.outputs.empty() || entry.outputs.size() > MaxContentBuildOutputs)
         {
             throw std::invalid_argument(
-                "content manifest fingerprints must be lowercase SHA-256 values.");
+                "content manifest node must contain between one and " +
+                std::to_string(MaxContentBuildOutputs) + " outputs.");
+        }
+        if (!IsLowerHexDigest(entry.fingerprint))
+        {
+            throw std::invalid_argument("content manifest fingerprint must be a lowercase "
+                                        "SHA-256 value.");
+        }
+        std::set<std::string> outputNames;
+        std::set<std::string> outputPaths;
+        for (const ContentBuildManifestOutput& output : entry.outputs)
+        {
+            const std::string problem = Cnb::CnbLogicalNameProblem(output.logicalName);
+            if (!problem.empty())
+            {
+                throw std::invalid_argument("content manifest output logical name '" +
+                                            output.logicalName + "' is invalid: " + problem +
+                                            ".");
+            }
+            RequireSafeRelativePath(output.path, "output path");
+            if (!outputNames.insert(output.logicalName).second)
+            {
+                throw std::invalid_argument("content manifest repeats output logical name '" +
+                                            output.logicalName + "'.");
+            }
+            if (!outputPaths.insert(output.path).second)
+            {
+                throw std::invalid_argument("content manifest repeats output path '" +
+                                            output.path + "'.");
+            }
+            if (output.assetTypeId == 0u)
+            {
+                throw std::invalid_argument("content manifest output asset type id must not be "
+                                            "zero.");
+            }
+            if (!IsLowerHexDigest(output.sha256))
+            {
+                throw std::invalid_argument("content manifest output digest must be a lowercase "
+                                            "SHA-256 value.");
+            }
+        }
+        if (!outputNames.contains(entry.nodeId))
+        {
+            throw std::invalid_argument("content manifest node must own one primary output named '" +
+                                        entry.nodeId + "'.");
         }
         for (const ContentDependency& dependency : entry.dependencies)
         {
@@ -647,7 +706,13 @@ namespace CNA::Content::Pipeline
         entry.runtimeReferences.erase(
             std::unique(entry.runtimeReferences.begin(), entry.runtimeReferences.end()),
             entry.runtimeReferences.end());
-        entries_.insert_or_assign(entry.logicalName, std::move(entry));
+        std::sort(entry.outputs.begin(), entry.outputs.end(),
+                  [](const ContentBuildManifestOutput& left,
+                     const ContentBuildManifestOutput& right)
+        {
+            return left.logicalName < right.logicalName;
+        });
+        entries_.insert_or_assign(entry.nodeId, std::move(entry));
     }
 
     void ContentBuildManifest::Clear() noexcept
@@ -685,12 +750,24 @@ namespace CNA::Content::Pipeline
         fingerprint.AddU64(ContentBuildManifestVersion);
         fingerprint.AddU64(Cnb::Format::ContainerMajor);
         fingerprint.AddU64(Cnb::Format::ContainerMinor);
-        fingerprint.AddString(entry.logicalName);
+        fingerprint.AddString(entry.nodeId);
         fingerprint.AddString(entry.source);
         AddIdentity(fingerprint, entry.importer);
         AddIdentity(fingerprint, entry.processor);
         AddIdentity(fingerprint, entry.writer);
-        fingerprint.AddU64(entry.assetTypeId);
+        std::vector<ContentBuildManifestOutput> outputs = entry.outputs;
+        std::sort(outputs.begin(), outputs.end(),
+                  [](const ContentBuildManifestOutput& left,
+                     const ContentBuildManifestOutput& right)
+        {
+            return left.logicalName < right.logicalName;
+        });
+        fingerprint.AddU64(outputs.size());
+        for (const ContentBuildManifestOutput& output : outputs)
+        {
+            fingerprint.AddString(output.logicalName);
+            fingerprint.AddU64(output.assetTypeId);
+        }
         fingerprint.AddString(
             ContentFileSha256(ResolveContained(sourceRoot, entry.source, "primary source")));
 
@@ -735,15 +812,26 @@ namespace CNA::Content::Pipeline
                                                             const std::filesystem::path& outputPath)
     {
         ContentBuildManifestEntry entry;
-        entry.logicalName = result.logicalName;
+        entry.nodeId = result.logicalName;
         entry.source = RelativeContained(sourceRoot, result.source, "primary source");
-        entry.output = RelativeContained(outputRoot, outputPath, "output");
         entry.importer = result.importer;
         entry.processor = result.processor;
         entry.writer = result.writer;
         entry.parameters = result.parameters;
         entry.runtimeReferences = result.runtimeReferences;
-        entry.assetTypeId = result.output.assetTypeId;
+        entry.outputs.reserve(1u + result.output.additionalOutputs.size());
+        entry.outputs.push_back(
+            {result.logicalName, RelativeContained(outputRoot, outputPath, "primary output"),
+             result.output.assetTypeId, ContentSha256(result.output.bytes)});
+        for (const ContentAdditionalWriteOutput& output : result.output.additionalOutputs)
+        {
+            std::filesystem::path path =
+                outputRoot / CNA::Internal::ContentPathFromUtf8(output.logicalName);
+            path += ".cnb";
+            entry.outputs.push_back(
+                {output.logicalName, RelativeContained(outputRoot, path, "additional output"),
+                 output.assetTypeId, ContentSha256(output.bytes)});
+        }
         entry.dependencies.reserve(result.dependencies.size());
         for (const ContentDependency& dependency : result.dependencies)
         {

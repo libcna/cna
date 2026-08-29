@@ -45,6 +45,7 @@ TEST(ContentPipelineCMakeIntegrationTest, HelperBuildsTheSameCliManagedArtifactT
     const Pipeline::ContentBuildManifestEntry* entry = manifest.Find("Nested/curve");
     ASSERT_NE(entry, nullptr);
     EXPECT_EQ(entry->source, "Nested/curve.cnj");
-    EXPECT_EQ(entry->output, "Nested/curve.cnb");
+    ASSERT_EQ(entry->outputs.size(), 1u);
+    EXPECT_EQ(entry->outputs.front().path, "Nested/curve.cnb");
 #endif
 }

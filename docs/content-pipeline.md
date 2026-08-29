@@ -1,6 +1,6 @@
 # CNA Content Pipeline
 
-> Status: implemented initial pipeline, updated 2026-08-28. The command-line build workflow and
+> Status: implemented and extended pipeline, updated 2026-08-29. The command-line build workflow and
 > built-in byte-compatibility guarantees described here are supported behavior. The custom C++
 > component API is explicitly experimental. CNB container 1.0 and the existing built-in CNB
 > schemas remain frozen.
@@ -102,13 +102,13 @@ ContentTypeWriter
 existing Encode*ToCnb() codec
     |
     v
-complete CNB bytes
+primary CNB + bounded named CNB child outputs
     |
     v
 shared atomic publisher
     |
     v
-*.cnb
+one or more *.cnb artifacts
 
 -------------------------- RUNTIME --------------------------
 
@@ -134,7 +134,7 @@ data and temporary authoring intermediates, not runtime Model objects.
 | imported object | explicit source-oriented C++ value such as `ImportedImage` |
 | `ContentProcessor<TInput,TOutput>` | `ContentProcessor` with stable input/output identities |
 | `ContentProcessorContext` | focused parameters, dependency, XREF, and logging services |
-| `ContentTypeWriter<T>` | `ContentTypeWriter` adapter over one existing typed CNB encoder |
+| `ContentTypeWriter<T>` | `ContentTypeWriter` adapter over one existing typed CNB encoder, with bounded named outputs |
 | `ContentTypeReader<T>` | existing typed CNB decoder plus `CnbLoaderRegistry` |
 | `ExternalReference<T>` | CNB XREF for runtime references; separate records for build inputs |
 | XNB | CNB for CNA-native compiled content; XNB remains the compatibility path |
@@ -323,11 +323,11 @@ configured. Duration remains zero when unknown, and soundtrack type defaults to 
 }
 ```
 
-The current one-output build publishes the `.cnb`, not a second copy of the streaming media. The
+Song and Video writers publish the metadata `.cnb`, not a second copy of the streaming media. The
 referenced media must be deployed at that content-root-relative path. The container XREF makes this
-support artifact discoverable. Automatic copying is intentionally deferred until CP-023 defines
-multi-output ownership, collision, failure-recovery, and manifest semantics; the compiler does not
-pretend two files were atomically published when only one was.
+support artifact discoverable. Multi-output writers deliberately return complete CNB artifacts;
+raw deployment-file copying remains a separate policy question and is not silently inferred from
+an XREF.
 
 ## Registry and selection
 
@@ -435,7 +435,8 @@ through the existing canonical Model DTO and encoder.
 - sorted categorized build dependencies;
 - sorted runtime references;
 - ordered info/warning messages;
-- complete CNB bytes and stable output asset identity.
+- complete primary CNB bytes and stable output asset identity;
+- zero or more explicitly named additional CNB outputs, bounded to 256 outputs total.
 
 An optional `ContentBuildLogger` receives messages with source, logical asset, stage, component, and
 severity while the result also records them for tests and future build integration.
@@ -455,17 +456,19 @@ It does not use mtimes to decide correctness. A fingerprint includes:
 - content-build dependency fingerprints when graph scheduling is available;
 - importer, processor, and writer stable names and versions;
 - typed processor parameters;
-- CNB container version and written asset type ID.
+- CNB container version;
+- every owned output logical identity and written asset type ID.
 
-The output's SHA-256 is stored separately. A missing or tampered `.cnb`, corrupt/incompatible
-manifest, changed component version, changed parameter, or changed dependency forces a rebuild.
-Identical effective inputs and intact output produce `SKIP`. Runtime XREF records are outputs rather
-than independent inputs; the source/dependency/component inputs that produced them are fingerprinted.
+Each output's path, type ID, and SHA-256 are stored separately. A missing or tampered primary or
+child `.cnb`, corrupt/incompatible manifest, changed output set, changed component version, changed
+parameter, or changed dependency forces the owning node to rebuild. Identical effective inputs and
+intact outputs produce `SKIP`. Runtime XREF records are outputs rather than independent inputs; the
+source/dependency/component inputs that produced them are fingerprinted.
 
 Primary sources, file dependencies, generated-file dependencies, and existing output verification
 are hashed in 1 MiB chunks. Hashing therefore uses bounded memory and accepts individual files above
-2 GiB while producing the same SHA-256 and version-1 fingerprint semantics as the original one-shot
-implementation. The ordinary test gate pins cross-chunk equivalence; an opt-in sparse 2 GiB+1-byte
+2 GiB while producing the same SHA-256 as the original one-shot implementation. The ordinary test
+gate pins cross-chunk equivalence; an opt-in sparse 2 GiB+1-byte
 test (`CNA_RUN_LARGE_FILE_TESTS=1`) pins the full large-file path without storing a giant fixture.
 
 Effective configuration is already represented by the manifest's logical name, selected stable
@@ -473,8 +476,30 @@ component identities, and typed parameters. Changing one asset's effective confi
 invalidates that asset without treating the entire configuration file as a shared byte dependency;
 an unrelated entry change leaves other assets eligible for `SKIP`.
 
-The manifest JSON layout is versioned internal build state, not a hand-edited project format. A
-corrupt or incompatible manifest is ignored safely and rebuilt.
+The manifest JSON layout is versioned internal build state, not a hand-edited project format.
+Version 2 gives each entry a stable build-node ID plus an ordered output ownership list. Version 1
+cannot represent that relationship, so it is rejected as incompatible and causes a safe rebuild;
+there is no ambiguous in-place migration. A corrupt or future incompatible manifest is handled the
+same way.
+
+## Multi-output nodes and ownership
+
+One primary source still defines one build node. Its stable node ID is the configured or
+convention-derived primary logical name. A writer may additionally return complete CNB file images
+with their own safe logical names and asset type IDs. The total is capped at 256 to bound manifest,
+validation, ownership, and publication work.
+
+The primary output keeps the CLI-selected path, including a custom path in a single-file build.
+Each additional output maps deterministically to `<output-root>/<logical-name>.cnb`. Before any
+artifact from a node is published, the CLI reserves all of its logical names and canonical paths.
+It also pre-reserves every discovered primary node, so a generated child cannot shadow another
+source asset. Duplicate names, duplicate paths, absolute names, traversal, and output-root escapes
+are errors.
+
+The manifest owns all output digests under the producing node. Tampering with any child rebuilds
+that node rather than treating the child as an independent source node. This output model is the
+foundation for graph dependencies, but it does not yet schedule content-to-content edges; that
+remains the next phase.
 
 ## Determinism and publication
 
@@ -482,12 +507,19 @@ Directory discovery is sorted by the UTF-8 logical name. Registries use ordered 
 serialize RTTI. CNB bytes and fingerprints do not contain timestamps, absolute temporary paths,
 random values, PIDs, pointers, memory addresses, or temporary file names.
 
-Writers finish the complete CNB image in memory. The CLI then calls the one shared audited atomic
-publisher from `tools/common/CnaToolAtomicWrite.hpp`. Each final artifact is all-or-nothing: a failed
-import, process, encode, or publish operation leaves that asset's previous valid `.cnb` unchanged
-and exposes no partial final output. Manifest publication uses the same helper. A directory build
-is not a transaction across unrelated assets; independently successful assets may publish even if
-another asset fails, while the old manifest remains and the next run repairs any mismatch.
+Writers finish every CNB image in memory. The CLI then calls the one shared audited atomic publisher
+from `tools/common/CnaToolAtomicWrite.hpp` for the primary output followed by additional outputs.
+Each individual final artifact is all-or-nothing and an old artifact is never removed before its
+replacement is ready. Manifest publication uses the same helper and occurs only after every
+requested node succeeds.
+
+Portable filesystems do not provide a transaction spanning several paths. If a later output fails,
+an earlier output may already contain its new complete bytes, but the previous manifest and any
+unreplaced artifacts remain. The next invocation detects the old manifest's digest mismatch and
+rebuilds the complete owning node. Thus the manifest never claims a partially published output set,
+recovery is deterministic, and no partial file is exposed. A directory build likewise is not a
+transaction across unrelated nodes. Removed or no-longer-produced child files are retained as
+unclaimed stale artifacts; automatic garbage collection is intentionally not part of this protocol.
 
 ## Paths and security
 
@@ -562,9 +594,12 @@ target_link_libraries(my_content_compiler PRIVATE CNA::ContentCompiler)
 [`modules/content/examples/custom-content-compiler.cpp`](../modules/content/examples/custom-content-compiler.cpp)
 is a complete executable: it registers all built-ins plus an `ExampleGame.Greeting` `.greeting`
 route, uses a typed `prefix` configuration parameter, and adapts its writer to the custom type's
-single `EncodeGreetingToCnb()` codec. A subprocess test compiles a mixed custom/PNG directory,
-checks the custom CMET/chunk and built-in Texture2D output, verifies manifest component/parameter
-identity, then proves the second invocation is a byte-preserving two-asset no-op.
+single `EncodeGreetingToCnb()` codec. The writer exercises the real multi-output path by emitting a
+primary greeting and a generated reply CNB through that same codec. A subprocess test compiles a
+mixed custom/PNG directory, checks both custom CNBs and the built-in Texture2D output, verifies
+manifest ownership and component/parameter identity, proves a byte-preserving no-op, repairs a
+tampered child, rejects collision with another primary node, and covers recoverable partial
+publication failure.
 
 This is a **source/toolchain compatibility model**, not a plugin ABI. The custom executable and CNA
 must be compiled and linked as compatible C++; applications should rebuild their compiler when CNA
@@ -582,7 +617,9 @@ CNB never depends on JSON internally.
 
 CNB is the CNA-native compiled format produced here. XNB remains the compatibility format for XNA,
 MonoGame, and FNA assets. The CNA Content Pipeline does not claim XNA binary compatibility and does
-not replace CNA's XNB readers.
+not replace CNA's XNB readers. Native transcoding of selected built-in XNB assets through existing
+pipeline processors/writers is planned separately; opaque XNB-inside-CNB wrapping and arbitrary
+custom-reader conversion are not implemented or advertised.
 
 ## Configuration, profiles, parallelism, and CMake
 
@@ -652,11 +689,13 @@ No `cna_add_game()` convenience layer is defined yet.
 - the rule that built-in writers reuse those encoders;
 - byte equivalence with legacy producers for matching implemented semantics;
 - build/runtime separation, deterministic selection, categorized dependencies versus XREFs,
-  content-hashed skips, logical path preservation, and per-artifact atomic publication.
+  content-hashed skips, logical path preservation, bounded output ownership, and per-artifact
+  atomic publication.
 
 **Experimental:**
 
 - the public C++ importer/processor/writer interfaces and stable in-memory type strings;
+- the C++ multi-output writer result and custom output generation surface;
 - custom registration and the user-built `CNA::ContentCompiler` embedding surface;
 - component names/versions as user configuration identifiers;
 - future recursive builds, target profiles, and parallel scheduling.

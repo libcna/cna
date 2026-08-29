@@ -8,6 +8,7 @@
 #include <iostream>
 #include <map>
 #include <memory>
+#include <numeric>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -419,21 +420,39 @@ namespace
         try
         {
             if (HasContentBuildDependency(entry)) { return false; }
+            const auto primaryOutput = std::find_if(
+                entry.outputs.begin(), entry.outputs.end(), [&](const auto& output)
+            {
+                return output.logicalName == item.logicalName;
+            });
+            if (entry.nodeId != item.logicalName || primaryOutput == entry.outputs.end())
+            {
+                return false;
+            }
             if (WeaklyCanonical(sourceRoot /
                                 CNA::Internal::ContentPathFromUtf8(entry.source)) !=
                     WeaklyCanonical(item.source) ||
                 WeaklyCanonical(outputRoot /
-                                CNA::Internal::ContentPathFromUtf8(entry.output)) !=
+                                CNA::Internal::ContentPathFromUtf8(primaryOutput->path)) !=
                     WeaklyCanonical(item.output) ||
                 !IsCurrentRoute(entry, registry, item))
             {
                 return false;
             }
-            if (Pipeline::ComputeContentBuildFingerprint(entry, sourceRoot) != entry.fingerprint ||
-                !std::filesystem::is_regular_file(item.output) ||
-                Pipeline::ContentFileSha256(item.output) != entry.outputSha256)
+            if (Pipeline::ComputeContentBuildFingerprint(entry, sourceRoot) != entry.fingerprint)
             {
                 return false;
+            }
+            for (const Pipeline::ContentBuildManifestOutput& output : entry.outputs)
+            {
+                const std::filesystem::path path = WeaklyCanonical(
+                    outputRoot / CNA::Internal::ContentPathFromUtf8(output.path));
+                if (!IsWithin(WeaklyCanonical(outputRoot), path) ||
+                    !std::filesystem::is_regular_file(path) ||
+                    Pipeline::ContentFileSha256(path) != output.sha256)
+                {
+                    return false;
+                }
             }
             return true;
         }
@@ -441,6 +460,95 @@ namespace
         {
             return false;
         }
+    }
+
+    void ReserveOutputs(const Pipeline::ContentBuildManifestEntry& entry,
+                        const std::string& owner, const std::filesystem::path& outputRoot,
+                        std::map<std::string, std::string>& logicalOwners,
+                        std::map<std::string, std::string>& pathOwners)
+    {
+        std::set<std::string> entryLogicalNames;
+        std::set<std::string> entryPaths;
+        const std::filesystem::path canonicalRoot = WeaklyCanonical(outputRoot);
+        for (const Pipeline::ContentBuildManifestOutput& output : entry.outputs)
+        {
+            if (!entryLogicalNames.insert(output.logicalName).second)
+            {
+                throw std::runtime_error("content build node '" + owner +
+                                         "' repeats output logical name '" +
+                                         output.logicalName + "'.");
+            }
+            const auto logical = logicalOwners.find(output.logicalName);
+            if (logical != logicalOwners.end() && logical->second != owner)
+            {
+                throw std::runtime_error("content build nodes '" + logical->second +
+                                         "' and '" + owner + "' both own output logical name '" +
+                                         output.logicalName + "'.");
+            }
+
+            const std::filesystem::path path = WeaklyCanonical(
+                outputRoot / CNA::Internal::ContentPathFromUtf8(output.path));
+            if (!IsWithin(canonicalRoot, path))
+            {
+                throw std::runtime_error("output '" + output.logicalName +
+                                         "' escapes the output root.");
+            }
+            const std::string identity = CNA::Internal::ContentPathToUtf8(path);
+            if (!entryPaths.insert(identity).second)
+            {
+                throw std::runtime_error("content build node '" + owner +
+                                         "' resolves multiple outputs to path '" + identity +
+                                         "'.");
+            }
+            const auto physical = pathOwners.find(identity);
+            if (physical != pathOwners.end() && physical->second != owner)
+            {
+                throw std::runtime_error("content build nodes '" + physical->second +
+                                         "' and '" + owner +
+                                         "' resolve outputs to the same path '" + identity +
+                                         "'.");
+            }
+        }
+        for (const std::string& logicalName : entryLogicalNames)
+        {
+            logicalOwners.emplace(logicalName, owner);
+        }
+        for (const std::string& path : entryPaths) { pathOwners.emplace(path, owner); }
+    }
+
+    const std::vector<std::uint8_t>& OutputBytes(
+        const Pipeline::ContentBuildResult& result,
+        const Pipeline::ContentBuildManifestOutput& output)
+    {
+        if (output.logicalName == result.logicalName) { return result.output.bytes; }
+        const auto found = std::find_if(
+            result.output.additionalOutputs.begin(), result.output.additionalOutputs.end(),
+            [&](const Pipeline::ContentAdditionalWriteOutput& candidate)
+        {
+            return candidate.logicalName == output.logicalName;
+        });
+        if (found == result.output.additionalOutputs.end())
+        {
+            throw std::logic_error("manifest output '" + output.logicalName +
+                                   "' has no matching writer result.");
+        }
+        return found->bytes;
+    }
+
+    const Pipeline::ContentBuildManifestOutput& ManifestOutput(
+        const Pipeline::ContentBuildManifestEntry& entry, const std::string& logicalName)
+    {
+        const auto found = std::find_if(
+            entry.outputs.begin(), entry.outputs.end(), [&](const auto& output)
+        {
+            return output.logicalName == logicalName;
+        });
+        if (found == entry.outputs.end())
+        {
+            throw std::logic_error("writer output '" + logicalName +
+                                   "' has no matching manifest record.");
+        }
+        return *found;
     }
 
     int Run(const std::vector<std::filesystem::path>& arguments,
@@ -488,6 +596,14 @@ namespace
         std::size_t built = 0u;
         std::size_t skipped = 0u;
         std::size_t failed = 0u;
+        std::map<std::string, std::string> logicalOwners;
+        std::map<std::string, std::string> pathOwners;
+        for (const BuildItem& item : builds)
+        {
+            logicalOwners.emplace(item.logicalName, item.relativeSource);
+            pathOwners.emplace(CNA::Internal::ContentPathToUtf8(WeaklyCanonical(item.output)),
+                               item.relativeSource);
+        }
         for (const BuildItem& item : builds)
         {
             try
@@ -497,6 +613,8 @@ namespace
                 if (previous != nullptr &&
                     CanSkip(*previous, *registry, item, sourceRoot, outputRoot))
                 {
+                    ReserveOutputs(*previous, item.relativeSource, outputRoot, logicalOwners,
+                                   pathOwners);
                     nextManifest.Set(*previous);
                     ++skipped;
                     if (!command.quiet)
@@ -528,15 +646,30 @@ namespace
                 }
                 manifestEntry.fingerprint =
                     Pipeline::ComputeContentBuildFingerprint(manifestEntry, sourceRoot);
-                manifestEntry.outputSha256 = Pipeline::ContentSha256(result.output.bytes);
+                ReserveOutputs(manifestEntry, item.relativeSource, outputRoot, logicalOwners,
+                               pathOwners);
 
                 try
                 {
-                    if (item.output.has_parent_path())
+                    const auto publish = [&](const std::string& logicalName,
+                                             const std::vector<std::uint8_t>& bytes)
                     {
-                        std::filesystem::create_directories(item.output.parent_path());
+                        const Pipeline::ContentBuildManifestOutput& output =
+                            ManifestOutput(manifestEntry, logicalName);
+                        const std::filesystem::path path =
+                            outputRoot / CNA::Internal::ContentPathFromUtf8(output.path);
+                        if (path.has_parent_path())
+                        {
+                            std::filesystem::create_directories(path.parent_path());
+                        }
+                        CNA::Tools::WriteFileAtomically(path, bytes);
+                    };
+                    publish(result.logicalName, result.output.bytes);
+                    for (const Pipeline::ContentAdditionalWriteOutput& output :
+                         result.output.additionalOutputs)
+                    {
+                        publish(output.logicalName, output.bytes);
                     }
-                    CNA::Tools::WriteFileAtomically(item.output, result.output.bytes);
                 }
                 catch (const std::exception& error)
                 {
@@ -545,6 +678,11 @@ namespace
                         "CNA.AtomicPublisher", error.what());
                 }
 
+                const std::size_t outputCount = manifestEntry.outputs.size();
+                const std::size_t outputBytes = std::accumulate(
+                    manifestEntry.outputs.begin(), manifestEntry.outputs.end(), std::size_t{0u},
+                    [&](std::size_t total, const auto& output)
+                    { return total + OutputBytes(result, output).size(); });
                 nextManifest.Set(std::move(manifestEntry));
 
                 ++built;
@@ -552,7 +690,8 @@ namespace
                 {
                     std::cout << "[BUILD] " << item.logicalName << " -> "
                               << CNA::Internal::ContentPathToUtf8(item.output)
-                              << " (" << result.output.bytes.size() << " bytes; "
+                              << " (" << outputCount << " output(s), " << outputBytes
+                              << " bytes; "
                               << result.importer.name << " -> " << result.processor.name << " -> "
                               << result.writer.name << ")\n";
                 }

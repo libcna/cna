@@ -188,8 +188,19 @@ namespace
     class NumberWriter final : public Pipeline::ContentTypeWriter
     {
     public:
-        explicit NumberWriter(std::string name = "test.NumberWriter")
-            : name_(std::move(name))
+        enum class OutputBehavior
+        {
+            PrimaryOnly,
+            ValidAdditional,
+            DuplicateName,
+            TraversalName,
+            EmptyAdditional,
+            TooMany,
+        };
+
+        explicit NumberWriter(std::string name = "test.NumberWriter",
+                              OutputBehavior behavior = OutputBehavior::PrimaryOnly)
+            : name_(std::move(name)), behavior_(behavior)
         {
         }
 
@@ -207,14 +218,46 @@ namespace
             const Pipeline::ContentValue& input, const std::string& logicalName) const override
         {
             const ProcessedNumber& number = input.Get<ProcessedNumber>();
-            return {{static_cast<std::uint8_t>(number.value),
-                     static_cast<std::uint8_t>(logicalName.size())},
-                    42u,
-                    "Test.ProcessedNumber"};
+            Pipeline::ContentWriteResult result{
+                {static_cast<std::uint8_t>(number.value),
+                 static_cast<std::uint8_t>(logicalName.size())},
+                42u,
+                "Test.ProcessedNumber"};
+            if (behavior_ == OutputBehavior::ValidAdditional)
+            {
+                result.additionalOutputs.push_back(
+                    {logicalName + "-index", {1u, 2u}, 43u, "Test.NumberIndex"});
+            }
+            else if (behavior_ == OutputBehavior::DuplicateName)
+            {
+                result.additionalOutputs.push_back(
+                    {logicalName, {1u}, 43u, "Test.NumberIndex"});
+            }
+            else if (behavior_ == OutputBehavior::TraversalName)
+            {
+                result.additionalOutputs.push_back(
+                    {"../escape", {1u}, 43u, "Test.NumberIndex"});
+            }
+            else if (behavior_ == OutputBehavior::EmptyAdditional)
+            {
+                result.additionalOutputs.push_back(
+                    {logicalName + "-index", {}, 43u, "Test.NumberIndex"});
+            }
+            else if (behavior_ == OutputBehavior::TooMany)
+            {
+                for (std::size_t index = 0u; index < Pipeline::MaxContentBuildOutputs; ++index)
+                {
+                    result.additionalOutputs.push_back(
+                        {logicalName + "-" + std::to_string(index), {1u}, 43u,
+                         "Test.NumberIndex"});
+                }
+            }
+            return result;
         }
 
     private:
         std::string name_;
+        OutputBehavior behavior_ = OutputBehavior::PrimaryOnly;
     };
 
     std::shared_ptr<Pipeline::ContentPipelineRegistry> MakeRegistry()
@@ -371,6 +414,51 @@ TEST(ContentPipelineCoreTest, BuildReportsComponentsParametersDependenciesRefere
     EXPECT_EQ(logger.messages[0].component, "test.NumberImporter");
     EXPECT_EQ(logger.messages[1].stage, Pipeline::ContentPipelineStage::Process);
     EXPECT_EQ(logger.messages[1].component, "test.NumberProcessor");
+}
+
+TEST(ContentPipelineCoreTest, BuildAcceptsBoundedExplicitlyNamedAdditionalOutputs)
+{
+    ScratchDirectory scratch("multiple_outputs");
+    Pipeline::ContentBuildRequest request = MakeRequest(scratch);
+    auto registry = std::make_shared<Pipeline::ContentPipelineRegistry>();
+    registry->RegisterImporter(std::make_shared<NumberImporter>());
+    registry->RegisterProcessor(std::make_shared<NumberProcessor>());
+    registry->RegisterWriter(std::make_shared<NumberWriter>(
+        "test.MultiNumberWriter", NumberWriter::OutputBehavior::ValidAdditional));
+
+    const Pipeline::ContentBuildResult result = Pipeline::ContentPipeline(registry).Build(request);
+    ASSERT_EQ(result.output.additionalOutputs.size(), 1u);
+    EXPECT_EQ(result.output.additionalOutputs.front().logicalName, "Numbers/asset-index");
+    EXPECT_EQ(result.output.additionalOutputs.front().bytes,
+              (std::vector<std::uint8_t>{1u, 2u}));
+    EXPECT_EQ(result.output.additionalOutputs.front().assetTypeId, 43u);
+}
+
+TEST(ContentPipelineCoreTest, BuildRejectsUnsafeDuplicateEmptyAndUnboundedOutputsAtWriteStage)
+{
+    ScratchDirectory scratch("invalid_multiple_outputs");
+    Pipeline::ContentBuildRequest request = MakeRequest(scratch);
+    for (const NumberWriter::OutputBehavior behavior :
+         {NumberWriter::OutputBehavior::DuplicateName,
+          NumberWriter::OutputBehavior::TraversalName,
+          NumberWriter::OutputBehavior::EmptyAdditional,
+          NumberWriter::OutputBehavior::TooMany})
+    {
+        auto registry = std::make_shared<Pipeline::ContentPipelineRegistry>();
+        registry->RegisterImporter(std::make_shared<NumberImporter>());
+        registry->RegisterProcessor(std::make_shared<NumberProcessor>());
+        registry->RegisterWriter(std::make_shared<NumberWriter>("test.BadOutputWriter", behavior));
+        try
+        {
+            static_cast<void>(Pipeline::ContentPipeline(registry).Build(request));
+            FAIL() << "invalid multi-output writer result was accepted";
+        }
+        catch (const Pipeline::ContentPipelineError& error)
+        {
+            EXPECT_EQ(error.Stage(), Pipeline::ContentPipelineStage::Write);
+            EXPECT_EQ(error.Component(), "test.BadOutputWriter");
+        }
+    }
 }
 
 TEST(ContentPipelineCoreTest, InvalidProcessorParametersFailAtTheProcessorBoundary)

@@ -142,7 +142,7 @@ namespace
     public:
         [[nodiscard]] Pipeline::ContentComponentIdentity Identity() const override
         {
-            return {"ExampleGame.GreetingWriter", "1"};
+            return {"ExampleGame.GreetingWriter", "2"};
         }
 
         [[nodiscard]] std::string InputType() const override { return kProcessedType; }
@@ -151,8 +151,15 @@ namespace
             const Pipeline::ContentValue& input,
             const std::string& logicalName) const override
         {
-            return {EncodeGreetingToCnb(input.Get<ProcessedGreeting>(), logicalName),
-                    GreetingAssetTypeId(), kAssetTypeName};
+            const ProcessedGreeting& greeting = input.Get<ProcessedGreeting>();
+            Pipeline::ContentWriteResult result{
+                EncodeGreetingToCnb(greeting, logicalName), GreetingAssetTypeId(), kAssetTypeName};
+            const std::string replyLogicalName = "Generated/" + logicalName + "-reply";
+            const ProcessedGreeting reply{"Reply: " + greeting.text};
+            result.additionalOutputs.push_back(
+                {replyLogicalName, EncodeGreetingToCnb(reply, replyLogicalName),
+                 GreetingAssetTypeId(), kAssetTypeName});
+            return result;
         }
     };
 

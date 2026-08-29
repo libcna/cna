@@ -12,23 +12,39 @@
 namespace CNA::Content::Pipeline
 {
     /** @brief Current on-disk CNA Content Pipeline manifest format version. */
-    inline constexpr std::uint32_t ContentBuildManifestVersion = 1u;
+    inline constexpr std::uint32_t ContentBuildManifestVersion = 2u;
 
     /** @brief File name used for the inspectable manifest below a content output
      * root. */
     inline constexpr const char* ContentBuildManifestFileName = ".cna-content-manifest.json";
 
-    /** @brief One deterministic, root-relative asset record in a build manifest. */
+    /** @brief One deterministic output owned by a build node. */
+    struct ContentBuildManifestOutput
+    {
+        /** @brief Logical ContentManager name and stable output identity. */
+        std::string logicalName;
+
+        /** @brief Published artifact path relative to the output root, using `/`. */
+        std::string path;
+
+        /** @brief CNB asset type written by the selected writer. */
+        std::uint32_t assetTypeId = 0u;
+
+        /** @brief SHA-256 of the published CNB bytes, used to detect deletion or tampering. */
+        std::string sha256;
+
+        /** @brief Compares every stable output field. */
+        bool operator==(const ContentBuildManifestOutput&) const = default;
+    };
+
+    /** @brief One deterministic, root-relative build-node record in a manifest. */
     struct ContentBuildManifestEntry
     {
-        /** @brief Logical ContentManager asset name and manifest key. */
-        std::string logicalName;
+        /** @brief Stable logical build-node identity and manifest key. */
+        std::string nodeId;
 
         /** @brief Primary source path relative to the source root, using `/`. */
         std::string source;
-
-        /** @brief Published artifact path relative to the output root, using `/`. */
-        std::string output;
 
         /** @brief Importer identity used to produce the artifact. */
         ContentComponentIdentity importer;
@@ -49,15 +65,11 @@ namespace CNA::Content::Pipeline
         /** @brief Runtime XREFs recorded separately from build inputs. */
         std::vector<RuntimeContentReference> runtimeReferences;
 
-        /** @brief CNB asset type written by the selected writer. */
-        std::uint32_t assetTypeId = 0u;
+        /** @brief Outputs owned by this node, including exactly one named @ref nodeId. */
+        std::vector<ContentBuildManifestOutput> outputs;
 
         /** @brief SHA-256 of all effective build inputs and component identities. */
         std::string fingerprint;
-
-        /** @brief SHA-256 of the published CNB bytes, used to detect deletion or
-         * tampering. */
-        std::string outputSha256;
 
         /** @brief Compares all persisted fields. */
         bool operator==(const ContentBuildManifestEntry&) const = default;
@@ -68,7 +80,7 @@ namespace CNA::Content::Pipeline
     {
     public:
         /**
-         * @brief Parses a complete version-1 manifest.
+         * @brief Parses a complete current-version manifest.
          *
          * @param json UTF-8 JSON document.
          * @return Parsed manifest with entries ordered by logical name.
@@ -84,17 +96,17 @@ namespace CNA::Content::Pipeline
         [[nodiscard]] std::string Serialize() const;
 
         /**
-         * @brief Finds a record by logical asset name.
+         * @brief Finds a record by stable build-node identity.
          *
-         * @param logicalName Logical asset name to find.
+         * @param nodeId Build-node identity to find.
          * @return Pointer valid until the manifest is mutated, or null when absent.
          */
-        [[nodiscard]] const ContentBuildManifestEntry* Find(const std::string& logicalName) const;
+        [[nodiscard]] const ContentBuildManifestEntry* Find(const std::string& nodeId) const;
 
         /**
          * @brief Inserts or replaces one record.
          *
-         * @param entry Fully populated record whose logical name is the key.
+         * @param entry Fully populated record whose node ID is the key.
          * @throws std::invalid_argument when a required field is invalid.
          */
         void Set(ContentBuildManifestEntry entry);
@@ -105,7 +117,7 @@ namespace CNA::Content::Pipeline
         /**
          * @brief Returns every record in stable logical-name order.
          *
-         * @return Read-only ordered record map.
+         * @return Read-only map ordered by build-node identity.
          */
         [[nodiscard]] const std::map<std::string, ContentBuildManifestEntry>&
         Entries() const noexcept;
@@ -160,8 +172,11 @@ namespace CNA::Content::Pipeline
      * @param sourceRoot Canonical source root.
      * @param outputRoot Canonical output root.
      * @param outputPath Published artifact path.
-     * @return Record with empty fingerprint and output digest fields for the caller
-     * to fill.
+     * Additional outputs use their logical names below @p outputRoot with a `.cnb` suffix. The
+     * primary output keeps the caller-selected path, which matters for single-file builds.
+     *
+     * @return Record with normalized output identities/digests and an empty effective-input
+     *         fingerprint for the caller to fill.
      */
     [[nodiscard]] ContentBuildManifestEntry MakeContentBuildManifestEntry(
         const ContentBuildResult& result, const std::filesystem::path& sourceRoot,

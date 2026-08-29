@@ -451,6 +451,34 @@ toolchain it uses. Arbitrary shared-library discovery was rejected because the e
 interfaces, STL values, exceptions and ownership cross a compiler-specific ABI with no current
 version handshake capable of making that stable or safe.
 
+### 5.12 Bounded multi-output build nodes (`CP-023`)
+
+One primary source remains one stable build node, identified by its primary logical asset name.
+`ContentWriteResult` preserves its original primary fields and now permits explicitly named
+`ContentAdditionalWriteOutput` CNB images, with at most 256 total outputs. This extends existing
+writers without changing them; built-in codecs and their bytes remain the sole schema authority.
+
+Manifest version 2 replaces the singular output fields with a sorted ownership list containing
+logical name, root-relative path, asset type ID and digest. The effective fingerprint includes the
+complete output identity/type set. Version-1 manifests are rejected as incompatible cache state and
+cause a safe rebuild rather than being guessed into the new semantics. The primary keeps an
+explicit single-file output path; children map deterministically from logical names below the
+output root.
+
+The CLI pre-reserves all discovered primary identities/paths and reserves every generated child
+before publishing its node. Logical or physical collisions, traversal, empty images, invalid type
+IDs and unbounded output sets fail with stage/node context. Each artifact and the manifest use the
+one existing atomic-write helper. Publication is deliberately a recoverable per-artifact protocol,
+not a fictitious multi-file transaction: if a later child fails, earlier replacements may be
+complete, but the old manifest remains and the next run detects the digest mismatch and rebuilds
+the node. A removed child can remain as an unclaimed stale file; deletion/garbage collection is not
+part of CP-023.
+
+The user-built `.greeting` compiler is the end-to-end proof. Its writer emits a primary greeting
+and generated reply using one custom codec. Tests cover stable manifest ordering, child tamper
+repair, primary/child collision rejection, failure after primary publication, retained old
+manifest/child state, recovery, and subsequent no-op.
+
 ---
 
 ## 6. First vertical slices
@@ -952,7 +980,7 @@ The completed feature branch was synchronized without reopening `CP-001` through
 | `CP-020` | **completed** | Added `VideoImporter`, `VideoProcessor`, and `VideoContentWriter` over the unchanged `EncodeVideoToCnb()`. The non-decoding importer covers unambiguous runtime video extensions; required configured width/height/fps prevents invented metadata or an FFmpeg dependency, while duration/soundtrack retain schema defaults. Six component/runtime tests and two CLI tests prove strict types/ranges/missing metadata, Unicode, single/directory builds, deterministic incremental invalidation, manifest XREF separation, HEADLESS runtime metadata compatibility, and exact bytes against the library encoder and legacy producer. `.ogg` remains Song-only for deterministic convention routing, and media copying remains CP-023 work. |
 | `CP-021` | **completed** | Kept Model/glTF paths native through pipeline discovery, intermediate Model CNJ compilation, sidecar opens and generated output publication. The one shared glTF implementation now gives cgltf generic UTF-8 names plus CNA file callbacks that reconstruct native filesystem paths; authored URI and serialized/generated-name boundaries use the existing explicit UTF-8 helpers. A repeated POSIX build with non-ASCII source root, nested directories, `.gltf`, external `.bin`, texture and generated XREF passes and preserves the pinned Model/direct-producer bytes; all four affected conversion sources also pass MinGW Windows-target syntax compilation. No native MSVC/Windows runtime was available, so Windows execution is still an explicit verification gap rather than a claimed result. |
 | `CP-022` | **completed** | Extracted the stock CLI coordinator into the linkable `CNA::ContentCompiler` target and added explicit built-in registration plus a configured-registry runner. Stock and custom executables now share discovery, configuration, incremental manifests, diagnostics and the sole atomic publisher. A real `.greeting` compiler example and subprocess test prove mixed custom/built-in directory output, typed configuration fingerprints, custom CMET/chunk bytes, manifest identities, determinism and no-op skips. The 150-test pipeline/legacy-producer/CNJ/golden gate passed (149 pass, one expected large-file skip), all 23 C-header compatibility cells passed, and the two new C++ declarations remain honestly planned under `CBIND-117` with no C ABI/export change. The contract is C++ source/toolchain compatibility; no dynamic plugin ABI or library search is claimed. |
-| `CP-023` | **pending** | Define and implement stable build-node/output identity and a bounded multi-output build result. Evolve the manifest explicitly and specify recoverable per-artifact publication before enabling generated child assets. |
+| `CP-023` | **completed** | Added a backward-extending writer result with at most 256 explicitly named CNB outputs, stable primary-node/output identities, global logical/path ownership checks and manifest v2 output lists. Version 1 is rejected into a safe rebuild. Every artifact and the manifest still use the sole atomic publisher; a later-output failure retains the old manifest so digest mismatch deterministically repairs the whole node. The custom `.greeting` compiler proves generated child publication, stable ordering/no-op, child-tamper repair, primary collision rejection and recovery after partial multi-file publication. The 141-test pipeline/producer/CNJ/golden selection passed 140 with only the expected large-file gate skipped; all 23 C-header compatibility cells and generated inventory gates pass. Frozen built-in encoders and bytes are unchanged. |
 | `CP-024` | **pending** | Schedule content-to-content build dependencies as graph edges distinct from source files, generated files and runtime XREFs. Prove shared dependencies, rebuild propagation, failure propagation and cache correctness. |
 | `CP-025` | **pending** | Add deterministic self/two-node/long-cycle detection with the logical cycle chain in diagnostics; never rely on recursive overflow. |
 | `CP-026` | **pending** | Audit component reentrancy, registry mutability, logging, manifest access, temporary-name ownership and third-party parser safety; freeze the registry/build graph before execution and specify deterministic scheduling. |
@@ -984,9 +1012,10 @@ the ordering wrong; it is not a promise to build speculative abstractions.
 * glTF's last orchestration is physically tool-owned and file-staged even though it is now one
   linked library implementation. An eager in-memory rewrite could break the strongest existing
   equivalence oracle; the staging seam should move only with pinned outputs.
-* The current one-output build API cannot publish glTF multi-skin Model groups, standalone clips or
-  generated texture child assets. It rejects multi-Model input rather than choosing silently;
-  graph identity/output ownership must be settled before those cases are advertised as complete.
+* The bounded multi-output API can publish generated CNB children, but existing glTF conversion
+  still rejects multi-Model input and does not yet extract standalone clips or texture child
+  assets. Those routes need explicit canonical processor results and CP-024 graph edges rather than
+  being enabled implicitly by the generic writer facility.
 * A string type ID and C++ type can disagree in a custom extension. Checked boxing/unboxing and
   diagnostics are mandatory; the string is persistent identity, the RTTI guard is only defensive.
 * Dependency correctness precedes incremental correctness. An incomplete dependency set must force
@@ -996,9 +1025,13 @@ the ordering wrong; it is not a promise to build speculative abstractions.
   longer capped at 2 GiB and no second SHA-256 algorithm was introduced.
 * Content-to-content dependency records have deterministic fingerprint semantics, but the serial
   CLI intentionally forces/refuses that route until graph ordering and cycles are implemented.
-* Song/Video compilation records and encodes the streaming media XREF but the current one-output
-  builder does not copy that media into the output tree. Deployment must place it at the referenced path;
-  automatic publication is coupled to CP-023's multi-output ownership and recovery protocol.
+* Song/Video compilation records and encodes the streaming media XREF but does not copy raw media
+  into the output tree. CP-023 intentionally models compiled CNB outputs, not arbitrary deployment
+  files; deployment must still place media at the referenced path until an explicit support-file
+  policy exists.
+* Multi-file publication is recoverable but not transactional across paths. A failed later output
+  can leave earlier complete replacements beside the old manifest; the next build repairs the
+  owning node. Outputs no longer claimed by any manifest entry are not garbage-collected.
 * Windows Unicode paths stay native through CLI discovery, manifests, image/WAV/DDS/CNJ and
   Model/glTF flows. cgltf and authored/generated JSON names cross one explicit generic-UTF-8
   boundary backed by a native file callback. Portable tests cover the complete non-ASCII Model

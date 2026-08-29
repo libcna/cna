@@ -749,6 +749,39 @@ namespace CNA::Content::Pipeline
             {
                 throw std::logic_error("writer returned invalid asset type id 0.");
             }
+            if (output.additionalOutputs.size() >= MaxContentBuildOutputs)
+            {
+                throw std::logic_error(
+                    "writer returned more than the maximum of " +
+                    std::to_string(MaxContentBuildOutputs) + " outputs.");
+            }
+            std::set<std::string> outputNames{logicalName};
+            for (const ContentAdditionalWriteOutput& additional : output.additionalOutputs)
+            {
+                const std::string problem = Cnb::CnbLogicalNameProblem(additional.logicalName);
+                if (!problem.empty())
+                {
+                    throw std::logic_error("writer returned invalid additional logical name '" +
+                                           additional.logicalName + "': " + problem + ".");
+                }
+                if (!outputNames.insert(additional.logicalName).second)
+                {
+                    throw std::logic_error("writer returned duplicate output logical name '" +
+                                           additional.logicalName + "'.");
+                }
+                if (additional.bytes.empty())
+                {
+                    throw std::logic_error("writer returned an empty file image for additional "
+                                           "output '" +
+                                           additional.logicalName + "'.");
+                }
+                if (additional.assetTypeId == 0u)
+                {
+                    throw std::logic_error("writer returned invalid asset type id 0 for "
+                                           "additional output '" +
+                                           additional.logicalName + "'.");
+                }
+            }
         }
         catch (...)
         {

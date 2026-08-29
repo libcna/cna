@@ -3,10 +3,10 @@
 > **Status (2026-08-29, after Content Pipeline integration): B0–B11 complete; B12 is an explicit
 > C-ABI backlog, not Content Pipeline v1 work.** Phase B10 bound all 506 rows the sixth merge
 > reopened, the CNB content format included; Phase B11 bound the seventh merge's 15-row tail. The
-> completed experimental C++ Content Pipeline now adds 412 deliberately unbound inventory rows:
-> 392 under `CNA::Content::Pipeline`, 12 under `Content::Import`, seven source-import declarations,
-> and one native-path Model build overload. Coverage: **548 headers / 9,243 symbols — 8,352
-> implemented, 15 approved partial, 412 planned, 464 not
+> completed experimental C++ Content Pipeline now adds 423 deliberately unbound inventory rows:
+> 403 under `CNA::Content::Pipeline`, 12 under `Content::Import`, seven source-import declarations,
+> and one native-path Model build overload. Coverage: **548 headers / 9,254 symbols — 8,352
+> implemented, 15 approved partial, 423 planned, 464 not
 > applicable.** ABI `0.18.0` and its 4,048 exports are unchanged. The release gate is consistently
 > **Not ready** on coverage alone until `CBIND-117`; this integration does not invent C routes for
 > a C++ build-time extension API merely because it is public. See *Current status* and Phase B12.
@@ -1545,13 +1545,13 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-**Snapshot (2026-08-29, after Content Pipeline continuation):** 548 headers / 9,243 symbols —
-**8,352 implemented, 15 approved partial, 412 planned, 464 not applicable.** ABI `0.18.0`, 4,048
+**Snapshot (2026-08-29, after Content Pipeline continuation):** 548 headers / 9,254 symbols —
+**8,352 implemented, 15 approved partial, 423 planned, 464 not applicable.** ABI `0.18.0`, 4,048
 exported symbols — the same 4,048 with `CNA_CNAEXT` on and off (measured symbol by symbol: zero
 differ), which is the engine layer's ABI promise measured rather than asserted.
 
 The completed C++ Content Pipeline and its continuation reopened only the coverage criterion: all
-412 unmapped declarations are assigned to open `CBIND-117`, no C route or ABI export was added, and
+423 unmapped declarations are assigned to open `CBIND-117`, no C route or ABI export was added, and
 the four new
 not-applicable rows are explicitly deleted declarations reported by Doxygen. The release gate is
 therefore **Not ready** on that one measured criterion while B12 remains open.

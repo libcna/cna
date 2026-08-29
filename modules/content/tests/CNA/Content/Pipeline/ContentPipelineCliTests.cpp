@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -436,7 +437,8 @@ TEST(ContentPipelineCliTest, NonAsciiDirectoryBuildPreservesUtf8LogicalNamesAndS
         manifest.Find("Textury/žluťoučký_壁");
     ASSERT_NE(entry, nullptr);
     EXPECT_EQ(entry->source, "Textury/žluťoučký_壁.png");
-    EXPECT_EQ(entry->output, "Textury/žluťoučký_壁.cnb");
+    ASSERT_EQ(entry->outputs.size(), 1u);
+    EXPECT_EQ(entry->outputs.front().path, "Textury/žluťoučký_壁.cnb");
 
     std::string second;
     ASSERT_EQ(RunTool({"build", CNA::Internal::ContentPathToUtf8(source), "-o",
@@ -830,8 +832,11 @@ TEST(ContentPipelineCliTest, UserBuiltCompilerCombinesCustomAndBuiltInRoutesEndT
         << firstLog;
 
     const std::filesystem::path greetingPath = output / "Messages" / "welcome.cnb";
+    const std::filesystem::path replyPath =
+        output / "Generated" / "Messages" / "welcome-reply.cnb";
     const std::filesystem::path texturePath = output / "Textures" / "badge.cnb";
     ASSERT_TRUE(std::filesystem::is_regular_file(greetingPath));
+    ASSERT_TRUE(std::filesystem::is_regular_file(replyPath));
     ASSERT_TRUE(std::filesystem::is_regular_file(texturePath));
 
     const Cnb::CnbDocument greeting =
@@ -844,6 +849,15 @@ TEST(ContentPipelineCliTest, UserBuiltCompilerCombinesCustomAndBuiltInRoutesEndT
         greeting.OpenChunk(greeting.RequireSingle(Cnb::MakeChunkId('T', 'X', 'T', '0')));
     EXPECT_EQ(text.ReadString(), "Hello, CNA");
     EXPECT_NO_THROW(text.RequireExhausted());
+
+    const std::vector<std::uint8_t> replyBytes = ReadBytes(replyPath);
+    const Cnb::CnbDocument reply =
+        Cnb::CnbDocument::Parse(replyBytes, "custom compiler generated reply");
+    EXPECT_EQ(reply.Metadata().contentName, "Generated/Messages/welcome-reply");
+    Cnb::CnbByteReader replyText =
+        reply.OpenChunk(reply.RequireSingle(Cnb::MakeChunkId('T', 'X', 'T', '0')));
+    EXPECT_EQ(replyText.ReadString(), "Reply: Hello, CNA");
+    EXPECT_NO_THROW(replyText.RequireExhausted());
 
     const Cnb::CnbDocument texture =
         Cnb::CnbDocument::Parse(ReadBytes(texturePath), "custom compiler built-in texture");
@@ -860,6 +874,15 @@ TEST(ContentPipelineCliTest, UserBuiltCompilerCombinesCustomAndBuiltInRoutesEndT
     EXPECT_EQ(greetingEntry->importer.name, "ExampleGame.GreetingImporter");
     EXPECT_EQ(greetingEntry->processor.name, "ExampleGame.GreetingProcessor");
     EXPECT_EQ(greetingEntry->writer.name, "ExampleGame.GreetingWriter");
+    EXPECT_EQ(greetingEntry->writer.version, "2");
+    ASSERT_EQ(greetingEntry->outputs.size(), 2u);
+    const auto generated = std::find_if(
+        greetingEntry->outputs.begin(), greetingEntry->outputs.end(), [](const auto& value)
+    {
+        return value.logicalName == "Generated/Messages/welcome-reply";
+    });
+    ASSERT_NE(generated, greetingEntry->outputs.end());
+    EXPECT_EQ(generated->path, "Generated/Messages/welcome-reply.cnb");
     ASSERT_NE(greetingEntry->parameters.Find("prefix"), nullptr);
     EXPECT_EQ(std::get<std::string>(*greetingEntry->parameters.Find("prefix")), "Hello, ");
 
@@ -873,5 +896,93 @@ TEST(ContentPipelineCliTest, UserBuiltCompilerCombinesCustomAndBuiltInRoutesEndT
     EXPECT_NE(secondLog.find("[SKIP] Textures/badge"), std::string::npos) << secondLog;
     EXPECT_EQ(ReadBytes(greetingPath), greetingBytes);
     EXPECT_EQ(ReadBytes(manifestPath), manifestBytes);
+
+    WriteBytes(replyPath, {0xBAu, 0xD0u});
+    std::string repairLog;
+    ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
+                            {"build", source.string(), "-o", output.string()}, repairLog),
+              0)
+        << repairLog;
+    EXPECT_NE(repairLog.find("[BUILD] Messages/welcome"), std::string::npos) << repairLog;
+    EXPECT_NE(repairLog.find("[SKIP] Textures/badge"), std::string::npos) << repairLog;
+    EXPECT_EQ(ReadBytes(replyPath), replyBytes);
+    EXPECT_EQ(ReadBytes(manifestPath), manifestBytes);
+}
+
+TEST(ContentPipelineCliTest, AdditionalOutputCannotClaimAnotherBuildNodesIdentity)
+{
+    ScratchDirectory scratch("multi_output_collision");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    WriteText(source / "welcome.greeting", "first\n");
+    WriteText(source / "Generated" / "welcome-reply.greeting", "second\n");
+
+    std::string log;
+    EXPECT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
+                            {"build", source.string(), "-o", output.string()}, log),
+              1)
+        << log;
+    EXPECT_NE(log.find("both own output logical name 'Generated/welcome-reply'"),
+              std::string::npos)
+        << log;
+    EXPECT_FALSE(std::filesystem::exists(output / Pipeline::ContentBuildManifestFileName));
+    EXPECT_FALSE(std::filesystem::exists(output / "welcome.cnb"));
+}
+
+TEST(ContentPipelineCliTest, MultiOutputFailureLeavesTheOldManifestAndRecoversSafely)
+{
+    ScratchDirectory scratch("multi_output_recovery");
+    const std::filesystem::path source = scratch.Path() / "ContentSource" / "welcome.greeting";
+    const std::filesystem::path primary = scratch.Path() / "Content" / "welcome.cnb";
+    const std::filesystem::path reply =
+        scratch.Path() / "Content" / "Generated" / "welcome-reply.cnb";
+    const std::filesystem::path manifest =
+        primary.parent_path() / Pipeline::ContentBuildManifestFileName;
+    WriteText(source, "first\n");
+
+    std::string firstLog;
+    ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
+                            {"build", source.string(), "-o", primary.string()}, firstLog),
+              0)
+        << firstLog;
+    EXPECT_NE(firstLog.find("2 output(s)"), std::string::npos) << firstLog;
+    const std::vector<std::uint8_t> oldPrimary = ReadBytes(primary);
+    const std::vector<std::uint8_t> oldReply = ReadBytes(reply);
+    const std::vector<std::uint8_t> oldManifest = ReadBytes(manifest);
+
+    WriteText(source, "second\n");
+    std::error_code permissionError;
+    std::filesystem::permissions(reply.parent_path(), std::filesystem::perms::owner_write,
+                                 std::filesystem::perm_options::remove, permissionError);
+    ASSERT_FALSE(permissionError);
+    std::string failedLog;
+    const int failed = RunExecutable(
+        CNA_CUSTOM_CONTENT_COMPILER_PATH,
+        {"build", source.string(), "-o", primary.string(), "--quiet"}, failedLog);
+    std::filesystem::permissions(reply.parent_path(), std::filesystem::perms::owner_write,
+                                 std::filesystem::perm_options::add, permissionError);
+    ASSERT_FALSE(permissionError);
+
+    EXPECT_EQ(failed, 1) << failedLog;
+    EXPECT_NE(failedLog.find("Publish (CNA.AtomicPublisher)"), std::string::npos) << failedLog;
+    EXPECT_NE(ReadBytes(primary), oldPrimary);
+    EXPECT_EQ(ReadBytes(reply), oldReply);
+    EXPECT_EQ(ReadBytes(manifest), oldManifest);
+
+    std::string recoveryLog;
+    ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
+                            {"build", source.string(), "-o", primary.string()}, recoveryLog),
+              0)
+        << recoveryLog;
+    EXPECT_NE(recoveryLog.find("[BUILD] welcome"), std::string::npos) << recoveryLog;
+    EXPECT_NE(ReadBytes(reply), oldReply);
+    EXPECT_NE(ReadBytes(manifest), oldManifest);
+
+    std::string skipLog;
+    ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
+                            {"build", source.string(), "-o", primary.string()}, skipLog),
+              0)
+        << skipLog;
+    EXPECT_NE(skipLog.find("[SKIP] welcome"), std::string::npos) << skipLog;
 }
 #endif

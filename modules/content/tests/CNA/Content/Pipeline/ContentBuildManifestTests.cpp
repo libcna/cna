@@ -61,9 +61,8 @@ namespace
         WriteBytes(sourceRoot / "shared" / "table.bin", {4u, 5u, 6u});
 
         Pipeline::ContentBuildManifestEntry entry;
-        entry.logicalName = "Data/asset";
+        entry.nodeId = "Data/asset";
         entry.source = "asset.bin";
-        entry.output = "Data/asset.cnb";
         entry.importer = {"test.Importer", "1"};
         entry.processor = {"test.Processor", "2"};
         entry.writer = {"test.Writer", "3"};
@@ -77,9 +76,12 @@ namespace
             {Pipeline::ContentDependencyKind::SourceFile, "shared/table.bin"},
         };
         entry.runtimeReferences = {{"Textures/reference", 1u}};
-        entry.assetTypeId = 42u;
+        entry.outputs = {
+            {"Data/asset", "Data/asset.cnb", 42u, Pipeline::ContentSha256({7u, 8u, 9u})},
+            {"Generated/asset-index", "Generated/asset-index.cnb", 43u,
+             Pipeline::ContentSha256({10u, 11u})},
+        };
         entry.fingerprint = Pipeline::ComputeContentBuildFingerprint(entry, sourceRoot);
-        entry.outputSha256 = Pipeline::ContentSha256({7u, 8u, 9u});
         return entry;
     }
 } // namespace
@@ -156,6 +158,15 @@ TEST(ContentBuildManifestTest, RoundTripsEveryStableFieldDeterministically)
     EXPECT_NE(first.find("CNA.ContentPipeline.Manifest"), std::string::npos);
     EXPECT_NE(first.find("source-file"), std::string::npos);
     EXPECT_NE(first.find("runtimeReferences"), std::string::npos);
+    EXPECT_NE(first.find("Generated/asset-index.cnb"), std::string::npos);
+    EXPECT_NE(first.find("\"version\":2"), std::string::npos);
+}
+
+TEST(ContentBuildManifestTest, VersionOneIsRejectedSoTheCliCanRebuildSafely)
+{
+    EXPECT_THROW((void)Pipeline::ContentBuildManifest::Parse(
+                     R"json({"format":"CNA.ContentPipeline.Manifest","version":1,"assets":[]})json"),
+                 std::runtime_error);
 }
 
 TEST(ContentBuildManifestTest, FingerprintUsesBytesNotModificationTimes)
@@ -182,7 +193,7 @@ TEST(ContentBuildManifestTest, FingerprintInvalidatesEveryDeclaredBuildIdentity)
     const Pipeline::ContentBuildManifestEntry original = MakeEntry(scratch.Path());
 
     Pipeline::ContentBuildManifestEntry changed = original;
-    changed.logicalName = "Data/renamed";
+    changed.nodeId = "Data/renamed";
     EXPECT_NE(Pipeline::ComputeContentBuildFingerprint(changed, scratch.Path()),
               original.fingerprint);
 
@@ -207,7 +218,12 @@ TEST(ContentBuildManifestTest, FingerprintInvalidatesEveryDeclaredBuildIdentity)
               original.fingerprint);
 
     changed = original;
-    changed.assetTypeId = 43u;
+    changed.outputs.front().assetTypeId = 44u;
+    EXPECT_NE(Pipeline::ComputeContentBuildFingerprint(changed, scratch.Path()),
+              original.fingerprint);
+
+    changed = original;
+    changed.outputs.back().logicalName = "Generated/renamed-index";
     EXPECT_NE(Pipeline::ComputeContentBuildFingerprint(changed, scratch.Path()),
               original.fingerprint);
 }
@@ -249,4 +265,30 @@ TEST(ContentBuildManifestTest, RejectsTraversalAndSymlinkEscapes)
     EXPECT_THROW((void)Pipeline::ComputeContentBuildFingerprint(entry, scratch.Path()),
                  std::runtime_error);
 #endif
+}
+
+TEST(ContentBuildManifestTest, RejectsMissingDuplicateAndEscapingOutputOwnership)
+{
+    ScratchDirectory scratch("output_ownership");
+    Pipeline::ContentBuildManifest manifest;
+
+    Pipeline::ContentBuildManifestEntry entry = MakeEntry(scratch.Path());
+    entry.outputs.erase(entry.outputs.begin());
+    EXPECT_THROW(manifest.Set(entry), std::invalid_argument);
+
+    entry = MakeEntry(scratch.Path());
+    entry.outputs.back().logicalName = entry.outputs.front().logicalName;
+    EXPECT_THROW(manifest.Set(entry), std::invalid_argument);
+
+    entry = MakeEntry(scratch.Path());
+    entry.outputs.back().path = entry.outputs.front().path;
+    EXPECT_THROW(manifest.Set(entry), std::invalid_argument);
+
+    entry = MakeEntry(scratch.Path());
+    entry.outputs.back().path = "../escape.cnb";
+    EXPECT_THROW(manifest.Set(entry), std::invalid_argument);
+
+    entry = MakeEntry(scratch.Path());
+    entry.outputs.resize(Pipeline::MaxContentBuildOutputs + 1u, entry.outputs.front());
+    EXPECT_THROW(manifest.Set(entry), std::invalid_argument);
 }

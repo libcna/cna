@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <map>
@@ -521,9 +522,15 @@ namespace CNA::Content::Pipeline
                                                    ContentProcessorContext& context) const = 0;
     };
 
-    /** @brief Bytes and stable CNB identity produced by a pipeline Content Type Writer. */
-    struct ContentWriteResult
+    /** @brief Maximum number of primary and additional CNB outputs from one build node. */
+    inline constexpr std::size_t MaxContentBuildOutputs = 256u;
+
+    /** @brief One explicitly named additional CNB output produced beside a primary output. */
+    struct ContentAdditionalWriteOutput
     {
+        /** @brief Complete logical ContentManager name and stable output identity. */
+        std::string logicalName;
+
         /** @brief Complete CNB file image. */
         std::vector<std::uint8_t> bytes;
 
@@ -532,6 +539,22 @@ namespace CNA::Content::Pipeline
 
         /** @brief Canonical runtime type name used in diagnostics. */
         std::string assetTypeName;
+    };
+
+    /** @brief Primary CNB output and any bounded, explicitly named additional outputs. */
+    struct ContentWriteResult
+    {
+        /** @brief Complete primary CNB file image. */
+        std::vector<std::uint8_t> bytes;
+
+        /** @brief Primary CNB asset type identifier written by the authoritative encoder. */
+        std::uint32_t assetTypeId = 0u;
+
+        /** @brief Primary canonical runtime type name used in diagnostics. */
+        std::string assetTypeName;
+
+        /** @brief Additional outputs whose logical names are distinct from the primary asset. */
+        std::vector<ContentAdditionalWriteOutput> additionalOutputs;
     };
 
     /** @brief Experimental pipeline writer contract above the low-level CNB codecs. */
@@ -552,7 +575,8 @@ namespace CNA::Content::Pipeline
          *
          * @param input Processed value whose stable type equals InputType().
          * @param logicalName Logical name recorded in CNB metadata.
-         * @return Complete CNB bytes and stable runtime asset identity.
+         * @return Primary CNB bytes/identity and at most MaxContentBuildOutputs minus one
+         *         explicitly named additional outputs.
          */
         [[nodiscard]] virtual ContentWriteResult Write(const ContentValue& input,
                                                        const std::string& logicalName) const = 0;
@@ -706,7 +730,7 @@ namespace CNA::Content::Pipeline
         /** @brief Ordered informational and warning messages emitted by the successful build. */
         std::vector<ContentLogMessage> messages;
 
-        /** @brief Complete compiled CNB bytes, not yet published. */
+        /** @brief Complete primary and additional compiled CNB bytes, not yet published. */
         ContentWriteResult output;
 
         /** @brief True for the current non-incremental coordinator; future manifests may skip. */
