@@ -734,6 +734,9 @@ if(CNA_BUILD_TESTS)
         C_EXTENSIONS OFF
     )
     target_link_libraries(cna_c_api_vector_smoke PRIVATE cna_c_api)
+    if(NOT WIN32)
+        target_link_libraries(cna_c_api_vector_smoke PRIVATE m)
+    endif()
     cna_c_api_enable_strict_warnings(cna_c_api_vector_smoke)
     add_test(NAME CApi_VectorSmoke COMMAND cna_c_api_vector_smoke)
 
@@ -770,6 +773,9 @@ if(CNA_BUILD_TESTS)
         C_EXTENSIONS OFF
     )
     target_link_libraries(cna_c_api_geometry_smoke PRIVATE cna_c_api)
+    if(NOT WIN32)
+        target_link_libraries(cna_c_api_geometry_smoke PRIVATE m)
+    endif()
     cna_c_api_enable_strict_warnings(cna_c_api_geometry_smoke)
     add_test(NAME CApi_GeometrySmoke COMMAND cna_c_api_geometry_smoke)
 

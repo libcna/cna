@@ -321,6 +321,21 @@ CCACHE_DEBUG=1 CCACHE_DEBUGDIR=/tmp/cna-ccache-debug \
 rg 'Result:|Error while finalizing stats' /tmp/cna-ccache-debug
 ```
 
+Three writable-cache workloads on 2026-08-29 used the existing 50 GiB global cache with its
+configuration and accumulated contents unchanged. Each row is the before/after counter delta for
+one `cmake-build-unit` invocation:
+
+| Edited input and target | Wall time | Direct hits | Preprocessed hits | Misses | Uncacheable | Cleanups |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `MathHelperTests.cpp` → `CnaMathTests` | 0.27 s | 1 | 0 | 0 | 0 | 0 |
+| `ContentReader.cpp` → `CnaContentTests` | 4.07 s | 0 | 0 | 1 | 0 | 0 |
+| `Vector3.hpp` → `CnaMathTests` | 0.36 s | 23 | 0 | 0 | 0 | 0 |
+
+The production-source miss is legitimate: that exact object and current command were absent from
+the cache, and its time includes eight dependent archive/executable link steps. The public-header
+case is the stronger direct-mode check: all 23 invalidated compile edges were recovered without
+running the preprocessor and without growing or cleaning the cache.
+
 ## Sanitizers
 
 Set `CNA_SANITIZE` instead of writing raw CMake flag variables. The existing device presets use:
@@ -427,49 +442,91 @@ Start local parallelism experiments at 8, 12, and 16 jobs on a 16-logical-CPU ho
 largest value that does not cause memory pressure. `CNA_MAX_VENDORED_BUILD_JOBS` controls the nested
 configure-time SDL build separately; it is not the main Ninja parallelism limit.
 
-### Reproducible GCC versus Clang clean build
+### Reproducible clean-build matrix
 
 `tools/build/benchmark_clean_build.py` runs one clean benchmark in a new directory and writes the
 full evidence to `benchmark-result.json`. An explicit directory must not exist and its basename
 must start with `cmake-build-benchmark-`; the script never deletes a build directory. With
 `--ccache isolated`, the cache and temporary directory are private to that build, so an empty
-directory is a verifiable cold-cache start.
+directory is a verifiable cold-cache start. Linux peak RSS is the sampled sum of the complete
+process tree, not only the outer CMake/Ninja process. Schema 2 also records load average before and
+after each measured phase.
 
-The 2026-08-29 comparison at commit `28056b129` used Debug, full debug information, the STUB
-renderer, Mold, 12 jobs, and the default `cna_tool_cnb_info` target. Tests, examples, C API,
-networking, video, Draco, PCH, unity, and IPO were disabled in both configurations:
+The three profiles select these reproducible closures:
+
+| Profile | Target | Configuration and enabled closure | Commands / compilations |
+| --- | --- | --- | ---: |
+| `dev` | `cna_tool_cnb_info` | Debug/STUB; focused tool only | 508 / 483 |
+| `unit` | `CnaTests` | Debug/STUB; complete unit-test executable | 1,164 / 1,126 |
+| `legacy` | `all` | Debug/OPENGLES3; tests, examples, C API, CNAEXT, compiled effects, networking, video | 2,483 / 1,929 |
+
+All profiles disable PCH, unity, IPO, Draco, and the configure-audit cache. The `dev` and `unit`
+profiles also disable examples, the C API, CNAEXT, compiled effects, networking, and video. The
+`legacy` profile intentionally reproduces the complete former `cmake-build-debug` closure and uses
+an existing FNA3D checkout for reproducible MojoShader sources. The 2026-08-29 reference used GCC
+14.2.0, Clang 19.1.7, Mold 2.37.1, CMake 3.31.6, Ninja 1.12.1, ccache 4.11.2, full debug
+information, and a 16-logical-CPU/30-GiB host. Each of the 18 points had its own initially empty
+cache. Times are single observed runs on a shared host, so the table is a machine baseline, not a
+portable timing promise. `Clang unit/j12` is a disclosed load outlier: its configure phase alone
+took 16.25 s while comparable focused points took about 5–7 s.
+
+| Profile | Compiler | Jobs | Clean build | Peak process-tree RSS |
+| --- | --- | ---: | ---: | ---: |
+| `dev` | GCC | 8 / 12 / 16 | 106.5 / 98.4 / **85.5 s** | 2.61 / 3.39 / 4.33 GiB |
+| `dev` | Clang | 8 / 12 / 16 | 108.2 / 97.3 / **94.3 s** | 1.80 / 2.59 / 3.23 GiB |
+| `unit` | GCC | 8 / 12 / 16 | 412.8 / 379.1 / **362.8 s** | 2.75 / 3.74 / 4.72 GiB |
+| `unit` | Clang | 8 / 12 / 16 | 453.5 / 520.2* / **370.0 s** | 1.95 / 2.73 / 3.54 GiB |
+| `legacy` | GCC | 8 / 12 / 16 | 742.4 / 643.8 / **605.1 s** | 4.55 / 4.73 / 6.23 GiB |
+| `legacy` | Clang | 8 / 12 / 16 | 662.9 / 605.2 / **582.3 s** | 3.42 / 4.65 / 7.39 GiB |
+
+Focused no-op builds took 0.15–0.34 s; complete no-op builds took 0.39–1.00 s. Full-profile
+configure phases took 7.90–8.92 s. Cold-cache counters matched the compile graph: 483 misses for
+`dev`, 1,125 misses plus one intra-build preprocessed hit for `unit`, and 1,929 misses for the
+complete profile. There were no direct hits because each isolated cache began empty; the subsequent
+no-op invoked no compiler. The current complete graph has one additional non-compile asset-copy
+edge compared with the earliest GCC points, after the benchmark exposed and fixed a parallel copy
+race; all six complete measurements contain the same 1,929 compiler calls.
+
+At 12 jobs the complete build took 643.75 s (10 min 44 s) with GCC and 605.18 s (10 min 05 s) with
+Clang. Clang was 6.0% faster, peaked at 4.65 GiB versus GCC's 4.73 GiB, and produced a 20.80-GiB
+tree versus GCC's 29.54-GiB tree (29.6% smaller). Clang's 12→16 gain was only 3.8% while RSS rose
+58.8%; GCC gained 6.0% while RSS rose 31.7%. Twelve jobs is therefore the balanced full-build
+default on this host, while 16 jobs is an opt-in choice when shortest wall time matters. Clang
+`-j16` was the fastest complete point at 582.34 s (9 min 42 s). GCC was fastest for the focused
+`dev` and `unit` closures, while Clang used less disk and usually less memory below saturation.
+Keep both compilers in CI rather than declaring one universal winner.
+
+Reproduce the full matrix with new output paths (the safety check intentionally rejects a rerun into
+an existing directory):
 
 ```sh
-python3 tools/build/benchmark_clean_build.py \
-  --label gcc-14.2.0 --cxx-compiler /usr/bin/g++ --c-compiler /usr/bin/gcc \
-  --parallel 12 --linker MOLD --ccache isolated \
-  --build-dir /tmp/cmake-build-benchmark-gcc14
+for profile in dev unit; do
+  for jobs in 8 12 16; do
+    python3 tools/build/benchmark_clean_build.py \
+      --label "comp001-${profile}-gcc-j${jobs}" --profile "${profile}" \
+      --cxx-compiler /usr/bin/g++ --c-compiler /usr/bin/gcc \
+      --parallel "${jobs}" --linker MOLD --ccache isolated \
+      --build-dir "/tmp/cmake-build-benchmark-repro-${profile}-gcc-j${jobs}"
+    python3 tools/build/benchmark_clean_build.py \
+      --label "comp001-${profile}-clang-j${jobs}" --profile "${profile}" \
+      --cxx-compiler /usr/bin/clang++ --c-compiler /usr/bin/clang \
+      --parallel "${jobs}" --linker MOLD --ccache isolated \
+      --build-dir "/tmp/cmake-build-benchmark-repro-${profile}-clang-j${jobs}"
+  done
+done
 
 python3 tools/build/benchmark_clean_build.py \
-  --label clang-19.1.7 --cxx-compiler /usr/bin/clang++ --c-compiler /usr/bin/clang \
-  --parallel 12 --linker MOLD --ccache isolated \
-  --build-dir /tmp/cmake-build-benchmark-clang19
+  --label comp001-legacy-gcc-j12 --profile legacy \
+  --cxx-compiler /usr/bin/g++ --c-compiler /usr/bin/gcc \
+  --fna3d-source /path/to/FNA3D --parallel 12 --linker MOLD --ccache isolated \
+  --build-dir /tmp/cmake-build-benchmark-repro-legacy-gcc-j12
+
+python3 tools/build/benchmark_clean_build.py \
+  --label comp001-legacy-clang-j12 --profile legacy \
+  --cxx-compiler /usr/bin/clang++ --c-compiler /usr/bin/clang \
+  --fna3d-source /path/to/FNA3D --parallel 12 --linker MOLD --ccache isolated \
+  --build-dir /tmp/cmake-build-benchmark-repro-legacy-clang-j12
 ```
-
-| Metric | GCC 14.2.0 | Clang 19.1.7 |
-| --- | ---: | ---: |
-| Configure wall time | 4.27 s | 4.67 s |
-| Clean target build | **83.45 s** | 90.02 s |
-| Peak build RSS | 864 MiB | **486 MiB** |
-| No-op build | 0.12 s | 0.12 s |
-| Ninja commands / compilations | 508 / 483 | 508 / 483 |
-| Artifact size | 1,299,360 B | **999,752 B** |
-| Build tree excluding ccache | 590,767,494 B | **382,313,116 B** |
-| Isolated ccache size | 71,246,162 B | **49,074,291 B** |
-| ccache misses / hits | 483 / 0 | 483 / 0 |
-
-GCC was 7.3% faster for this clean workload. Clang used 43.8% less peak memory, produced a 35.3%
-smaller build tree and a 23.1% smaller executable. The zero direct and preprocessed hits are
-expected here: both isolated caches began empty, and the measured second invocation was a no-op
-with no compiler calls. On this machine GCC is therefore the faster default for clean development
-builds, while Clang remains valuable for its lower resource use, diagnostics, `-ftime-trace`, and
-independent CI coverage. This single target is not evidence that either compiler wins every CNA
-configuration.
 
 ## Deferred techniques
 

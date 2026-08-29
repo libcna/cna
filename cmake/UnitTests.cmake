@@ -591,6 +591,14 @@ if(CNA_BUILD_TESTS)
         endif()
     endforeach()
 
+    # COMP-001 full-build regression: EasyGL's compiled-effect public headers include
+    # mojoshader.h. The focused object groups copy renderer include directories above, but include
+    # directories alone do not carry MojoShader's required public compile definitions (notably
+    # MOJOSHADER_NO_VERSION_INCLUDE for its ungenerated source-tree version header).
+    if(CNA_EASYGL_COMPILED_EFFECTS AND TARGET cna_mojoshader)
+        target_link_libraries(cna_test_build_config INTERFACE cna_mojoshader)
+    endif()
+
     # REMED-GFX-054's WebGPU-only IndexBuffer regression opens native error scopes around the
     # public operation. CNA's renderer intentionally keeps wgpu-native PRIVATE, so expose it only
     # to this test executable in the WebGPU configuration.

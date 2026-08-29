@@ -1,7 +1,8 @@
 # CNA compilation-performance plan
 
-> **Status:** ACTIVE — the safe build-policy foundation is complete; measured follow-up work is
-> pending. This plan turns [`misc/cnacomp.md`](../misc/cnacomp.md) into an executable task sequence.
+> **Status:** ACTIVE — the experiments and measured baseline are complete; final regression
+> guardrails remain. This plan turns [`misc/cnacomp.md`](../misc/cnacomp.md) into an executable task
+> sequence.
 >
 > **Goal:** shorten the edit/build/test loop without weakening XNA/FNA compatibility, diagnostics,
 > platform coverage, installed-package compatibility, or reproducibility.
@@ -56,7 +57,7 @@ must not be compared with the new post-reset counters.
 
 | ID | Task | Depends on | Status |
 |---|---|---|---|
-| COMP-001 | Rebuild the benchmark and ccache evidence baseline | foundation commit | ⬜ |
+| COMP-001 | Rebuild the benchmark and ccache evidence baseline | foundation commit | ✅ |
 | COMP-002 | Split the monolithic unit-test iteration path | COMP-001 | ✅ |
 | COMP-003 | Pilot target-specific precompiled headers | COMP-002 | ✅ |
 | COMP-004 | Benchmark Mold and LLD final linking | COMP-001 | ✅ |
@@ -103,23 +104,35 @@ builds can hide include hygiene and alter which translation units appear expensi
   requires per-workload counter deltas from a writable environment and shows the exact debug-log
   procedure.
 
-### GCC/Clang clean-build evidence (2026-08-29)
+### Completion evidence (2026-08-29)
 
-- `tools/build/benchmark_clean_build.py` now creates or accepts only a new
-  `cmake-build-benchmark-*` directory, never removes it, captures the exact commands and tool
-  versions, and writes configure/build/no-op timing, peak RSS, graph size, artifacts, tree size,
-  and machine-readable ccache counters to `benchmark-result.json`.
-- An equal Debug/STUB/FULL-DWARF/Mold comparison at `--parallel 12`, with tests, examples, C API,
-  optional backends, PCH, unity, and IPO disabled, produced the same 508-command graph containing
-  483 compilations. Both compiler runs started with their own empty cache and reported exactly 483
-  misses and zero hits.
-- GCC 14.2.0 built `cna_tool_cnb_info` in 83.45 s; Clang 19.1.7 took 90.02 s. GCC was therefore
-  7.3% faster for this workload. Clang's 486 MiB peak RSS was 43.8% below GCC's 864 MiB, and its
-  365 MiB build tree was 35.3% smaller than GCC's 563 MiB. Both no-op builds took 0.12 s, and both
-  resulting tools produced the expected usage output.
-- This closes the requested like-for-like compiler comparison and provides the reusable driver.
-  The wider `dev`/`unit`/legacy and 8/12/16-job matrix required to mark all of COMP-001 complete
-  remains pending; the task therefore deliberately stays open.
+- `tools/build/benchmark_clean_build.py` supports `dev`, `unit`, and legacy `all` profiles, creates
+  or accepts only a new `cmake-build-benchmark-*` directory, never removes it, and emits the exact
+  commands, cache values, tool versions, load averages, configure/build/no-op timings, aggregate
+  Linux process-tree RSS, graph size, artifact/tree/cache sizes, and ccache counters as JSON.
+- Eighteen empty-cache Debug/FULL-DWARF/Mold builds covered GCC 14.2.0 and Clang 19.1.7 at 8, 12,
+  and 16 jobs. The exact compile graphs were stable at 483 (`dev`), 1,126 (`unit`), and 1,929
+  (`legacy`). Unlike the focused STUB profiles, `legacy` reproduces the complete OPENGLES3 closure:
+  tests, examples, C API, CNAEXT, compiled effects, networking, and video.
+- At 12 jobs the complete legacy `all` build took 643.75 s with GCC and 605.18 s with Clang. Clang
+  was 6.0% faster, peaked at 4.65 GiB versus GCC's 4.73 GiB, and produced a 20.80-GiB tree versus
+  29.54 GiB. Clang gained only 3.8% from 12 to 16 jobs while RSS rose 58.8%; 12 jobs is therefore
+  the balanced full-build default. Clang `-j16` was the shortest complete point at 582.34 s, while
+  GCC `-j16` took 605.08 s.
+- The host was shared and load-sensitive; one Clang `unit`/12 point was an explicit outlier. The
+  report preserves observed values and load metadata rather than treating single-run differences as
+  portable promises. Structural graph/cache facts and repeated compiler/resource trends remain
+  comparable.
+- Three writable global-cache edit sequences left direct mode and the 50 GiB policy unchanged. A
+  one-test rebuild produced 1 direct hit, a previously uncached production source produced 1 miss,
+  and touching `Vector3.hpp` produced 23 direct hits. All had zero preprocessed hits, uncacheable
+  calls, and cleanups; the header rebuild completed in 0.36 s. This closes the earlier direct-mode
+  diagnostic with real workload deltas rather than lifetime percentages.
+- Exercising the complete graph found and fixed configuration-only integration faults: focused
+  test objects now inherit MojoShader's public definitions, Clang sees matching C API declaration
+  tags and unambiguous example colors, pure-C math smokes link the platform math library, and shared
+  example content copies are serialized instead of racing under high parallelism. Native GCC and
+  Clang complete builds both finish successfully after these fixes.
 
 ## 5. COMP-002 — split the monolithic unit-test iteration path
 

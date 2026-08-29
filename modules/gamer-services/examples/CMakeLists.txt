@@ -21,6 +21,27 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33"
         OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL1" OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2"
         OR CNA_GRAPHICS_RENDERER STREQUAL "VULKAN"))
+    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+        file(GLOB_RECURSE _cna_avatar_content_files CONFIGURE_DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/demo_avatar/Content/*")
+        set(_cna_avatar_content_stamp
+            "${CMAKE_CURRENT_BINARY_DIR}/cna-demo-avatar-content.stamp")
+        add_custom_command(
+            OUTPUT "${_cna_avatar_content_stamp}"
+            COMMAND ${CMAKE_COMMAND}
+                -DCNA_COPY_SOURCE=${CMAKE_CURRENT_SOURCE_DIR}/demo_avatar/Content
+                -DCNA_COPY_DESTINATION=${CMAKE_BINARY_DIR}/Content
+                -DCNA_COPY_LOCK=${CMAKE_BINARY_DIR}/CMakeFiles/cna-example-content.lock
+                -P ${CMAKE_SOURCE_DIR}/cmake/CopyDirectoryLocked.cmake
+            COMMAND ${CMAKE_COMMAND} -E touch "${_cna_avatar_content_stamp}"
+            DEPENDS ${_cna_avatar_content_files}
+                    "${CMAKE_SOURCE_DIR}/cmake/CopyDirectoryLocked.cmake"
+            COMMENT "Copying shared avatar Content next to the demo executables"
+            VERBATIM)
+        add_custom_target(cna_demo_avatar_content
+            DEPENDS "${_cna_avatar_content_stamp}")
+    endif()
+
     # Task 11.11 (Phase 11b): real windowed proof that AvatarRenderer's real-rendering
     # extension (Phase 10) draws Phase 11a's procedurally-generated, non-synthetic avatar
     # content (tools/avatar_builder/ + tools/avatar_asset_pipeline/convert_avatar.py,
@@ -48,11 +69,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         if(TARGET SDL3::SDL3main)
             target_link_libraries(cna_demo_avatar PRIVATE SDL3::SDL3main)
         endif()
-        add_custom_command(TARGET cna_demo_avatar POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${CMAKE_CURRENT_SOURCE_DIR}/demo_avatar/Content"
-                "$<TARGET_FILE_DIR:cna_demo_avatar>/Content"
-            COMMENT "Copying Content next to cna_demo_avatar executable")
+        add_dependencies(cna_demo_avatar cna_demo_avatar_content)
         if(WIN32)
             set_target_properties(cna_demo_avatar PROPERTIES WIN32_EXECUTABLE TRUE)
             cna_copy_sdl_runtime(cna_demo_avatar)
@@ -271,11 +288,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         if(TARGET SDL3::SDL3main)
             target_link_libraries(cna_demo_avatar_animation_gallery PRIVATE SDL3::SDL3main)
         endif()
-        add_custom_command(TARGET cna_demo_avatar_animation_gallery POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${CMAKE_CURRENT_SOURCE_DIR}/demo_avatar/Content"
-                "$<TARGET_FILE_DIR:cna_demo_avatar_animation_gallery>/Content"
-            COMMENT "Copying demo_avatar's Content next to cna_demo_avatar_animation_gallery executable")
+        add_dependencies(cna_demo_avatar_animation_gallery cna_demo_avatar_content)
         if(WIN32)
             set_target_properties(cna_demo_avatar_animation_gallery PROPERTIES WIN32_EXECUTABLE TRUE)
             cna_copy_sdl_runtime(cna_demo_avatar_animation_gallery)
@@ -307,11 +320,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         if(TARGET SDL3::SDL3main)
             target_link_libraries(cna_demo_avatar_wardrobe_hotswap PRIVATE SDL3::SDL3main)
         endif()
-        add_custom_command(TARGET cna_demo_avatar_wardrobe_hotswap POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${CMAKE_CURRENT_SOURCE_DIR}/demo_avatar/Content"
-                "$<TARGET_FILE_DIR:cna_demo_avatar_wardrobe_hotswap>/Content"
-            COMMENT "Copying demo_avatar's Content next to cna_demo_avatar_wardrobe_hotswap executable")
+        add_dependencies(cna_demo_avatar_wardrobe_hotswap cna_demo_avatar_content)
         if(WIN32)
             set_target_properties(cna_demo_avatar_wardrobe_hotswap PROPERTIES WIN32_EXECUTABLE TRUE)
             cna_copy_sdl_runtime(cna_demo_avatar_wardrobe_hotswap)
@@ -342,11 +351,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         if(TARGET SDL3::SDL3main)
             target_link_libraries(cna_demo_avatar_appearance_tint_studio PRIVATE SDL3::SDL3main)
         endif()
-        add_custom_command(TARGET cna_demo_avatar_appearance_tint_studio POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${CMAKE_CURRENT_SOURCE_DIR}/demo_avatar/Content"
-                "$<TARGET_FILE_DIR:cna_demo_avatar_appearance_tint_studio>/Content"
-            COMMENT "Copying demo_avatar's Content next to cna_demo_avatar_appearance_tint_studio executable")
+        add_dependencies(cna_demo_avatar_appearance_tint_studio cna_demo_avatar_content)
         if(WIN32)
             set_target_properties(cna_demo_avatar_appearance_tint_studio PROPERTIES WIN32_EXECUTABLE TRUE)
             cna_copy_sdl_runtime(cna_demo_avatar_appearance_tint_studio)
@@ -377,11 +382,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         if(TARGET SDL3::SDL3main)
             target_link_libraries(cna_demo_avatar_dual_compare PRIVATE SDL3::SDL3main)
         endif()
-        add_custom_command(TARGET cna_demo_avatar_dual_compare POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${CMAKE_CURRENT_SOURCE_DIR}/demo_avatar/Content"
-                "$<TARGET_FILE_DIR:cna_demo_avatar_dual_compare>/Content"
-            COMMENT "Copying demo_avatar's Content next to cna_demo_avatar_dual_compare executable")
+        add_dependencies(cna_demo_avatar_dual_compare cna_demo_avatar_content)
         if(WIN32)
             set_target_properties(cna_demo_avatar_dual_compare PROPERTIES WIN32_EXECUTABLE TRUE)
             cna_copy_sdl_runtime(cna_demo_avatar_dual_compare)
@@ -413,11 +414,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         if(TARGET SDL3::SDL3main)
             target_link_libraries(cna_demo_avatar_multi_attach_stress PRIVATE SDL3::SDL3main)
         endif()
-        add_custom_command(TARGET cna_demo_avatar_multi_attach_stress POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${CMAKE_CURRENT_SOURCE_DIR}/demo_avatar/Content"
-                "$<TARGET_FILE_DIR:cna_demo_avatar_multi_attach_stress>/Content"
-            COMMENT "Copying demo_avatar's Content next to cna_demo_avatar_multi_attach_stress executable")
+        add_dependencies(cna_demo_avatar_multi_attach_stress cna_demo_avatar_content)
         if(WIN32)
             set_target_properties(cna_demo_avatar_multi_attach_stress PROPERTIES WIN32_EXECUTABLE TRUE)
             cna_copy_sdl_runtime(cna_demo_avatar_multi_attach_stress)
@@ -449,11 +446,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         if(TARGET SDL3::SDL3main)
             target_link_libraries(cna_demo_avatar_bone_state_boundary PRIVATE SDL3::SDL3main)
         endif()
-        add_custom_command(TARGET cna_demo_avatar_bone_state_boundary POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${CMAKE_CURRENT_SOURCE_DIR}/demo_avatar/Content"
-                "$<TARGET_FILE_DIR:cna_demo_avatar_bone_state_boundary>/Content"
-            COMMENT "Copying demo_avatar's Content next to cna_demo_avatar_bone_state_boundary executable")
+        add_dependencies(cna_demo_avatar_bone_state_boundary cna_demo_avatar_content)
         if(WIN32)
             set_target_properties(cna_demo_avatar_bone_state_boundary PROPERTIES WIN32_EXECUTABLE TRUE)
             cna_copy_sdl_runtime(cna_demo_avatar_bone_state_boundary)

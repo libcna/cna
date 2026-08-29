@@ -743,7 +743,7 @@ class DeferredSourceLifetimeTest : public Game
                 {
                     dev.SetRenderTarget(&cube, static_cast<CubeMapFace>(face));
                     ResetState(dev);
-                    dev.Clear(Color(static_cast<bytecs>(30 + face * 30), 90, 220, 255));
+                    dev.Clear(Color(30 + face * 30, 90, 220, 255));
                 }
                 dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
                 ResetState(dev);
