@@ -18,6 +18,7 @@
 #include "CNA/Content/Cnb/CnbFormat.hpp"
 #include "CNA/Content/Cnb/CnbLoaderRegistry.hpp"
 #include "CNA/Content/Cnb/CnbWriter.hpp"
+#include "CNA/Content/Pipeline/ContentCompiler.hpp"
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 
@@ -250,6 +251,25 @@ namespace
         stream.write(reinterpret_cast<const char*>(bytes.data()),
                      static_cast<std::streamsize>(bytes.size()));
     }
+}
+
+TEST(CustomContentPipelineTest, BuiltInRegistrationIsExplicitAndComplete)
+{
+    Pipeline::ContentPipelineRegistry registry;
+    Pipeline::RegisterBuiltInContentPipeline(registry);
+
+    EXPECT_EQ(registry.ResolveImporter("texture.png")->Identity().name, "CNA.ImageImporter");
+    EXPECT_EQ(registry.ResolveImporter("sound.wav")->Identity().name, "CNA.WavImporter");
+    EXPECT_EQ(registry.ResolveImporter("song.mp3")->Identity().name, "CNA.SongImporter");
+    EXPECT_EQ(registry.ResolveImporter("video.mp4")->Identity().name, "CNA.VideoImporter");
+    EXPECT_EQ(registry.ResolveImporter("model.gltf")->Identity().name, "CNA.GltfImporter");
+    EXPECT_EQ(registry.ResolveImporter("asset.cnj")->Identity().name, "CNA.CnjImporter");
+}
+
+TEST(CustomContentPipelineTest, CompilerEmbeddingRejectsANullRegistry)
+{
+    EXPECT_THROW(static_cast<void>(Pipeline::RunContentCompiler({}, nullptr)),
+                 std::invalid_argument);
 }
 
 TEST(CustomContentPipelineTest, GameComponentsBuildAndLoadACustomCnbAssetEndToEnd)

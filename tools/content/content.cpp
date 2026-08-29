@@ -16,6 +16,7 @@
 #include "CNA/Content/Pipeline/ContentBuildManifest.hpp"
 #include "CNA/Content/Pipeline/ContentBuildConfiguration.hpp"
 #include "CNA/Content/Pipeline/CnjContentPipeline.hpp"
+#include "CNA/Content/Pipeline/ContentCompiler.hpp"
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
 #include "CNA/Content/Pipeline/ModelContentPipeline.hpp"
 #include "CNA/Content/Pipeline/SongContentPipeline.hpp"
@@ -217,18 +218,6 @@ namespace
             return left.logicalName < right.logicalName;
         });
         return builds;
-    }
-
-    std::shared_ptr<const Pipeline::ContentPipelineRegistry> CreateRegistry()
-    {
-        auto registry = std::make_shared<Pipeline::ContentPipelineRegistry>();
-        Pipeline::RegisterTexture2DContentPipeline(*registry);
-        Pipeline::RegisterSoundEffectContentPipeline(*registry);
-        Pipeline::RegisterSongContentPipeline(*registry);
-        Pipeline::RegisterVideoContentPipeline(*registry);
-        Pipeline::RegisterModelContentPipeline(*registry);
-        Pipeline::RegisterCnjContentPipeline(*registry);
-        return registry;
     }
 
     std::string ReadText(const std::filesystem::path& path)
@@ -454,7 +443,8 @@ namespace
         }
     }
 
-    int Run(const std::vector<std::filesystem::path>& arguments)
+    int Run(const std::vector<std::filesystem::path>& arguments,
+            std::shared_ptr<const Pipeline::ContentPipelineRegistry> registry)
     {
         CommandLine command;
         try
@@ -468,7 +458,6 @@ namespace
             return 2;
         }
 
-        const std::shared_ptr<const Pipeline::ContentPipelineRegistry> registry = CreateRegistry();
         std::filesystem::path sourceRoot;
         std::filesystem::path outputRoot;
         bool directoryBuild = false;
@@ -604,20 +593,25 @@ namespace
     }
 }
 
-#if defined(_WIN32)
-int wmain(int argc, wchar_t** argv)
+namespace CNA::Content::Pipeline
 {
-    std::vector<std::filesystem::path> arguments;
-    arguments.reserve(argc > 1 ? static_cast<std::size_t>(argc - 1) : 0u);
-    for (int index = 1; index < argc; ++index) { arguments.emplace_back(argv[index]); }
-    return Run(arguments);
-}
-#else
-int main(int argc, char** argv)
-{
-    std::vector<std::filesystem::path> arguments;
-    arguments.reserve(argc > 1 ? static_cast<std::size_t>(argc - 1) : 0u);
-    for (int index = 1; index < argc; ++index) { arguments.emplace_back(argv[index]); }
-    return Run(arguments);
-}
-#endif
+    void RegisterBuiltInContentPipeline(ContentPipelineRegistry& registry)
+    {
+        RegisterTexture2DContentPipeline(registry);
+        RegisterSoundEffectContentPipeline(registry);
+        RegisterSongContentPipeline(registry);
+        RegisterVideoContentPipeline(registry);
+        RegisterModelContentPipeline(registry);
+        RegisterCnjContentPipeline(registry);
+    }
+
+    int RunContentCompiler(const std::vector<std::filesystem::path>& arguments,
+                           std::shared_ptr<const ContentPipelineRegistry> registry)
+    {
+        if (registry == nullptr)
+        {
+            throw std::invalid_argument("RunContentCompiler(): registry must not be null.");
+        }
+        return Run(arguments, std::move(registry));
+    }
+} // namespace CNA::Content::Pipeline

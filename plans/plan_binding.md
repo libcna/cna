@@ -3,9 +3,10 @@
 > **Status (2026-08-29, after Content Pipeline integration): B0–B11 complete; B12 is an explicit
 > C-ABI backlog, not Content Pipeline v1 work.** Phase B10 bound all 506 rows the sixth merge
 > reopened, the CNB content format included; Phase B11 bound the seventh merge's 15-row tail. The
-> completed experimental C++ Content Pipeline now adds 342 deliberately unbound inventory rows:
-> 335 under its `CNA::Content::Pipeline`/`Import` surface and seven source-import declarations.
-> Coverage: **544 headers / 9,173 symbols — 8,352 implemented, 15 approved partial, 342 planned, 464 not
+> completed experimental C++ Content Pipeline now adds 412 deliberately unbound inventory rows:
+> 392 under `CNA::Content::Pipeline`, 12 under `Content::Import`, seven source-import declarations,
+> and one native-path Model build overload. Coverage: **548 headers / 9,243 symbols — 8,352
+> implemented, 15 approved partial, 412 planned, 464 not
 > applicable.** ABI `0.18.0` and its 4,048 exports are unchanged. The release gate is consistently
 > **Not ready** on coverage alone until `CBIND-117`; this integration does not invent C routes for
 > a C++ build-time extension API merely because it is public. See *Current status* and Phase B12.
@@ -1473,15 +1474,16 @@ Tests: a hand-written five-entry `.xnb` in `ContentSmoke.c`, every route and eve
 
 The Content Pipeline is a public, experimental C++ build-time component system, so the binding
 inventory's complete-public-API policy records it even though the C ABI remains a runtime-facing
-adapter and this integration task does not authorize new C routes. The merged source adds 342
-unmapped declarations: 323 in the six `CNA/Content/Pipeline` headers, 12 in
-`CNA/Content/Import/ImportedSound.hpp`, and seven in `CnbSourceImport.hpp`. They remain honest
+adapter and this integration task does not authorize new C routes. The continued source adds 412
+unmapped declarations: 392 in the ten `CNA/Content/Pipeline` headers, 12 in
+`CNA/Content/Import/ImportedSound.hpp`, seven in `CnbSourceImport.hpp`, and one native-path overload
+in `CnbModelFromCnj.hpp`. They remain honest
 `planned` rows rather than being hidden by an exclusion,
 mislabelled not-applicable, or attributed to already completed binding phases.
 
 | # | Task | Rows | Status | Acceptance criteria |
 |---|---|---:|---|---|
-| CBIND-117 | Design or disposition the experimental Content Pipeline C boundary | 342 | ⬜ | Decide whether C consumers need a build-time pipeline API and, if so, design C-native orchestration and extension contracts without exposing C++ RTTI, templates, `std::filesystem`, exceptions or component objects. Bind or owner-approve a documented disposition for every row, add C-only evidence for any route, update ABI/version artifacts when required, and return the generated coverage and release-gate documents to a measured closed state. This is separate future C-ABI work; no route is added by Content Pipeline integration. |
+| CBIND-117 | Design or disposition the experimental Content Pipeline C boundary | 412 | ⬜ | Decide whether C consumers need a build-time pipeline API and, if so, design C-native orchestration and extension contracts without exposing C++ RTTI, templates, `std::filesystem`, exceptions or component objects. Bind or owner-approve a documented disposition for every row, add C-only evidence for any route, update ABI/version artifacts when required, and return the generated coverage and release-gate documents to a measured closed state. This is separate future C-ABI work; no route is added by Content Pipeline integration. |
 
 ## Mandatory test layers
 
@@ -1543,13 +1545,14 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-**Snapshot (2026-08-29, after Content Pipeline integration):** 544 headers / 9,173 symbols —
-**8,352 implemented, 15 approved partial, 342 planned, 464 not applicable.** ABI `0.18.0`, 4,048
+**Snapshot (2026-08-29, after Content Pipeline continuation):** 548 headers / 9,243 symbols —
+**8,352 implemented, 15 approved partial, 412 planned, 464 not applicable.** ABI `0.18.0`, 4,048
 exported symbols — the same 4,048 with `CNA_CNAEXT` on and off (measured symbol by symbol: zero
 differ), which is the engine layer's ABI promise measured rather than asserted.
 
-The completed C++ Content Pipeline reopened only the coverage criterion: all 342 unmapped
-declarations are assigned to open `CBIND-117`, no C route or ABI export was added, and the four new
+The completed C++ Content Pipeline and its continuation reopened only the coverage criterion: all
+412 unmapped declarations are assigned to open `CBIND-117`, no C route or ABI export was added, and
+the four new
 not-applicable rows are explicitly deleted declarations reported by Doxygen. The release gate is
 therefore **Not ready** on that one measured criterion while B12 remains open.
 Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.

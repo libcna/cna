@@ -749,6 +749,24 @@ if(CNA_BUILD_TESTS)
         endif()
     endif()
 
+    if(TARGET cna_custom_content_compiler_example)
+        # CP-022: exercise a separately linked user-owned compiler with both a custom route and
+        # CNA built-ins through the same command coordinator as stock cna-content.
+        add_dependencies(${CNA_TEST_OBJECT_TARGET_content}
+            cna_custom_content_compiler_example)
+        target_compile_definitions(${CNA_TEST_OBJECT_TARGET_content} PRIVATE
+            CNA_CUSTOM_CONTENT_COMPILER_PATH="$<TARGET_FILE:cna_custom_content_compiler_example>"
+        )
+    endif()
+
+    if(TARGET cna_content_compiler)
+        # The embedding API is implemented by the build-time compiler library rather than the
+        # runtime content module. Both executables that consume the shared content test objects
+        # therefore carry that exact implementation for its direct API contract tests.
+        target_link_libraries(CnaContentTests PRIVATE cna_content_compiler)
+        target_link_libraries(CnaTests PRIVATE cna_content_compiler)
+    endif()
+
     if(TARGET cna_tool_cnb_info)
         # plans/plan_cnb.md CNBF-H013: CnbInfoToolTests.cpp spawns the inspector as a subprocess, for
         # the same reason the other tool suites do -- it has its own main() and its contract is its

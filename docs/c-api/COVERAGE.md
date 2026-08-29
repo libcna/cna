@@ -21,7 +21,7 @@ subset; `planned` is not coverage and names the task that owns its design; and
 behavior to expose. Nothing is treated as implemented merely because a related C
 operation exists.
 
-Snapshot: **547 headers**, **9241 symbols**, **8352 implemented**, **15 partial**, **410 planned**, **464 not applicable**. Explicitly excluded internal/detail headers: **130**.
+Snapshot: **548 headers**, **9243 symbols**, **8352 implemented**, **15 partial**, **412 planned**, **464 not applicable**. Explicitly excluded internal/detail headers: **130**.
 
 Regenerate with:
 
@@ -39,7 +39,7 @@ python3 tools/c-api/generate_coverage_inventory.py --check
 | Module | Headers | Symbols | Implemented | Partial | Planned | N/A |
 |---|---:|---:|---:|---:|---:|---:|
 | `audio` | 22 | 310 | 217 | 0 | 0 | 93 |
-| `content` | 44 | 1010 | 561 | 10 | 410 | 29 |
+| `content` | 45 | 1012 | 561 | 10 | 412 | 29 |
 | `core` | 15 | 168 | 162 | 0 | 0 | 6 |
 | `devices` | 18 | 209 | 182 | 0 | 0 | 27 |
 | `devices-ext` | 17 | 84 | 79 | 0 | 0 | 5 |
@@ -1249,6 +1249,13 @@ python3 tools/c-api/generate_coverage_inventory.py --check
 | `CPP-847F76D66268` | 132 | public function | `CNA::Content::Pipeline::ContentFileSha256(const std::filesystem::path &path)` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
 | `CPP-69AC35C78321` | 151 | public function | `CNA::Content::Pipeline::ComputeContentBuildFingerprint(const ContentBuildManifestEntry &entry, const std::filesystem::path &sourceRoot, const std::map< std::string, std::string > &contentBuildFingerprints={})` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
 | `CPP-B93A3AAC6539` | 166 | public function | `CNA::Content::Pipeline::MakeContentBuildManifestEntry(const ContentBuildResult &result, const std::filesystem::path &sourceRoot, const std::filesystem::path &outputRoot, const std::filesystem::path &outputPath)` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+
+#### `modules/content/include/CNA/Content/Pipeline/ContentCompiler.hpp`
+
+| ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
+|---|---:|---|---|---|---|---|
+| `CPP-80DC702492E4` | 21 | public function | `CNA::Content::Pipeline::RegisterBuiltInContentPipeline(ContentPipelineRegistry &registry)` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-FD5426F046E4` | 36 | public function | `CNA::Content::Pipeline::RunContentCompiler(const std::vector< std::filesystem::path > &arguments, std::shared_ptr< const ContentPipelineRegistry > registry)` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
 
 #### `modules/content/include/CNA/Content/Pipeline/ContentPipeline.hpp`
 

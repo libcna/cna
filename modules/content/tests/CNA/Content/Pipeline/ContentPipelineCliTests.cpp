@@ -146,7 +146,8 @@ namespace
         return {};
     }
 
-    int RunTool(const std::vector<std::string>& arguments, std::string& output)
+    int RunExecutable(const char* executable, const std::vector<std::string>& arguments,
+                      std::string& output)
     {
         const std::filesystem::path capture =
             std::filesystem::temp_directory_path() /
@@ -160,7 +161,7 @@ namespace
         posix_spawn_file_actions_adddup2(&actions, STDOUT_FILENO, STDERR_FILENO);
 
         std::vector<char*> argv;
-        argv.push_back(const_cast<char*>(CNA_CONTENT_TOOL_PATH));
+        argv.push_back(const_cast<char*>(executable));
         for (const std::string& argument : arguments)
         {
             argv.push_back(const_cast<char*>(argument.c_str()));
@@ -168,7 +169,7 @@ namespace
         argv.push_back(nullptr);
 
         pid_t pid = -1;
-        const int spawnResult = posix_spawn(&pid, CNA_CONTENT_TOOL_PATH, &actions, nullptr,
+        const int spawnResult = posix_spawn(&pid, executable, &actions, nullptr,
                                             argv.data(), environ);
         posix_spawn_file_actions_destroy(&actions);
         if (spawnResult != 0)
@@ -187,6 +188,11 @@ namespace
         std::error_code error;
         std::filesystem::remove(capture, error);
         return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+    }
+
+    int RunTool(const std::vector<std::string>& arguments, std::string& output)
+    {
+        return RunExecutable(CNA_CONTENT_TOOL_PATH, arguments, output);
     }
 
     int RunTool(const std::vector<std::string>& arguments)
@@ -796,3 +802,76 @@ TEST(ContentPipelineCliTest, VideoSingleAndDirectoryBuildsUseConfiguredMetadataA
     EXPECT_NE(changed.find("[SKIP] Textures/wall"), std::string::npos) << changed;
     EXPECT_EQ(ReadBytes(videoOutput), videoBytes);
 }
+
+#if defined(CNA_CUSTOM_CONTENT_COMPILER_PATH)
+TEST(ContentPipelineCliTest, UserBuiltCompilerCombinesCustomAndBuiltInRoutesEndToEnd)
+{
+    ScratchDirectory scratch("custom_compiler");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    WriteText(source / "Messages" / "welcome.greeting", "CNA\n");
+    WriteBytes(source / "Textures" / "badge.png", MakePng(2, 2));
+    WriteText(
+        source / Pipeline::ContentBuildConfigurationFileName,
+        R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"Messages/welcome.greeting":{"parameters":{"prefix":{"type":"string","value":"Hello, "}}}}})json");
+
+    std::string firstLog;
+    ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
+                            {"build", source.string(), "-o", output.string()}, firstLog),
+              0)
+        << firstLog;
+    EXPECT_NE(firstLog.find("ExampleGame.GreetingImporter -> "
+                            "ExampleGame.GreetingProcessor -> ExampleGame.GreetingWriter"),
+              std::string::npos)
+        << firstLog;
+    EXPECT_NE(firstLog.find("CNA.ImageImporter -> CNA.TextureProcessor -> "
+                            "CNA.Texture2DContentWriter"),
+              std::string::npos)
+        << firstLog;
+
+    const std::filesystem::path greetingPath = output / "Messages" / "welcome.cnb";
+    const std::filesystem::path texturePath = output / "Textures" / "badge.cnb";
+    ASSERT_TRUE(std::filesystem::is_regular_file(greetingPath));
+    ASSERT_TRUE(std::filesystem::is_regular_file(texturePath));
+
+    const Cnb::CnbDocument greeting =
+        Cnb::CnbDocument::Parse(ReadBytes(greetingPath), "custom compiler greeting");
+    EXPECT_EQ(greeting.AssetTypeId(), Cnb::CnbAssetTypeIdFromName("ExampleGame.Greeting"));
+    EXPECT_EQ(greeting.AssetSchemaVersion(), 1u);
+    EXPECT_EQ(greeting.Metadata().assetTypeName, "ExampleGame.Greeting");
+    EXPECT_EQ(greeting.Metadata().contentName, "Messages/welcome");
+    Cnb::CnbByteReader text =
+        greeting.OpenChunk(greeting.RequireSingle(Cnb::MakeChunkId('T', 'X', 'T', '0')));
+    EXPECT_EQ(text.ReadString(), "Hello, CNA");
+    EXPECT_NO_THROW(text.RequireExhausted());
+
+    const Cnb::CnbDocument texture =
+        Cnb::CnbDocument::Parse(ReadBytes(texturePath), "custom compiler built-in texture");
+    EXPECT_EQ(texture.AssetTypeId(), Cnb::CnbAssetTypeId::Texture2D);
+
+    const std::filesystem::path manifestPath =
+        output / Pipeline::ContentBuildManifestFileName;
+    const std::vector<std::uint8_t> manifestBytes = ReadBytes(manifestPath);
+    const Pipeline::ContentBuildManifest manifest = Pipeline::ContentBuildManifest::Parse(
+        std::string(manifestBytes.begin(), manifestBytes.end()));
+    const Pipeline::ContentBuildManifestEntry* greetingEntry =
+        manifest.Find("Messages/welcome");
+    ASSERT_NE(greetingEntry, nullptr);
+    EXPECT_EQ(greetingEntry->importer.name, "ExampleGame.GreetingImporter");
+    EXPECT_EQ(greetingEntry->processor.name, "ExampleGame.GreetingProcessor");
+    EXPECT_EQ(greetingEntry->writer.name, "ExampleGame.GreetingWriter");
+    ASSERT_NE(greetingEntry->parameters.Find("prefix"), nullptr);
+    EXPECT_EQ(std::get<std::string>(*greetingEntry->parameters.Find("prefix")), "Hello, ");
+
+    const std::vector<std::uint8_t> greetingBytes = ReadBytes(greetingPath);
+    std::string secondLog;
+    ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
+                            {"build", source.string(), "-o", output.string()}, secondLog),
+              0)
+        << secondLog;
+    EXPECT_NE(secondLog.find("[SKIP] Messages/welcome"), std::string::npos) << secondLog;
+    EXPECT_NE(secondLog.find("[SKIP] Textures/badge"), std::string::npos) << secondLog;
+    EXPECT_EQ(ReadBytes(greetingPath), greetingBytes);
+    EXPECT_EQ(ReadBytes(manifestPath), manifestBytes);
+}
+#endif

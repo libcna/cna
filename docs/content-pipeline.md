@@ -538,11 +538,41 @@ the component version whenever content-affecting behavior changes. A custom writ
 one authoritative custom codec, just as built-ins adapt to `Encode*ToCnb()`; it should not duplicate
 its schema in multiple front ends.
 
-The stock `cna-content` binary currently registers built-ins only. A game using custom components
-must currently provide a small custom build front end linked to the pipeline library. Dynamic
-component loading and a declarative CLI extension mechanism are unresolved. The entire custom C++
-component surface is marked by `ContentPipelineExtensionApiIsExperimental == true`; no source or
-ABI compatibility promise is made yet.
+The stock `cna-content` binary registers built-ins only. CNA now exposes that binary's complete
+command coordinator through `CNA::ContentCompiler`, so a game can build a small custom executable
+without copying discovery, configuration, incremental manifests, diagnostics, or atomic
+publication:
+
+```cpp
+#include "CNA/Content/Pipeline/ContentCompiler.hpp"
+
+auto registry = std::make_shared<CNA::Content::Pipeline::ContentPipelineRegistry>();
+CNA::Content::Pipeline::RegisterBuiltInContentPipeline(*registry);
+registry->RegisterImporter(std::make_shared<WorldLevelImporter>());
+registry->RegisterProcessor(std::make_shared<WorldLevelProcessor>());
+registry->RegisterWriter(std::make_shared<WorldLevelWriter>());
+return CNA::Content::Pipeline::RunContentCompiler(arguments, std::move(registry));
+```
+
+```cmake
+add_executable(my_content_compiler my_content_compiler.cpp)
+target_link_libraries(my_content_compiler PRIVATE CNA::ContentCompiler)
+```
+
+[`modules/content/examples/custom-content-compiler.cpp`](../modules/content/examples/custom-content-compiler.cpp)
+is a complete executable: it registers all built-ins plus an `ExampleGame.Greeting` `.greeting`
+route, uses a typed `prefix` configuration parameter, and adapts its writer to the custom type's
+single `EncodeGreetingToCnb()` codec. A subprocess test compiles a mixed custom/PNG directory,
+checks the custom CMET/chunk and built-in Texture2D output, verifies manifest component/parameter
+identity, then proves the second invocation is a byte-preserving two-asset no-op.
+
+This is a **source/toolchain compatibility model**, not a plugin ABI. The custom executable and CNA
+must be compiled and linked as compatible C++; applications should rebuild their compiler when CNA
+or the toolchain changes. There is deliberately no arbitrary shared-library search, static
+initializer registration, binary version handshake, or claim that separately distributed C++
+plugins are stable. `ContentPipelineExtensionApiIsExperimental == true` covers both custom
+components and the embedding functions; persistent author-controlled component/type names remain
+the configuration and fingerprint identities, but the C++ declarations and ABI may evolve.
 
 ## CNJ, CNB, and XNB
 
@@ -585,6 +615,19 @@ requested; the pipeline's byte-hashed manifest performs the correct per-asset no
 therefore does not duplicate source discovery, dependency hashing, cache logic, or publication.
 `QUIET` forwards quiet output.
 
+A custom compiler can drive the same helper through its existing executable override. The explicit
+dependency ensures the compiler exists before the content target runs:
+
+```cmake
+cna_add_content(
+    TARGET MyGameContent
+    SOURCE_DIR ContentSource
+    OUTPUT_DIR Content
+    CONTENT_EXECUTABLE "$<TARGET_FILE:my_content_compiler>"
+)
+add_dependencies(MyGameContent my_content_compiler)
+```
+
 For a cross-compiling CMake build, a target-platform `cna-content` executable cannot run on the
 host. Such a call must provide an already-built host tool explicitly:
 
@@ -614,9 +657,14 @@ No `cna_add_game()` convenience layer is defined yet.
 **Experimental:**
 
 - the public C++ importer/processor/writer interfaces and stable in-memory type strings;
-- custom registration and custom component source/ABI compatibility;
+- custom registration and the user-built `CNA::ContentCompiler` embedding surface;
 - component names/versions as user configuration identifiers;
-- future recursive builds, dynamic extensions, target profiles, and parallel scheduling.
+- future recursive builds, target profiles, and parallel scheduling.
+
+**Not provided:**
+
+- a stable dynamic plugin ABI or automatic shared-library discovery;
+- binary compatibility for custom C++ compiler components across CNA/toolchain changes.
 
 **Internal/versioned implementation detail:**
 

@@ -2,7 +2,7 @@
   "schema_version": 1,
   "release": {
     "name_template": "CNA C ABI {abi_version}, experimental",
-    "note": "This gate governs publishing an **experimental** C ABI release. ABI 1.0 -- the point at which only additive changes are permitted within a major version -- is a separate decision that this gate does not make and must not be read as making. Content Pipeline integration on 2026-08-29 records 342 public C++ build-time declarations under open `CBIND-117`; it does not add C routes or exempt that experimental surface from the complete-public-API inventory."
+    "note": "This gate governs publishing an **experimental** C ABI release. ABI 1.0 -- the point at which only additive changes are permitted within a major version -- is a separate decision that this gate does not make and must not be read as making. Content Pipeline continuation on 2026-08-29 records 412 public C++ build-time declarations under open `CBIND-117`; it does not add C routes or exempt that experimental surface from the complete-public-API inventory."
   },
   "criteria": [
     {

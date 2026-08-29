@@ -431,6 +431,26 @@ long-term C++ source or ABI stability. In particular, multi-output graph compone
 plugin loading have not yet exercised the API. Persistent component/type identity strings and CNB
 custom-type rules are stable behavior; the C++ registration surface is experimental.
 
+### 5.11 User-built custom compiler (`CP-022`)
+
+The stock executable and user-owned compilers now link one `cna_content_compiler` implementation.
+`RegisterBuiltInContentPipeline()` performs explicit deterministic built-in registration, while
+`RunContentCompiler()` accepts the completed shared registry and owns the same parsing, discovery,
+configuration, manifest, cache, diagnostic and atomic-publication path as `cna-content`. The stock
+front end is only native argv conversion plus those two calls.
+
+`modules/content/examples/custom-content-compiler.cpp` is a real separately linked executable. It
+adds a `.greeting` importer, configurable processor and writer over one custom codec while retaining
+all CNA routes. Its subprocess test builds a mixed `.greeting`/PNG source tree, validates custom and
+built-in CNB documents plus manifest identities and typed parameters, and proves deterministic
+incremental skips.
+
+The supported contract is C++ **source/toolchain** integration through `CNA::ContentCompiler`; it is
+not binary plugin loading. A custom compiler is rebuilt against the CNA revision and compatible C++
+toolchain it uses. Arbitrary shared-library discovery was rejected because the experimental virtual
+interfaces, STL values, exceptions and ownership cross a compiler-specific ABI with no current
+version handshake capable of making that stable or safe.
+
 ---
 
 ## 6. First vertical slices
@@ -931,7 +951,7 @@ The completed feature branch was synchronized without reopening `CP-001` through
 | `CP-019` | **completed** | Added `SongImporter`, `SongProcessor`, and `SongContentWriter` over the unchanged `EncodeSongToCnb()`. The importer retains a non-empty media file as a streamed, root-relative external source without decoding/embedding it; configured/default metadata produces one separately recorded XREF. `.wav` remains unambiguously SoundEffect. Six component/runtime tests plus a single/directory CLI test prove stable selection, Unicode paths, validation, determinism, primary-source invalidation, manifest XREF separation, runtime metadata loading, and exact bytes against both the library encoder and real legacy producer. The one-output builder intentionally does not copy media before CP-023 defines safe multi-output publication. |
 | `CP-020` | **completed** | Added `VideoImporter`, `VideoProcessor`, and `VideoContentWriter` over the unchanged `EncodeVideoToCnb()`. The non-decoding importer covers unambiguous runtime video extensions; required configured width/height/fps prevents invented metadata or an FFmpeg dependency, while duration/soundtrack retain schema defaults. Six component/runtime tests and two CLI tests prove strict types/ranges/missing metadata, Unicode, single/directory builds, deterministic incremental invalidation, manifest XREF separation, HEADLESS runtime metadata compatibility, and exact bytes against the library encoder and legacy producer. `.ogg` remains Song-only for deterministic convention routing, and media copying remains CP-023 work. |
 | `CP-021` | **completed** | Kept Model/glTF paths native through pipeline discovery, intermediate Model CNJ compilation, sidecar opens and generated output publication. The one shared glTF implementation now gives cgltf generic UTF-8 names plus CNA file callbacks that reconstruct native filesystem paths; authored URI and serialized/generated-name boundaries use the existing explicit UTF-8 helpers. A repeated POSIX build with non-ASCII source root, nested directories, `.gltf`, external `.bin`, texture and generated XREF passes and preserves the pinned Model/direct-producer bytes; all four affected conversion sources also pass MinGW Windows-target syntax compilation. No native MSVC/Windows runtime was available, so Windows execution is still an explicit verification gap rather than a claimed result. |
-| `CP-022` | **pending** | Enable custom components outside tests through a supported user-built content-compiler executable linked to CNA's experimental C++ registry API. Provide an end-to-end example and honest source/toolchain compatibility contract; do not claim a stable dynamic plugin ABI. |
+| `CP-022` | **completed** | Extracted the stock CLI coordinator into the linkable `CNA::ContentCompiler` target and added explicit built-in registration plus a configured-registry runner. Stock and custom executables now share discovery, configuration, incremental manifests, diagnostics and the sole atomic publisher. A real `.greeting` compiler example and subprocess test prove mixed custom/built-in directory output, typed configuration fingerprints, custom CMET/chunk bytes, manifest identities, determinism and no-op skips. The 150-test pipeline/legacy-producer/CNJ/golden gate passed (149 pass, one expected large-file skip), all 23 C-header compatibility cells passed, and the two new C++ declarations remain honestly planned under `CBIND-117` with no C ABI/export change. The contract is C++ source/toolchain compatibility; no dynamic plugin ABI or library search is claimed. |
 | `CP-023` | **pending** | Define and implement stable build-node/output identity and a bounded multi-output build result. Evolve the manifest explicitly and specify recoverable per-artifact publication before enabling generated child assets. |
 | `CP-024` | **pending** | Schedule content-to-content build dependencies as graph edges distinct from source files, generated files and runtime XREFs. Prove shared dependencies, rebuild propagation, failure propagation and cache correctness. |
 | `CP-025` | **pending** | Add deterministic self/two-node/long-cycle detection with the logical cycle chain in diagnostics; never rely on recursive overflow. |
@@ -984,6 +1004,9 @@ the ordering wrong; it is not a promise to build speculative abstractions.
   boundary backed by a native file callback. Portable tests cover the complete non-ASCII Model
   source/sidecar layout and existing model bytes remain pinned, but no native MSVC/Windows runtime
   execution was available for CP-021.
+* Custom compilers are source/toolchain-linked executables. `CNA::ContentCompiler` intentionally
+  exposes the same experimental C++ types as component registration, so it is not a stable binary
+  boundary and separately distributed dynamic plugins are unsupported.
 
 ### Rejected alternatives
 
@@ -1009,6 +1032,10 @@ the ordering wrong; it is not a promise to build speculative abstractions.
   its minimum useful semantics.
 * **Parallel scheduler in v1.** Rejected until registry, dependency and publication correctness are
   stable.
+* **Load custom components as arbitrary shared libraries.** Rejected for the current experimental
+  API: virtual interfaces, STL ownership and exceptions cross the C++ ABI, while CNA has no stable
+  plugin handshake. A user-built compiler linked from source provides the real extension use case
+  without implying binary compatibility or searching untrusted directories.
 
 ---
 

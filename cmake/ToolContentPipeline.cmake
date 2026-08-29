@@ -1,13 +1,32 @@
-# plans/plan_content_pipeline.md CP-006: unified CNA Content Pipeline front end.
-add_executable(cna_content_tool
+# plans/plan_content_pipeline.md CP-006/CP-022: one command-line coordinator implementation is
+# linked by both the stock front end and user-built custom content compilers. Keep cache,
+# configuration and atomic-publication logic here rather than copying it into custom launchers.
+add_library(cna_content_compiler STATIC
     tools/content/content.cpp
 )
-set_target_properties(cna_content_tool PROPERTIES OUTPUT_NAME "cna-content")
-target_include_directories(cna_content_tool PRIVATE
+add_library(CNA::ContentCompiler ALIAS cna_content_compiler)
+target_include_directories(cna_content_compiler PRIVATE
     ${CNA_SOURCE_DIR}/tools/common
 )
-target_link_libraries(cna_content_tool PRIVATE cna_content)
+target_link_libraries(cna_content_compiler PUBLIC cna_content)
+cna_link_sharp_runtime(cna_content_compiler PRIVATE)
+
+add_executable(cna_content_tool
+    tools/content/content_main.cpp
+)
+set_target_properties(cna_content_tool PROPERTIES OUTPUT_NAME "cna-content")
+target_link_libraries(cna_content_tool PRIVATE cna_content_compiler)
 cna_link_sharp_runtime(cna_content_tool PRIVATE)
+
+if(CNA_BUILD_EXAMPLES OR CNA_BUILD_TESTS)
+    # CP-022: a real user-owned compiler executable, deliberately source/toolchain linked rather
+    # than loaded through an unsupported dynamic C++ plugin ABI.
+    add_executable(cna_custom_content_compiler_example
+        modules/content/examples/custom-content-compiler.cpp
+    )
+    target_link_libraries(cna_custom_content_compiler_example PRIVATE cna_content_compiler)
+    cna_link_sharp_runtime(cna_custom_content_compiler_example PRIVATE)
+endif()
 
 # Adds a build target that delegates content compilation to the same cna-content executable users
 # invoke manually. The target intentionally runs whenever requested; cna-content's content-hashed
