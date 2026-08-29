@@ -92,8 +92,8 @@ auto ui = content.Load<SpriteFont>("Fonts/ui");
 auto explosion = content.Load<SoundEffect>("Sounds/explosion");
 ```
 
-The runtime needs the `.cnb` artifacts, not the authoring PNG, WAV, glTF, CNJ, XNB, or sidecar
-files.
+The runtime needs the `.cnb` artifacts plus explicitly deployed Song/Video streaming media, not the
+other authoring PNG, WAV, glTF, CNJ, XNB, or intermediate sidecar files.
 
 ## Architecture
 
@@ -121,13 +121,13 @@ ContentTypeWriter
 existing Encode*ToCnb() codec
     |
     v
-primary CNB + bounded named CNB child outputs
+primary CNB + bounded named CNB child outputs + bounded deployment-support files
     |
     v
 shared atomic publisher
     |
     v
-one or more *.cnb artifacts
+one or more *.cnb artifacts plus explicitly registered external media
 
 -------------------------- RUNTIME --------------------------
 
@@ -291,8 +291,8 @@ canonical type name, and loader through `ContentManager::RegisterCnbLoaderEXT<T>
 |---|---|---|---|---|
 | `.png`, `.jpg`, `.jpeg`, `.bmp`, `.tga`, `.gif`, `.psd`, `.hdr`, `.pic`, `.pnm` | `CNA.ImageImporter/1` | `ImportedImage` | `CNA.TextureProcessor/1` | `CNA.Texture2DContentWriter/1` |
 | `.wav` | `CNA.WavImporter/1` | `ImportedSound` | `CNA.SoundEffectProcessor/1` | `CNA.SoundEffectContentWriter/1` |
-| `.mp3`, `.ogg`, `.oga`, `.qoa`, `.flac`, `.opus`, `.aac`, `.wma` | `CNA.SongImporter/1` | `ImportedSongSource` | `CNA.SongProcessor/1` | `CNA.SongContentWriter/1` |
-| `.mp4`, `.ogv`, `.webm`, `.mkv`, `.avi`, `.mov` | `CNA.VideoImporter/1` | `ImportedVideoSource` | `CNA.VideoProcessor/1` | `CNA.VideoContentWriter/1` |
+| `.mp3`, `.ogg`, `.oga`, `.qoa`, `.flac`, `.opus`, `.aac`, `.wma` | `CNA.SongImporter/2` | `ImportedSongSource` | `CNA.SongProcessor/2` | `CNA.SongContentWriter/1` |
+| `.mp4`, `.ogv`, `.webm`, `.mkv`, `.avi`, `.mov` | `CNA.VideoImporter/2` | `ImportedVideoSource` | `CNA.VideoProcessor/2` | `CNA.VideoContentWriter/1` |
 | `.gltf`, `.glb` | `CNA.GltfImporter/1` | `ImportedModelDocument` | `CNA.ModelProcessor/1` | `CNA.ModelContentWriter/1` |
 | `.cnj` Texture2D | `CNA.CnjImporter/1` | `ImportedImage` | same texture processor | same Texture2D writer |
 | `.cnj` SoundEffect | `CNA.CnjImporter/1` | `ImportedSound` | same sound processor | same SoundEffect writer |
@@ -302,7 +302,7 @@ canonical type name, and loader through `ContentManager::RegisterCnbLoaderEXT<T>
 | `.cnj` TextureCube | `CNA.CnjImporter/1` | `ImportedTextureCube` | `CNA.TextureCubeProcessor/1` | `CNA.TextureCubeContentWriter/1` |
 | `.cnj` Curve | `CNA.CnjImporter/1` | `ImportedCurve` | `CNA.CurveProcessor/1` | `CNA.CurveContentWriter/1` |
 | `.cnj` AnimationClip | `CNA.CnjImporter/1` | `ImportedAnimationClip` | `CNA.AnimationClipProcessor/1` | `CNA.AnimationClipContentWriter/1` |
-| `.xnb` supported built-in root | `CNA.XnbImporter/1` | existing imported type selected by validated root reader | existing type processor (plus metadata-only `CNA.XnbVideoProcessor/1`) | existing native built-in writer/codec |
+| `.xnb` supported built-in root | `CNA.XnbImporter/2` | existing imported type selected by validated root reader | existing type processor (plus metadata/deployment `CNA.XnbVideoProcessor/2`) | existing native built-in writer/codec |
 
 DDS is currently a contained TextureCube CNJ sidecar, not a direct default route. `.wav` remains
 the unambiguous SoundEffect route; it is not also registered as Song. `.ogg` remains the
@@ -313,12 +313,13 @@ shader/FX architecture is settled.
 ### Streaming Song and Video sources
 
 `SongImporter` and `VideoImporter` never decode or buffer the media payload. They validate that the
-primary source is non-empty, retain its normalized root-relative path as the default stream
+primary source is non-empty, retain its canonical source path and normalized root-relative stream
 reference, and rely on the normal primary-source fingerprint for byte dependency tracking. Their
 processors produce only `CnbSongData`/`CnbVideoData`, record the media path as a runtime reference
-with unconstrained asset type, and their writers delegate to the existing media encoders. This
-keeps build dependencies and runtime XREFs separate while preserving bounded compiler memory and
-HEADLESS operation.
+with unconstrained asset type, and register the same source/path pair as a deployment-support file.
+Their writers still delegate only to the existing media encoders. This keeps build dependencies,
+runtime XREFs, compiled CNB outputs and deployment artifacts distinct while preserving bounded
+compiler memory and HEADLESS operation.
 
 Duration cannot be inferred without introducing a media decoder into the build tool, so it defaults
 to zero (unknown). The optional display name defaults empty, which makes the runtime use the asset
@@ -349,11 +350,17 @@ configured. Duration remains zero when unknown, and soundtrack type defaults to 
 }
 ```
 
-Song and Video writers publish the metadata `.cnb`, not a second copy of the streaming media. The
-referenced media must be deployed at that content-root-relative path. The container XREF makes this
-support artifact discoverable. Multi-output writers deliberately return complete CNB artifacts;
-raw deployment-file copying remains a separate policy question and is not silently inferred from
-an XREF.
+The compiler publishes the Song/Video metadata `.cnb` and streams a byte-identical media copy to
+the content-root-relative XREF path. The copy is not a writer output and is never embedded in CNB.
+It has a separate manifest-v4 source/path/digest record, participates in output reservation, skip
+verification, atomic publication and ownership-safe garbage collection, and uses at most 1 MiB of
+copy buffer. A configured `streamReference` changes both the CNB XREF and deployment destination.
+
+For a single-file build whose output root already contains the exact authored media source at the
+XREF path, the compiler leaves that source in place and does not claim it as an owned deployment
+file. Any other support destination resolving inside the source root is rejected, as are compiled
+output collisions, cross-node deployment collisions, traversal and symlink escapes. A separate
+output root is therefore required when copying rather than reusing in-place media.
 
 ## Registry and selection
 
@@ -430,7 +437,7 @@ form where applicable.
 
 ## Dependencies and runtime XREFs
 
-Build-time dependencies and runtime content references are different records:
+Build-time dependencies, runtime content references, and deployment outputs are different records:
 
 ```text
 robot.gltf source/build inputs:
@@ -444,13 +451,15 @@ robot.cnb runtime reference:
 
 Build dependency categories are primary source, source file, content-build dependency, and
 generated dependency. Runtime references carry a logical name and optional expected CNB asset type
-ID. The two collections are separately sorted in `ContentBuildResult` and in the manifest.
+ID. Deployment files pair one contained, byte-hashed source with one contained output-relative
+path. All three collections are separately sorted in `ContentBuildResult` and in the manifest.
 
 Reading a source file does not automatically create an XREF. Registering an XREF does not claim
 that the referenced runtime asset is enough to reproduce the build. For a custom type,
 `AddRuntimeReference()` makes the reference observable to build tooling; the custom processed data
 and authoritative codec must also encode the corresponding XREF. Built-in Model handling does both
-through the existing canonical Model DTO and encoder.
+through the existing canonical Model DTO and encoder. `AddDeploymentFile()` is an explicit copy
+request, not an inference from an XREF; it also makes a non-primary source a source-file dependency.
 
 ## Build result, logging, and errors
 
@@ -461,6 +470,7 @@ through the existing canonical Model DTO and encoder.
 - effective parameters;
 - sorted categorized build dependencies;
 - sorted runtime references;
+- sorted non-CNB deployment files, bounded to 256 files;
 - ordered info/warning messages;
 - complete primary CNB bytes and stable output asset identity;
 - zero or more explicitly named additional CNB outputs, bounded to 256 outputs total.
@@ -484,13 +494,15 @@ It does not use mtimes to decide correctness. A fingerprint includes:
 - importer, processor, and writer stable names and versions;
 - typed processor parameters;
 - CNB container version;
-- every owned output logical identity and written asset type ID.
+- every owned compiled-output logical identity/type and deployment source/destination identity.
 
-Each output's path, type ID, and SHA-256 are stored separately. A missing or tampered primary or
-child `.cnb`, corrupt/incompatible manifest, changed output set, changed component version, changed
-parameter, or changed dependency forces the owning node to rebuild. Identical effective inputs and
-intact outputs produce `SKIP`. Runtime XREF records are outputs rather than independent inputs; the
-source/dependency/component inputs that produced them are fingerprinted.
+Each compiled output's path, type ID, and SHA-256 are stored separately. Each deployment-support
+file stores its contained source path, output path, and SHA-256. A missing or tampered primary,
+child `.cnb`, or deployment file; corrupt/incompatible manifest; changed output set; changed
+component version; changed parameter; or changed dependency forces the owning node to rebuild.
+Identical effective inputs and intact outputs produce `SKIP`. Runtime XREF records are outputs
+rather than independent inputs; the source/dependency/component inputs that produced them are
+fingerprinted.
 
 Primary sources, file dependencies, generated-file dependencies, and existing output verification
 are hashed in 1 MiB chunks. Hashing therefore uses bounded memory and accepts individual files above
@@ -504,10 +516,11 @@ invalidates that asset without treating the entire configuration file as a share
 an unrelated entry change leaves other assets eligible for `SKIP`.
 
 The manifest JSON layout is versioned internal build state, not a hand-edited project format.
-Version 3 gives each entry a stable build-node ID, an ordered output ownership list, a direct
-fingerprint, and an effective graph fingerprint. Versions 1 and 2 cannot represent all of those
-relationships, so they are rejected as incompatible and cause a safe rebuild; there is no
-ambiguous in-place migration. A corrupt or future incompatible manifest is handled the same way.
+Version 4 gives each entry a stable build-node ID, ordered compiled and deployment ownership lists,
+a direct fingerprint, and an effective graph fingerprint. Versions 1 through 3 cannot represent
+all of those relationships, so they are rejected as incompatible and cause a safe rebuild; there
+is no ambiguous in-place migration. A corrupt or future incompatible manifest is handled the same
+way.
 
 ## Multi-output nodes and ownership
 
@@ -634,9 +647,10 @@ random values, PIDs, pointers, memory addresses, or temporary file names.
 
 Writers finish every CNB image in memory. The CLI then calls the one shared audited atomic publisher
 from `tools/common/CnaToolAtomicWrite.hpp` for the primary output followed by additional outputs.
-Each individual final artifact is all-or-nothing and an old artifact is never removed before its
-replacement is ready. Manifest publication uses the same helper and occurs only after every
-requested node succeeds.
+Deployment media uses the same exclusive sibling-temporary/replacement path, but streams from its
+source in 1 MiB chunks rather than materializing the file in RAM. Each individual final artifact is
+all-or-nothing and an old artifact is never removed before its replacement is ready. Manifest
+publication uses the same helper and occurs only after every requested node succeeds.
 
 Portable filesystems do not provide a transaction spanning several paths. If a later output fails,
 an earlier output may already contain its new complete bytes, but the previous manifest and any
@@ -814,9 +828,10 @@ proven byte-order path. Frozen CNB schema 1 cannot preserve BGRA or NormalizedBy
 identity, so those formats are rejected rather than silently changed. XMA2 and unknown audio codecs
 are likewise rejected.
 
-For Song and Video, the external media stays external: it is a source-file dependency for
-fingerprinting and a CNB XREF for deployment. Absolute paths, traversal and symlink escapes fail
-through the ordinary source-root containment policy. The media bytes are not embedded or copied.
+For Song and Video, the external media stays external to CNB: it is a source-file dependency for
+fingerprinting, a CNB XREF for runtime resolution, and an explicitly owned deployment-support copy
+when the output root differs from the source location. Absolute paths, traversal and symlink
+escapes fail through the ordinary containment policy. The media bytes are never embedded.
 
 There is no `EmbeddedXnb`, `XNB0` chunk, opaque payload, reader/CLR name in output, second scheduler,
 or alternate manifest. Unsupported XNB means a diagnostic and no published artifact.
@@ -931,8 +946,8 @@ mismatches; CP-042 also scavenges valid abandoned version-1 staging trees conser
 or malformed/incompletely initialized trees are left for manual inspection. CP-043 collects only
 obsolete files proven by a valid prior manifest and matching digest; it never performs an output
 tree or extension scan.
-Song and Video CNBs retain streaming XREFs; deployment must place the media at those referenced
-paths because the compiler does not copy raw media support files.
+Song and Video CNBs retain streaming XREFs, while the compiler now deploys the referenced media as
+separately fingerprinted/owned support files without embedding it in CNB.
 
 ## Stability summary
 

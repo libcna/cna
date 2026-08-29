@@ -1184,7 +1184,7 @@ carrying forward task-local results:
 | `CP-041` | **completed** | Added one field-order Model graph walker and shared CPU decoders for declarations, vertex/index buffers and BasicEffect state. The runtime readers remain adapters over those decoders, while `XnbImporter` resolves the shared graph into canonical data and accepts only the CP-040 schema-1 subset through the existing Model processor/writer. Synthetic positive and real/synthetic negative fixtures cover complete geometry/material/hierarchy semantics, texture XREF containment, tags, declarations, effect type/power, ranges, bounds, sharing and truncation; runtime XNB versus CNB Model equivalence and all pre-existing Model/effect reader regressions pass. No renderer/device is used by compilation and no Model wire byte changed. The one new experimental C++ carrier field is inventoried as planned under existing `CBIND-117` (449 total); no C route/export/ABI version changed. |
 | `CP-042` | **completed** | Moved compiler staging under a private versioned per-user temporary parent and added an exact session name/owner marker plus an OS-held lease. Startup inspects at most 4,096 direct entries/256 candidates, requires same-user ownership, a non-symlink directory, matching bounded metadata and age >=24h, then deletes only after exclusively claiming the lease. PID is diagnostic identity only, so reuse cannot authorize deletion; old live builds retain their lock. Malformed, recent, future-dated, symlinked, legacy and indeterminate candidates remain untouched with sorted diagnostics. Tests cover an old same-PID abandoned tree, old active lease, recent/malformed/symlink cases, authored source survival, scan bounds and normal cleanup. |
 | `CP-043` | **completed** | Added sorted previous-owned minus next-owned collection only after every node succeeds and before manifest replacement. A valid prior manifest plus unchanged recorded SHA-256 proves each regular non-symlink candidate; all parents must be real directories inside the canonical output root. There is no tree/extension scan or recursive deletion. Corrupt manifests authorize nothing, failed builds collect nothing, and changed/symlinked/indeterminate candidates fail conservatively with the old manifest retained. Tests cover removal, logical rename, multi-output contraction, manual files, corruption, failed builds, digest replacement, symlink escape, recovery ordering and workers 1/2/4 deterministic trees. |
-| `CP-044` | **planned** | Define compiled versus deployment-support artifacts and implement contained, hashed, atomic Song/Video media deployment through the existing manifest/publisher/scheduler. |
+| `CP-044` | **completed** | Added an explicit bounded deployment-file result separate from CNB writer outputs and runtime XREFs. Song/Video and XNB Song/Video register their canonical media source and final XREF path; manifest v4 stores contained source/path/SHA-256 ownership. Preparation and publication stream through the existing atomic helper with a 1 MiB buffer, skip checks verify support digests, reservations reject compiled/cross-node collisions, and CP-043 GC handles renamed/removed support paths. In-place single-file media is never copied or owned; every other destination inside the source root is rejected. Tests cover direct and XNB routes, overrides, tamper repair, source change, removal/rename GC, manual-file survival, collision/escape guards, failed-publication recovery and workers 1/2/4 deterministic trees. Importer/processor identities moved to version 2; frozen Song/Video CNB bytes remain identical. The generated inventory now records 9,298 symbols with all 467 experimental pipeline rows planned under `CBIND-117`; no C route, export or ABI version changed. |
 | `CP-045` | **planned** | Harden custom writer fingerprints with explicit stable writer/asset/schema/codec identity and tests proving semantic writer evolution invalidates cached output without RTTI names. |
 | `CP-046` | **planned** | Audit real glTF multi-Model/generated-child cases against the existing graph; implement only deterministic optional output behavior that preserves default direct-glTF bytes. |
 | `CP-047` | **planned** | Audit MonoGame XNB LZ4 framing/dependencies and implement bounded decoding only if the exact variant can be supported safely without a bespoke unproven codec. |
@@ -1223,10 +1223,10 @@ the ordering wrong; it is not a promise to build speculative abstractions.
   compiled output size until the run completes. CP-042 scavenges only version-1 directories with
   valid identity metadata that are at least 24 hours old and whose lease can be claimed. Legacy or
   malformed/incompletely initialized trees remain deliberately untouched rather than guessed safe.
-* Song/Video compilation records and encodes the streaming media XREF but does not copy raw media
-  into the output tree. CP-023 intentionally models compiled CNB outputs, not arbitrary deployment
-  files; deployment must still place media at the referenced path until an explicit support-file
-  policy exists.
+* Song/Video compilation now copies raw streaming media as explicit deployment-support files rather
+  than CNB writer outputs. The manifest and extension API shape are experimental; files are copied
+  byte-for-byte with no transcoding, and an in-place single-file layout remains user-owned rather
+  than becoming garbage-collection ownership.
 * Multi-file publication is recoverable but not transactional across paths. A failed later output
   can leave earlier complete replacements beside the old manifest; the next build repairs the
   owning node. CP-043 likewise removes obsolete manifest-owned files before manifest replacement,
@@ -1611,3 +1611,65 @@ corrupt-manifest non-deletion, failed-build preservation, exact-digest refusal a
 replacement, refusal of an intermediate symlink escape, and contraction of the custom writer's two
 outputs to a built-in single output. The source-removal case produces identical output trees and
 manifests with workers 1, 2 and 4.
+
+---
+
+## 20. Song/Video deployment-support files (`CP-044`)
+
+Compiled artifacts and deployment artifacts are now different typed concepts. A
+`ContentTypeWriter` still returns only complete CNB images. A processor may explicitly call
+`AddDeploymentFile(source, outputPath)`, producing a bounded `ContentDeploymentFile` in the build
+result. The call contains/canonicalizes the source, validates the generic output path, adds a
+non-primary source to byte-hashed dependencies, deduplicates identical mappings, and rejects a
+second source claiming the same destination. Runtime XREF registration remains independent.
+
+Song/Video importer carriers retain the canonical native media source without reading its payload.
+Their version-2 processors register that source at the final (possibly configured) stream XREF and
+their unchanged version-1 writers encode exactly the prior metadata CNB. XNB Song and Video reuse
+the same path: version-2 `XnbImporter` retains the already resolved external-media source and
+`SongProcessor/2` or `XnbVideoProcessor/2` registers it. This is still:
+
+```text
+media/XNB source -> ordinary importer -> ordinary processor -> ordinary CNB writer
+                                      \-> explicit deployment-support file
+```
+
+It is not a raw-media writer output, inferred XREF copy, embedded CNB chunk, alternate scheduler or
+CMake-side copy.
+
+Manifest version 4 adds a sorted `deploymentFiles` list containing source-root-relative source,
+output-root-relative path and SHA-256. Source/destination identity participates in the direct
+fingerprint; source bytes already participate through the primary/source-file dependency. Support
+paths share the coordinator's physical reservations with compiled outputs and other nodes. Skip
+checks require both the CNB and support digests. CP-043 ownership inventories include support paths,
+so configured-path changes, source removal and output-set contraction collect only the old
+manifest-proven bytes.
+
+Large media never enters a `std::vector`. The existing atomic helper now has a streaming copy entry
+point over the exact same exclusive sibling temporary, checked close and POSIX/Windows replacement
+primitive as CNB publication. Preparation copies each source to the private per-run staging tree in
+1 MiB chunks and verifies the staged SHA-256; final publication repeats the bounded copy from that
+immutable staged image. Repair of an output with otherwise-current graph topology verifies source
+and final digests around direct atomic publication. Import/decode remains HEADLESS.
+
+A normal directory build produces, for example, both `Music/theme.cnb` and
+`Music/theme.ogg`. A configured XREF such as `Streaming/theme.ogg` changes both CNB metadata and the
+support destination. If a single-file output root already contains the exact authored source at
+that path, the compiler neither copies nor owns it; this preserves user source. Any different
+deployment destination resolving inside the source root is rejected. Compiled/support path
+collision, two-node support collision, traversal, symlink escape, missing source and tampered old
+ownership all fail before unsafe publication/deletion.
+
+Artifact publication still is not a portable multi-file transaction. Support files publish after a
+node's CNBs and the manifest publishes only after every node plus CP-043 collection succeeds. A
+support-copy failure retains the previous manifest and old support file; already published complete
+CNBs are repaired/verified on the next run. Tests force that failure through a locked deployment
+directory and prove recovery/no-op. Direct Song/Video and XNB media routes, configured rename,
+tamper repair, removal GC, manual `.cnb` survival, API containment/conflict checks and atomic-copy
+cleanup are covered. The source-removal worker 1/2/4 oracle includes a deployed Song and requires
+byte-identical final trees/manifests.
+
+A representative 64 MiB Song support-file run in the HEADLESS Debug build measured 4.55 seconds
+for a cold hash/stage/publish build and 2.43 seconds for a digest-verifying no-op, with peak RSS of
+34 MiB in both cases. This is a bounded-memory implementation check on the current host, not a CI
+performance threshold; the existing 1 MiB buffer keeps memory independent of media size.

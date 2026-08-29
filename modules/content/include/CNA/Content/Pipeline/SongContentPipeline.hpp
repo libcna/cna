@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstdint>
+#include <filesystem>
 #include <optional>
 #include <string>
 
@@ -28,6 +29,9 @@ namespace CNA::Content::Pipeline
     /** @brief Source-oriented identity of a streaming song file without embedded media bytes. */
     struct ImportedSongSource
     {
+        /** @brief Canonical native source file copied as the streaming deployment artifact. */
+        std::filesystem::path mediaSource;
+
         /** @brief Normalized generic UTF-8 media path relative to the source/content root. */
         std::string streamReference;
 

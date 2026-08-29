@@ -12,7 +12,7 @@
 namespace CNA::Content::Pipeline
 {
     /** @brief Current on-disk CNA Content Pipeline manifest format version. */
-    inline constexpr std::uint32_t ContentBuildManifestVersion = 3u;
+    inline constexpr std::uint32_t ContentBuildManifestVersion = 4u;
 
     /** @brief File name used for the inspectable manifest below a content output
      * root. */
@@ -35,6 +35,22 @@ namespace CNA::Content::Pipeline
 
         /** @brief Compares every stable output field. */
         bool operator==(const ContentBuildManifestOutput&) const = default;
+    };
+
+    /** @brief One non-CNB deployment file owned by a build node. */
+    struct ContentBuildManifestDeploymentFile
+    {
+        /** @brief Source path relative to the source root, using `/`. */
+        std::string source;
+
+        /** @brief Published path relative to the output root, using `/`. */
+        std::string path;
+
+        /** @brief SHA-256 of the deployed bytes for skip checks and ownership-safe collection. */
+        std::string sha256;
+
+        /** @brief Compares every stable deployment-file field. */
+        bool operator==(const ContentBuildManifestDeploymentFile&) const = default;
     };
 
     /** @brief One deterministic, root-relative build-node record in a manifest. */
@@ -67,6 +83,9 @@ namespace CNA::Content::Pipeline
 
         /** @brief Outputs owned by this node, including exactly one named @ref nodeId. */
         std::vector<ContentBuildManifestOutput> outputs;
+
+        /** @brief Non-CNB support files atomically deployed and owned by this node. */
+        std::vector<ContentBuildManifestDeploymentFile> deploymentFiles;
 
         /** @brief SHA-256 of direct inputs and dependency-edge identities. */
         std::string directFingerprint;

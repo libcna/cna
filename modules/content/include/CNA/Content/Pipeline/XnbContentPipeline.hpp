@@ -13,6 +13,9 @@ namespace CNA::Content::Pipeline
     /** @brief Source-oriented XNB Video metadata plus its validated external-media identity. */
     struct ImportedXnbVideo
     {
+        /** @brief Canonical native source file copied as the streaming deployment artifact. */
+        std::filesystem::path mediaSource;
+
         /** @brief Canonical native Video metadata decoded from the XNB payload. */
         Cnb::CnbVideoData data;
     };

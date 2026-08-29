@@ -477,6 +477,20 @@ namespace CNA::Content::Pipeline
                                          RequireString(output, "sha256")});
             }
 
+            for (const JsonValue& deployment :
+                 RequireMember(value, "deploymentFiles", JsonType::Array).arrayValue)
+            {
+                if (deployment.type != JsonType::Object)
+                {
+                    throw std::runtime_error(
+                        "content manifest deployment file must be an object.");
+                }
+                entry.deploymentFiles.push_back(
+                    {RequireString(deployment, "source"),
+                     RequireString(deployment, "path"),
+                     RequireString(deployment, "sha256")});
+            }
+
             for (const JsonValue& parameter :
                  RequireMember(value, "parameters", JsonType::Array).arrayValue)
             {
@@ -558,6 +572,18 @@ namespace CNA::Content::Pipeline
             }
             value.Set("outputs", std::move(outputs));
 
+            JsonValue deploymentFiles = JsonValue::MakeArray();
+            for (const ContentBuildManifestDeploymentFile& deployment :
+                 entry.deploymentFiles)
+            {
+                JsonValue item = JsonValue::MakeObject();
+                item.Set("source", StringValue(deployment.source));
+                item.Set("path", StringValue(deployment.path));
+                item.Set("sha256", StringValue(deployment.sha256));
+                deploymentFiles.arrayValue.push_back(std::move(item));
+            }
+            value.Set("deploymentFiles", std::move(deploymentFiles));
+
             JsonValue parameters = JsonValue::MakeArray();
             for (const auto& [name, parameterValue] : entry.parameters.Values())
             {
@@ -625,6 +651,12 @@ namespace CNA::Content::Pipeline
                 "content manifest node must contain between one and " +
                 std::to_string(MaxContentBuildOutputs) + " outputs.");
         }
+        if (entry.deploymentFiles.size() > MaxContentDeploymentFiles)
+        {
+            throw std::invalid_argument(
+                "content manifest node exceeds the maximum of " +
+                std::to_string(MaxContentDeploymentFiles) + " deployment files.");
+        }
         if (!IsLowerHexDigest(entry.directFingerprint) || !IsLowerHexDigest(entry.fingerprint))
         {
             throw std::invalid_argument("content manifest direct and effective fingerprints must "
@@ -668,6 +700,22 @@ namespace CNA::Content::Pipeline
             throw std::invalid_argument("content manifest node must own one primary output named '" +
                                         entry.nodeId + "'.");
         }
+        for (const ContentBuildManifestDeploymentFile& deployment : entry.deploymentFiles)
+        {
+            RequireSafeRelativePath(deployment.source, "deployment source");
+            RequireSafeRelativePath(deployment.path, "deployment output path");
+            if (!outputPaths.insert(deployment.path).second)
+            {
+                throw std::invalid_argument(
+                    "content manifest repeats compiled/deployment output path '" +
+                    deployment.path + "'.");
+            }
+            if (!IsLowerHexDigest(deployment.sha256))
+            {
+                throw std::invalid_argument(
+                    "content manifest deployment-file digest must be a lowercase SHA-256 value.");
+            }
+        }
         for (const ContentDependency& dependency : entry.dependencies)
         {
             if (dependency.kind == ContentDependencyKind::ContentBuild)
@@ -693,6 +741,22 @@ namespace CNA::Content::Pipeline
                                         "primary-source dependency matching "
                                         "its source field.");
         }
+        for (const ContentBuildManifestDeploymentFile& deployment : entry.deploymentFiles)
+        {
+            const bool fingerprinted = std::any_of(
+                entry.dependencies.begin(), entry.dependencies.end(),
+                [&](const ContentDependency& dependency)
+                {
+                    return dependency.kind != ContentDependencyKind::ContentBuild &&
+                           dependency.identity == deployment.source;
+                });
+            if (!fingerprinted)
+            {
+                throw std::invalid_argument("content manifest deployment source '" +
+                                            deployment.source +
+                                            "' is not a byte-hashed build dependency.");
+            }
+        }
         for (const RuntimeContentReference& reference : entry.runtimeReferences)
         {
             const std::string problem = Cnb::CnbLogicalNameProblem(reference.logicalName);
@@ -714,6 +778,12 @@ namespace CNA::Content::Pipeline
                      const ContentBuildManifestOutput& right)
         {
             return left.logicalName < right.logicalName;
+        });
+        std::sort(entry.deploymentFiles.begin(), entry.deploymentFiles.end(),
+                  [](const ContentBuildManifestDeploymentFile& left,
+                     const ContentBuildManifestDeploymentFile& right)
+        {
+            return left.path < right.path;
         });
         entries_.insert_or_assign(entry.nodeId, std::move(entry));
     }
@@ -769,6 +839,20 @@ namespace CNA::Content::Pipeline
         {
             fingerprint.AddString(output.logicalName);
             fingerprint.AddU64(output.assetTypeId);
+        }
+        std::vector<ContentBuildManifestDeploymentFile> deploymentFiles =
+            entry.deploymentFiles;
+        std::sort(deploymentFiles.begin(), deploymentFiles.end(),
+                  [](const ContentBuildManifestDeploymentFile& left,
+                     const ContentBuildManifestDeploymentFile& right)
+        {
+            return left.path < right.path;
+        });
+        fingerprint.AddU64(deploymentFiles.size());
+        for (const ContentBuildManifestDeploymentFile& deployment : deploymentFiles)
+        {
+            fingerprint.AddString(deployment.source);
+            fingerprint.AddString(deployment.path);
         }
         const std::string primarySourceDigest =
             ContentFileSha256(ResolveContained(sourceRoot, entry.source, "primary source"));
@@ -877,6 +961,33 @@ namespace CNA::Content::Pipeline
             entry.outputs.push_back(
                 {output.logicalName, RelativeContained(outputRoot, path, "additional output"),
                  output.assetTypeId, ContentSha256(output.bytes)});
+        }
+        entry.deploymentFiles.reserve(result.deploymentFiles.size());
+        for (const ContentDeploymentFile& deployment : result.deploymentFiles)
+        {
+            const std::string source =
+                RelativeContained(sourceRoot, deployment.source, "deployment source");
+            const std::filesystem::path destination =
+                outputRoot / CNA::Internal::ContentPathFromUtf8(deployment.outputPath);
+            const std::string path =
+                RelativeContained(outputRoot, destination, "deployment output");
+            const std::filesystem::path canonicalSource =
+                ResolveContained(sourceRoot, source, "deployment source");
+            const std::filesystem::path canonicalDestination =
+                ResolveContained(outputRoot, path, "deployment output");
+            if (IsWithin(WeaklyCanonical(sourceRoot), canonicalDestination))
+            {
+                if (canonicalSource == canonicalDestination)
+                {
+                    continue;
+                }
+                throw std::invalid_argument(
+                    "deployment output '" + path +
+                    "' is inside the source root and could overwrite authored content; choose a "
+                    "separate output root.");
+            }
+            entry.deploymentFiles.push_back(
+                {source, path, ContentFileSha256(deployment.source)});
         }
         entry.dependencies.reserve(result.dependencies.size());
         for (const ContentDependency& dependency : result.dependencies)

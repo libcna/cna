@@ -51,9 +51,11 @@
 // Power-loss durability is out of scope: nothing here fsyncs the file or its directory. The
 // contract is that no PROCESS failure can leave a partial file where a complete one was.
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -213,22 +215,34 @@ namespace CNA::Tools
              */
             [[nodiscard]] bool WriteAll(const std::vector<std::uint8_t>& bytes)
             {
+                return WriteAll(bytes.data(), bytes.size());
+            }
+
+            /**
+             * @brief Writes a complete byte range, resuming short platform writes.
+             *
+             * @param bytes First byte to write, or null when @p size is zero.
+             * @param size Number of bytes to write.
+             * @return True when every byte was accepted.
+             */
+            [[nodiscard]] bool WriteAll(const std::uint8_t* bytes, std::size_t size)
+            {
                 std::size_t written = 0;
-                while (written < bytes.size())
+                while (written < size)
                 {
-                    const std::size_t remaining = bytes.size() - written;
+                    const std::size_t remaining = size - written;
 #if defined(_WIN32)
                     const DWORD piece = static_cast<DWORD>(
                         remaining > 0x2000'0000u ? 0x2000'0000u : remaining);
                     DWORD produced = 0;
-                    if (::WriteFile(handle_, bytes.data() + written, piece, &produced, nullptr) == 0)
+                    if (::WriteFile(handle_, bytes + written, piece, &produced, nullptr) == 0)
                     {
                         return false;
                     }
                     if (produced == 0) { return false; }
                     written += produced;
 #else
-                    const ssize_t produced = ::write(handle_, bytes.data() + written, remaining);
+                    const ssize_t produced = ::write(handle_, bytes + written, remaining);
                     if (produced < 0)
                     {
                         if (errno == EINTR) { continue; }
@@ -324,6 +338,65 @@ namespace CNA::Tools
             std::filesystem::rename(temporary, destination, ec);
 #endif
         }
+
+        /**
+         * @brief Produces one sibling temporary and atomically publishes it.
+         *
+         * @tparam Producer Callable accepting ExclusiveNewFile& and returning true on a complete
+         * write.
+         * @param destination Final file path.
+         * @param producer Byte producer invoked exactly once after exclusive temporary creation.
+         */
+        template<typename Producer>
+        inline void PublishFileAtomically(const std::filesystem::path& destination,
+                                          Producer&& producer)
+        {
+            const std::filesystem::path directory =
+                destination.has_parent_path() ? destination.parent_path()
+                                              : std::filesystem::path(".");
+
+            std::filesystem::path temporary;
+            std::optional<ExclusiveNewFile> out;
+            for (int attempt = 0; attempt < 64; ++attempt)
+            {
+                const std::filesystem::path candidate =
+                    directory /
+                    (destination.filename().string() + ".cnatmp-" + ProcessTag() + "-" +
+                     std::to_string(attempt));
+                out.emplace(candidate);
+                if (out->IsOpen())
+                {
+                    temporary = candidate;
+                    break;
+                }
+                out.reset();
+            }
+            if (temporary.empty())
+            {
+                throw std::runtime_error("cannot create a temporary file beside '" +
+                                         destination.string() + "'");
+            }
+
+            TemporaryFileGuard guard(temporary);
+            if (!producer(*out))
+            {
+                throw std::runtime_error("failed while writing '" + destination.string() + "'");
+            }
+            if (!out->Close())
+            {
+                throw std::runtime_error("failed while closing the temporary for '" +
+                                         destination.string() + "'");
+            }
+
+            std::error_code ec;
+            ReplaceFileAtomically(temporary, destination, ec);
+            if (ec)
+            {
+                throw std::runtime_error("cannot replace '" + destination.string() +
+                                         "': " + ec.message());
+            }
+            guard.Release();
+        }
     }
 
     /**
@@ -349,56 +422,51 @@ namespace CNA::Tools
     inline void WriteFileAtomically(const std::filesystem::path& destination,
                                     const std::vector<std::uint8_t>& bytes)
     {
-        const std::filesystem::path directory =
-            destination.has_parent_path() ? destination.parent_path() : std::filesystem::path(".");
-
-        // A short bounded search rather than one fixed name, so two tools writing different
-        // destinations in one directory -- or the same tool retried after a crash left debris --
-        // do not collide. The create is EXCLUSIVE, so "is this name free?" and "claim it" are one
-        // operation and there is no window between them.
-        std::filesystem::path temporary;
-        std::optional<Detail::ExclusiveNewFile> out;
-        for (int attempt = 0; attempt < 64; ++attempt)
+        Detail::PublishFileAtomically(destination, [&](Detail::ExclusiveNewFile& out)
         {
-            const std::filesystem::path candidate =
-                directory / (destination.filename().string() + ".cnatmp-" + Detail::ProcessTag() +
-                             "-" + std::to_string(attempt));
-            out.emplace(candidate);
-            if (out->IsOpen())
+            return out.WriteAll(bytes);
+        });
+    }
+
+    /**
+     * @brief Copies @p source to @p destination with bounded memory and atomic replacement.
+     *
+     * The copy uses the same exclusively created sibling temporary and platform replacement path
+     * as WriteFileAtomically(). The source is never opened for writing and the destination is not
+     * changed unless the complete stream was read, written, and closed successfully.
+     *
+     * @param source Existing regular file to copy.
+     * @param destination Final path to create or replace.
+     * @throws std::runtime_error if the source cannot be read or atomic publication fails.
+     */
+    inline void CopyFileAtomically(const std::filesystem::path& source,
+                                   const std::filesystem::path& destination)
+    {
+        std::ifstream input(source, std::ios::binary);
+        if (!input)
+        {
+            throw std::runtime_error("cannot open deployment source '" + source.string() + "'");
+        }
+        Detail::PublishFileAtomically(destination, [&](Detail::ExclusiveNewFile& out)
+        {
+            std::array<std::uint8_t, 1024u * 1024u> buffer{};
+            while (input)
             {
-                temporary = candidate;
-                break;
+                input.read(reinterpret_cast<char*>(buffer.data()),
+                           static_cast<std::streamsize>(buffer.size()));
+                const std::streamsize count = input.gcount();
+                if (count > 0 &&
+                    !out.WriteAll(buffer.data(), static_cast<std::size_t>(count)))
+                {
+                    return false;
+                }
             }
-            out.reset();
-        }
-        if (temporary.empty())
-        {
-            throw std::runtime_error("cannot create a temporary file beside '" +
-                                     destination.string() + "'");
-        }
-
-        Detail::TemporaryFileGuard guard(temporary);
-
-        if (!out->WriteAll(bytes))
-        {
-            throw std::runtime_error("failed while writing '" + destination.string() + "'");
-        }
-        // Closed EXPLICITLY and then tested, before anything replaces the destination. A close is
-        // where a deferred write error surfaces on more than one filesystem, and a truncated
-        // temporary published as though it were whole is precisely the failure being prevented.
-        if (!out->Close())
-        {
-            throw std::runtime_error("failed while closing the temporary for '" +
-                                     destination.string() + "'");
-        }
-
-        std::error_code ec;
-        Detail::ReplaceFileAtomically(temporary, destination, ec);
-        if (ec)
-        {
-            throw std::runtime_error("cannot replace '" + destination.string() +
-                                     "': " + ec.message());
-        }
-        guard.Release();
+            if (!input.eof())
+            {
+                throw std::runtime_error("failed while reading deployment source '" +
+                                         source.string() + "'");
+            }
+            return true;
+        });
     }
 }

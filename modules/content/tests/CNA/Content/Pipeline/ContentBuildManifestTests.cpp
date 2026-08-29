@@ -81,6 +81,10 @@ namespace
             {"Generated/asset-index", "Generated/asset-index.cnb", 43u,
              Pipeline::ContentSha256({10u, 11u})},
         };
+        entry.deploymentFiles = {
+            {"shared/table.bin", "Support/table.bin",
+             Pipeline::ContentFileSha256(sourceRoot / "shared" / "table.bin")},
+        };
         entry.directFingerprint =
             Pipeline::ComputeContentBuildDirectFingerprint(entry, sourceRoot);
         entry.fingerprint = Pipeline::ComputeContentBuildEffectiveFingerprint(entry);
@@ -161,12 +165,13 @@ TEST(ContentBuildManifestTest, RoundTripsEveryStableFieldDeterministically)
     EXPECT_NE(first.find("source-file"), std::string::npos);
     EXPECT_NE(first.find("runtimeReferences"), std::string::npos);
     EXPECT_NE(first.find("Generated/asset-index.cnb"), std::string::npos);
-    EXPECT_NE(first.find("\"version\":3"), std::string::npos);
+    EXPECT_NE(first.find("Support/table.bin"), std::string::npos);
+    EXPECT_NE(first.find("\"version\":4"), std::string::npos);
 }
 
 TEST(ContentBuildManifestTest, EarlierVersionsAreRejectedSoTheCliCanRebuildSafely)
 {
-    for (const std::uint32_t version : {1u, 2u})
+    for (const std::uint32_t version : {1u, 2u, 3u})
     {
         EXPECT_THROW((void)Pipeline::ContentBuildManifest::Parse(
                          "{\"format\":\"CNA.ContentPipeline.Manifest\",\"version\":" +
@@ -230,6 +235,16 @@ TEST(ContentBuildManifestTest, FingerprintInvalidatesEveryDeclaredBuildIdentity)
 
     changed = original;
     changed.outputs.back().logicalName = "Generated/renamed-index";
+    EXPECT_NE(Pipeline::ComputeContentBuildFingerprint(changed, scratch.Path()),
+              original.fingerprint);
+
+    changed = original;
+    changed.deploymentFiles.front().path = "Support/renamed.bin";
+    EXPECT_NE(Pipeline::ComputeContentBuildFingerprint(changed, scratch.Path()),
+              original.fingerprint);
+
+    changed = original;
+    changed.deploymentFiles.front().source = "asset.bin";
     EXPECT_NE(Pipeline::ComputeContentBuildFingerprint(changed, scratch.Path()),
               original.fingerprint);
 }
@@ -300,5 +315,30 @@ TEST(ContentBuildManifestTest, RejectsMissingDuplicateAndEscapingOutputOwnership
 
     entry = MakeEntry(scratch.Path());
     entry.outputs.resize(Pipeline::MaxContentBuildOutputs + 1u, entry.outputs.front());
+    EXPECT_THROW(manifest.Set(entry), std::invalid_argument);
+
+    entry = MakeEntry(scratch.Path());
+    entry.deploymentFiles.front().path = entry.outputs.front().path;
+    EXPECT_THROW(manifest.Set(entry), std::invalid_argument);
+
+    entry = MakeEntry(scratch.Path());
+    entry.deploymentFiles.front().path = "../escape.bin";
+    EXPECT_THROW(manifest.Set(entry), std::invalid_argument);
+
+    entry = MakeEntry(scratch.Path());
+    entry.deploymentFiles.front().source = "../escape.bin";
+    EXPECT_THROW(manifest.Set(entry), std::invalid_argument);
+
+    entry = MakeEntry(scratch.Path());
+    entry.deploymentFiles.front().sha256 = "bad";
+    EXPECT_THROW(manifest.Set(entry), std::invalid_argument);
+
+    entry = MakeEntry(scratch.Path());
+    entry.deploymentFiles.front().source = "untracked.bin";
+    EXPECT_THROW(manifest.Set(entry), std::invalid_argument);
+
+    entry = MakeEntry(scratch.Path());
+    entry.deploymentFiles.resize(Pipeline::MaxContentDeploymentFiles + 1u,
+                                 entry.deploymentFiles.front());
     EXPECT_THROW(manifest.Set(entry), std::invalid_argument);
 }

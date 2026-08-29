@@ -13,6 +13,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
+#include "CNA/Internal/ContentPath.hpp"
 
 namespace Pipeline = CNA::Content::Pipeline;
 
@@ -261,6 +262,41 @@ namespace
         OutputBehavior behavior_ = OutputBehavior::PrimaryOnly;
     };
 
+    class DeploymentProcessor final : public Pipeline::ContentProcessor
+    {
+    public:
+        explicit DeploymentProcessor(
+            std::vector<std::pair<std::filesystem::path, std::string>> files)
+            : files_(std::move(files))
+        {
+        }
+
+        [[nodiscard]] Pipeline::ContentComponentIdentity Identity() const override
+        {
+            return {"test.DeploymentProcessor", "1"};
+        }
+
+        [[nodiscard]] std::string InputType() const override { return kImportedType; }
+        [[nodiscard]] std::string OutputType() const override { return kProcessedType; }
+
+        void ValidateParameters(const Pipeline::ContentProcessorParameters&) const override {}
+
+        [[nodiscard]] Pipeline::ContentValue Process(
+            const Pipeline::ContentValue& input,
+            Pipeline::ContentProcessorContext& context) const override
+        {
+            for (const auto& [source, output] : files_)
+            {
+                context.AddDeploymentFile(source, output);
+            }
+            return Pipeline::ContentValue::Create(
+                kProcessedType, ProcessedNumber{input.Get<ImportedNumber>().value});
+        }
+
+    private:
+        std::vector<std::pair<std::filesystem::path, std::string>> files_;
+    };
+
     std::shared_ptr<Pipeline::ContentPipelineRegistry> MakeRegistry()
     {
         auto registry = std::make_shared<Pipeline::ContentPipelineRegistry>();
@@ -469,6 +505,74 @@ TEST(ContentPipelineCoreTest, BuildReportsComponentsParametersDependenciesRefere
     EXPECT_EQ(logger.messages[0].component, "test.NumberImporter");
     EXPECT_EQ(logger.messages[1].stage, Pipeline::ContentPipelineStage::Process);
     EXPECT_EQ(logger.messages[1].component, "test.NumberProcessor");
+}
+
+TEST(ContentPipelineCoreTest, ProcessorDeploymentFilesAreContainedDeduplicatedAndFingerprintable)
+{
+    ScratchDirectory scratch("deployment_files");
+    Pipeline::ContentBuildRequest request = MakeRequest(scratch);
+    WriteText(scratch.Path() / "media.bin", "streaming bytes");
+    auto registry = std::make_shared<Pipeline::ContentPipelineRegistry>();
+    registry->RegisterImporter(std::make_shared<NumberImporter>());
+    registry->RegisterProcessor(std::make_shared<DeploymentProcessor>(
+        std::vector<std::pair<std::filesystem::path, std::string>>{
+            {"media.bin", "Support/media.bin"},
+            {"media.bin", "Support/media.bin"},
+        }));
+    registry->RegisterWriter(std::make_shared<NumberWriter>());
+
+    const Pipeline::ContentBuildResult result =
+        Pipeline::ContentPipeline(registry).Build(request);
+    ASSERT_EQ(result.deploymentFiles.size(), 1u);
+    EXPECT_EQ(result.deploymentFiles[0].source, scratch.Path() / "media.bin");
+    EXPECT_EQ(result.deploymentFiles[0].outputPath, "Support/media.bin");
+    ASSERT_EQ(result.dependencies.size(), 2u);
+    EXPECT_EQ(result.dependencies[1],
+              (Pipeline::ContentDependency{Pipeline::ContentDependencyKind::SourceFile,
+                                           CNA::Internal::ContentPathToUtf8(
+                                               scratch.Path() / "media.bin")}));
+}
+
+TEST(ContentPipelineCoreTest, ProcessorDeploymentFilesRejectConflictsAndPathEscapes)
+{
+    ScratchDirectory scratch("deployment_file_errors");
+    ScratchDirectory outside("deployment_file_outside");
+    Pipeline::ContentBuildRequest request = MakeRequest(scratch);
+    WriteText(scratch.Path() / "a.bin", "a");
+    WriteText(scratch.Path() / "b.bin", "b");
+    WriteText(outside.Path() / "outside.bin", "outside");
+
+    const auto build = [&](std::vector<std::pair<std::filesystem::path, std::string>> files)
+    {
+        auto registry = std::make_shared<Pipeline::ContentPipelineRegistry>();
+        registry->RegisterImporter(std::make_shared<NumberImporter>());
+        registry->RegisterProcessor(
+            std::make_shared<DeploymentProcessor>(std::move(files)));
+        registry->RegisterWriter(std::make_shared<NumberWriter>());
+        return Pipeline::ContentPipeline(registry).Build(request);
+    };
+
+    for (auto files :
+         {std::vector<std::pair<std::filesystem::path, std::string>>{
+              {"a.bin", "Support/shared.bin"}, {"b.bin", "Support/shared.bin"}},
+          std::vector<std::pair<std::filesystem::path, std::string>>{
+              {"a.bin", "../escape.bin"}},
+          std::vector<std::pair<std::filesystem::path, std::string>>{
+              {outside.Path() / "outside.bin", "Support/outside.bin"}},
+          std::vector<std::pair<std::filesystem::path, std::string>>{
+              {"missing.bin", "Support/missing.bin"}}})
+    {
+        try
+        {
+            static_cast<void>(build(std::move(files)));
+            FAIL() << "invalid deployment mapping was accepted";
+        }
+        catch (const Pipeline::ContentPipelineError& error)
+        {
+            EXPECT_EQ(error.Stage(), Pipeline::ContentPipelineStage::Process);
+            EXPECT_EQ(error.Component(), "test.DeploymentProcessor");
+        }
+    }
 }
 
 TEST(ContentPipelineCoreTest, BuildAcceptsBoundedExplicitlyNamedAdditionalOutputs)

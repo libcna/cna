@@ -227,7 +227,7 @@ namespace CNA::Content::Pipeline
 
     ContentComponentIdentity XnbImporter::Identity() const
     {
-        return {XnbImporterName, "1"};
+        return {XnbImporterName, "2"};
     }
 
     std::vector<std::string> XnbImporter::SourceExtensions() const
@@ -317,6 +317,7 @@ namespace CNA::Content::Pipeline
                 throw ContentLoadException("XnbImporter: Song duration must not be negative.");
             }
             ImportedSongSource imported;
+            imported.mediaSource = media;
             imported.streamReference =
                 RootRelativeReference(context.SourceRoot(), media);
             imported.byteSize = MediaSize(media);
@@ -339,6 +340,7 @@ namespace CNA::Content::Pipeline
                     "XnbImporter: Video metadata is outside native CNB ranges.");
             }
             ImportedXnbVideo imported;
+            imported.mediaSource = media;
             imported.data.streamReference =
                 RootRelativeReference(context.SourceRoot(), media);
             imported.data.durationMs = static_cast<std::uint32_t>(source.durationMs);
@@ -365,7 +367,7 @@ namespace CNA::Content::Pipeline
 
     ContentComponentIdentity XnbVideoProcessor::Identity() const
     {
-        return {XnbVideoProcessorName, "1"};
+        return {XnbVideoProcessorName, "2"};
     }
 
     std::string XnbVideoProcessor::InputType() const
@@ -436,7 +438,8 @@ namespace CNA::Content::Pipeline
     ContentValue XnbVideoProcessor::Process(
         const ContentValue& input, ContentProcessorContext& context) const
     {
-        Cnb::CnbVideoData video = input.Get<ImportedXnbVideo>().data;
+        const ImportedXnbVideo& imported = input.Get<ImportedXnbVideo>();
+        Cnb::CnbVideoData video = imported.data;
         if (const std::string* stream =
                 OptionalString(context.Parameters(), VideoStreamReferenceParameter))
         {
@@ -464,8 +467,10 @@ namespace CNA::Content::Pipeline
         {
             video.soundtrackType = static_cast<std::uint32_t>(*value);
         }
+        context.AddDeploymentFile(imported.mediaSource, video.streamReference);
         context.AddRuntimeReference(video.streamReference);
-        context.LogInfo("preserved XNB Video metadata and external media XREF.");
+        context.LogInfo(
+            "preserved XNB Video metadata, external media XREF and deployment-support file.");
         return ContentValue::Create(ProcessedVideoType, std::move(video));
     }
 

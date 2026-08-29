@@ -513,7 +513,7 @@ TEST(XnbContentPipelineTest, Texture2DUncompressedAndLzxProduceCanonicalNativeCn
         const Pipeline::ContentBuildResult first = BuildFixture(fixture, "Textures/legacy");
         const Pipeline::ContentBuildResult second = BuildFixture(fixture, "Textures/legacy");
         EXPECT_EQ(first.importer,
-                  (Pipeline::ContentComponentIdentity{"CNA.XnbImporter", "1"}));
+                  (Pipeline::ContentComponentIdentity{"CNA.XnbImporter", "2"}));
         EXPECT_EQ(first.processor,
                   (Pipeline::ContentComponentIdentity{"CNA.TextureProcessor", "1"}));
         EXPECT_EQ(first.output.bytes, second.output.bytes);
@@ -783,6 +783,10 @@ TEST(XnbContentPipelineTest, SongPreservesMetadataAndRecordsExternalMediaAsDepen
     EXPECT_EQ(built.dependencies[1].kind, Pipeline::ContentDependencyKind::SourceFile);
     ASSERT_EQ(built.runtimeReferences.size(), 1u);
     EXPECT_EQ(built.runtimeReferences[0].logicalName, "one_two_three.ogg");
+    ASSERT_EQ(built.deploymentFiles.size(), 1u);
+    EXPECT_EQ(built.deploymentFiles[0].source,
+              fixture.parent_path() / "one_two_three.ogg");
+    EXPECT_EQ(built.deploymentFiles[0].outputPath, "one_two_three.ogg");
 
     ScratchDirectory scratch("runtime_song");
     WriteBytes(scratch.Path() / "one_two_three.cnb", built.output.bytes);
@@ -817,6 +821,9 @@ TEST(XnbContentPipelineTest, VideoUsesFnaObjectReferencesAndPreservesNativeMetad
     EXPECT_EQ(actual.soundtrackType, static_cast<std::uint32_t>(expected.soundtrackType));
     ASSERT_EQ(built.dependencies.size(), 2u);
     ASSERT_EQ(built.runtimeReferences.size(), 1u);
+    ASSERT_EQ(built.deploymentFiles.size(), 1u);
+    EXPECT_EQ(built.deploymentFiles[0].source, scratch.Path() / "clip.ogv");
+    EXPECT_EQ(built.deploymentFiles[0].outputPath, "clip.ogv");
 
     const std::filesystem::path nativeRoot = scratch.Path() / "native";
     WriteBytes(nativeRoot / "clip.cnb", built.output.bytes);
@@ -856,7 +863,7 @@ TEST(XnbContentPipelineTest, LosslessModelSubsetProducesCanonicalNativeModel)
 
     EXPECT_EQ(first.output.assetTypeId, Cnb::CnbAssetTypeId::Model);
     EXPECT_EQ(first.importer,
-              (Pipeline::ContentComponentIdentity{"CNA.XnbImporter", "1"}));
+              (Pipeline::ContentComponentIdentity{"CNA.XnbImporter", "2"}));
     EXPECT_EQ(first.processor,
               (Pipeline::ContentComponentIdentity{"CNA.ModelProcessor", "1"}));
     EXPECT_EQ(first.output.bytes, second.output.bytes);

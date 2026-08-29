@@ -72,7 +72,7 @@ namespace CNA::Content::Pipeline
 
     ContentComponentIdentity SongImporter::Identity() const
     {
-        return {kSongImporterName, "1"};
+        return {kSongImporterName, "2"};
     }
 
     std::vector<std::string> SongImporter::SourceExtensions() const
@@ -117,6 +117,7 @@ namespace CNA::Content::Pipeline
                                      (error ? ": " + error.message() : std::string{}) + ".");
         }
         ImportedSongSource imported;
+        imported.mediaSource = context.SourcePath();
         imported.streamReference = CNA::Internal::ContentPathToUtf8(relative);
         imported.byteSize = static_cast<std::uint64_t>(size);
         if (const std::string problem = Cnb::CnbLogicalNameProblem(imported.streamReference);
@@ -132,7 +133,7 @@ namespace CNA::Content::Pipeline
 
     ContentComponentIdentity SongProcessor::Identity() const
     {
-        return {kSongProcessorName, "1"};
+        return {kSongProcessorName, "2"};
     }
 
     std::string SongProcessor::InputType() const
@@ -189,8 +190,10 @@ namespace CNA::Content::Pipeline
             ConfiguredDurationMs(context.Parameters());
         song.durationMs = configuredDuration.value_or(
             imported.authoredDurationMs.value_or(0u));
+        context.AddDeploymentFile(imported.mediaSource, song.streamReference);
         context.AddRuntimeReference(song.streamReference);
-        context.LogInfo("prepared Song metadata and external media XREF for CNB encoding.");
+        context.LogInfo(
+            "prepared Song metadata, external media XREF and deployment-support file.");
         return ContentValue::Create(ProcessedSongType, std::move(song));
     }
 

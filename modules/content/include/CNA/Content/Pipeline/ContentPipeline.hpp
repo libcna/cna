@@ -159,6 +159,19 @@ namespace CNA::Content::Pipeline
         bool operator==(const RuntimeContentReference&) const = default;
     };
 
+    /** @brief One source file copied as a non-CNB deployment artifact beside compiled content. */
+    struct ContentDeploymentFile
+    {
+        /** @brief Canonical native source path contained by the build's source root. */
+        std::filesystem::path source;
+
+        /** @brief Generic UTF-8 destination path relative to the content output root. */
+        std::string outputPath;
+
+        /** @brief Compares the source and destination identities. */
+        bool operator==(const ContentDeploymentFile&) const = default;
+    };
+
     /** @brief Per-build collector that keeps build dependencies distinct from runtime XREFs. */
     class ContentDependencyCollector
     {
@@ -179,6 +192,14 @@ namespace CNA::Content::Pipeline
         void AddRuntimeReference(RuntimeContentReference reference);
 
         /**
+         * @brief Adds one validated deployment file under its unique output path.
+         *
+         * @param file Canonical source and contained output-relative destination.
+         * @throws std::invalid_argument when the output path is already mapped to another source.
+         */
+        void AddDeploymentFile(ContentDeploymentFile file);
+
+        /**
          * @brief Returns build-time dependencies in deterministic order.
          *
          * @return A sorted copy of the collected build dependencies.
@@ -192,9 +213,17 @@ namespace CNA::Content::Pipeline
          */
         [[nodiscard]] std::vector<RuntimeContentReference> RuntimeReferences() const;
 
+        /**
+         * @brief Returns deployment files in deterministic output-path order.
+         *
+         * @return A sorted copy of the collected deployment files.
+         */
+        [[nodiscard]] std::vector<ContentDeploymentFile> DeploymentFiles() const;
+
     private:
         std::set<ContentDependency> dependencies_;
         std::set<RuntimeContentReference> runtimeReferences_;
+        std::map<std::string, ContentDeploymentFile> deploymentFiles_;
     };
 
     /** @brief Bounded value types accepted by dynamic processor configuration. */
@@ -451,6 +480,20 @@ namespace CNA::Content::Pipeline
                                  std::uint32_t expectedAssetTypeId = 0u);
 
         /**
+         * @brief Registers a contained source file for atomic deployment below the output root.
+         *
+         * The source is also recorded as a byte-hashed source dependency unless it is the primary
+         * source itself.
+         *
+         * @param sourcePath Native absolute path, or a path relative to the source root.
+         * @param outputPath Safe generic UTF-8 path relative to the content output root.
+         * @throws std::invalid_argument if either path escapes its root, the source is not a
+         * regular file, or the destination conflicts with an earlier deployment file.
+         */
+        void AddDeploymentFile(const std::filesystem::path& sourcePath,
+                               std::string outputPath);
+
+        /**
          * @brief Emits an informational processor message.
          *
          * @param text Message text.
@@ -554,6 +597,9 @@ namespace CNA::Content::Pipeline
 
     /** @brief Maximum number of primary and additional CNB outputs from one build node. */
     inline constexpr std::size_t MaxContentBuildOutputs = 256u;
+
+    /** @brief Maximum number of non-CNB deployment files owned by one build node. */
+    inline constexpr std::size_t MaxContentDeploymentFiles = 256u;
 
     /** @brief One explicitly named additional CNB output produced beside a primary output. */
     struct ContentAdditionalWriteOutput
@@ -781,6 +827,9 @@ namespace CNA::Content::Pipeline
 
         /** @brief Sorted runtime content references, distinct from dependencies. */
         std::vector<RuntimeContentReference> runtimeReferences;
+
+        /** @brief Sorted non-CNB files that must be deployed beside compiled content. */
+        std::vector<ContentDeploymentFile> deploymentFiles;
 
         /** @brief Ordered informational and warning messages emitted by the successful build. */
         std::vector<ContentLogMessage> messages;

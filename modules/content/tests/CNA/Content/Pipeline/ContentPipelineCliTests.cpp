@@ -41,8 +41,11 @@ namespace
         explicit ScratchDirectory(const std::string& tag)
             : path_(std::filesystem::temp_directory_path() /
                     ("cna_content_cli_" + tag + "_" +
+                     std::to_string(::getpid()) + "_" +
                      std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
+            std::error_code error;
+            std::filesystem::remove_all(path_, error);
             std::filesystem::create_directories(path_);
         }
 
@@ -543,9 +546,11 @@ TEST(ContentPipelineCliTest, XnbSongExternalMediaBytesParticipateInIncrementalFi
     ASSERT_TRUE(std::filesystem::is_regular_file(media));
 
     ScratchDirectory scratch("xnb_song_incremental");
-    const std::filesystem::path source = scratch.Path() / "legacy_song.xnb";
-    const std::filesystem::path support = scratch.Path() / "one_two_three.ogg";
-    const std::filesystem::path output = scratch.Path() / "legacy_song.cnb";
+    const std::filesystem::path source = scratch.Path() / "Source" / "legacy_song.xnb";
+    const std::filesystem::path support = scratch.Path() / "Source" / "one_two_three.ogg";
+    const std::filesystem::path output = scratch.Path() / "Content" / "legacy_song.cnb";
+    const std::filesystem::path deployed =
+        scratch.Path() / "Content" / "one_two_three.ogg";
     WriteBytes(source, ReadBytes(fixture));
     WriteBytes(support, ReadBytes(media));
 
@@ -555,6 +560,7 @@ TEST(ContentPipelineCliTest, XnbSongExternalMediaBytesParticipateInIncrementalFi
     EXPECT_EQ(Cnb::DecodeSongFromCnb(
                   Cnb::CnbDocument::Parse(native, "XNB Song CLI output")).streamReference,
               "one_two_three.ogg");
+    EXPECT_EQ(ReadBytes(deployed), ReadBytes(support));
 
     std::string noOp;
     ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, noOp), 0) << noOp;
@@ -567,6 +573,7 @@ TEST(ContentPipelineCliTest, XnbSongExternalMediaBytesParticipateInIncrementalFi
     ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, changed), 0) << changed;
     EXPECT_NE(changed.find("[BUILD] legacy_song"), std::string::npos) << changed;
     EXPECT_EQ(ReadBytes(output), native);
+    EXPECT_EQ(ReadBytes(deployed), ReadBytes(support));
 }
 
 TEST(ContentPipelineCliTest, WorkerCountIsStrictBoundedAndHasASerialFallback)
@@ -993,6 +1000,7 @@ TEST(ContentPipelineCliTest, SourceDeletionCollectsOnlyManifestOwnedOutputsDeter
     const std::filesystem::path source = scratch.Path() / "ContentSource";
     WriteBytes(source / "keep.png", MakePng(2, 2));
     WriteBytes(source / "obsolete.png", MakePng(3, 2));
+    WriteBytes(source / "Music" / "theme.ogg", {1u, 2u, 3u, 4u});
 
     FileTreeSnapshot reference;
     for (const std::size_t workers : {1u, 2u, 4u})
@@ -1023,9 +1031,11 @@ TEST(ContentPipelineCliTest, SourceDeletionCollectsOnlyManifestOwnedOutputsDeter
                   std::string::npos)
             << log;
         EXPECT_EQ(CountOccurrences(log, "[CLEAN]"), 1u) << log;
-        EXPECT_NE(log.find("Built: 0  Skipped: 1  Failed: 0"), std::string::npos) << log;
+        EXPECT_NE(log.find("Built: 0  Skipped: 2  Failed: 0"), std::string::npos) << log;
         EXPECT_FALSE(std::filesystem::exists(output / "obsolete.cnb"));
         EXPECT_TRUE(std::filesystem::is_regular_file(output / "keep.cnb"));
+        EXPECT_EQ(ReadBytes(output / "Music" / "theme.ogg"),
+                  ReadBytes(source / "Music" / "theme.ogg"));
         EXPECT_EQ(ReadBytes(output / "Manual" / "preserved.cnb"),
                   (std::vector<std::uint8_t>{'u', 's', 'e', 'r'}));
 
@@ -1205,14 +1215,18 @@ TEST(ContentPipelineCliTest, SongSingleAndDirectoryBuildsPreserveExternalMediaSe
     EXPECT_EQ(singleSong.streamReference, "Music/theme.ogg");
     EXPECT_EQ(singleSong.name, "Main Theme");
     EXPECT_EQ(singleSong.durationMs, 185000u);
+    EXPECT_EQ(ReadBytes(scratch.Path() / "Single" / "Music" / "theme.ogg"),
+              ReadBytes(media));
 
     std::string first;
     ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, first), 0) << first;
     EXPECT_NE(first.find("[BUILD] Music/theme"), std::string::npos) << first;
     EXPECT_NE(first.find("[BUILD] Textures/wall"), std::string::npos) << first;
     const std::filesystem::path songOutput = output / "Music" / "theme.cnb";
+    const std::filesystem::path deployedMedia = output / "Music" / "theme.ogg";
     EXPECT_TRUE(std::filesystem::is_regular_file(songOutput));
-    EXPECT_FALSE(std::filesystem::exists(output / "Music" / "theme.ogg"));
+    ASSERT_TRUE(std::filesystem::is_regular_file(deployedMedia));
+    EXPECT_EQ(ReadBytes(deployedMedia), ReadBytes(media));
 
     const std::vector<std::uint8_t> songBytes = ReadBytes(songOutput);
     Cnb::CnbSongData expected;
@@ -1231,11 +1245,25 @@ TEST(ContentPipelineCliTest, SongSingleAndDirectoryBuildsPreserveExternalMediaSe
     ASSERT_EQ(entry->runtimeReferences.size(), 1u);
     EXPECT_EQ(entry->runtimeReferences.front().logicalName, "Music/theme.ogg");
     EXPECT_EQ(entry->runtimeReferences.front().expectedAssetTypeId, 0u);
+    ASSERT_EQ(entry->deploymentFiles.size(), 1u);
+    EXPECT_EQ(entry->deploymentFiles.front().source, "Music/theme.ogg");
+    EXPECT_EQ(entry->deploymentFiles.front().path, "Music/theme.ogg");
+    EXPECT_EQ(entry->deploymentFiles.front().sha256,
+              Pipeline::ContentFileSha256(media));
 
     std::string second;
     ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, second), 0) << second;
     EXPECT_NE(second.find("[SKIP] Music/theme"), std::string::npos) << second;
     EXPECT_NE(second.find("[SKIP] Textures/wall"), std::string::npos) << second;
+    EXPECT_EQ(ReadBytes(songOutput), songBytes);
+
+    WriteBytes(deployedMedia, {'b', 'a', 'd'});
+    std::string repaired;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, repaired), 0)
+        << repaired;
+    EXPECT_NE(repaired.find("[BUILD] Music/theme"), std::string::npos) << repaired;
+    EXPECT_NE(repaired.find("[SKIP] Textures/wall"), std::string::npos) << repaired;
+    EXPECT_EQ(ReadBytes(deployedMedia), ReadBytes(media));
     EXPECT_EQ(ReadBytes(songOutput), songBytes);
 
     WriteBytes(media, {0x4Fu, 0x67u, 0x67u, 0x53u, 9u, 8u, 7u});
@@ -1245,6 +1273,7 @@ TEST(ContentPipelineCliTest, SongSingleAndDirectoryBuildsPreserveExternalMediaSe
     EXPECT_NE(changed.find("[BUILD] Music/theme"), std::string::npos) << changed;
     EXPECT_NE(changed.find("[SKIP] Textures/wall"), std::string::npos) << changed;
     EXPECT_EQ(ReadBytes(songOutput), songBytes);
+    EXPECT_EQ(ReadBytes(deployedMedia), ReadBytes(media));
 }
 
 TEST(ContentPipelineCliTest, VideoBuildRequiresExplicitFrameMetadata)
@@ -1289,14 +1318,18 @@ TEST(ContentPipelineCliTest, VideoSingleAndDirectoryBuildsUseConfiguredMetadataA
     EXPECT_EQ(singleVideo.height, 1080u);
     EXPECT_FLOAT_EQ(singleVideo.framesPerSecond, 29.97f);
     EXPECT_EQ(singleVideo.soundtrackType, 2u);
+    EXPECT_EQ(ReadBytes(scratch.Path() / "Single" / "Movies" / "intro.mp4"),
+              ReadBytes(media));
 
     std::string first;
     ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, first), 0) << first;
     EXPECT_NE(first.find("[BUILD] Movies/intro"), std::string::npos) << first;
     EXPECT_NE(first.find("[BUILD] Textures/wall"), std::string::npos) << first;
     const std::filesystem::path videoOutput = output / "Movies" / "intro.cnb";
+    const std::filesystem::path deployedMedia = output / "Movies" / "intro.mp4";
     EXPECT_TRUE(std::filesystem::is_regular_file(videoOutput));
-    EXPECT_FALSE(std::filesystem::exists(output / "Movies" / "intro.mp4"));
+    ASSERT_TRUE(std::filesystem::is_regular_file(deployedMedia));
+    EXPECT_EQ(ReadBytes(deployedMedia), ReadBytes(media));
 
     const std::vector<std::uint8_t> videoBytes = ReadBytes(videoOutput);
     Cnb::CnbVideoData expected;
@@ -1316,11 +1349,25 @@ TEST(ContentPipelineCliTest, VideoSingleAndDirectoryBuildsUseConfiguredMetadataA
     ASSERT_NE(entry, nullptr);
     ASSERT_EQ(entry->runtimeReferences.size(), 1u);
     EXPECT_EQ(entry->runtimeReferences.front().logicalName, "Movies/intro.mp4");
+    ASSERT_EQ(entry->deploymentFiles.size(), 1u);
+    EXPECT_EQ(entry->deploymentFiles.front().source, "Movies/intro.mp4");
+    EXPECT_EQ(entry->deploymentFiles.front().path, "Movies/intro.mp4");
+    EXPECT_EQ(entry->deploymentFiles.front().sha256,
+              Pipeline::ContentFileSha256(media));
 
     std::string second;
     ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, second), 0) << second;
     EXPECT_NE(second.find("[SKIP] Movies/intro"), std::string::npos) << second;
     EXPECT_NE(second.find("[SKIP] Textures/wall"), std::string::npos) << second;
+
+    WriteBytes(deployedMedia, {'b', 'a', 'd'});
+    std::string repaired;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, repaired), 0)
+        << repaired;
+    EXPECT_NE(repaired.find("[BUILD] Movies/intro"), std::string::npos) << repaired;
+    EXPECT_NE(repaired.find("[SKIP] Textures/wall"), std::string::npos) << repaired;
+    EXPECT_EQ(ReadBytes(deployedMedia), ReadBytes(media));
+    EXPECT_EQ(ReadBytes(videoOutput), videoBytes);
 
     WriteBytes(media, {0u, 0u, 0u, 24u, 'f', 't', 'y', 'p', 9u});
     std::string changed;
@@ -1329,6 +1376,158 @@ TEST(ContentPipelineCliTest, VideoSingleAndDirectoryBuildsUseConfiguredMetadataA
     EXPECT_NE(changed.find("[BUILD] Movies/intro"), std::string::npos) << changed;
     EXPECT_NE(changed.find("[SKIP] Textures/wall"), std::string::npos) << changed;
     EXPECT_EQ(ReadBytes(videoOutput), videoBytes);
+    EXPECT_EQ(ReadBytes(deployedMedia), ReadBytes(media));
+}
+
+TEST(ContentPipelineCliTest, DeploymentFilesFollowConfiguredPathsAndOwnedGarbageCollection)
+{
+    ScratchDirectory scratch("deployment_path_gc");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    const std::filesystem::path media = source / "Music" / "theme.ogg";
+    const std::filesystem::path configuration =
+        source / Pipeline::ContentBuildConfigurationFileName;
+    WriteBytes(media, {0x4Fu, 0x67u, 0x67u, 0x53u, 1u, 2u, 3u});
+    WriteBytes(source / "keep.png", MakePng(2, 2));
+    WriteBytes(output / "Manual" / "preserved.cnb", {'u', 's', 'e', 'r'});
+    WriteText(configuration,
+              R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"Music/theme.ogg":{"parameters":{"streamReference":{"type":"string","value":"Deploy/theme.ogg"}}}}})json");
+
+    std::string log;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--workers", "2"},
+                      log),
+              0)
+        << log;
+    EXPECT_EQ(ReadBytes(output / "Deploy" / "theme.ogg"), ReadBytes(media));
+    EXPECT_EQ(Cnb::DecodeSongFromCnb(Cnb::CnbDocument::ParseFile(
+                  (output / "Music" / "theme.cnb").string())).streamReference,
+              "Deploy/theme.ogg");
+
+    WriteText(configuration,
+              R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"Music/theme.ogg":{"parameters":{"streamReference":{"type":"string","value":"Streaming/theme.ogg"}}}}})json");
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--workers", "4"},
+                      log),
+              0)
+        << log;
+    EXPECT_NE(log.find("[CLEAN] Deploy/theme.ogg (obsolete manifest-owned output)"),
+              std::string::npos)
+        << log;
+    EXPECT_FALSE(std::filesystem::exists(output / "Deploy" / "theme.ogg"));
+    EXPECT_EQ(ReadBytes(output / "Streaming" / "theme.ogg"), ReadBytes(media));
+    EXPECT_EQ(Cnb::DecodeSongFromCnb(Cnb::CnbDocument::ParseFile(
+                  (output / "Music" / "theme.cnb").string())).streamReference,
+              "Streaming/theme.ogg");
+
+    ASSERT_TRUE(std::filesystem::remove(media));
+    WriteText(configuration,
+              R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{}})json");
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    EXPECT_FALSE(std::filesystem::exists(output / "Music" / "theme.cnb"));
+    EXPECT_FALSE(std::filesystem::exists(output / "Streaming" / "theme.ogg"));
+    EXPECT_TRUE(std::filesystem::is_regular_file(output / "keep.cnb"));
+    EXPECT_EQ(ReadBytes(output / "Manual" / "preserved.cnb"),
+              (std::vector<std::uint8_t>{'u', 's', 'e', 'r'}));
+}
+
+TEST(ContentPipelineCliTest, DeploymentFilesNeverOverwriteCompiledOrAuthoredSources)
+{
+    ScratchDirectory scratch("deployment_collisions");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    const std::filesystem::path media = source / "Music" / "theme.ogg";
+    WriteBytes(media, {0x4Fu, 0x67u, 0x67u, 0x53u});
+    WriteText(source / Pipeline::ContentBuildConfigurationFileName,
+              R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"Music/theme.ogg":{"parameters":{"streamReference":{"type":"string","value":"Music/theme.cnb"}}}}})json");
+    std::string log;
+    EXPECT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 1) << log;
+    EXPECT_NE(log.find("resolves multiple outputs to path"), std::string::npos) << log;
+    EXPECT_FALSE(std::filesystem::exists(output / "Music" / "theme.cnb"));
+    EXPECT_FALSE(std::filesystem::exists(output / Pipeline::ContentBuildManifestFileName));
+
+    const std::filesystem::path sharedSource = scratch.Path() / "SharedSource";
+    const std::filesystem::path sharedOutput = scratch.Path() / "SharedOutput";
+    WriteBytes(sharedSource / "a.ogg", {1u});
+    WriteBytes(sharedSource / "b.ogg", {2u});
+    WriteText(sharedSource / Pipeline::ContentBuildConfigurationFileName,
+              R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"a.ogg":{"parameters":{"streamReference":{"type":"string","value":"Shared/audio.ogg"}}},"b.ogg":{"parameters":{"streamReference":{"type":"string","value":"Shared/audio.ogg"}}}}})json");
+    EXPECT_EQ(RunTool({"build", sharedSource.string(), "-o", sharedOutput.string(),
+                       "--workers", "4"},
+                      log),
+              1)
+        << log;
+    EXPECT_NE(log.find("resolve outputs to the same path"), std::string::npos) << log;
+    EXPECT_FALSE(std::filesystem::exists(
+        sharedOutput / Pipeline::ContentBuildManifestFileName));
+    EXPECT_FALSE(std::filesystem::exists(sharedOutput / "a.cnb"));
+    EXPECT_FALSE(std::filesystem::exists(sharedOutput / "b.cnb"));
+
+    const std::filesystem::path singleRoot = scratch.Path() / "SingleSource";
+    const std::filesystem::path direct = singleRoot / "direct.ogg";
+    const std::filesystem::path directOutput = singleRoot / "direct.cnb";
+    WriteBytes(direct, {1u, 2u, 3u});
+    ASSERT_EQ(RunTool({"build", direct.string(), "-o", directOutput.string()}, log), 0) << log;
+    EXPECT_EQ(ReadBytes(direct), (std::vector<std::uint8_t>{1u, 2u, 3u}));
+    const std::vector<std::uint8_t> manifestBytes =
+        ReadBytes(singleRoot / Pipeline::ContentBuildManifestFileName);
+    const Pipeline::ContentBuildManifest manifest = Pipeline::ContentBuildManifest::Parse(
+        std::string(manifestBytes.begin(), manifestBytes.end()));
+    ASSERT_NE(manifest.Find("direct"), nullptr);
+    EXPECT_TRUE(manifest.Find("direct")->deploymentFiles.empty());
+
+    WriteBytes(singleRoot / "authored.ogg", {'k', 'e', 'e', 'p'});
+    WriteText(singleRoot / Pipeline::ContentBuildConfigurationFileName,
+              R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"direct.ogg":{"parameters":{"streamReference":{"type":"string","value":"authored.ogg"}}}}})json");
+    EXPECT_EQ(RunTool({"build", direct.string(), "-o", directOutput.string()}, log), 1) << log;
+    EXPECT_NE(log.find("inside the source root and could overwrite authored content"),
+              std::string::npos)
+        << log;
+    EXPECT_EQ(ReadBytes(singleRoot / "authored.ogg"),
+              (std::vector<std::uint8_t>{'k', 'e', 'e', 'p'}));
+}
+
+TEST(ContentPipelineCliTest, DeploymentPublicationFailureKeepsOldManifestAndRecovers)
+{
+    if (::geteuid() == 0)
+    {
+        GTEST_SKIP() << "running as root, which ignores the directory permissions this test needs";
+    }
+
+    ScratchDirectory scratch("deployment_recovery");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    const std::filesystem::path media = source / "Music" / "theme.ogg";
+    const std::filesystem::path deployed = output / "Deploy" / "theme.ogg";
+    const std::filesystem::path manifest =
+        output / Pipeline::ContentBuildManifestFileName;
+    WriteBytes(media, {1u, 2u, 3u});
+    WriteText(source / Pipeline::ContentBuildConfigurationFileName,
+              R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"Music/theme.ogg":{"parameters":{"streamReference":{"type":"string","value":"Deploy/theme.ogg"}}}}})json");
+    std::string log;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    const std::vector<std::uint8_t> oldDeployment = ReadBytes(deployed);
+    const std::vector<std::uint8_t> oldManifest = ReadBytes(manifest);
+
+    WriteBytes(media, {4u, 5u, 6u, 7u});
+    std::error_code permissionError;
+    std::filesystem::permissions(deployed.parent_path(), std::filesystem::perms::owner_write,
+                                 std::filesystem::perm_options::remove, permissionError);
+    ASSERT_FALSE(permissionError);
+    const int failed =
+        RunTool({"build", source.string(), "-o", output.string(), "--quiet"}, log);
+    std::filesystem::permissions(deployed.parent_path(), std::filesystem::perms::owner_write,
+                                 std::filesystem::perm_options::add, permissionError);
+    ASSERT_FALSE(permissionError);
+
+    EXPECT_EQ(failed, 1) << log;
+    EXPECT_NE(log.find("Publish (CNA.AtomicPublisher)"), std::string::npos) << log;
+    EXPECT_EQ(ReadBytes(deployed), oldDeployment);
+    EXPECT_EQ(ReadBytes(manifest), oldManifest);
+
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    EXPECT_EQ(ReadBytes(deployed), ReadBytes(media));
+    EXPECT_NE(ReadBytes(manifest), oldManifest);
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    EXPECT_NE(log.find("[SKIP] Music/theme"), std::string::npos) << log;
 }
 
 #if defined(CNA_CUSTOM_CONTENT_COMPILER_PATH)

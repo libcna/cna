@@ -272,6 +272,24 @@ namespace CNA::Content::Pipeline
         runtimeReferences_.insert(std::move(reference));
     }
 
+    void ContentDependencyCollector::AddDeploymentFile(ContentDeploymentFile file)
+    {
+        const auto found = deploymentFiles_.find(file.outputPath);
+        if (found != deploymentFiles_.end() && found->second.source != file.source)
+        {
+            throw std::invalid_argument("deployment output path '" + file.outputPath +
+                                        "' is already mapped to another source file.");
+        }
+        if (found == deploymentFiles_.end() &&
+            deploymentFiles_.size() >= MaxContentDeploymentFiles)
+        {
+            throw std::invalid_argument(
+                "content build exceeds the maximum deployment-file count of " +
+                std::to_string(MaxContentDeploymentFiles) + ".");
+        }
+        deploymentFiles_.insert_or_assign(file.outputPath, std::move(file));
+    }
+
     std::vector<ContentDependency> ContentDependencyCollector::Dependencies() const
     {
         return {dependencies_.begin(), dependencies_.end()};
@@ -280,6 +298,18 @@ namespace CNA::Content::Pipeline
     std::vector<RuntimeContentReference> ContentDependencyCollector::RuntimeReferences() const
     {
         return {runtimeReferences_.begin(), runtimeReferences_.end()};
+    }
+
+    std::vector<ContentDeploymentFile> ContentDependencyCollector::DeploymentFiles() const
+    {
+        std::vector<ContentDeploymentFile> result;
+        result.reserve(deploymentFiles_.size());
+        for (const auto& [outputPath, file] : deploymentFiles_)
+        {
+            static_cast<void>(outputPath);
+            result.push_back(file);
+        }
+        return result;
     }
 
     void ContentProcessorParameters::Set(std::string name,
@@ -433,6 +463,35 @@ namespace CNA::Content::Pipeline
     {
         dependencies_->AddRuntimeReference(
             RuntimeContentReference{std::move(logicalName), expectedAssetTypeId});
+    }
+
+    void ContentProcessorContext::AddDeploymentFile(
+        const std::filesystem::path& sourcePath, std::string outputPath)
+    {
+        const std::string problem = Cnb::CnbLogicalNameProblem(outputPath);
+        if (!problem.empty())
+        {
+            throw std::invalid_argument("deployment output path '" + outputPath +
+                                        "' is invalid: " + problem + ".");
+        }
+        const std::filesystem::path candidate =
+            sourcePath.is_relative() ? sourceRoot_ / sourcePath : sourcePath;
+        const std::filesystem::path resolved =
+            RequireContained(sourceRoot_, candidate, "deployment source");
+        if (!std::filesystem::is_regular_file(resolved))
+        {
+            throw std::invalid_argument("deployment source '" +
+                                        CNA::Internal::ContentPathToUtf8(sourcePath) +
+                                        "' is not a regular file.");
+        }
+        if (resolved != source_)
+        {
+            dependencies_->Add(
+                ContentDependency{ContentDependencyKind::SourceFile,
+                                  CNA::Internal::ContentPathToUtf8(resolved)});
+        }
+        dependencies_->AddDeploymentFile(
+            ContentDeploymentFile{resolved, std::move(outputPath)});
     }
 
     void ContentProcessorContext::LogInfo(std::string text) const
@@ -832,6 +891,7 @@ namespace CNA::Content::Pipeline
         result.parameters = request.parameters;
         result.dependencies = dependencies.Dependencies();
         result.runtimeReferences = dependencies.RuntimeReferences();
+        result.deploymentFiles = dependencies.DeploymentFiles();
         result.messages = logger.TakeMessages();
         result.output = std::move(output);
         return result;
