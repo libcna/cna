@@ -1,8 +1,9 @@
 # CNA compilation-performance plan
 
-> **Status:** ACTIVE — the experiments and measured baseline are complete; final regression
-> guardrails remain. This plan turns [`misc/cnacomp.md`](../misc/cnacomp.md) into an executable task
-> sequence.
+> **Status:** ACTIVE — every compilation experiment and the regression-guard implementation are
+> complete. Final COMP-008 acceptance is waiting on unrelated existing OPENGLES3 runtime-test
+> failures recorded below. This plan turns [`misc/cnacomp.md`](../misc/cnacomp.md) into an
+> executable task sequence.
 >
 > **Goal:** shorten the edit/build/test loop without weakening XNA/FNA compatibility, diagnostics,
 > platform coverage, installed-package compatibility, or reproducibility.
@@ -64,7 +65,7 @@ must not be compared with the new post-reset counters.
 | COMP-005 | Reduce CMake configure/regeneration cost | COMP-001 | ✅ |
 | COMP-006 | Reduce measured header and translation-unit cost | COMP-001 | ✅ |
 | COMP-007 | Add an opt-in CI unity-build experiment | COMP-002, COMP-006 | ✅ |
-| COMP-008 | Publish results and add regression guardrails | COMP-002–COMP-007 | ⬜ |
+| COMP-008 | Publish results and add regression guardrails | COMP-002–COMP-007 | 🟨 |
 | COMP-009 | Add an opt-in fast-debug preset | COMP-001 | ✅ |
 
 `COMP-003`, `COMP-004`, `COMP-005`, and `COMP-006` may proceed independently after their stated
@@ -444,6 +445,36 @@ foundation work, but both are now available on the reference host.
 - Full integration tests and installed-consumer checks pass.
 - The final report distinguishes clean-build, incremental-build, configure, link, and cache gains;
   it does not present compile-command reduction as an elapsed-time benchmark.
+
+### Implementation evidence (2026-08-29)
+
+- `docs/build-performance.md` now starts with a consolidated result table that distinguishes
+  configure, clean compilation, incremental rebuild, final link, ccache, and structural graph
+  evidence. Every retained optional technique names its default or disable path; Split DWARF,
+  broad unity/PCH, and default IPO remain explicitly deferred.
+- `tools/build/check_build_performance_policy.py` resolves preset inheritance, checks the documented
+  `dev`, `unit`, `release-modules`, PCH, unity, fast-debug, and IPO values, verifies experimental
+  defaults/scope, and rejects routine raw global flag policy. Its only narrow exception is the
+  sanitizer flag passed to the standalone C consumer's own out-of-tree build. The check passes on
+  the current presets and CMake sources.
+- `tools/build/report_build_performance.py` reads an existing Ninja graph plus the actual CI build
+  log and `/usr/bin/time` files. It emits configure/build time and GNU-time maximum RSS, graph size,
+  executed compile/link edges, selected artifact sizes, and
+  direct/preprocessed/miss/uncacheable/cleanup ccache counters as JSON. A local no-op validation
+  reported the exact 2,483-command/1,929-compile integration graph and the 432,795,808-byte
+  `CnaTests` artifact.
+- `general-tests-ci.yml` enforces the deterministic policy check, records its real configure/build
+  invocations, publishes the report as a 30-day artifact, and deliberately adds no shared-runner
+  timing threshold. The workflow parses as YAML.
+- Native GCC and Clang complete OPENGLES3 builds succeeded. The installed shared/static C consumer
+  passes under Xvfb, and the focused STUB core/math suites pass 63/63 and 840/840. The 9,079-test
+  monolithic OPENGLES3 runtime run completed with 40 existing renderer-correctness failures. Three
+  representative failures reproduce in isolated CTest processes: the vertex-declaration case
+  explicitly names the open/stale `REMED-GFX-217` expectation, shadow-filter softness is an
+  existing rendering difference, and the EasyGL compiled-effect test reports its existing runtime
+  selection boundary. COMP-008 changes only documentation, Python tooling, and CI YAML, so these
+  cannot be caused by its implementation; nevertheless the task remains 🟨 rather than claiming
+  the plan's full-test acceptance criterion passed.
 
 ## 13. Explicit non-goals
 

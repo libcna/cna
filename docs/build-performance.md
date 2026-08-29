@@ -7,6 +7,28 @@ applications, and the sibling Sharp Runtime can make a full integration configur
 larger than a focused edit needs to be. This document defines the supported fast paths without
 changing the coverage expected from CI and release configurations.
 
+## Accepted results at a glance
+
+These measurements deliberately separate clean compilation, incremental work, configuration,
+linking, and cache behavior. Compile-command counts are structural scope evidence only; they are
+not presented as elapsed-time improvements.
+
+| Area | Retained measured result | Default or disable path |
+| --- | --- | --- |
+| Focused test loop | A math test-source rebuild fell 71% (0.84 to 0.24 s); its final link fell 73% (0.75 to 0.20 s). The 88.5% graph reduction is supporting structure, not a timing claim. | Build `CnaTests` for the complete suite. |
+| Configure audits | Unchanged configure fell about 82% (4.39–4.72 to 0.83–0.84 s). | `-DCNA_CONFIGURE_AUDIT_CACHE=OFF` forces every audit. |
+| Content-test PCH | Clean content-test compilation fell 23.5% (71.90 to 55.03 s). | Default `CNA_ENABLE_PCH=OFF`; use `unit-pch` only for the pilot. |
+| Header hygiene | The controlled `ContentReader.hpp` consumer frontend fell 24.5%; seven-header parse count fell 30.6%. | Retained source cleanup; no compiler-mode dependency. |
+| Fast debug | Controlled content compilation fell 9.7% and the build tree fell 47.2% with line tables. | `CNA_DEBUG_INFO=FULL` is default; `dev-fast-debug` opts in. |
+| Clean-CI unity | Four-job core/math clean closure fell 25.6%; a one-source rebuild regressed 5.7%. | Default `CNA_ENABLE_UNITY_BUILD=OFF`; `unit-unity` is leaf-only. |
+| Final linking | Large Debug `CnaTests` link fell 90.9% with LLD and 89.9% with Mold versus GNU ld. | `CNA_LINKER=DEFAULT`; `AUTO`, `LLD`, and `MOLD` are explicit alternatives. |
+| ccache | A public-header rebuild recovered 23/23 compile edges as direct hits in 0.36 s, with no preprocessed hits or eviction. | `CNA_USE_CCACHE=OFF`; CNA never changes global sloppiness/direct-mode policy. |
+| Complete clean build | At 12 jobs GCC took 10:44 and Clang 10:05 for all 1,929 compile edges; this is the post-optimization machine baseline, not an improvement inferred from command counts. | Use a focused profile for normal edits; keep complete GCC/Clang integration in CI. |
+
+Split DWARF and broad default unity/PCH remain deferred: the measured tradeoffs did not justify
+making them normal developer policy. IPO/LTO remains an opt-in release experiment rather than a
+compilation-speed feature.
+
 ## Presets
 
 All new performance-oriented presets use Ninja and write `compile_commands.json`.
@@ -441,6 +463,29 @@ cache state, and target. Record:
 Start local parallelism experiments at 8, 12, and 16 jobs on a 16-logical-CPU host, and keep the
 largest value that does not cause memory pressure. `CNA_MAX_VENDORED_BUILD_JOBS` controls the nested
 configure-time SDL build separately; it is not the main Ninja parallelism limit.
+
+### CI trend report and structural guard
+
+`tools/build/check_build_performance_policy.py` resolves preset inheritance and fails
+deterministically if the focused `dev`, `unit`, or `release-modules` closures regain tests,
+examples, the C API, or optional backends. It also verifies that PCH, unity, and IPO remain opt-in
+and rejects routine project policy expressed through global `CMAKE_C_FLAGS`, `CMAKE_CXX_FLAGS`,
+linker flags, `add_compile_options()`, or `add_link_options()`. The isolated sanitizer flags used
+to build the standalone C API consumer are the only narrow, explicit exception.
+
+The general Linux workflow records the actual configure and build commands with `/usr/bin/time`,
+keeps the Ninja build log, and runs `tools/build/report_build_performance.py` after the build. Its
+uploaded `build-performance-report.json` contains:
+
+- configure/build wall time and GNU-time maximum RSS (the reproducible clean-build driver uses the
+  stricter aggregate process-tree RSS measurement);
+- complete graph command and compile counts;
+- compile and link edges actually observed in that fresh build's Ninja log;
+- selected artifact sizes; and
+- direct/preprocessed ccache hits, misses, uncacheable reasons, cleanups, and cache size.
+
+These values are retained as a 30-day CI artifact for trend inspection. Shared-runner timing has no
+hard pass/fail threshold; only machine-independent preset and policy invariants are enforced.
 
 ### Reproducible clean-build matrix
 

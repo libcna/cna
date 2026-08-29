@@ -71,6 +71,9 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Check build-performance policy
+        run: python3 tools/build/check_build_performance_policy.py
+
       - name: Clone sibling repos (public, no token needed)
         run: |
           set -euo pipefail
@@ -85,7 +88,7 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            gcc-14 g++-14 cmake ninja-build pkg-config doxygen xvfb x11-utils \
+            gcc-14 g++-14 cmake ninja-build ccache time pkg-config doxygen xvfb x11-utils \
             libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
             libvulkan-dev \
             libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev \
@@ -133,12 +136,14 @@ jobs:
 
       - name: Configure (OPENGLES3, tests + examples on, general default suite)
         run: |
-          cmake -S . -B build -G Ninja \
+          /usr/bin/time -f '%e %M' -o "${RUNNER_TEMP}/cna-configure.time" \
+            cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \
             -DCNA_GRAPHICS_RENDERER=OPENGLES3 \
             -DCNA_BUILD_TESTS=ON \
             -DCNA_BUILD_EXAMPLES=ON \
             -DCNA_TEST_DISPLAY=:99
+          ccache --zero-stats
 
       # Unlike the other 3 workflows (which build only the CnaTests target, since their own label/
       # filter selections don't reach any of the ~247 separately-registered renderer smoke-test
@@ -146,7 +151,28 @@ jobs:
       # (add_test(COMMAND <exe>) against targets that are part of the default `all` target) -- so
       # this job needs a full default build, not just CnaTests.
       - name: Build (all CTest-registered targets)
-        run: cmake --build build --parallel 4
+        run: |
+          set -o pipefail
+          /usr/bin/time -f '%e %M' -o "${RUNNER_TEMP}/cna-build.time" \
+            cmake --build build --parallel 4 2>&1 | tee "${RUNNER_TEMP}/cna-build.log"
+
+      - name: Publish build-performance trend report
+        run: |
+          python3 tools/build/report_build_performance.py \
+            --build-dir build \
+            --target all \
+            --artifact CnaTests \
+            --configure-timing "${RUNNER_TEMP}/cna-configure.time" \
+            --build-timing "${RUNNER_TEMP}/cna-build.time" \
+            --build-log "${RUNNER_TEMP}/cna-build.log" \
+            --output build/build-performance-report.json
+
+      - name: Upload build-performance trend report
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-performance-${{ github.run_id }}
+          path: build/build-performance-report.json
+          retention-days: 30
 
       - name: Run full unfiltered CnaTests suite (ctest, no -L / --gtest_filter)
         id: run_ctest
