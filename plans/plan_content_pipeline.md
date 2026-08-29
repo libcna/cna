@@ -1189,7 +1189,7 @@ carrying forward task-local results:
 | `CP-045` | **completed** | Added sorted `ContentWriterSchemaIdentity` declarations containing asset ID/name, native schema version and explicit codec name/version. The core rejects incomplete/duplicate/undeclared identities; manifest v5 persists and fingerprints declarations plus per-output schema/name, and versions 1–4 rebuild safely. The skip path compares the current declaration without executing the writer. All ten built-ins declare their frozen schema-1 encoders, and the real custom compiler proves independently stale asset ID, type name, schema and codec records all force rebuild while unchanged identities skip. The generated inventory records 9,319 symbols/488 experimental pipeline rows under `CBIND-117`; no RTTI, C API route/export/version, CNB schema or encoder byte changed. |
 | `CP-046` | **completed** | Audited scenes, skin/static Model groups, embedded/standalone clips, external/data-URI textures and the existing output graph. A single animated Model now builds normally with identical primary bytes. Optional bool `generateChildAssets` publishes canonical additional Models, standalone AnimationClips and remapped native Texture2D children through the existing typed encoders; multi-Model input requires this explicit mode. Default-scene selection remains unchanged, the lexicographically first generated Model is primary, sanitized group/clip name collisions fail before overwrite, and ordinary reservations/atomic staging/manifest ownership/CP-043 contraction GC govern the bundle. Real fixtures prove embedded/child clip equivalence, external/embedded texture decode, multi-Model semantics, default producer bytes, no-op/incremental contraction and workers 1/2/4 identical trees. The inventory now records 9,332 symbols/501 pipeline rows under `CBIND-117`; no C route/export/version, frozen schema or default glTF byte changed. |
 | `CP-047` | **completed** | Confirmed from MonoGame `ContentWriter`/`Lz4DecoderStream` that flag `0x40` carries one raw LZ4 block after the ordinary decompressed-size field, never an LZ4 frame. Added one bounds-checked shared decoder used by runtime and canonical compiler paths with no runtime dependency. A fixture whose real MonoGame body was compressed by upstream liblz4 proves exact bytes; runtime and headless XNB-to-CNB pixels agree. Negative tests cover every token/length/offset/input/output boundary, size limits and 1,500 deterministic whole-container mutations. Both compression bits remain invalid. |
-| `CP-048` | **planned** | Fix the MinGW `wmain` entry-point link seam if locally owned, then close the continuation with portability, sanitizer, determinism, security, CMake/C-API and documentation verification. |
+| `CP-048` | **completed** | Added MinGW's Unicode-console startup option only to the stock and custom content compiler executables that define `wmain`. Both link as x86-64 PE console programs; Wine 10 runs each, the stock tool builds through a native non-ASCII path, and the custom tool publishes its two-output fixture. A Windows-target Curve CNB is byte-identical to the Linux build. Linux entry points still build/run normally. Native Windows and MSVC remain untested and unclaimed. |
 
 Tasks are intentionally vertical/coherent. The ledger is revised when implementation evidence makes
 the ordering wrong; it is not a promise to build speculative abstractions.
@@ -1390,9 +1390,9 @@ itself references only `SDL_LoadWAV_IO` and `SDL_ConvertAudioSamples`, not SDL i
 device-open calls.
 
 MinGW-w64 compiles every modified source, including `cna_content`, `cna_audio`, the compiler and the
-tool entry point. Linking the executable reaches the pre-existing `wmain` configuration defect: the
-target omits `-municode`, so MinGW's CRT asks for `WinMain`. Native Windows/MSVC execution is not
-available and is not claimed. All nine build-free C-API consistency gates pass. The four canonical
+tool entry point. CP-048 subsequently fixed the locally owned `wmain` link configuration and added
+Wine execution coverage; native Windows/MSVC execution is still unavailable and is not claimed.
+All nine build-free C-API consistency gates pass. The four canonical
 reader helpers remain private implementation details behind a source-private friend shim; the 19
 new/changed experimental pipeline declarations are inventoried as planned under open `CBIND-117`,
 without adding a C export.
@@ -1819,3 +1819,30 @@ runtime/compiler/decoder/fuzz selection also passes under combined ASan+UBSan an
 `halt_on_error=1`; no sanitizer report occurred. The sanitizer build had to set
 `ASAN_OPTIONS=detect_leaks=0` for build-time content generation because this runner's `ptrace`
 environment makes LeakSanitizer abort, so no LSan coverage is claimed.
+
+---
+
+## 24. Windows content-tool entry points (`CP-048`)
+
+The Windows CLI design was already correct at the source boundary: both the stock and custom
+compiler front ends define `wmain(int, wchar_t**)` and construct `std::filesystem::path` directly
+from each wide argument. The defect was target-local. MinGW's default console startup object seeks
+`main`/`WinMain`; unlike MSVC, it requires `-municode` to select the CRT path that invokes `wmain`.
+`ToolContentPipeline.cmake` now adds that private link option to exactly those two executables when
+`MINGW` is true. It does not affect the Linux `main` branch, libraries, unrelated tools, or MSVC.
+
+The x86_64-w64-mingw32 configuration compiles and links `cna-content.exe` and
+`cna_custom_content_compiler_example.exe`; both PE files export the expected `wmain` symbol and
+their Ninja link edges contain `-municode`. Wine 10.0 then exercises more than process startup:
+
+* the stock tool builds a real CNJ Curve through importer, processor, writer, staging and atomic
+  publication using `Z:/.../Zażółć/曲線/curve.cnb` as its native output path;
+* that 308-byte Windows-target CNB has SHA-256
+  `49107687976e9087be79fae6790fbf33822d739d0b9f429b16541ae26f773145` and is byte-identical to
+  the Linux tool's output for the same source;
+* the custom compiler builds its configured greeting source and publishes both its primary and
+  generated reply outputs under Wine.
+
+The ordinary Linux stock/custom compiler targets and corresponding fixture builds also pass after
+the CMake change. This evidence is specifically MinGW compile/link plus Wine execution. It is not a
+native Windows run and provides no MSVC result; those two platform claims remain open.

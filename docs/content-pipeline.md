@@ -746,10 +746,13 @@ sidecars without narrowing; its string overload remains only for existing narrow
 A POSIX regression test builds a model whose source root, nested directories, `.gltf`, external
 `.bin`, and external texture all contain non-ASCII characters, repeats the build byte-identically,
 and validates both source dependencies and the resulting CNB. A fresh MinGW-w64 configuration also
-compiles and links the complete `cna_content` Windows-target static library, including the native
-path and scheduler sources. Neither result is evidence of a native MSVC/Windows runtime execution;
-that platform run remains an explicit verification gap rather than an advertised result. Existing
-direct glTF producer and pinned Model-byte equivalence tests remain unchanged.
+compiles and links the complete `cna_content` library, stock `cna-content.exe`, and custom compiler
+example. MinGW's Unicode-console startup option is target-local to those two `wmain` executables.
+Wine 10 executes both: the stock tool builds through a native `Zażółć/曲線` output path and produces
+a Curve CNB byte-identical to Linux, while the custom tool publishes its primary and generated
+reply outputs. This is MinGW compile/link plus Wine execution, not a native Windows or MSVC test;
+those verification gaps remain explicit. Existing direct glTF producer and pinned Model-byte
+equivalence tests remain unchanged.
 
 ## Custom extensions
 
