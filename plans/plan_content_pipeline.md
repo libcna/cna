@@ -939,6 +939,14 @@ The completed feature branch was synchronized without reopening `CP-001` through
 | `CP-028` | **pending** | Benchmark representative cold, no-op, one-change and shared-dependency builds before/after parallel execution; retain correctness-first defaults. |
 | `CP-029` | **pending** | Follow stable CLI/config/custom-tool behavior through `cna_add_content()`, preserving host-tool separation and one real cache/build implementation. |
 | `CP-030` | **pending** | Complete cross-platform/security/HEADLESS review, normal and sanitizer gates, documentation, stable/experimental/future labels and the final frozen-CNB compatibility audit. |
+| `CP-031` | **pending** | Audit the existing XNB container, decompression and built-in ContentTypeReader implementations for reuse by a HEADLESS build importer. Publish an exact XNB-to-native-CNB support matrix and identify runtime-object/device seams that must be split into canonical CPU data rather than invoked by the compiler. |
+| `CP-032` | **pending** | Define `XnbImporter` as a compatibility source front end that emits existing imported/canonical pipeline types and routes through existing processors and CNB writers. Selection must use validated XNB reader/type identity, reject unknown/custom readers clearly, preserve source dependencies, and add no XNB bytes or decoder tables to CNB. |
+| `CP-033` | **pending** | Implement XNB Texture2D to native Texture2D CNB, including supported surface formats and mip levels, through the authoritative Texture2D writer/codec. Compare decoded source-XNB data with the resulting CNB runtime data and keep the compiler HEADLESS. |
+| `CP-034` | **pending** | Implement XNB SpriteFont to native SpriteFont CNB, preserving atlas, glyph/cropping/character tables, line spacing, spacing and default-character semantics through the existing SpriteFont codec. |
+| `CP-035` | **pending** | Implement XNB SoundEffect to native SoundEffect CNB, preserving sample representation, loop metadata and duration semantics through the existing SoundEffect processor/writer without opening an audio device. |
+| `CP-036` | **pending** | Evaluate and implement further built-in conversions only where current canonical DTOs and HEADLESS readers support them, including Model and streaming Song/Video as separate evidence-backed decisions. Unsupported/custom XNB reader graphs must remain explicit diagnostics, not partial guesses. |
+| `CP-037` | **pending** | Build the cross-format equivalence matrix: load each fixture through the existing XNB runtime path, transcode XNB through the pipeline to native CNB, load CNB, and compare every relevant semantic field. Preserve existing XNB tests and all frozen CNB bytes/golden vectors. |
+| `CP-038` | **pending** | Integrate supported `.xnb` discovery into single/directory `cna-content` builds, incremental/config/graph semantics, CMake orchestration, diagnostics and documentation. State the supported built-in reader matrix precisely and do not advertise arbitrary/custom XNB conversion. |
 
 Tasks are intentionally vertical/coherent. The ledger is revised when implementation evidence makes
 the ordering wrong; it is not a promise to build speculative abstractions.
@@ -1010,3 +1018,46 @@ the ordering wrong; it is not a promise to build speculative abstractions.
   question; it will be settled before recursive build APIs.
 * How custom writer schema/codec version identities should compose with custom CNB asset schema
   versions in fingerprints. Built-ins can use their frozen asset schema IDs directly.
+
+---
+
+## 15. Future phase: XNB compatibility sources to native CNB (`CP-031`–`CP-038`)
+
+The preferred feature is transcoding supported XNA/FNA/MonoGame XNB assets into ordinary native
+CNB assets. XNB becomes another compatibility source format beside PNG, WAV, glTF and CNJ:
+
+```text
+known built-in .xnb
+    -> XnbImporter
+    -> existing imported/canonical CNA data
+    -> existing processor
+    -> existing ContentTypeWriter
+    -> existing Encode*ToCnb()
+    -> native .cnb
+```
+
+This phase must not create a second CNB serializer, duplicate a built-in parser, initialize a GPU,
+window or audio device, or claim that every possible XNB reader graph is convertible. Each supported
+built-in type is admitted only after its current XNB decoding path can produce the canonical CPU
+data the existing pipeline route needs. Custom or unknown ContentTypeReaders fail with the reader
+identity and asset path in the diagnostic.
+
+The primary compatibility oracle compares both runtime results:
+
+```text
+source.xnb -> existing XNB loader -> runtime value A
+
+source.xnb -> XnbImporter -> native CNB -> existing CNB loader -> runtime value B
+
+relevant fields/bytes of A == B
+```
+
+Texture2D, SpriteFont and SoundEffect are the first candidates because CNA already owns both their
+XNB reader paths and native CNB schemas. Model and streaming Song/Video require separate audits;
+their inclusion is not assumed. The supported matrix will be explicit and conservative.
+
+An opaque `XNB0` chunk or `EmbeddedXnb` asset that stores the original XNB bytes inside CNB is
+deliberately **not** planned. It would retain the full XNB runtime layer and stack CNB validation,
+compression and dispatch over XNB's own container machinery. Reconsider it only for a concrete
+deployment/interchange requirement that cannot be served more directly by a future package format;
+bit-preserving wrapping is not a fallback for an unsupported native conversion.
