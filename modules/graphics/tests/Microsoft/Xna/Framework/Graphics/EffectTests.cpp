@@ -26,6 +26,7 @@
 #include "System/NotSupportedException.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ObjectDisposedException.hpp"
+#include "CNA/TestSupport/TestPaths.hpp"
 
 using Microsoft::Xna::Framework::Graphics::BufferUsage;
 using Microsoft::Xna::Framework::Graphics::Effect;
@@ -62,8 +63,8 @@ namespace
 
     std::vector<SharpRuntime::bytecs> LoadValidCompiledEffectFixture()
     {
-        const std::filesystem::path path = std::filesystem::path(__FILE__).parent_path() /
-            "../../../../../../renderers/fna3d/effects/BasicEffect.fxb";
+        const std::filesystem::path path =
+            CNA::TestSupport::CompiledEffectDirectory() / "BasicEffect.fxb";
         std::ifstream input(path, std::ios::binary);
         return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
     }

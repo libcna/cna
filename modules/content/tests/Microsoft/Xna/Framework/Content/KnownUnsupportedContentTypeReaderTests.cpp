@@ -24,6 +24,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include "CNA/TestSupport/TestPaths.hpp"
 
 using CNA::Internal::Xnb::RegisterEffectXnbReader;
 using Microsoft::Xna::Framework::Content::ContentLoadException;
@@ -37,8 +38,8 @@ namespace
 {
     std::vector<std::uint8_t> LoadFixture()
     {
-        const std::filesystem::path path = std::filesystem::path(__FILE__).parent_path() /
-            "../../../../../../renderers/fna3d/effects/BasicEffect.fxb";
+        const std::filesystem::path path =
+            CNA::TestSupport::CompiledEffectDirectory() / "BasicEffect.fxb";
         std::ifstream file(path, std::ios::binary);
         return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
     }

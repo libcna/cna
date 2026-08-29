@@ -20,6 +20,7 @@
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffect.hpp"
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffectVertexLayout.hpp"
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
+#include "CNA/TestSupport/TestPaths.hpp"
 #include "CNA/TestSupport/CompiledEffectConformance.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
@@ -51,8 +52,7 @@ namespace
     /// Reads a committed fixture. They live with the FNA3D renderer, which owns their provenance.
     std::vector<std::uint8_t> LoadEffect(const std::string& name)
     {
-        const std::filesystem::path path = std::filesystem::path(__FILE__).parent_path() /
-            "../../../../../../fna3d/effects" / name;
+        const std::filesystem::path path = CNA::TestSupport::CompiledEffectDirectory() / name;
         std::ifstream input(path, std::ios::binary);
         if (!input) return {};
         return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};

@@ -3,6 +3,7 @@
 
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Json.hpp"
+#include "CNA/TestSupport/TestPaths.hpp"
 #include "CNA/TestSupport/CompiledEffectConformance.hpp"
 #include "CNA/TestSupport/CompiledEffectFixtures.hpp"
 #include "CNA/TestSupport/CompiledEffectFormat.hpp"
@@ -66,7 +67,7 @@ namespace
     std::vector<SharpRuntime::bytecs> LoadStockEffect(const char* name)
     {
         const std::filesystem::path path =
-            std::filesystem::path(__FILE__).parent_path() / "../../../../../effects" / name;
+            CNA::TestSupport::CompiledEffectDirectory() / name;
         std::ifstream input(path, std::ios::binary);
         if (!input) return {};
         return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
@@ -357,8 +358,8 @@ namespace
     /** @brief Reads FNA's checked-in reflection oracle (plans/plan_fx.md FX-005). */
     JsonValue LoadFnaReflectionOracle()
     {
-        const std::filesystem::path path = std::filesystem::path(__FILE__).parent_path() /
-            "../../../../../../../../tests/fixtures/compiled-effects/fna-effect-reflection.json";
+        const std::filesystem::path path = CNA::TestSupport::CompiledEffectFixtureDirectory() /
+            "fna-effect-reflection.json";
         std::ifstream input(path);
         if (!input) return {};
         std::ostringstream text;
@@ -636,8 +637,8 @@ TEST(Fna3dCompiledEffectTest, CrashCorpusIsRejectedWithoutCrashing)
     if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
 
-    const std::filesystem::path corpus = std::filesystem::path(__FILE__).parent_path() /
-        "../../../../../../../../tests/fixtures/compiled-effects/crash-corpus";
+    const std::filesystem::path corpus =
+        CNA::TestSupport::CompiledEffectFixtureDirectory() / "crash-corpus";
     ASSERT_TRUE(std::filesystem::is_directory(corpus)) << "crash corpus is missing";
 
     int replayed = 0;

@@ -37,6 +37,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include "CNA/TestSupport/TestPaths.hpp"
 
 namespace
 {
@@ -48,14 +49,12 @@ namespace
 
     std::filesystem::path FixtureRoot()
     {
-        return std::filesystem::path(__FILE__).parent_path() /
-            "../../../../../../../../tests/fixtures/compiled-effects";
+        return CNA::TestSupport::CompiledEffectFixtureDirectory();
     }
 
     std::filesystem::path EffectRoot()
     {
-        return std::filesystem::path(__FILE__).parent_path() /
-            "../../../../../effects";
+        return CNA::TestSupport::CompiledEffectDirectory();
     }
 
     /** @brief Reads FNA's checked-in pass-state oracle. */
