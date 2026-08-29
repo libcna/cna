@@ -22,13 +22,14 @@
 // setReferenceStencilProperty has no real effect (does not reach any renderer), the compare still
 // uses the state's own baked-in 0x05 vs buffer 0x05 -> PASSES -> incorrectly shows GREEN.
 //
-// NOTE: this project's GraphicsDevice::setReferenceStencilProperty is confirmed (via code reading)
-// to be a pure local no-op with ZERO renderer connection on ALL THREE renderers -- there is no
-// SetReferenceStencil method anywhere in IGraphicsRenderer at all, so there is no possible code path
-// for this override to ever take effect on ANY renderer currently, not just Vulkan (a different,
-// broader gap than Task 870, tracked separately as Task 872). Expect this test to FAIL on every
-// renderer that can run it (EasyGL here) -- this is confirming a real, universal, not-yet-fixed
-// bug, not a regression in this test.
+// HISTORY: this file used to carry a note saying setReferenceStencilProperty was a pure local
+// no-op, that IGraphicsRenderer had no SetReferenceStencil at all, and that the test should be
+// expected to fail everywhere. All three stopped being true. Task 870/319 added
+// IGraphicsRenderer::SetReferenceStencil (a defaulted no-op on the interface, so a renderer that
+// never implements it fails this test rather than failing to build), GraphicsDevice forwards to it,
+// and 26 renderers implement it. EasyGL was the one that did not, which is what this test was
+// still reporting -- REMED-GFX-236. A note that says "expect this to fail" outlives the reason and
+// turns a real signal into background noise, so it is replaced rather than amended.
 //
 // Exit code 0 = PASS (correct override behavior), 1 = FAIL (confirms Task 872).
 
@@ -71,6 +72,26 @@ namespace
             { Vector3( 1.0f,  1.0f, 0.5f), color },
         };
         // Task 896 finding: this quad's winding is CCW/back-facing under CNA's real default RasterizerState — needs CullNone.
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
+        dev.DrawUserPrimitives(PrimitiveType::TriangleList, verts, 0, 2);
+    }
+
+    /// The same quad wound the other way, so it reaches GL's OTHER stencil face.
+    ///
+    /// Under TwoSidedStencilMode the reference is bound per face (`glStencilFuncSeparate`), and the
+    /// quad above turns out to rasterize as the FRONT face -- measured, by removing each face's
+    /// reissue in turn and watching which one this test noticed. Without a second winding the back
+    /// face is never compared and half the two-sided path is untested.
+    void DrawQuadReversedWinding(GraphicsDevice& dev, const Color& color)
+    {
+        const VertexPositionColor verts[6] = {
+            { Vector3(-1.0f,  1.0f, 0.5f), color },
+            { Vector3( 1.0f, -1.0f, 0.5f), color },
+            { Vector3(-1.0f, -1.0f, 0.5f), color },
+            { Vector3(-1.0f,  1.0f, 0.5f), color },
+            { Vector3( 1.0f,  1.0f, 0.5f), color },
+            { Vector3( 1.0f, -1.0f, 0.5f), color },
+        };
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
         dev.DrawUserPrimitives(PrimitiveType::TriangleList, verts, 0, 2);
     }
@@ -144,7 +165,38 @@ protected:
                         "       compare still used the state's own baked-in ReferenceStencil.\n");
         }
 
-        result_ = ok ? 0 : 1;
+        // REMED-GFX-236 leg B: the same override with TwoSidedStencilMode on. GL binds the
+        // reference PER FACE (glStencilFuncSeparate), so reissuing only one face would leave the
+        // other comparing against the state's own value. Both windings are drawn because one quad
+        // reaches one face only -- verified by removing each face's reissue in turn: with only one
+        // winding, dropping the back face went unnoticed.
+        DepthStencilState twoSided;
+        twoSided.setDepthBufferEnableProperty(false);
+        twoSided.setStencilEnableProperty(true);
+        twoSided.setTwoSidedStencilModeProperty(true);
+        twoSided.setStencilFunctionProperty(CompareFunction::Equal);
+        twoSided.setCounterClockwiseStencilFunctionProperty(CompareFunction::Equal);
+        twoSided.setReferenceStencilProperty(0x05);
+        twoSided.setStencilPassProperty(StencilOperation::Keep);
+        twoSided.setStencilFailProperty(StencilOperation::Keep);
+        twoSided.setCounterClockwiseStencilPassProperty(StencilOperation::Keep);
+        twoSided.setCounterClockwiseStencilFailProperty(StencilOperation::Keep);
+        dev.setDepthStencilStateProperty(twoSided);
+        dev.setReferenceStencilProperty(0x99);
+
+        DrawQuad(dev, kGreen);
+        DrawQuadReversedWinding(dev, kGreen);
+        Color twoSidedCentre(0, 0, 0, 0);
+        dev.GetBackBufferData(&reg, &twoSidedCentre, 0, 1);
+        const bool twoSidedGreen = twoSidedCentre.getGProperty() >= 200
+            && twoSidedCentre.getRProperty() <= 60 && twoSidedCentre.getBProperty() <= 60;
+        const bool twoSidedOk = !twoSidedGreen;
+        std::printf("[%s] two-sided centre=(%d,%d,%d), expected BACKGROUND (the override must reach "
+                    "both faces)\n",
+                    twoSidedOk ? "PASS" : "FAIL", twoSidedCentre.getRProperty(),
+                    twoSidedCentre.getGProperty(), twoSidedCentre.getBProperty());
+
+        result_ = (ok && twoSidedOk) ? 0 : 1;
         Exit();
     }
 

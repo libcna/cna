@@ -2404,7 +2404,50 @@ guard, and the reason the correction exists — stays green, because it is not m
 
 ---
 
-## 33. `REMED-BUILD-017` — the native GDI workflow omitted three correctness targets
+## 33. `REMED-GFX-236` — EasyGL ignored `GraphicsDevice.ReferenceStencil`
+
+**Status:** **CLOSED, 2026-08-29** · **Pre-existing gap: the one renderer of 27 that never
+implemented the hook**
+
+**Defect.** `GraphicsDevice.ReferenceStencil` is a standalone device property in XNA/FNA
+(`FNA3D_Get/SetReferenceStencil`), like `BlendFactor`: changing it must affect the next draw's
+stencil compare **without** reassigning the whole `DepthStencilState`. Task 870/319 added
+`IGraphicsRenderer::SetReferenceStencil(int)` and `GraphicsDevice::setReferenceStencilProperty`
+forwards to it. **26 renderers implement it; EasyGL did not**, so it inherited the interface's
+defaulted no-op and every override was silently discarded — the compare kept using whatever the
+assigned state had baked in.
+
+**Why the interface default hides it.** `SetReferenceStencil` is declared `virtual void
+SetReferenceStencil(int) {}`, so a renderer that never implements it still builds and still runs.
+The only thing that reports the gap is a pixel test, and this one had been reporting it.
+
+**Fix.** GL has no call that sets the reference alone — `glStencilFunc` binds function, reference
+and mask together — so `ApplyDepthStencilState` now records the function, the CCW function, the read
+mask and the two-sided flag, and `SetReferenceStencil` reissues the function call(s) with the new
+value. Two-sided state reissues **both faces**, because GL binds the reference per face. Recorded
+even while the stencil test is off, since a later state may re-enable it. Nothing is reissued while
+it is off; that state carries its own reference when it arrives.
+
+**The test was reporting the truth and telling readers to ignore it.** Its header carried a note
+saying `setReferenceStencilProperty` was a pure local no-op, that `IGraphicsRenderer` had no such
+method at all, and that the test should be *expected* to fail on every renderer. All three had
+stopped being true. The note is replaced rather than amended: an "expect this to fail" that outlives
+its reason turns a real signal into background noise.
+
+**Coverage, and a leg that initially defended nothing.** A two-sided leg was added for the new
+per-face path. Its first version passed **with the back-face reissue deleted** — one quad reaches
+one GL face, and this fixture's quad rasterizes as the FRONT face despite the file's own comment
+about it being back-facing (that comment is about culling, not about GL's stencil faces). Measured
+by removing each face's reissue in turn and watching which one the test noticed. The leg now draws
+both windings, and removing either face fails it.
+
+**Evidence.** `EasyGL_GraphicsDevice_ReferenceStencil` 1 FAIL → 2 PASS. Mutation-checked three
+ways: storing the value without reissuing fails leg A; dropping the front face fails leg B;
+dropping the back face fails leg B.
+
+---
+
+## 34. `REMED-BUILD-017` — the native GDI workflow omitted three correctness targets
 
 **Status:** **CLOSED — DISCOVERED AND RESOLVED in the GDI adaptation, 2026-08-08** ·
 **Build/evidence inventory defect, not a renderer defect**
@@ -2421,7 +2464,7 @@ inventory defect.
 
 ---
 
-## 34. `REMED-BUILD-018` — the capability test used an incomplete backend type
+## 35. `REMED-BUILD-018` — the capability test used an incomplete backend type
 
 **Status:** **CLOSED — DISCOVERED AND RESOLVED in the GDI adaptation, 2026-08-08** ·
 **Shared test-build defect, not a renderer defect**

@@ -1093,6 +1093,16 @@ namespace CNA::Internal::Renderers::EasyGL
         // holds identity and extent but no GL handles.
         std::shared_ptr<EasyGLBoundTargetEXT> bound_ = std::make_shared<EasyGLBoundTargetEXT>();
 
+        /// Task 870/319: what ApplyDepthStencilState last installed, so SetReferenceStencil can
+        /// reissue `glStencilFunc` with a new reference. GL binds function, reference and mask in
+        /// one call, so the other two have to be remembered to change the one.
+        bool stencilEnabled_ = false;
+        bool stencilTwoSided_ = false;
+        int  stencilFunc_ = 0;
+        int  stencilCcwFunc_ = 0;
+        int  stencilReadMask_ = 0;
+        int  referenceStencil_ = 0;
+
         /// REMED-GFX-168: the binding record as pointer VALUES only, for `CNA_EASYGL_TARGET_TRACE`.
         /// Never dereferences a recorded target -- one of them may already be destroyed storage,
         /// which is precisely what the trace exists to record.
@@ -1597,6 +1607,17 @@ namespace CNA::Internal::Renderers::EasyGL
          */
         void ApplySamplerAddressW(int slot, int addressW) override;
         void SetBlendFactor(float r, float g, float b, float a) override;
+        /**
+         * @brief Task 870/319: applies `GraphicsDevice.ReferenceStencil` on its own.
+         *
+         * A standalone device property, like @ref SetBlendFactor: it must take effect for the
+         * next draw even when no new `DepthStencilState` is assigned. GL has no call that sets
+         * the reference alone -- `glStencilFunc` carries function, reference and mask together --
+         * so the function and mask last applied are remembered and reissued with the new value.
+         *
+         * @param value The new reference value.
+         */
+        void SetReferenceStencil(int value) override;
         void SetScissorRect(int x, int y, int w, int h) override;
         void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
 

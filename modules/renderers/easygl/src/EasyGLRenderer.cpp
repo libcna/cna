@@ -5613,6 +5613,16 @@ if (!ProfileIsEs2ApiGeneration())
         if (depthEnable)
             device.set_depth_func(ToEasyGLCompareFunc(depthFunc));
 
+        // Task 870/319: remember what this installs, so SetReferenceStencil can reissue the
+        // function call with a new reference. Recorded even when the stencil test is off, because
+        // the reference survives a disabled state and applies again when one re-enables it.
+        stencilEnabled_   = stencilEnable;
+        stencilTwoSided_  = twoSidedStencilMode;
+        stencilFunc_      = stencilFunc;
+        stencilCcwFunc_   = ccwStencilFunc;
+        stencilReadMask_  = stencilMask;
+        referenceStencil_ = referenceStencil;
+
         device.set_stencil_test_enabled(stencilEnable);
         if (stencilEnable)
         {
@@ -5746,6 +5756,33 @@ if (!ProfileIsEs2ApiGeneration())
     {
         if (metagl::IsContextLost()) return;
         device.set_blend_color(r, g, b, a);
+    }
+
+    void EasyGLRenderer::SetReferenceStencil(int value)
+    {
+        if (metagl::IsContextLost()) return;
+        referenceStencil_ = value;
+        // Same standalone-property discipline SetBlendFactor has, but GL gives that one a call of
+        // its own (glBlendColor) and gives this one none: glStencilFunc sets function, reference
+        // and mask together, so reissuing it with the remembered function and mask is the only way
+        // to change the reference without waiting for the next DepthStencilState assignment.
+        // Nothing to reissue while the stencil test is off -- the value is kept, and whichever
+        // ApplyDepthStencilState re-enables the test carries its own reference anyway.
+        if (!stencilEnabled_) return;
+        if (stencilTwoSided_)
+        {
+            device.set_stencil_func_separate(::easygl::CullFace::Front,
+                ToEasyGLCompareFunc(stencilFunc_),
+                referenceStencil_, static_cast<unsigned int>(stencilReadMask_));
+            device.set_stencil_func_separate(::easygl::CullFace::Back,
+                ToEasyGLCompareFunc(stencilCcwFunc_),
+                referenceStencil_, static_cast<unsigned int>(stencilReadMask_));
+        }
+        else
+        {
+            device.set_stencil_func(ToEasyGLCompareFunc(stencilFunc_),
+                referenceStencil_, static_cast<unsigned int>(stencilReadMask_));
+        }
     }
 
     void EasyGLRenderer::SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth)
