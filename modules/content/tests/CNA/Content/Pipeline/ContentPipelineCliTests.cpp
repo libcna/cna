@@ -19,6 +19,7 @@
 
 #include "CNA/Content/Cnb/CnbDocument.hpp"
 #include "CNA/Content/Cnb/CnbMediaCodec.hpp"
+#include "CNA/Content/Cnb/CnbTextureCodec.hpp"
 #include "CNA/Content/Pipeline/ContentBuildConfiguration.hpp"
 #include "CNA/Content/Pipeline/ContentBuildManifest.hpp"
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
@@ -190,6 +191,20 @@ namespace
         return {};
     }
 
+    std::filesystem::path FindXnbFixture(const std::string& relative)
+    {
+        for (const char* prefix : {"tests/assets/xnb/", "../tests/assets/xnb/",
+                                   "../../tests/assets/xnb/"})
+        {
+            const std::filesystem::path candidate = std::string(prefix) + relative;
+            if (std::filesystem::exists(candidate))
+            {
+                return std::filesystem::weakly_canonical(candidate);
+            }
+        }
+        return {};
+    }
+
     int RunExecutable(const char* executable, const std::vector<std::string>& arguments,
                       std::string& output)
     {
@@ -281,6 +296,160 @@ TEST(ContentPipelineCliTest, SingleAssetBuildPublishesThePipelineBytesAtomically
     request.source = source;
     request.logicalName = "wall";
     EXPECT_EQ(ReadBytes(output), pipeline.Build(request).output.bytes);
+}
+
+TEST(ContentPipelineCliTest, XnbSingleFileUsesTheOrdinaryIncrementalAndOutputVerificationPath)
+{
+    const std::filesystem::path fixture =
+        FindXnbFixture("monogame/windows/uncompressed/white-1.xnb");
+    ASSERT_FALSE(fixture.empty());
+    ScratchDirectory scratch("xnb_single");
+    const std::filesystem::path source = scratch.Path() / "legacy_texture.xnb";
+    const std::filesystem::path output = scratch.Path() / "legacy_texture.cnb";
+    WriteBytes(source, ReadBytes(fixture));
+
+    std::string first;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, first), 0) << first;
+    EXPECT_NE(first.find("[BUILD] legacy_texture"), std::string::npos) << first;
+    const std::vector<std::uint8_t> expected = ReadBytes(output);
+    EXPECT_EQ(Cnb::CnbDocument::Parse(expected, "XNB CLI output").AssetTypeId(),
+              Cnb::CnbAssetTypeId::Texture2D);
+
+    std::string second;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, second), 0) << second;
+    EXPECT_NE(second.find("[SKIP] legacy_texture"), std::string::npos) << second;
+
+    WriteBytes(output, {'b', 'a', 'd'});
+    std::string repaired;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, repaired), 0)
+        << repaired;
+    EXPECT_NE(repaired.find("[BUILD] legacy_texture"), std::string::npos) << repaired;
+    EXPECT_EQ(ReadBytes(output), expected);
+
+    WriteText(
+        scratch.Path() / Pipeline::ContentBuildConfigurationFileName,
+        R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"legacy_texture.xnb":{"parameters":{"colorKey":{"type":"string","value":"255,255,255"}}}}})json");
+    std::string configured;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, configured), 0)
+        << configured;
+    EXPECT_NE(configured.find("[BUILD] legacy_texture"), std::string::npos) << configured;
+    const Cnb::CnbTextureData keyed = Cnb::DecodeTexture2DFromCnb(
+        Cnb::CnbDocument::Parse(ReadBytes(output), "configured XNB CLI output"));
+    ASSERT_EQ(keyed.representations.size(), 1u);
+    ASSERT_EQ(keyed.representations[0].levels.size(), 1u);
+    ASSERT_EQ(keyed.representations[0].levels[0].size(), 4u);
+    EXPECT_EQ(keyed.representations[0].levels[0][3], 0u);
+
+    std::string configuredNoOp;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, configuredNoOp), 0)
+        << configuredNoOp;
+    EXPECT_NE(configuredNoOp.find("[SKIP] legacy_texture"), std::string::npos)
+        << configuredNoOp;
+}
+
+TEST(ContentPipelineCliTest, XnbDirectoryBuildIsDeterministicAcrossWorkerCountsAndRebuildsChanges)
+{
+    const std::filesystem::path texture =
+        FindXnbFixture("monogame/windows/uncompressed/white-1.xnb");
+    const std::filesystem::path changedTexture =
+        FindXnbFixture("monogame/windows/lzx/Explosion.xnb");
+    const std::filesystem::path font =
+        FindXnbFixture("monogame/windows/uncompressed/Default.xnb");
+    const std::filesystem::path sound = FindXnbFixture(
+        "monogame/windows/uncompressed/audio/tone_mono_44khz_16bit.xnb");
+    ASSERT_FALSE(texture.empty());
+    ASSERT_FALSE(changedTexture.empty());
+    ASSERT_FALSE(font.empty());
+    ASSERT_FALSE(sound.empty());
+
+    ScratchDirectory scratch("xnb_directory");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    WriteBytes(source / "legacy" / "texture.xnb", ReadBytes(texture));
+    WriteBytes(source / "legacy" / "font.xnb", ReadBytes(font));
+    WriteBytes(source / "legacy" / "sound.xnb", ReadBytes(sound));
+
+    FileTreeSnapshot reference;
+    for (const std::size_t workers : {1u, 2u, 4u})
+    {
+        const std::filesystem::path output =
+            scratch.Path() / ("Content" + std::to_string(workers));
+        std::string log;
+        ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--workers",
+                           std::to_string(workers)}, log),
+                  0)
+            << log;
+        EXPECT_NE(log.find("Built: 3  Skipped: 0  Failed: 0"), std::string::npos) << log;
+        EXPECT_TRUE(std::filesystem::is_regular_file(output / "legacy" / "texture.cnb"));
+        EXPECT_TRUE(std::filesystem::is_regular_file(output / "legacy" / "font.cnb"));
+        EXPECT_TRUE(std::filesystem::is_regular_file(output / "legacy" / "sound.cnb"));
+        if (reference.empty()) { reference = SnapshotFileTree(output); }
+        else { EXPECT_EQ(SnapshotFileTree(output), reference); }
+    }
+
+    const std::filesystem::path output = scratch.Path() / "Content4";
+    std::string noOp;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--workers", "4"}, noOp),
+              0)
+        << noOp;
+    EXPECT_NE(noOp.find("Built: 0  Skipped: 3  Failed: 0"), std::string::npos) << noOp;
+
+    WriteBytes(source / "legacy" / "texture.xnb", ReadBytes(changedTexture));
+    std::string changed;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--workers", "4"}, changed),
+              0)
+        << changed;
+    EXPECT_NE(changed.find("[BUILD] legacy/texture"), std::string::npos) << changed;
+    EXPECT_NE(changed.find("[SKIP] legacy/font"), std::string::npos) << changed;
+    EXPECT_NE(changed.find("[SKIP] legacy/sound"), std::string::npos) << changed;
+}
+
+TEST(ContentPipelineCliTest, UnsupportedXnbReaderFailsClearlyWithoutPublishing)
+{
+    const std::filesystem::path model =
+        FindXnbFixture("monogame/windows/uncompressed/BlenderDefaultCube.xnb");
+    ASSERT_FALSE(model.empty());
+    ScratchDirectory scratch("xnb_unsupported");
+    const std::filesystem::path output = scratch.Path() / "model.cnb";
+    std::string log;
+    EXPECT_EQ(RunTool({"build", model.string(), "-o", output.string()}, log), 1) << log;
+    EXPECT_NE(log.find("Microsoft.Xna.Framework.Content.ModelReader"), std::string::npos) << log;
+    EXPECT_NE(log.find("shared resource"), std::string::npos) << log;
+    EXPECT_FALSE(std::filesystem::exists(output));
+}
+
+TEST(ContentPipelineCliTest, XnbSongExternalMediaBytesParticipateInIncrementalFingerprint)
+{
+    const std::filesystem::path fixture = FindXnbFixture(
+        "monogame/windows/uncompressed/song/one_two_three.xnb");
+    ASSERT_FALSE(fixture.empty());
+    const std::filesystem::path media = fixture.parent_path() / "one_two_three.ogg";
+    ASSERT_TRUE(std::filesystem::is_regular_file(media));
+
+    ScratchDirectory scratch("xnb_song_incremental");
+    const std::filesystem::path source = scratch.Path() / "legacy_song.xnb";
+    const std::filesystem::path support = scratch.Path() / "one_two_three.ogg";
+    const std::filesystem::path output = scratch.Path() / "legacy_song.cnb";
+    WriteBytes(source, ReadBytes(fixture));
+    WriteBytes(support, ReadBytes(media));
+
+    std::string first;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, first), 0) << first;
+    const std::vector<std::uint8_t> native = ReadBytes(output);
+    EXPECT_EQ(Cnb::DecodeSongFromCnb(
+                  Cnb::CnbDocument::Parse(native, "XNB Song CLI output")).streamReference,
+              "one_two_three.ogg");
+
+    std::string noOp;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, noOp), 0) << noOp;
+    EXPECT_NE(noOp.find("[SKIP] legacy_song"), std::string::npos) << noOp;
+
+    std::vector<std::uint8_t> changedMedia = ReadBytes(support);
+    changedMedia.push_back(0u);
+    WriteBytes(support, changedMedia);
+    std::string changed;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, changed), 0) << changed;
+    EXPECT_NE(changed.find("[BUILD] legacy_song"), std::string::npos) << changed;
+    EXPECT_EQ(ReadBytes(output), native);
 }
 
 TEST(ContentPipelineCliTest, WorkerCountIsStrictBoundedAndHasASerialFallback)

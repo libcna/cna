@@ -66,6 +66,9 @@ namespace CNA::Content::Pipeline
 
         /** @brief One tightly packed Rgba8 mip level. */
         std::vector<std::uint8_t> rgbaPixels;
+
+        /** @brief Optional additional tightly packed Rgba8 mip levels. */
+        std::vector<std::vector<std::uint8_t>> additionalRgbaMipLevels;
     };
 
     /** @brief DDS cube-map source decoded by CNA's existing shared DDS importer. */

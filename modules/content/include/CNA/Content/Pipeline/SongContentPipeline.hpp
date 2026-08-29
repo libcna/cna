@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
@@ -32,6 +33,12 @@ namespace CNA::Content::Pipeline
 
         /** @brief Source size used only for diagnostics; the primary dependency owns hashing. */
         std::uint64_t byteSize = 0u;
+
+        /** @brief Optional display name authored by a compatibility container. */
+        std::optional<std::string> authoredName;
+
+        /** @brief Optional duration authored by a compatibility container, in milliseconds. */
+        std::optional<std::uint32_t> authoredDurationMs;
 
         /** @brief Compares the complete imported source identity. */
         bool operator==(const ImportedSongSource&) const = default;

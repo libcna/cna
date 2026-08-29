@@ -18,8 +18,14 @@
 > merged into `next` or pushed by this plan. `CP-016` records the continuation audit, and
 > `CP-017` onward consume the remaining backlog without reopening `CP-001` through `CP-015`.
 > `CP-016` through `CP-030` are now complete on that continuation branch. `CP-031` through
-> `CP-038` are the deliberately deferred XNB-to-native-CNB compatibility phase, not part of the
-> completed continuation implementation.
+> `CP-038` are the following XNB-to-native-CNB compatibility phase.
+>
+> **XNB continuation (2026-08-29):** work started from clean `next` and
+> `content-pipeline-next` commit `f230b2f6b2f01632287e3fb507545401388db0c7` on the isolated
+> `content-pipeline-xnb` branch. The phase keeps XNB strictly as a compatibility source format:
+> supported built-in roots are decoded to canonical CPU data, passed through the existing
+> processors/writers, and emitted as ordinary native CNB. No XNB payload, reader identity, new
+> chunk, or frozen-schema change is present in the output.
 >
 > **Boundary:** this plan owns the build-time CNA Content Pipeline. `plans/plan_cnb.md` remains the
 > engineering record for the frozen CNB compiled format. The pipeline consumes the existing CNB
@@ -1156,14 +1162,14 @@ carrying forward task-local results:
 | `CP-028` | **completed** | Added a reproducible fail-fast benchmark harness for 128 mixed PNG/WAV/glTF/CNJ nodes and a 97-node shared-dependency custom graph. It alternates serial/parallel order, excludes fixture/seed/verification work, emits machine-readable samples, and proves complete tree/manifest equality. Seven-sample HEADLESS Debug medians for workers 1 versus 4 measured 2.662x cold, 2.243x no-op, 2.177x one-change and 1.241x shared-change speedups on the recorded 8-core host. The conservative default remains one worker and results are documented as host-specific evidence, not a CI threshold. |
 | `CP-029` | **completed** | Extended the thin `cna_add_content()` wrapper with configure-time-checked `CONFIG_FILE` and strict `WORKERS 1..64`, defaulting to serial and forwarding both to the selected stock/custom compiler. The real CLI still solely owns containment, JSON parsing, fingerprints, graph/cache and atomic publication. Generated stock and user-linked custom targets prove `--config ... --workers 2`: one changes a Curve logical output through explicit stable components; the other is accepted only by the `.greeting` compiler and verifies its custom primary/child outputs, component identities and typed parameter. Native/cross host-tool separation is unchanged. The 175-test normal compatibility selection passed 174 with only the expected >2 GiB skip. |
 | `CP-030` | **completed** | Closed the extended pipeline with a complete HEADLESS Debug build, the same 273/273 compatibility/security selection normally and under ASan+UBSan, a 107/107 TSan pipeline/concurrency selection, and the real opt-in sparse 2 GiB+1-byte hash test. MinGW-w64 compiled and linked the complete `cna_content` target; native Windows/MSVC execution remains unclaimed. All nine C-API gates pass with no pipeline export. `cna-content` has no renderer/SDL/audio/FFmpeg/runtime-loader dependency, no staging residue remained, and the final diff changes no frozen CNB definition, byte oracle or atomic publisher. The known HEADLESS TextureCube runtime failure, ptrace-disabled LSan, and restricted PulseAudio full-run block are recorded separately from pipeline results. |
-| `CP-031` | **pending** | Audit the existing XNB container, decompression and built-in ContentTypeReader implementations for reuse by a HEADLESS build importer. Publish an exact XNB-to-native-CNB support matrix and identify runtime-object/device seams that must be split into canonical CPU data rather than invoked by the compiler. |
-| `CP-032` | **pending** | Define `XnbImporter` as a compatibility source front end that emits existing imported/canonical pipeline types and routes through existing processors and CNB writers. Selection must use validated XNB reader/type identity, reject unknown/custom readers clearly, preserve source dependencies, and add no XNB bytes or decoder tables to CNB. |
-| `CP-033` | **pending** | Implement XNB Texture2D to native Texture2D CNB, including supported surface formats and mip levels, through the authoritative Texture2D writer/codec. Compare decoded source-XNB data with the resulting CNB runtime data and keep the compiler HEADLESS. |
-| `CP-034` | **pending** | Implement XNB SpriteFont to native SpriteFont CNB, preserving atlas, glyph/cropping/character tables, line spacing, spacing and default-character semantics through the existing SpriteFont codec. |
-| `CP-035` | **pending** | Implement XNB SoundEffect to native SoundEffect CNB, preserving sample representation, loop metadata and duration semantics through the existing SoundEffect processor/writer without opening an audio device. |
-| `CP-036` | **pending** | Evaluate and implement further built-in conversions only where current canonical DTOs and HEADLESS readers support them, including Model and streaming Song/Video as separate evidence-backed decisions. Unsupported/custom XNB reader graphs must remain explicit diagnostics, not partial guesses. |
-| `CP-037` | **pending** | Build the cross-format equivalence matrix: load each fixture through the existing XNB runtime path, transcode XNB through the pipeline to native CNB, load CNB, and compare every relevant semantic field. Preserve existing XNB tests and all frozen CNB bytes/golden vectors. |
-| `CP-038` | **pending** | Integrate supported `.xnb` discovery into single/directory `cna-content` builds, incremental/config/graph semantics, CMake orchestration, diagnostics and documentation. State the supported built-in reader matrix precisely and do not advertise arbitrary/custom XNB conversion. |
+| `CP-031` | **completed** | Audited header/version/platform validation, None/LZX/LZ4 dispatch, LZX framing, limits, normalized type tables, root dispatch, shared resources, external references, and every candidate built-in reader. The matrix in section 15 records exact runtime seams and native representability. The build parser reuses those container/type/limit components without the process-global runtime factory registry. |
+| `CP-032` | **completed** | Added reentrant `CNA.XnbImporter/1`. It validates the container and normalized root reader identity, accepts only the explicit built-in graph matrix, emits existing imported types, and reports the source plus unsupported/custom reader identity. It has no `ContentManager`, graphics/audio/video service, mutable registration, filename guessing, or XNB-in-CNB fallback. |
+| `CP-033` | **completed** | Extracted shared canonical Texture2D bytes and retained the runtime GPU adapter. Color and DXT1/3/5, level-zero/full mip chains, legacy v4 DXT mappings, bounds and truncation are tested through native Texture2D CNB; DXT normalizes to the frozen schema's Rgba8 representation. BGRA/normalized-vector and Xbox-swizzled transcoding are explicit rejections because schema 1 cannot prove equivalent observable format/bytes. |
+| `CP-034` | **completed** | Extracted the SpriteFont reader graph into a shared headless decoder for the nested Texture2D atlas, rectangle/character/Vector3 lists and all scalar/default-character fields. Uncompressed DXT-atlas and multi-block LZX fixtures are field/atlas equivalent through native SpriteFont CNB and the old runtime path remains covered. |
+| `CP-035` | **completed** | Extracted WAVEFORMATEX/sample parsing and a device-free audio decode seam shared by the runtime adapter and pipeline. PCM8/16, float32, MS-ADPCM and IMA-ADPCM fixtures produce deterministic native PCM CNB with loop/rate/channel/frame validation; no audio device is opened. XMA2, unknown codecs and unproven Xbox sample byte order fail explicitly. |
+| `CP-036` | **completed** | Added headless Texture3D, TextureCube, Curve, Song and FNA-layout Video routes through their existing native processors/writers. Song/Video retain external media as contained byte dependencies plus XREFs. Model remains intentionally unsupported: its real fixture uses three shared resources and runtime VertexBuffer/IndexBuffer/BasicEffect construction, while current native Model cannot prove arbitrary effect/tag graph equivalence without silent loss. |
+| `CP-037` | **completed** | Added a permanent fixture matrix covering container variants, all supported roots, negative/truncated/custom/shared graphs and deterministic bytes. Runtime-XNB versus transcoded-CNB oracles compare Texture2D pixels/format/mips, every SpriteFont field and atlas, SoundEffect duration/name plus canonical PCM for all codecs, Curve keys, and Song/Video metadata/path semantics. Texture3D/Cube use canonical CPU level/face byte comparison because HEADLESS deliberately has no safe runtime GPU storage/readback. Existing runtime XNB regressions remain gates. |
+| `CP-038` | **completed** | Registered `.xnb` in the stock frozen registry and ordinary single/directory discovery. CLI tests prove single-file build, directory layouts, worker 1/2/4 byte-identical trees/manifests, no-op skip, source change, output-tamper repair, configuration fingerprint invalidation and unsupported-reader non-publication. XNB nodes use the existing manifest, graph, scheduler, staging and atomic publisher without a separate build path. |
 
 Tasks are intentionally vertical/coherent. The ledger is revised when implementation evidence makes
 the ordering wrong; it is not a promise to build speculative abstractions.
@@ -1262,9 +1268,9 @@ the ordering wrong; it is not a promise to build speculative abstractions.
 
 ---
 
-## 15. Future phase: XNB compatibility sources to native CNB (`CP-031`–`CP-038`)
+## 15. XNB compatibility sources to native CNB (`CP-031`–`CP-038`)
 
-The preferred feature is transcoding supported XNA/FNA/MonoGame XNB assets into ordinary native
+The implemented feature transcodes supported XNA/FNA/MonoGame XNB assets into ordinary native
 CNB assets. XNB becomes another compatibility source format beside PNG, WAV, glTF and CNJ:
 
 ```text
@@ -1277,11 +1283,104 @@ known built-in .xnb
     -> native .cnb
 ```
 
-This phase must not create a second CNB serializer, duplicate a built-in parser, initialize a GPU,
-window or audio device, or claim that every possible XNB reader graph is convertible. Each supported
-built-in type is admitted only after its current XNB decoding path can produce the canonical CPU
-data the existing pipeline route needs. Custom or unknown ContentTypeReaders fail with the reader
-identity and asset path in the diagnostic.
+`XnbImporter` parses with the existing `XnbHeader`, `XnbDecompression`/`LzxDecoder`,
+`XnbTypeReaderTable`, `ContentReader` primitives and `XnbReadLimits`. Its canonical table mode does
+not instantiate runtime readers through the mutable process-global `ContentTypeReaderManager`.
+Root and nested references are 1-based validated table indices; reader version zero is required.
+None and LZX compression are accepted. LZ4 is recognized but rejected because CNA's existing XNB
+stack has no LZ4 decoder. Versions 4/5 and the same 16 platform bytes as runtime are container-valid;
+individual routes can impose stricter semantic rules (notably Xbox texture/audio payloads).
+
+Shared resources are parsed and bounded but are rejected for transcoding before root construction.
+Generic external XNB object references are not interpreted as build edges. The only external forms
+admitted are Song/Video streaming-media path fields; they pass through source-root containment,
+become source-file dependencies, and remain distinct CNB XREFs. Absolute paths, `..`, canonical
+symlink escapes, missing/empty media and unconsumed graph bytes fail.
+
+### 15.1 Reader audit and support matrix
+
+| XNB root reader | Existing runtime reader | Runtime construction seam | Headless canonical decode | Native CNB result / status |
+|---|---:|---|---:|---|
+| `Texture2DReader` | yes | `GraphicsDevice`, Texture2D allocation/upload | yes, shared | Texture2D **supported** for Color/DXT1/3/5; DXT becomes Rgba8 |
+| `SpriteFontReader` | yes | nested GPU Texture2D plus runtime SpriteFont | yes, shared built-in nested graph | SpriteFont **supported**; atlas follows Texture2D limits |
+| `SoundEffectReader` | yes | SoundEffect construction and former WAV runtime decode | yes, shared; SDL decode calls do not open a device | SoundEffect **supported** for PCM8/16, float32, MS/IMA ADPCM |
+| `Texture3DReader` | yes | GraphicsDevice and Texture3D upload | yes, shared | Texture3D **supported** for Color/DXT1/3/5 to Rgba8 |
+| `TextureCubeReader` | yes | GraphicsDevice and six-face upload | yes, shared | TextureCube **supported** for Color/DXT1/3/5 to Rgba8 |
+| `CurveReader` | yes | none; CPU value already | yes, shared | Curve **supported** through the existing Curve schema |
+| `SongReader` | yes | ContentManager path resolution and runtime Song | yes, shared metadata | Song **supported** with contained external media dependency/XREF |
+| `VideoReader` | yes | ContentManager path resolution, GraphicsDevice stored by Video | yes, shared metadata | Video **supported** for FNA's String/Int32/Single object-reference graph |
+| `ModelReader` | yes | shared resources, GPU vertex/index buffers, effects, ownership graph | no lossless native adapter | **unsupported**; real fixture identifies ModelReader and 3 shared resources |
+| any other/custom root | maybe | unknown application semantics | no | **unsupported** with exact normalized reader identity |
+
+Texture transcode deliberately targets the only representation frozen CNB schema 1 can currently
+emit: Rgba8. Color bytes remain Rgba8; DXT1/3/5 are decoded with the same shared DXT implementation
+used by historical runtime fallback. `ColorBgraEXT`, `NormalizedByte2`, `NormalizedByte4`, unknown
+formats and Xbox-swizzled texture payloads are rejected rather than changing the schema or lying
+about observable format. Likewise XMA2/unknown audio and unproven Xbox sample ordering are rejected.
+On a runtime renderer that preserves DXT natively, the old XNB object's optimization-level
+`SurfaceFormat` can remain DXT while native CNB is Rgba8; HEADLESS and other fallback renderers are
+format/pixel equivalent. This is the precise compatibility boundary, not a claim of arbitrary
+bit-preserving XNB texture conversion.
+
+SpriteFont accepts exactly the built-in nested graph it needs: Texture2D,
+`List<Rectangle>`, `List<Char>` and `List<Vector3>`, with matching table identities and counts.
+Video accepts FNA's real `ReadObject<String/Int32/Single>` references. The runtime Video adapter also
+keeps CNA's older direct-field fixture seam for backward compatibility; that non-FNA test layout is
+not advertised as a pipeline source format.
+
+### 15.2 Shared headless decoder and equivalence evidence
+
+```text
+validated XNB bytes
+    -> Decode*XnbData() canonical CPU value
+       -> runtime adapter (existing runtime object behavior)
+       -> pipeline adapter -> existing processor -> existing writer -> existing Encode*ToCnb()
+```
+
+The extracted parsers own no renderer, device, window, playback service or global registry state.
+Texture/runtime adapters alone allocate GPU objects. Sound conversion may use SDL's in-memory WAVE
+decoder when CNA is built with the SDL3 audio backend, but it does not initialize SDL subsystems,
+open an audio device, or construct a mixer/playback object. Other audio backends retain PCM8/16
+support and reject formats for which they provide no decoder.
+
+| Supported root | Permanent equivalence evidence |
+|---|---|
+| Texture2D | real uncompressed Color and LZX DXT fixtures; canonical levels; runtime width/height/format/mips and per-level pixels versus CNB |
+| SpriteFont | real uncompressed DXT atlas and multi-block LZX fixtures; all glyph/crop/character/kerning/scalar/default fields and runtime atlas pixels |
+| SoundEffect | six real PCM8/16, float32, MS-ADPCM and IMA-ADPCM fixtures; exact canonical processed samples/rate/channels/frames/loops; PCM16 runtime duration/name versus CNB |
+| Texture3D | hand-built FNA-order full mip fixture; every canonical dimension and level byte versus decoded native CNB (runtime GPU oracle unavailable in HEADLESS) |
+| TextureCube | real DXT1 six-face/full-mip fixture; all 42 canonical face/level images versus decoded native CNB (runtime GPU oracle unavailable in HEADLESS) |
+| Curve | hand-built FNA-order fields; canonical/native keys and runtime-XNB versus runtime-CNB equality |
+| Song | real MonoGame fixture and companion Ogg; duration/name/media filename, dependency and XREF equality |
+| Video | hand-built FNA object-reference graph; all metadata/media filename, dependency and XREF equality |
+
+The CLI matrix also proves identical output trees and manifest bytes with workers 1, 2 and 4,
+normal incremental skip, source-byte invalidation, configuration-parameter invalidation and output
+digest repair. The frozen registry and invocation-local canonical readers make parallel decoding
+reentrant; there is no mutable reader registration during a build.
+
+### 15.3 Executed verification and environment boundaries
+
+The final HEADLESS Debug gate built the complete configuration. Focused XNB conversion tests are
+18/18; the existing XNB/container/reader selection is 197 passed with five expected HEADLESS skips;
+the complete pipeline selection is 125 passed with only the opt-in greater-than-2-GiB fixture
+skipped. CNB is 370/370 after excluding the three known HEADLESS Texture3D/TextureCube runtime
+storage tests, CNJ is 108/108, and the glTF selection is 589 passed with three opt-in large-fixture
+skips. The platform SDL ownership ratchet remains at zero files/references.
+
+ASan+UBSan passes 200/200 XNB/runtime/pipeline tests with leak detection disabled because LSan cannot
+operate under this environment's ptrace wrapper; SDL's dummy audio backend avoids contacting the
+restricted host PulseAudio service while retaining runtime SoundEffect construction. TSan passes
+17/17 conversion and XNB CLI tests, including the workers 1/2/4 directory route. The decoder object
+itself references only `SDL_LoadWAV_IO` and `SDL_ConvertAudioSamples`, not SDL initialization or
+device-open calls.
+
+MinGW-w64 compiles every modified source, including `cna_content`, `cna_audio`, the compiler and the
+tool entry point. Linking the executable reaches the pre-existing `wmain` configuration defect: the
+target omits `-municode`, so MinGW's CRT asks for `WinMain`. Native Windows/MSVC execution is not
+available and is not claimed. Seven of the eight build-free C-API consistency gates pass; the
+coverage gate reports the pre-existing four planned rows still owned by completed `CBIND-036`.
+Neither issue is caused by this phase's diff.
 
 The primary compatibility oracle compares both runtime results:
 
@@ -1293,12 +1392,8 @@ source.xnb -> XnbImporter -> native CNB -> existing CNB loader -> runtime value 
 relevant fields/bytes of A == B
 ```
 
-Texture2D, SpriteFont and SoundEffect are the first candidates because CNA already owns both their
-XNB reader paths and native CNB schemas. Model and streaming Song/Video require separate audits;
-their inclusion is not assumed. The supported matrix will be explicit and conservative.
-
 An opaque `XNB0` chunk or `EmbeddedXnb` asset that stores the original XNB bytes inside CNB is
-deliberately **not** planned. It would retain the full XNB runtime layer and stack CNB validation,
+deliberately **not implemented**. It would retain the full XNB runtime layer and stack CNB validation,
 compression and dispatch over XNB's own container machinery. Reconsider it only for a concrete
 deployment/interchange requirement that cannot be served more directly by a future package format;
 bit-preserving wrapping is not a fallback for an unsupported native conversion.

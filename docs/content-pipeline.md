@@ -7,7 +7,8 @@
 
 The CNA Content Pipeline is the build-time system that turns authoring files into CNB. It is
 inspired by XNA 4.0's Importer -> Processor -> Writer separation, but it uses CNA-native C++23
-components and the existing CNB codecs instead of CLR reflection, XNB reader tables, or MSBuild.
+components and the existing CNB codecs instead of CLR reflection or MSBuild. XNB reader tables are
+consulted only at the compatibility-source boundary; they never enter native CNB.
 
 These three terms describe separate layers:
 
@@ -61,6 +62,12 @@ A single asset can be built explicitly:
 cna-content build ContentSource/Textures/wall.png -o Content/Textures/wall.cnb
 ```
 
+A supported legacy built-in XNB is used the same way and produces native CNB, not wrapped XNB:
+
+```bash
+cna-content build ContentSource/Legacy/texture.xnb -o Content/Legacy/texture.cnb
+```
+
 Configuration remains optional. A directory or single-file build automatically reads
 `.cna-content.json` from its source root when present; `--config <path>` selects another file
 inside that root.
@@ -85,7 +92,8 @@ auto ui = content.Load<SpriteFont>("Fonts/ui");
 auto explosion = content.Load<SoundEffect>("Sounds/explosion");
 ```
 
-The runtime needs the `.cnb` artifacts, not the authoring PNG, WAV, glTF, CNJ, or sidecar files.
+The runtime needs the `.cnb` artifacts, not the authoring PNG, WAV, glTF, CNJ, XNB, or sidecar
+files.
 
 ## Architecture
 
@@ -132,9 +140,10 @@ pixels become runtime Texture2D content?”; the writer answers “which authori
 the compiled representation?”
 
 No pipeline component constructs a GraphicsDevice, opens an audio device, creates a window, reads
-back GPU data, or initializes a renderer. The tested HEADLESS `cna-content` executable has no SDL,
-graphics-driver, FFmpeg, or audio shared-library dependency. Model import uses CPU-side canonical
-data and temporary authoring intermediates, not runtime Model objects.
+back GPU data, or initializes a renderer. XNB float/ADPCM SoundEffect conversion can call SDL3's
+in-memory WAVE decoder when that audio backend is compiled, but does not initialize SDL video/audio
+subsystems or open a device. Model import uses CPU-side canonical data and temporary authoring
+intermediates, not runtime Model objects.
 
 ## XNA conceptual mapping
 
@@ -148,7 +157,7 @@ data and temporary authoring intermediates, not runtime Model objects.
 | `ContentTypeWriter<T>` | `ContentTypeWriter` adapter over one existing typed CNB encoder, with bounded named outputs |
 | `ContentTypeReader<T>` | existing typed CNB decoder plus `CnbLoaderRegistry` |
 | `ExternalReference<T>` | CNB XREF for runtime references; separate records for build inputs |
-| XNB | CNB for CNA-native compiled content; XNB remains the compatibility path |
+| XNB | a validated compatibility source for explicitly supported built-in roots; output is ordinary CNB |
 | MGCB/MSBuild | `cna-content` plus the thin `cna_add_content()` CMake helper |
 
 CNA deliberately does not copy assembly discovery, reflection-driven processor properties,
@@ -293,6 +302,7 @@ canonical type name, and loader through `ContentManager::RegisterCnbLoaderEXT<T>
 | `.cnj` TextureCube | `CNA.CnjImporter/1` | `ImportedTextureCube` | `CNA.TextureCubeProcessor/1` | `CNA.TextureCubeContentWriter/1` |
 | `.cnj` Curve | `CNA.CnjImporter/1` | `ImportedCurve` | `CNA.CurveProcessor/1` | `CNA.CurveContentWriter/1` |
 | `.cnj` AnimationClip | `CNA.CnjImporter/1` | `ImportedAnimationClip` | `CNA.AnimationClipProcessor/1` | `CNA.AnimationClipContentWriter/1` |
+| `.xnb` supported built-in root | `CNA.XnbImporter/1` | existing imported type selected by validated root reader | existing type processor (plus metadata-only `CNA.XnbVideoProcessor/1`) | existing native built-in writer/codec |
 
 DDS is currently a contained TextureCube CNJ sidecar, not a direct default route. `.wav` remains
 the unambiguous SoundEffect route; it is not also registered as Song. `.ogg` remains the
@@ -717,11 +727,49 @@ CNJ remains a supported authoring/intermediate front end. Direct image, WAV, and
 their equivalent CNJ inputs converge on the same processors and writers where semantics match.
 CNB never depends on JSON internally.
 
-CNB is the CNA-native compiled format produced here. XNB remains the compatibility format for XNA,
-MonoGame, and FNA assets. The CNA Content Pipeline does not claim XNA binary compatibility and does
-not replace CNA's XNB readers. Native transcoding of selected built-in XNB assets through existing
-pipeline processors/writers is planned separately; opaque XNB-inside-CNB wrapping and arbitrary
-custom-reader conversion are not implemented or advertised.
+CNB is the CNA-native compiled format produced here. XNB is both an existing runtime compatibility
+format and, for the roots below, a Content Pipeline source format. `XnbImporter` validates the XNB
+header, None/LZX payload, normalized type-reader table, root reader/version, nested references,
+limits and complete consumption. It decodes to canonical CPU data shared with the runtime readers,
+then uses the same processors, writers and `Encode*ToCnb()` functions as other sources.
+
+```text
+supported built-in XNB
+    -> shared Decode*XnbData() CPU representation
+       -> existing runtime adapter (old XNB loading)
+       -> XnbImporter -> existing processor/writer -> native CNB
+```
+
+| Root ContentTypeReader | Native target | Accepted compatibility subset |
+|---|---|---|
+| `Texture2DReader` | Texture2D | Color and DXT1/3/5, level zero or full mip chain; DXT normalizes to Rgba8 |
+| `SpriteFontReader` | SpriteFont | built-in Texture2D/List nested graph and every font field; atlas follows texture limits |
+| `SoundEffectReader` | SoundEffect | PCM8/16; float32 and MS/IMA ADPCM when the SDL3 decoder is compiled; loops/rate/channels preserved |
+| `Texture3DReader` | Texture3D | Color and DXT1/3/5, all declared levels, normalized to Rgba8 |
+| `TextureCubeReader` | TextureCube | Color and DXT1/3/5, six faces and all declared levels, normalized to Rgba8 |
+| `CurveReader` | Curve | all loop/key/tangent/continuity fields |
+| `SongReader` | Song | path/duration metadata plus contained external media dependency/XREF |
+| `VideoReader` | Video | FNA String/Int32/Single object-reference graph plus contained external media dependency/XREF |
+
+`ModelReader` is explicitly unsupported. Its real graph uses shared VertexBuffer, IndexBuffer and
+BasicEffect resources and performs GPU construction; the current native Model schema cannot prove
+lossless preservation of arbitrary effect/tag graphs. Every other custom/unknown root is also
+rejected with its normalized reader identity. Shared-resource graphs and generic external object
+references are not claimed merely because supported roots use fixed nested built-in readers.
+
+None and LZX compression and XNB versions 4/5 are supported through CNA's existing container code.
+LZ4 is recognized but CNA has no decoder, so it fails clearly. The existing 16 platform header
+identifiers remain valid, but Xbox-swizzled texture/sample payloads are not transcoded without a
+proven byte-order path. Frozen CNB schema 1 cannot preserve BGRA or NormalizedByte2/4 texture format
+identity, so those formats are rejected rather than silently changed. XMA2 and unknown audio codecs
+are likewise rejected.
+
+For Song and Video, the external media stays external: it is a source-file dependency for
+fingerprinting and a CNB XREF for deployment. Absolute paths, traversal and symlink escapes fail
+through the ordinary source-root containment policy. The media bytes are not embedded or copied.
+
+There is no `EmbeddedXnb`, `XNB0` chunk, opaque payload, reader/CLR name in output, second scheduler,
+or alternate manifest. Unsupported XNB means a diagnostic and no published artifact.
 
 ## Configuration, profiles, parallelism, and CMake
 
@@ -852,7 +900,8 @@ paths because the compiler does not copy raw media support files.
 **Future:**
 
 - optional target profiles, if a concrete portable-output policy requires them;
-- selected XNB-to-native-CNB compatibility import routes described in the continuation plan.
+- lossless Model XNB transcoding only after a canonical shared-resource/effect graph can be mapped
+  to native Model without GPU construction or silent field loss.
 
 **Not provided:**
 

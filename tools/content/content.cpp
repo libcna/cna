@@ -28,6 +28,7 @@
 #include "CNA/Content/Pipeline/SoundEffectContentPipeline.hpp"
 #include "CNA/Content/Pipeline/Texture2DContentPipeline.hpp"
 #include "CNA/Content/Pipeline/VideoContentPipeline.hpp"
+#include "CNA/Content/Pipeline/XnbContentPipeline.hpp"
 #include "CNA/Internal/ContentPath.hpp"
 #include "CnaToolAtomicWrite.hpp"
 
@@ -1370,6 +1371,7 @@ namespace CNA::Content::Pipeline
         RegisterVideoContentPipeline(registry);
         RegisterModelContentPipeline(registry);
         RegisterCnjContentPipeline(registry);
+        RegisterXnbContentPipeline(registry);
     }
 
     int RunContentCompiler(const std::vector<std::filesystem::path>& arguments,

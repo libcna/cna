@@ -34,6 +34,9 @@ namespace CNA::Content::Pipeline
         /** @brief Exact level-zero pixels in R, G, B, A byte order. */
         std::vector<std::uint8_t> rgbaPixels;
 
+        /** @brief Optional additional Rgba8 mip levels in descending dimension order. */
+        std::vector<std::vector<std::uint8_t>> additionalRgbaMipLevels;
+
         /** @brief Source-authored colour-key policy, or absent for ordinary image sources. */
         std::optional<std::array<std::uint8_t, 3>> authoredColorKey;
     };

@@ -289,6 +289,10 @@ namespace CNA::Content::Pipeline
         Cnb::CnbTextureRepresentation representation;
         representation.format = Cnb::CnbTextureFormat::Rgba8;
         representation.levels.push_back(imported.rgbaPixels);
+        representation.levels.insert(
+            representation.levels.end(), imported.additionalRgbaMipLevels.begin(),
+            imported.additionalRgbaMipLevels.end());
+        texture.mipCount = static_cast<std::uint32_t>(representation.levels.size());
         texture.representations.push_back(std::move(representation));
         context.LogInfo("prepared one canonical Rgba8 Texture3D representation.");
         return ContentValue::Create(ProcessedTexture3DType, std::move(texture));
@@ -455,8 +459,20 @@ namespace CNA::Content::Pipeline
     {
         const ImportedSpriteFont& imported = input.Get<ImportedSpriteFont>();
         Cnb::CnbSpriteFontData font;
-        font.atlas = Cnb::MakeRgba8Texture2DData(
-            imported.atlas.width, imported.atlas.height, imported.atlas.rgbaPixels);
+        font.atlas.width = imported.atlas.width;
+        font.atlas.height = imported.atlas.height;
+        font.atlas.depth = 1u;
+        font.atlas.faceCount = 1u;
+        font.atlas.mipCount = static_cast<std::uint32_t>(
+            1u + imported.atlas.additionalRgbaMipLevels.size());
+        Cnb::CnbTextureRepresentation atlasRepresentation;
+        atlasRepresentation.format = Cnb::CnbTextureFormat::Rgba8;
+        atlasRepresentation.levels.push_back(imported.atlas.rgbaPixels);
+        atlasRepresentation.levels.insert(
+            atlasRepresentation.levels.end(),
+            imported.atlas.additionalRgbaMipLevels.begin(),
+            imported.atlas.additionalRgbaMipLevels.end());
+        font.atlas.representations.push_back(std::move(atlasRepresentation));
         font.lineSpacing = imported.lineSpacing;
         font.spacing = imported.spacing;
         font.defaultCharacter = imported.defaultCharacter;
