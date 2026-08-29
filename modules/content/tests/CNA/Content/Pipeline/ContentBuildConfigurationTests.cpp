@@ -124,7 +124,7 @@ TEST(ContentBuildConfigurationTest, RejectsUnknownOrMistypedParameterValues)
     const auto withParameter = [](const std::string& parameter)
     {
         return Pipeline::ContentBuildConfiguration::Parse(
-            "{\"format\":\"CNA.ContentPipeline.Config\",\"version\":1,\"assets\":{" 
+            "{\"format\":\"CNA.ContentPipeline.Config\",\"version\":1,\"assets\":{"
             "\"a.png\":{\"parameters\":{\"p\":" + parameter + "}}}}}");
     };
 
