@@ -2124,7 +2124,18 @@ TEST(GltfFixtureCorpus, InlineGltfDocumentsDoNotGrowWithoutADecision)
     // tools/gltf_fixtures/ is the wrong home for them (docs/gltf-conformance.md §3.7). One builder
     // splices the extensions object and the extensionsUsed list into the middle of one document, so
     // as with the UV-channel builder above, the literal openings exceed the document count.
-    constexpr int kCeiling = 280;
+    //
+    // 280 -> 281 is plans/plan_content_pipeline.md CP-009's Model glTF pipeline slice, and the
+    // decision is the same one the entry above records: a **loader-machinery probe**, not a
+    // conformance statement about an asset. The document lives in GltfUriContainmentTests.cpp and
+    // is never imported -- it is parsed only to feed CollectExternalUriDependenciesEXT, and what
+    // DependencyCollectionIsSortedUniqueAndExcludesInlineData asserts is the returned dependency
+    // LIST: sorted, deduplicated, inline data URIs excluded, and a mid-path traversal that comes
+    // back inside normalized to one entry. There is no asset whose correct import it states, so
+    // tools/gltf_fixtures/ is the wrong home for it (docs/gltf-conformance.md 3.7). It also sits
+    // with the five URI-containment probes already in that file, which are the same kind and were
+    // dispositioned the same way.
+    constexpr int kCeiling = 281;
 
     int found = 0;
     std::map<std::string, int> perFile;
