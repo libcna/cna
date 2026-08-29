@@ -584,6 +584,24 @@ matched. The tiny custom nodes show the scheduler overhead boundary; no automati
 CI threshold is inferred. `docs/content-pipeline-benchmark.md` records full methodology, medians,
 p95 values and limitations.
 
+### 5.18 CMake configuration/scheduler follow-through (`CP-029`)
+
+The existing `cna_add_content()` remains a custom-target command wrapper over the one stock or
+user-linked compiler executable. Optional `CONFIG_FILE` resolves relative to the caller's source
+directory, must identify a file at configure time, and is forwarded as `--config`; the compiler
+retains the one canonical containment/parser/fingerprint implementation. Optional `WORKERS` is
+validated against the exact CLI range 1..64 and always forwards an explicit count, defaulting to
+the conservative serial value 1. Neither setting creates CMake-side source enumeration, graph,
+cache, dependency fingerprints, or publication.
+
+The generated stock integration target uses a non-default configuration filename to select explicit
+stable Curve components and override `Nested/curve` to `Configured/curve`, plus two workers. The
+actual generated command contains both options, and the test decodes the configured artifact and
+inspects its manifest source/logical/output identity. A second generated target selects the
+user-built `.greeting` compiler via `CONTENT_EXECUTABLE`, forwards its own non-default config and two
+workers, and verifies custom primary/child artifacts, component identities and typed parameter in
+the manifest. Native target dependency and cross-build explicit-host-tool rules are unchanged.
+
 ---
 
 ## 6. First vertical slices
@@ -1091,7 +1109,7 @@ The completed feature branch was synchronized without reopening `CP-001` through
 | `CP-026` | **completed** | Added a permanent mutex-protected registry freeze, invoked before CLI discovery and by direct coordinators, with deterministic late-registration refusal through retained aliases. Public component/logger contracts now state their concurrency obligations. The audit found built-ins invocation-local, cgltf per-call, stb thread-local, and staging/publication names exclusively claimed; it confines manifest, ownership, graph states, counters and terminal diagnostics to a deterministic coordinator. Tests prove all late registration families fail and sixteen direct builds share a frozen registry safely. The 149-test pipeline/producer/CNJ/golden selection passed 148 with only the expected large-file skip, and all seven generated C-API consistency gates pass; the two new experimental declarations are planned under `CBIND-117` with no C export. CP-027 owns the bounded node-local scheduler implementation. |
 | `CP-027` | **completed** | Added strict `--workers 1..64` with a true synchronous fallback, bounded parallel preparation/staging, dependency-ready execution and coordinator-only deterministic integration. Shared nodes dispatch once, failures propagate without dependent publication, and private staged outputs are size/digest verified before the sole atomic publisher commits them. Worker counts 1, 2 and 4 produce byte-identical mixed cold, no-op and shared-dependency rebuild trees, manifests and logs; long-cycle diagnostics are identical between serial and four-worker runs. The 174-test normal pipeline/producer/CNJ/golden selection passed 173 with only the expected large-file skip. A fresh GCC ThreadSanitizer HEADLESS build passed 106/107 pipeline/config/manifest/custom/media/model tests, with only that same opt-in >2 GiB test skipped and no TSan report. |
 | `CP-028` | **completed** | Added a reproducible fail-fast benchmark harness for 128 mixed PNG/WAV/glTF/CNJ nodes and a 97-node shared-dependency custom graph. It alternates serial/parallel order, excludes fixture/seed/verification work, emits machine-readable samples, and proves complete tree/manifest equality. Seven-sample HEADLESS Debug medians for workers 1 versus 4 measured 2.662x cold, 2.243x no-op, 2.177x one-change and 1.241x shared-change speedups on the recorded 8-core host. The conservative default remains one worker and results are documented as host-specific evidence, not a CI threshold. |
-| `CP-029` | **pending** | Follow stable CLI/config/custom-tool behavior through `cna_add_content()`, preserving host-tool separation and one real cache/build implementation. |
+| `CP-029` | **completed** | Extended the thin `cna_add_content()` wrapper with configure-time-checked `CONFIG_FILE` and strict `WORKERS 1..64`, defaulting to serial and forwarding both to the selected stock/custom compiler. The real CLI still solely owns containment, JSON parsing, fingerprints, graph/cache and atomic publication. Generated stock and user-linked custom targets prove `--config ... --workers 2`: one changes a Curve logical output through explicit stable components; the other is accepted only by the `.greeting` compiler and verifies its custom primary/child outputs, component identities and typed parameter. Native/cross host-tool separation is unchanged. The 175-test normal compatibility selection passed 174 with only the expected >2 GiB skip. |
 | `CP-030` | **pending** | Complete cross-platform/security/HEADLESS review, normal and sanitizer gates, documentation, stable/experimental/future labels and the final frozen-CNB compatibility audit. |
 | `CP-031` | **pending** | Audit the existing XNB container, decompression and built-in ContentTypeReader implementations for reuse by a HEADLESS build importer. Publish an exact XNB-to-native-CNB support matrix and identify runtime-object/device seams that must be split into canonical CPU data rather than invoked by the compiler. |
 | `CP-032` | **pending** | Define `XnbImporter` as a compatibility source front end that emits existing imported/canonical pipeline types and routes through existing processors and CNB writers. Selection must use validated XNB reader/type identity, reject unknown/custom readers clearly, preserve source dependencies, and add no XNB bytes or decoder tables to CNB. |

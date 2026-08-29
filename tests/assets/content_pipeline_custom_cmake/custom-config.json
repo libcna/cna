@@ -1,0 +1,1 @@
+{"format":"CNA.ContentPipeline.Config","version":1,"assets":{"hello.greeting":{"parameters":{"prefix":{"type":"string","value":"Configured: "}}}}}

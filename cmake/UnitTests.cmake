@@ -734,18 +734,63 @@ if(CNA_BUILD_TESTS)
                 TARGET cna_content_cmake_fixture
                 SOURCE_DIR "${CNA_SOURCE_DIR}/tests/assets/content_pipeline_cmake"
                 OUTPUT_DIR "${_cna_content_cmake_fixture_output}"
+                CONFIG_FILE
+                    "${CNA_SOURCE_DIR}/tests/assets/content_pipeline_cmake/pipeline-config.json"
+                WORKERS 2
                 QUIET
             )
+            get_property(_cna_content_cmake_fixture_config
+                TARGET cna_content_cmake_fixture PROPERTY CNA_CONTENT_CONFIG_FILE)
+            get_property(_cna_content_cmake_fixture_workers
+                TARGET cna_content_cmake_fixture PROPERTY CNA_CONTENT_WORKERS)
+            if(NOT _cna_content_cmake_fixture_config STREQUAL
+                    "${CNA_SOURCE_DIR}/tests/assets/content_pipeline_cmake/pipeline-config.json")
+                message(FATAL_ERROR
+                    "cna_add_content did not retain the normalized CONFIG_FILE")
+            endif()
+            if(NOT _cna_content_cmake_fixture_workers STREQUAL "2")
+                message(FATAL_ERROR "cna_add_content did not retain WORKERS")
+            endif()
             add_dependencies(${CNA_TEST_OBJECT_TARGET_content} cna_content_cmake_fixture)
             file(TO_CMAKE_PATH "${_cna_content_cmake_fixture_output}"
                 _cna_content_cmake_fixture_output_definition)
-            set_source_files_properties(
+            set_property(SOURCE
                 "${CNA_SOURCE_DIR}/modules/content/tests/CNA/Content/Pipeline/ContentPipelineCMakeIntegrationTests.cpp"
-                PROPERTIES COMPILE_DEFINITIONS
-                    "CNA_CONTENT_CMAKE_FIXTURE_OUTPUT=\"${_cna_content_cmake_fixture_output_definition}\""
-            )
+                APPEND PROPERTY COMPILE_DEFINITIONS
+                    "CNA_CONTENT_CMAKE_FIXTURE_OUTPUT=\"${_cna_content_cmake_fixture_output_definition}\"")
             unset(_cna_content_cmake_fixture_output_definition)
+            unset(_cna_content_cmake_fixture_config)
+            unset(_cna_content_cmake_fixture_workers)
             unset(_cna_content_cmake_fixture_output)
+
+            if(TARGET cna_custom_content_compiler_example)
+                set(_cna_custom_content_cmake_fixture_output
+                    "${CMAKE_CURRENT_BINARY_DIR}/custom-content-pipeline-cmake-fixture")
+                cna_add_content(
+                    TARGET cna_custom_content_cmake_fixture
+                    SOURCE_DIR
+                        "${CNA_SOURCE_DIR}/tests/assets/content_pipeline_custom_cmake"
+                    OUTPUT_DIR "${_cna_custom_content_cmake_fixture_output}"
+                    CONFIG_FILE
+                        "${CNA_SOURCE_DIR}/tests/assets/content_pipeline_custom_cmake/custom-config.json"
+                    CONTENT_EXECUTABLE
+                        "$<TARGET_FILE:cna_custom_content_compiler_example>"
+                    WORKERS 2
+                    QUIET
+                )
+                add_dependencies(cna_custom_content_cmake_fixture
+                    cna_custom_content_compiler_example)
+                add_dependencies(${CNA_TEST_OBJECT_TARGET_content}
+                    cna_custom_content_cmake_fixture)
+                file(TO_CMAKE_PATH "${_cna_custom_content_cmake_fixture_output}"
+                    _cna_custom_content_cmake_fixture_output_definition)
+                set_property(SOURCE
+                    "${CNA_SOURCE_DIR}/modules/content/tests/CNA/Content/Pipeline/ContentPipelineCMakeIntegrationTests.cpp"
+                    APPEND PROPERTY COMPILE_DEFINITIONS
+                        "CNA_CUSTOM_CONTENT_CMAKE_FIXTURE_OUTPUT=\"${_cna_custom_content_cmake_fixture_output_definition}\"")
+                unset(_cna_custom_content_cmake_fixture_output_definition)
+                unset(_cna_custom_content_cmake_fixture_output)
+            endif()
         endif()
     endif()
 

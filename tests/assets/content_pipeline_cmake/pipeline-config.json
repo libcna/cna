@@ -1,0 +1,1 @@
+{"format":"CNA.ContentPipeline.Config","version":1,"assets":{"Nested/curve.cnj":{"logicalName":"Configured/curve","importer":"CNA.CnjImporter","processor":"CNA.CurveProcessor","writer":"CNA.CurveContentWriter"}}}

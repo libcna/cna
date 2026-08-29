@@ -31,15 +31,21 @@ endif()
 # Adds a build target that delegates content compilation to the same cna-content executable users
 # invoke manually. The target intentionally runs whenever requested; cna-content's content-hashed
 # manifest makes an identical run a cheap, correct no-op without teaching CMake a second dependency
-# model. SOURCE_DIR is relative to the caller's source directory, OUTPUT_DIR to its binary directory.
-# Cross builds require an explicit host CONTENT_EXECUTABLE because a target-platform tool cannot be
-# executed by the host build.
+# model. SOURCE_DIR and an optional CONFIG_FILE are relative to the caller's source directory;
+# OUTPUT_DIR is relative to its binary directory. Cross builds require an explicit host
+# CONTENT_EXECUTABLE because a target-platform tool cannot be executed by the host build.
 function(cna_add_content)
     set(_cna_content_options QUIET)
-    set(_cna_content_one_value TARGET SOURCE_DIR OUTPUT_DIR CONTENT_EXECUTABLE)
+    set(_cna_content_one_value
+        TARGET SOURCE_DIR OUTPUT_DIR CONFIG_FILE WORKERS CONTENT_EXECUTABLE)
     cmake_parse_arguments(PARSE_ARGV 0 CNA_CONTENT
         "${_cna_content_options}" "${_cna_content_one_value}" "")
 
+    if(CNA_CONTENT_KEYWORDS_MISSING_VALUES)
+        message(FATAL_ERROR
+            "cna_add_content: argument(s) require a value: "
+            "${CNA_CONTENT_KEYWORDS_MISSING_VALUES}")
+    endif()
     if(CNA_CONTENT_UNPARSED_ARGUMENTS)
         message(FATAL_ERROR
             "cna_add_content: unknown argument(s): ${CNA_CONTENT_UNPARSED_ARGUMENTS}")
@@ -65,6 +71,26 @@ function(cna_add_content)
             "cna_add_content: SOURCE_DIR is not a directory: ${_cna_content_source}")
     endif()
 
+    set(_cna_content_config)
+    if(DEFINED CNA_CONTENT_CONFIG_FILE)
+        cmake_path(ABSOLUTE_PATH CNA_CONTENT_CONFIG_FILE
+            BASE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" NORMALIZE
+            OUTPUT_VARIABLE _cna_content_config)
+        if(NOT EXISTS "${_cna_content_config}" OR IS_DIRECTORY "${_cna_content_config}")
+            message(FATAL_ERROR
+                "cna_add_content: CONFIG_FILE is not a file: ${_cna_content_config}")
+        endif()
+    endif()
+
+    set(_cna_content_workers 1)
+    if(DEFINED CNA_CONTENT_WORKERS)
+        if(NOT "${CNA_CONTENT_WORKERS}" MATCHES "^([1-9]|[1-5][0-9]|6[0-4])$")
+            message(FATAL_ERROR
+                "cna_add_content: WORKERS must be an integer between 1 and 64")
+        endif()
+        set(_cna_content_workers "${CNA_CONTENT_WORKERS}")
+    endif()
+
     set(_cna_content_dependencies)
     if(CNA_CONTENT_CONTENT_EXECUTABLE)
         set(_cna_content_compiler "${CNA_CONTENT_CONTENT_EXECUTABLE}")
@@ -79,6 +105,10 @@ function(cna_add_content)
 
     set(_cna_content_command
         "${_cna_content_compiler}" build "${_cna_content_source}" -o "${_cna_content_output}")
+    if(_cna_content_config)
+        list(APPEND _cna_content_command --config "${_cna_content_config}")
+    endif()
+    list(APPEND _cna_content_command --workers "${_cna_content_workers}")
     if(CNA_CONTENT_QUIET)
         list(APPEND _cna_content_command --quiet)
     endif()
@@ -93,4 +123,8 @@ function(cna_add_content)
         CNA_CONTENT_SOURCE_DIR "${_cna_content_source}")
     set_property(TARGET "${CNA_CONTENT_TARGET}" PROPERTY
         CNA_CONTENT_OUTPUT_DIR "${_cna_content_output}")
+    set_property(TARGET "${CNA_CONTENT_TARGET}" PROPERTY
+        CNA_CONTENT_CONFIG_FILE "${_cna_content_config}")
+    set_property(TARGET "${CNA_CONTENT_TARGET}" PROPERTY
+        CNA_CONTENT_WORKERS "${_cna_content_workers}")
 endfunction()

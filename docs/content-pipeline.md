@@ -750,11 +750,27 @@ cna_add_content(
 add_dependencies(MyGame MyGameContent)
 ```
 
-`SOURCE_DIR` is resolved relative to the caller's source directory and `OUTPUT_DIR` relative to its
-binary directory. The custom target intentionally invokes `cna-content` whenever the target is
-requested; the pipeline's byte-hashed manifest performs the correct per-asset no-op decisions. CMake
-therefore does not duplicate source discovery, dependency hashing, cache logic, or publication.
-`QUIET` forwards quiet output.
+`SOURCE_DIR` and optional `CONFIG_FILE` are resolved relative to the caller's source directory;
+`OUTPUT_DIR` is relative to its binary directory. `CONFIG_FILE` must exist at configure time and is
+passed to the CLI, whose canonical source-root containment check remains authoritative. `WORKERS`
+is optional, strictly accepts 1 through 64, and defaults to the CLI-compatible serial value 1.
+
+The custom target intentionally invokes `cna-content` whenever the target is requested; the
+pipeline's byte-hashed manifest performs the correct per-asset no-op decisions. CMake therefore
+does not duplicate configuration parsing, source discovery, dependency hashing, graph/cache logic,
+or publication. `QUIET` forwards quiet output.
+
+Projects that need the optional settings can add them without changing the convention-only flow:
+
+```cmake
+cna_add_content(
+    TARGET MyConfiguredContent
+    SOURCE_DIR ContentSource
+    OUTPUT_DIR Content
+    CONFIG_FILE ContentSource/pipeline.json
+    WORKERS 4
+)
+```
 
 A custom compiler can drive the same helper through its existing executable override. The explicit
 dependency ensures the compiler exists before the content target runs:
@@ -765,6 +781,8 @@ cna_add_content(
     SOURCE_DIR ContentSource
     OUTPUT_DIR Content
     CONTENT_EXECUTABLE "$<TARGET_FILE:my_content_compiler>"
+    CONFIG_FILE ContentSource/pipeline.json
+    WORKERS 4
 )
 add_dependencies(MyGameContent my_content_compiler)
 ```
