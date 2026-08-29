@@ -3,9 +3,11 @@
 
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
+#include "CNA/Content/Cnb/CnbModelData.hpp"
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
 
 namespace CNA::Content::Pipeline
@@ -38,6 +40,9 @@ namespace CNA::Content::Pipeline
 
         /** @brief Whether processor-read authored sidecars must be recorded as source inputs. */
         bool recordAuthoredSidecars = false;
+
+        /** @brief Canonical CPU Model supplied directly by XNB import, bypassing CNJ staging. */
+        std::optional<CNA::Content::Cnb::CnbModelData> canonicalModel;
     };
 
     /** @brief Headless glTF importer backed by CNA's single shared glTF interpretation. */

@@ -21,7 +21,7 @@ subset; `planned` is not coverage and names the task that owns its design; and
 behavior to expose. Nothing is treated as implemented merely because a related C
 operation exists.
 
-Snapshot: **549 headers**, **9279 symbols**, **8352 implemented**, **15 partial**, **448 planned**, **464 not applicable**. Explicitly excluded internal/detail headers: **132**.
+Snapshot: **549 headers**, **9280 symbols**, **8352 implemented**, **15 partial**, **449 planned**, **464 not applicable**. Explicitly excluded internal/detail headers: **132**.
 
 Regenerate with:
 
@@ -39,7 +39,7 @@ python3 tools/c-api/generate_coverage_inventory.py --check
 | Module | Headers | Symbols | Implemented | Partial | Planned | N/A |
 |---|---:|---:|---:|---:|---:|---:|
 | `audio` | 22 | 310 | 217 | 0 | 0 | 93 |
-| `content` | 46 | 1048 | 561 | 10 | 448 | 29 |
+| `content` | 46 | 1049 | 561 | 10 | 449 | 29 |
 | `core` | 15 | 168 | 162 | 0 | 0 | 6 |
 | `devices` | 18 | 209 | 182 | 0 | 0 | 27 |
 | `devices-ext` | 17 | 84 | 79 | 0 | 0 | 5 |
@@ -1426,29 +1426,30 @@ python3 tools/c-api/generate_coverage_inventory.py --check
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-6B4447A60AB8` | 14 | public field | `CNA::Content::Pipeline::ImportedModelDocumentType = "CNA.Content.Pipeline.ImportedModelDocument"` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
-| `CPP-8DE32C4D147D` | 18 | public field | `CNA::Content::Pipeline::ProcessedModelType = "CNA.Content.Cnb.ModelData"` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
-| `CPP-815C63771AD9` | 28 | public struct | `CNA::Content::Pipeline::ImportedModelDocument` | Planned `CNA_*` POD or validated handle design (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
-| `CPP-19B25F35C5CE` | 31 | public field | `CNA::Content::Pipeline::ImportedModelDocument::document` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
-| `CPP-721A92C9EAB1` | 34 | public field | `CNA::Content::Pipeline::ImportedModelDocument::intermediateRoot` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
-| `CPP-7F0B43E9F25F` | 37 | public field | `CNA::Content::Pipeline::ImportedModelDocument::intermediateLifetime` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
-| `CPP-F568D4E9BA51` | 40 | public field | `CNA::Content::Pipeline::ImportedModelDocument::recordAuthoredSidecars = false` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
-| `CPP-AFCB0EA6F06C` | 44 | public class | `CNA::Content::Pipeline::GltfImporter` | Planned `CNA_*` POD or validated handle design (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
-| `CPP-6D7134F4E109` | 48 | public method | `CNA::Content::Pipeline::GltfImporter::Identity() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
-| `CPP-780E3DAD7EAD` | 51 | public method | `CNA::Content::Pipeline::GltfImporter::SourceExtensions() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
-| `CPP-971D220FBD76` | 57 | public method | `CNA::Content::Pipeline::GltfImporter::OutputTypes() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
-| `CPP-18B860322F3D` | 65 | public method | `CNA::Content::Pipeline::GltfImporter::Import(ContentImporterContext &context) const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
-| `CPP-76161425A69B` | 69 | public class | `CNA::Content::Pipeline::ModelProcessor` | Planned `CNA_*` POD or validated handle design (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
-| `CPP-DEF971680149` | 73 | public method | `CNA::Content::Pipeline::ModelProcessor::Identity() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
-| `CPP-558B67211119` | 76 | public method | `CNA::Content::Pipeline::ModelProcessor::InputType() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
-| `CPP-3BD8B15EE804` | 79 | public method | `CNA::Content::Pipeline::ModelProcessor::OutputType() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
-| `CPP-9BF2F5598BBF` | 86 | public method | `CNA::Content::Pipeline::ModelProcessor::ValidateParameters(const ContentProcessorParameters &parameters) const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
-| `CPP-0B4608F433A4` | 95 | public method | `CNA::Content::Pipeline::ModelProcessor::Process(const ContentValue &input, ContentProcessorContext &context) const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
-| `CPP-6091AED656DD` | 100 | public class | `CNA::Content::Pipeline::ModelContentWriter` | Planned `CNA_*` POD or validated handle design (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
-| `CPP-133309EB3573` | 104 | public method | `CNA::Content::Pipeline::ModelContentWriter::Identity() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
-| `CPP-E2B02D93AE4F` | 107 | public method | `CNA::Content::Pipeline::ModelContentWriter::InputType() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
-| `CPP-74F5D6F3417A` | 116 | public method | `CNA::Content::Pipeline::ModelContentWriter::Write(const ContentValue &input, const std::string &logicalName) const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
-| `CPP-5DC06C5C93C8` | 125 | public function | `CNA::Content::Pipeline::RegisterModelContentPipeline(ContentPipelineRegistry &registry)` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-6B4447A60AB8` | 16 | public field | `CNA::Content::Pipeline::ImportedModelDocumentType = "CNA.Content.Pipeline.ImportedModelDocument"` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-8DE32C4D147D` | 20 | public field | `CNA::Content::Pipeline::ProcessedModelType = "CNA.Content.Cnb.ModelData"` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-815C63771AD9` | 30 | public struct | `CNA::Content::Pipeline::ImportedModelDocument` | Planned `CNA_*` POD or validated handle design (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-19B25F35C5CE` | 33 | public field | `CNA::Content::Pipeline::ImportedModelDocument::document` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-721A92C9EAB1` | 36 | public field | `CNA::Content::Pipeline::ImportedModelDocument::intermediateRoot` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-7F0B43E9F25F` | 39 | public field | `CNA::Content::Pipeline::ImportedModelDocument::intermediateLifetime` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-F568D4E9BA51` | 42 | public field | `CNA::Content::Pipeline::ImportedModelDocument::recordAuthoredSidecars = false` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-368026441ED2` | 45 | public field | `CNA::Content::Pipeline::ImportedModelDocument::canonicalModel` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-AFCB0EA6F06C` | 49 | public class | `CNA::Content::Pipeline::GltfImporter` | Planned `CNA_*` POD or validated handle design (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-6D7134F4E109` | 53 | public method | `CNA::Content::Pipeline::GltfImporter::Identity() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-780E3DAD7EAD` | 56 | public method | `CNA::Content::Pipeline::GltfImporter::SourceExtensions() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-971D220FBD76` | 62 | public method | `CNA::Content::Pipeline::GltfImporter::OutputTypes() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-18B860322F3D` | 70 | public method | `CNA::Content::Pipeline::GltfImporter::Import(ContentImporterContext &context) const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-76161425A69B` | 74 | public class | `CNA::Content::Pipeline::ModelProcessor` | Planned `CNA_*` POD or validated handle design (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-DEF971680149` | 78 | public method | `CNA::Content::Pipeline::ModelProcessor::Identity() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-558B67211119` | 81 | public method | `CNA::Content::Pipeline::ModelProcessor::InputType() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-3BD8B15EE804` | 84 | public method | `CNA::Content::Pipeline::ModelProcessor::OutputType() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-9BF2F5598BBF` | 91 | public method | `CNA::Content::Pipeline::ModelProcessor::ValidateParameters(const ContentProcessorParameters &parameters) const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-0B4608F433A4` | 100 | public method | `CNA::Content::Pipeline::ModelProcessor::Process(const ContentValue &input, ContentProcessorContext &context) const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-6091AED656DD` | 105 | public class | `CNA::Content::Pipeline::ModelContentWriter` | Planned `CNA_*` POD or validated handle design (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-133309EB3573` | 109 | public method | `CNA::Content::Pipeline::ModelContentWriter::Identity() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-E2B02D93AE4F` | 112 | public method | `CNA::Content::Pipeline::ModelContentWriter::InputType() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-74F5D6F3417A` | 121 | public method | `CNA::Content::Pipeline::ModelContentWriter::Write(const ContentValue &input, const std::string &logicalName) const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-5DC06C5C93C8` | 130 | public function | `CNA::Content::Pipeline::RegisterModelContentPipeline(ContentPipelineRegistry &registry)` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
 
 #### `modules/content/include/CNA/Content/Pipeline/SongContentPipeline.hpp`
 

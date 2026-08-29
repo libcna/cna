@@ -35,6 +35,17 @@ namespace CNA::Internal::Xnb
         }
 
         /**
+         * @brief Reads one nullable canonical type-reader reference.
+         * @param input Initialized XNB content reader.
+         * @return Referenced table entry, or null for wire index zero.
+         */
+        [[nodiscard]] static const XnbTypeReaderTableEntry* ReadOptionalReference(
+            Microsoft::Xna::Framework::Content::ContentReader& input)
+        {
+            return input.ReadOptionalCanonicalTypeReaderReferenceEXT();
+        }
+
+        /**
          * @brief Returns the parsed reader-table size.
          * @param input Initialized or raw runtime content reader.
          * @return Reader-table entry count.

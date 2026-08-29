@@ -357,6 +357,8 @@ namespace Microsoft::Xna::Framework::Content
         /** @endcond */
 
         void InitializeCanonicalTypeReadersEXT();
+        [[nodiscard]] const CNA::Internal::Xnb::XnbTypeReaderTableEntry*
+            ReadOptionalCanonicalTypeReaderReferenceEXT();
         [[nodiscard]] const CNA::Internal::Xnb::XnbTypeReaderTableEntry&
             ReadCanonicalTypeReaderReferenceEXT();
         [[nodiscard]] std::size_t getCanonicalTypeReaderCountEXT() const;

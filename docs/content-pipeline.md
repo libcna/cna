@@ -750,9 +750,10 @@ supported built-in XNB
 | `CurveReader` | Curve | all loop/key/tangent/continuity fields |
 | `SongReader` | Song | path/duration metadata plus contained external media dependency/XREF |
 | `VideoReader` | Video | FNA String/Int32/Single object-reference graph plus contained external media dependency/XREF |
+| `ModelReader` | Model | canonical CNA declarations; unique whole buffers; root-0 hierarchy; null tags; uniquely owned BasicEffect with default SpecularPower; reproducible bounds |
 
-`ModelReader` remains unsupported until `CP-041` lands. The completed `CP-040` field audit proves a
-narrow schema-1 subset: canonical CNA vertex declarations only; triangle-list parts consuming
+`ModelReader` supports the deliberately narrow subset proved by `CP-040` and implemented by
+`CP-041`: canonical CNA vertex declarations only; triangle-list parts consuming
 unique whole buffers; bone 0 as an identity root; null tags; unique BasicEffect resources with
 default `SpecularPower`; and serialized mesh bounds equal to the bounds deterministically rebuilt
 from retained positions. Colours, alpha, vertex-colour enablement and contained texture references
@@ -762,6 +763,15 @@ bounding spheres do not fit and must fail rather than degrade. The real Blender 
 outside the subset because its stride-24 Position+Normal declaration conflicts with CNA's
 stride-24 canonical layout and its SpecularPower is non-default. Every other custom/unknown root
 is rejected with its normalized reader identity.
+
+Model compilation is headless. One shared field-order graph walker feeds either the existing
+runtime ownership/fixup adapter or canonical `XnbModelData`; shared CPU declaration, buffer and
+BasicEffect decoders likewise sit below both paths. The compiler converts only after proving the
+subset, then follows `ImportedModelDocument -> ModelProcessor -> ModelContentWriter ->
+EncodeModelToCnb()`. It does not instantiate a `GraphicsDevice`, GPU buffer or runtime Effect and
+does not preserve XNB bytes. The frozen Model schema remains version 1. General Model support would
+require a separately reviewed future schema carrying explicit declarations, part windows, bounds,
+root semantics, sharing identity, stable tags and complete stock/custom effect state.
 
 None and LZX compression and XNB versions 4/5 are supported through CNA's existing container code.
 LZ4 is recognized but CNA has no decoder, so it fails clearly. The existing 16 platform header

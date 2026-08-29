@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Xnb/XnbCanonicalData.hpp"
 #include "XnbCanonicalReaderAccess.hpp"
+#include "XnbModelGraphReader.hpp"
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
+#include <cstring>
 #include <fstream>
 #include <limits>
 #include <sstream>
@@ -13,6 +16,7 @@
 #include "CNA/Internal/Audio/WavWrapper.hpp"
 #include "CNA/Internal/ContentPath.hpp"
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
+#include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include "CNA/Internal/Xnb/XnbArithmetic.hpp"
 #include "CNA/Internal/Xnb/XnbDecompression.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
@@ -370,6 +374,169 @@ namespace CNA::Internal::Xnb
             }
             return {std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
         }
+
+        class CanonicalModelSink
+        {
+        public:
+            CanonicalModelSink(const std::int32_t sharedResourceCount, std::string origin)
+                : sharedResourceCount_(sharedResourceCount), origin_(std::move(origin)) {}
+
+            [[nodiscard]] std::string ReadString(ContentReader& input) const
+            {
+                RequireReader(
+                    XnbCanonicalReaderAccess::ReadReference(input),
+                    "Microsoft.Xna.Framework.Content.StringReader", origin_);
+                return input.ReadString();
+            }
+
+            void BeginBones(const std::uint32_t count) { model_.bones.reserve(count); }
+
+            void AddBone(const std::uint32_t index, std::string name,
+                         const Microsoft::Xna::Framework::Matrix& transform)
+            {
+                if (index != model_.bones.size())
+                {
+                    throw ContentLoadException("XnbImporter: Model bone ordering is inconsistent.");
+                }
+                model_.bones.push_back({std::move(name), transform, -1, {}});
+            }
+
+            void BeginBoneLinks(const std::uint32_t bone, const std::int32_t parent,
+                                const std::uint32_t childCount)
+            {
+                model_.bones.at(bone).parent = parent;
+                model_.bones.at(bone).children.reserve(childCount);
+            }
+
+            void AddBoneChild(const std::uint32_t bone, const std::int32_t child)
+            {
+                model_.bones.at(bone).children.push_back(child);
+            }
+
+            void EndBoneLinks(const std::uint32_t /*bone*/) {}
+
+            void BeginMeshes(const std::uint32_t count) { model_.meshes.reserve(count); }
+
+            void BeginMesh(const std::uint32_t index, std::string name,
+                           const std::int32_t parentBone,
+                           const Microsoft::Xna::Framework::BoundingSphere& bounds)
+            {
+                if (index != model_.meshes.size())
+                {
+                    throw ContentLoadException("XnbImporter: Model mesh ordering is inconsistent.");
+                }
+                model_.meshes.push_back({std::move(name), parentBone, bounds, {}});
+                currentMesh_ = index;
+                currentPart_ = 0u;
+            }
+
+            void ReadTag(ContentReader& input, const XnbModelTagKind kind) const
+            {
+                const XnbTypeReaderTableEntry* reader =
+                    XnbCanonicalReaderAccess::ReadOptionalReference(input);
+                if (reader == nullptr) { return; }
+                std::string location = "Model";
+                if (kind == XnbModelTagKind::Mesh)
+                {
+                    location = "mesh " + std::to_string(currentMesh_);
+                }
+                else if (kind == XnbModelTagKind::MeshPart)
+                {
+                    location = "mesh " + std::to_string(currentMesh_) + " part " +
+                               std::to_string(currentPart_);
+                }
+                throw ContentLoadException(
+                    "XnbImporter: Model cannot be transcoded losslessly: " + location +
+                    " has a non-null Tag using reader '" + reader->normalizedName +
+                    "', but Model schema 1 has no Tag representation.");
+            }
+
+            void BeginMeshParts(const std::uint32_t count)
+            {
+                model_.meshes.at(currentMesh_).parts.reserve(count);
+            }
+
+            void BeginMeshPart(const std::uint32_t index, const std::int32_t vertexOffset,
+                               const std::int32_t vertexCount, const std::int32_t startIndex,
+                               const std::int32_t primitiveCount)
+            {
+                currentPart_ = index;
+                model_.meshes.at(currentMesh_).parts.push_back(
+                    {vertexOffset, vertexCount, startIndex, primitiveCount, -1, -1, -1});
+            }
+
+            void ReadSharedReference(ContentReader& input, const XnbModelSharedKind kind)
+            {
+                const std::int32_t encoded = input.Read7BitEncodedInt();
+                if (encoded <= 0 || encoded > sharedResourceCount_)
+                {
+                    throw ContentLoadException(
+                        "XnbImporter: Model mesh " + std::to_string(currentMesh_) + " part " +
+                        std::to_string(currentPart_) +
+                        " has a null or out-of-range shared-resource reference.");
+                }
+                XnbModelPartData& part =
+                    model_.meshes.at(currentMesh_).parts.at(currentPart_);
+                std::int32_t* destination = &part.effectResource;
+                if (kind == XnbModelSharedKind::VertexBuffer)
+                {
+                    destination = &part.vertexBufferResource;
+                }
+                else if (kind == XnbModelSharedKind::IndexBuffer)
+                {
+                    destination = &part.indexBufferResource;
+                }
+                *destination = encoded - 1;
+            }
+
+            void EndMeshPart() {}
+            void EndMesh() {}
+
+            [[nodiscard]] XnbModelData Finish(const std::int32_t root)
+            {
+                model_.rootBone = root;
+                return std::move(model_);
+            }
+
+        private:
+            XnbModelData model_;
+            std::int32_t sharedResourceCount_ = 0;
+            std::string origin_;
+            std::size_t currentMesh_ = 0u;
+            std::size_t currentPart_ = 0u;
+        };
+
+        [[nodiscard]] std::array<float, 16> MatrixValues(
+            const Microsoft::Xna::Framework::Matrix& value)
+        {
+            return {{value.M11, value.M12, value.M13, value.M14,
+                     value.M21, value.M22, value.M23, value.M24,
+                     value.M31, value.M32, value.M33, value.M34,
+                     value.M41, value.M42, value.M43, value.M44}};
+        }
+
+        [[nodiscard]] bool SameFloat(const float left, const float right)
+        {
+            return std::bit_cast<std::uint32_t>(left) == std::bit_cast<std::uint32_t>(right);
+        }
+
+        [[nodiscard]] bool SameSphere(
+            const Microsoft::Xna::Framework::BoundingSphere& left,
+            const Microsoft::Xna::Framework::BoundingSphere& right)
+        {
+            return SameFloat(left.Center.X, right.Center.X) &&
+                   SameFloat(left.Center.Y, right.Center.Y) &&
+                   SameFloat(left.Center.Z, right.Center.Z) &&
+                   SameFloat(left.Radius, right.Radius);
+        }
+
+        [[nodiscard]] std::string ModelPartContext(
+            const XnbModelMeshData& mesh, const std::size_t meshIndex,
+            const std::size_t partIndex)
+        {
+            return "mesh " + std::to_string(meshIndex) + " ('" + mesh.name + "') part " +
+                   std::to_string(partIndex);
+        }
     }
 
     XnbTextureData DecodeTexture2DXnbData(
@@ -636,6 +803,336 @@ namespace CNA::Internal::Xnb
         return result;
     }
 
+    XnbVertexDeclarationData DecodeVertexDeclarationXnbData(ContentReader& input)
+    {
+        XnbVertexDeclarationData result;
+        result.stride = input.ReadInt32();
+        const std::int32_t elementCount = input.ReadInt32();
+        input.CheckCollectionElementCount(elementCount, "VertexDeclarationReader elements");
+        if (result.stride <= 0)
+        {
+            throw ContentLoadException("VertexDeclarationReader: vertex stride must be positive.");
+        }
+        result.elements.reserve(static_cast<std::size_t>(elementCount));
+        for (std::int32_t element = 0; element < elementCount; ++element)
+        {
+            const std::int32_t offset = input.ReadInt32();
+            const auto format =
+                static_cast<Microsoft::Xna::Framework::Graphics::VertexElementFormat>(
+                    input.ReadInt32());
+            const auto usage =
+                static_cast<Microsoft::Xna::Framework::Graphics::VertexElementUsage>(
+                    input.ReadInt32());
+            const std::int32_t usageIndex = input.ReadInt32();
+            result.elements.emplace_back(
+                offset, format, usage, usageIndex);
+        }
+        return result;
+    }
+
+    XnbVertexBufferData DecodeVertexBufferXnbData(ContentReader& input)
+    {
+        XnbVertexBufferData result;
+        result.declaration = DecodeVertexDeclarationXnbData(input);
+        result.vertexCount = input.ReadUInt32();
+        const std::int64_t byteCount = CheckedMultiplyOrThrow(
+            {result.vertexCount, static_cast<std::uint32_t>(result.declaration.stride)},
+            "VertexBufferReader");
+        input.CheckDecodedByteSize(byteCount, "VertexBufferReader");
+        if (byteCount > std::numeric_limits<std::int32_t>::max())
+        {
+            throw ContentLoadException("VertexBufferReader: vertex payload exceeds Int32 length.");
+        }
+        result.bytes = input.ReadBytesExactOrThrow(
+            static_cast<std::int32_t>(byteCount), "VertexBufferReader");
+        return result;
+    }
+
+    XnbIndexBufferData DecodeIndexBufferXnbData(ContentReader& input)
+    {
+        XnbIndexBufferData result;
+        result.indexElementSize = input.ReadBoolean() ? 2u : 4u;
+        const std::int32_t byteCount = input.ReadInt32();
+        if (byteCount < 0 || byteCount % static_cast<std::int32_t>(result.indexElementSize) != 0)
+        {
+            throw ContentLoadException(
+                "IndexBufferReader: payload length is negative or not a whole number of indices.");
+        }
+        result.bytes = input.ReadBytesExactOrThrow(byteCount, "IndexBufferReader");
+        return result;
+    }
+
+    XnbBasicEffectData DecodeBasicEffectXnbData(
+        ContentReader& input, std::string textureReference)
+    {
+        XnbBasicEffectData result;
+        result.textureReference = std::move(textureReference);
+        result.diffuseColor = input.ReadVector3();
+        result.emissiveColor = input.ReadVector3();
+        result.specularColor = input.ReadVector3();
+        result.specularPower = input.ReadSingle();
+        result.alpha = input.ReadSingle();
+        result.vertexColorEnabled = input.ReadBoolean();
+        return result;
+    }
+
+    CNA::Content::Cnb::CnbModelData ConvertXnbModelToCnb(
+        const XnbModelData& source,
+        const std::function<std::string(const std::string&)>& resolveTexture)
+    {
+        namespace Cnb = CNA::Content::Cnb;
+        namespace Fidelity = CNA::Internal::Graphics;
+        using Microsoft::Xna::Framework::BoundingSphere;
+        using Microsoft::Xna::Framework::Matrix;
+        using Microsoft::Xna::Framework::Vector3;
+
+        const auto fail = [](const std::string& detail) -> void
+        {
+            throw ContentLoadException(
+                "XnbImporter: Model cannot be transcoded losslessly: " + detail + ".");
+        };
+
+        if (source.bones.empty()) { fail("the Model has no root bone"); }
+        if (source.rootBone != 0) { fail("the serialized root bone is not bone 0"); }
+        if (!(source.bones.front().transform == Matrix::getIdentityProperty()))
+        {
+            fail("bone 0 has a non-identity transform which the Model schema-1 runtime does not apply");
+        }
+
+        Cnb::CnbModelData result;
+        result.bones.reserve(source.bones.size());
+        std::vector<std::vector<std::int32_t>> childrenByParent(source.bones.size());
+        for (std::size_t bone = 0u; bone < source.bones.size(); ++bone)
+        {
+            const XnbModelBoneData& inputBone = source.bones[bone];
+            if (inputBone.name.empty())
+            {
+                fail("bone " + std::to_string(bone) +
+                     " has an empty name which the Model schema-1 runtime replaces");
+            }
+            if (bone == 0u)
+            {
+                if (inputBone.parent != -1) { fail("bone 0 has a parent"); }
+            }
+            else if (inputBone.parent < 0 ||
+                     static_cast<std::size_t>(inputBone.parent) >= bone)
+            {
+                fail("bone " + std::to_string(bone) +
+                     " is not ordered after its valid parent");
+            }
+            if (inputBone.parent >= 0)
+            {
+                childrenByParent.at(static_cast<std::size_t>(inputBone.parent)).push_back(
+                    static_cast<std::int32_t>(bone));
+            }
+            result.bones.push_back(
+                {inputBone.name, inputBone.parent, MatrixValues(inputBone.transform)});
+        }
+        for (std::size_t bone = 0u; bone < source.bones.size(); ++bone)
+        {
+            if (source.bones[bone].children != childrenByParent[bone])
+            {
+                fail("bone " + std::to_string(bone) +
+                     " has child references that do not match the serialized parent graph");
+            }
+        }
+
+        std::vector<std::uint32_t> resourceUses(source.sharedResources.size(), 0u);
+        result.meshes.reserve(source.meshes.size());
+        for (std::size_t meshIndex = 0u; meshIndex < source.meshes.size(); ++meshIndex)
+        {
+            const XnbModelMeshData& mesh = source.meshes[meshIndex];
+            if (mesh.parentBone < 0 ||
+                static_cast<std::size_t>(mesh.parentBone) >= source.bones.size())
+            {
+                fail("mesh " + std::to_string(meshIndex) + " has an invalid parent bone");
+            }
+            Cnb::CnbModelMesh outputMesh;
+            outputMesh.name = mesh.name;
+            outputMesh.parentBone = mesh.parentBone;
+            std::vector<Vector3> meshPositions;
+
+            for (std::size_t partIndex = 0u; partIndex < mesh.parts.size(); ++partIndex)
+            {
+                const XnbModelPartData& part = mesh.parts[partIndex];
+                const std::string where = ModelPartContext(mesh, meshIndex, partIndex);
+                const std::int32_t references[] = {
+                    part.vertexBufferResource, part.indexBufferResource, part.effectResource};
+                for (const std::int32_t reference : references)
+                {
+                    if (reference < 0 ||
+                        static_cast<std::size_t>(reference) >= source.sharedResources.size())
+                    {
+                        fail(where + " has an invalid shared-resource reference");
+                    }
+                    ++resourceUses[static_cast<std::size_t>(reference)];
+                }
+
+                const auto* vertex = std::get_if<XnbVertexBufferData>(
+                    &source.sharedResources[static_cast<std::size_t>(
+                        part.vertexBufferResource)].value);
+                const auto* index = std::get_if<XnbIndexBufferData>(
+                    &source.sharedResources[static_cast<std::size_t>(
+                        part.indexBufferResource)].value);
+                const auto* effect = std::get_if<XnbBasicEffectData>(
+                    &source.sharedResources[static_cast<std::size_t>(part.effectResource)].value);
+                if (vertex == nullptr)
+                {
+                    fail(where + " does not reference a VertexBufferReader resource");
+                }
+                if (index == nullptr)
+                {
+                    fail(where + " does not reference an IndexBufferReader resource");
+                }
+                if (effect == nullptr)
+                {
+                    fail(where + " uses effect reader '" +
+                         source.sharedResources[static_cast<std::size_t>(part.effectResource)].reader +
+                         "'; only BasicEffectReader is representable by the initial schema-1 subset");
+                }
+
+                const Fidelity::InferredVertexLayout inferred =
+                    Fidelity::InferredLayoutForStride(
+                        vertex->declaration.stride,
+                        Fidelity::UnlistedStrideLayout::RendererRefusesIt);
+                if (!inferred.known)
+                {
+                    fail(where + " uses vertex stride " +
+                         std::to_string(vertex->declaration.stride) +
+                         " which has no canonical Model schema-1 layout");
+                }
+                if (vertex->declaration.elements.size() != inferred.count)
+                {
+                    fail(where + " uses a VertexDeclaration with " +
+                         std::to_string(vertex->declaration.elements.size()) +
+                         " elements, but stride " +
+                         std::to_string(vertex->declaration.stride) + " reconstructs " +
+                         std::to_string(inferred.count));
+                }
+                for (std::size_t element = 0u; element < inferred.count; ++element)
+                {
+                    const auto& declared = vertex->declaration.elements[element];
+                    const auto& canonical = inferred.elements[element];
+                    if (declared.getOffsetProperty() != canonical.offset ||
+                        declared.getVertexElementFormatProperty() != canonical.format ||
+                        declared.getVertexElementUsageProperty() != canonical.usage ||
+                        declared.getUsageIndexProperty() != canonical.usageIndex)
+                    {
+                        fail(where + " uses VertexDeclaration element " +
+                             Fidelity::VertexDeclarationFidelityDetail::Describe(
+                                 declared.getVertexElementUsageProperty(),
+                                 declared.getUsageIndexProperty(), declared.getOffsetProperty(),
+                                 declared.getVertexElementFormatProperty()) +
+                             ", but stride " +
+                             std::to_string(vertex->declaration.stride) +
+                             " reconstructs " +
+                             Fidelity::VertexDeclarationFidelityDetail::Describe(
+                                 canonical.usage, canonical.usageIndex,
+                                 canonical.offset, canonical.format));
+                    }
+                }
+                if (part.vertexOffset != 0 || part.startIndex != 0 || part.vertexCount < 0 ||
+                    static_cast<std::uint32_t>(part.vertexCount) != vertex->vertexCount)
+                {
+                    fail(where + " uses VertexOffset = " +
+                         std::to_string(part.vertexOffset) + ", StartIndex = " +
+                         std::to_string(part.startIndex) + ", and NumVertices = " +
+                         std::to_string(part.vertexCount) + " of " +
+                         std::to_string(vertex->vertexCount) +
+                         "; Model schema 1 preserves only whole buffers at offset zero");
+                }
+                const std::uint32_t indexCount = static_cast<std::uint32_t>(
+                    index->bytes.size() / index->indexElementSize);
+                if (part.primitiveCount < 0 || indexCount !=
+                        static_cast<std::uint64_t>(part.primitiveCount) * 3u)
+                {
+                    fail(where + " triangle count does not consume the complete index buffer");
+                }
+                if (!SameFloat(effect->specularPower, 16.0f))
+                {
+                    fail(where + " has BasicEffect.SpecularPower = " +
+                         std::to_string(effect->specularPower) +
+                         ", but Model schema 1 has no SpecularPower field and reconstructs 16");
+                }
+
+                Cnb::CnbModelPart outputPart;
+                outputPart.name = mesh.name + "/part" + std::to_string(partIndex);
+                outputPart.vertexStride =
+                    static_cast<std::uint32_t>(vertex->declaration.stride);
+                outputPart.vertexCount = vertex->vertexCount;
+                outputPart.indexCount = indexCount;
+                outputPart.indexElementSize = index->indexElementSize;
+                outputPart.primitiveTopology = 4u;
+                outputPart.primitiveCount = static_cast<std::uint32_t>(part.primitiveCount);
+                outputPart.effectKind = Cnb::CnbEffectKind::BasicEffect;
+                outputPart.vertexColorEnabled = effect->vertexColorEnabled;
+                outputPart.material.baseColorFactor = {{
+                    effect->diffuseColor.X, effect->diffuseColor.Y,
+                    effect->diffuseColor.Z, effect->alpha}};
+                outputPart.material.emissiveFactor = {{
+                    effect->emissiveColor.X, effect->emissiveColor.Y,
+                    effect->emissiveColor.Z}};
+                outputPart.material.specularColorFactor = {{
+                    effect->specularColor.X, effect->specularColor.Y,
+                    effect->specularColor.Z}};
+                if (!effect->textureReference.empty())
+                {
+                    outputPart.material.baseColorTexture =
+                        resolveTexture(effect->textureReference);
+                }
+                outputPart.vertexBytes = vertex->bytes;
+                outputPart.indexBytes = index->bytes;
+
+                for (std::uint32_t vertexIndex = 0u;
+                     vertexIndex < vertex->vertexCount; ++vertexIndex)
+                {
+                    const std::size_t offset =
+                        static_cast<std::size_t>(vertexIndex) *
+                        static_cast<std::size_t>(vertex->declaration.stride);
+                    float xyz[3];
+                    std::memcpy(xyz, vertex->bytes.data() + offset, sizeof(xyz));
+                    meshPositions.emplace_back(xyz[0], xyz[1], xyz[2]);
+                }
+
+                outputMesh.partIndices.push_back(
+                    static_cast<std::uint32_t>(result.parts.size()));
+                result.parts.push_back(std::move(outputPart));
+            }
+
+            if (meshPositions.empty())
+            {
+                fail("mesh " + std::to_string(meshIndex) + " has no positions for its bounding sphere");
+            }
+            const BoundingSphere rebuilt = BoundingSphere::CreateFromPoints(meshPositions);
+            if (!SameSphere(mesh.boundingSphere, rebuilt))
+            {
+                fail("mesh " + std::to_string(meshIndex) +
+                     " bounding sphere differs from the value Model schema 1 reconstructs");
+            }
+            result.meshes.push_back(std::move(outputMesh));
+        }
+
+        for (std::size_t resource = 0u; resource < resourceUses.size(); ++resource)
+        {
+            if (resourceUses[resource] == 0u)
+            {
+                fail("shared resource " + std::to_string(resource + 1u) + " using reader '" +
+                     source.sharedResources[resource].reader +
+                     "' is unused; Model schema 1 has no independent resource table");
+            }
+            if (resourceUses[resource] > 1u)
+            {
+                fail("shared resource " + std::to_string(resource + 1u) + " using reader '" +
+                     source.sharedResources[resource].reader + "' is referenced " +
+                     std::to_string(resourceUses[resource]) +
+                     " times; Model schema 1 cannot preserve shared-object identity");
+            }
+        }
+        result.hasBoneHierarchy = source.bones.size() > 1u;
+        result.appliesGltfLightingPolicy = false;
+        return result;
+    }
+
     CNA::Content::Cnb::CnbTextureData ConvertXnbTextureToCnbRgba8(
         const XnbTextureData& source, const bool allowXboxPayload)
     {
@@ -840,12 +1337,16 @@ namespace CNA::Internal::Xnb
                 "'" + origin + "' uses root ContentTypeReader '" + root.normalizedName +
                 "' at unsupported version (" + std::to_string(root.version) + ").");
         }
-        if (XnbCanonicalReaderAccess::SharedResourceCount(reader) != 0)
+        const std::int32_t sharedResourceCount =
+            XnbCanonicalReaderAccess::SharedResourceCount(reader);
+        const bool modelRoot =
+            root.normalizedName == "Microsoft.Xna.Framework.Content.ModelReader";
+        if (sharedResourceCount != 0 && !modelRoot)
         {
             throw ContentLoadException(
                 "'" + origin + "' root ContentTypeReader '" + root.normalizedName +
                 "' uses " +
-                std::to_string(XnbCanonicalReaderAccess::SharedResourceCount(reader)) +
+                std::to_string(sharedResourceCount) +
                 " shared resource(s); that reader graph is not supported for native CNB "
                 "transcoding.");
         }
@@ -886,6 +1387,52 @@ namespace CNA::Internal::Xnb
         else if (root.normalizedName == "Microsoft.Xna.Framework.Content.VideoReader")
         {
             result.value = DecodeVideoXnbData(reader, true);
+        }
+        else if (modelRoot)
+        {
+            CanonicalModelSink sink(sharedResourceCount, origin);
+            XnbModelData model = ReadXnbModelGraph(reader, sink);
+            model.sharedResources.reserve(static_cast<std::size_t>(sharedResourceCount));
+            for (std::int32_t resource = 0; resource < sharedResourceCount; ++resource)
+            {
+                const XnbTypeReaderTableEntry& resourceReader =
+                    XnbCanonicalReaderAccess::ReadReference(reader);
+                if (resourceReader.version != 0)
+                {
+                    throw ContentLoadException(
+                        "'" + origin + "' uses shared-resource reader '" +
+                        resourceReader.normalizedName + "' at unsupported version (" +
+                        std::to_string(resourceReader.version) + ").");
+                }
+                XnbModelSharedResourceData decoded;
+                decoded.reader = resourceReader.normalizedName;
+                if (resourceReader.normalizedName ==
+                    "Microsoft.Xna.Framework.Content.VertexBufferReader")
+                {
+                    decoded.value = DecodeVertexBufferXnbData(reader);
+                }
+                else if (resourceReader.normalizedName ==
+                         "Microsoft.Xna.Framework.Content.IndexBufferReader")
+                {
+                    decoded.value = DecodeIndexBufferXnbData(reader);
+                }
+                else if (resourceReader.normalizedName ==
+                         "Microsoft.Xna.Framework.Content.BasicEffectReader")
+                {
+                    decoded.value = DecodeBasicEffectXnbData(reader, reader.ReadString());
+                }
+                else
+                {
+                    throw ContentLoadException(
+                        "XnbImporter: Model cannot be transcoded losslessly: shared resource " +
+                        std::to_string(resource + 1) + " uses reader '" +
+                        resourceReader.normalizedName +
+                        "'; the initial Model schema-1 subset supports only VertexBufferReader, "
+                        "IndexBufferReader, and BasicEffectReader.");
+                }
+                model.sharedResources.push_back(std::move(decoded));
+            }
+            result.value = std::move(model);
         }
         else
         {

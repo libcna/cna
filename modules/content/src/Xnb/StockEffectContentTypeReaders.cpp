@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Xnb/StockEffectContentTypeReaders.hpp"
+#include "CNA/Internal/Xnb/XnbCanonicalData.hpp"
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
@@ -36,20 +37,20 @@ namespace CNA::Internal::Xnb
     {
         (void)existingInstance; // never provided: CanDeserializeIntoExistingObject defaults false, matching FNA
 
-        auto effect = std::make_shared<BasicEffect>(RequireGraphicsDevice(input, "BasicEffectReader"));
-
         std::optional<Texture2D> texture = input.ReadExternalReference<Texture2D>();
+        const XnbBasicEffectData decoded = DecodeBasicEffectXnbData(input, {});
+        auto effect = std::make_shared<BasicEffect>(RequireGraphicsDevice(input, "BasicEffectReader"));
         if (texture.has_value())
         {
             effect->SetOwnedTexture(std::make_shared<Texture2D>(std::move(*texture)));
             effect->setTextureEnabledProperty(true);
         }
-        effect->setDiffuseColorProperty(input.ReadVector3());
-        effect->setEmissiveColorProperty(input.ReadVector3());
-        effect->setSpecularColorProperty(input.ReadVector3());
-        effect->setSpecularPowerProperty(input.ReadSingle());
-        effect->setAlphaProperty(input.ReadSingle());
-        effect->VertexColorEnabled = input.ReadBoolean();
+        effect->setDiffuseColorProperty(decoded.diffuseColor);
+        effect->setEmissiveColorProperty(decoded.emissiveColor);
+        effect->setSpecularColorProperty(decoded.specularColor);
+        effect->setSpecularPowerProperty(decoded.specularPower);
+        effect->setAlphaProperty(decoded.alpha);
+        effect->VertexColorEnabled = decoded.vertexColorEnabled;
         return effect;
     }
 

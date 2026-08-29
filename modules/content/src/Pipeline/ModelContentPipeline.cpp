@@ -158,6 +158,28 @@ namespace CNA::Content::Pipeline
                                          ContentProcessorContext& context) const
     {
         const ImportedModelDocument& imported = input.Get<ImportedModelDocument>();
+        if (imported.canonicalModel.has_value())
+        {
+            const Cnb::CnbModelData& model = *imported.canonicalModel;
+            for (const Cnb::CnbModelPart& part : model.parts)
+            {
+                const std::string* references[] = {
+                    &part.material.baseColorTexture, &part.material.texture2,
+                    &part.material.normalMap, &part.material.metallicRoughnessMap,
+                    &part.material.emissiveMap, &part.material.occlusionMap,
+                    &part.material.specularMap, &part.material.specularColorMap};
+                for (const std::string* reference : references)
+                {
+                    if (!reference->empty()) { context.AddRuntimeReference(*reference); }
+                }
+                if (!part.externalEffect.empty())
+                {
+                    context.AddRuntimeReference(part.externalEffect);
+                }
+            }
+            context.LogInfo("prepared canonical XNB Model data for CNB encoding.");
+            return ContentValue::Create(ProcessedModelType, model);
+        }
         Cnb::CnbModelFromCnjResult processed =
             Cnb::BuildCnbModelFromCnj(imported.document, imported.intermediateRoot);
         if (imported.recordAuthoredSidecars)

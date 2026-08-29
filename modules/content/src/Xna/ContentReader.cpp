@@ -283,14 +283,13 @@ namespace Microsoft::Xna::Framework::Content
         sharedResourceFixups_.clear();
     }
 
-    const CNA::Internal::Xnb::XnbTypeReaderTableEntry&
-    ContentReader::ReadCanonicalTypeReaderReferenceEXT()
+    const CNA::Internal::Xnb::XnbTypeReaderTableEntry*
+    ContentReader::ReadOptionalCanonicalTypeReaderReferenceEXT()
     {
         const int32_t typeReaderIndex = Read7BitEncodedInt();
         if (typeReaderIndex == 0)
         {
-            throw ContentLoadException(
-                "'" + assetName_ + "' has a null object where canonical XNB data is required.");
+            return nullptr;
         }
         if (typeReaderIndex < 0 ||
             static_cast<std::size_t>(typeReaderIndex) > typeReaderTable_.size())
@@ -298,7 +297,19 @@ namespace Microsoft::Xna::Framework::Content
             throw ContentLoadException(
                 "'" + assetName_ + "' has an incorrect type reader index.");
         }
-        return typeReaderTable_[static_cast<std::size_t>(typeReaderIndex - 1)];
+        return &typeReaderTable_[static_cast<std::size_t>(typeReaderIndex - 1)];
+    }
+
+    const CNA::Internal::Xnb::XnbTypeReaderTableEntry&
+    ContentReader::ReadCanonicalTypeReaderReferenceEXT()
+    {
+        const auto* result = ReadOptionalCanonicalTypeReaderReferenceEXT();
+        if (result == nullptr)
+        {
+            throw ContentLoadException(
+                "'" + assetName_ + "' has a null object where canonical XNB data is required.");
+        }
+        return *result;
     }
 
     std::size_t ContentReader::getCanonicalTypeReaderCountEXT() const

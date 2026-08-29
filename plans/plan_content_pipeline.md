@@ -29,6 +29,13 @@
 > `CP-039` is the focused post-XNB follow-on: iterative validation removes the remaining process
 > stack dependency from very deep content-build graphs.
 >
+> **Post-XNB continuation (2026-08-29):** local `next` had advanced independently to
+> `ffd32388b220ddd47669bbd90a794100afa6fd1a` and did not contain the completed XNB branch.
+> Existing `content-pipeline-model-next` already preserved the XNB/CP-039 head
+> `d86a402d14aa376ace990d63fc9a60b1bbbc53df`; a normal, non-rewriting merge produced the safe
+> combined baseline `8029488d02d561d35bad8509941aa679e2ac6ab1`. `next` remains untouched.
+> `CP-040` and later work continue only on that dedicated branch.
+>
 > **Boundary:** this plan owns the build-time CNA Content Pipeline. `plans/plan_cnb.md` remains the
 > engineering record for the frozen CNB compiled format. The pipeline consumes the existing CNB
 > codec APIs; it does not reopen CNB design.
@@ -1174,7 +1181,7 @@ carrying forward task-local results:
 | `CP-038` | **completed** | Registered `.xnb` in the stock frozen registry and ordinary single/directory discovery. CLI tests prove single-file build, directory layouts, worker 1/2/4 byte-identical trees/manifests, no-op skip, source change, output-tamper repair, configuration fingerprint invalidation and unsupported-reader non-publication. XNB nodes use the existing manifest, graph, scheduler, staging and atomic publisher without a separate build path. |
 | `CP-039` | **completed** | Post-XNB review selected the recursive cycle preflight as the highest-value unambiguous risk. Replaced recursive DFS with an explicit frame/active-position stack while preserving sorted traversal, exact cycle chains and one shared diagnostic per cycle. A 4,096-node acyclic graph builds under workers 4, the same graph closed into a 4,096-node cycle fails deterministically without replacing its prior manifest, all three legacy cycle oracles remain exact, and the deep case passes ASan+UBSan. |
 | `CP-040` | **completed** | Audited the complete FNA/CNA XNB Model graph against frozen Model schema 1. Section 17 records the field-level representability proof, the deliberately narrow useful subset, the two demonstrated blockers in the existing Blender cube fixture plus its remaining bounds gate, and the separately reviewable schema-2 requirements. No Model codec, schema, runtime path or byte changed. |
-| `CP-041` | **planned** | Extract one canonical CPU Model/shared-resource decode used by both the existing runtime adapters and `XnbImporter`; transcode only the CP-040 subset through `ImportedModelDocument` -> existing `ModelProcessor` -> existing writer, with exact negative diagnostics and semantic equivalence coverage. |
+| `CP-041` | **completed** | Added one field-order Model graph walker and shared CPU decoders for declarations, vertex/index buffers and BasicEffect state. The runtime readers remain adapters over those decoders, while `XnbImporter` resolves the shared graph into canonical data and accepts only the CP-040 schema-1 subset through the existing Model processor/writer. Synthetic positive and real/synthetic negative fixtures cover complete geometry/material/hierarchy semantics, texture XREF containment, tags, declarations, effect type/power, ranges, bounds, sharing and truncation; runtime XNB versus CNB Model equivalence and all pre-existing Model/effect reader regressions pass. No renderer/device is used by compilation and no Model wire byte changed. The one new experimental C++ carrier field is inventoried as planned under existing `CBIND-117` (449 total); no C route/export/ABI version changed. |
 | `CP-042` | **planned** | Add conservative abandoned staging-directory scavenging with bounded work, strong name/metadata validation, a stale threshold and an active-owner rule that does not trust PID alone. |
 | `CP-043` | **planned** | Add manifest-proven orphan-output collection after a complete successful build; never infer ownership from an extension and preserve old outputs on failed/corrupt-manifest runs. |
 | `CP-044` | **planned** | Define compiled versus deployment-support artifacts and implement contained, hashed, atomic Song/Video media deployment through the existing manifest/publisher/scheduler. |
@@ -1299,11 +1306,12 @@ None and LZX compression are accepted. LZ4 is recognized but rejected because CN
 stack has no LZ4 decoder. Versions 4/5 and the same 16 platform bytes as runtime are container-valid;
 individual routes can impose stricter semantic rules (notably Xbox texture/audio payloads).
 
-Shared resources are parsed and bounded but are rejected for transcoding before root construction.
-Generic external XNB object references are not interpreted as build edges. The only external forms
-admitted are Song/Video streaming-media path fields; they pass through source-root containment,
-become source-file dependencies, and remain distinct CNB XREFs. Absolute paths, `..`, canonical
-symlink escapes, missing/empty media and unconsumed graph bytes fail.
+Shared resources are parsed and bounded. Generic shared-resource graphs remain rejected; the Model
+route admits only its CP-041 VertexBuffer/IndexBuffer/BasicEffect subset and then proves one-owner
+identity before conversion. Generic external XNB object references are not interpreted as build
+edges. Song/Video media paths become source dependencies plus CNB XREFs, while the admitted Model
+BasicEffect texture path becomes a contained logical XREF. Absolute paths, escaping `..`, canonical
+symlink escapes for source dependencies, missing/empty media and unconsumed graph bytes fail.
 
 ### 15.1 Reader audit and support matrix
 
@@ -1317,7 +1325,7 @@ symlink escapes, missing/empty media and unconsumed graph bytes fail.
 | `CurveReader` | yes | none; CPU value already | yes, shared | Curve **supported** through the existing Curve schema |
 | `SongReader` | yes | ContentManager path resolution and runtime Song | yes, shared metadata | Song **supported** with contained external media dependency/XREF |
 | `VideoReader` | yes | ContentManager path resolution, GraphicsDevice stored by Video | yes, shared metadata | Video **supported** for FNA's String/Int32/Single object-reference graph |
-| `ModelReader` | yes | shared resources, GPU vertex/index buffers, effects, ownership graph | no lossless native adapter | **unsupported**; real fixture identifies ModelReader and 3 shared resources |
+| `ModelReader` | yes | shared resources, GPU vertex/index buffers, effects, ownership graph | yes, shared field-order graph plus CPU resource decoders | Model **supported subset** per section 17; incompatible declarations/effects/tags/windows/bounds/sharing fail exactly |
 | any other/custom root | maybe | unknown application semantics | no | **unsupported** with exact normalized reader identity |
 
 Texture transcode deliberately targets the only representation frozen CNB schema 1 can currently
@@ -1457,7 +1465,7 @@ proved runtime default or exactly recoverable from retained data.
 | diffuse/emissive/specular colour and alpha | existing material factors | **NORMALIZABLE** | the CNB runtime adapter must apply these existing schema-1 fields to BasicEffect; no wire change is needed |
 | `BasicEffect.SpecularPower` | none | **SUPPORTED-SUBSET** | must equal the constructed XNA/CNA default 16 exactly |
 | BasicEffect texture and `TextureEnabled` | base-colour XREF; enabled iff non-null | **NORMALIZABLE** | relative logical reference must remain contained and resolve to the same content identity |
-| `VertexColorEnabled` | part flag | **EXACT** | declaration must also contain the matching canonical colour element when enabled |
+| `VertexColorEnabled` | part flag | **EXACT** | preserve the serialized flag exactly; both runtime paths use the same admitted declaration |
 | World/View/Projection, lighting rig, fog, per-pixel preference | not serialized by `BasicEffectReader` | **RUNTIME-ONLY** | both paths retain constructor defaults; callers set draw-time state after load |
 | shared BasicEffect identity | no sharing identity; one effect is built per CNB part | **SUPPORTED-SUBSET** | each effect resource may be referenced by exactly one part |
 | AlphaTest/DualTexture/EnvironmentMap/Skinned/custom `Effect` graphs | partial or no schema concepts | **UNSUPPORTED** | reject by exact reader identity until every field and sharing behavior is proved |
@@ -1473,7 +1481,7 @@ recomputation equality gate before conversion. No one of those conditions may be
 
 ### 17.1 Initial useful subset
 
-`CP-041` may support uncompressed or already-supported LZX XNB v4/v5 Models containing a valid
+`CP-041` supports uncompressed or already-supported LZX XNB v4/v5 Models containing a valid
 parent-before-child hierarchy rooted at bone 0, identity bone-0 transform, null tags, triangle-list
 parts that consume unique whole vertex/index buffers, an exact canonical CNA vertex declaration,
 16- or 32-bit indices, and one uniquely referenced `BasicEffect` per part with default
@@ -1483,7 +1491,37 @@ first incompatible semantic. This is narrow but useful for conventional
 `VertexPositionNormalTexture` and other already-native CNA layouts; it is not described as general
 XNA Model compatibility.
 
-### 17.2 Possible Model schema 2 requirements (not authorized here)
+### 17.2 Implemented canonical decode architecture (`CP-041`)
+
+`ReadXnbModelGraph()` is the single field-order parser for bones, hierarchy, meshes, parts, tags,
+shared-resource references and root identity. A runtime sink retains the existing `ModelReader`
+ownership/fixup behavior; a canonical sink retains scalar references and rejects non-null tags
+before constructing runtime objects. `DecodeVertexDeclarationXnbData()`,
+`DecodeVertexBufferXnbData()`, `DecodeIndexBufferXnbData()` and
+`DecodeBasicEffectXnbData()` are likewise shared by the runtime readers and compiler. Only after
+all shared CPU resources are decoded does `ConvertXnbModelToCnb()` prove every subset condition.
+
+The successful route is therefore:
+
+```text
+validated XNB + shared field-order graph/CPU resource decoders
+    -> XnbModelData
+    -> subset proof / CnbModelData
+    -> ImportedModelDocument
+    -> existing ModelProcessor
+    -> existing ModelContentWriter
+    -> existing EncodeModelToCnb()
+```
+
+The compiler never creates `GraphicsDevice`, `VertexBuffer`, `IndexBuffer`, `Effect`, renderer or
+window state. Texture references become contained root-relative logical XREFs. Every shared
+vertex buffer, index buffer and effect must have exactly one use: duplicating immutable bytes
+would preserve drawing in many cases, but shared runtime effect/buffer mutation and pointer
+identity are observable, so schema 1 cannot claim the general case. Existing schema-1 material
+factors are now applied to XNA stock effects by the CNB runtime adapter; this realizes already
+documented fields and changes no wire layout or encoded bytes.
+
+### 17.3 Possible Model schema 2 requirements (not authorized here)
 
 A future schema able to claim general XNB Model fidelity would need, at minimum: the complete
 vertex declaration (usage, usage index, format, offset and stride); part vertex/index windows;

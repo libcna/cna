@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <limits>
 #include <optional>
 #include <string>
@@ -10,12 +11,16 @@
 #include <vector>
 
 #include "CNA/Content/Cnb/CnbTextureCodec.hpp"
+#include "CNA/Content/Cnb/CnbModelData.hpp"
 #include "CNA/Content/Import/ImportedSound.hpp"
 #include "CNA/Internal/Xnb/XnbHeader.hpp"
 #include "CNA/Internal/Xnb/XnbReadLimits.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
 #include "Microsoft/Xna/Framework/Curve.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+#include "Microsoft/Xna/Framework/BoundingSphere.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
@@ -165,6 +170,121 @@ namespace CNA::Internal::Xnb
         std::int32_t soundtrackType = 0;
     };
 
+    /** @brief Device-independent vertex declaration decoded from XNB. */
+    struct XnbVertexDeclarationData
+    {
+        /** @brief Declared byte stride. */
+        std::int32_t stride = 0;
+        /** @brief Complete declared element list in serialized order. */
+        std::vector<Microsoft::Xna::Framework::Graphics::VertexElement> elements;
+    };
+
+    /** @brief Device-independent vertex declaration and bytes decoded from an XNB shared resource. */
+    struct XnbVertexBufferData
+    {
+        /** @brief Complete declaration serialized with the buffer. */
+        XnbVertexDeclarationData declaration;
+        /** @brief Number of vertices in the buffer. */
+        std::uint32_t vertexCount = 0u;
+        /** @brief Exact interleaved vertex bytes. */
+        std::vector<std::uint8_t> bytes;
+    };
+
+    /** @brief Device-independent index format and bytes decoded from an XNB shared resource. */
+    struct XnbIndexBufferData
+    {
+        /** @brief Bytes per index, either two or four. */
+        std::uint32_t indexElementSize = 2u;
+        /** @brief Exact little-endian index bytes. */
+        std::vector<std::uint8_t> bytes;
+    };
+
+    /** @brief Serialized BasicEffect state, excluding draw-time runtime-only properties. */
+    struct XnbBasicEffectData
+    {
+        /** @brief Authored external texture reference, or empty. */
+        std::string textureReference;
+        /** @brief Diffuse RGB multiplier. */
+        Microsoft::Xna::Framework::Vector3 diffuseColor{1.0f, 1.0f, 1.0f};
+        /** @brief Emissive RGB contribution. */
+        Microsoft::Xna::Framework::Vector3 emissiveColor{};
+        /** @brief Specular RGB multiplier. */
+        Microsoft::Xna::Framework::Vector3 specularColor{1.0f, 1.0f, 1.0f};
+        /** @brief Specular exponent. */
+        float specularPower = 16.0f;
+        /** @brief Opacity multiplier. */
+        float alpha = 1.0f;
+        /** @brief Whether the effect consumes the vertex-colour element. */
+        bool vertexColorEnabled = false;
+    };
+
+    /** @brief One bone in the canonical XNB Model graph. */
+    struct XnbModelBoneData
+    {
+        /** @brief Bone name. */
+        std::string name;
+        /** @brief Bone-local transform. */
+        Microsoft::Xna::Framework::Matrix transform;
+        /** @brief Parent bone index, or -1. */
+        std::int32_t parent = -1;
+        /** @brief Serialized child indices. */
+        std::vector<std::int32_t> children;
+    };
+
+    /** @brief One part in a canonical XNB Model graph. */
+    struct XnbModelPartData
+    {
+        /** @brief First vertex selected from the shared vertex buffer. */
+        std::int32_t vertexOffset = 0;
+        /** @brief Number of selected vertices. */
+        std::int32_t vertexCount = 0;
+        /** @brief First index selected from the shared index buffer. */
+        std::int32_t startIndex = 0;
+        /** @brief Number of triangle-list primitives. */
+        std::int32_t primitiveCount = 0;
+        /** @brief Zero-based shared vertex-buffer resource index. */
+        std::int32_t vertexBufferResource = -1;
+        /** @brief Zero-based shared index-buffer resource index. */
+        std::int32_t indexBufferResource = -1;
+        /** @brief Zero-based shared effect resource index. */
+        std::int32_t effectResource = -1;
+    };
+
+    /** @brief One mesh in a canonical XNB Model graph. */
+    struct XnbModelMeshData
+    {
+        /** @brief Mesh name. */
+        std::string name;
+        /** @brief Parent bone index. */
+        std::int32_t parentBone = -1;
+        /** @brief Serialized mesh-local bounding sphere. */
+        Microsoft::Xna::Framework::BoundingSphere boundingSphere;
+        /** @brief Mesh parts in draw order. */
+        std::vector<XnbModelPartData> parts;
+    };
+
+    /** @brief One supported shared resource in a canonical XNB Model graph. */
+    struct XnbModelSharedResourceData
+    {
+        /** @brief Exact normalized reader identity. */
+        std::string reader;
+        /** @brief CPU value produced by that reader. */
+        std::variant<XnbVertexBufferData, XnbIndexBufferData, XnbBasicEffectData> value;
+    };
+
+    /** @brief Complete device-independent XNB Model graph before schema-1 subset conversion. */
+    struct XnbModelData
+    {
+        /** @brief Bones in serialized order. */
+        std::vector<XnbModelBoneData> bones;
+        /** @brief Meshes and their parts in serialized order. */
+        std::vector<XnbModelMeshData> meshes;
+        /** @brief Serialized root-bone index. */
+        std::int32_t rootBone = -1;
+        /** @brief Shared resources in serialized order. */
+        std::vector<XnbModelSharedResourceData> sharedResources;
+    };
+
     /** @brief Bounded canonical root values supported by native XNB transcoding. */
     using XnbCanonicalValue = std::variant<
         XnbTextureData,
@@ -172,7 +292,8 @@ namespace CNA::Internal::Xnb
         XnbSoundEffectData,
         Microsoft::Xna::Framework::Curve,
         XnbSongData,
-        XnbVideoData>;
+        XnbVideoData,
+        XnbModelData>;
 
     /** @brief Validated XNB container metadata plus its decoded built-in root value. */
     struct XnbCanonicalAsset
@@ -274,6 +395,50 @@ namespace CNA::Internal::Xnb
     [[nodiscard]] XnbVideoData DecodeVideoXnbData(
         Microsoft::Xna::Framework::Content::ContentReader& input,
         bool objectReferences = false);
+
+    /**
+     * @brief Reads a VertexBuffer payload into declaration metadata and raw CPU bytes.
+     * @param input Content reader positioned at the declaration stride.
+     * @return Canonical vertex-buffer data.
+     */
+    [[nodiscard]] XnbVertexBufferData DecodeVertexBufferXnbData(
+        Microsoft::Xna::Framework::Content::ContentReader& input);
+
+    /**
+     * @brief Reads a VertexDeclaration payload without constructing a GPU resource.
+     * @param input Content reader positioned at the declaration stride.
+     * @return Canonical declaration fields.
+     */
+    [[nodiscard]] XnbVertexDeclarationData DecodeVertexDeclarationXnbData(
+        Microsoft::Xna::Framework::Content::ContentReader& input);
+
+    /**
+     * @brief Reads an IndexBuffer payload into format metadata and raw CPU bytes.
+     * @param input Content reader positioned at the sixteen-bit flag.
+     * @return Canonical index-buffer data.
+     */
+    [[nodiscard]] XnbIndexBufferData DecodeIndexBufferXnbData(
+        Microsoft::Xna::Framework::Content::ContentReader& input);
+
+    /**
+     * @brief Reads BasicEffect fields after its external texture-reference string.
+     * @param input Content reader positioned at DiffuseColor.
+     * @param textureReference Raw authored texture reference already read by the caller.
+     * @return Canonical serialized BasicEffect state.
+     */
+    [[nodiscard]] XnbBasicEffectData DecodeBasicEffectXnbData(
+        Microsoft::Xna::Framework::Content::ContentReader& input,
+        std::string textureReference);
+
+    /**
+     * @brief Converts the lossless CP-040 XNB Model subset to frozen Model schema-1 data.
+     * @param source Validated canonical Model graph and shared resources.
+     * @param resolveTexture Converts an authored relative texture reference to a CNB logical name.
+     * @return Model schema-1 data for the existing processor/writer path.
+     */
+    [[nodiscard]] CNA::Content::Cnb::CnbModelData ConvertXnbModelToCnb(
+        const XnbModelData& source,
+        const std::function<std::string(const std::string&)>& resolveTexture);
 
     /**
      * @brief Converts a supported XNB texture into CNB schema-1 Rgba8 CPU data.

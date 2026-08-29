@@ -11,6 +11,7 @@
 #include "CNA/Content/Cnb/CnbFormat.hpp"
 #include "CNA/Content/Import/ImportedSound.hpp"
 #include "CNA/Content/Pipeline/CnjContentPipeline.hpp"
+#include "CNA/Content/Pipeline/ModelContentPipeline.hpp"
 #include "CNA/Content/Pipeline/SongContentPipeline.hpp"
 #include "CNA/Content/Pipeline/SoundEffectContentPipeline.hpp"
 #include "CNA/Content/Pipeline/Texture2DContentPipeline.hpp"
@@ -33,6 +34,7 @@ namespace CNA::Content::Pipeline
         using CNA::Internal::Xnb::XnbSpriteFontData;
         using CNA::Internal::Xnb::XnbTextureData;
         using CNA::Internal::Xnb::XnbVideoData;
+        using CNA::Internal::Xnb::XnbModelData;
         using Microsoft::Xna::Framework::Content::ContentLoadException;
 
         constexpr const char* XnbImporterName = "CNA.XnbImporter";
@@ -134,6 +136,29 @@ namespace CNA::Content::Pipeline
             return result;
         }
 
+        [[nodiscard]] std::string ResolveModelTextureReference(
+            const std::string& modelLogicalName, const std::string& authored)
+        {
+            std::string normalizedAuthored = authored;
+            std::replace(normalizedAuthored.begin(), normalizedAuthored.end(), '\\', '/');
+            if (normalizedAuthored.empty() ||
+                CNA::Internal::IsDisallowedAbsolutePath(normalizedAuthored))
+            {
+                throw ContentLoadException(
+                    "XnbImporter: Model texture reference must be a non-empty relative logical name.");
+            }
+            const std::filesystem::path resolved =
+                (CNA::Internal::ContentPathFromUtf8(modelLogicalName).parent_path() /
+                 CNA::Internal::ContentPathFromUtf8(normalizedAuthored)).lexically_normal();
+            const std::string logical = CNA::Internal::ContentPathToUtf8(resolved);
+            if (const std::string problem = Cnb::CnbLogicalNameProblem(logical); !problem.empty())
+            {
+                throw ContentLoadException(
+                    "XnbImporter: Model texture reference '" + authored + "' is " + problem + ".");
+            }
+            return logical;
+        }
+
         [[nodiscard]] std::uint64_t MediaSize(const std::filesystem::path& path)
         {
             std::error_code error;
@@ -214,7 +239,7 @@ namespace CNA::Content::Pipeline
     {
         return {ImportedImageType, ImportedSpriteFontType, ImportedSoundType,
                 ImportedTexture3DType, ImportedTextureCubeType, ImportedCurveType,
-                ImportedSongSourceType, ImportedXnbVideoType};
+                ImportedSongSourceType, ImportedXnbVideoType, ImportedModelDocumentType};
     }
 
     ContentValue XnbImporter::Import(ContentImporterContext& context) const
@@ -322,6 +347,17 @@ namespace CNA::Content::Pipeline
             imported.data.framesPerSecond = source.framesPerSecond;
             imported.data.soundtrackType = static_cast<std::uint32_t>(source.soundtrackType);
             return ContentValue::Create(ImportedXnbVideoType, std::move(imported));
+        }
+        if (asset.rootReader == "Microsoft.Xna.Framework.Content.ModelReader")
+        {
+            ImportedModelDocument imported;
+            imported.canonicalModel = CNA::Internal::Xnb::ConvertXnbModelToCnb(
+                std::get<XnbModelData>(asset.value),
+                [&context](const std::string& authored)
+                {
+                    return ResolveModelTextureReference(context.LogicalName(), authored);
+                });
+            return ContentValue::Create(ImportedModelDocumentType, std::move(imported));
         }
         throw ContentLoadException(
             "XnbImporter: validated root dispatch produced no supported canonical route.");

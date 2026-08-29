@@ -2377,6 +2377,35 @@ namespace Microsoft::Xna::Framework::Content
                     }
                 }
 
+                // CP-041: these fields have always been present in frozen Model schema 1, but
+                // the runtime adapter formerly applied them only to PBR effects (and partly in
+                // the glTF-unlit branch). Applying them to the three XNA material effects is the
+                // existing schema's stated meaning, not a wire extension. BasicEffect's
+                // SpecularPower and SkinnedEffect's WeightsPerVertex still have no schema field;
+                // XNB transcoding therefore accepts only their constructor-default values.
+                const Vector3 diffuse(
+                    material.baseColorFactor.X, material.baseColorFactor.Y,
+                    material.baseColorFactor.Z);
+                if (auto* basicFx = dynamic_cast<Graphics::BasicEffect*>(fx.get()))
+                {
+                    basicFx->setDiffuseColorProperty(diffuse);
+                    basicFx->setEmissiveColorProperty(material.emissiveFactor);
+                    basicFx->setSpecularColorProperty(material.specularColorFactorEXT);
+                    basicFx->setAlphaProperty(material.baseColorFactor.W);
+                }
+                else if (auto* skinnedFx = dynamic_cast<Graphics::SkinnedEffect*>(fx.get()))
+                {
+                    skinnedFx->setDiffuseColorProperty(diffuse);
+                    skinnedFx->setEmissiveColorProperty(material.emissiveFactor);
+                    skinnedFx->setSpecularColorProperty(material.specularColorFactorEXT);
+                    skinnedFx->setAlphaProperty(material.baseColorFactor.W);
+                }
+                else if (auto* dualFx = dynamic_cast<Graphics::DualTextureEffect*>(fx.get()))
+                {
+                    dualFx->setDiffuseColorProperty(diffuse);
+                    dualFx->setAlphaProperty(material.baseColorFactor.W);
+                }
+
                 // GLTF-236/237: apply the complete material carrier reconstructed
                 // above, including the four PBR maps and every factor/scalar.
                 if (auto* pbrFx = dynamic_cast<Graphics::PbrEffect*>(fx.get())) {
