@@ -48,6 +48,8 @@
 #include <stdexcept>
 #include <unordered_set>
 
+#include "CNA/Internal/ContentPath.hpp"
+
 // plans/plan_cnj.md CNB-91 / plans/plan_gltf.md GLTF-353: KHR_draco_mesh_compression decoding. The normal
 // build uses CNA's pinned Draco submodule; CNA_DRACO_AVAILABLE remains conditional so packagers
 // and the conformance gate can deliberately exercise the decoder-free refusal path.
@@ -2145,12 +2147,17 @@ namespace CNA::Internal::GltfImport
             // caller that reaches ExtractImage without the up-front sweep.
             const std::filesystem::path imgPath = ResolveExternalUriEXT(gltfDir, uri, "image");
             std::ifstream f(imgPath, std::ios::binary);
-            if (!f) { throw std::runtime_error("Cannot open external image file: " + imgPath.string()); }
+            if (!f)
+            {
+                throw std::runtime_error("Cannot open external image file: " +
+                                         CNA::Internal::ContentPathToUtf8(imgPath));
+            }
             ExtractedImage result;
             result.bytes.assign(std::istreambuf_iterator<char>(f), {});
             if (ext.empty())
             {
-                std::string realExt = imgPath.extension().string();
+                std::string realExt =
+                    CNA::Internal::ContentPathToUtf8(imgPath.extension());
                 if (!realExt.empty() && realExt.front() == '.') { realExt = realExt.substr(1); }
                 ext = realExt;
             }
@@ -4779,7 +4786,8 @@ namespace CNA::Internal::GltfImport
                 "Refusing " + subject + ": it is an absolute path, and a glTF file may only "
                 "reference files inside its own directory.");
         }
-        const fs::path relative(decoded.data());
+        const fs::path relative =
+            CNA::Internal::ContentPathFromUtf8(std::string_view(decoded.data()));
 
         // (2) An absolute path ignores the asset directory by construction, so containment is not
         // even a question -- it is simply not the kind of reference glTF's relative URIs are.
@@ -4822,7 +4830,8 @@ namespace CNA::Internal::GltfImport
             {
                 throw std::runtime_error(
                     "Refusing " + subject + ": it resolves through a symbolic link to '" +
-                    realPath.string() + "', outside the asset's own directory.");
+                    CNA::Internal::ContentPathToUtf8(realPath) +
+                    "', outside the asset's own directory.");
             }
         }
 

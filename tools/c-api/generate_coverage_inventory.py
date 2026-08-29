@@ -776,6 +776,11 @@ B11_SLICE_OWNERS: dict[str, str] = {
 # task instead of handing them back to the completed CBIND-036/CBIND-111 slices.
 B12_SLICE_OWNERS: dict[str, str] = {
     "content/CnbSourceImport": "CBIND-117",
+    # CP-021 adds a native-filesystem overload for the C++ build pipeline. The existing narrow
+    # overload remains mapped by CBIND-109; designing any distinct C path representation belongs
+    # to the still-open experimental pipeline boundary task rather than reopening that closed
+    # schema slice or silently growing the released ABI.
+    "content/CnbModelFromCnj": "CBIND-117",
 }
 
 

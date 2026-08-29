@@ -11,6 +11,8 @@
 using CNA::Internal::ResolveContainedPath;
 using CNA::Internal::ResolveContainedPathFromBase;
 using CNA::Internal::ResolveContainedPathRelativeToFile;
+using CNA::Internal::ResolveContainedUtf8Path;
+using CNA::Internal::ValidateContainedNativePath;
 
 namespace
 {
@@ -258,4 +260,37 @@ TEST(PathContainmentTest, ResultPathIsUsableAndCorrect)
     const auto result = ResolveContainedPath(root.path().string(), "sub/file.txt");
     ASSERT_TRUE(result.ok);
     EXPECT_TRUE(std::filesystem::exists(result.resolvedPath));
+}
+
+TEST(PathContainmentTest, NativeValidationPreservesANonAsciiFilesystemPath)
+{
+    ScratchDir root;
+    const std::filesystem::path nested =
+        root.path() / CNA::Internal::ContentPathFromUtf8("vnoření_内");
+    const std::filesystem::path file =
+        nested / CNA::Internal::ContentPathFromUtf8("obrázek_壁.bin");
+    std::filesystem::create_directories(nested);
+    std::ofstream(file) << "data";
+
+    const auto result = ValidateContainedNativePath(root.path(), file);
+    ASSERT_TRUE(result.ok);
+    EXPECT_EQ(result.resolvedPath, file.lexically_normal());
+    EXPECT_EQ(CNA::Internal::ContentPathToUtf8(result.resolvedPath.filename()),
+              "obrázek_壁.bin");
+}
+
+TEST(PathContainmentTest, Utf8ResolverUsesNativePathsAndRetainsContainmentPolicy)
+{
+    ScratchDir root;
+    const std::filesystem::path file =
+        root.path() / CNA::Internal::ContentPathFromUtf8("geometrie_形/údaje_ß.bin");
+    std::filesystem::create_directories(file.parent_path());
+    std::ofstream(file) << "data";
+
+    const auto result = ResolveContainedUtf8Path(root.path(), "geometrie_形/údaje_ß.bin");
+    ASSERT_TRUE(result.ok);
+    EXPECT_EQ(result.resolvedPath, file.lexically_normal());
+    EXPECT_FALSE(ResolveContainedUtf8Path(root.path(), "../outside.bin").ok);
+    EXPECT_FALSE(ResolveContainedUtf8Path(root.path(), "C:/outside.bin").ok);
+    EXPECT_FALSE(ResolveContainedUtf8Path(root.path(), "\\\\server\\share\\outside.bin").ok);
 }

@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 
+#include <algorithm>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -15,6 +17,7 @@
 #include "CNA/Content/Pipeline/ContentBuildManifest.hpp"
 #include "CNA/Content/Pipeline/ModelContentPipeline.hpp"
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/Internal/ContentPath.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
@@ -80,6 +83,11 @@ namespace
         std::ofstream stream(path, std::ios::binary);
         stream.write(reinterpret_cast<const char*>(bytes.data()),
                      static_cast<std::streamsize>(bytes.size()));
+    }
+
+    std::filesystem::path Utf8Path(std::string_view value)
+    {
+        return CNA::Internal::ContentPathFromUtf8(value);
     }
 
     std::shared_ptr<const Pipeline::ContentPipelineRegistry> MakeRegistry()
@@ -171,6 +179,88 @@ TEST(ModelContentPipelineTest, ReportsSourceDependenciesSeparatelyFromRuntimeXre
               "gltf-external-image_tex0.png");
     EXPECT_EQ(result.runtimeReferences[0].expectedAssetTypeId, 0u);
     EXPECT_NE(result.dependencies[1].identity, result.runtimeReferences[0].logicalName);
+}
+
+TEST(ModelContentPipelineTest, PreservesUnicodeNativePathsThroughGltfAndItsSidecars)
+{
+    const std::filesystem::path fixture = FindFixture("gltf-external-image.gltf");
+    const std::filesystem::path vertexFixture =
+        FindFixture("gltf-external-image.vb.bin");
+    const std::filesystem::path indexFixture =
+        FindFixture("gltf-external-image.ib.bin");
+    const std::filesystem::path imageFixture =
+        FindFixture("gltf-external-image.texture.png");
+    if (fixture.empty() || vertexFixture.empty() || indexFixture.empty() || imageFixture.empty())
+    {
+        GTEST_SKIP() << "external glTF fixtures not found";
+    }
+
+    ScratchDirectory scratch("unicode");
+    const std::filesystem::path sourceRoot = scratch.Path() / Utf8Path("kořen_根");
+    const std::filesystem::path sourceDirectory =
+        sourceRoot / Utf8Path("vnoření_内") / Utf8Path("modely_模型");
+    const std::filesystem::path gltfPath =
+        sourceDirectory / Utf8Path("žluťoučký_模型.gltf");
+    const std::string bufferUri = "geometrie_形/údaje_ß.bin";
+    const std::string imageUri = "textury_图/obrázek_壁.png";
+
+    const std::vector<std::uint8_t> sourceBytes = ReadBytes(fixture);
+    std::string source(sourceBytes.begin(), sourceBytes.end());
+    const std::string originalImageUri = "gltf-external-image.texture.png";
+    const std::size_t imagePosition = source.find(originalImageUri);
+    ASSERT_NE(imagePosition, std::string::npos);
+    source.replace(imagePosition, originalImageUri.size(), imageUri);
+
+    const std::size_t buffersPosition = source.find("\"buffers\": [");
+    ASSERT_NE(buffersPosition, std::string::npos);
+    const std::string uriPrefix = "\"uri\": \"";
+    const std::size_t uriPosition = source.find(uriPrefix, buffersPosition);
+    ASSERT_NE(uriPosition, std::string::npos);
+    const std::size_t uriValuePosition = uriPosition + uriPrefix.size();
+    const std::size_t uriEnd = source.find('"', uriValuePosition);
+    ASSERT_NE(uriEnd, std::string::npos);
+    source.replace(uriValuePosition, uriEnd - uriValuePosition, bufferUri);
+
+    std::vector<std::uint8_t> geometry = ReadBytes(vertexFixture);
+    const std::vector<std::uint8_t> indices = ReadBytes(indexFixture);
+    geometry.insert(geometry.end(), indices.begin(), indices.end());
+    ASSERT_EQ(geometry.size(), 150u);
+    const std::vector<std::uint8_t> rewrittenSource(source.begin(), source.end());
+    WriteBytes(gltfPath, rewrittenSource);
+    WriteBytes(sourceDirectory / Utf8Path(bufferUri), geometry);
+    WriteBytes(sourceDirectory / Utf8Path(imageUri), ReadBytes(imageFixture));
+
+    const Pipeline::ContentPipeline pipeline(MakeRegistry());
+    Pipeline::ContentBuildRequest request;
+    request.sourceRoot = sourceRoot;
+    request.source = gltfPath;
+    request.logicalName = "Models/unicode";
+    const Pipeline::ContentBuildResult first = pipeline.Build(request);
+    const Pipeline::ContentBuildResult second = pipeline.Build(request);
+
+    EXPECT_EQ(first.output.bytes, second.output.bytes);
+    ASSERT_EQ(first.dependencies.size(), 3u);
+    std::vector<std::string> dependencyNames;
+    for (const Pipeline::ContentDependency& dependency : first.dependencies)
+    {
+        if (dependency.kind == Pipeline::ContentDependencyKind::SourceFile)
+        {
+            dependencyNames.push_back(CNA::Internal::ContentPathToUtf8(
+                CNA::Internal::ContentPathFromUtf8(dependency.identity).filename()));
+        }
+    }
+    EXPECT_NE(std::find(dependencyNames.begin(), dependencyNames.end(), "údaje_ß.bin"),
+              dependencyNames.end());
+    EXPECT_NE(std::find(dependencyNames.begin(), dependencyNames.end(), "obrázek_壁.png"),
+              dependencyNames.end());
+
+    ASSERT_EQ(first.runtimeReferences.size(), 1u);
+    EXPECT_EQ(first.runtimeReferences[0].logicalName, "žluťoučký_模型_tex0.png");
+    const Cnb::CnbDocument document =
+        Cnb::CnbDocument::Parse(first.output.bytes, "unicode model.cnb");
+    const Cnb::CnbModelData decoded = Cnb::DecodeModelFromCnb(document);
+    ASSERT_EQ(decoded.parts.size(), 1u);
+    EXPECT_EQ(decoded.parts[0].vertexCount, 3u);
 }
 
 TEST(ModelContentPipelineTest, ResultLoadsThroughContentManagerWhenTheRendererSupports3D)

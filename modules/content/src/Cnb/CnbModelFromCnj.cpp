@@ -14,6 +14,7 @@
 #include "CNA/Content/Cnb/CnbArithmetic.hpp"
 #include "CNA/Internal/CnjEnvelope.hpp"
 #include "CNA/Internal/CnjMorphSidecarEXT.hpp"
+#include "CNA/Internal/ContentPath.hpp"
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
 #include "CNA/Internal/Json.hpp"
 #include "CNA/Internal/PathContainment.hpp"
@@ -33,12 +34,18 @@ namespace CNA::Content::Cnb
         namespace fs = std::filesystem;
 
         /// Reads a whole file, refusing quietly-truncated reads rather than returning short data.
-        std::vector<std::uint8_t> ReadBinary(const std::string& path)
+        std::string PathText(const fs::path& path)
+        {
+            return CNA::Internal::ContentPathToUtf8(path);
+        }
+
+        std::vector<std::uint8_t> ReadBinary(const fs::path& path)
         {
             std::ifstream file(path, std::ios::binary);
             if (!file.is_open())
             {
-                throw ContentLoadException("cnj-to-cnb: cannot open binary file '" + path + "'.");
+                throw ContentLoadException("cnj-to-cnb: cannot open binary file '" +
+                                           PathText(path) + "'.");
             }
             std::ostringstream ss;
             ss << file.rdbuf();
@@ -46,12 +53,12 @@ namespace CNA::Content::Cnb
             return std::vector<std::uint8_t>(bytes.begin(), bytes.end());
         }
 
-        std::string ReadText(const std::string& path)
+        std::string ReadText(const fs::path& path)
         {
             std::ifstream file(path, std::ios::binary);
             if (!file.is_open())
             {
-                throw ContentLoadException("cnj-to-cnb: cannot open '" + path + "'.");
+                throw ContentLoadException("cnj-to-cnb: cannot open '" + PathText(path) + "'.");
             }
             std::ostringstream ss;
             ss << file.rdbuf();
@@ -124,11 +131,11 @@ namespace CNA::Content::Cnb
             std::size_t position_ = 0;
         };
 
-        std::string ResolveSidecar(const std::string& root, const std::string& value,
-                                   const char* field, const std::string& cnjPath)
+        fs::path ResolveSidecar(const fs::path& root, const std::string& value,
+                                const char* field, const std::string& cnjPath)
         {
-            const Internal::ContainedPathResult resolved =
-                Internal::ResolveContainedPath(root, value);
+            const Internal::ContainedNativePathResult resolved =
+                Internal::ResolveContainedUtf8Path(root, value);
             if (!resolved.ok)
             {
                 throw ContentLoadException(
@@ -141,22 +148,20 @@ namespace CNA::Content::Cnb
         /// Turns a `.cnj` asset reference into the logical name ContentManager would resolve it by,
         /// with the same containment rule the runtime reader applies, and normalised to the
         /// forward-slash form the `.cnb` external-reference table requires.
-        std::string ToLogicalName(const std::string& root, const std::string& value,
+        std::string ToLogicalName(const fs::path& root, const std::string& value,
                                   const char* field, const std::string& cnjPath)
         {
-            const std::string resolved = ResolveSidecar(root, value, field, cnjPath);
+            const fs::path resolved = ResolveSidecar(root, value, field, cnjPath);
             const fs::path rootPath =
-                (root.empty() ? fs::path(".") : fs::path(root)).lexically_normal();
-            std::error_code ec;
-            fs::path relative = fs::path(resolved).lexically_normal().lexically_relative(rootPath);
+                (root.empty() ? fs::path(".") : root).lexically_normal();
+            fs::path relative = resolved.lexically_normal().lexically_relative(rootPath);
             if (relative.empty())
             {
                 throw ContentLoadException(
                     "cnj-to-cnb: '" + cnjPath + "' field '" + field + "' ('" + value +
                     "') does not resolve to a name inside the content root.");
             }
-            (void)ec;
-            return relative.generic_string();
+            return CNA::Internal::ContentPathToUtf8(relative);
         }
 
         const Json::JsonValue* Member(const Json::JsonValue& object, const char* key)
@@ -239,9 +244,9 @@ namespace CNA::Content::Cnb
             }
         }
 
-        AnimationClipEXT ReadClipBin(const std::string& path)
+        AnimationClipEXT ReadClipBin(const fs::path& path)
         {
-            SidecarReader reader(ReadBinary(path), "clip sidecar '" + path + "'");
+            SidecarReader reader(ReadBinary(path), "clip sidecar '" + PathText(path) + "'");
             AnimationClipEXT clip;
             const double duration = reader.F64();
             if (!std::isfinite(duration))
@@ -286,11 +291,12 @@ namespace CNA::Content::Cnb
             return clip;
         }
 
-        AnimationClipEXT ReadClipCnj(const std::string& path)
+        AnimationClipEXT ReadClipCnj(const fs::path& path)
         {
+            const std::string pathText = PathText(path);
             const std::string json = ReadText(path);
             const Internal::CnjEnvelope envelope = Internal::ParseCnjEnvelope(json);
-            Internal::ValidateCnjEnvelope(envelope, "AnimationClip", path);
+            Internal::ValidateCnjEnvelope(envelope, "AnimationClip", pathText);
 
             const Json::JsonValue root = Json::ParseJson(json);
             if (const Json::JsonValue* clipFile = root.FindMember("clipFile");
@@ -298,14 +304,15 @@ namespace CNA::Content::Cnb
             {
                 // A .cnj AnimationClip may itself defer to a raw sidecar; the compiler follows the
                 // one indirection the runtime reader follows, and no further.
-                const fs::path parent = fs::path(path).parent_path();
-                return ReadClipBin((parent / clipFile->stringValue).string());
+                return ReadClipBin(
+                    ResolveSidecar(path.parent_path(), clipFile->stringValue, "clipFile",
+                                   pathText));
             }
 
             AnimationClipEXT clip;
             clip.Duration = System::TimeSpan::FromSeconds(
-                NumberField(root, "duration", path, 0.0));
-            if (StringField(root, "targetSpace", path) == "SceneNode")
+                NumberField(root, "duration", pathText, 0.0));
+            if (StringField(root, "targetSpace", pathText) == "SceneNode")
             {
                 clip.TargetSpace = ClipTargetSpaceEXT::SceneNode;
             }
@@ -313,42 +320,45 @@ namespace CNA::Content::Cnb
             if (tracks == nullptr || tracks->type != Json::JsonType::Array)
             {
                 throw ContentLoadException(
-                    "cnj-to-cnb: AnimationClip '" + path + "' has no 'tracks' array.");
+                    "cnj-to-cnb: AnimationClip '" + pathText + "' has no 'tracks' array.");
             }
             for (const Json::JsonValue& trackValue : tracks->arrayValue)
             {
                 BoneTrackEXT track;
-                track.BoneIndex = static_cast<int>(NumberField(trackValue, "boneIndex", path, -1.0));
+                track.BoneIndex =
+                    static_cast<int>(NumberField(trackValue, "boneIndex", pathText, -1.0));
                 const Json::JsonValue* keys = Member(trackValue, "keys");
                 if (keys == nullptr || keys->type != Json::JsonType::Array)
                 {
                     throw ContentLoadException(
-                        "cnj-to-cnb: AnimationClip '" + path + "' has a track with no 'keys'.");
+                        "cnj-to-cnb: AnimationClip '" + pathText +
+                        "' has a track with no 'keys'.");
                 }
                 for (const Json::JsonValue& keyValue : keys->arrayValue)
                 {
                     KeyframeEXT key;
                     key.Time = System::TimeSpan::FromSeconds(
-                        NumberField(keyValue, "time", path, 0.0));
+                        NumberField(keyValue, "time", pathText, 0.0));
                     const std::vector<float> translation =
-                        FloatArrayField(keyValue, "translation", path);
+                        FloatArrayField(keyValue, "translation", pathText);
                     if (!translation.empty())
                     {
-                        RequireExactLength(translation, 3u, "translation", path);
+                        RequireExactLength(translation, 3u, "translation", pathText);
                         key.Translation = Microsoft::Xna::Framework::Vector3(
                             translation[0], translation[1], translation[2]);
                     }
-                    const std::vector<float> rotation = FloatArrayField(keyValue, "rotation", path);
+                    const std::vector<float> rotation =
+                        FloatArrayField(keyValue, "rotation", pathText);
                     if (!rotation.empty())
                     {
-                        RequireExactLength(rotation, 4u, "rotation", path);
+                        RequireExactLength(rotation, 4u, "rotation", pathText);
                         key.Rotation = Microsoft::Xna::Framework::Quaternion(
                             rotation[0], rotation[1], rotation[2], rotation[3]);
                     }
-                    const std::vector<float> scale = FloatArrayField(keyValue, "scale", path);
+                    const std::vector<float> scale = FloatArrayField(keyValue, "scale", pathText);
                     if (!scale.empty())
                     {
-                        RequireExactLength(scale, 3u, "scale", path);
+                        RequireExactLength(scale, 3u, "scale", pathText);
                         key.Scale =
                             Microsoft::Xna::Framework::Vector3(scale[0], scale[1], scale[2]);
                     }
@@ -359,11 +369,11 @@ namespace CNA::Content::Cnb
             return clip;
         }
 
-        CnbMorphData ReadMorphSidecar(const std::string& path, std::uint32_t partVertexCount,
+        CnbMorphData ReadMorphSidecar(const fs::path& path, std::uint32_t partVertexCount,
                                        bool recomputeFlatNormals,
                                        const std::vector<float>& defaultWeights)
         {
-            SidecarReader reader(ReadBinary(path), "morph sidecar '" + path + "'");
+            SidecarReader reader(ReadBinary(path), "morph sidecar '" + PathText(path) + "'");
             CnbMorphData morph;
             morph.vertexCount = partVertexCount;
             morph.recomputeFlatNormals = recomputeFlatNormals;
@@ -458,12 +468,13 @@ namespace CNA::Content::Cnb
         }
     }
 
-    CnbModelFromCnjResult BuildCnbModelFromCnj(const std::string& cnjPath,
-                                                const std::string& contentRoot)
+    CnbModelFromCnjResult BuildCnbModelFromCnj(const fs::path& nativeCnjPath,
+                                                const fs::path& contentRoot)
     {
         namespace Gltf = CNA::Internal::GltfImport;
 
-        const std::string json = ReadText(cnjPath);
+        const std::string cnjPath = PathText(nativeCnjPath);
+        const std::string json = ReadText(nativeCnjPath);
         const Internal::CnjEnvelope envelope = Internal::ParseCnjEnvelope(json);
         Internal::ValidateCnjEnvelope(envelope, "Model", cnjPath, /*maxVersion=*/2);
         if (envelope.hasSourceFile)
@@ -565,9 +576,10 @@ namespace CNA::Content::Cnb
         const std::string skeletonFile = StringField(root, "skeleton", cnjPath);
         if (!skeletonFile.empty())
         {
-            const std::string path =
+            const fs::path path =
                 ResolveSidecar(contentRoot, skeletonFile, "skeleton", cnjPath);
-            SidecarReader reader(ReadBinary(path), "skeleton sidecar '" + path + "'");
+            SidecarReader reader(ReadBinary(path),
+                                 "skeleton sidecar '" + PathText(path) + "'");
             const std::int32_t boneCount = reader.I32();
             if (boneCount < 0 || boneCount > 100000)
             {
@@ -605,11 +617,11 @@ namespace CNA::Content::Cnb
                 const std::string clipFile = StringField(entry, "clip", cnjPath);
                 if (name.empty() || clipFile.empty()) { continue; }
 
-                const std::string path = ResolveSidecar(contentRoot, clipFile, "clip", cnjPath);
+                const fs::path path = ResolveSidecar(contentRoot, clipFile, "clip", cnjPath);
                 CnbModelAnimation animation;
                 animation.name = name;
-                animation.clip = fs::path(path).extension() == ".cnj" ? ReadClipCnj(path)
-                                                                       : ReadClipBin(path);
+                animation.clip = path.extension() == ".cnj" ? ReadClipCnj(path)
+                                                             : ReadClipBin(path);
                 // An unskinned model's rigid clips are dropped by the runtime reader when they
                 // target a joint palette; the compiled form keeps the same rule so the two paths
                 // produce the same clip set.
@@ -675,8 +687,9 @@ namespace CNA::Content::Cnb
             }
             part.vertexStride = static_cast<std::uint32_t>(strideValue);
 
-            const std::string vertPath = ResolveSidecar(contentRoot, vertFile, "vertices", cnjPath);
-            const std::string idxPath = ResolveSidecar(contentRoot, idxFile, "indices", cnjPath);
+            const fs::path vertPath =
+                ResolveSidecar(contentRoot, vertFile, "vertices", cnjPath);
+            const fs::path idxPath = ResolveSidecar(contentRoot, idxFile, "indices", cnjPath);
             part.vertexBytes = ReadBinary(vertPath);
             part.indexBytes = ReadBinary(idxPath);
             result.absorbedFiles.push_back(vertFile);
@@ -688,7 +701,7 @@ namespace CNA::Content::Cnb
             if (part.vertexBytes.size() % part.vertexStride != 0u)
             {
                 throw ContentLoadException(
-                    "cnj-to-cnb: '" + vertPath + "' holds " +
+                    "cnj-to-cnb: '" + PathText(vertPath) + "' holds " +
                     std::to_string(part.vertexBytes.size()) +
                     " byte(s), which is not a whole number of " +
                     std::to_string(part.vertexStride) + "-byte vertices.");
@@ -701,7 +714,7 @@ namespace CNA::Content::Cnb
             if (part.indexBytes.size() % part.indexElementSize != 0u)
             {
                 throw ContentLoadException(
-                    "cnj-to-cnb: '" + idxPath + "' holds " +
+                    "cnj-to-cnb: '" + PathText(idxPath) + "' holds " +
                     std::to_string(part.indexBytes.size()) +
                     " byte(s), which is not a whole number of " +
                     std::to_string(part.indexElementSize) + "-byte indices.");
@@ -894,7 +907,7 @@ namespace CNA::Content::Cnb
             const std::string morphFile = StringField(entry, "morphTargets", cnjPath);
             if (!morphFile.empty())
             {
-                const std::string morphPath =
+                const fs::path morphPath =
                     ResolveSidecar(contentRoot, morphFile, "morphTargets", cnjPath);
                 CnbMorphData morph = ReadMorphSidecar(
                     morphPath, part.vertexCount,
@@ -984,5 +997,11 @@ namespace CNA::Content::Cnb
 
         result.externalReferences.assign(externalReferences.begin(), externalReferences.end());
         return result;
+    }
+
+    CnbModelFromCnjResult BuildCnbModelFromCnj(const std::string& cnjPath,
+                                                const std::string& contentRoot)
+    {
+        return BuildCnbModelFromCnj(fs::path(cnjPath), fs::path(contentRoot));
     }
 }

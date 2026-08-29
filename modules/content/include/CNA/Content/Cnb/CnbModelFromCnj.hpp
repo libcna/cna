@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -49,6 +50,19 @@ namespace CNA::Content::Cnb
      * @throws Microsoft::Xna::Framework::Content::ContentLoadException if the document cannot be
      *         read, is not a `Model`, names a sidecar outside the content root, carries a field
      *         the v1 Model schema does not express, or is internally inconsistent.
+     */
+    [[nodiscard]] CnbModelFromCnjResult BuildCnbModelFromCnj(
+        const std::filesystem::path& cnjPath, const std::filesystem::path& contentRoot);
+
+    /**
+     * @brief Compatibility overload for callers that already hold native narrow path strings.
+     *
+     * New filesystem-aware callers should use the native-path overload so Windows Unicode paths
+     * are not narrowed before opening the CNJ document or its sidecars.
+     *
+     * @param cnjPath     Native narrow filesystem path of the Model CNJ document.
+     * @param contentRoot Native narrow directory containing its sidecars.
+     * @return The decoded model and file lists.
      */
     [[nodiscard]] CnbModelFromCnjResult BuildCnbModelFromCnj(const std::string& cnjPath,
                                                               const std::string& contentRoot);

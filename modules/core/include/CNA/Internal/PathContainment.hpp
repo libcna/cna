@@ -5,7 +5,10 @@
 #include <cctype>
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <system_error>
+
+#include "CNA/Internal/ContentPath.hpp"
 
 namespace CNA::Internal
 {
@@ -44,6 +47,75 @@ namespace CNA::Internal
         std::string resolvedPath;
     };
 
+    /** @brief Native-filesystem counterpart of ContainedPathResult. */
+    struct ContainedNativePathResult
+    {
+        /** @brief True if the input resolved within the given base directory. */
+        bool ok = false;
+        /** @brief The resolved native path, valid only when @c ok is true. */
+        std::filesystem::path resolvedPath;
+    };
+
+    /**
+     * @brief Verifies that an already-constructed native path is a child of a native root.
+     *
+     * @param rootDir      The authorized native root directory.
+     * @param candidate    An already-constructed native path to validate.
+     * @param canonicalize When true, resolve existing symlink components for the check.
+     * @return The contained lexical path, or an empty failure result.
+     */
+    inline ContainedNativePathResult ValidateContainedNativePath(
+        const std::filesystem::path& rootDir, const std::filesystem::path& candidate,
+        bool canonicalize = true)
+    {
+        namespace fs = std::filesystem;
+
+        if (candidate.empty()) { return {}; }
+        const fs::path lexicalRoot =
+            (rootDir.empty() ? fs::path(".") : rootDir).lexically_normal();
+        const fs::path lexicalCandidate = candidate.lexically_normal();
+
+        fs::path checkedRoot = lexicalRoot;
+        fs::path checkedCandidate = lexicalCandidate;
+        if (canonicalize)
+        {
+            std::error_code rootError;
+            std::error_code candidateError;
+            checkedRoot = fs::weakly_canonical(lexicalRoot, rootError);
+            checkedCandidate = fs::weakly_canonical(lexicalCandidate, candidateError);
+            if (rootError || candidateError) { return {}; }
+        }
+
+        const fs::path relative = checkedCandidate.lexically_relative(checkedRoot);
+        if (relative.empty() || relative == "." || *relative.begin() == "..") { return {}; }
+        return {true, lexicalCandidate};
+    }
+
+    /**
+     * @brief Resolves authored generic UTF-8 path text below a native filesystem root.
+     *
+     * Cross-platform absolute spellings, lexical traversal, and symlink escapes are rejected
+     * before the returned path can be opened.
+     *
+     * @param rootDir      The authorized native root directory and join base.
+     * @param relativeUtf8 Untrusted relative path encoded as generic UTF-8.
+     * @param canonicalize When true, resolve existing symlink components for the check.
+     * @return The contained native path, or an empty failure result.
+     */
+    inline ContainedNativePathResult ResolveContainedUtf8Path(
+        const std::filesystem::path& rootDir, std::string_view relativeUtf8,
+        bool canonicalize = true)
+    {
+        std::string normalized(relativeUtf8);
+        std::replace(normalized.begin(), normalized.end(), '\\', '/');
+        if (normalized.empty() || IsDisallowedAbsolutePath(normalized)) { return {}; }
+
+        const std::filesystem::path root =
+            rootDir.empty() ? std::filesystem::path(".") : rootDir;
+        return ValidateContainedNativePath(
+            root, (root / ContentPathFromUtf8(normalized)).lexically_normal(), canonicalize);
+    }
+
     /**
      * @brief Verifies that an already-constructed @p candidate path is a child of @p rootDir.
      *
@@ -65,42 +137,11 @@ namespace CNA::Internal
                                                        bool canonicalize = true)
     {
         namespace fs = std::filesystem;
-
-        if (candidate.empty())
-        {
-            return {};
-        }
-
-        const fs::path lexicalRoot =
-            (rootDir.empty() ? fs::path(".") : fs::path(rootDir)).lexically_normal();
-        const fs::path lexicalCandidate = fs::path(candidate).lexically_normal();
-
-        fs::path checkedRoot = lexicalRoot;
-        fs::path checkedCandidate = lexicalCandidate;
-        if (canonicalize)
-        {
-            std::error_code rootEc;
-            std::error_code candidateEc;
-            checkedRoot = fs::weakly_canonical(lexicalRoot, rootEc);
-            checkedCandidate = fs::weakly_canonical(lexicalCandidate, candidateEc);
-            if (rootEc || candidateEc)
-            {
-                return {};
-            }
-        }
-
-        // lexically_relative(), not relative(): the latter always canonicalizes both arguments
-        // internally regardless of what this function already did above, which would silently
-        // force real filesystem access even when canonicalize=false was requested. Both operands
-        // are already in comparable form by this point (either both lexically normalized only,
-        // or both already weakly_canonical'd above), so a pure component comparison is correct.
-        const fs::path rel = checkedCandidate.lexically_relative(checkedRoot);
-        if (rel.empty() || rel == "." || *rel.begin() == "..")
-        {
-            return {};
-        }
-
-        return {true, lexicalCandidate.string()};
+        const ContainedNativePathResult result = ValidateContainedNativePath(
+            rootDir.empty() ? fs::path(".") : fs::path(rootDir), fs::path(candidate),
+            canonicalize);
+        return result.ok ? ContainedPathResult{true, result.resolvedPath.string()}
+                         : ContainedPathResult{};
     }
 
     /**

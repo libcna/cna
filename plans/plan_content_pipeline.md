@@ -642,11 +642,12 @@ skips `Textury/žluťoučký_壁.png` beneath non-ASCII source/output roots, ver
 and manifest paths. The Windows entry point and lower native-path APIs compile in the normal target,
 but this Linux run is not reported as a Windows execution result.
 
-One audited limitation remains explicit: the shared glTF orchestration ultimately passes
-`path.string()` to cgltf, and `BuildCnbModelFromCnj` remains a legacy narrow-path compiler seam.
-Consequently CP-012 does not advertise Windows non-ASCII paths for glTF or Model CNJ input. Fixing
-that requires a shared native cgltf file callback/path refactor while preserving the pinned direct
-glTF/CNJ/CNB byte oracles; it is not papered over with a locale conversion or second glTF parser.
+At the CP-012 checkpoint one audited limitation remained explicit: the shared glTF orchestration
+ultimately passed `path.string()` to cgltf, and `BuildCnbModelFromCnj` retained a legacy narrow-path
+compiler seam. CP-021 later closed that seam with CNA-owned cgltf callbacks that translate explicit
+UTF-8 to native filesystem paths and a native-path Model CNJ compiler overload. No locale conversion
+or second glTF parser was introduced, and native Windows runtime execution remains separately
+unverified rather than inferred from the portable regression test.
 
 ---
 
@@ -929,7 +930,7 @@ The completed feature branch was synchronized without reopening `CP-001` through
 | `CP-018` | **completed** | Added strict optional `.cna-content.json` plus contained `--config`: normalized root-relative asset keys, logical-name/output override, stable importer/processor/writer selection and explicitly tagged bool/i64/u64/f64/string parameters. Unknown/duplicate fields, missing/unsupported assets, unsafe paths, unknown components/options and wrong types fail contextually. Existing convention builds remain unchanged; effective identities/parameters already fingerprint each record, so a config edit rebuilt only the affected asset while its independent neighbor skipped. Five parser and 17 CLI tests passed. |
 | `CP-019` | **completed** | Added `SongImporter`, `SongProcessor`, and `SongContentWriter` over the unchanged `EncodeSongToCnb()`. The importer retains a non-empty media file as a streamed, root-relative external source without decoding/embedding it; configured/default metadata produces one separately recorded XREF. `.wav` remains unambiguously SoundEffect. Six component/runtime tests plus a single/directory CLI test prove stable selection, Unicode paths, validation, determinism, primary-source invalidation, manifest XREF separation, runtime metadata loading, and exact bytes against both the library encoder and real legacy producer. The one-output builder intentionally does not copy media before CP-023 defines safe multi-output publication. |
 | `CP-020` | **completed** | Added `VideoImporter`, `VideoProcessor`, and `VideoContentWriter` over the unchanged `EncodeVideoToCnb()`. The non-decoding importer covers unambiguous runtime video extensions; required configured width/height/fps prevents invented metadata or an FFmpeg dependency, while duration/soundtrack retain schema defaults. Six component/runtime tests and two CLI tests prove strict types/ranges/missing metadata, Unicode, single/directory builds, deterministic incremental invalidation, manifest XREF separation, HEADLESS runtime metadata compatibility, and exact bytes against the library encoder and legacy producer. `.ogg` remains Song-only for deterministic convention routing, and media copying remains CP-023 work. |
-| `CP-021` | **pending** | Keep Model/glTF filesystem paths native through the shared conversion seam and convert to UTF-8 only at documented cgltf/serialization boundaries. Cover non-ASCII glTF, buffer, texture and nested paths on available platforms; do not claim native Windows runtime verification unless it actually runs. |
+| `CP-021` | **completed** | Kept Model/glTF paths native through pipeline discovery, intermediate Model CNJ compilation, sidecar opens and generated output publication. The one shared glTF implementation now gives cgltf generic UTF-8 names plus CNA file callbacks that reconstruct native filesystem paths; authored URI and serialized/generated-name boundaries use the existing explicit UTF-8 helpers. A repeated POSIX build with non-ASCII source root, nested directories, `.gltf`, external `.bin`, texture and generated XREF passes and preserves the pinned Model/direct-producer bytes; all four affected conversion sources also pass MinGW Windows-target syntax compilation. No native MSVC/Windows runtime was available, so Windows execution is still an explicit verification gap rather than a claimed result. |
 | `CP-022` | **pending** | Enable custom components outside tests through a supported user-built content-compiler executable linked to CNA's experimental C++ registry API. Provide an end-to-end example and honest source/toolchain compatibility contract; do not claim a stable dynamic plugin ABI. |
 | `CP-023` | **pending** | Define and implement stable build-node/output identity and a bounded multi-output build result. Evolve the manifest explicitly and specify recoverable per-artifact publication before enabling generated child assets. |
 | `CP-024` | **pending** | Schedule content-to-content build dependencies as graph edges distinct from source files, generated files and runtime XREFs. Prove shared dependencies, rebuild propagation, failure propagation and cache correctness. |
@@ -978,10 +979,11 @@ the ordering wrong; it is not a promise to build speculative abstractions.
 * Song/Video compilation records and encodes the streaming media XREF but the current one-output
   builder does not copy that media into the output tree. Deployment must place it at the referenced path;
   automatic publication is coupled to CP-023's multi-output ownership and recovery protocol.
-* Windows Unicode paths are native through CLI discovery, manifests, image/WAV/DDS and non-Model
-  CNJ flows. The existing glTF/canonical-Model seam still narrows paths for cgltf and
-  `BuildCnbModelFromCnj`; non-ASCII Windows Model sources are not advertised until that shared
-  implementation is converted and all existing model byte oracles remain pinned.
+* Windows Unicode paths stay native through CLI discovery, manifests, image/WAV/DDS/CNJ and
+  Model/glTF flows. cgltf and authored/generated JSON names cross one explicit generic-UTF-8
+  boundary backed by a native file callback. Portable tests cover the complete non-ASCII Model
+  source/sidecar layout and existing model bytes remain pinned, but no native MSVC/Windows runtime
+  execution was available for CP-021.
 
 ### Rejected alternatives
 

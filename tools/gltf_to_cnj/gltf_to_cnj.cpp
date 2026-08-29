@@ -33,6 +33,7 @@
 
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
 #include "CNA/Internal/CnjMorphSidecarEXT.hpp"
+#include "CNA/Internal/ContentPath.hpp"
 #ifndef CNA_GLTF_TO_CNJ_NO_MAIN
 #include "GltfOracleEXT.hpp"
 #endif
@@ -45,6 +46,7 @@
 #include <fstream>
 #include <iostream>
 #include <optional>
+#include <limits>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -70,6 +72,108 @@ namespace
 #ifndef CNA_GLTF_TO_CNJ_NO_MAIN
     namespace Oracle = CnaTest::GltfOracle;
 #endif
+
+    std::string PathText(const std::filesystem::path& path)
+    {
+        return CNA::Internal::ContentPathToUtf8(path);
+    }
+
+    std::filesystem::path Utf8Child(const std::filesystem::path& directory,
+                                    std::string_view name)
+    {
+        return directory / CNA::Internal::ContentPathFromUtf8(name);
+    }
+
+    cgltf_result NativeUtf8FileRead(const cgltf_memory_options* memoryOptions,
+                                    const cgltf_file_options*, const char* utf8Path,
+                                    cgltf_size* size, void** data) noexcept
+    {
+        if (memoryOptions == nullptr || utf8Path == nullptr || data == nullptr)
+        {
+            return cgltf_result_invalid_options;
+        }
+
+        *data = nullptr;
+        try
+        {
+            std::ifstream stream(CNA::Internal::ContentPathFromUtf8(utf8Path),
+                                 std::ios::binary | std::ios::ate);
+            if (!stream) { return cgltf_result_file_not_found; }
+
+            const std::streampos end = stream.tellg();
+            if (end < 0) { return cgltf_result_io_error; }
+            const auto available = static_cast<std::uintmax_t>(end);
+            const std::uintmax_t requested = size != nullptr && *size != 0
+                ? static_cast<std::uintmax_t>(*size)
+                : available;
+            if (requested > available ||
+                requested > static_cast<std::uintmax_t>(
+                    std::numeric_limits<cgltf_size>::max()))
+            {
+                return cgltf_result_io_error;
+            }
+
+            const cgltf_size byteCount = static_cast<cgltf_size>(requested);
+            void* memory = memoryOptions->alloc_func != nullptr
+                ? memoryOptions->alloc_func(memoryOptions->user_data,
+                                            byteCount == 0 ? 1 : byteCount)
+                : std::malloc(byteCount == 0 ? 1 : byteCount);
+            if (memory == nullptr) { return cgltf_result_out_of_memory; }
+
+            stream.seekg(0, std::ios::beg);
+            std::size_t offset = 0;
+            constexpr std::size_t ReadChunkSize = 1024u * 1024u;
+            while (offset < static_cast<std::size_t>(byteCount))
+            {
+                const std::size_t remaining = static_cast<std::size_t>(byteCount) - offset;
+                const std::size_t chunk = std::min(remaining, ReadChunkSize);
+                stream.read(static_cast<char*>(memory) + offset,
+                            static_cast<std::streamsize>(chunk));
+                if (stream.gcount() != static_cast<std::streamsize>(chunk))
+                {
+                    if (memoryOptions->free_func != nullptr)
+                    {
+                        memoryOptions->free_func(memoryOptions->user_data, memory);
+                    }
+                    else
+                    {
+                        std::free(memory);
+                    }
+                    return cgltf_result_io_error;
+                }
+                offset += chunk;
+            }
+
+            if (size != nullptr) { *size = byteCount; }
+            *data = memory;
+            return cgltf_result_success;
+        }
+        catch (...)
+        {
+            return cgltf_result_io_error;
+        }
+    }
+
+    void NativeUtf8FileRelease(const cgltf_memory_options* memoryOptions,
+                               const cgltf_file_options*, void* data) noexcept
+    {
+        if (memoryOptions != nullptr && memoryOptions->free_func != nullptr)
+        {
+            memoryOptions->free_func(memoryOptions->user_data, data);
+        }
+        else
+        {
+            std::free(data);
+        }
+    }
+
+    cgltf_options NativeUtf8CgltfOptions()
+    {
+        cgltf_options options{};
+        options.file.read = NativeUtf8FileRead;
+        options.file.release = NativeUtf8FileRelease;
+        return options;
+    }
 
     // ---------------------------------------------------------------------------
     // Small helpers: binary writers, JSON string escaping.
@@ -195,14 +299,14 @@ namespace
     void WriteBinaryFile(const std::filesystem::path& path, const std::vector<std::uint8_t>& bytes)
     {
         std::ofstream f(path, std::ios::binary);
-        if (!f) { throw std::runtime_error("Cannot open for writing: " + path.string()); }
+        if (!f) { throw std::runtime_error("Cannot open for writing: " + PathText(path)); }
         f.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
     }
 
     void WriteTextFile(const std::filesystem::path& path, const std::string& text)
     {
         std::ofstream f(path, std::ios::binary);
-        if (!f) { throw std::runtime_error("Cannot open for writing: " + path.string()); }
+        if (!f) { throw std::runtime_error("Cannot open for writing: " + PathText(path)); }
         f << text;
     }
 
@@ -438,7 +542,7 @@ namespace
                 if (!meshOut.morphPositionDeltas.empty())
                 {
                     morphFile = outName + "_mesh" + std::to_string(meshCounter) + "_morph.bin";
-                    WriteBinaryFile(outputDir / morphFile, BuildMorphBytes(meshOut));
+                    WriteBinaryFile(Utf8Child(outputDir, morphFile), BuildMorphBytes(meshOut));
 
                     const std::size_t targetCount = meshOut.morphPositionDeltas.size();
                     // glTF gives an instancing node's `weights` precedence over `mesh.weights`.
@@ -571,8 +675,8 @@ namespace
 
                 const std::string vertFile = outName + "_mesh" + std::to_string(meshCounter) + "_verts.bin";
                 const std::string idxFile  = outName + "_mesh" + std::to_string(meshCounter) + "_idx.bin";
-                WriteBinaryFile(outputDir / vertFile, meshOut.vertexBytes);
-                WriteBinaryFile(outputDir / idxFile, meshOut.indexBytes);
+                WriteBinaryFile(Utf8Child(outputDir, vertFile), meshOut.vertexBytes);
+                WriteBinaryFile(Utf8Child(outputDir, idxFile), meshOut.indexBytes);
 
                 std::string textureFile;
                 if (meshOut.material.baseColorImage)
@@ -585,7 +689,7 @@ namespace
                     else if (auto img = ExtractImage(meshOut.material.baseColorImage, gltfDir))
                     {
                         textureFile = outName + "_tex" + std::to_string(writtenTextures.size()) + "." + img->extension;
-                        WriteBinaryFile(outputDir / textureFile, img->bytes);
+                        WriteBinaryFile(Utf8Child(outputDir, textureFile), img->bytes);
                         writtenTextures[meshOut.material.baseColorImage] = textureFile;
                     }
                 }
@@ -625,7 +729,7 @@ namespace
                         // unrelated entries computing the same N and colliding on disk.
                         texture2File = outName + "_texocc" + std::to_string(remappedOcclusionTextures.size())
                                      + "." + remapped->extension;
-                        WriteBinaryFile(outputDir / texture2File, remapped->bytes);
+                        WriteBinaryFile(Utf8Child(outputDir, texture2File), remapped->bytes);
                         remappedOcclusionTextures[meshOut.material.occlusionImage] = texture2File;
                     }
                 }
@@ -641,7 +745,7 @@ namespace
                     if (auto img = ExtractImage(image, gltfDir))
                     {
                         std::string file = outName + "_tex" + std::to_string(writtenTextures.size()) + "." + img->extension;
-                        WriteBinaryFile(outputDir / file, img->bytes);
+                        WriteBinaryFile(Utf8Child(outputDir, file), img->bytes);
                         writtenTextures[image] = file;
                         return file;
                     }
@@ -737,7 +841,7 @@ namespace
                     variantEntry.vertFile =
                         outName + "_mesh" + std::to_string(meshCounter) + "_variant" +
                         std::to_string(variant.variantIndex) + "_verts.bin";
-                    WriteBinaryFile(outputDir / variantEntry.vertFile,
+                    WriteBinaryFile(Utf8Child(outputDir, variantEntry.vertFile),
                                     variantMesh.vertexBytes);
 
                     variantEntry.textureFile = extractCached(
@@ -759,7 +863,7 @@ namespace
                                 outName + "_texocc" +
                                 std::to_string(remappedOcclusionTextures.size()) + "." +
                                 remapped->extension;
-                            WriteBinaryFile(outputDir / variantEntry.texture2File,
+                            WriteBinaryFile(Utf8Child(outputDir, variantEntry.texture2File),
                                             remapped->bytes);
                             remappedOcclusionTextures[
                                 variantMesh.material.occlusionImage] =
@@ -796,7 +900,7 @@ namespace
                         variantEntry.morphFile =
                             outName + "_mesh" + std::to_string(meshCounter) + "_variant" +
                             std::to_string(variant.variantIndex) + "_morph.bin";
-                        WriteBinaryFile(outputDir / variantEntry.morphFile,
+                        WriteBinaryFile(Utf8Child(outputDir, variantEntry.morphFile),
                                         BuildMorphBytes(variantMesh));
                         const std::size_t targetCount =
                             variantMesh.morphPositionDeltas.size();
@@ -831,7 +935,7 @@ namespace
             for (const BoneOut& b : skeleton.bones) { AppendMatrix(skelBytes, b.parentWorldPrefix); }
 
             skeletonFile = outName + ".skeleton.bin";
-            WriteBinaryFile(outputDir / skeletonFile, skelBytes);
+            WriteBinaryFile(Utf8Child(outputDir, skeletonFile), skelBytes);
         }
 
         struct ClipEntry { std::string name, cnjFile; };
@@ -871,8 +975,8 @@ namespace
             json << "  ]\n}\n";
 
             const std::string cnjFile = outName + "_" + SanitizeForFilename(clip.name) + ".cnj";
-            WriteTextFile(outputDir / cnjFile, json.str());
-            documents.push_back(outputDir / cnjFile);
+            WriteTextFile(Utf8Child(outputDir, cnjFile), json.str());
+            documents.push_back(Utf8Child(outputDir, cnjFile));
             return cnjFile;
         };
 
@@ -1246,12 +1350,13 @@ namespace
         }
         json << "  ]\n}\n";
 
-        WriteTextFile(outputDir / (outName + ".cnj"), json.str());
-        documents.push_back(outputDir / (outName + ".cnj"));
+        const std::filesystem::path documentPath = Utf8Child(outputDir, outName + ".cnj");
+        WriteTextFile(documentPath, json.str());
+        documents.push_back(documentPath);
 
         if (emitMessages)
         {
-            std::cout << "Wrote " << outputDir / (outName + ".cnj") << " ("
+            std::cout << "Wrote " << documentPath << " ("
                       << meshCounter << " mesh part(s), "
                       << (hasSkin ? std::to_string(skeleton.bones.size()) + " bones, "
                                   : std::string("no skeleton, "))
@@ -1277,13 +1382,14 @@ namespace
 
     CNA::Tools::Gltf::GltfToCnjResult Convert(const ConvertOptions& opts)
     {
-        cgltf_options parseOptions{};
+        cgltf_options parseOptions = NativeUtf8CgltfOptions();
+        const std::string inputPathUtf8 = PathText(opts.inputPath);
         cgltf_data* data = nullptr;
-        cgltf_result result = cgltf_parse_file(&parseOptions, opts.inputPath.string().c_str(), &data);
+        cgltf_result result = cgltf_parse_file(&parseOptions, inputPathUtf8.c_str(), &data);
         if (result != cgltf_result_success)
         {
             throw std::runtime_error("cgltf_parse_file failed (code " + std::to_string(static_cast<int>(result)) +
-                                      ") for: " + opts.inputPath.string());
+                                      ") for: " + inputPathUtf8);
         }
         struct DataGuard { cgltf_data* d; ~DataGuard() { cgltf_free(d); } } guard{data};
 
@@ -1295,7 +1401,7 @@ namespace
         converted.sourceDependencies =
             CollectExternalUriDependenciesEXT(data, opts.inputPath.parent_path());
 
-        result = cgltf_load_buffers(&parseOptions, data, opts.inputPath.string().c_str());
+        result = cgltf_load_buffers(&parseOptions, data, inputPathUtf8.c_str());
         if (result != cgltf_result_success)
         {
             throw std::runtime_error("cgltf_load_buffers failed (code " + std::to_string(static_cast<int>(result)) + ").");
@@ -1312,7 +1418,7 @@ namespace
         // plans/plan_gltf.md GLTF-021..GLTF-024: structural validation, extensionsRequired enforcement
         // and an ignored-extension report, before anything is decoded. Deliberately after
         // cgltf_load_buffers, because the sparse index-bound check needs buffer data to run at all.
-        ValidateGltfEXT(data, opts.inputPath.string(), warnings);
+        ValidateGltfEXT(data, inputPathUtf8, warnings);
         const std::vector<std::string> validationWarnings = warnings;
 
         // plans/plan_gltf.md GLTF-113: build the node graph once and share it across every group, so
@@ -1367,20 +1473,21 @@ namespace
     void DumpOracle(const std::filesystem::path& inputPath,
                     const std::filesystem::path& outputDir)
     {
-        cgltf_options parseOptions{};
+        cgltf_options parseOptions = NativeUtf8CgltfOptions();
+        const std::string inputPathUtf8 = PathText(inputPath);
         cgltf_data* data = nullptr;
         cgltf_result result =
-            cgltf_parse_file(&parseOptions, inputPath.string().c_str(), &data);
+            cgltf_parse_file(&parseOptions, inputPathUtf8.c_str(), &data);
         if (result != cgltf_result_success)
         {
             throw std::runtime_error(
                 "cgltf_parse_file failed (code " +
-                std::to_string(static_cast<int>(result)) + ") for: " + inputPath.string());
+                std::to_string(static_cast<int>(result)) + ") for: " + inputPathUtf8);
         }
         struct DataGuard { cgltf_data* d; ~DataGuard() { cgltf_free(d); } } guard{data};
 
         ValidateExternalUriContainmentEXT(data, inputPath.parent_path());
-        result = cgltf_load_buffers(&parseOptions, data, inputPath.string().c_str());
+        result = cgltf_load_buffers(&parseOptions, data, inputPathUtf8.c_str());
         if (result != cgltf_result_success)
         {
             throw std::runtime_error(
@@ -1395,7 +1502,7 @@ namespace
         }
 
         std::vector<std::string> validationWarnings;
-        ValidateGltfEXT(data, inputPath.string(), validationWarnings);
+        ValidateGltfEXT(data, inputPathUtf8, validationWarnings);
 
         std::error_code error;
         const bool outputExists = std::filesystem::exists(outputDir, error);
@@ -1415,7 +1522,7 @@ namespace
             if (!outputIsDirectory)
             {
                 throw std::runtime_error("Oracle output exists but is not a directory: " +
-                                         outputDir.string());
+                                         PathText(outputDir));
             }
             const bool outputIsEmpty = std::filesystem::is_empty(outputDir, error);
             if (error)
@@ -1426,7 +1533,7 @@ namespace
             if (!outputIsEmpty)
             {
                 throw std::runtime_error("Oracle output directory must be empty: " +
-                                         outputDir.string());
+                                         PathText(outputDir));
             }
         }
         else
@@ -1447,7 +1554,7 @@ namespace
         std::ostringstream json;
         json << "{\n"
              << "  \"schema\": \"CNA-gltf-oracle-v1\",\n"
-             << "  \"source\": \"" << JsonEscape(inputPath.filename().string()) << "\",\n"
+             << "  \"source\": \"" << JsonEscape(PathText(inputPath.filename())) << "\",\n"
              << "  \"validationWarnings\": [";
         for (std::size_t index = 0; index < validationWarnings.size(); ++index)
         {

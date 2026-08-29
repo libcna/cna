@@ -9,6 +9,7 @@
 #include "CNA/Content/Cnb/CnbFormat.hpp"
 #include "CNA/Content/Cnb/CnbModelCodec.hpp"
 #include "CNA/Content/Cnb/CnbModelFromCnj.hpp"
+#include "CNA/Internal/ContentPath.hpp"
 #include "GltfToCnjEntry.hpp"
 
 namespace CNA::Content::Pipeline
@@ -86,7 +87,8 @@ namespace CNA::Content::Pipeline
     ContentValue GltfImporter::Import(ContentImporterContext& context) const
     {
         const auto storage = std::make_shared<ModelIntermediateStorage>();
-        const std::string baseName = context.SourcePath().stem().string();
+        const std::string baseName =
+            CNA::Internal::ContentPathToUtf8(context.SourcePath().stem());
         if (baseName.empty())
         {
             throw std::runtime_error("glTF source has no usable file-name stem.");
@@ -102,7 +104,8 @@ namespace CNA::Content::Pipeline
             if (authored.empty())
             {
                 throw std::runtime_error("glTF dependency cannot be expressed relative to its "
-                                         "source directory: " + dependency.string() + ".");
+                                         "source directory: " +
+                                         CNA::Internal::ContentPathToUtf8(dependency) + ".");
             }
             static_cast<void>(context.ResolveSourceDependency(authored));
         }
@@ -111,8 +114,8 @@ namespace CNA::Content::Pipeline
             context.LogWarning(warning);
         }
 
-        const std::filesystem::path modelDocument = storage->Path() / (baseName + ".cnj");
-        if (!std::filesystem::is_regular_file(modelDocument))
+        if (converted.documents.size() != 1u ||
+            !std::filesystem::is_regular_file(converted.documents.front()))
         {
             throw std::runtime_error(
                 "glTF produced multiple Model documents. One-source-to-many-output graph "
@@ -121,7 +124,7 @@ namespace CNA::Content::Pipeline
 
         context.LogInfo("imported glTF through CNA's shared canonical model front end.");
         ImportedModelDocument imported;
-        imported.document = modelDocument;
+        imported.document = converted.documents.front();
         imported.intermediateRoot = storage->Path();
         imported.intermediateLifetime = storage;
         imported.recordAuthoredSidecars = false;
@@ -155,8 +158,8 @@ namespace CNA::Content::Pipeline
                                          ContentProcessorContext& context) const
     {
         const ImportedModelDocument& imported = input.Get<ImportedModelDocument>();
-        Cnb::CnbModelFromCnjResult processed = Cnb::BuildCnbModelFromCnj(
-            imported.document.string(), imported.intermediateRoot.string());
+        Cnb::CnbModelFromCnjResult processed =
+            Cnb::BuildCnbModelFromCnj(imported.document, imported.intermediateRoot);
         if (imported.recordAuthoredSidecars)
         {
             for (const std::string& authoredPath : processed.absorbedFiles)

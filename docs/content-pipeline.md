@@ -500,11 +500,20 @@ On Windows, `cna-content` uses `wmain(int, wchar_t**)` and constructs native
 Logical names, manifest paths, dependency identities, and diagnostics use explicit generic UTF-8;
 manifest reads explicitly convert UTF-8 back to a native path.
 
-Native non-ASCII paths are covered for image, WAV, DDS, and non-Model CNJ paths. The current shared
-glTF orchestration still narrows its input for cgltf, and the canonical Model CNJ compiler has a
-legacy narrow-path boundary. Windows non-ASCII glTF and Model CNJ paths are therefore not currently
-advertised. Fixing that boundary must preserve the pinned direct glTF/CNJ/CNB byte oracles and must
-not introduce a second glTF parser.
+Native non-ASCII paths are covered for image, WAV, DDS, CNJ, and Model/glTF sources. The shared glTF
+orchestration passes a generic UTF-8 spelling to cgltf, whose CNA-owned file callbacks convert that
+spelling back to a native `std::filesystem::path` before opening the primary document or an external
+buffer. Authored external image/buffer URIs and generated CNJ sidecar names cross the same explicit
+UTF-8/native boundary. `BuildCnbModelFromCnj()` has a native-path overload and opens its document and
+sidecars without narrowing; its string overload remains only for existing narrow-path callers.
+
+A POSIX regression test builds a model whose source root, nested directories, `.gltf`, external
+`.bin`, and external texture all contain non-ASCII characters, repeats the build byte-identically,
+and validates both source dependencies and the resulting CNB. The four affected conversion sources
+also pass a MinGW Windows-target syntax compilation. Neither result is evidence of a native
+MSVC/Windows runtime execution; that platform run remains an explicit verification gap rather than
+an advertised result. Existing direct glTF producer and pinned Model-byte equivalence tests remain
+unchanged.
 
 ## Custom extensions
 
