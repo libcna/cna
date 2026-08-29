@@ -16,6 +16,7 @@
 #include <unistd.h>
 
 #include "CNA/Content/Cnb/CnbDocument.hpp"
+#include "CNA/Content/Pipeline/ContentBuildConfiguration.hpp"
 #include "CNA/Content/Pipeline/ContentBuildManifest.hpp"
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
 #include "CNA/Content/Pipeline/Texture2DContentPipeline.hpp"
@@ -61,6 +62,11 @@ namespace
         std::ofstream stream(path, std::ios::binary);
         stream.write(reinterpret_cast<const char*>(bytes.data()),
                      static_cast<std::streamsize>(bytes.size()));
+    }
+
+    void WriteText(const std::filesystem::path& path, const std::string& text)
+    {
+        WriteBytes(path, std::vector<std::uint8_t>(text.begin(), text.end()));
     }
 
     std::vector<std::uint8_t> ReadBytes(const std::filesystem::path& path)
@@ -258,6 +264,135 @@ TEST(ContentPipelineCliTest, DirectoryBuildIsSortedAndPreservesLogicalRelativePa
     ASSERT_EQ(manifest.Entries().size(), 2u);
     EXPECT_NE(manifest.Find("Sounds/explosion"), nullptr);
     EXPECT_NE(manifest.Find("Textures/wall"), nullptr);
+}
+
+TEST(ContentPipelineCliTest, ExplicitConfigurationOverridesRouteParametersAndLogicalOutput)
+{
+    ScratchDirectory scratch("configured");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    const std::filesystem::path image = source / "Textures" / "wall.png";
+    const std::filesystem::path configuration = source / "custom-content.json";
+    WriteBytes(image, MakePng(3, 2));
+    WriteText(configuration,
+              R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"Textures/wall.png":{"logicalName":"Environment/stone","importer":"CNA.ImageImporter","processor":"CNA.TextureProcessor","writer":"CNA.Texture2DContentWriter","parameters":{"colorKey":{"type":"string","value":"3,20,37"}}}}})json");
+
+    std::string log;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--config",
+                       configuration.string()},
+                      log),
+              0)
+        << log;
+    const std::filesystem::path configuredOutput = output / "Environment" / "stone.cnb";
+    ASSERT_TRUE(std::filesystem::is_regular_file(configuredOutput));
+    EXPECT_FALSE(std::filesystem::exists(output / "Textures" / "wall.cnb"));
+
+    auto registry = std::make_shared<Pipeline::ContentPipelineRegistry>();
+    Pipeline::RegisterTexture2DContentPipeline(*registry);
+    const Pipeline::ContentPipeline pipeline(registry);
+    Pipeline::ContentBuildRequest request;
+    request.sourceRoot = source;
+    request.source = image;
+    request.logicalName = "Environment/stone";
+    request.importer = "CNA.ImageImporter";
+    request.processor = "CNA.TextureProcessor";
+    request.writer = "CNA.Texture2DContentWriter";
+    request.parameters.Set(Pipeline::TextureColorKeyParameter, std::string("3,20,37"));
+    EXPECT_EQ(ReadBytes(configuredOutput), pipeline.Build(request).output.bytes);
+
+    const std::vector<std::uint8_t> manifestBytes =
+        ReadBytes(output / Pipeline::ContentBuildManifestFileName);
+    const Pipeline::ContentBuildManifest manifest = Pipeline::ContentBuildManifest::Parse(
+        std::string(manifestBytes.begin(), manifestBytes.end()));
+    const Pipeline::ContentBuildManifestEntry* entry = manifest.Find("Environment/stone");
+    ASSERT_NE(entry, nullptr);
+    ASSERT_NE(entry->parameters.Find(Pipeline::TextureColorKeyParameter), nullptr);
+    EXPECT_EQ(std::get<std::string>(
+                  *entry->parameters.Find(Pipeline::TextureColorKeyParameter)),
+              "3,20,37");
+}
+
+TEST(ContentPipelineCliTest, ConfigurationChangeInvalidatesOnlyTheAffectedAsset)
+{
+    ScratchDirectory scratch("config_incremental");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    const std::filesystem::path configuration =
+        source / Pipeline::ContentBuildConfigurationFileName;
+    WriteBytes(source / "wall.png", MakePng(3, 2));
+    WriteBytes(source / "floor.png", MakePng(2, 2));
+    WriteText(configuration,
+              R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"wall.png":{"parameters":{"colorKey":{"type":"string","value":"3,20,37"}}}}})json");
+
+    std::string log;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    ASSERT_NE(log.find("[BUILD] floor"), std::string::npos) << log;
+    ASSERT_NE(log.find("[BUILD] wall"), std::string::npos) << log;
+
+    WriteText(configuration,
+              R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"wall.png":{"parameters":{"colorKey":{"type":"string","value":"4,20,37"}}}}})json");
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    EXPECT_NE(log.find("[SKIP] floor"), std::string::npos) << log;
+    EXPECT_NE(log.find("[BUILD] wall"), std::string::npos) << log;
+}
+
+TEST(ContentPipelineCliTest, ConfigurationRejectsUnknownAssetsComponentsAndOptions)
+{
+    ScratchDirectory scratch("config_errors");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    const std::filesystem::path configuration =
+        source / Pipeline::ContentBuildConfigurationFileName;
+    WriteBytes(source / "wall.png", MakePng(3, 2));
+
+    struct Case
+    {
+        const char* label;
+        const char* assets;
+        const char* expected;
+    };
+    const Case cases[] = {
+        {"unknown asset", R"json("missing.png":{})json", "does not name"},
+        {"unknown processor", R"json("wall.png":{"processor":"Missing.Processor"})json",
+         "unknown processor"},
+        {"unknown option",
+         R"json("wall.png":{"parameters":{"unknown":{"type":"bool","value":true}}})json",
+         "does not recognize"},
+        {"wrong option type",
+         R"json("wall.png":{"parameters":{"colorKey":{"type":"bool","value":true}}})json",
+         "must be a string"},
+    };
+
+    for (const Case& item : cases)
+    {
+        WriteText(configuration,
+                  std::string("{\"format\":\"CNA.ContentPipeline.Config\",\"version\":1,"
+                              "\"assets\":{") +
+                      item.assets + "}}");
+        std::string log;
+        EXPECT_NE(RunTool({"build", source.string(), "-o", output.string()}, log), 0)
+            << item.label << "\n" << log;
+        EXPECT_NE(log.find(item.expected), std::string::npos) << item.label << "\n" << log;
+        EXPECT_FALSE(std::filesystem::exists(output / "wall.cnb")) << item.label;
+    }
+}
+
+TEST(ContentPipelineCliTest, ConfigurationPathMustRemainInsideTheSourceRoot)
+{
+    ScratchDirectory scratch("config_containment");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    const std::filesystem::path outside = scratch.Path() / "outside.json";
+    WriteBytes(source / "wall.png", MakePng(3, 2));
+    WriteText(outside,
+              R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{}})json");
+
+    std::string log;
+    EXPECT_NE(RunTool({"build", source.string(), "-o", output.string(), "--config",
+                       outside.string()},
+                      log),
+              0);
+    EXPECT_NE(log.find("must remain inside source root"), std::string::npos) << log;
 }
 
 TEST(ContentPipelineCliTest, NonAsciiDirectoryBuildPreservesUtf8LogicalNamesAndSkips)

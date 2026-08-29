@@ -21,7 +21,7 @@ subset; `planned` is not coverage and names the task that owns its design; and
 behavior to expose. Nothing is treated as implemented merely because a related C
 operation exists.
 
-Snapshot: **544 headers**, **9173 symbols**, **8352 implemented**, **15 partial**, **342 planned**, **464 not applicable**. Explicitly excluded internal/detail headers: **130**.
+Snapshot: **545 headers**, **9187 symbols**, **8352 implemented**, **15 partial**, **356 planned**, **464 not applicable**. Explicitly excluded internal/detail headers: **130**.
 
 Regenerate with:
 
@@ -39,7 +39,7 @@ python3 tools/c-api/generate_coverage_inventory.py --check
 | Module | Headers | Symbols | Implemented | Partial | Planned | N/A |
 |---|---:|---:|---:|---:|---:|---:|
 | `audio` | 22 | 310 | 217 | 0 | 0 | 93 |
-| `content` | 41 | 942 | 561 | 10 | 342 | 29 |
+| `content` | 42 | 956 | 561 | 10 | 356 | 29 |
 | `core` | 15 | 168 | 162 | 0 | 0 | 6 |
 | `devices` | 18 | 209 | 182 | 0 | 0 | 27 |
 | `devices-ext` | 17 | 84 | 79 | 0 | 0 | 5 |
@@ -1197,6 +1197,25 @@ python3 tools/c-api/generate_coverage_inventory.py --check
 | `CPP-8F5B727DFF56` | 462 | public method | `CNA::Content::Pipeline::SpriteFontContentWriter::InputType() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
 | `CPP-07E42CB6A891` | 471 | public method | `CNA::Content::Pipeline::SpriteFontContentWriter::Write(const ContentValue &input, const std::string &logicalName) const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
 | `CPP-141BA4EE8D92` | 483 | public function | `CNA::Content::Pipeline::RegisterCnjContentPipeline(ContentPipelineRegistry &registry)` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+
+#### `modules/content/include/CNA/Content/Pipeline/ContentBuildConfiguration.hpp`
+
+| ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
+|---|---:|---|---|---|---|---|
+| `CPP-901DC79ED896` | 14 | public field | `CNA::Content::Pipeline::ContentBuildConfigurationVersion = 1u` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-6F41811725CE` | 17 | public field | `CNA::Content::Pipeline::ContentBuildConfigurationFileName = ".cna-content.json"` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-755665F7C4BC` | 20 | public struct | `CNA::Content::Pipeline::ContentAssetBuildConfiguration` | Planned `CNA_*` POD or validated handle design (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-82BAF51813BA` | 23 | public field | `CNA::Content::Pipeline::ContentAssetBuildConfiguration::source` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-C4429E890269` | 26 | public field | `CNA::Content::Pipeline::ContentAssetBuildConfiguration::logicalName` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-D3A69725BF95` | 29 | public field | `CNA::Content::Pipeline::ContentAssetBuildConfiguration::importer` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-0B7079C48DF5` | 32 | public field | `CNA::Content::Pipeline::ContentAssetBuildConfiguration::processor` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-E232B093E4B1` | 35 | public field | `CNA::Content::Pipeline::ContentAssetBuildConfiguration::writer` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-47EEBEFD1063` | 38 | public field | `CNA::Content::Pipeline::ContentAssetBuildConfiguration::parameters` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-34346B1AB237` | 41 | public operator | `CNA::Content::Pipeline::ContentAssetBuildConfiguration::operator==(const ContentAssetBuildConfiguration &) const =default` | Planned named `cna_*` value operation (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-9288C914993D` | 45 | public class | `CNA::Content::Pipeline::ContentBuildConfiguration` | Planned `CNA_*` POD or validated handle design (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-FD4F9ACE3740` | 57 | public method | `CNA::Content::Pipeline::ContentBuildConfiguration::Parse(const std::string &json, const std::filesystem::path &sourceName={})` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-D3851D37A06B` | 66 | public method | `CNA::Content::Pipeline::ContentBuildConfiguration::Find(const std::string &source) const` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-7D5CEA76C72F` | 74 | public method | `CNA::Content::Pipeline::ContentBuildConfiguration::Entries() const noexcept` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
 
 #### `modules/content/include/CNA/Content/Pipeline/ContentBuildManifest.hpp`
 

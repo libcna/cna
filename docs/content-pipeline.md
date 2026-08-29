@@ -61,6 +61,10 @@ A single asset can be built explicitly:
 cna-content build ContentSource/Textures/wall.png -o Content/Textures/wall.cnb
 ```
 
+Configuration remains optional. A directory or single-file build automatically reads
+`.cna-content.json` from its source root when present; `--config <path>` selects another file
+inside that root.
+
 Runtime loading remains the existing ContentManager API:
 
 ```cpp
@@ -293,6 +297,57 @@ result. Explicit selection must name a registered component compatible with the 
 The registry should be fully configured before builds and then shared as immutable state. The
 current coordinator is serial, but component contracts do not require mutable globals.
 
+## Optional per-asset configuration
+
+The convention-only command remains the default. Configuration exists for content-affecting
+choices that cannot be inferred safely, including processor parameters and the metadata needed by
+streaming media routes. The version-1 format is strict and deliberately contains no project-wide
+build system:
+
+```json
+{
+  "format": "CNA.ContentPipeline.Config",
+  "version": 1,
+  "assets": {
+    "Textures/wall.png": {
+      "logicalName": "Environment/stone",
+      "importer": "CNA.ImageImporter",
+      "processor": "CNA.TextureProcessor",
+      "writer": "CNA.Texture2DContentWriter",
+      "parameters": {
+        "colorKey": { "type": "string", "value": "255,0,255" }
+      }
+    }
+  }
+}
+```
+
+Asset keys are normalized generic UTF-8 paths relative to the source root. Backslashes, absolute
+paths, `..`, missing files, symlink escapes, and unsupported source extensions are rejected. A
+logical-name override changes CNB metadata and, for directory builds, the relative output path; it
+must obey the same safe CNB logical-name rules. A single-file build keeps its explicitly supplied
+output path.
+
+Importer, processor, and writer fields are optional stable component-name overrides. Unknown or
+route-incompatible names fail at selection. `parameters` is an object keyed by parameter name. Each
+value has an explicit `type`: `bool`, `i64`, `u64`, `f64`, or `string`. Boolean/string values use
+their corresponding JSON primitive; integer and floating-point values use strings so exact values
+survive JSON parsing and persisted fingerprinting:
+
+```json
+{
+  "durationMs": { "type": "u64", "value": "185000" },
+  "framesPerSecond": { "type": "f64", "value": "29.97" },
+  "displayName": { "type": "string", "value": "Main Theme" },
+  "enabled": { "type": "bool", "value": true }
+}
+```
+
+Unknown root, asset, or parameter-value fields are errors rather than ignored future behavior.
+The selected processor remains authoritative for accepted option names, types, and ranges.
+Configuration diagnostics name the file, asset entry, field/parameter, invalid value, and expected
+form where applicable.
+
 ## Dependencies and runtime XREFs
 
 Build-time dependencies and runtime content references are different records:
@@ -359,6 +414,11 @@ are hashed in 1 MiB chunks. Hashing therefore uses bounded memory and accepts in
 2 GiB while producing the same SHA-256 and version-1 fingerprint semantics as the original one-shot
 implementation. The ordinary test gate pins cross-chunk equivalence; an opt-in sparse 2 GiB+1-byte
 test (`CNA_RUN_LARGE_FILE_TESTS=1`) pins the full large-file path without storing a giant fixture.
+
+Effective configuration is already represented by the manifest's logical name, selected stable
+component identities, and typed parameters. Changing one asset's effective configuration therefore
+invalidates that asset without treating the entire configuration file as a shared byte dependency;
+an unrelated entry change leaves other assets eligible for `SKIP`.
 
 The manifest JSON layout is versioned internal build state, not a hand-edited project format. A
 corrupt or incompatible manifest is ignored safely and rebuilt.

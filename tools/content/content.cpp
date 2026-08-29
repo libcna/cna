@@ -6,12 +6,15 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <memory>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 #include "CNA/Content/Pipeline/ContentBuildManifest.hpp"
+#include "CNA/Content/Pipeline/ContentBuildConfiguration.hpp"
 #include "CNA/Content/Pipeline/CnjContentPipeline.hpp"
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
 #include "CNA/Content/Pipeline/ModelContentPipeline.hpp"
@@ -28,6 +31,7 @@ namespace
     {
         std::filesystem::path source;
         std::filesystem::path output;
+        std::filesystem::path configuration;
         bool quiet = false;
     };
 
@@ -35,13 +39,19 @@ namespace
     {
         std::filesystem::path source;
         std::filesystem::path output;
+        std::string relativeSource;
         std::string logicalName;
+        std::string importer;
+        std::string processor;
+        std::string writer;
+        Pipeline::ContentProcessorParameters parameters;
     };
 
     void PrintUsage()
     {
         std::cerr
-            << "Usage: cna-content build <source-file-or-directory> -o <output> [--quiet]\n\n"
+            << "Usage: cna-content build <source-file-or-directory> -o <output> "
+               "[--config <file>] [--quiet]\n\n"
             << "Builds source content through Importer -> Processor -> Content Type Writer -> "
                "CNB.\n"
             << "A source file requires an output .cnb path. A source directory requires an "
@@ -80,6 +90,18 @@ namespace
             else if (IsOption(argument, "--quiet"))
             {
                 command.quiet = true;
+            }
+            else if (IsOption(argument, "--config"))
+            {
+                if (++index >= arguments.size())
+                {
+                    throw std::invalid_argument("--config requires a path.");
+                }
+                if (!command.configuration.empty())
+                {
+                    throw std::invalid_argument("--config was specified more than once.");
+                }
+                command.configuration = arguments[index];
             }
             else if (!argument.empty() && argument.native().front() ==
                                               std::filesystem::path("-").native().front())
@@ -156,7 +178,8 @@ namespace
             }
             sourceRoot = source.parent_path();
             outputRoot = output.parent_path();
-            return {{source, output, LogicalName(source.filename())}};
+            return {{source, output, CNA::Internal::ContentPathToUtf8(source.filename()),
+                     LogicalName(source.filename())}};
         }
         if (!std::filesystem::is_directory(source))
         {
@@ -184,7 +207,8 @@ namespace
                 std::filesystem::relative(entry.path(), sourceRoot);
             std::filesystem::path output = outputRoot / relative;
             output.replace_extension(".cnb");
-            builds.push_back({entry.path(), std::move(output), LogicalName(relative)});
+            builds.push_back({entry.path(), std::move(output),
+                              CNA::Internal::ContentPathToUtf8(relative), LogicalName(relative)});
         }
         std::sort(builds.begin(), builds.end(), [](const BuildItem& left, const BuildItem& right)
         {
@@ -212,6 +236,111 @@ namespace
                                      CNA::Internal::ContentPathToUtf8(path) + "'.");
         }
         return {std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
+    }
+
+    Pipeline::ContentBuildConfiguration LoadConfiguration(
+        const CommandLine& command, const std::filesystem::path& sourceRoot)
+    {
+        const bool explicitPath = !command.configuration.empty();
+        const std::filesystem::path authored =
+            explicitPath ? command.configuration
+                         : sourceRoot / Pipeline::ContentBuildConfigurationFileName;
+        std::error_code existsError;
+        if (!explicitPath && !std::filesystem::exists(authored, existsError))
+        {
+            if (existsError)
+            {
+                throw std::runtime_error(
+                    "cannot inspect default content configuration '" +
+                    CNA::Internal::ContentPathToUtf8(authored) + "': " +
+                    existsError.message() + ".");
+            }
+            return {};
+        }
+
+        const std::filesystem::path path = WeaklyCanonical(authored);
+        if (!IsWithin(WeaklyCanonical(sourceRoot), path))
+        {
+            throw std::runtime_error("content configuration '" +
+                                     CNA::Internal::ContentPathToUtf8(path) +
+                                     "' must remain inside source root '" +
+                                     CNA::Internal::ContentPathToUtf8(sourceRoot) + "'.");
+        }
+        if (!std::filesystem::is_regular_file(path))
+        {
+            throw std::runtime_error("content configuration '" +
+                                     CNA::Internal::ContentPathToUtf8(path) +
+                                     "' is not a regular file.");
+        }
+        return Pipeline::ContentBuildConfiguration::Parse(ReadText(path), path);
+    }
+
+    void ApplyConfiguration(std::vector<BuildItem>& builds,
+                            const Pipeline::ContentBuildConfiguration& configuration,
+                            const Pipeline::ContentPipelineRegistry& registry,
+                            const std::filesystem::path& sourceRoot,
+                            const std::filesystem::path& outputRoot, bool directoryBuild)
+    {
+        for (const auto& [source, entry] : configuration.Entries())
+        {
+            const std::filesystem::path path = WeaklyCanonical(
+                sourceRoot / CNA::Internal::ContentPathFromUtf8(source));
+            if (!IsWithin(WeaklyCanonical(sourceRoot), path) ||
+                !std::filesystem::is_regular_file(path))
+            {
+                throw std::runtime_error("content configuration asset '" + source +
+                                         "' does not name a contained regular source file.");
+            }
+            if (!registry.HasImporterForSource(path))
+            {
+                throw std::runtime_error("content configuration asset '" + source +
+                                         "' has no registered importer for its source extension.");
+            }
+            static_cast<void>(entry);
+        }
+
+        std::map<std::string, std::string> logicalOwners;
+        std::map<std::string, std::string> outputOwners;
+        for (BuildItem& item : builds)
+        {
+            if (const Pipeline::ContentAssetBuildConfiguration* entry =
+                    configuration.Find(item.relativeSource))
+            {
+                if (!entry->logicalName.empty()) { item.logicalName = entry->logicalName; }
+                item.importer = entry->importer;
+                item.processor = entry->processor;
+                item.writer = entry->writer;
+                item.parameters = entry->parameters;
+                if (directoryBuild && !entry->logicalName.empty())
+                {
+                    item.output = outputRoot /
+                                  CNA::Internal::ContentPathFromUtf8(item.logicalName);
+                    item.output += ".cnb";
+                }
+            }
+
+            if (!logicalOwners.emplace(item.logicalName, item.relativeSource).second)
+            {
+                throw std::runtime_error("content assets '" +
+                                         logicalOwners.at(item.logicalName) + "' and '" +
+                                         item.relativeSource + "' both resolve to logical name '" +
+                                         item.logicalName + "'.");
+            }
+            const std::filesystem::path canonicalOutput = WeaklyCanonical(item.output);
+            if (!IsWithin(WeaklyCanonical(outputRoot), canonicalOutput))
+            {
+                throw std::runtime_error("configured output for asset '" + item.relativeSource +
+                                         "' escapes the output root.");
+            }
+            const std::string outputIdentity =
+                CNA::Internal::ContentPathToUtf8(canonicalOutput);
+            if (!outputOwners.emplace(outputIdentity, item.relativeSource).second)
+            {
+                throw std::runtime_error("content assets '" + outputOwners.at(outputIdentity) +
+                                         "' and '" + item.relativeSource +
+                                         "' resolve to the same output path.");
+            }
+        }
     }
 
     Pipeline::ContentBuildManifest LoadManifest(const std::filesystem::path& path,
@@ -248,14 +377,13 @@ namespace
 
     bool IsCurrentRoute(const Pipeline::ContentBuildManifestEntry& entry,
                         const Pipeline::ContentPipelineRegistry& registry,
-                        const BuildItem& item,
-                        const Pipeline::ContentProcessorParameters& parameters)
+                        const BuildItem& item)
     {
         try
         {
             const std::shared_ptr<const Pipeline::ContentImporter> importer =
-                registry.ResolveImporter(item.source);
-            if (entry.importer != importer->Identity() || entry.parameters != parameters)
+                registry.ResolveImporter(item.source, item.importer);
+            if (entry.importer != importer->Identity() || entry.parameters != item.parameters)
             {
                 return false;
             }
@@ -264,10 +392,14 @@ namespace
                 try
                 {
                     const std::shared_ptr<const Pipeline::ContentProcessor> processor =
-                        registry.ResolveProcessor(outputType, entry.processor.name);
-                    processor->ValidateParameters(parameters);
+                        registry.ResolveProcessor(
+                            outputType,
+                            item.processor.empty() ? entry.processor.name : item.processor);
+                    processor->ValidateParameters(item.parameters);
                     const std::shared_ptr<const Pipeline::ContentTypeWriter> writer =
-                        registry.ResolveWriter(processor->OutputType(), entry.writer.name);
+                        registry.ResolveWriter(
+                            processor->OutputType(),
+                            item.writer.empty() ? entry.writer.name : item.writer);
                     if (entry.processor == processor->Identity() &&
                         entry.writer == writer->Identity())
                     {
@@ -289,8 +421,7 @@ namespace
     bool CanSkip(const Pipeline::ContentBuildManifestEntry& entry,
                  const Pipeline::ContentPipelineRegistry& registry,
                  const BuildItem& item, const std::filesystem::path& sourceRoot,
-                 const std::filesystem::path& outputRoot,
-                 const Pipeline::ContentProcessorParameters& parameters)
+                 const std::filesystem::path& outputRoot)
     {
         try
         {
@@ -301,7 +432,7 @@ namespace
                 WeaklyCanonical(outputRoot /
                                 CNA::Internal::ContentPathFromUtf8(entry.output)) !=
                     WeaklyCanonical(item.output) ||
-                !IsCurrentRoute(entry, registry, item, parameters))
+                !IsCurrentRoute(entry, registry, item))
             {
                 return false;
             }
@@ -341,6 +472,10 @@ namespace
         try
         {
             builds = DiscoverBuilds(command, *registry, sourceRoot, outputRoot, directoryBuild);
+            const Pipeline::ContentBuildConfiguration configuration =
+                LoadConfiguration(command, sourceRoot);
+            ApplyConfiguration(builds, configuration, *registry, sourceRoot, outputRoot,
+                               directoryBuild);
         }
         catch (const std::exception& error)
         {
@@ -366,9 +501,8 @@ namespace
             {
                 const Pipeline::ContentBuildManifestEntry* previous =
                     previousManifest.Find(item.logicalName);
-                const Pipeline::ContentProcessorParameters parameters;
                 if (previous != nullptr &&
-                    CanSkip(*previous, *registry, item, sourceRoot, outputRoot, parameters))
+                    CanSkip(*previous, *registry, item, sourceRoot, outputRoot))
                 {
                     nextManifest.Set(*previous);
                     ++skipped;
@@ -384,7 +518,10 @@ namespace
                 request.sourceRoot = sourceRoot;
                 request.source = item.source;
                 request.logicalName = item.logicalName;
-                request.parameters = parameters;
+                request.importer = item.importer;
+                request.processor = item.processor;
+                request.writer = item.writer;
+                request.parameters = item.parameters;
                 Pipeline::ContentBuildResult result = pipeline.Build(request);
 
                 Pipeline::ContentBuildManifestEntry manifestEntry =
