@@ -12,6 +12,12 @@
 > preserved through a normal merge of current `next`, without reset, rebase, squash, history
 > rewrite or push.
 >
+> **Continuation (2026-08-29):** development resumes from the clean merged baseline
+> `5cb92628d4ab85cde23e6b85231e3f5819d8e4c6`, where local `next`, `origin/next` and the completed
+> `content-pipeline` branch agree. New work is isolated on `content-pipeline-next`; it will not be
+> merged into `next` or pushed by this plan. `CP-016` records the continuation audit, and
+> `CP-017` onward consume the remaining backlog without reopening `CP-001` through `CP-015`.
+>
 > **Boundary:** this plan owns the build-time CNA Content Pipeline. `plans/plan_cnb.md` remains the
 > engineering record for the frozen CNB compiled format. The pipeline consumes the existing CNB
 > codec APIs; it does not reopen CNB design.
@@ -918,6 +924,21 @@ The completed feature branch was synchronized without reopening `CP-001` through
 | `CP-013` | **completed** | Added the implementation-derived `docs/content-pipeline.md` and index entry, documenting the build/runtime boundary, XNA mapping, exact component/context/data APIs, built-in routes, dependencies versus XREF, CLI/cache/atomic/path behavior, migration limits and stable/experimental/internal status. The evidence-based architecture review above found no duplicate built-in codec/parser or runtime-device dependency; the remaining Windows Model and build-graph limits stay explicit. |
 | `CP-014` | **completed** | Added the minimal `cna_add_content(TARGET ... SOURCE_DIR ... OUTPUT_DIR ... [QUIET] [CONTENT_EXECUTABLE ...])` helper. It always delegates to the real CLI, leaving dependency/cache/publication semantics singular; native builds depend on the tool target and cross builds require an explicit host compiler. A generated nested Curve integration fixture and test prove CNB logical-name/manifest output through the helper. |
 | `CP-015` | **completed** | Completed the whole HEADLESS Debug build and a 259-test/27-suite compatibility selection, including all 11 frozen golden vectors. Fixed the CNBF-123 producer guard to recognize `cna-content` as the fourth atomic publisher. A fresh ASan+UBSan build of the tests, new CLI and legacy producers passed the same 259 tests with `halt_on_error`; LSan was explicitly unavailable under the runner's `ptrace`, and TSan is not applicable before concurrent scheduling. The final architecture review found no frozen CNB or byte change. |
+| `CP-016` | **completed** | Audited the integrated v1 baseline, requested plans/docs, component sources, CLI, CMake helper, tests and producer/runtime media seams. The concrete dependency order is: preserve SHA-256 semantics while removing the 2 GiB one-shot limit; add the smallest optional per-asset configuration needed to supply non-inferable media metadata; complete Song and Video routes; close the independent Windows Model path seam; expose custom components through a user-linked compiler executable; then evolve one-output manifests into a graph with cycles proved before parallelism. |
+| `CP-017` | **in progress** | Stream primary-source, file-dependency and output SHA-256 hashing with bounded memory and identical digests. Prove small-file compatibility, short-read/error behavior and an opt-in sparse file above 2 GiB without committing a large fixture. Keep manifest version 1 because fingerprint semantics do not change. |
+| `CP-018` | **pending** | Add a minimal optional, strict per-asset configuration model for importer/processor overrides, typed processor parameters, and logical-name override. Configuration identity must invalidate only affected assets; convention-only builds remain unchanged. |
+| `CP-019` | **pending** | Add the Song source importer, processor and writer adapter over `EncodeSongToCnb()`, using metadata plus a runtime media XREF rather than embedding media. Prove single/directory builds, dependency tracking, determinism, old-producer bytes and runtime metadata compatibility. |
+| `CP-020` | **pending** | Add the Video source importer, processor and writer adapter over `EncodeVideoToCnb()`, requiring explicit metadata that cannot be safely inferred without an optional decoder. Preserve HEADLESS operation, streaming XREF semantics, validation, determinism, old-producer bytes and runtime metadata compatibility. |
+| `CP-021` | **pending** | Keep Model/glTF filesystem paths native through the shared conversion seam and convert to UTF-8 only at documented cgltf/serialization boundaries. Cover non-ASCII glTF, buffer, texture and nested paths on available platforms; do not claim native Windows runtime verification unless it actually runs. |
+| `CP-022` | **pending** | Enable custom components outside tests through a supported user-built content-compiler executable linked to CNA's experimental C++ registry API. Provide an end-to-end example and honest source/toolchain compatibility contract; do not claim a stable dynamic plugin ABI. |
+| `CP-023` | **pending** | Define and implement stable build-node/output identity and a bounded multi-output build result. Evolve the manifest explicitly and specify recoverable per-artifact publication before enabling generated child assets. |
+| `CP-024` | **pending** | Schedule content-to-content build dependencies as graph edges distinct from source files, generated files and runtime XREFs. Prove shared dependencies, rebuild propagation, failure propagation and cache correctness. |
+| `CP-025` | **pending** | Add deterministic self/two-node/long-cycle detection with the logical cycle chain in diagnostics; never rely on recursive overflow. |
+| `CP-026` | **pending** | Audit component reentrancy, registry mutability, logging, manifest access, temporary-name ownership and third-party parser safety; freeze the registry/build graph before execution and specify deterministic scheduling. |
+| `CP-027` | **pending** | Implement bounded worker scheduling with a serial fallback, one execution per node, shared-dependency coordination, deterministic manifest/diagnostic identity and byte equality for worker counts 1, 2 and N. Run TSan if supported. |
+| `CP-028` | **pending** | Benchmark representative cold, no-op, one-change and shared-dependency builds before/after parallel execution; retain correctness-first defaults. |
+| `CP-029` | **pending** | Follow stable CLI/config/custom-tool behavior through `cna_add_content()`, preserving host-tool separation and one real cache/build implementation. |
+| `CP-030` | **pending** | Complete cross-platform/security/HEADLESS review, normal and sanitizer gates, documentation, stable/experimental/future labels and the final frozen-CNB compatibility audit. |
 
 Tasks are intentionally vertical/coherent. The ledger is revised when implementation evidence makes
 the ordering wrong; it is not a promise to build speculative abstractions.
