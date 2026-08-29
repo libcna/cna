@@ -10,6 +10,7 @@
 #include <map>
 #include <memory>
 #include <numeric>
+#include <sstream>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -50,6 +51,17 @@ namespace
         std::string processor;
         std::string writer;
         Pipeline::ContentProcessorParameters parameters;
+    };
+
+    class ContentBuildCycleError final : public Pipeline::ContentPipelineError
+    {
+    public:
+        ContentBuildCycleError(const BuildItem& item, const std::string& reason)
+            : ContentPipelineError(item.source, item.logicalName,
+                                   Pipeline::ContentPipelineStage::Graph,
+                                   "CNA.ContentBuildGraph", reason)
+        {
+        }
     };
 
     void PrintUsage()
@@ -642,6 +654,8 @@ namespace
         std::map<std::string, BuildState> states;
         std::map<std::string, std::string> effectiveFingerprints;
         std::map<std::string, std::string> failureMessages;
+        std::vector<std::string> activeNodes;
+        std::set<std::string> reportedFailures;
         constexpr const char* graphComponent = "CNA.ContentBuildGraph";
 
         std::function<void(const std::string&)> buildNode;
@@ -662,12 +676,18 @@ namespace
             }
             if (state == BuildState::Visiting)
             {
-                throw Pipeline::ContentPipelineError(
-                    item.source, item.logicalName, Pipeline::ContentPipelineStage::Graph,
-                    graphComponent,
-                    "content-build dependency cycle detected at node '" + nodeId + "'.");
+                const auto cycleStart = std::find(activeNodes.begin(), activeNodes.end(), nodeId);
+                std::ostringstream reason;
+                reason << "content-build dependency cycle:";
+                for (auto node = cycleStart; node != activeNodes.end(); ++node)
+                {
+                    reason << "\n  " << (node == cycleStart ? "" : "-> ") << *node;
+                }
+                reason << "\n  -> " << nodeId;
+                throw ContentBuildCycleError(item, reason.str());
             }
             state = BuildState::Visiting;
+            activeNodes.push_back(nodeId);
 
             try
             {
@@ -683,6 +703,10 @@ namespace
                         try
                         {
                             buildNode(dependency);
+                        }
+                        catch (const ContentBuildCycleError&)
+                        {
+                            throw;
                         }
                         catch (const std::exception& error)
                         {
@@ -700,6 +724,7 @@ namespace
                         effectiveFingerprints.insert_or_assign(item.logicalName,
                                                               previous->fingerprint);
                         state = BuildState::Done;
+                        activeNodes.pop_back();
                         ++skipped;
                         if (!command.quiet)
                         {
@@ -728,6 +753,10 @@ namespace
                     try
                     {
                         buildNode(dependency);
+                    }
+                    catch (const ContentBuildCycleError&)
+                    {
+                        throw;
                     }
                     catch (const std::exception& error)
                     {
@@ -783,6 +812,7 @@ namespace
                 nextManifest.Set(std::move(manifestEntry));
 
                 state = BuildState::Done;
+                activeNodes.pop_back();
                 ++built;
                 if (!command.quiet)
                 {
@@ -798,6 +828,10 @@ namespace
             {
                 state = BuildState::Failed;
                 failureMessages.insert_or_assign(nodeId, error.what());
+                if (!activeNodes.empty() && activeNodes.back() == nodeId)
+                {
+                    activeNodes.pop_back();
+                }
                 throw;
             }
         };
@@ -811,7 +845,10 @@ namespace
             catch (const std::exception& error)
             {
                 ++failed;
-                std::cerr << error.what() << "\n";
+                if (reportedFailures.insert(error.what()).second)
+                {
+                    std::cerr << error.what() << "\n";
+                }
             }
         }
 

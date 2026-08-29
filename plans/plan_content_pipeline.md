@@ -501,7 +501,20 @@ Subprocess tests prove dependency-first ordering despite lexical source order, s
 shared node, deterministic graph no-op, transitive rebuild with unchanged dependent CNB bytes,
 direct-versus-effective fingerprint behavior, missing-primary diagnostics, failure propagation,
 no dependent publication, and recovery. A Visiting guard already prevents recursive overflow;
-CP-025 owns exact cycle-chain diagnostics and its dedicated matrix.
+the exact cycle-chain diagnostics are hardened separately in CP-025 below.
+
+### 5.14 Deterministic cycle diagnostics (`CP-025`)
+
+The graph coordinator retains an active logical-node stack. Encountering a Visiting node slices
+that stack at its first occurrence and reports the complete closed chain, including the repeated
+start node. Dependency lists and root traversal are sorted, so self, two-node and longer cycles
+have one stable spelling independent of component registration order.
+
+A dedicated cycle error crosses graph parents without being repeatedly wrapped. Every affected
+node still transitions to Failed for correct summary/failure propagation, but the identical cycle
+diagnostic is emitted only once. Subprocess tests prove `A -> A`, `A -> B -> A`, and
+`A -> B -> C -> A`, zero publication/manifest replacement, exact failed-node counts, and
+byte-identical diagnostics on a repeated long-cycle invocation.
 
 ---
 
@@ -1006,7 +1019,7 @@ The completed feature branch was synchronized without reopening `CP-001` through
 | `CP-022` | **completed** | Extracted the stock CLI coordinator into the linkable `CNA::ContentCompiler` target and added explicit built-in registration plus a configured-registry runner. Stock and custom executables now share discovery, configuration, incremental manifests, diagnostics and the sole atomic publisher. A real `.greeting` compiler example and subprocess test prove mixed custom/built-in directory output, typed configuration fingerprints, custom CMET/chunk bytes, manifest identities, determinism and no-op skips. The 150-test pipeline/legacy-producer/CNJ/golden gate passed (149 pass, one expected large-file skip), all 23 C-header compatibility cells passed, and the two new C++ declarations remain honestly planned under `CBIND-117` with no C ABI/export change. The contract is C++ source/toolchain compatibility; no dynamic plugin ABI or library search is claimed. |
 | `CP-023` | **completed** | Added a backward-extending writer result with at most 256 explicitly named CNB outputs, stable primary-node/output identities, global logical/path ownership checks and manifest v2 output lists. Version 1 is rejected into a safe rebuild. Every artifact and the manifest still use the sole atomic publisher; a later-output failure retains the old manifest so digest mismatch deterministically repairs the whole node. The custom `.greeting` compiler proves generated child publication, stable ordering/no-op, child-tamper repair, primary collision rejection and recovery after partial multi-file publication. The 141-test pipeline/producer/CNJ/golden selection passed 140 with only the expected large-file gate skipped; all 23 C-header compatibility cells and generated inventory gates pass. Frozen built-in encoders and bytes are unchanged. |
 | `CP-024` | **completed** | Added deterministic serial graph scheduling for `ContentBuild` edges between discovered primary node IDs, distinct from file/generated inputs and runtime XREFs. Manifest v3 stores direct/topology and effective dependency fingerprints; versions 1/2 safely rebuild. Shared dependencies execute once before parents, no-op graphs reuse prior edges without running components, dependency changes rebuild every dependent, and missing/failed targets prevent parent publication with Graph-stage context. The `.greeting` subprocess suite proves ordering, shared coordination, cache propagation, failure/recovery and direct/effective hash behavior. The 144-test pipeline/producer/CNJ/golden selection passed 143 with only the expected large-file skip, and all 23 C-header compatibility cells pass with no C ABI/export change. |
-| `CP-025` | **pending** | Add deterministic self/two-node/long-cycle detection with the logical cycle chain in diagnostics; never rely on recursive overflow. |
+| `CP-025` | **completed** | Added an active-stack cycle detector that reports the complete logical chain with its repeated start node. Sorted root/edge traversal makes selection deterministic; a dedicated error avoids nested duplicate chains while every affected node still fails. Self, two-node and three-node subprocess tests prove exact chains, one diagnostic, no publication/manifest replacement, correct failure counts and byte-identical repeated output. |
 | `CP-026` | **pending** | Audit component reentrancy, registry mutability, logging, manifest access, temporary-name ownership and third-party parser safety; freeze the registry/build graph before execution and specify deterministic scheduling. |
 | `CP-027` | **pending** | Implement bounded worker scheduling with a serial fallback, one execution per node, shared-dependency coordination, deterministic manifest/diagnostic identity and byte equality for worker counts 1, 2 and N. Run TSan if supported. |
 | `CP-028` | **pending** | Benchmark representative cold, no-op, one-change and shared-dependency builds before/after parallel execution; retain correctness-first defaults. |
@@ -1047,9 +1060,9 @@ the ordering wrong; it is not a promise to build speculative abstractions.
 * The public SharpRuntime SHA-256 convenience call remains `intcs`-bounded, but CP-017's internal
   streaming adapter feeds bounded chunks through the same implementation. Content files are no
   longer capped at 2 GiB and no second SHA-256 algorithm was introduced.
-* Content-to-content dependencies are serially scheduled and fingerprinted. The Visiting guard
-  prevents recursive overflow, but CP-025 still owns canonical cycle-chain diagnostics and the
-  self/two-node/long-cycle test matrix.
+* Content-to-content dependencies are serially scheduled and fingerprinted, with deterministic
+  cycle-chain rejection. Very deep acyclic graphs still use the serial coordinator's DFS call
+  stack; parallel scheduling should replace execution mechanics without changing graph semantics.
 * Song/Video compilation records and encodes the streaming media XREF but does not copy raw media
   into the output tree. CP-023 intentionally models compiled CNB outputs, not arbitrary deployment
   files; deployment must still place media at the referenced path until an explicit support-file

@@ -1069,6 +1069,87 @@ TEST(ContentPipelineCliTest, ContentBuildDependencyMustNameADiscoveredPrimaryNod
     EXPECT_FALSE(std::filesystem::exists(output / Pipeline::ContentBuildManifestFileName));
 }
 
+TEST(ContentPipelineCliTest, ContentBuildGraphReportsASelfCycleChainOnce)
+{
+    ScratchDirectory scratch("content_build_self_cycle");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    WriteText(source / "A" / "self.greeting", "self\n");
+    WriteText(
+        source / Pipeline::ContentBuildConfigurationFileName,
+        R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"A/self.greeting":{"parameters":{"dependsOn":{"type":"string","value":"A/self"}}}}})json");
+
+    std::string log;
+    EXPECT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
+                            {"build", source.string(), "-o", output.string()}, log),
+              1)
+        << log;
+    EXPECT_EQ(CountOccurrences(log, "content-build dependency cycle:"), 1u) << log;
+    EXPECT_NE(log.find("content-build dependency cycle:\n  A/self\n  -> A/self"),
+              std::string::npos)
+        << log;
+    EXPECT_NE(log.find("Built: 0  Skipped: 0  Failed: 1"), std::string::npos) << log;
+    EXPECT_FALSE(std::filesystem::exists(output / "A" / "self.cnb"));
+    EXPECT_FALSE(std::filesystem::exists(output / Pipeline::ContentBuildManifestFileName));
+}
+
+TEST(ContentPipelineCliTest, ContentBuildGraphReportsATwoNodeCycleChainOnce)
+{
+    ScratchDirectory scratch("content_build_two_cycle");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    WriteText(source / "A.greeting", "a\n");
+    WriteText(source / "B.greeting", "b\n");
+    WriteText(
+        source / Pipeline::ContentBuildConfigurationFileName,
+        R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"A.greeting":{"parameters":{"dependsOn":{"type":"string","value":"B"}}},"B.greeting":{"parameters":{"dependsOn":{"type":"string","value":"A"}}}}})json");
+
+    std::string log;
+    EXPECT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
+                            {"build", source.string(), "-o", output.string()}, log),
+              1)
+        << log;
+    EXPECT_EQ(CountOccurrences(log, "content-build dependency cycle:"), 1u) << log;
+    EXPECT_NE(log.find("content-build dependency cycle:\n  A\n  -> B\n  -> A"),
+              std::string::npos)
+        << log;
+    EXPECT_NE(log.find("Built: 0  Skipped: 0  Failed: 2"), std::string::npos) << log;
+    EXPECT_FALSE(std::filesystem::exists(output / Pipeline::ContentBuildManifestFileName));
+}
+
+TEST(ContentPipelineCliTest, ContentBuildGraphReportsALongCycleDeterministically)
+{
+    ScratchDirectory scratch("content_build_long_cycle");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    WriteText(source / "A" / "first.greeting", "a\n");
+    WriteText(source / "B" / "second.greeting", "b\n");
+    WriteText(source / "C" / "third.greeting", "c\n");
+    WriteText(
+        source / Pipeline::ContentBuildConfigurationFileName,
+        R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"A/first.greeting":{"parameters":{"dependsOn":{"type":"string","value":"B/second"}}},"B/second.greeting":{"parameters":{"dependsOn":{"type":"string","value":"C/third"}}},"C/third.greeting":{"parameters":{"dependsOn":{"type":"string","value":"A/first"}}}}})json");
+
+    std::string firstLog;
+    EXPECT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
+                            {"build", source.string(), "-o", output.string()}, firstLog),
+              1)
+        << firstLog;
+    EXPECT_EQ(CountOccurrences(firstLog, "content-build dependency cycle:"), 1u) << firstLog;
+    EXPECT_NE(firstLog.find("content-build dependency cycle:\n  A/first\n  -> B/second\n  "
+                            "-> C/third\n  -> A/first"),
+              std::string::npos)
+        << firstLog;
+    EXPECT_NE(firstLog.find("Built: 0  Skipped: 0  Failed: 3"), std::string::npos) << firstLog;
+
+    std::string secondLog;
+    EXPECT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
+                            {"build", source.string(), "-o", output.string()}, secondLog),
+              1)
+        << secondLog;
+    EXPECT_EQ(secondLog, firstLog);
+    EXPECT_FALSE(std::filesystem::exists(output / Pipeline::ContentBuildManifestFileName));
+}
+
 TEST(ContentPipelineCliTest, MultiOutputFailureLeavesTheOldManifestAndRecoversSafely)
 {
     ScratchDirectory scratch("multi_output_recovery");

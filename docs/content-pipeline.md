@@ -526,8 +526,20 @@ rebuilds every transitive dependent even when its own source and direct hash are
 direct input or configuration changes, the node runs first to discover its new edge set, so a
 removed stale edge cannot block the rebuild.
 
-The current visiting-state guard refuses cycles without recursive overflow. CP-025 owns the final
-stable cycle-chain diagnostic and exhaustive self/two-node/long-cycle coverage.
+The visiting-state guard refuses cycles before recursive overflow. Diagnostics print the exact
+logical cycle once, for example:
+
+```text
+content-build dependency cycle:
+  Levels/world
+  -> Navigation/world
+  -> Levels/world
+```
+
+Root traversal and every outgoing edge are sorted, so the chosen chain and its spelling are stable.
+Self, two-node, and three-node cycles are covered; the long-cycle subprocess is repeated and must
+produce byte-for-byte identical diagnostics. No node in or dependent on a cycle publishes and the
+manifest is not replaced.
 
 ## Determinism and publication
 
