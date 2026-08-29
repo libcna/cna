@@ -26,6 +26,7 @@
 #include "CNA/Content/Pipeline/Texture2DContentPipeline.hpp"
 #include "CNA/Internal/ContentPath.hpp"
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
+#include "CnaContentStaging.hpp"
 
 extern char** environ;
 
@@ -275,6 +276,121 @@ namespace
         }
         return matches;
     }
+}
+
+TEST(ContentPipelineCliTest, StagingScavengerRemovesOnlyOldUnlockedValidatedDirectories)
+{
+    ScratchDirectory scratch("staging_scavenger");
+    const std::filesystem::path parent = scratch.Path() / "temporary";
+    const std::filesystem::path authoredSource = scratch.Path() / "ContentSource";
+    std::filesystem::create_directories(parent);
+    WriteText(authoredSource / "keep.txt", "user-authored\n");
+
+    const std::int64_t now = 2'000'000;
+    const std::int64_t old = now - CNA::Tools::ContentStagingMinimumAgeSeconds - 1;
+    CNA::Tools::ContentBuildStagingDirectory active(parent, old);
+
+    const auto createCandidate = [&](const std::string& pid, const std::string& token,
+                                     const std::string& attempt, const std::int64_t created)
+    {
+        const CNA::Tools::ContentStagingDetail::CandidateIdentity identity{
+            pid, token, attempt};
+        const std::string name = std::string(CNA::Tools::ContentStagingDirectoryPrefix) +
+                                 pid + "_" + token + "_" + attempt;
+        const std::filesystem::path path = parent / name;
+        std::filesystem::create_directory(path);
+        WriteText(
+            path / CNA::Tools::ContentStagingMetadataFile,
+            CNA::Tools::ContentStagingDetail::MetadataText(name, identity, created));
+        WriteText(path / CNA::Tools::ContentStagingLeaseFile, "");
+        WriteText(path / "0.cnb", "staged bytes");
+        return path;
+    };
+
+    const std::filesystem::path stale = createCandidate(
+        CNA::Tools::Detail::ProcessTag(), "0000000000000001", "0", old);
+    const std::filesystem::path recent = createCandidate(
+        "999991", "0000000000000002", "0", now - 5);
+    const std::filesystem::path malformed =
+        parent / "cna_content_stage_v1_999992_0000000000000003_0";
+    std::filesystem::create_directory(malformed);
+    WriteText(malformed / CNA::Tools::ContentStagingMetadataFile, "not pipeline metadata\n");
+    WriteText(malformed / CNA::Tools::ContentStagingLeaseFile, "");
+    const std::filesystem::path malformedName =
+        parent / "cna_content_stage_v1_not-a-valid-session";
+    std::filesystem::create_directory(malformedName);
+
+    const std::filesystem::path symlinkCandidate =
+        parent / "cna_content_stage_v1_999993_0000000000000004_0";
+    std::error_code symlinkError;
+    std::filesystem::create_directory_symlink(
+        authoredSource, symlinkCandidate, symlinkError);
+    WriteText(parent / "ordinary-user-file.txt", "keep\n");
+
+    const CNA::Tools::ContentStagingScavengeResult result =
+        CNA::Tools::ScavengeContentStagingDirectories(parent, now);
+    EXPECT_EQ(result.removedDirectories, 1u);
+    EXPECT_EQ(result.activeDirectories, 1u);
+    EXPECT_EQ(result.recentDirectories, 1u);
+    EXPECT_GE(result.conservativeSkips, symlinkError ? 2u : 3u);
+    EXPECT_FALSE(std::filesystem::exists(stale));
+    EXPECT_TRUE(std::filesystem::exists(active.Path()));
+    EXPECT_TRUE(std::filesystem::exists(recent));
+    EXPECT_TRUE(std::filesystem::exists(malformed));
+    EXPECT_TRUE(std::filesystem::exists(malformedName));
+    if (!symlinkError) { EXPECT_TRUE(std::filesystem::is_symlink(symlinkCandidate)); }
+    EXPECT_EQ(ReadBytes(authoredSource / "keep.txt"),
+              (std::vector<std::uint8_t>{'u', 's', 'e', 'r', '-', 'a', 'u', 't', 'h', 'o',
+                                         'r', 'e', 'd', '\n'}));
+    EXPECT_TRUE(std::filesystem::exists(parent / "ordinary-user-file.txt"));
+    EXPECT_TRUE(std::is_sorted(result.diagnostics.begin(), result.diagnostics.end()));
+}
+
+TEST(ContentPipelineCliTest, StagingScavengingIsBoundedAndNormalLifetimeCleansUp)
+{
+    ScratchDirectory scratch("staging_bounded");
+    const std::filesystem::path parent = scratch.Path() / "temporary";
+    std::filesystem::create_directories(parent);
+    const std::int64_t now = 3'000'000;
+    const std::int64_t old = now - CNA::Tools::ContentStagingMinimumAgeSeconds - 1;
+    for (int candidate = 0; candidate < 3; ++candidate)
+    {
+        const std::string token = "000000000000000" + std::to_string(candidate + 1);
+        const CNA::Tools::ContentStagingDetail::CandidateIdentity identity{
+            "999994", token, "0"};
+        const std::string name = std::string(CNA::Tools::ContentStagingDirectoryPrefix) +
+                                 identity.pid + "_" + identity.token + "_" + identity.attempt;
+        const std::filesystem::path path = parent / name;
+        std::filesystem::create_directory(path);
+        WriteText(
+            path / CNA::Tools::ContentStagingMetadataFile,
+            CNA::Tools::ContentStagingDetail::MetadataText(name, identity, old));
+        WriteText(path / CNA::Tools::ContentStagingLeaseFile, "");
+    }
+
+    const CNA::Tools::ContentStagingScavengeResult bounded =
+        CNA::Tools::ScavengeContentStagingDirectories(parent, now, 1, 4096u, 1u);
+    EXPECT_EQ(bounded.removedDirectories, 1u);
+    EXPECT_TRUE(bounded.scanLimitReached);
+    EXPECT_EQ(std::ranges::count_if(
+                  std::filesystem::directory_iterator(parent), [](const auto& entry)
+                  {
+                      return entry.path().filename().string().starts_with(
+                          CNA::Tools::ContentStagingDirectoryPrefix);
+                  }),
+              2);
+
+    std::filesystem::path normalPath;
+    {
+        CNA::Tools::ContentBuildStagingDirectory normal(parent, now);
+        normalPath = normal.Path();
+        EXPECT_TRUE(std::filesystem::is_directory(normalPath));
+        EXPECT_TRUE(std::filesystem::is_regular_file(
+            normalPath / CNA::Tools::ContentStagingMetadataFile));
+        EXPECT_TRUE(std::filesystem::is_regular_file(
+            normalPath / CNA::Tools::ContentStagingLeaseFile));
+    }
+    EXPECT_FALSE(std::filesystem::exists(normalPath));
 }
 
 TEST(ContentPipelineCliTest, SingleAssetBuildPublishesThePipelineBytesAtomically)

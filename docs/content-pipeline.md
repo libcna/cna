@@ -590,6 +590,19 @@ from memory. Thus retained cold-build memory is bounded by the active worker cou
 number of discovered assets. Before final publication, staged size and SHA-256 are checked against
 the prepared manifest record.
 
+Compiler staging lives under the private versioned system-temporary parent
+`cna_content_staging_v1`. Each run writes an identity marker and holds a separate OS lease for its
+whole lifetime (`flock` on POSIX, exclusive no-share file handle on Windows). Startup scavenging is
+bounded to 4,096 parent entries and 256 candidate trees. A candidate must have an exact versioned
+name and matching <=1 KiB marker, be a same-user non-symlink directory, be at least 24 hours old,
+and have a regular lease that can be exclusively claimed. PID is recorded but never used as
+liveness evidence, so PID reuse cannot authorize deletion and a genuinely active old build stays
+protected by its lease. Removal targets only that validated direct child; nested symlinks are not
+followed. Recent, future-dated, malformed, symlinked, owner-mismatched, active, legacy and otherwise
+indeterminate entries remain untouched. Non-quiet builds report removals and sorted conservative
+diagnostics. Normal success/handled failure still cleans its own tree immediately through RAII;
+after a crash, the released lease makes the tree eligible once the age threshold expires.
+
 Workers read the frozen graph and dependency fingerprint snapshot and return node-local outcomes.
 Only the coordinator owns output reservations, graph state, effective fingerprint integration,
 manifest mutation, counters, and stdout/stderr. Ready lists and result integration use stable
@@ -893,7 +906,9 @@ manifest.
 Multi-file publication is recoverable, not a portable filesystem transaction. Prepared cold
 outputs can temporarily consume disk space comparable to the compiled output set, and an abrupt
 termination may leave an owner-only staging directory. The next build repairs digest/manifest
-mismatches, but automatic staging cleanup and stale-output garbage collection are not implemented.
+mismatches; CP-042 also scavenges valid abandoned version-1 staging trees conservatively. Legacy
+or malformed/incompletely initialized trees are left for manual inspection, and stale-output
+garbage collection is not yet implemented.
 Song and Video CNBs retain streaming XREFs; deployment must place the media at those referenced
 paths because the compiler does not copy raw media support files.
 

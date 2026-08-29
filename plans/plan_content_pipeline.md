@@ -1182,7 +1182,7 @@ carrying forward task-local results:
 | `CP-039` | **completed** | Post-XNB review selected the recursive cycle preflight as the highest-value unambiguous risk. Replaced recursive DFS with an explicit frame/active-position stack while preserving sorted traversal, exact cycle chains and one shared diagnostic per cycle. A 4,096-node acyclic graph builds under workers 4, the same graph closed into a 4,096-node cycle fails deterministically without replacing its prior manifest, all three legacy cycle oracles remain exact, and the deep case passes ASan+UBSan. |
 | `CP-040` | **completed** | Audited the complete FNA/CNA XNB Model graph against frozen Model schema 1. Section 17 records the field-level representability proof, the deliberately narrow useful subset, the two demonstrated blockers in the existing Blender cube fixture plus its remaining bounds gate, and the separately reviewable schema-2 requirements. No Model codec, schema, runtime path or byte changed. |
 | `CP-041` | **completed** | Added one field-order Model graph walker and shared CPU decoders for declarations, vertex/index buffers and BasicEffect state. The runtime readers remain adapters over those decoders, while `XnbImporter` resolves the shared graph into canonical data and accepts only the CP-040 schema-1 subset through the existing Model processor/writer. Synthetic positive and real/synthetic negative fixtures cover complete geometry/material/hierarchy semantics, texture XREF containment, tags, declarations, effect type/power, ranges, bounds, sharing and truncation; runtime XNB versus CNB Model equivalence and all pre-existing Model/effect reader regressions pass. No renderer/device is used by compilation and no Model wire byte changed. The one new experimental C++ carrier field is inventoried as planned under existing `CBIND-117` (449 total); no C route/export/ABI version changed. |
-| `CP-042` | **planned** | Add conservative abandoned staging-directory scavenging with bounded work, strong name/metadata validation, a stale threshold and an active-owner rule that does not trust PID alone. |
+| `CP-042` | **completed** | Moved compiler staging under a private versioned per-user temporary parent and added an exact session name/owner marker plus an OS-held lease. Startup inspects at most 4,096 direct entries/256 candidates, requires same-user ownership, a non-symlink directory, matching bounded metadata and age >=24h, then deletes only after exclusively claiming the lease. PID is diagnostic identity only, so reuse cannot authorize deletion; old live builds retain their lock. Malformed, recent, future-dated, symlinked, legacy and indeterminate candidates remain untouched with sorted diagnostics. Tests cover an old same-PID abandoned tree, old active lease, recent/malformed/symlink cases, authored source survival, scan bounds and normal cleanup. |
 | `CP-043` | **planned** | Add manifest-proven orphan-output collection after a complete successful build; never infer ownership from an extension and preserve old outputs on failed/corrupt-manifest runs. |
 | `CP-044` | **planned** | Define compiled versus deployment-support artifacts and implement contained, hashed, atomic Song/Video media deployment through the existing manifest/publisher/scheduler. |
 | `CP-045` | **planned** | Harden custom writer fingerprints with explicit stable writer/asset/schema/codec identity and tests proving semantic writer evolution invalidates cached output without RTTI names. |
@@ -1220,8 +1220,9 @@ the ordering wrong; it is not a promise to build speculative abstractions.
   unsynchronized mutable per-instance state is safe with the default `--workers 1` but violates the
   documented contract when the user explicitly enables multiple workers.
 * Prepared cold-build outputs use bounded RAM but may occupy temporary disk space up to the total
-  compiled output size until the run completes. Cleanup is best effort after abrupt process or
-  machine termination; abandoned private staging directories are not yet scavenged automatically.
+  compiled output size until the run completes. CP-042 scavenges only version-1 directories with
+  valid identity metadata that are at least 24 hours old and whose lease can be claimed. Legacy or
+  malformed/incompletely initialized trees remain deliberately untouched rather than guessed safe.
 * Song/Video compilation records and encodes the streaming media XREF but does not copy raw media
   into the output tree. CP-023 intentionally models compiled CNB outputs, not arbitrary deployment
   files; deployment must still place media at the referenced path until an explicit support-file
@@ -1428,12 +1429,11 @@ removes process-stack depth from graph correctness. The permanent integration or
 proves one complete deterministic chain, 4,096 failed nodes, no publication, and preservation of
 the last valid manifest. The same case passes combined ASan+UBSan.
 
-The other reviewed risks remain open because they require separate policy, not merely a safer
-implementation of existing semantics: scavenging abandoned staging directories needs an age and
-live-owner protocol; orphan-output collection needs an explicit ownership/retention policy; raw
-Song/Video support-file copying needs deployment semantics; and glTF child/multi-Model output or
-custom schema-version fingerprints change component contracts. None was guessed as a side effect
-of the XNB phase.
+The review also identified independent policy work. CP-042 subsequently supplied the staging age
+and live-owner protocol without changing the graph/publisher. Orphan-output collection still needs
+an explicit ownership/retention policy; raw Song/Video support-file copying needs deployment
+semantics; and glTF child/multi-Model output or custom schema-version fingerprints change component
+contracts. None was guessed as a side effect of the XNB phase.
 
 ---
 
@@ -1531,3 +1531,39 @@ distinct buffers/effects; complete discriminated stock-effect records including 
 SkinnedEffect weights, alpha-test and environment-map fields; and a deliberate policy for embedded
 custom Effect bytecode versus external Effect assets. Those requirements are documented for a
 separate architectural review. `CP-040` neither changes nor reinterprets frozen Model schema 1.
+
+---
+
+## 18. Abandoned staging recovery (`CP-042`)
+
+Every compiler run now owns one child of the private, owner-only
+`<system-temp>/cna_content_staging_v1` parent. A child name contains an exact versioned prefix,
+decimal PID, 16-digit session token and decimal collision attempt. Its bounded owner marker repeats
+the directory name, PID/token and creation time. A separate lease file is held with `flock()` on
+POSIX or an exclusive no-share handle on Windows for the entire build. PID is never treated as
+proof that a process is alive: a reused PID cannot hold the abandoned session's lease.
+
+Before claiming its own child, a run scans at most 4,096 direct parent entries and retains at most
+256 matching candidates. Candidate diagnostics are sorted. Deletion requires all of the following:
+
+1. an exact current-version name directly below the staging parent;
+2. a real non-symlink directory owned by the current POSIX user (the Windows temp parent is already
+   per-user/ACL protected);
+3. a regular, non-symlink, <=1 KiB marker whose identity exactly matches the directory;
+4. a non-future creation time at least 24 hours old; and
+5. successful exclusive claim of the regular, non-symlink lease.
+
+The claim remains held through recursive removal on POSIX. Windows closes its exclusive claim only
+immediately before removal because the OS refuses deletion of an open no-share file; session names
+are unique and no build can adopt an old directory. `remove_all()` is applied only to the validated
+direct child, and filesystem symlinks encountered below it are removed as links rather than
+traversed. User source/output roots are never inputs to scavenging.
+
+Normal success and handled failures still remove the current tree through RAII. A crash releases
+the OS lease, so a later run can remove the valid tree after the safety threshold. Old live builds,
+recent/future timestamps, malformed or missing metadata/leases, symlink candidates, owner mismatch,
+and the pre-CP-042 legacy naming scheme remain untouched. That intentionally leaves a tiny
+incomplete-initialization/legacy residue class rather than guessing that an unproved directory is
+pipeline-owned. Hitting either scan bound leaves the remainder for a future invocation and emits a
+deterministic diagnostic; scavenging never prevents an otherwise valid build merely because one
+candidate cannot be classified or removed.

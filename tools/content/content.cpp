@@ -29,6 +29,7 @@
 #include "CNA/Content/Pipeline/VideoContentPipeline.hpp"
 #include "CNA/Content/Pipeline/XnbContentPipeline.hpp"
 #include "CNA/Internal/ContentPath.hpp"
+#include "CnaContentStaging.hpp"
 #include "CnaToolAtomicWrite.hpp"
 
 namespace Pipeline = CNA::Content::Pipeline;
@@ -67,65 +68,6 @@ namespace
                                    "CNA.ContentBuildGraph", reason)
         {
         }
-    };
-
-    class ContentBuildStagingDirectory final
-    {
-    public:
-        ContentBuildStagingDirectory()
-        {
-            std::error_code error;
-            const std::filesystem::path temporary =
-                std::filesystem::temp_directory_path(error);
-            if (error)
-            {
-                throw std::runtime_error("no content staging directory is available: " +
-                                         error.message() + ".");
-            }
-            for (std::size_t attempt = 0u; attempt < 1024u; ++attempt)
-            {
-                error.clear();
-                const std::filesystem::path candidate =
-                    temporary / ("cna_content_stage_" + CNA::Tools::Detail::ProcessTag() + "_" +
-                                 std::to_string(attempt));
-                if (std::filesystem::create_directory(candidate, error))
-                {
-                    std::filesystem::permissions(
-                        candidate, std::filesystem::perms::owner_all,
-                        std::filesystem::perm_options::replace, error);
-                    if (error)
-                    {
-                        std::error_code ignored;
-                        std::filesystem::remove(candidate, ignored);
-                        throw std::runtime_error(
-                            "cannot secure content staging directory: " + error.message() +
-                            ".");
-                    }
-                    path_ = candidate;
-                    return;
-                }
-                if (error && error != std::errc::file_exists)
-                {
-                    throw std::runtime_error("cannot reserve content staging directory: " +
-                                             error.message() + ".");
-                }
-            }
-            throw std::runtime_error("cannot reserve a unique content staging directory.");
-        }
-
-        ~ContentBuildStagingDirectory()
-        {
-            std::error_code ignored;
-            std::filesystem::remove_all(path_, ignored);
-        }
-
-        ContentBuildStagingDirectory(const ContentBuildStagingDirectory&) = delete;
-        ContentBuildStagingDirectory& operator=(const ContentBuildStagingDirectory&) = delete;
-
-        [[nodiscard]] const std::filesystem::path& Path() const noexcept { return path_; }
-
-    private:
-        std::filesystem::path path_;
     };
 
     void PrintUsage()
@@ -1005,10 +947,25 @@ namespace
                                item.relativeSource);
         }
 
-        std::unique_ptr<ContentBuildStagingDirectory> staging;
+        std::unique_ptr<CNA::Tools::ContentBuildStagingDirectory> staging;
         try
         {
-            staging = std::make_unique<ContentBuildStagingDirectory>();
+            staging = std::make_unique<CNA::Tools::ContentBuildStagingDirectory>();
+            if (!command.quiet)
+            {
+                const CNA::Tools::ContentStagingScavengeResult& scavenged =
+                    staging->ScavengeResult();
+                if (scavenged.removedDirectories > 0u)
+                {
+                    std::cerr << "[CLEAN] removed " << scavenged.removedDirectories
+                              << " abandoned content staging director"
+                              << (scavenged.removedDirectories == 1u ? "y" : "ies") << ".\n";
+                }
+                for (const std::string& diagnostic : scavenged.diagnostics)
+                {
+                    std::cerr << "warning: content staging scavenger: " << diagnostic << "\n";
+                }
+            }
         }
         catch (const std::exception& error)
         {
