@@ -114,6 +114,47 @@ namespace
         DrawQuad(dev, kBackground);
     }
 
+    /// REMED-GFX-237: does a stencil clear put the WRITE mask back?
+    ///
+    /// XNA's Clear ignores `StencilWriteMask`; `glClear` obeys it, so the clear has to force the
+    /// mask open. Leaving it open is the defect: the next draw then writes stencil bits the active
+    /// state forbids. Assign a state whose write mask is 0x00 -- a draw through it must change
+    /// nothing -- clear the buffer to @p seeded, draw through that state, then compare.
+    /// Restored: the buffer still holds @p seeded and the compare draws GREEN.
+    /// Not restored: the draw replaced it with 0x0A and the compare finds nothing.
+    bool ClearThenWriteMaskedDrawKeepsStencil(GraphicsDevice& dev, int seeded)
+    {
+        DepthStencilState masked;
+        masked.setDepthBufferEnableProperty(false);
+        masked.setStencilEnableProperty(true);
+        masked.setStencilFunctionProperty(CompareFunction::Always);
+        masked.setStencilPassProperty(StencilOperation::Replace);
+        masked.setReferenceStencilProperty(0x0A);
+        masked.setStencilWriteMaskProperty(0x00);
+        dev.setDepthStencilStateProperty(masked);
+
+        dev.Clear(ClearOptions::Stencil, kBackground, 1.0f, seeded);
+        dev.setBlendStateProperty(BlendState::Opaque);
+        ApplyBasicEffect(dev);
+        DrawQuad(dev, kBackground);
+
+        DepthStencilState test;
+        test.setDepthBufferEnableProperty(false);
+        test.setStencilEnableProperty(true);
+        test.setStencilFunctionProperty(CompareFunction::Equal);
+        test.setReferenceStencilProperty(seeded);
+        test.setStencilPassProperty(StencilOperation::Keep);
+        test.setStencilFailProperty(StencilOperation::Keep);
+        dev.setDepthStencilStateProperty(test);
+        DrawQuad(dev, kGreen);
+
+        const auto& vp = dev.getViewportProperty();
+        Rectangle reg(vp.getWidthProperty() / 2, vp.getHeightProperty() / 2, 1, 1);
+        Color c(0, 0, 0, 0);
+        dev.GetBackBufferData(&reg, &c, 0, 1);
+        return c.getGProperty() >= 200 && c.getRProperty() <= 60 && c.getBProperty() <= 60;
+    }
+
     bool ClearThenTestStencilEquals(GraphicsDevice& dev, ClearOptions clearOptions, int clearStencilValue,
                                      int expected)
     {
@@ -194,8 +235,16 @@ protected:
                         "in ONE frame\n", okC ? "PASS" : "FAIL");
             if (okC) ++passCount_;
 
-            std::printf("=== %d/3 PASS ===\n", passCount_);
-            result_ = (passCount_ == 3) ? 0 : 1;
+            // Check D -- REMED-GFX-237: a clear must ignore the stencil WRITE mask AND put it back.
+            // Nothing covered the restore: with it deleted, all 65 stencil tests still passed.
+            StampStencil(dev, 0x05);
+            const bool okD = ClearThenWriteMaskedDrawKeepsStencil(dev, 0x05);
+            std::printf("[%s] RESTORE: a StencilWriteMask=0x00 draw after ClearOptions::Stencil "
+                        "must leave the cleared value alone\n", okD ? "PASS" : "FAIL");
+            if (okD) ++passCount_;
+
+            std::printf("=== %d/4 PASS ===\n", passCount_);
+            result_ = (passCount_ == 4) ? 0 : 1;
             done_ = true;
             Exit();
             break;

@@ -5613,6 +5613,18 @@ if (!ProfileIsEs2ApiGeneration())
         if (depthEnable)
             device.set_depth_func(ToEasyGLCompareFunc(depthFunc));
 
+        // Task 870/319: remember what this installs, so SetReferenceStencil can reissue the
+        // function call with a new reference. Recorded even when the stencil test is off, because
+        // the reference survives a disabled state and applies again when one re-enables it.
+        stencilEnabled_   = stencilEnable;
+        depthWriteEnabled_ = depthWriteEnable;   // REMED-GFX-237
+        stencilWriteMask_  = stencilWriteMask;   // REMED-GFX-237
+        stencilTwoSided_  = twoSidedStencilMode;
+        stencilFunc_      = stencilFunc;
+        stencilCcwFunc_   = ccwStencilFunc;
+        stencilReadMask_  = stencilMask;
+        referenceStencil_ = referenceStencil;
+
         device.set_stencil_test_enabled(stencilEnable);
         if (stencilEnable)
         {
@@ -5746,6 +5758,33 @@ if (!ProfileIsEs2ApiGeneration())
     {
         if (metagl::IsContextLost()) return;
         device.set_blend_color(r, g, b, a);
+    }
+
+    void EasyGLRenderer::SetReferenceStencil(int value)
+    {
+        if (metagl::IsContextLost()) return;
+        referenceStencil_ = value;
+        // Same standalone-property discipline SetBlendFactor has, but GL gives that one a call of
+        // its own (glBlendColor) and gives this one none: glStencilFunc sets function, reference
+        // and mask together, so reissuing it with the remembered function and mask is the only way
+        // to change the reference without waiting for the next DepthStencilState assignment.
+        // Nothing to reissue while the stencil test is off -- the value is kept, and whichever
+        // ApplyDepthStencilState re-enables the test carries its own reference anyway.
+        if (!stencilEnabled_) return;
+        if (stencilTwoSided_)
+        {
+            device.set_stencil_func_separate(::easygl::CullFace::Front,
+                ToEasyGLCompareFunc(stencilFunc_),
+                referenceStencil_, static_cast<unsigned int>(stencilReadMask_));
+            device.set_stencil_func_separate(::easygl::CullFace::Back,
+                ToEasyGLCompareFunc(stencilCcwFunc_),
+                referenceStencil_, static_cast<unsigned int>(stencilReadMask_));
+        }
+        else
+        {
+            device.set_stencil_func(ToEasyGLCompareFunc(stencilFunc_),
+                referenceStencil_, static_cast<unsigned int>(stencilReadMask_));
+        }
     }
 
     void EasyGLRenderer::SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth)
@@ -9290,8 +9329,35 @@ CNA_GL_PUNCTUAL_DECL
         // row-vector WVP by this clip-space translation produces clip.xy += offset * clip.w.
         int viewportX = 0, viewportY = 0, viewportWidth = 0, viewportHeight = 0;
         device.get_viewport(viewportX, viewportY, viewportWidth, viewportHeight);
+        // REMED-GFX-235: not while the destination is multisampled.
+        //
+        // The correction above is a GEOMETRY translation, and that is only equivalent to what it
+        // means at ONE sample per pixel. There it decides which side of the fill edge the pixel
+        // CENTRE lands on, and 63/128 is deliberately just under half a pixel so the centre stays
+        // covered -- that margin is the whole design. At four samples the outer sample positions
+        // sit at a quarter of a pixel, inside that margin, so the same translation also removes
+        // coverage: the outermost row and column lose two of four samples and the corner three of
+        // four, measured as exactly 1/2 and exactly 1/4 of the expected colour.
+        //
+        // Suppressing it here keeps the correction doing the job it was tuned for and stops it
+        // doing one it was not. The cost is real and deliberate: geometry differs by ~0.49px
+        // between a multisampled destination and a single-sampled one, so a game toggling MSAA
+        // sees a sub-pixel shift. The alternative was to weaken four fixtures that seven renderers
+        // share, only one of which applies this correction at all.
+        bool multisampledDestination = false;
+        if (bound_)
+        {
+            if (bound_->rt2D != nullptr && bound_->rt2D->GetMultiSampleCount() > 0)
+                multisampledDestination = true;
+            if (bound_->cube != nullptr && bound_->cube->GetMultiSampleCount() > 0)
+                multisampledDestination = true;
+            for (int slot = 0; slot < bound_->mrtCount; ++slot)
+                if (bound_->mrt[static_cast<std::size_t>(slot)] != nullptr &&
+                    bound_->mrt[static_cast<std::size_t>(slot)]->GetMultiSampleCount() > 0)
+                    multisampledDestination = true;
+        }
         Matrix xnaPixelCenter = Matrix::getIdentityProperty();
-        if (viewportWidth > 0 && viewportHeight > 0)
+        if (viewportWidth > 0 && viewportHeight > 0 && !multisampledDestination)
         {
             xnaPixelCenter = Matrix::CreateTranslation(
                 xnaPixelCenterScale_ / static_cast<float>(viewportWidth),
@@ -9881,6 +9947,33 @@ if (ProfileIsEs2ApiGeneration())
                 p.loc_rt_flip_v_hi, rtFlipV[4], rtFlipV[5], rtFlipV[6], 0.0f);
     }
 
+    /// REMED-GFX-237: puts back what a clear had to override.
+    ///
+    /// XNA's `Clear` ignores the depth and stencil WRITE masks; `glClear` obeys them, so every
+    /// clear path forces them open first. Restoring was left to "ApplyDepthStencilState reissues
+    /// the real mask before the next draw anyway" -- true only if the game reassigns its
+    /// DepthStencilState between the clear and that draw, which nothing requires it to do.
+    ///
+    /// The stencil mask is only put back while the stencil test is on, matching
+    /// ApplyDepthStencilState, which does not install one otherwise.
+    void EasyGLRenderer::RestoreWriteMasksAfterClear(bool depth, bool stencil)
+    {
+        if (depth && !depthWriteEnabled_) device.set_depth_mask(false);
+        if (stencil && stencilEnabled_)
+        {
+            const auto mask = static_cast<unsigned int>(stencilWriteMask_);
+            if (stencilTwoSided_)
+            {
+                device.set_stencil_mask_separate(::easygl::CullFace::Front, mask);
+                device.set_stencil_mask_separate(::easygl::CullFace::Back, mask);
+            }
+            else
+            {
+                device.set_stencil_mask(mask);
+            }
+        }
+    }
+
     void EasyGLRenderer::ClearColorAndDepth(float r, float g, float b, float a, float depth)
     {
         if (metagl::IsContextLost()) return;
@@ -9895,6 +9988,7 @@ if (ProfileIsEs2ApiGeneration())
         if (maskActive) ForceAllColorWriteMasks();
         device.clear(::easygl::ClearFlags::Color | ::easygl::ClearFlags::Depth);
         if (maskActive) ApplyCurrentColorWriteMasks();
+        RestoreWriteMasksAfterClear(true, false);
     }
 
     // Task 871: glClear(GL_STENCIL_BUFFER_BIT) is itself masked by the currently-active
@@ -9908,6 +10002,7 @@ if (ProfileIsEs2ApiGeneration())
         device.set_clear_stencil(stencil);
         device.set_stencil_mask(0xFFFFFFFFu);
         device.clear(::easygl::ClearFlags::Stencil);
+        RestoreWriteMasksAfterClear(false, true);
     }
 
     void EasyGLRenderer::ClearDepthAndStencil(float depth, int stencil)
@@ -9918,6 +10013,7 @@ if (ProfileIsEs2ApiGeneration())
         device.set_depth_mask(true);
         device.set_stencil_mask(0xFFFFFFFFu);
         device.clear(::easygl::ClearFlags::Depth | ::easygl::ClearFlags::Stencil);
+        RestoreWriteMasksAfterClear(true, true);
     }
 
     void EasyGLRenderer::ClearColorAndStencil(float r, float g, float b, float a, int stencil)
@@ -9946,6 +10042,7 @@ if (ProfileIsEs2ApiGeneration())
         const bool maskActive = HasRestrictedActiveColorWriteMask();
         if (maskActive) ForceAllColorWriteMasks();
         device.clear(::easygl::ClearFlags::Color | ::easygl::ClearFlags::Depth | ::easygl::ClearFlags::Stencil);
+        RestoreWriteMasksAfterClear(true, true);
         if (maskActive) ApplyCurrentColorWriteMasks();
     }
 
@@ -9955,6 +10052,7 @@ if (ProfileIsEs2ApiGeneration())
         device.set_clear_depth(depth);
         device.set_depth_mask(true);
         device.clear(::easygl::ClearFlags::Depth);
+        RestoreWriteMasksAfterClear(true, false);
     }
 
     void EasyGLRenderer::SetDepthTestEnabled(bool enabled)
@@ -9963,6 +10061,7 @@ if (ProfileIsEs2ApiGeneration())
         if (enabled)
         {
             device.set_depth_func(::easygl::CompareFunc::Lequal);
+            depthWriteEnabled_ = true;   // REMED-GFX-237: this really does install the mask.
             device.set_depth_mask(true);
         }
     }
@@ -9977,6 +10076,7 @@ if (ProfileIsEs2ApiGeneration())
 
     void EasyGLRenderer::SetDepthWriteEnabled(bool enabled)
     {
+        depthWriteEnabled_ = enabled;   // REMED-GFX-237: what a clear must put back.
         device.set_depth_mask(enabled);
     }
 

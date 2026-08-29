@@ -2359,7 +2359,137 @@ test change is what turns a stale refusal expectation into an assertion that nam
 
 ---
 
-## 32. `REMED-BUILD-017` — the native GDI workflow omitted three correctness targets
+## 32. `REMED-GFX-235` — the XNA pixel-centre correction removed multisample coverage
+
+**Status:** **CLOSED — owner chose this of two measured options, 2026-08-29** ·
+**Pre-existing since `SAMPLE-001`; a side effect of a deliberate correction, not a defect in it**
+
+**Defect.** `EasyGLRenderer::BindDrawParams` post-multiplies WVP by `xnaPixelCenter`, a clip-space
+translation of `xnaPixelCenterScale_ = 63/64` over the viewport extent — **63/128 ≈ 0.492 window
+pixels** — reproducing XNA 4.0's Direct3D 9 pixel-CENTRE addressing on a GL that addresses pixel
+CORNERS. `SAMPLE-001` added it so the Primitives sample's 1×1 right triangles cover a pixel, and the
+value is deliberately just under half a pixel so the centre stays on the covered side.
+
+That margin is exactly what multisampling defeats. At four samples the outer sample positions sit at
+a quarter of a pixel, inside the margin, so the same translation stops being a fill-rule decision
+and starts removing coverage.
+
+**Measured, in this order, and each step narrowed the next.** The 15 wrong texels of an 8×8 are row 0
+(8) plus column 0 (7). `texel(0,0)` is **exactly ¼** of the expected colour and the other 14 exactly
+½ — one and two of four samples. A quad drawn to NDC ±1.125, half a pixel outward, takes every
+failure to zero, while ±1.0625 does not, so the shift is between a quarter and a half pixel. A quad
+covering only NDC `x ∈ [-1,0]` leaves the **interior** seam at window x=4 half-covered too, so it is
+a uniform geometry shift and not an edge artefact. Setting `xnaPixelCenterScale_ = 0` takes both
+fixtures to zero. And the same failures reproduce byte-identically on real AMD hardware
+(`DISPLAY=:0`, Radeon 780M/radeonsi), so no part of it is a llvmpipe artefact.
+
+**Fix.** The correction is skipped while the destination is multisampled — asked of the bound
+`rt2D`, `cube` and every live MRT slot, so no path is missed. It keeps doing the job it was tuned
+for and stops doing one it was not.
+
+**The cost is real and was accepted deliberately.** Geometry now differs by ~0.49px between a
+multisampled destination and a single-sampled one, so a game toggling MSAA sees a sub-pixel shift.
+
+**The alternative, and why it lost.** The four failing fixtures could have been taught to tolerate
+partial coverage instead. But `rendertarget_msaa_first_readback_test.cpp` and
+`rendertarget_msaa_mip_readback_test.cpp` are registered for **seven renderers** — bgfx, easygl,
+headless, sdl-gpu, software, vulkan, webgpu — and only EasyGL applies this correction. Weakening
+them would blind a cross-renderer contract on the other six, where full coverage is achievable and a
+genuine edge-coverage defect would then pass unnoticed. That option was not measured on those six;
+this configuration builds EasyGL only.
+
+**Evidence.** `EasyGL_GFX164_BoundMsaaAlpha`, `EasyGL_MsaaFirstReadback`, `EasyGL_MsaaMipReadback`
+and `EasyGL_InvalidMipLevel` all go to zero failures. `EasyGL_XnaPixelCenter` — `SAMPLE-001`'s own
+guard, and the reason the correction exists — stays green, because it is not multisampled.
+
+---
+
+## 33. `REMED-GFX-236` — EasyGL ignored `GraphicsDevice.ReferenceStencil`
+
+**Status:** **CLOSED, 2026-08-29** · **Pre-existing gap: the one renderer of 27 that never
+implemented the hook**
+
+**Defect.** `GraphicsDevice.ReferenceStencil` is a standalone device property in XNA/FNA
+(`FNA3D_Get/SetReferenceStencil`), like `BlendFactor`: changing it must affect the next draw's
+stencil compare **without** reassigning the whole `DepthStencilState`. Task 870/319 added
+`IGraphicsRenderer::SetReferenceStencil(int)` and `GraphicsDevice::setReferenceStencilProperty`
+forwards to it. **26 renderers implement it; EasyGL did not**, so it inherited the interface's
+defaulted no-op and every override was silently discarded — the compare kept using whatever the
+assigned state had baked in.
+
+**Why the interface default hides it.** `SetReferenceStencil` is declared `virtual void
+SetReferenceStencil(int) {}`, so a renderer that never implements it still builds and still runs.
+The only thing that reports the gap is a pixel test, and this one had been reporting it.
+
+**Fix.** GL has no call that sets the reference alone — `glStencilFunc` binds function, reference
+and mask together — so `ApplyDepthStencilState` now records the function, the CCW function, the read
+mask and the two-sided flag, and `SetReferenceStencil` reissues the function call(s) with the new
+value. Two-sided state reissues **both faces**, because GL binds the reference per face. Recorded
+even while the stencil test is off, since a later state may re-enable it. Nothing is reissued while
+it is off; that state carries its own reference when it arrives.
+
+**The test was reporting the truth and telling readers to ignore it.** Its header carried a note
+saying `setReferenceStencilProperty` was a pure local no-op, that `IGraphicsRenderer` had no such
+method at all, and that the test should be *expected* to fail on every renderer. All three had
+stopped being true. The note is replaced rather than amended: an "expect this to fail" that outlives
+its reason turns a real signal into background noise.
+
+**Coverage, and a leg that initially defended nothing.** A two-sided leg was added for the new
+per-face path. Its first version passed **with the back-face reissue deleted** — one quad reaches
+one GL face, and this fixture's quad rasterizes as the FRONT face despite the file's own comment
+about it being back-facing (that comment is about culling, not about GL's stencil faces). Measured
+by removing each face's reissue in turn and watching which one the test noticed. The leg now draws
+both windings, and removing either face fails it.
+
+**Evidence.** `EasyGL_GraphicsDevice_ReferenceStencil` 1 FAIL → 2 PASS. Mutation-checked three
+ways: storing the value without reissuing fails leg A; dropping the front face fails leg B;
+dropping the back face fails leg B.
+
+---
+
+## 34. `REMED-GFX-237` — a clear opened the depth and stencil write masks and left them open
+
+**Status:** **CLOSED, 2026-08-29** · **Pre-existing; the restore half of a correct override was
+never written**
+
+**Defect.** XNA's `Clear` ignores `DepthBufferWriteEnable` and `StencilWriteMask`; `glClear` obeys
+both. EasyGL therefore forces `glDepthMask(true)` and `glStencilMask(0xFFFFFFFF)` around every
+clear, which is right. It never put them back.
+
+**The assumption that made that look safe is written in the source.** `ClearStencil`'s own comment
+says *"ApplyDepthStencilState() reissues the real write mask before the next draw anyway"* — true
+only if the game reassigns its `DepthStencilState` between the clear and that draw, and nothing
+requires it to. `Clear` immediately followed by a draw through the state that was already active
+drew with the wrong masks: depth writes that the state disabled, stencil bits that its write mask
+forbade.
+
+Note the same file already got this right for the COLOUR write mask (`REMED-GFX-077`): force,
+clear, `ApplyCurrentColorWriteMasks()`. The depth and stencil halves of the same idea were missing
+the third step.
+
+**Fix.** `ApplyDepthStencilState` records `depthWriteEnable` and `stencilWriteMask` (joining the
+function/mask state `REMED-GFX-236` already caches), `SetDepthWriteEnabled` and
+`SetDepthTestEnabled` keep the depth value in step, and every clear path that forces a mask calls
+`RestoreWriteMasksAfterClear`. All five do: `ClearDepth`, `ClearStencil`, `ClearColorAndDepth`,
+`ClearDepthAndStencil`, `ClearColorDepthAndStencil`. The stencil mask is restored only while the
+stencil test is on, matching `ApplyDepthStencilState`, which installs one only then; two-sided state
+restores both faces.
+
+**The stencil half was a latent hole nothing would have caught.** Only the depth half had a failing
+test. Deleting the stencil restore left **all 65 stencil tests passing**, so it was measured before
+being shipped and a leg was written for it: `EasyGL_GraphicsDevice_ClearStencil` Check D stamps
+0x05, assigns a state with `StencilWriteMask=0x00`, clears the stencil to 0x05 — which only lands
+because the clear forces the mask open — draws through that state, and compares. Restored, the
+buffer still reads 0x05 and the compare draws green; not restored, the draw replaced it with its own
+reference.
+
+**Evidence.** `EasyGL_DepthStencilState_WriteEnable_Golden` FAIL → PASS;
+`EasyGL_GraphicsDevice_ClearStencil` 3/3 → 4/4. Mutation-checked both halves: deleting the depth
+restore fails the golden test, deleting the stencil restore fails Check D.
+
+---
+
+## 35. `REMED-BUILD-017` — the native GDI workflow omitted three correctness targets
 
 **Status:** **CLOSED — DISCOVERED AND RESOLVED in the GDI adaptation, 2026-08-08** ·
 **Build/evidence inventory defect, not a renderer defect**
@@ -2376,7 +2506,7 @@ inventory defect.
 
 ---
 
-## 33. `REMED-BUILD-018` — the capability test used an incomplete backend type
+## 36. `REMED-BUILD-018` — the capability test used an incomplete backend type
 
 **Status:** **CLOSED — DISCOVERED AND RESOLVED in the GDI adaptation, 2026-08-08** ·
 **Shared test-build defect, not a renderer defect**
