@@ -65,6 +65,17 @@ Configuration remains optional. A directory or single-file build automatically r
 `.cna-content.json` from its source root when present; `--config <path>` selects another file
 inside that root.
 
+Build execution is serial by default. Independent graph nodes can be compiled concurrently with a
+strict bounded worker count:
+
+```bash
+cna-content build ContentSource -o Content --workers 4
+```
+
+`--workers` accepts integers from 1 through 64. `--workers 1` is the explicit serial fallback and
+has the same behavior as omitting the option. The worker count changes execution only; it is not
+content identity and does not enter CNB bytes or manifest fingerprints.
+
 Runtime loading remains the existing ContentManager API:
 
 ```cpp
@@ -165,8 +176,8 @@ logging. `ResolveSourceDependency()` rejects absolute authored paths and paths t
 source root, including canonical symlink escapes, and records the resolved file as a build input.
 
 Components must not retain references or pointers to a context after `Import()` returns. Component
-objects are registry-owned and reusable; they should keep no per-build mutable state so future
-parallel scheduling remains possible.
+objects are registry-owned and reusable; they must keep no unsynchronized per-build mutable state
+because `--workers` may invoke the same frozen component concurrently.
 
 ## Imported and processed data
 
@@ -218,7 +229,7 @@ resolution, categorized content-build/generated dependency registration, separat
 registration, and scoped logging. It does not duplicate the importer's source-path getters or
 expose runtime services.
 
-Content-to-content build dependencies are scheduled as explicit graph edges by the serial CLI.
+Content-to-content build dependencies are scheduled as explicit graph edges by the CLI coordinator.
 `AddContentBuildDependency("Shared/material")` names the stable primary build-node ID, not an output
 path or runtime XREF. The target must be another primary node discovered in the same invocation;
 additional outputs do not become implicit source nodes. Shared dependencies execute once, complete
@@ -352,8 +363,9 @@ at registration. Multiple components may declare the same route, but default res
 with a sorted ambiguity diagnostic; registration order and “last registered wins” never decide the
 result. Explicit selection must name a registered component compatible with the route.
 
-The registry should be fully configured before builds and then shared as immutable state. The
-current coordinator is serial, but component contracts do not require mutable globals.
+The registry must be fully configured before builds and is permanently frozen when a coordinator
+accepts it. Lookups are safe for concurrent readers, and component contracts require reentrant
+invocation when more than one worker is selected.
 
 ## Optional per-asset configuration
 
@@ -507,11 +519,12 @@ that node rather than treating the child as an independent source node.
 ## Content-to-content build graph
 
 Directory discovery still creates the bounded set of primary nodes in sorted logical-name order.
-The serial graph coordinator then uses deterministic depth-first scheduling: each dependency is
-completed before its dependent, and a shared dependency has one state/result regardless of how many
-parents name it. A missing target is a Graph-stage error identifying the dependent and dependency;
-a failed target prevents every dependent from publishing. Independent successful nodes may still
-publish, but the manifest is replaced only when the complete requested graph succeeds.
+The graph coordinator validates the complete sorted topology and dispatches only dependency-ready
+nodes: each dependency is completed before its dependent, and a shared dependency has one
+state/result regardless of how many parents name it. A missing target is a Graph-stage error
+identifying the dependent and dependency; a failed target prevents every dependent from publishing.
+Independent successful nodes may still publish, but the manifest is replaced only when the complete
+requested graph succeeds.
 
 Each manifest node has two hashes:
 
@@ -541,7 +554,7 @@ Self, two-node, and three-node cycles are covered; the long-cycle subprocess is 
 produce byte-for-byte identical diagnostics. No node in or dependent on a cycle publishes and the
 manifest is not replaced.
 
-## Parallel-scheduler readiness boundary
+## Bounded deterministic scheduling
 
 The registry is protected during configuration and permanently read-only once a coordinator
 accepts it. A concurrency regression invokes sixteen independent `ContentPipeline::Build()` calls
@@ -555,10 +568,23 @@ exclusive create, and the one atomic publication helper claims sibling temporary
 platform's exclusive-create primitive. Logical/path ownership already prevents two graph nodes
 from targeting the same final artifact.
 
-Parallel graph scheduling is still future work. The current coordinator deliberately keeps graph
-state, output ownership, manifest mutation, summary counters and terminal output serial. CP-027
-must keep those as coordinator-owned deterministic state: workers may produce node-local outcomes,
-but must not write shared diagnostics or mutate the manifest directly.
+The CLI uses dependency-aware ready batches capped by `--workers`. Shared dependencies execute
+once; dependent nodes become ready only after all of their content-build inputs succeed. A failed
+dependency prevents dependent publication. `--workers 1` takes a synchronous path without
+launching worker tasks.
+
+Changed nodes first run a no-publication preparation pass so their complete output/edge topology is
+known before cycle validation and scheduling. Prepared output bytes are placed in a private,
+owner-only staging directory through the same atomic writer used everywhere else, then released
+from memory. Thus retained cold-build memory is bounded by the active worker count rather than the
+number of discovered assets. Before final publication, staged size and SHA-256 are checked against
+the prepared manifest record.
+
+Workers read the frozen graph and dependency fingerprint snapshot and return node-local outcomes.
+Only the coordinator owns output reservations, graph state, effective fingerprint integration,
+manifest mutation, counters, and stdout/stderr. Ready lists and result integration use stable
+logical-name order. Tests compare worker counts 1, 2, and 4 across cold, no-op, and shared-input
+rebuilds and require identical CNB/output trees, manifest bytes, diagnostics, and summaries.
 
 ## Determinism and publication
 
@@ -704,9 +730,10 @@ There is no platform ID or target profile in CNB v1 processing. Current schemas 
 portable representations. A future profile can be added only when a demonstrated policy needs it;
 it must participate in fingerprints.
 
-Build-graph scheduling is serial and deterministic. Registries are configured explicitly and
-components are intended to be reentrant, leaving room for later bounded parallel scheduling without
-committing to thread complexity now.
+Build-graph scheduling is serial and deterministic unless `--workers` opts into bounded concurrent
+execution. Registries are configured explicitly and frozen before discovery. Built-in components
+are reentrant; custom components and custom loggers must follow the concurrency contract documented
+above when their compiler is invoked with more than one worker.
 
 CMake can create a content target with the helper defined alongside the CNA tool:
 
@@ -772,7 +799,12 @@ No `cna_add_game()` convenience layer is defined yet.
 - the C++ multi-output writer result and custom output generation surface;
 - custom registration and the user-built `CNA::ContentCompiler` embedding surface;
 - component names/versions as user configuration identifiers;
-- future recursive builds, target profiles, and parallel scheduling.
+- content-build edges, recursive dependency builds, and bounded parallel scheduling.
+
+**Future:**
+
+- optional target profiles, if a concrete portable-output policy requires them;
+- selected XNB-to-native-CNB compatibility import routes described in the continuation plan.
 
 **Not provided:**
 

@@ -543,6 +543,31 @@ a no-publication preparation step; retained bytes must be bounded or staged rath
 unbounded cold-build RAM. Registry mutation, streaming worker diagnostics, and direct worker
 manifest writes are rejected designs.
 
+### 5.16 Bounded deterministic graph scheduler (`CP-027`)
+
+`cna-content` and user-linked custom compilers accept `--workers 1..64`; omission and `1` use the
+same synchronous serial path. The scheduler selects sorted ready nodes only after their
+content-build dependencies have succeeded and executes at most the requested count. A shared node
+is represented by one resolution record and cannot be dispatched twice. Failed nodes propagate a
+stable Graph-stage failure to dependents without publishing them.
+
+Nodes with changed direct inputs run a parallel preparation pass before graph validation so their
+writer outputs and complete edge sets are frozen. Each finished result is atomically staged below
+one private owner-only temporary directory and its in-memory bytes are released, bounding retained
+memory by the active batch rather than the whole cold build. The coordinator reserves every final
+logical/path owner and validates missing edges and deterministic cycles before any staged artifact
+is committed. Publication rechecks staged size and SHA-256, then uses the existing sole atomic
+publisher for each final artifact.
+
+Workers receive only immutable graph plans and effective dependency fingerprints. Manifest maps,
+ownership, graph resolution, counters, event ordering, stdout and stderr stay coordinator-owned.
+Outcomes are joined and integrated in logical-name order, so scheduling changes neither artifact
+bytes nor manifest/diagnostic identity. Subprocess tests compare worker counts 1, 2 and 4 for mixed
+built-in/custom cold builds, no-op builds and shared-dependency invalidation; the output tree,
+manifest and logs are byte-identical. Strict CLI tests reject missing, duplicate, signed,
+non-numeric and out-of-range counts. The long-cycle diagnostic is also identical between serial and
+four-worker runs.
+
 ---
 
 ## 6. First vertical slices
@@ -1048,7 +1073,7 @@ The completed feature branch was synchronized without reopening `CP-001` through
 | `CP-024` | **completed** | Added deterministic serial graph scheduling for `ContentBuild` edges between discovered primary node IDs, distinct from file/generated inputs and runtime XREFs. Manifest v3 stores direct/topology and effective dependency fingerprints; versions 1/2 safely rebuild. Shared dependencies execute once before parents, no-op graphs reuse prior edges without running components, dependency changes rebuild every dependent, and missing/failed targets prevent parent publication with Graph-stage context. The `.greeting` subprocess suite proves ordering, shared coordination, cache propagation, failure/recovery and direct/effective hash behavior. The 144-test pipeline/producer/CNJ/golden selection passed 143 with only the expected large-file skip, and all 23 C-header compatibility cells pass with no C ABI/export change. |
 | `CP-025` | **completed** | Added an active-stack cycle detector that reports the complete logical chain with its repeated start node. Sorted root/edge traversal makes selection deterministic; a dedicated error avoids nested duplicate chains while every affected node still fails. Self, two-node and three-node subprocess tests prove exact chains, one diagnostic, no publication/manifest replacement, correct failure counts and byte-identical repeated output. |
 | `CP-026` | **completed** | Added a permanent mutex-protected registry freeze, invoked before CLI discovery and by direct coordinators, with deterministic late-registration refusal through retained aliases. Public component/logger contracts now state their concurrency obligations. The audit found built-ins invocation-local, cgltf per-call, stb thread-local, and staging/publication names exclusively claimed; it confines manifest, ownership, graph states, counters and terminal diagnostics to a deterministic coordinator. Tests prove all late registration families fail and sixteen direct builds share a frozen registry safely. The 149-test pipeline/producer/CNJ/golden selection passed 148 with only the expected large-file skip, and all seven generated C-API consistency gates pass; the two new experimental declarations are planned under `CBIND-117` with no C export. CP-027 owns the bounded node-local scheduler implementation. |
-| `CP-027` | **pending** | Implement bounded worker scheduling with a serial fallback, one execution per node, shared-dependency coordination, deterministic manifest/diagnostic identity and byte equality for worker counts 1, 2 and N. Run TSan if supported. |
+| `CP-027` | **completed** | Added strict `--workers 1..64` with a true synchronous fallback, bounded parallel preparation/staging, dependency-ready execution and coordinator-only deterministic integration. Shared nodes dispatch once, failures propagate without dependent publication, and private staged outputs are size/digest verified before the sole atomic publisher commits them. Worker counts 1, 2 and 4 produce byte-identical mixed cold, no-op and shared-dependency rebuild trees, manifests and logs; long-cycle diagnostics are identical between serial and four-worker runs. The 174-test normal pipeline/producer/CNJ/golden selection passed 173 with only the expected large-file skip. A fresh GCC ThreadSanitizer HEADLESS build passed 106/107 pipeline/config/manifest/custom/media/model tests, with only that same opt-in >2 GiB test skipped and no TSan report. |
 | `CP-028` | **pending** | Benchmark representative cold, no-op, one-change and shared-dependency builds before/after parallel execution; retain correctness-first defaults. |
 | `CP-029` | **pending** | Follow stable CLI/config/custom-tool behavior through `cna_add_content()`, preserving host-tool separation and one real cache/build implementation. |
 | `CP-030` | **pending** | Complete cross-platform/security/HEADLESS review, normal and sanitizer gates, documentation, stable/experimental/future labels and the final frozen-CNB compatibility audit. |
@@ -1087,12 +1112,16 @@ the ordering wrong; it is not a promise to build speculative abstractions.
 * The public SharpRuntime SHA-256 convenience call remains `intcs`-bounded, but CP-017's internal
   streaming adapter feeds bounded chunks through the same implementation. Content files are no
   longer capped at 2 GiB and no second SHA-256 algorithm was introduced.
-* Content-to-content dependencies are serially scheduled and fingerprinted, with deterministic
-  cycle-chain rejection. Very deep acyclic graphs still use the serial coordinator's DFS call
-  stack; parallel scheduling should replace execution mechanics without changing graph semantics.
-* The registry and built-in components are ready for concurrent reads/calls, but the graph
-  coordinator is intentionally still serial. CP-027 must keep prepared outputs bounded and must
-  not let workers mutate manifest/ownership state or stream order-dependent diagnostics.
+* Content-to-content dependencies are dependency-ready scheduled and fingerprinted, with
+  deterministic cycle-chain rejection. The cycle-validation preflight still uses a recursive DFS;
+  very deep acyclic graphs can therefore consume the process call stack even though execution is
+  iterative and bounded.
+* Parallel work is opt-in and built-ins are audited reentrant. A custom component or logger with
+  unsynchronized mutable per-instance state is safe with the default `--workers 1` but violates the
+  documented contract when the user explicitly enables multiple workers.
+* Prepared cold-build outputs use bounded RAM but may occupy temporary disk space up to the total
+  compiled output size until the run completes. Cleanup is best effort after abrupt process or
+  machine termination; abandoned private staging directories are not yet scavenged automatically.
 * Song/Video compilation records and encodes the streaming media XREF but does not copy raw media
   into the output tree. CP-023 intentionally models compiled CNB outputs, not arbitrary deployment
   files; deployment must still place media at the referenced path until an explicit support-file

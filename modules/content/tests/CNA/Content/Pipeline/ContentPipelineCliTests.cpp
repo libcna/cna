@@ -5,6 +5,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -75,6 +76,36 @@ namespace
     {
         std::ifstream stream(path, std::ios::binary);
         return {std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
+    }
+
+    using FileTreeSnapshot = std::map<std::string, std::vector<std::uint8_t>>;
+
+    FileTreeSnapshot SnapshotFileTree(const std::filesystem::path& root)
+    {
+        FileTreeSnapshot snapshot;
+        if (!std::filesystem::exists(root)) { return snapshot; }
+        for (const std::filesystem::directory_entry& entry :
+             std::filesystem::recursive_directory_iterator(root))
+        {
+            if (!entry.is_regular_file()) { continue; }
+            snapshot.emplace(
+                CNA::Internal::ContentPathToUtf8(
+                    std::filesystem::relative(entry.path(), root)),
+                ReadBytes(entry.path()));
+        }
+        return snapshot;
+    }
+
+    void RestoreFileTree(const std::filesystem::path& root,
+                         const FileTreeSnapshot& snapshot)
+    {
+        std::error_code error;
+        std::filesystem::remove_all(root, error);
+        ASSERT_FALSE(error);
+        for (const auto& [relative, bytes] : snapshot)
+        {
+            WriteBytes(root / CNA::Internal::ContentPathFromUtf8(relative), bytes);
+        }
     }
 
     std::size_t CountOccurrences(const std::string& text, const std::string& needle)
@@ -250,6 +281,38 @@ TEST(ContentPipelineCliTest, SingleAssetBuildPublishesThePipelineBytesAtomically
     request.source = source;
     request.logicalName = "wall";
     EXPECT_EQ(ReadBytes(output), pipeline.Build(request).output.bytes);
+}
+
+TEST(ContentPipelineCliTest, WorkerCountIsStrictBoundedAndHasASerialFallback)
+{
+    ScratchDirectory scratch("workers_syntax");
+    const std::filesystem::path source = scratch.Path() / "wall.png";
+    const std::filesystem::path output = scratch.Path() / "wall.cnb";
+    WriteBytes(source, MakePng(2, 2));
+
+    for (const std::vector<std::string>& suffix :
+         {std::vector<std::string>{"--workers"},
+          std::vector<std::string>{"--workers", "0"},
+          std::vector<std::string>{"--workers", "-1"},
+          std::vector<std::string>{"--workers", "1x"},
+          std::vector<std::string>{"--workers", "65"},
+          std::vector<std::string>{"--workers", "2", "--workers", "3"}})
+    {
+        std::vector<std::string> arguments{
+            "build", source.string(), "-o", output.string()};
+        arguments.insert(arguments.end(), suffix.begin(), suffix.end());
+        std::string log;
+        EXPECT_EQ(RunTool(arguments, log), 2) << log;
+        EXPECT_FALSE(std::filesystem::exists(output));
+    }
+
+    std::string serialLog;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(),
+                       "--workers", "1"}, serialLog),
+              0)
+        << serialLog;
+    EXPECT_NE(serialLog.find("Built: 1  Skipped: 0  Failed: 0"), std::string::npos)
+        << serialLog;
 }
 
 TEST(ContentPipelineCliTest, DirectoryBuildIsSortedAndPreservesLogicalRelativePaths)
@@ -818,6 +881,83 @@ TEST(ContentPipelineCliTest, VideoSingleAndDirectoryBuildsUseConfiguredMetadataA
 }
 
 #if defined(CNA_CUSTOM_CONTENT_COMPILER_PATH)
+TEST(ContentPipelineCliTest, WorkerCountsProduceIdenticalColdNoOpAndDependencyRebuilds)
+{
+    ScratchDirectory scratch("worker_determinism");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    WriteText(source / "A" / "first.greeting", "first\n");
+    WriteText(source / "B" / "second.greeting", "second\n");
+    WriteText(source / "C" / "independent.greeting", "independent\n");
+    WriteText(source / "Z" / "shared.greeting", "shared-v1\n");
+    WriteBytes(source / "Sounds" / "effect.wav", MakeWav());
+    WriteBytes(source / "Textures" / "badge.png", MakePng(5, 4));
+    WriteText(
+        source / Pipeline::ContentBuildConfigurationFileName,
+        R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"A/first.greeting":{"parameters":{"dependsOn":{"type":"string","value":"Z/shared"}}},"B/second.greeting":{"parameters":{"dependsOn":{"type":"string","value":"Z/shared"}}}}})json");
+
+    const auto run = [&](std::size_t workers, std::string& log)
+    {
+        return RunExecutable(
+            CNA_CUSTOM_CONTENT_COMPILER_PATH,
+            {"build", source.string(), "-o", output.string(), "--workers",
+             std::to_string(workers)},
+            log);
+    };
+
+    std::string serialColdLog;
+    ASSERT_EQ(run(1u, serialColdLog), 0) << serialColdLog;
+    const FileTreeSnapshot coldSnapshot = SnapshotFileTree(output);
+    ASSERT_FALSE(coldSnapshot.empty());
+    const std::size_t sharedPosition = serialColdLog.find("[BUILD] Z/shared");
+    const std::size_t firstPosition = serialColdLog.find("[BUILD] A/first");
+    const std::size_t secondPosition = serialColdLog.find("[BUILD] B/second");
+    ASSERT_NE(sharedPosition, std::string::npos) << serialColdLog;
+    ASSERT_NE(firstPosition, std::string::npos) << serialColdLog;
+    ASSERT_NE(secondPosition, std::string::npos) << serialColdLog;
+    EXPECT_LT(sharedPosition, firstPosition);
+    EXPECT_LT(sharedPosition, secondPosition);
+
+    for (const std::size_t workers : {2u, 4u})
+    {
+        RestoreFileTree(output, {});
+        std::string parallelColdLog;
+        ASSERT_EQ(run(workers, parallelColdLog), 0) << parallelColdLog;
+        EXPECT_EQ(parallelColdLog, serialColdLog);
+        EXPECT_EQ(SnapshotFileTree(output), coldSnapshot);
+    }
+
+    const FileTreeSnapshot noOpBefore = SnapshotFileTree(output);
+    std::string serialNoOpLog;
+    ASSERT_EQ(run(1u, serialNoOpLog), 0) << serialNoOpLog;
+    EXPECT_NE(serialNoOpLog.find("Built: 0  Skipped: 6  Failed: 0"), std::string::npos)
+        << serialNoOpLog;
+    for (const std::size_t workers : {2u, 4u})
+    {
+        std::string parallelNoOpLog;
+        ASSERT_EQ(run(workers, parallelNoOpLog), 0) << parallelNoOpLog;
+        EXPECT_EQ(parallelNoOpLog, serialNoOpLog);
+        EXPECT_EQ(SnapshotFileTree(output), noOpBefore);
+    }
+
+    WriteText(source / "Z" / "shared.greeting", "shared-v2\n");
+    std::string serialChangedLog;
+    ASSERT_EQ(run(1u, serialChangedLog), 0) << serialChangedLog;
+    const FileTreeSnapshot changedSnapshot = SnapshotFileTree(output);
+    EXPECT_EQ(CountOccurrences(serialChangedLog, "[BUILD] Z/shared"), 1u)
+        << serialChangedLog;
+    EXPECT_EQ(CountOccurrences(serialChangedLog, "[BUILD] A/first"), 1u)
+        << serialChangedLog;
+    EXPECT_EQ(CountOccurrences(serialChangedLog, "[BUILD] B/second"), 1u)
+        << serialChangedLog;
+
+    RestoreFileTree(output, noOpBefore);
+    std::string parallelChangedLog;
+    ASSERT_EQ(run(4u, parallelChangedLog), 0) << parallelChangedLog;
+    EXPECT_EQ(parallelChangedLog, serialChangedLog);
+    EXPECT_EQ(SnapshotFileTree(output), changedSnapshot);
+}
+
 TEST(ContentPipelineCliTest, UserBuiltCompilerCombinesCustomAndBuiltInRoutesEndToEnd)
 {
     ScratchDirectory scratch("custom_compiler");
@@ -1143,7 +1283,8 @@ TEST(ContentPipelineCliTest, ContentBuildGraphReportsALongCycleDeterministically
 
     std::string secondLog;
     EXPECT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                            {"build", source.string(), "-o", output.string()}, secondLog),
+                            {"build", source.string(), "-o", output.string(),
+                             "--workers", "4"}, secondLog),
               1)
         << secondLog;
     EXPECT_EQ(secondLog, firstLog);

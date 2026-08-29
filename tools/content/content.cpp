@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <algorithm>
+#include <charconv>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <future>
 #include <iostream>
 #include <map>
 #include <memory>
@@ -38,8 +40,11 @@ namespace
         std::filesystem::path source;
         std::filesystem::path output;
         std::filesystem::path configuration;
+        std::size_t workers = 1u;
         bool quiet = false;
     };
+
+    constexpr std::size_t MaxContentCompilerWorkers = 64u;
 
     struct BuildItem
     {
@@ -64,16 +69,90 @@ namespace
         }
     };
 
+    class ContentBuildStagingDirectory final
+    {
+    public:
+        ContentBuildStagingDirectory()
+        {
+            std::error_code error;
+            const std::filesystem::path temporary =
+                std::filesystem::temp_directory_path(error);
+            if (error)
+            {
+                throw std::runtime_error("no content staging directory is available: " +
+                                         error.message() + ".");
+            }
+            for (std::size_t attempt = 0u; attempt < 1024u; ++attempt)
+            {
+                error.clear();
+                const std::filesystem::path candidate =
+                    temporary / ("cna_content_stage_" + CNA::Tools::Detail::ProcessTag() + "_" +
+                                 std::to_string(attempt));
+                if (std::filesystem::create_directory(candidate, error))
+                {
+                    std::filesystem::permissions(
+                        candidate, std::filesystem::perms::owner_all,
+                        std::filesystem::perm_options::replace, error);
+                    if (error)
+                    {
+                        std::error_code ignored;
+                        std::filesystem::remove(candidate, ignored);
+                        throw std::runtime_error(
+                            "cannot secure content staging directory: " + error.message() +
+                            ".");
+                    }
+                    path_ = candidate;
+                    return;
+                }
+                if (error && error != std::errc::file_exists)
+                {
+                    throw std::runtime_error("cannot reserve content staging directory: " +
+                                             error.message() + ".");
+                }
+            }
+            throw std::runtime_error("cannot reserve a unique content staging directory.");
+        }
+
+        ~ContentBuildStagingDirectory()
+        {
+            std::error_code ignored;
+            std::filesystem::remove_all(path_, ignored);
+        }
+
+        ContentBuildStagingDirectory(const ContentBuildStagingDirectory&) = delete;
+        ContentBuildStagingDirectory& operator=(const ContentBuildStagingDirectory&) = delete;
+
+        [[nodiscard]] const std::filesystem::path& Path() const noexcept { return path_; }
+
+    private:
+        std::filesystem::path path_;
+    };
+
     void PrintUsage()
     {
         std::cerr
             << "Usage: cna-content build <source-file-or-directory> -o <output> "
-               "[--config <file>] [--quiet]\n\n"
+               "[--config <file>] [--workers <1..64>] [--quiet]\n\n"
             << "Builds source content through Importer -> Processor -> Content Type Writer -> "
                "CNB.\n"
             << "A source file requires an output .cnb path. A source directory requires an "
                "output\n"
             << "directory; relative paths and logical content names are preserved.\n";
+    }
+
+    std::size_t ParseWorkerCount(const std::filesystem::path& argument)
+    {
+        const std::string text = CNA::Internal::ContentPathToUtf8(argument);
+        std::uint64_t value = 0u;
+        const auto [end, error] =
+            std::from_chars(text.data(), text.data() + text.size(), value, 10);
+        if (text.empty() || error != std::errc{} || end != text.data() + text.size() ||
+            value == 0u || value > MaxContentCompilerWorkers)
+        {
+            throw std::invalid_argument("--workers must be an integer between 1 and " +
+                                        std::to_string(MaxContentCompilerWorkers) + ".");
+        }
+        return static_cast<std::size_t>(value);
     }
 
     bool IsOption(const std::filesystem::path& argument, const char* spelling)
@@ -89,6 +168,7 @@ namespace
         }
 
         CommandLine command;
+        bool workersSpecified = false;
         for (std::size_t index = 1u; index < arguments.size(); ++index)
         {
             const std::filesystem::path& argument = arguments[index];
@@ -119,6 +199,19 @@ namespace
                     throw std::invalid_argument("--config was specified more than once.");
                 }
                 command.configuration = arguments[index];
+            }
+            else if (IsOption(argument, "--workers"))
+            {
+                if (++index >= arguments.size())
+                {
+                    throw std::invalid_argument("--workers requires a count.");
+                }
+                if (workersSpecified)
+                {
+                    throw std::invalid_argument("--workers was specified more than once.");
+                }
+                command.workers = ParseWorkerCount(arguments[index]);
+                workersSpecified = true;
             }
             else if (!argument.empty() && argument.native().front() ==
                                               std::filesystem::path("-").native().front())
@@ -588,6 +681,270 @@ namespace
         return *found;
     }
 
+    struct StagedOutput
+    {
+        std::filesystem::path path;
+        std::size_t byteCount = 0u;
+    };
+
+    struct BuildNodePlan
+    {
+        const BuildItem* item = nullptr;
+        Pipeline::ContentBuildManifestEntry manifest;
+        std::map<std::string, StagedOutput> stagedOutputs;
+        bool prepared = false;
+        bool hasManifest = false;
+        std::string failure;
+    };
+
+    struct BuildNodeOutcome
+    {
+        Pipeline::ContentBuildManifestEntry manifest;
+        bool success = false;
+        bool skipped = false;
+        std::string failure;
+        std::string statusLine;
+    };
+
+    std::vector<std::uint8_t> ReadBinaryFile(const std::filesystem::path& path)
+    {
+        std::ifstream stream(path, std::ios::binary);
+        if (!stream)
+        {
+            throw std::runtime_error("cannot open staged content '" +
+                                     CNA::Internal::ContentPathToUtf8(path) + "'.");
+        }
+        std::vector<std::uint8_t> bytes{std::istreambuf_iterator<char>(stream),
+                                        std::istreambuf_iterator<char>()};
+        if (stream.bad())
+        {
+            throw std::runtime_error("cannot completely read staged content '" +
+                                     CNA::Internal::ContentPathToUtf8(path) + "'.");
+        }
+        return bytes;
+    }
+
+    void PublishBytes(const Pipeline::ContentBuildManifestEntry& manifest,
+                      const std::string& logicalName,
+                      const std::vector<std::uint8_t>& bytes,
+                      const std::filesystem::path& outputRoot)
+    {
+        const Pipeline::ContentBuildManifestOutput& output =
+            ManifestOutput(manifest, logicalName);
+        const std::filesystem::path path =
+            outputRoot / CNA::Internal::ContentPathFromUtf8(output.path);
+        if (path.has_parent_path()) { std::filesystem::create_directories(path.parent_path()); }
+        CNA::Tools::WriteFileAtomically(path, bytes);
+    }
+
+    void PublishResult(const Pipeline::ContentBuildResult& result,
+                       const Pipeline::ContentBuildManifestEntry& manifest,
+                       const std::filesystem::path& outputRoot)
+    {
+        PublishBytes(manifest, result.logicalName, result.output.bytes, outputRoot);
+        for (const Pipeline::ContentAdditionalWriteOutput& output :
+             result.output.additionalOutputs)
+        {
+            PublishBytes(manifest, output.logicalName, output.bytes, outputRoot);
+        }
+    }
+
+    std::size_t PublishStagedResult(const BuildNodePlan& plan,
+                                    const std::filesystem::path& outputRoot)
+    {
+        std::size_t byteCount = 0u;
+        for (const Pipeline::ContentBuildManifestOutput& output : plan.manifest.outputs)
+        {
+            const auto staged = plan.stagedOutputs.find(output.logicalName);
+            if (staged == plan.stagedOutputs.end())
+            {
+                throw std::logic_error("prepared output '" + output.logicalName +
+                                       "' has no staged file.");
+            }
+            std::vector<std::uint8_t> bytes = ReadBinaryFile(staged->second.path);
+            if (bytes.size() != staged->second.byteCount ||
+                Pipeline::ContentSha256(bytes) != output.sha256)
+            {
+                throw std::runtime_error("staged output '" + output.logicalName +
+                                         "' failed its content digest check.");
+            }
+            PublishBytes(plan.manifest, output.logicalName, bytes, outputRoot);
+            byteCount += bytes.size();
+        }
+        return byteCount;
+    }
+
+    std::string BuildStatusLine(const BuildItem& item,
+                                const Pipeline::ContentBuildManifestEntry& manifest,
+                                std::size_t outputBytes)
+    {
+        std::ostringstream status;
+        status << "[BUILD] " << item.logicalName << " -> "
+               << CNA::Internal::ContentPathToUtf8(item.output) << " ("
+               << manifest.outputs.size() << " output(s), " << outputBytes << " bytes; "
+               << manifest.importer.name << " -> " << manifest.processor.name << " -> "
+               << manifest.writer.name << ")";
+        return status.str();
+    }
+
+    BuildNodePlan PrepareBuildNode(
+        const BuildItem& item, std::size_t index, const Pipeline::ContentPipeline& pipeline,
+        const Pipeline::ContentPipelineRegistry& registry,
+        const Pipeline::ContentBuildManifest& previousManifest,
+        const std::filesystem::path& sourceRoot, const std::filesystem::path& outputRoot,
+        const std::filesystem::path& stagingRoot)
+    {
+        BuildNodePlan plan;
+        plan.item = &item;
+        try
+        {
+            const Pipeline::ContentBuildManifestEntry* previous =
+                previousManifest.Find(item.logicalName);
+            if (previous != nullptr &&
+                IsPreviousGraphCurrent(*previous, registry, item, sourceRoot, outputRoot))
+            {
+                plan.manifest = *previous;
+                plan.hasManifest = true;
+                return plan;
+            }
+
+            Pipeline::ContentBuildRequest request;
+            request.sourceRoot = sourceRoot;
+            request.source = item.source;
+            request.logicalName = item.logicalName;
+            request.importer = item.importer;
+            request.processor = item.processor;
+            request.writer = item.writer;
+            request.parameters = item.parameters;
+            Pipeline::ContentBuildResult result = pipeline.Build(request);
+
+            plan.manifest = Pipeline::MakeContentBuildManifestEntry(
+                result, sourceRoot, outputRoot, item.output);
+            plan.manifest.directFingerprint =
+                Pipeline::ComputeContentBuildDirectFingerprint(plan.manifest, sourceRoot);
+            const std::filesystem::path nodeStage = stagingRoot / std::to_string(index);
+            try
+            {
+                std::filesystem::create_directories(nodeStage);
+                for (std::size_t outputIndex = 0u;
+                     outputIndex < plan.manifest.outputs.size(); ++outputIndex)
+                {
+                    const Pipeline::ContentBuildManifestOutput& output =
+                        plan.manifest.outputs[outputIndex];
+                    const std::vector<std::uint8_t>& bytes = OutputBytes(result, output);
+                    const std::filesystem::path staged =
+                        nodeStage / (std::to_string(outputIndex) + ".cnb");
+                    CNA::Tools::WriteFileAtomically(staged, bytes);
+                    plan.stagedOutputs.emplace(output.logicalName,
+                                               StagedOutput{staged, bytes.size()});
+                }
+            }
+            catch (const std::exception& error)
+            {
+                throw Pipeline::ContentPipelineError(
+                    item.source, item.logicalName, Pipeline::ContentPipelineStage::Write,
+                    "CNA.ContentBuildStaging", error.what());
+            }
+            plan.prepared = true;
+            plan.hasManifest = true;
+        }
+        catch (const std::exception& error)
+        {
+            plan.failure = error.what();
+        }
+        return plan;
+    }
+
+    BuildNodeOutcome ExecuteBuildNode(
+        const BuildNodePlan& plan, const Pipeline::ContentPipeline& pipeline,
+        const std::filesystem::path& sourceRoot, const std::filesystem::path& outputRoot,
+        const std::map<std::string, std::string>& effectiveFingerprints)
+    {
+        BuildNodeOutcome outcome;
+        const BuildItem& item = *plan.item;
+        try
+        {
+            if (plan.prepared)
+            {
+                outcome.manifest = plan.manifest;
+                outcome.manifest.fingerprint =
+                    Pipeline::ComputeContentBuildEffectiveFingerprint(
+                        outcome.manifest, effectiveFingerprints);
+                try
+                {
+                    const std::size_t outputBytes = PublishStagedResult(plan, outputRoot);
+                    outcome.statusLine = BuildStatusLine(item, outcome.manifest, outputBytes);
+                }
+                catch (const std::exception& error)
+                {
+                    throw Pipeline::ContentPipelineError(
+                        item.source, item.logicalName, Pipeline::ContentPipelineStage::Publish,
+                        "CNA.AtomicPublisher", error.what());
+                }
+                outcome.success = true;
+                return outcome;
+            }
+
+            if (CanSkipEffective(plan.manifest, outputRoot, effectiveFingerprints))
+            {
+                outcome.manifest = plan.manifest;
+                outcome.success = true;
+                outcome.skipped = true;
+                outcome.statusLine = "[SKIP] " + item.logicalName + " -> " +
+                                     CNA::Internal::ContentPathToUtf8(item.output);
+                return outcome;
+            }
+
+            Pipeline::ContentBuildRequest request;
+            request.sourceRoot = sourceRoot;
+            request.source = item.source;
+            request.logicalName = item.logicalName;
+            request.importer = item.importer;
+            request.processor = item.processor;
+            request.writer = item.writer;
+            request.parameters = item.parameters;
+            Pipeline::ContentBuildResult result = pipeline.Build(request);
+            outcome.manifest = Pipeline::MakeContentBuildManifestEntry(
+                result, sourceRoot, outputRoot, item.output);
+            outcome.manifest.directFingerprint =
+                Pipeline::ComputeContentBuildDirectFingerprint(outcome.manifest, sourceRoot);
+            if (outcome.manifest.directFingerprint != plan.manifest.directFingerprint ||
+                ContentBuildDependencies(outcome.manifest) !=
+                    ContentBuildDependencies(plan.manifest))
+            {
+                throw Pipeline::ContentPipelineError(
+                    item.source, item.logicalName, Pipeline::ContentPipelineStage::Graph,
+                    "CNA.ContentBuildGraph",
+                    "a component changed the frozen build topology without a changed direct "
+                    "fingerprint.");
+            }
+            outcome.manifest.fingerprint =
+                Pipeline::ComputeContentBuildEffectiveFingerprint(
+                    outcome.manifest, effectiveFingerprints);
+            try
+            {
+                PublishResult(result, outcome.manifest, outputRoot);
+            }
+            catch (const std::exception& error)
+            {
+                throw Pipeline::ContentPipelineError(
+                    item.source, item.logicalName, Pipeline::ContentPipelineStage::Publish,
+                    "CNA.AtomicPublisher", error.what());
+            }
+            const std::size_t outputBytes = std::accumulate(
+                outcome.manifest.outputs.begin(), outcome.manifest.outputs.end(),
+                std::size_t{0u}, [&](std::size_t total, const auto& output)
+                { return total + OutputBytes(result, output).size(); });
+            outcome.statusLine = BuildStatusLine(item, outcome.manifest, outputBytes);
+            outcome.success = true;
+        }
+        catch (const std::exception& error)
+        {
+            outcome.failure = error.what();
+        }
+        return outcome;
+    }
+
     int Run(const std::vector<std::filesystem::path>& arguments,
             std::shared_ptr<const Pipeline::ContentPipelineRegistry> registry)
     {
@@ -614,6 +971,11 @@ namespace
                 LoadConfiguration(command, sourceRoot);
             ApplyConfiguration(builds, configuration, *registry, sourceRoot, outputRoot,
                                directoryBuild);
+            std::sort(builds.begin(), builds.end(), [](const BuildItem& left,
+                                                       const BuildItem& right)
+            {
+                return left.logicalName < right.logicalName;
+            });
         }
         catch (const std::exception& error)
         {
@@ -635,220 +997,337 @@ namespace
         std::size_t failed = 0u;
         std::map<std::string, std::string> logicalOwners;
         std::map<std::string, std::string> pathOwners;
-        std::map<std::string, const BuildItem*> itemsByNode;
+        std::map<std::string, std::size_t> plansByNode;
         for (const BuildItem& item : builds)
         {
             logicalOwners.emplace(item.logicalName, item.relativeSource);
             pathOwners.emplace(CNA::Internal::ContentPathToUtf8(WeaklyCanonical(item.output)),
                                item.relativeSource);
-            itemsByNode.emplace(item.logicalName, &item);
         }
 
-        enum class BuildState
+        std::unique_ptr<ContentBuildStagingDirectory> staging;
+        try
+        {
+            staging = std::make_unique<ContentBuildStagingDirectory>();
+        }
+        catch (const std::exception& error)
+        {
+            std::cerr << "content staging failed: " << error.what() << "\n";
+            return 1;
+        }
+
+        std::vector<BuildNodePlan> plans(builds.size());
+        try
+        {
+            for (std::size_t offset = 0u; offset < builds.size(); offset += command.workers)
+            {
+                const std::size_t end = std::min(builds.size(), offset + command.workers);
+                if (command.workers == 1u)
+                {
+                    plans[offset] = PrepareBuildNode(
+                        builds[offset], offset, pipeline, *registry, previousManifest, sourceRoot,
+                        outputRoot, staging->Path());
+                    continue;
+                }
+
+                std::vector<std::future<BuildNodePlan>> futures;
+                futures.reserve(end - offset);
+                for (std::size_t index = offset; index < end; ++index)
+                {
+                    futures.push_back(std::async(
+                        std::launch::async,
+                        [&, index]
+                        {
+                            return PrepareBuildNode(
+                                builds[index], index, pipeline, *registry, previousManifest,
+                                sourceRoot, outputRoot, staging->Path());
+                        }));
+                }
+                for (std::size_t index = offset; index < end; ++index)
+                {
+                    plans[index] = futures[index - offset].get();
+                }
+            }
+        }
+        catch (const std::exception& error)
+        {
+            std::cerr << "content worker preparation failed: " << error.what() << "\n";
+            return 1;
+        }
+
+        for (std::size_t index = 0u; index < plans.size(); ++index)
+        {
+            plansByNode.emplace(plans[index].item->logicalName, index);
+            if (!plans[index].failure.empty() || !plans[index].hasManifest) { continue; }
+            try
+            {
+                ReserveOutputs(plans[index].manifest, plans[index].item->relativeSource,
+                               outputRoot, logicalOwners, pathOwners);
+            }
+            catch (const std::exception& error)
+            {
+                plans[index].failure = Pipeline::ContentPipelineError(
+                    plans[index].item->source, plans[index].item->logicalName,
+                    Pipeline::ContentPipelineStage::Graph, "CNA.ContentBuildGraph",
+                    error.what()).what();
+            }
+        }
+
+        for (BuildNodePlan& plan : plans)
+        {
+            if (!plan.failure.empty() || !plan.hasManifest) { continue; }
+            for (const std::string& dependency : ContentBuildDependencies(plan.manifest))
+            {
+                if (!plansByNode.contains(dependency))
+                {
+                    plan.failure = Pipeline::ContentPipelineError(
+                        plan.item->source, plan.item->logicalName,
+                        Pipeline::ContentPipelineStage::Graph, "CNA.ContentBuildGraph",
+                        "content-build dependency '" + dependency +
+                            "' does not name a discovered primary build node.").what();
+                    break;
+                }
+            }
+        }
+
+        enum class VisitState
         {
             Unvisited,
             Visiting,
             Done,
+        };
+        std::map<std::string, VisitState> visitStates;
+        std::vector<std::string> activeNodes;
+        std::map<std::string, std::string> cycleFailures;
+        std::function<void(const std::string&)> visit;
+        visit = [&](const std::string& nodeId)
+        {
+            BuildNodePlan& plan = plans[plansByNode.at(nodeId)];
+            if (!plan.failure.empty() || !plan.hasManifest) { return; }
+            VisitState& state = visitStates[nodeId];
+            if (state == VisitState::Done) { return; }
+            state = VisitState::Visiting;
+            activeNodes.push_back(nodeId);
+            for (const std::string& dependency : ContentBuildDependencies(plan.manifest))
+            {
+                BuildNodePlan& dependencyPlan = plans[plansByNode.at(dependency)];
+                if (!dependencyPlan.failure.empty() || !dependencyPlan.hasManifest) { continue; }
+                if (visitStates[dependency] == VisitState::Visiting)
+                {
+                    const auto cycleStart =
+                        std::find(activeNodes.begin(), activeNodes.end(), dependency);
+                    std::ostringstream reason;
+                    reason << "content-build dependency cycle:";
+                    for (auto node = cycleStart; node != activeNodes.end(); ++node)
+                    {
+                        reason << "\n  " << (node == cycleStart ? "" : "-> ") << *node;
+                    }
+                    reason << "\n  -> " << dependency;
+                    const std::string message =
+                        ContentBuildCycleError(*dependencyPlan.item, reason.str()).what();
+                    for (auto node = cycleStart; node != activeNodes.end(); ++node)
+                    {
+                        cycleFailures.try_emplace(*node, message);
+                    }
+                    continue;
+                }
+                if (visitStates[dependency] == VisitState::Unvisited) { visit(dependency); }
+            }
+            activeNodes.pop_back();
+            state = VisitState::Done;
+        };
+        for (const BuildNodePlan& plan : plans)
+        {
+            if (visitStates[plan.item->logicalName] == VisitState::Unvisited)
+            {
+                visit(plan.item->logicalName);
+            }
+        }
+        for (const auto& [nodeId, message] : cycleFailures)
+        {
+            if (plans[plansByNode.at(nodeId)].failure.empty())
+            {
+                plans[plansByNode.at(nodeId)].failure = message;
+            }
+        }
+
+        enum class Resolution
+        {
+            Pending,
+            Succeeded,
             Failed,
         };
-        std::map<std::string, BuildState> states;
+        struct TerminalEvent
+        {
+            bool failure = false;
+            std::string text;
+        };
+        std::map<std::string, Resolution> resolutions;
         std::map<std::string, std::string> effectiveFingerprints;
         std::map<std::string, std::string> failureMessages;
-        std::vector<std::string> activeNodes;
-        std::set<std::string> reportedFailures;
-        constexpr const char* graphComponent = "CNA.ContentBuildGraph";
-
-        std::function<void(const std::string&)> buildNode;
-        buildNode = [&](const std::string& nodeId)
+        std::vector<TerminalEvent> events;
+        std::size_t resolved = 0u;
+        for (const BuildNodePlan& plan : plans)
         {
-            const auto itemFound = itemsByNode.find(nodeId);
-            if (itemFound == itemsByNode.end())
+            if (!plan.failure.empty())
             {
-                throw std::runtime_error("content-build dependency '" + nodeId +
-                                         "' does not name a discovered primary build node.");
+                resolutions[plan.item->logicalName] = Resolution::Failed;
+                failureMessages.emplace(plan.item->logicalName, plan.failure);
+                events.push_back({true, plan.failure});
+                ++failed;
+                ++resolved;
             }
-            const BuildItem& item = *itemFound->second;
-            BuildState& state = states[nodeId];
-            if (state == BuildState::Done) { return; }
-            if (state == BuildState::Failed)
-            {
-                throw std::runtime_error(failureMessages.at(nodeId));
-            }
-            if (state == BuildState::Visiting)
-            {
-                const auto cycleStart = std::find(activeNodes.begin(), activeNodes.end(), nodeId);
-                std::ostringstream reason;
-                reason << "content-build dependency cycle:";
-                for (auto node = cycleStart; node != activeNodes.end(); ++node)
-                {
-                    reason << "\n  " << (node == cycleStart ? "" : "-> ") << *node;
-                }
-                reason << "\n  -> " << nodeId;
-                throw ContentBuildCycleError(item, reason.str());
-            }
-            state = BuildState::Visiting;
-            activeNodes.push_back(nodeId);
+        }
 
-            try
+        while (resolved < plans.size())
+        {
+            std::vector<std::size_t> ready;
+            bool propagatedFailure = false;
+            for (std::size_t index = 0u; index < plans.size(); ++index)
             {
-                const Pipeline::ContentBuildManifestEntry* previous =
-                    previousManifest.Find(item.logicalName);
-                const bool previousGraphCurrent =
-                    previous != nullptr && IsPreviousGraphCurrent(
-                                               *previous, *registry, item, sourceRoot, outputRoot);
-                if (previousGraphCurrent)
+                BuildNodePlan& plan = plans[index];
+                const std::string& nodeId = plan.item->logicalName;
+                if (resolutions[nodeId] != Resolution::Pending) { continue; }
+                bool dependenciesResolved = true;
+                std::string failedDependency;
+                for (const std::string& dependency :
+                     ContentBuildDependencies(plan.manifest))
                 {
-                    for (const std::string& dependency : ContentBuildDependencies(*previous))
+                    if (resolutions[dependency] == Resolution::Pending)
                     {
-                        try
-                        {
-                            buildNode(dependency);
-                        }
-                        catch (const ContentBuildCycleError&)
-                        {
-                            throw;
-                        }
-                        catch (const std::exception& error)
-                        {
-                            throw Pipeline::ContentPipelineError(
-                                item.source, item.logicalName,
-                                Pipeline::ContentPipelineStage::Graph, graphComponent,
-                                "dependency '" + dependency + "' failed: " + error.what());
-                        }
+                        dependenciesResolved = false;
+                        break;
                     }
-                    if (CanSkipEffective(*previous, outputRoot, effectiveFingerprints))
+                    if (failedDependency.empty() &&
+                        resolutions[dependency] == Resolution::Failed)
                     {
-                        ReserveOutputs(*previous, item.relativeSource, outputRoot, logicalOwners,
-                                       pathOwners);
-                        nextManifest.Set(*previous);
-                        effectiveFingerprints.insert_or_assign(item.logicalName,
-                                                              previous->fingerprint);
-                        state = BuildState::Done;
-                        activeNodes.pop_back();
-                        ++skipped;
-                        if (!command.quiet)
-                        {
-                            std::cout << "[SKIP] " << item.logicalName << " -> "
-                                      << CNA::Internal::ContentPathToUtf8(item.output) << "\n";
-                        }
-                        return;
+                        failedDependency = dependency;
                     }
                 }
-
-                Pipeline::ContentBuildRequest request;
-                request.sourceRoot = sourceRoot;
-                request.source = item.source;
-                request.logicalName = item.logicalName;
-                request.importer = item.importer;
-                request.processor = item.processor;
-                request.writer = item.writer;
-                request.parameters = item.parameters;
-                Pipeline::ContentBuildResult result = pipeline.Build(request);
-
-                Pipeline::ContentBuildManifestEntry manifestEntry =
-                    Pipeline::MakeContentBuildManifestEntry(
-                        result, sourceRoot, outputRoot, item.output);
-                for (const std::string& dependency : ContentBuildDependencies(manifestEntry))
+                if (!dependenciesResolved) { continue; }
+                if (!failedDependency.empty())
                 {
-                    try
-                    {
-                        buildNode(dependency);
-                    }
-                    catch (const ContentBuildCycleError&)
-                    {
-                        throw;
-                    }
-                    catch (const std::exception& error)
-                    {
-                        throw Pipeline::ContentPipelineError(
-                            item.source, item.logicalName, Pipeline::ContentPipelineStage::Graph,
-                            graphComponent,
-                            "dependency '" + dependency + "' failed: " + error.what());
-                    }
+                    const std::string message = Pipeline::ContentPipelineError(
+                        plan.item->source, nodeId, Pipeline::ContentPipelineStage::Graph,
+                        "CNA.ContentBuildGraph",
+                        "dependency '" + failedDependency + "' failed: " +
+                            failureMessages.at(failedDependency)).what();
+                    resolutions[nodeId] = Resolution::Failed;
+                    failureMessages.emplace(nodeId, message);
+                    events.push_back({true, message});
+                    ++failed;
+                    ++resolved;
+                    propagatedFailure = true;
+                    continue;
                 }
-                manifestEntry.directFingerprint =
-                    Pipeline::ComputeContentBuildDirectFingerprint(manifestEntry, sourceRoot);
-                manifestEntry.fingerprint = Pipeline::ComputeContentBuildEffectiveFingerprint(
-                    manifestEntry, effectiveFingerprints);
-                ReserveOutputs(manifestEntry, item.relativeSource, outputRoot, logicalOwners,
-                               pathOwners);
+                ready.push_back(index);
+            }
 
+            if (propagatedFailure) { continue; }
+            if (ready.empty())
+            {
+                for (BuildNodePlan& plan : plans)
+                {
+                    const std::string& nodeId = plan.item->logicalName;
+                    if (resolutions[nodeId] != Resolution::Pending) { continue; }
+                    const std::string message = Pipeline::ContentPipelineError(
+                        plan.item->source, nodeId, Pipeline::ContentPipelineStage::Graph,
+                        "CNA.ContentBuildGraph",
+                        "internal scheduler error: unresolved dependency graph remained after "
+                        "cycle detection.").what();
+                    resolutions[nodeId] = Resolution::Failed;
+                    failureMessages.emplace(nodeId, message);
+                    events.push_back({true, message});
+                    ++failed;
+                    ++resolved;
+                }
+                break;
+            }
+
+            if (ready.size() > command.workers) { ready.resize(command.workers); }
+            std::vector<BuildNodeOutcome> outcomes;
+            outcomes.reserve(ready.size());
+            if (command.workers == 1u)
+            {
+                outcomes.push_back(ExecuteBuildNode(
+                    plans[ready.front()], pipeline, sourceRoot, outputRoot,
+                    effectiveFingerprints));
+            }
+            else
+            {
                 try
                 {
-                    const auto publish = [&](const std::string& logicalName,
-                                             const std::vector<std::uint8_t>& bytes)
+                    std::vector<std::future<BuildNodeOutcome>> futures;
+                    futures.reserve(ready.size());
+                    for (const std::size_t index : ready)
                     {
-                        const Pipeline::ContentBuildManifestOutput& output =
-                            ManifestOutput(manifestEntry, logicalName);
-                        const std::filesystem::path path =
-                            outputRoot / CNA::Internal::ContentPathFromUtf8(output.path);
-                        if (path.has_parent_path())
-                        {
-                            std::filesystem::create_directories(path.parent_path());
-                        }
-                        CNA::Tools::WriteFileAtomically(path, bytes);
-                    };
-                    publish(result.logicalName, result.output.bytes);
-                    for (const Pipeline::ContentAdditionalWriteOutput& output :
-                         result.output.additionalOutputs)
+                        futures.push_back(std::async(
+                            std::launch::async,
+                            [&, index]
+                            {
+                                return ExecuteBuildNode(
+                                    plans[index], pipeline, sourceRoot, outputRoot,
+                                    effectiveFingerprints);
+                            }));
+                    }
+                    for (std::future<BuildNodeOutcome>& future : futures)
                     {
-                        publish(output.logicalName, output.bytes);
+                        outcomes.push_back(future.get());
                     }
                 }
                 catch (const std::exception& error)
                 {
-                    throw Pipeline::ContentPipelineError(
-                        item.source, item.logicalName, Pipeline::ContentPipelineStage::Publish,
-                        "CNA.AtomicPublisher", error.what());
-                }
-
-                const std::size_t outputCount = manifestEntry.outputs.size();
-                const std::size_t outputBytes = std::accumulate(
-                    manifestEntry.outputs.begin(), manifestEntry.outputs.end(), std::size_t{0u},
-                    [&](std::size_t total, const auto& output)
-                    { return total + OutputBytes(result, output).size(); });
-                effectiveFingerprints.insert_or_assign(item.logicalName,
-                                                       manifestEntry.fingerprint);
-                nextManifest.Set(std::move(manifestEntry));
-
-                state = BuildState::Done;
-                activeNodes.pop_back();
-                ++built;
-                if (!command.quiet)
-                {
-                    std::cout << "[BUILD] " << item.logicalName << " -> "
-                              << CNA::Internal::ContentPathToUtf8(item.output)
-                              << " (" << outputCount << " output(s), " << outputBytes
-                              << " bytes; "
-                              << result.importer.name << " -> " << result.processor.name << " -> "
-                              << result.writer.name << ")\n";
+                    outcomes.clear();
+                    for (const std::size_t index : ready)
+                    {
+                        BuildNodeOutcome outcome;
+                        outcome.failure = Pipeline::ContentPipelineError(
+                            plans[index].item->source, plans[index].item->logicalName,
+                            Pipeline::ContentPipelineStage::Graph, "CNA.ContentBuildScheduler",
+                            "worker dispatch failed: " + std::string(error.what())).what();
+                        outcomes.push_back(std::move(outcome));
+                    }
                 }
             }
-            catch (const std::exception& error)
+
+            for (std::size_t outcomeIndex = 0u; outcomeIndex < outcomes.size(); ++outcomeIndex)
             {
-                state = BuildState::Failed;
-                failureMessages.insert_or_assign(nodeId, error.what());
-                if (!activeNodes.empty() && activeNodes.back() == nodeId)
+                const std::string& nodeId = plans[ready[outcomeIndex]].item->logicalName;
+                BuildNodeOutcome& outcome = outcomes[outcomeIndex];
+                if (!outcome.success)
                 {
-                    activeNodes.pop_back();
+                    resolutions[nodeId] = Resolution::Failed;
+                    failureMessages.emplace(nodeId, outcome.failure);
+                    events.push_back({true, outcome.failure});
+                    ++failed;
                 }
-                throw;
+                else
+                {
+                    resolutions[nodeId] = Resolution::Succeeded;
+                    effectiveFingerprints.insert_or_assign(nodeId,
+                                                           outcome.manifest.fingerprint);
+                    nextManifest.Set(std::move(outcome.manifest));
+                    events.push_back({false, std::move(outcome.statusLine)});
+                    if (outcome.skipped) { ++skipped; }
+                    else { ++built; }
+                }
+                ++resolved;
             }
-        };
+        }
 
-        for (const BuildItem& item : builds)
+        std::set<std::string> reportedFailures;
+        for (const TerminalEvent& event : events)
         {
-            try
+            if (event.failure)
             {
-                buildNode(item.logicalName);
-            }
-            catch (const std::exception& error)
-            {
-                ++failed;
-                if (reportedFailures.insert(error.what()).second)
+                if (reportedFailures.insert(event.text).second)
                 {
-                    std::cerr << error.what() << "\n";
+                    std::cerr << event.text << "\n";
                 }
+            }
+            else if (!command.quiet)
+            {
+                std::cout << event.text << "\n";
             }
         }
 
