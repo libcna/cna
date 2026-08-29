@@ -59,7 +59,7 @@ must not be compared with the new post-reset counters.
 | COMP-001 | Rebuild the benchmark and ccache evidence baseline | foundation commit | ⬜ |
 | COMP-002 | Split the monolithic unit-test iteration path | COMP-001 | ✅ |
 | COMP-003 | Pilot target-specific precompiled headers | COMP-002 | ✅ |
-| COMP-004 | Benchmark Mold and LLD final linking | COMP-001 | ⬜ |
+| COMP-004 | Benchmark Mold and LLD final linking | COMP-001 | ✅ |
 | COMP-005 | Reduce CMake configure/regeneration cost | COMP-001 | ✅ |
 | COMP-006 | Reduce measured header and translation-unit cost | COMP-001 | ✅ |
 | COMP-007 | Add an opt-in CI unity-build experiment | COMP-002, COMP-006 | ✅ |
@@ -212,7 +212,7 @@ being edited. The goal is a focused developer target, while retaining a full com
 ## 7. COMP-004 — Mold/LLD linker benchmark
 
 The `CNA_LINKER` policy already detects and probes `MOLD` and `LLD`; neither was installed during the
-foundation work.
+foundation work, but both are now available on the reference host.
 
 ### Work
 
@@ -229,6 +229,30 @@ foundation work.
 - Publish the measurement table in `docs/build-performance.md`.
 - A linker may become a recommended local dependency only if it improves the large test link by at
   least 20% and passes the same tests. The portable default remains valid.
+
+### Completion evidence (2026-08-29)
+
+- `tools/build/benchmark_final_link.py` extracts exactly one final-link command from an existing
+  Ninja graph, runs it directly without rebuilding inputs, samples aggregate Linux process-tree
+  RSS, and emits all repetitions plus versions and the exact command as JSON. Five large Debug
+  links and seven Release tool links used GCC 14.2.0, GNU ld 2.44, LLD 19.1.7, and Mold 2.37.1.
+- For the identical 7,427-test `CnaTests` input, median final-link time was 10.638 s with GNU ld,
+  0.972 s with LLD (90.9% faster), and 1.073 s with Mold (89.9% faster). Peak process-tree RSS was
+  1,566/1,855/1,943 MiB respectively; artifacts were 330,289,832/337,507,472/350,046,664 bytes.
+  Interleaved 30-run no-test startup medians were 58.5/58.1/59.2 ms, showing no material startup
+  difference.
+- The Release `cna_tool_cnb_info` link medians were 0.123 s with GNU ld, 0.063 s with LLD (48.7%
+  faster), and 0.048 s with Mold (60.9% faster). Peak RSS was 29/105/126 MiB and artifacts were
+  158,008/153,064/167,800 bytes; startup stayed near 2 ms and every binary printed the expected
+  usage text.
+- All three `CnaTests` binaries produced the exact same result profile: 7,427 run, 6,868 passed,
+  490 skipped, and the same normalized set of 69 failures. The failures are baseline STUB/sandbox
+  limitations, including an unwritable storage directory, rather than linker differences.
+- The linker probe verifies Mold-to-LLD switching in one build tree, a clear error for an explicitly
+  unavailable linker, and toolchain-default behavior for cross-build `AUTO`. Candidate-specific
+  program-cache entries fix the stale-path issue exposed by this test. `AUTO` remains probe-based
+  and prefers Mold, while both Mold and LLD qualify as recommended local dependencies; GNU ld
+  remains the dependency-free portable choice.
 
 ## 8. COMP-005 — configure/regeneration cost
 

@@ -56,10 +56,16 @@ function(cna_configure_linker)
     include(CheckLinkerFlag)
     foreach(_cna_linker_candidate IN LISTS _cna_linker_candidates)
         if(_cna_linker_candidate STREQUAL "MOLD")
-            find_program(_cna_linker_program NAMES mold)
+            # Keep independent cache entries so an existing build tree can switch between
+            # MOLD and LLD without find_program reusing the previous candidate's result.
+            find_program(CNA_MOLD_LINKER_EXECUTABLE NAMES mold)
+            mark_as_advanced(CNA_MOLD_LINKER_EXECUTABLE)
+            set(_cna_linker_program "${CNA_MOLD_LINKER_EXECUTABLE}")
             set(_cna_linker_driver_name mold)
         else()
-            find_program(_cna_linker_program NAMES ld.lld lld)
+            find_program(CNA_LLD_LINKER_EXECUTABLE NAMES ld.lld lld)
+            mark_as_advanced(CNA_LLD_LINKER_EXECUTABLE)
+            set(_cna_linker_program "${CNA_LLD_LINKER_EXECUTABLE}")
             set(_cna_linker_driver_name lld)
         endif()
 

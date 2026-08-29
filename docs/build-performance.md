@@ -348,7 +348,63 @@ artifacts, and cannot be combined with `CNA_ENABLE_IPO`.
 - `DEFAULT`: always use the toolchain default;
 - `MOLD` or `LLD`: require the named linker and fail at configure time if it is unavailable.
 
-This setting is intentionally inactive on Apple, Windows/MSVC, Android, Emscripten, and cross-builds.
+`AUTO` retains the toolchain default on Apple, Windows/MSVC, Android, Emscripten, and cross-builds;
+an explicit `MOLD` or `LLD` request is rejected there rather than silently ignored.
+
+### Final-link benchmark
+
+`tools/build/benchmark_final_link.py` reads an existing Ninja graph, requires exactly one matching
+final-link command, and invokes that command directly. It does not touch source/object inputs or
+mix compilation into the timer. On Linux it samples the complete compiler-driver/linker process
+tree through `/proc`, avoiding the incomplete RSS values produced by timing a nested
+`cmake --build` wrapper. Each JSON report includes every repetition, the exact command, artifact
+size, Git revision, platform, and tool versions.
+
+After building the target once, reproduce a linker variant with:
+
+```sh
+cmake -S . -B cmake-build-unit -DCNA_LINKER=LLD
+python3 tools/build/benchmark_final_link.py \
+  --build-dir cmake-build-unit --target CnaTests --artifact CnaTests \
+  --label unit-lld --iterations 5 --output /tmp/unit-lld-link.json
+
+cmake -S . -B cmake-build-release-modules -DCNA_LINKER=LLD
+python3 tools/build/benchmark_final_link.py \
+  --build-dir cmake-build-release-modules --target cna_tool_cnb_info \
+  --artifact cna_tool_cnb_info --label release-lld --iterations 7 \
+  --output /tmp/release-lld-link.json
+```
+
+Repeat with `DEFAULT` and `MOLD`. The 2026-08-29 reference used GCC 14.2.0, GNU ld 2.44, LLD
+19.1.7, Mold 2.37.1, STUB, full Debug information for tests, and ordinary Release for the tool.
+All variants reused identical object files.
+
+| `CnaTests` metric | GNU ld | LLD | Mold |
+| --- | ---: | ---: | ---: |
+| Median final link (5 runs) | 10.638 s | **0.972 s** | 1.073 s |
+| Improvement from GNU ld | baseline | **90.9%** | 89.9% |
+| Peak process-tree RSS | **1,566 MiB** | 1,855 MiB | 1,943 MiB |
+| Executable size | **330,289,832 B** | 337,507,472 B | 350,046,664 B |
+| Interleaved startup median | 58.5 ms | **58.1 ms** | 59.2 ms |
+
+| Release `cna_tool_cnb_info` metric | GNU ld | LLD | Mold |
+| --- | ---: | ---: | ---: |
+| Median final link (7 runs) | 0.123 s | 0.063 s | **0.048 s** |
+| Improvement from GNU ld | baseline | 48.7% | **60.9%** |
+| Peak process-tree RSS | **29 MiB** | 105 MiB | 126 MiB |
+| Executable size | 158,008 B | **153,064 B** | 167,800 B |
+| Startup median | 2.0 ms | 1.9 ms | 2.1 ms |
+
+Both fast linkers exceed the 20% acceptance threshold. LLD won the large Debug test link and used
+less memory than Mold; Mold won the small Release link. `AUTO` remains probe-based and prefers
+Mold, a good general local choice, with LLD equally recommended when large Debug links dominate.
+GNU ld remains a valid dependency-free fallback. All three `CnaTests` binaries ran the same 7,427
+tests and produced an identical normalized result set: 6,868 passed, 490 skipped, and the same 69
+baseline STUB/sandbox failures. Every Release tool emitted the expected usage output.
+
+The accompanying minimal probe also verifies three policy edges: one build directory can switch
+from Mold to LLD without a stale cached program path, an explicitly unavailable linker fails with
+an actionable diagnostic, and cross-build `AUTO` contributes no linker option.
 
 `CNA_ENABLE_IPO=ON` enables CMake IPO/LTO only for supported native `Release`, `RelWithDebInfo`, or
 `MinSizeRel` CNA-owned targets after `CheckIPOSupported` succeeds. It is off by default because it
