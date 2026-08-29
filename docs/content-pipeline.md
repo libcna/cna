@@ -526,6 +526,20 @@ are errors.
 The manifest owns all output digests under the producing node. Tampering with any child rebuilds
 that node rather than treating the child as an independent source node.
 
+After every requested node succeeds, the compiler compares the previous valid ownership inventory
+with the new inventory. A path no longer owned because a source was removed, a logical output was
+renamed, a route changed, or a writer's output set contracted is eligible for collection. The
+compiler never discovers garbage by scanning for `.cnb`: an unrelated manually placed file is not
+an owned output and survives.
+
+Collection is deliberately stricter than path ownership alone. Before deleting any file, the
+complete obsolete set is preflighted in sorted manifest-path order. Every candidate must remain
+under the canonical output root through real non-symlink parent directories, be a regular
+non-symlink file, and still match the SHA-256 recorded by the old manifest. Missing candidates are
+already clean. A corrupt/incompatible old manifest authorizes no deletion; changed files,
+symlinked parents/targets, directories, containment failures, and I/O errors are preserved and
+fail the build with the prior manifest intact.
+
 ## Content-to-content build graph
 
 Directory discovery still creates the bounded set of primary nodes in sorted logical-name order.
@@ -629,8 +643,15 @@ an earlier output may already contain its new complete bytes, but the previous m
 unreplaced artifacts remain. The next invocation detects the old manifest's digest mismatch and
 rebuilds the complete owning node. Thus the manifest never claims a partially published output set,
 recovery is deterministic, and no partial file is exposed. A directory build likewise is not a
-transaction across unrelated nodes. Removed or no-longer-produced child files are retained as
-unclaimed stale artifacts; automatic garbage collection is intentionally not part of this protocol.
+transaction across unrelated nodes.
+
+Obsolete-output collection occurs after all artifact publications succeed but before the new
+manifest is atomically published. A build/node failure performs no collection. A crash, removal
+error, or manifest-publication failure can therefore leave some newly published artifacts and/or
+some already removed obsolete artifacts beside the old manifest, but that manifest retains the
+ownership proof needed to retry: already missing stale paths are accepted, and current output
+digest mismatches rebuild their nodes. The compiler never publishes a manifest claiming an output
+that was not committed.
 
 ## Paths and security
 
@@ -907,8 +928,9 @@ Multi-file publication is recoverable, not a portable filesystem transaction. Pr
 outputs can temporarily consume disk space comparable to the compiled output set, and an abrupt
 termination may leave an owner-only staging directory. The next build repairs digest/manifest
 mismatches; CP-042 also scavenges valid abandoned version-1 staging trees conservatively. Legacy
-or malformed/incompletely initialized trees are left for manual inspection, and stale-output
-garbage collection is not yet implemented.
+or malformed/incompletely initialized trees are left for manual inspection. CP-043 collects only
+obsolete files proven by a valid prior manifest and matching digest; it never performs an output
+tree or extension scan.
 Song and Video CNBs retain streaming XREFs; deployment must place the media at those referenced
 paths because the compiler does not copy raw media support files.
 

@@ -987,6 +987,171 @@ TEST(ContentPipelineCliTest, FailedRebuildPreservesTheOldValidOutputAndLeavesNoT
     EXPECT_TRUE(TemporaryFilesBeside(manifest).empty());
 }
 
+TEST(ContentPipelineCliTest, SourceDeletionCollectsOnlyManifestOwnedOutputsDeterministically)
+{
+    ScratchDirectory scratch("orphan_source_deletion");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    WriteBytes(source / "keep.png", MakePng(2, 2));
+    WriteBytes(source / "obsolete.png", MakePng(3, 2));
+
+    FileTreeSnapshot reference;
+    for (const std::size_t workers : {1u, 2u, 4u})
+    {
+        const std::filesystem::path output =
+            scratch.Path() / ("Content" + std::to_string(workers));
+        std::string log;
+        ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--workers",
+                           std::to_string(workers)},
+                          log),
+                  0)
+            << log;
+        WriteBytes(output / "Manual" / "preserved.cnb", {'u', 's', 'e', 'r'});
+    }
+
+    ASSERT_TRUE(std::filesystem::remove(source / "obsolete.png"));
+    for (const std::size_t workers : {1u, 2u, 4u})
+    {
+        const std::filesystem::path output =
+            scratch.Path() / ("Content" + std::to_string(workers));
+        std::string log;
+        ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--workers",
+                           std::to_string(workers)},
+                          log),
+                  0)
+            << log;
+        EXPECT_NE(log.find("[CLEAN] obsolete.cnb (obsolete manifest-owned output)"),
+                  std::string::npos)
+            << log;
+        EXPECT_EQ(CountOccurrences(log, "[CLEAN]"), 1u) << log;
+        EXPECT_NE(log.find("Built: 0  Skipped: 1  Failed: 0"), std::string::npos) << log;
+        EXPECT_FALSE(std::filesystem::exists(output / "obsolete.cnb"));
+        EXPECT_TRUE(std::filesystem::is_regular_file(output / "keep.cnb"));
+        EXPECT_EQ(ReadBytes(output / "Manual" / "preserved.cnb"),
+                  (std::vector<std::uint8_t>{'u', 's', 'e', 'r'}));
+
+        const FileTreeSnapshot snapshot = SnapshotFileTree(output);
+        if (reference.empty())
+        {
+            reference = snapshot;
+        }
+        else
+        {
+            EXPECT_EQ(snapshot, reference);
+        }
+    }
+}
+
+TEST(ContentPipelineCliTest, ConfigurationRenameCollectsTheFormerOwnedOutput)
+{
+    ScratchDirectory scratch("orphan_config_rename");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    const std::filesystem::path configuration =
+        source / Pipeline::ContentBuildConfigurationFileName;
+    WriteBytes(source / "Textures" / "wall.png", MakePng(2, 2));
+
+    std::string log;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    ASSERT_TRUE(std::filesystem::is_regular_file(output / "Textures" / "wall.cnb"));
+    WriteText(configuration,
+              R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"Textures/wall.png":{"logicalName":"Environment/stone"}}})json");
+
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    EXPECT_NE(log.find("[CLEAN] Textures/wall.cnb (obsolete manifest-owned output)"),
+              std::string::npos)
+        << log;
+    EXPECT_FALSE(std::filesystem::exists(output / "Textures" / "wall.cnb"));
+    EXPECT_TRUE(std::filesystem::is_regular_file(output / "Environment" / "stone.cnb"));
+}
+
+TEST(ContentPipelineCliTest, CorruptManifestNeverAuthorizesOrphanDeletion)
+{
+    ScratchDirectory scratch("orphan_corrupt_manifest");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    const std::filesystem::path manifest =
+        output / Pipeline::ContentBuildManifestFileName;
+    WriteBytes(source / "old.png", MakePng(2, 2));
+    std::string log;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    const std::vector<std::uint8_t> oldOutput = ReadBytes(output / "old.cnb");
+    WriteBytes(manifest, {'b', 'a', 'd'});
+    ASSERT_TRUE(std::filesystem::remove(source / "old.png"));
+
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    EXPECT_NE(log.find("[WARN] Ignoring incompatible or corrupt manifest"), std::string::npos)
+        << log;
+    EXPECT_EQ(ReadBytes(output / "old.cnb"), oldOutput);
+    const std::vector<std::uint8_t> manifestBytes = ReadBytes(manifest);
+    const Pipeline::ContentBuildManifest parsed = Pipeline::ContentBuildManifest::Parse(
+        std::string(manifestBytes.begin(), manifestBytes.end()));
+    EXPECT_TRUE(parsed.Entries().empty());
+}
+
+TEST(ContentPipelineCliTest, FailedBuildPreservesOutputsOwnedOnlyByTheOldManifest)
+{
+    ScratchDirectory scratch("orphan_failed_build");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    const std::filesystem::path manifest =
+        output / Pipeline::ContentBuildManifestFileName;
+    WriteBytes(source / "bad.png", MakePng(2, 2));
+    WriteBytes(source / "old.png", MakePng(3, 2));
+    std::string log;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    const std::vector<std::uint8_t> oldOutput = ReadBytes(output / "old.cnb");
+    const std::vector<std::uint8_t> oldManifest = ReadBytes(manifest);
+    ASSERT_TRUE(std::filesystem::remove(source / "old.png"));
+    WriteBytes(source / "bad.png", {'n', 'o', 't', 'p', 'n', 'g'});
+
+    EXPECT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 1) << log;
+    EXPECT_EQ(ReadBytes(output / "old.cnb"), oldOutput);
+    EXPECT_EQ(ReadBytes(manifest), oldManifest);
+    EXPECT_EQ(log.find("[CLEAN]"), std::string::npos) << log;
+}
+
+TEST(ContentPipelineCliTest, ChangedOrSymlinkedObsoleteOutputsAreNeverDeleted)
+{
+    ScratchDirectory scratch("orphan_destructive_guards");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    const std::filesystem::path manifest =
+        output / Pipeline::ContentBuildManifestFileName;
+    WriteBytes(source / "changed.png", MakePng(2, 2));
+    std::string log;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    const std::vector<std::uint8_t> oldManifest = ReadBytes(manifest);
+    WriteBytes(output / "changed.cnb", {'u', 's', 'e', 'r'});
+    ASSERT_TRUE(std::filesystem::remove(source / "changed.png"));
+
+    EXPECT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 1) << log;
+    EXPECT_NE(log.find("bytes no longer match the previous manifest"), std::string::npos)
+        << log;
+    EXPECT_EQ(ReadBytes(output / "changed.cnb"),
+              (std::vector<std::uint8_t>{'u', 's', 'e', 'r'}));
+    EXPECT_EQ(ReadBytes(manifest), oldManifest);
+
+    ASSERT_TRUE(std::filesystem::remove(output / "changed.cnb"));
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+
+    WriteBytes(source / "Nested" / "linked.png", MakePng(2, 2));
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    const std::vector<std::uint8_t> linkedManifest = ReadBytes(manifest);
+    ASSERT_TRUE(std::filesystem::remove(source / "Nested" / "linked.png"));
+    ASSERT_TRUE(std::filesystem::remove(output / "Nested" / "linked.cnb"));
+    ASSERT_TRUE(std::filesystem::remove(output / "Nested"));
+    const std::filesystem::path outside = scratch.Path() / "outside";
+    WriteBytes(outside / "linked.cnb", {'s', 'a', 'f', 'e'});
+    std::filesystem::create_directory_symlink(outside, output / "Nested");
+
+    EXPECT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 1) << log;
+    EXPECT_NE(log.find("output-path parent is not a real directory"), std::string::npos)
+        << log;
+    EXPECT_EQ(ReadBytes(outside / "linked.cnb"),
+              (std::vector<std::uint8_t>{'s', 'a', 'f', 'e'}));
+    EXPECT_EQ(ReadBytes(manifest), linkedManifest);
+}
+
 TEST(ContentPipelineCliTest, UnknownExtensionsFailWithoutPublishingAnOutput)
 {
     ScratchDirectory scratch("unknown");
@@ -1345,6 +1510,48 @@ TEST(ContentPipelineCliTest, UserBuiltCompilerCombinesCustomAndBuiltInRoutesEndT
     EXPECT_NE(repairLog.find("[SKIP] Textures/badge"), std::string::npos) << repairLog;
     EXPECT_EQ(ReadBytes(replyPath), replyBytes);
     EXPECT_EQ(ReadBytes(manifestPath), manifestBytes);
+}
+
+TEST(ContentPipelineCliTest, MultiOutputContractionCollectsOnlyTheObsoleteChild)
+{
+    ScratchDirectory scratch("orphan_multi_output_contraction");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    WriteText(source / "welcome.greeting", "first\n");
+    std::string log;
+    ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
+                            {"build", source.string(), "-o", output.string()}, log),
+              0)
+        << log;
+    const std::filesystem::path primary = output / "welcome.cnb";
+    const std::filesystem::path child =
+        output / "Generated" / "welcome-reply.cnb";
+    ASSERT_TRUE(std::filesystem::is_regular_file(primary));
+    ASSERT_TRUE(std::filesystem::is_regular_file(child));
+
+    ASSERT_TRUE(std::filesystem::remove(source / "welcome.greeting"));
+    WriteBytes(source / "welcome.png", MakePng(2, 2));
+    ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
+                            {"build", source.string(), "-o", output.string()}, log),
+              0)
+        << log;
+    EXPECT_NE(log.find("[CLEAN] Generated/welcome-reply.cnb "
+                       "(obsolete manifest-owned output)"),
+              std::string::npos)
+        << log;
+    EXPECT_TRUE(std::filesystem::is_regular_file(primary));
+    EXPECT_FALSE(std::filesystem::exists(child));
+    const Cnb::CnbDocument replacement =
+        Cnb::CnbDocument::Parse(ReadBytes(primary), "contracted primary");
+    EXPECT_EQ(replacement.AssetTypeId(), Cnb::CnbAssetTypeId::Texture2D);
+
+    const std::vector<std::uint8_t> manifestBytes =
+        ReadBytes(output / Pipeline::ContentBuildManifestFileName);
+    const Pipeline::ContentBuildManifest manifest = Pipeline::ContentBuildManifest::Parse(
+        std::string(manifestBytes.begin(), manifestBytes.end()));
+    const Pipeline::ContentBuildManifestEntry* entry = manifest.Find("welcome");
+    ASSERT_NE(entry, nullptr);
+    EXPECT_EQ(entry->outputs.size(), 1u);
 }
 
 TEST(ContentPipelineCliTest, AdditionalOutputCannotClaimAnotherBuildNodesIdentity)

@@ -387,13 +387,18 @@ namespace
 
     Pipeline::ContentBuildManifest LoadManifest(const std::filesystem::path& path,
                                                 std::string& original,
-                                                bool quiet)
+                                                bool quiet,
+                                                bool& ownershipTrusted)
     {
+        ownershipTrusted = false;
         try
         {
             if (!std::filesystem::exists(path)) { return {}; }
             original = ReadText(path);
-            return Pipeline::ContentBuildManifest::Parse(original);
+            Pipeline::ContentBuildManifest manifest =
+                Pipeline::ContentBuildManifest::Parse(original);
+            ownershipTrusted = true;
+            return manifest;
         }
         catch (const std::exception& error)
         {
@@ -406,6 +411,125 @@ namespace
             }
             return {};
         }
+    }
+
+    std::map<std::string, std::string> OwnedOutputDigests(
+        const Pipeline::ContentBuildManifest& manifest)
+    {
+        std::map<std::string, std::string> result;
+        for (const auto& [nodeId, entry] : manifest.Entries())
+        {
+            for (const Pipeline::ContentBuildManifestOutput& output : entry.outputs)
+            {
+                const auto [found, inserted] = result.emplace(output.path, output.sha256);
+                if (!inserted && found->second != output.sha256)
+                {
+                    throw std::runtime_error(
+                        "content manifest has conflicting ownership records for output '" +
+                        output.path + "'.");
+                }
+            }
+            static_cast<void>(nodeId);
+        }
+        return result;
+    }
+
+    std::filesystem::file_status SymlinkStatus(const std::filesystem::path& path)
+    {
+        std::error_code error;
+        const std::filesystem::file_status status =
+            std::filesystem::symlink_status(path, error);
+        if (error && error != std::errc::no_such_file_or_directory)
+        {
+            throw std::runtime_error("cannot inspect obsolete owned output '" +
+                                     CNA::Internal::ContentPathToUtf8(path) + "': " +
+                                     error.message() + ".");
+        }
+        return status;
+    }
+
+    void RequireUnlinkedOutputParents(const std::filesystem::path& outputRoot,
+                                      const std::filesystem::path& relative)
+    {
+        std::filesystem::path parent = outputRoot;
+        for (const std::filesystem::path& component : relative.parent_path())
+        {
+            parent /= component;
+            const std::filesystem::file_status status = SymlinkStatus(parent);
+            if (status.type() == std::filesystem::file_type::not_found) { return; }
+            if (std::filesystem::is_symlink(status) || !std::filesystem::is_directory(status))
+            {
+                throw std::runtime_error(
+                    "refusing to collect obsolete owned output '" +
+                    CNA::Internal::ContentPathToUtf8(relative) +
+                    "' because an output-path parent is not a real directory.");
+            }
+        }
+    }
+
+    std::size_t CollectObsoleteOwnedOutputs(
+        const Pipeline::ContentBuildManifest& previousManifest,
+        const Pipeline::ContentBuildManifest& nextManifest,
+        const std::filesystem::path& outputRoot, bool quiet)
+    {
+        const std::map<std::string, std::string> previous =
+            OwnedOutputDigests(previousManifest);
+        const std::map<std::string, std::string> current =
+            OwnedOutputDigests(nextManifest);
+        const std::filesystem::path canonicalRoot = WeaklyCanonical(outputRoot);
+        std::vector<std::pair<std::filesystem::path, std::string>> obsolete;
+        for (const auto& [relativeText, sha256] : previous)
+        {
+            if (current.contains(relativeText)) { continue; }
+
+            const std::filesystem::path relative =
+                CNA::Internal::ContentPathFromUtf8(relativeText);
+            RequireUnlinkedOutputParents(canonicalRoot, relative);
+            const std::filesystem::path candidate = canonicalRoot / relative;
+            const std::filesystem::file_status status = SymlinkStatus(candidate);
+            if (status.type() == std::filesystem::file_type::not_found) { continue; }
+            if (std::filesystem::is_symlink(status) ||
+                !std::filesystem::is_regular_file(status))
+            {
+                throw std::runtime_error(
+                    "refusing to collect obsolete owned output '" + relativeText +
+                    "' because it is not a real regular file.");
+            }
+            const std::filesystem::path canonicalCandidate = WeaklyCanonical(candidate);
+            if (!IsWithin(canonicalRoot, canonicalCandidate))
+            {
+                throw std::runtime_error("refusing to collect obsolete owned output '" +
+                                         relativeText + "' because it escapes the output root.");
+            }
+            if (Pipeline::ContentFileSha256(candidate) != sha256)
+            {
+                throw std::runtime_error(
+                    "refusing to collect obsolete owned output '" + relativeText +
+                    "' because its bytes no longer match the previous manifest.");
+            }
+            obsolete.emplace_back(candidate, relativeText);
+        }
+
+        std::size_t removed = 0u;
+        for (const auto& [path, relative] : obsolete)
+        {
+            std::error_code error;
+            const bool deleted = std::filesystem::remove(path, error);
+            if (error)
+            {
+                throw std::runtime_error("cannot remove obsolete owned output '" + relative +
+                                         "': " + error.message() + ".");
+            }
+            if (deleted)
+            {
+                ++removed;
+                if (!quiet)
+                {
+                    std::cout << "[CLEAN] " << relative << " (obsolete manifest-owned output)\n";
+                }
+            }
+        }
+        return removed;
     }
 
     std::vector<std::string> ContentBuildDependencies(
@@ -929,8 +1053,10 @@ namespace
         const std::filesystem::path manifestPath =
             outputRoot / Pipeline::ContentBuildManifestFileName;
         std::string originalManifest;
+        bool previousOwnershipTrusted = false;
         const Pipeline::ContentBuildManifest previousManifest =
-            LoadManifest(manifestPath, originalManifest, command.quiet);
+            LoadManifest(manifestPath, originalManifest, command.quiet,
+                         previousOwnershipTrusted);
         Pipeline::ContentBuildManifest nextManifest = previousManifest;
         if (directoryBuild) { nextManifest.Clear(); }
 
@@ -1304,6 +1430,24 @@ namespace
             else if (!command.quiet)
             {
                 std::cout << event.text << "\n";
+            }
+        }
+
+        if (failed == 0u)
+        {
+            if (previousOwnershipTrusted)
+            {
+                try
+                {
+                    static_cast<void>(CollectObsoleteOwnedOutputs(
+                        previousManifest, nextManifest, outputRoot, command.quiet));
+                }
+                catch (const std::exception& error)
+                {
+                    ++failed;
+                    std::cerr << "obsolete owned-output collection failed: " << error.what()
+                              << "\n";
+                }
             }
         }
 

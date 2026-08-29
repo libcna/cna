@@ -1183,7 +1183,7 @@ carrying forward task-local results:
 | `CP-040` | **completed** | Audited the complete FNA/CNA XNB Model graph against frozen Model schema 1. Section 17 records the field-level representability proof, the deliberately narrow useful subset, the two demonstrated blockers in the existing Blender cube fixture plus its remaining bounds gate, and the separately reviewable schema-2 requirements. No Model codec, schema, runtime path or byte changed. |
 | `CP-041` | **completed** | Added one field-order Model graph walker and shared CPU decoders for declarations, vertex/index buffers and BasicEffect state. The runtime readers remain adapters over those decoders, while `XnbImporter` resolves the shared graph into canonical data and accepts only the CP-040 schema-1 subset through the existing Model processor/writer. Synthetic positive and real/synthetic negative fixtures cover complete geometry/material/hierarchy semantics, texture XREF containment, tags, declarations, effect type/power, ranges, bounds, sharing and truncation; runtime XNB versus CNB Model equivalence and all pre-existing Model/effect reader regressions pass. No renderer/device is used by compilation and no Model wire byte changed. The one new experimental C++ carrier field is inventoried as planned under existing `CBIND-117` (449 total); no C route/export/ABI version changed. |
 | `CP-042` | **completed** | Moved compiler staging under a private versioned per-user temporary parent and added an exact session name/owner marker plus an OS-held lease. Startup inspects at most 4,096 direct entries/256 candidates, requires same-user ownership, a non-symlink directory, matching bounded metadata and age >=24h, then deletes only after exclusively claiming the lease. PID is diagnostic identity only, so reuse cannot authorize deletion; old live builds retain their lock. Malformed, recent, future-dated, symlinked, legacy and indeterminate candidates remain untouched with sorted diagnostics. Tests cover an old same-PID abandoned tree, old active lease, recent/malformed/symlink cases, authored source survival, scan bounds and normal cleanup. |
-| `CP-043` | **planned** | Add manifest-proven orphan-output collection after a complete successful build; never infer ownership from an extension and preserve old outputs on failed/corrupt-manifest runs. |
+| `CP-043` | **completed** | Added sorted previous-owned minus next-owned collection only after every node succeeds and before manifest replacement. A valid prior manifest plus unchanged recorded SHA-256 proves each regular non-symlink candidate; all parents must be real directories inside the canonical output root. There is no tree/extension scan or recursive deletion. Corrupt manifests authorize nothing, failed builds collect nothing, and changed/symlinked/indeterminate candidates fail conservatively with the old manifest retained. Tests cover removal, logical rename, multi-output contraction, manual files, corruption, failed builds, digest replacement, symlink escape, recovery ordering and workers 1/2/4 deterministic trees. |
 | `CP-044` | **planned** | Define compiled versus deployment-support artifacts and implement contained, hashed, atomic Song/Video media deployment through the existing manifest/publisher/scheduler. |
 | `CP-045` | **planned** | Harden custom writer fingerprints with explicit stable writer/asset/schema/codec identity and tests proving semantic writer evolution invalidates cached output without RTTI names. |
 | `CP-046` | **planned** | Audit real glTF multi-Model/generated-child cases against the existing graph; implement only deterministic optional output behavior that preserves default direct-glTF bytes. |
@@ -1229,7 +1229,9 @@ the ordering wrong; it is not a promise to build speculative abstractions.
   policy exists.
 * Multi-file publication is recoverable but not transactional across paths. A failed later output
   can leave earlier complete replacements beside the old manifest; the next build repairs the
-  owning node. Outputs no longer claimed by any manifest entry are not garbage-collected.
+  owning node. CP-043 likewise removes obsolete manifest-owned files before manifest replacement,
+  so a crash can leave already-removed old outputs named by the previous manifest; the next build
+  treats those missing stale files as already clean and retries publication.
 * Windows Unicode paths stay native through CLI discovery, manifests, image/WAV/DDS/CNJ and
   Model/glTF flows. cgltf and authored/generated JSON names cross one explicit generic-UTF-8
   boundary backed by a native file callback. Portable tests cover the complete non-ASCII Model
@@ -1567,3 +1569,45 @@ incomplete-initialization/legacy residue class rather than guessing that an unpr
 pipeline-owned. Hitting either scan bound leaves the remainder for a future invocation and emits a
 deterministic diagnostic; scavenging never prevents an otherwise valid build merely because one
 candidate cannot be classified or removed.
+
+---
+
+## 19. Manifest-proven obsolete-output collection (`CP-043`)
+
+The prior successfully parsed manifest is the sole ownership authority. After the whole requested
+graph succeeds, the coordinator computes the sorted set difference between every old output path
+and every newly owned output path. This catches source deletion, logical/configuration renames,
+route replacement and additional-output contraction without scanning `Content/` or inferring
+ownership from `.cnb`. A manually placed file at any unowned path is invisible to collection.
+
+Before the first removal, every obsolete candidate is preflighted. Its manifest path is already a
+validated safe relative UTF-8 path; resolution starts at the canonical output root, each existing
+parent must be a real non-symlink directory, and the target must be a real regular non-symlink file
+whose streaming SHA-256 exactly equals the old ownership record. Missing paths need no action.
+Directories are never recursively removed. A changed file, symlink target/parent, root escape,
+conflicting old ownership record or filesystem error aborts collection before planned removals,
+preserves the suspect path and leaves the previous manifest in place. A corrupt/incompatible
+manifest sets no ownership authority and therefore permits a safe rebuild/manifest replacement but
+no deletion of prior output bytes.
+
+The recoverable ordering is:
+
+```text
+publish every successful current artifact atomically
+    -> require every requested graph node to have succeeded
+    -> preflight old-owned minus new-owned
+    -> remove only validated obsolete regular files
+    -> atomically publish the new manifest
+```
+
+A node failure performs no collection. A crash or I/O failure during removal, or failure to publish
+the new manifest afterward, can leave some complete new artifacts and some already absent stale
+artifacts beside the old manifest. The next run uses that retained record: current digest mismatch
+forces rebuilding while an already missing obsolete path is accepted, so cleanup/publication can be
+retried without a second journal or false multi-file transaction claim.
+
+CLI regressions prove source deletion and configuration rename, an unrelated hand-authored `.cnb`,
+corrupt-manifest non-deletion, failed-build preservation, exact-digest refusal after user
+replacement, refusal of an intermediate symlink escape, and contraction of the custom writer's two
+outputs to a built-in single output. The source-removal case produces identical output trees and
+manifests with workers 1, 2 and 4.
