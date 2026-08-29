@@ -303,6 +303,14 @@ namespace CNA::Content::Pipeline
         return {kTexture3DWriterName, "1"};
     }
 
+    std::vector<ContentWriterSchemaIdentity>
+    Texture3DContentWriter::OutputSchemaIdentities() const
+    {
+        return {{Cnb::CnbAssetTypeId::Texture3D, Cnb::CnbTextureSchemaVersion,
+                 "Microsoft.Xna.Framework.Graphics.Texture3D",
+                 {"CNA.Cnb.EncodeTexture3DToCnb", "1"}}};
+    }
+
     std::string Texture3DContentWriter::InputType() const { return ProcessedTexture3DType; }
 
     ContentWriteResult Texture3DContentWriter::Write(const ContentValue& input,
@@ -339,6 +347,14 @@ namespace CNA::Content::Pipeline
     ContentComponentIdentity TextureCubeContentWriter::Identity() const
     {
         return {kTextureCubeWriterName, "1"};
+    }
+
+    std::vector<ContentWriterSchemaIdentity>
+    TextureCubeContentWriter::OutputSchemaIdentities() const
+    {
+        return {{Cnb::CnbAssetTypeId::TextureCube, Cnb::CnbTextureSchemaVersion,
+                 "Microsoft.Xna.Framework.Graphics.TextureCube",
+                 {"CNA.Cnb.EncodeTextureCubeToCnb", "1"}}};
     }
 
     std::string TextureCubeContentWriter::InputType() const { return ProcessedTextureCubeType; }
@@ -378,6 +394,14 @@ namespace CNA::Content::Pipeline
         return {kCurveWriterName, "1"};
     }
 
+    std::vector<ContentWriterSchemaIdentity>
+    CurveContentWriter::OutputSchemaIdentities() const
+    {
+        return {{Cnb::CnbAssetTypeId::Curve, Cnb::CnbCurveSchemaVersion,
+                 "Microsoft.Xna.Framework.Curve",
+                 {"CNA.Cnb.EncodeCurveToCnb", "1"}}};
+    }
+
     std::string CurveContentWriter::InputType() const { return ProcessedCurveType; }
 
     ContentWriteResult CurveContentWriter::Write(const ContentValue& input,
@@ -414,6 +438,14 @@ namespace CNA::Content::Pipeline
     ContentComponentIdentity AnimationClipContentWriter::Identity() const
     {
         return {kAnimationClipWriterName, "1"};
+    }
+
+    std::vector<ContentWriterSchemaIdentity>
+    AnimationClipContentWriter::OutputSchemaIdentities() const
+    {
+        return {{Cnb::CnbAssetTypeId::AnimationClip, Cnb::CnbAnimationClipSchemaVersion,
+                 "Microsoft.Xna.Framework.Graphics.AnimationClipEXT",
+                 {"CNA.Cnb.EncodeAnimationClipToCnb", "1"}}};
     }
 
     std::string AnimationClipContentWriter::InputType() const
@@ -494,6 +526,14 @@ namespace CNA::Content::Pipeline
     ContentComponentIdentity SpriteFontContentWriter::Identity() const
     {
         return {kSpriteFontWriterName, "1"};
+    }
+
+    std::vector<ContentWriterSchemaIdentity>
+    SpriteFontContentWriter::OutputSchemaIdentities() const
+    {
+        return {{Cnb::CnbAssetTypeId::SpriteFont, Cnb::CnbSpriteFontSchemaVersion,
+                 "Microsoft.Xna.Framework.Graphics.SpriteFont",
+                 {"CNA.Cnb.EncodeSpriteFontToCnb", "1"}}};
     }
 
     std::string SpriteFontContentWriter::InputType() const

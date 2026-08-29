@@ -113,6 +113,13 @@ namespace CNA::Content::Pipeline
         /** @brief Returns the stable built-in writer identity. */
         [[nodiscard]] ContentComponentIdentity Identity() const override;
 
+        /**
+         * @brief Returns the frozen Video schema and encoder identity.
+         * @return One stable Video asset/schema/codec declaration.
+         */
+        [[nodiscard]] std::vector<ContentWriterSchemaIdentity>
+        OutputSchemaIdentities() const override;
+
         /** @brief Returns ProcessedVideoType. */
         [[nodiscard]] std::string InputType() const override;
 

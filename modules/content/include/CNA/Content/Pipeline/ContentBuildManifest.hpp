@@ -12,7 +12,7 @@
 namespace CNA::Content::Pipeline
 {
     /** @brief Current on-disk CNA Content Pipeline manifest format version. */
-    inline constexpr std::uint32_t ContentBuildManifestVersion = 4u;
+    inline constexpr std::uint32_t ContentBuildManifestVersion = 5u;
 
     /** @brief File name used for the inspectable manifest below a content output
      * root. */
@@ -29,6 +29,12 @@ namespace CNA::Content::Pipeline
 
         /** @brief CNB asset type written by the selected writer. */
         std::uint32_t assetTypeId = 0u;
+
+        /** @brief CNB asset schema version declared by the selected writer. */
+        std::uint32_t assetSchemaVersion = 0u;
+
+        /** @brief Canonical runtime type name declared by the selected writer. */
+        std::string assetTypeName;
 
         /** @brief SHA-256 of the published CNB bytes, used to detect deletion or tampering. */
         std::string sha256;
@@ -70,6 +76,9 @@ namespace CNA::Content::Pipeline
 
         /** @brief Writer identity used to produce the artifact. */
         ContentComponentIdentity writer;
+
+        /** @brief Stable writer asset/schema/codec declarations used by the skip path. */
+        std::vector<ContentWriterSchemaIdentity> writerSchemas;
 
         /** @brief Effective, typed processor configuration. */
         ContentProcessorParameters parameters;

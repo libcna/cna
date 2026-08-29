@@ -132,6 +132,68 @@ namespace CNA::Content::Pipeline
             }
         }
 
+        bool WriterSchemaLess(const ContentWriterSchemaIdentity& left,
+                              const ContentWriterSchemaIdentity& right)
+        {
+            if (left.assetTypeId != right.assetTypeId)
+            {
+                return left.assetTypeId < right.assetTypeId;
+            }
+            return left.assetTypeName < right.assetTypeName;
+        }
+
+        void ValidateWriterSchemas(const std::vector<ContentWriterSchemaIdentity>& schemas)
+        {
+            if (schemas.empty())
+            {
+                throw std::logic_error(
+                    "writer returned no asset/schema/codec identity declarations.");
+            }
+            if (schemas.size() > MaxContentBuildOutputs)
+            {
+                throw std::logic_error(
+                    "writer returned more than the maximum of " +
+                    std::to_string(MaxContentBuildOutputs) +
+                    " asset/schema/codec identity declarations.");
+            }
+            for (std::size_t index = 0u; index < schemas.size(); ++index)
+            {
+                const ContentWriterSchemaIdentity& schema = schemas[index];
+                if (schema.assetTypeId == 0u || schema.assetSchemaVersion == 0u ||
+                    schema.assetTypeName.empty())
+                {
+                    throw std::logic_error(
+                        "writer returned an incomplete asset/schema identity declaration.");
+                }
+                ValidateIdentity(schema.codec, "writer codec");
+                if (index != 0u && !WriterSchemaLess(schemas[index - 1u], schema))
+                {
+                    throw std::logic_error(
+                        "writer asset/schema identities must be strictly ordered by asset type "
+                        "id and canonical type name without duplicates.");
+                }
+            }
+        }
+
+        void RequireDeclaredWriterOutput(
+            const std::vector<ContentWriterSchemaIdentity>& schemas,
+            std::uint32_t assetTypeId, const std::string& assetTypeName,
+            const std::string& outputName)
+        {
+            const auto found = std::find_if(
+                schemas.begin(), schemas.end(), [&](const ContentWriterSchemaIdentity& schema)
+            {
+                return schema.assetTypeId == assetTypeId &&
+                       schema.assetTypeName == assetTypeName;
+            });
+            if (found == schemas.end())
+            {
+                throw std::logic_error(
+                    "writer output '" + outputName + "' returned undeclared asset identity " +
+                    std::to_string(assetTypeId) + " ('" + assetTypeName + "').");
+            }
+        }
+
         void ValidateStableType(const std::string& type, const std::string& component,
                                 const char* role)
         {
@@ -830,9 +892,12 @@ namespace CNA::Content::Pipeline
         }
 
         ContentWriteResult output;
+        std::vector<ContentWriterSchemaIdentity> writerSchemas;
         const ContentComponentIdentity writerIdentity = writer->Identity();
         try
         {
+            writerSchemas = writer->OutputSchemaIdentities();
+            ValidateWriterSchemas(writerSchemas);
             output = writer->Write(processed, logicalName);
             if (output.bytes.empty())
             {
@@ -842,6 +907,8 @@ namespace CNA::Content::Pipeline
             {
                 throw std::logic_error("writer returned invalid asset type id 0.");
             }
+            RequireDeclaredWriterOutput(writerSchemas, output.assetTypeId,
+                                        output.assetTypeName, logicalName);
             if (output.additionalOutputs.size() >= MaxContentBuildOutputs)
             {
                 throw std::logic_error(
@@ -874,6 +941,9 @@ namespace CNA::Content::Pipeline
                                            "additional output '" +
                                            additional.logicalName + "'.");
                 }
+                RequireDeclaredWriterOutput(writerSchemas, additional.assetTypeId,
+                                            additional.assetTypeName,
+                                            additional.logicalName);
             }
         }
         catch (...)
@@ -888,6 +958,7 @@ namespace CNA::Content::Pipeline
         result.importer = importerIdentity;
         result.processor = processorIdentity;
         result.writer = writerIdentity;
+        result.writerSchemas = std::move(writerSchemas);
         result.parameters = request.parameters;
         result.dependencies = dependencies.Dependencies();
         result.runtimeReferences = dependencies.RuntimeReferences();

@@ -198,6 +198,10 @@ namespace
             TraversalName,
             EmptyAdditional,
             TooMany,
+            EmptySchemaDeclarations,
+            DuplicateSchemaDeclarations,
+            UnsortedSchemaDeclarations,
+            UndeclaredPrimaryIdentity,
         };
 
         explicit NumberWriter(std::string name = "test.NumberWriter",
@@ -209,6 +213,28 @@ namespace
         [[nodiscard]] Pipeline::ContentComponentIdentity Identity() const override
         {
             return {name_, "3"};
+        }
+
+        [[nodiscard]] std::vector<Pipeline::ContentWriterSchemaIdentity>
+        OutputSchemaIdentities() const override
+        {
+            if (behavior_ == OutputBehavior::EmptySchemaDeclarations) { return {}; }
+            if (behavior_ == OutputBehavior::DuplicateSchemaDeclarations)
+            {
+                return {{42u, 1u, "Test.ProcessedNumber", {"Test.NumberCodec", "1"}},
+                        {42u, 2u, "Test.ProcessedNumber", {"Test.NumberCodec", "2"}}};
+            }
+            if (behavior_ == OutputBehavior::UnsortedSchemaDeclarations)
+            {
+                return {{43u, 1u, "Test.NumberIndex", {"Test.NumberIndexCodec", "1"}},
+                        {42u, 1u, "Test.ProcessedNumber", {"Test.NumberCodec", "1"}}};
+            }
+            if (behavior_ == OutputBehavior::UndeclaredPrimaryIdentity)
+            {
+                return {{43u, 1u, "Test.NumberIndex", {"Test.NumberIndexCodec", "1"}}};
+            }
+            return {{42u, 1u, "Test.ProcessedNumber", {"Test.NumberCodec", "1"}},
+                    {43u, 1u, "Test.NumberIndex", {"Test.NumberIndexCodec", "1"}}};
         }
 
         [[nodiscard]] std::string InputType() const override
@@ -601,7 +627,11 @@ TEST(ContentPipelineCoreTest, BuildRejectsUnsafeDuplicateEmptyAndUnboundedOutput
          {NumberWriter::OutputBehavior::DuplicateName,
           NumberWriter::OutputBehavior::TraversalName,
           NumberWriter::OutputBehavior::EmptyAdditional,
-          NumberWriter::OutputBehavior::TooMany})
+          NumberWriter::OutputBehavior::TooMany,
+          NumberWriter::OutputBehavior::EmptySchemaDeclarations,
+          NumberWriter::OutputBehavior::DuplicateSchemaDeclarations,
+          NumberWriter::OutputBehavior::UnsortedSchemaDeclarations,
+          NumberWriter::OutputBehavior::UndeclaredPrimaryIdentity})
     {
         auto registry = std::make_shared<Pipeline::ContentPipelineRegistry>();
         registry->RegisterImporter(std::make_shared<NumberImporter>());

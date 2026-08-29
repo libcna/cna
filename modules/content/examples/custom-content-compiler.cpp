@@ -152,6 +152,13 @@ namespace
             return {"ExampleGame.GreetingWriter", "2"};
         }
 
+        [[nodiscard]] std::vector<Pipeline::ContentWriterSchemaIdentity>
+        OutputSchemaIdentities() const override
+        {
+            return {{GreetingAssetTypeId(), 1u, kAssetTypeName,
+                     {"ExampleGame.EncodeGreetingToCnb", "1"}}};
+        }
+
         [[nodiscard]] std::string InputType() const override { return kProcessedType; }
 
         [[nodiscard]] Pipeline::ContentWriteResult Write(

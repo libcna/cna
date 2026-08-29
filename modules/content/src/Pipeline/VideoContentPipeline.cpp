@@ -269,6 +269,14 @@ namespace CNA::Content::Pipeline
         return {kVideoWriterName, "1"};
     }
 
+    std::vector<ContentWriterSchemaIdentity>
+    VideoContentWriter::OutputSchemaIdentities() const
+    {
+        return {{Cnb::CnbAssetTypeId::Video, Cnb::CnbMediaSchemaVersion,
+                 "Microsoft.Xna.Framework.Media.Video",
+                 {"CNA.Cnb.EncodeVideoToCnb", "1"}}};
+    }
+
     std::string VideoContentWriter::InputType() const
     {
         return ProcessedVideoType;

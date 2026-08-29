@@ -202,6 +202,14 @@ namespace CNA::Content::Pipeline
         return {kModelWriterName, "1"};
     }
 
+    std::vector<ContentWriterSchemaIdentity>
+    ModelContentWriter::OutputSchemaIdentities() const
+    {
+        return {{Cnb::CnbAssetTypeId::Model, Cnb::CnbModelSchemaVersion,
+                 "Microsoft.Xna.Framework.Graphics.Model",
+                 {"CNA.Cnb.EncodeModelToCnb", "1"}}};
+    }
+
     std::string ModelContentWriter::InputType() const
     {
         return ProcessedModelType;

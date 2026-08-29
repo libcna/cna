@@ -112,6 +112,13 @@ namespace CNA::Content::Pipeline
         /** @brief Returns the stable built-in writer identity. */
         [[nodiscard]] ContentComponentIdentity Identity() const override;
 
+        /**
+         * @brief Returns the frozen Texture2D schema and encoder identity.
+         * @return One stable Texture2D asset/schema/codec declaration.
+         */
+        [[nodiscard]] std::vector<ContentWriterSchemaIdentity>
+        OutputSchemaIdentities() const override;
+
         /** @brief Returns ProcessedTexture2DType. */
         [[nodiscard]] std::string InputType() const override;
 

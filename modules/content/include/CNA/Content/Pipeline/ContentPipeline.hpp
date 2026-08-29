@@ -34,6 +34,29 @@ namespace CNA::Content::Pipeline
         bool operator==(const ContentComponentIdentity&) const = default;
     };
 
+    /** @brief Stable native asset/schema/codec identity declared by a content writer. */
+    struct ContentWriterSchemaIdentity
+    {
+        /** @brief Stable nonzero CNB asset type identifier emitted by the writer. */
+        std::uint32_t assetTypeId = 0u;
+
+        /** @brief Stable nonzero CNB asset schema version emitted for this asset type. */
+        std::uint32_t assetSchemaVersion = 0u;
+
+        /** @brief Canonical runtime type name carried by CNB metadata. */
+        std::string assetTypeName;
+
+        /** @brief Stable codec name/version, changed when same-schema output semantics change. */
+        ContentComponentIdentity codec;
+
+        /**
+         * @brief Compares the complete persistent writer schema identity.
+         * @param other Identity to compare.
+         * @return True when every asset, schema and codec field matches.
+         */
+        bool operator==(const ContentWriterSchemaIdentity& other) const = default;
+    };
+
     /** @brief Pipeline stages reported by diagnostics and build logging. */
     enum class ContentPipelineStage
     {
@@ -648,6 +671,19 @@ namespace CNA::Content::Pipeline
         /** @brief Returns the writer's stable name and build version. */
         [[nodiscard]] virtual ContentComponentIdentity Identity() const = 0;
 
+        /**
+         * @brief Declares every stable asset/schema/codec identity this writer can emit.
+         *
+         * The result must be nonempty, strictly ordered by asset type ID then canonical type
+         * name, and contain at most one entry for each such pair. The build cache records this
+         * declaration before invoking the writer, so schema or codec evolution invalidates old
+         * output even when the writer component version was accidentally left unchanged.
+         *
+         * @return Immutable author-controlled identities independent of C++ RTTI.
+         */
+        [[nodiscard]] virtual std::vector<ContentWriterSchemaIdentity>
+        OutputSchemaIdentities() const = 0;
+
         /** @brief Returns the stable processed type accepted by this writer. */
         [[nodiscard]] virtual std::string InputType() const = 0;
 
@@ -818,6 +854,9 @@ namespace CNA::Content::Pipeline
 
         /** @brief Writer identity used for this build. */
         ContentComponentIdentity writer;
+
+        /** @brief Stable asset/schema/codec declarations selected before writing. */
+        std::vector<ContentWriterSchemaIdentity> writerSchemas;
 
         /** @brief Effective processor parameters. */
         ContentProcessorParameters parameters;

@@ -586,7 +586,8 @@ namespace
                             processor->OutputType(),
                             item.writer.empty() ? entry.writer.name : item.writer);
                     if (entry.processor == processor->Identity() &&
-                        entry.writer == writer->Identity())
+                        entry.writer == writer->Identity() &&
+                        entry.writerSchemas == writer->OutputSchemaIdentities())
                     {
                         return true;
                     }

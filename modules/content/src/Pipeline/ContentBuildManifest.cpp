@@ -461,6 +461,20 @@ namespace CNA::Content::Pipeline
             entry.importer = ParseComponent(value, "importer");
             entry.processor = ParseComponent(value, "processor");
             entry.writer = ParseComponent(value, "writer");
+            for (const JsonValue& schema :
+                 RequireMember(value, "writerSchemas", JsonType::Array).arrayValue)
+            {
+                if (schema.type != JsonType::Object)
+                {
+                    throw std::runtime_error(
+                        "content manifest writer schema identity must be an object.");
+                }
+                entry.writerSchemas.push_back(
+                    {RequireUInt32(schema, "assetTypeId"),
+                     RequireUInt32(schema, "assetSchemaVersion"),
+                     RequireString(schema, "assetTypeName"),
+                     ParseComponent(schema, "codec")});
+            }
             entry.directFingerprint = RequireString(value, "directFingerprint");
             entry.fingerprint = RequireString(value, "fingerprint");
 
@@ -474,6 +488,8 @@ namespace CNA::Content::Pipeline
                 entry.outputs.push_back({RequireString(output, "logicalName"),
                                          RequireString(output, "path"),
                                          RequireUInt32(output, "assetTypeId"),
+                                         RequireUInt32(output, "assetSchemaVersion"),
+                                         RequireString(output, "assetTypeName"),
                                          RequireString(output, "sha256")});
             }
 
@@ -560,6 +576,19 @@ namespace CNA::Content::Pipeline
             value.Set("processor", ComponentValue(entry.processor));
             value.Set("writer", ComponentValue(entry.writer));
 
+            JsonValue writerSchemas = JsonValue::MakeArray();
+            for (const ContentWriterSchemaIdentity& schema : entry.writerSchemas)
+            {
+                JsonValue item = JsonValue::MakeObject();
+                item.Set("assetTypeId", JsonValue::MakeNumber(schema.assetTypeId));
+                item.Set("assetSchemaVersion",
+                         JsonValue::MakeNumber(schema.assetSchemaVersion));
+                item.Set("assetTypeName", StringValue(schema.assetTypeName));
+                item.Set("codec", ComponentValue(schema.codec));
+                writerSchemas.arrayValue.push_back(std::move(item));
+            }
+            value.Set("writerSchemas", std::move(writerSchemas));
+
             JsonValue outputs = JsonValue::MakeArray();
             for (const ContentBuildManifestOutput& output : entry.outputs)
             {
@@ -567,6 +596,9 @@ namespace CNA::Content::Pipeline
                 item.Set("logicalName", StringValue(output.logicalName));
                 item.Set("path", StringValue(output.path));
                 item.Set("assetTypeId", JsonValue::MakeNumber(output.assetTypeId));
+                item.Set("assetSchemaVersion",
+                         JsonValue::MakeNumber(output.assetSchemaVersion));
+                item.Set("assetTypeName", StringValue(output.assetTypeName));
                 item.Set("sha256", StringValue(output.sha256));
                 outputs.arrayValue.push_back(std::move(item));
             }
@@ -645,6 +677,40 @@ namespace CNA::Content::Pipeline
         {
             throw std::invalid_argument("content manifest component identities must not be empty.");
         }
+        if (entry.writerSchemas.empty() ||
+            entry.writerSchemas.size() > MaxContentBuildOutputs)
+        {
+            throw std::invalid_argument(
+                "content manifest writer must declare between one and " +
+                std::to_string(MaxContentBuildOutputs) + " asset/schema/codec identities.");
+        }
+        std::sort(entry.writerSchemas.begin(), entry.writerSchemas.end(),
+                  [](const ContentWriterSchemaIdentity& left,
+                     const ContentWriterSchemaIdentity& right)
+        {
+            if (left.assetTypeId != right.assetTypeId)
+            {
+                return left.assetTypeId < right.assetTypeId;
+            }
+            return left.assetTypeName < right.assetTypeName;
+        });
+        std::set<std::pair<std::uint32_t, std::string>> writerSchemaKeys;
+        for (const ContentWriterSchemaIdentity& schema : entry.writerSchemas)
+        {
+            if (schema.assetTypeId == 0u || schema.assetSchemaVersion == 0u ||
+                schema.assetTypeName.empty() || schema.codec.name.empty() ||
+                schema.codec.version.empty())
+            {
+                throw std::invalid_argument(
+                    "content manifest writer schema identities must be complete and nonzero.");
+            }
+            if (!writerSchemaKeys.emplace(schema.assetTypeId, schema.assetTypeName).second)
+            {
+                throw std::invalid_argument(
+                    "content manifest repeats writer schema asset identity " +
+                    std::to_string(schema.assetTypeId) + " ('" + schema.assetTypeName + "').");
+            }
+        }
         if (entry.outputs.empty() || entry.outputs.size() > MaxContentBuildOutputs)
         {
             throw std::invalid_argument(
@@ -688,6 +754,25 @@ namespace CNA::Content::Pipeline
             {
                 throw std::invalid_argument("content manifest output asset type id must not be "
                                             "zero.");
+            }
+            if (output.assetSchemaVersion == 0u || output.assetTypeName.empty())
+            {
+                throw std::invalid_argument(
+                    "content manifest output schema version and type name must not be empty.");
+            }
+            const auto schema = std::find_if(
+                entry.writerSchemas.begin(), entry.writerSchemas.end(),
+                [&](const ContentWriterSchemaIdentity& candidate)
+            {
+                return candidate.assetTypeId == output.assetTypeId &&
+                       candidate.assetSchemaVersion == output.assetSchemaVersion &&
+                       candidate.assetTypeName == output.assetTypeName;
+            });
+            if (schema == entry.writerSchemas.end())
+            {
+                throw std::invalid_argument(
+                    "content manifest output '" + output.logicalName +
+                    "' does not match a declared writer asset/schema identity.");
             }
             if (!IsLowerHexDigest(output.sha256))
             {
@@ -827,6 +912,14 @@ namespace CNA::Content::Pipeline
         AddIdentity(fingerprint, entry.importer);
         AddIdentity(fingerprint, entry.processor);
         AddIdentity(fingerprint, entry.writer);
+        fingerprint.AddU64(entry.writerSchemas.size());
+        for (const ContentWriterSchemaIdentity& schema : entry.writerSchemas)
+        {
+            fingerprint.AddU64(schema.assetTypeId);
+            fingerprint.AddU64(schema.assetSchemaVersion);
+            fingerprint.AddString(schema.assetTypeName);
+            AddIdentity(fingerprint, schema.codec);
+        }
         std::vector<ContentBuildManifestOutput> outputs = entry.outputs;
         std::sort(outputs.begin(), outputs.end(),
                   [](const ContentBuildManifestOutput& left,
@@ -839,6 +932,8 @@ namespace CNA::Content::Pipeline
         {
             fingerprint.AddString(output.logicalName);
             fingerprint.AddU64(output.assetTypeId);
+            fingerprint.AddU64(output.assetSchemaVersion);
+            fingerprint.AddString(output.assetTypeName);
         }
         std::vector<ContentBuildManifestDeploymentFile> deploymentFiles =
             entry.deploymentFiles;
@@ -947,20 +1042,45 @@ namespace CNA::Content::Pipeline
         entry.importer = result.importer;
         entry.processor = result.processor;
         entry.writer = result.writer;
+        entry.writerSchemas = result.writerSchemas;
         entry.parameters = result.parameters;
         entry.runtimeReferences = result.runtimeReferences;
+        const auto schemaFor = [&](std::uint32_t assetTypeId,
+                                   const std::string& assetTypeName)
+            -> const ContentWriterSchemaIdentity&
+        {
+            const auto found = std::find_if(
+                result.writerSchemas.begin(), result.writerSchemas.end(),
+                [&](const ContentWriterSchemaIdentity& schema)
+            {
+                return schema.assetTypeId == assetTypeId &&
+                       schema.assetTypeName == assetTypeName;
+            });
+            if (found == result.writerSchemas.end())
+            {
+                throw std::invalid_argument(
+                    "build result output has no matching writer schema identity.");
+            }
+            return *found;
+        };
         entry.outputs.reserve(1u + result.output.additionalOutputs.size());
+        const ContentWriterSchemaIdentity& primarySchema =
+            schemaFor(result.output.assetTypeId, result.output.assetTypeName);
         entry.outputs.push_back(
             {result.logicalName, RelativeContained(outputRoot, outputPath, "primary output"),
-             result.output.assetTypeId, ContentSha256(result.output.bytes)});
+             result.output.assetTypeId, primarySchema.assetSchemaVersion,
+             result.output.assetTypeName, ContentSha256(result.output.bytes)});
         for (const ContentAdditionalWriteOutput& output : result.output.additionalOutputs)
         {
             std::filesystem::path path =
                 outputRoot / CNA::Internal::ContentPathFromUtf8(output.logicalName);
             path += ".cnb";
+            const ContentWriterSchemaIdentity& schema =
+                schemaFor(output.assetTypeId, output.assetTypeName);
             entry.outputs.push_back(
                 {output.logicalName, RelativeContained(outputRoot, path, "additional output"),
-                 output.assetTypeId, ContentSha256(output.bytes)});
+                 output.assetTypeId, schema.assetSchemaVersion, output.assetTypeName,
+                 ContentSha256(output.bytes)});
         }
         entry.deploymentFiles.reserve(result.deploymentFiles.size());
         for (const ContentDeploymentFile& deployment : result.deploymentFiles)

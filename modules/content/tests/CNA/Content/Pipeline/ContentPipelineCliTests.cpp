@@ -1677,7 +1677,14 @@ TEST(ContentPipelineCliTest, UserBuiltCompilerCombinesCustomAndBuiltInRoutesEndT
     EXPECT_EQ(greetingEntry->processor.name, "ExampleGame.GreetingProcessor");
     EXPECT_EQ(greetingEntry->writer.name, "ExampleGame.GreetingWriter");
     EXPECT_EQ(greetingEntry->writer.version, "2");
+    EXPECT_EQ(greetingEntry->writerSchemas,
+              (std::vector<Pipeline::ContentWriterSchemaIdentity>{
+                  {Cnb::CnbAssetTypeIdFromName("ExampleGame.Greeting"), 1u,
+                   "ExampleGame.Greeting",
+                   {"ExampleGame.EncodeGreetingToCnb", "1"}}}));
     ASSERT_EQ(greetingEntry->outputs.size(), 2u);
+    EXPECT_EQ(greetingEntry->outputs.front().assetSchemaVersion, 1u);
+    EXPECT_EQ(greetingEntry->outputs.front().assetTypeName, "ExampleGame.Greeting");
     const auto generated = std::find_if(
         greetingEntry->outputs.begin(), greetingEntry->outputs.end(), [](const auto& value)
     {
@@ -1709,6 +1716,89 @@ TEST(ContentPipelineCliTest, UserBuiltCompilerCombinesCustomAndBuiltInRoutesEndT
     EXPECT_NE(repairLog.find("[SKIP] Textures/badge"), std::string::npos) << repairLog;
     EXPECT_EQ(ReadBytes(replyPath), replyBytes);
     EXPECT_EQ(ReadBytes(manifestPath), manifestBytes);
+}
+
+TEST(ContentPipelineCliTest, CustomWriterSchemaAndCodecEvolutionCannotSkipStaleOutput)
+{
+    ScratchDirectory scratch("custom_writer_fingerprint");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    WriteText(source / "welcome.greeting", "CNA\n");
+
+    const auto run = [&](std::string& log)
+    {
+        return RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
+                             {"build", source.string(), "-o", output.string()}, log);
+    };
+    std::string log;
+    ASSERT_EQ(run(log), 0) << log;
+    const std::filesystem::path manifestPath =
+        output / Pipeline::ContentBuildManifestFileName;
+    const std::filesystem::path artifact = output / "welcome.cnb";
+    const std::vector<std::uint8_t> originalArtifact = ReadBytes(artifact);
+
+    enum class Evolution
+    {
+        AssetType,
+        Schema,
+        TypeName,
+        Codec,
+    };
+    for (const Evolution evolution : {Evolution::AssetType, Evolution::Schema,
+                                      Evolution::TypeName, Evolution::Codec})
+    {
+        const std::vector<std::uint8_t> currentManifestBytes = ReadBytes(manifestPath);
+        Pipeline::ContentBuildManifest stale = Pipeline::ContentBuildManifest::Parse(
+            std::string(currentManifestBytes.begin(), currentManifestBytes.end()));
+        Pipeline::ContentBuildManifestEntry entry = *stale.Find("welcome");
+        ASSERT_EQ(entry.writerSchemas.size(), 1u);
+        if (evolution == Evolution::AssetType)
+        {
+            ++entry.writerSchemas[0].assetTypeId;
+            for (auto& owned : entry.outputs) { ++owned.assetTypeId; }
+        }
+        else if (evolution == Evolution::Schema)
+        {
+            entry.writerSchemas[0].assetSchemaVersion = 2u;
+            for (auto& owned : entry.outputs) { owned.assetSchemaVersion = 2u; }
+        }
+        else if (evolution == Evolution::TypeName)
+        {
+            entry.writerSchemas[0].assetTypeName = "ExampleGame.GreetingV2";
+            for (auto& owned : entry.outputs)
+            {
+                owned.assetTypeName = "ExampleGame.GreetingV2";
+            }
+        }
+        else
+        {
+            entry.writerSchemas[0].codec.version = "2";
+        }
+        entry.directFingerprint =
+            Pipeline::ComputeContentBuildDirectFingerprint(entry, source);
+        entry.fingerprint = Pipeline::ComputeContentBuildEffectiveFingerprint(entry);
+        stale.Set(std::move(entry));
+        WriteText(manifestPath, stale.Serialize());
+
+        log.clear();
+        ASSERT_EQ(run(log), 0) << log;
+        EXPECT_NE(log.find("[BUILD] welcome"), std::string::npos) << log;
+        EXPECT_EQ(ReadBytes(artifact), originalArtifact);
+        const std::vector<std::uint8_t> repairedBytes = ReadBytes(manifestPath);
+        const Pipeline::ContentBuildManifest repaired =
+            Pipeline::ContentBuildManifest::Parse(
+                std::string(repairedBytes.begin(), repairedBytes.end()));
+        ASSERT_EQ(repaired.Find("welcome")->writerSchemas.size(), 1u);
+        EXPECT_EQ(repaired.Find("welcome")->writerSchemas[0],
+                  (Pipeline::ContentWriterSchemaIdentity{
+                      Cnb::CnbAssetTypeIdFromName("ExampleGame.Greeting"), 1u,
+                      "ExampleGame.Greeting",
+                      {"ExampleGame.EncodeGreetingToCnb", "1"}}));
+    }
+
+    log.clear();
+    ASSERT_EQ(run(log), 0) << log;
+    EXPECT_NE(log.find("[SKIP] welcome"), std::string::npos) << log;
 }
 
 TEST(ContentPipelineCliTest, MultiOutputContractionCollectsOnlyTheObsoleteChild)

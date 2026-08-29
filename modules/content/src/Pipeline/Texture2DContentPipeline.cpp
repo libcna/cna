@@ -223,6 +223,14 @@ namespace CNA::Content::Pipeline
         return {kTextureWriterName, "1"};
     }
 
+    std::vector<ContentWriterSchemaIdentity>
+    Texture2DContentWriter::OutputSchemaIdentities() const
+    {
+        return {{Cnb::CnbAssetTypeId::Texture2D, Cnb::CnbTextureSchemaVersion,
+                 "Microsoft.Xna.Framework.Graphics.Texture2D",
+                 {"CNA.Cnb.EncodeTexture2DToCnb", "1"}}};
+    }
+
     std::string Texture2DContentWriter::InputType() const
     {
         return ProcessedTexture2DType;

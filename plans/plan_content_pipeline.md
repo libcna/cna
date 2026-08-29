@@ -868,8 +868,8 @@ second digest implementation. The effective fingerprint covers canonical length-
 * importer, processor and writer stable names and versions;
 * canonical processor parameters;
 * logical content identity where it affects CMET/output bytes;
-* CNB container major/minor identity, asset type ID, and selected writer identity/version (the
-  built-in writer build version owns schema/codec behavior);
+* CNB container major/minor identity, selected writer identity/version, and every declared output
+  asset ID, canonical type name, asset schema version and explicit codec name/version;
 * manifest format version.
 
 No timestamp, RTTI name, absolute path, temporary path, process ID or native path separator enters
@@ -1185,7 +1185,7 @@ carrying forward task-local results:
 | `CP-042` | **completed** | Moved compiler staging under a private versioned per-user temporary parent and added an exact session name/owner marker plus an OS-held lease. Startup inspects at most 4,096 direct entries/256 candidates, requires same-user ownership, a non-symlink directory, matching bounded metadata and age >=24h, then deletes only after exclusively claiming the lease. PID is diagnostic identity only, so reuse cannot authorize deletion; old live builds retain their lock. Malformed, recent, future-dated, symlinked, legacy and indeterminate candidates remain untouched with sorted diagnostics. Tests cover an old same-PID abandoned tree, old active lease, recent/malformed/symlink cases, authored source survival, scan bounds and normal cleanup. |
 | `CP-043` | **completed** | Added sorted previous-owned minus next-owned collection only after every node succeeds and before manifest replacement. A valid prior manifest plus unchanged recorded SHA-256 proves each regular non-symlink candidate; all parents must be real directories inside the canonical output root. There is no tree/extension scan or recursive deletion. Corrupt manifests authorize nothing, failed builds collect nothing, and changed/symlinked/indeterminate candidates fail conservatively with the old manifest retained. Tests cover removal, logical rename, multi-output contraction, manual files, corruption, failed builds, digest replacement, symlink escape, recovery ordering and workers 1/2/4 deterministic trees. |
 | `CP-044` | **completed** | Added an explicit bounded deployment-file result separate from CNB writer outputs and runtime XREFs. Song/Video and XNB Song/Video register their canonical media source and final XREF path; manifest v4 stores contained source/path/SHA-256 ownership. Preparation and publication stream through the existing atomic helper with a 1 MiB buffer, skip checks verify support digests, reservations reject compiled/cross-node collisions, and CP-043 GC handles renamed/removed support paths. In-place single-file media is never copied or owned; every other destination inside the source root is rejected. Tests cover direct and XNB routes, overrides, tamper repair, source change, removal/rename GC, manual-file survival, collision/escape guards, failed-publication recovery and workers 1/2/4 deterministic trees. Importer/processor identities moved to version 2; frozen Song/Video CNB bytes remain identical. The generated inventory now records 9,298 symbols with all 467 experimental pipeline rows planned under `CBIND-117`; no C route, export or ABI version changed. |
-| `CP-045` | **planned** | Harden custom writer fingerprints with explicit stable writer/asset/schema/codec identity and tests proving semantic writer evolution invalidates cached output without RTTI names. |
+| `CP-045` | **completed** | Added sorted `ContentWriterSchemaIdentity` declarations containing asset ID/name, native schema version and explicit codec name/version. The core rejects incomplete/duplicate/undeclared identities; manifest v5 persists and fingerprints declarations plus per-output schema/name, and versions 1–4 rebuild safely. The skip path compares the current declaration without executing the writer. All ten built-ins declare their frozen schema-1 encoders, and the real custom compiler proves independently stale asset ID, type name, schema and codec records all force rebuild while unchanged identities skip. The generated inventory records 9,319 symbols/488 experimental pipeline rows under `CBIND-117`; no RTTI, C API route/export/version, CNB schema or encoder byte changed. |
 | `CP-046` | **planned** | Audit real glTF multi-Model/generated-child cases against the existing graph; implement only deterministic optional output behavior that preserves default direct-glTF bytes. |
 | `CP-047` | **planned** | Audit MonoGame XNB LZ4 framing/dependencies and implement bounded decoding only if the exact variant can be supported safely without a bespoke unproven codec. |
 | `CP-048` | **planned** | Fix the MinGW `wmain` entry-point link seam if locally owned, then close the continuation with portability, sanitizer, determinism, security, CMake/C-API and documentation verification. |
@@ -1281,8 +1281,6 @@ the ordering wrong; it is not a promise to build speculative abstractions.
 * Whether one source producing several logical assets (glTF skins/clips) should be one graph node
   with several outputs or deterministic child nodes. Current glTF behavior makes this a real design
   question; it will be settled before recursive build APIs.
-* How custom writer schema/codec version identities should compose with custom CNB asset schema
-  versions in fingerprints. Built-ins can use their frozen asset schema IDs directly.
 
 ---
 
@@ -1673,3 +1671,43 @@ A representative 64 MiB Song support-file run in the HEADLESS Debug build measur
 for a cold hash/stage/publish build and 2.43 seconds for a digest-verifying no-op, with peak RSS of
 34 MiB in both cases. This is a bounded-memory implementation check on the current host, not a CI
 performance threshold; the existing 1 MiB buffer keeps memory independent of media size.
+
+---
+
+## 21. Writer/schema/codec fingerprint contract (`CP-045`)
+
+The audit confirmed a real skip-path gap. `ContentComponentIdentity` was explicit and stable, but
+one writer identity stood in for three independent facts: the writer adapter, native asset schema,
+and codec implementation. A custom writer that changed its schema or same-schema encoding without
+bumping the broad component version left the previous manifest internally self-consistent and
+eligible for `SKIP`. The output's type ID was recorded only after `Write()`, so it could not describe
+the current implementation on a path deliberately avoiding `Write()`.
+
+Each `ContentTypeWriter` now returns a nonempty, strictly sorted set of
+`ContentWriterSchemaIdentity` values before writing:
+
+| Field | Meaning | When it changes |
+|---|---|---|
+| writer `ContentComponentIdentity` | adapter selection/orchestration and output-set behavior | any content-affecting writer behavior |
+| `assetTypeId` + `assetTypeName` | native runtime dispatch identity; the name disambiguates custom-ID collisions | the canonical asset type changes |
+| `assetSchemaVersion` | native asset wire schema | the decoder needs a new schema interpretation |
+| codec name/version | authoritative encoder semantics within that schema | bytes or decoded meaning can change without a schema change |
+
+The core refuses zero/empty fields, duplicate or unordered asset ID/name pairs, more than 256
+declarations, and primary or additional writer outputs whose returned ID/name was not declared.
+This is an explicit trusted extension contract, not reflection: neither `typeid`, compiler RTTI
+names nor an invocation of `Write()` participates in route preflight. The custom writer remains
+responsible for declaring what its authoritative codec actually writes. The custom integration
+oracle parses the resulting CNB and pins schema/type metadata; the built-in codec round trips pin
+the same relationship for CNA writers.
+
+Manifest version 5 stores the complete sorted declaration and each owned output's actual selected
+ID/name/schema. All fields enter the length-prefixed direct fingerprint. Route preflight resolves
+the current writer and compares its declaration with the prior manifest, so independently changing
+the asset ID, canonical name, schema version or codec version forces `BUILD` even if the writer's
+own component version remains unchanged. An unchanged declaration retains `SKIP`. Manifest
+versions 1–4 rebuild without migration because none could prove the full current writer contract.
+
+All ten built-in writers declare their existing schema-1 `Encode*ToCnb()` route with codec version
+1. These are new cache identities only: no frozen container/schema constant, chunk, CRC, encoder,
+golden vector or output byte was modified.

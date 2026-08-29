@@ -273,6 +273,22 @@ container construction in the built-in pipeline. `CnbWriter` remains the low-lev
 builder used by authoritative codecs and custom schemas; `ContentTypeWriter` is the build-stage
 adapter above a codec.
 
+Every writer also declares `OutputSchemaIdentities()` before `Write()` can run. Each sorted entry
+contains the stable numeric asset type, canonical runtime type name, asset schema version, and an
+explicit codec name/version. These identities have different jobs:
+
+- the writer component version changes when writer orchestration or output-set behavior changes;
+- the asset type ID plus canonical name identify runtime dispatch (the name is load-bearing for a
+  custom-ID collision);
+- the asset schema version changes when the native wire schema changes; and
+- the codec version changes when output semantics or bytes can change within the same schema.
+
+The pipeline refuses empty, duplicate, unordered, zero-valued, or incomplete declarations and any
+writer result whose asset ID/name was not declared. The declaration is an author-controlled codec
+contract—the pipeline does not infer it from RTTI or execute a writer on the skip path. Built-in
+codec round trips and the custom compiler's parsed CNB oracle verify that declared schema versions
+match the bytes their authoritative encoders emit.
+
 ## Runtime reader mapping
 
 CNA does not add a redundant `ContentTypeReader` hierarchy. The conceptual XNA reader role is
@@ -492,12 +508,13 @@ It does not use mtimes to decide correctness. A fingerprint includes:
 - every reported source/generated dependency's bytes;
 - content-build dependency fingerprints when graph scheduling is available;
 - importer, processor, and writer stable names and versions;
+- every selected writer asset ID, canonical type name, schema version, and codec name/version;
 - typed processor parameters;
 - CNB container version;
 - every owned compiled-output logical identity/type and deployment source/destination identity.
 
-Each compiled output's path, type ID, and SHA-256 are stored separately. Each deployment-support
-file stores its contained source path, output path, and SHA-256. A missing or tampered primary,
+Each compiled output's path, type ID, type name, schema version, and SHA-256 are stored separately.
+Each deployment-support file stores its contained source path, output path, and SHA-256. A missing or tampered primary,
 child `.cnb`, or deployment file; corrupt/incompatible manifest; changed output set; changed
 component version; changed parameter; or changed dependency forces the owning node to rebuild.
 Identical effective inputs and intact outputs produce `SKIP`. Runtime XREF records are outputs
@@ -516,11 +533,11 @@ invalidates that asset without treating the entire configuration file as a share
 an unrelated entry change leaves other assets eligible for `SKIP`.
 
 The manifest JSON layout is versioned internal build state, not a hand-edited project format.
-Version 4 gives each entry a stable build-node ID, ordered compiled and deployment ownership lists,
-a direct fingerprint, and an effective graph fingerprint. Versions 1 through 3 cannot represent
-all of those relationships, so they are rejected as incompatible and cause a safe rebuild; there
-is no ambiguous in-place migration. A corrupt or future incompatible manifest is handled the same
-way.
+Version 5 gives each entry a stable build-node ID, ordered compiled and deployment ownership lists,
+explicit writer schema/codec declarations, a direct fingerprint, and an effective graph
+fingerprint. Versions 1 through 4 cannot represent all of those relationships, so they are rejected
+as incompatible and cause a safe rebuild; there is no ambiguous in-place migration. A corrupt or
+future incompatible manifest is handled the same way.
 
 ## Multi-output nodes and ownership
 
@@ -712,9 +729,13 @@ CNA::Content::Pipeline::ContentPipeline pipeline(registry);
 ```
 
 Custom components must use deliberate stable strings for component/type identities and increment
-the component version whenever content-affecting behavior changes. A custom writer should adapt to
-one authoritative custom codec, just as built-ins adapt to `Encode*ToCnb()`; it should not duplicate
-its schema in multiple front ends.
+the component version whenever component behavior changes. A custom writer must additionally
+declare its asset/schema/codec contract through `OutputSchemaIdentities()`; a codec change must bump
+the codec version even when its writer and schema versions stay fixed, while an incompatible wire
+schema change must bump the schema version. The manifest fingerprints all of them independently,
+so forgetting to bump the broad writer component version no longer leaves a schema/codec evolution
+eligible for `SKIP`. A custom writer should adapt to one authoritative custom codec, just as
+built-ins adapt to `Encode*ToCnb()`; it should not duplicate its schema in multiple front ends.
 
 The stock `cna-content` binary registers built-ins only. CNA now exposes that binary's complete
 command coordinator through `CNA::ContentCompiler`, so a game can build a small custom executable
@@ -743,8 +764,9 @@ route, uses a typed `prefix` configuration parameter, and adapts its writer to t
 single `EncodeGreetingToCnb()` codec. The writer exercises the real multi-output path by emitting a
 primary greeting and a generated reply CNB through that same codec. A subprocess test compiles a
 mixed custom/PNG directory, checks both custom CNBs and the built-in Texture2D output, verifies
-manifest ownership and component/parameter identity, proves a byte-preserving no-op, repairs a
-tampered child, rejects collision with another primary node, and covers recoverable partial
+manifest ownership and component/parameter/schema/codec identity, proves a byte-preserving no-op,
+forces rebuilds after independently stale asset-ID, type-name, schema-version and codec-version
+records, repairs a tampered child, rejects collision with another primary node, and covers recoverable partial
 publication failure. Its optional string `dependsOn` parameter also exercises real graph edges:
 tests prove dependency-first ordering, one execution of a shared dependency, no-op reuse,
 transitive invalidation, missing-target diagnostics, failure propagation, and recovery.
@@ -957,6 +979,8 @@ separately fingerprinted/owned support files without embedding it in CNB.
   typed encoders/decoders;
 - the rule that built-in writers reuse those encoders;
 - byte equivalence with legacy producers for matching implemented semantics;
+- lossless XNB Model transcoding for the documented schema-1-compatible subset, with every
+  unrepresentable declaration, effect/material field, tag, sharing semantic, or reference rejected;
 - build/runtime separation, deterministic selection, categorized dependencies versus XREFs,
   content-hashed skips, logical path preservation, bounded output ownership, and per-artifact
   atomic publication.
@@ -966,14 +990,15 @@ separately fingerprinted/owned support files without embedding it in CNB.
 - the public C++ importer/processor/writer interfaces and stable in-memory type strings;
 - the C++ multi-output writer result and custom output generation surface;
 - custom registration and the user-built `CNA::ContentCompiler` embedding surface;
-- component names/versions as user configuration identifiers;
+- component names/versions as user configuration identifiers, plus explicit writer asset/schema and
+  codec identities used by cache fingerprints;
 - content-build edges, dependency builds, and bounded parallel scheduling.
 
 **Future:**
 
 - optional target profiles, if a concrete portable-output policy requires them;
-- lossless Model XNB transcoding only after a canonical shared-resource/effect graph can be mapped
-  to native Model without GPU construction or silent field loss.
+- broader XNB Model support only through a separately reviewed Model schema revision that can preserve
+  the unsupported vertex, effect/material, tag, shared-resource, and external-reference semantics.
 
 **Not provided:**
 

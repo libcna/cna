@@ -77,6 +77,13 @@ namespace CNA::Content::Pipeline
         /** @brief Returns the stable built-in writer identity. */
         [[nodiscard]] ContentComponentIdentity Identity() const override;
 
+        /**
+         * @brief Returns the frozen SoundEffect schema and encoder identity.
+         * @return One stable SoundEffect asset/schema/codec declaration.
+         */
+        [[nodiscard]] std::vector<ContentWriterSchemaIdentity>
+        OutputSchemaIdentities() const override;
+
         /** @brief Returns ProcessedSoundEffectType. */
         [[nodiscard]] std::string InputType() const override;
 

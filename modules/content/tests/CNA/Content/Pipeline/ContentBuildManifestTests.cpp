@@ -66,6 +66,10 @@ namespace
         entry.importer = {"test.Importer", "1"};
         entry.processor = {"test.Processor", "2"};
         entry.writer = {"test.Writer", "3"};
+        entry.writerSchemas = {
+            {42u, 1u, "Test.Asset", {"test.AssetCodec", "7"}},
+            {43u, 2u, "Test.AssetIndex", {"test.AssetIndexCodec", "8"}},
+        };
         entry.parameters.Set("bool", true);
         entry.parameters.Set("f64", 1.25);
         entry.parameters.Set("i64", std::int64_t{-7});
@@ -77,8 +81,10 @@ namespace
         };
         entry.runtimeReferences = {{"Textures/reference", 1u}};
         entry.outputs = {
-            {"Data/asset", "Data/asset.cnb", 42u, Pipeline::ContentSha256({7u, 8u, 9u})},
-            {"Generated/asset-index", "Generated/asset-index.cnb", 43u,
+            {"Data/asset", "Data/asset.cnb", 42u, 1u, "Test.Asset",
+             Pipeline::ContentSha256({7u, 8u, 9u})},
+            {"Generated/asset-index", "Generated/asset-index.cnb", 43u, 2u,
+             "Test.AssetIndex",
              Pipeline::ContentSha256({10u, 11u})},
         };
         entry.deploymentFiles = {
@@ -166,12 +172,14 @@ TEST(ContentBuildManifestTest, RoundTripsEveryStableFieldDeterministically)
     EXPECT_NE(first.find("runtimeReferences"), std::string::npos);
     EXPECT_NE(first.find("Generated/asset-index.cnb"), std::string::npos);
     EXPECT_NE(first.find("Support/table.bin"), std::string::npos);
-    EXPECT_NE(first.find("\"version\":4"), std::string::npos);
+    EXPECT_NE(first.find("\"version\":5"), std::string::npos);
+    EXPECT_NE(first.find("writerSchemas"), std::string::npos);
+    EXPECT_NE(first.find("test.AssetCodec"), std::string::npos);
 }
 
 TEST(ContentBuildManifestTest, EarlierVersionsAreRejectedSoTheCliCanRebuildSafely)
 {
-    for (const std::uint32_t version : {1u, 2u, 3u})
+    for (const std::uint32_t version : {1u, 2u, 3u, 4u})
     {
         EXPECT_THROW((void)Pipeline::ContentBuildManifest::Parse(
                          "{\"format\":\"CNA.ContentPipeline.Manifest\",\"version\":" +
@@ -224,12 +232,37 @@ TEST(ContentBuildManifestTest, FingerprintInvalidatesEveryDeclaredBuildIdentity)
               original.fingerprint);
 
     changed = original;
+    changed.writerSchemas.front().assetSchemaVersion = 2u;
+    EXPECT_NE(Pipeline::ComputeContentBuildFingerprint(changed, scratch.Path()),
+              original.fingerprint);
+
+    changed = original;
+    changed.writerSchemas.front().codec.version = "8";
+    EXPECT_NE(Pipeline::ComputeContentBuildFingerprint(changed, scratch.Path()),
+              original.fingerprint);
+
+    changed = original;
+    changed.writerSchemas.front().assetTypeName = "Test.RenamedAsset";
+    EXPECT_NE(Pipeline::ComputeContentBuildFingerprint(changed, scratch.Path()),
+              original.fingerprint);
+
+    changed = original;
     changed.parameters.Set("u64", std::uint64_t{10u});
     EXPECT_NE(Pipeline::ComputeContentBuildFingerprint(changed, scratch.Path()),
               original.fingerprint);
 
     changed = original;
     changed.outputs.front().assetTypeId = 44u;
+    EXPECT_NE(Pipeline::ComputeContentBuildFingerprint(changed, scratch.Path()),
+              original.fingerprint);
+
+    changed = original;
+    changed.outputs.front().assetSchemaVersion = 2u;
+    EXPECT_NE(Pipeline::ComputeContentBuildFingerprint(changed, scratch.Path()),
+              original.fingerprint);
+
+    changed = original;
+    changed.outputs.front().assetTypeName = "Test.RenamedAsset";
     EXPECT_NE(Pipeline::ComputeContentBuildFingerprint(changed, scratch.Path()),
               original.fingerprint);
 
@@ -299,6 +332,22 @@ TEST(ContentBuildManifestTest, RejectsMissingDuplicateAndEscapingOutputOwnership
 
     Pipeline::ContentBuildManifestEntry entry = MakeEntry(scratch.Path());
     entry.outputs.erase(entry.outputs.begin());
+    EXPECT_THROW(manifest.Set(entry), std::invalid_argument);
+
+    entry = MakeEntry(scratch.Path());
+    entry.writerSchemas.clear();
+    EXPECT_THROW(manifest.Set(entry), std::invalid_argument);
+
+    entry = MakeEntry(scratch.Path());
+    entry.writerSchemas.push_back(entry.writerSchemas.front());
+    EXPECT_THROW(manifest.Set(entry), std::invalid_argument);
+
+    entry = MakeEntry(scratch.Path());
+    entry.outputs.front().assetSchemaVersion = 3u;
+    EXPECT_THROW(manifest.Set(entry), std::invalid_argument);
+
+    entry = MakeEntry(scratch.Path());
+    entry.outputs.front().assetTypeName = "Test.Undeclared";
     EXPECT_THROW(manifest.Set(entry), std::invalid_argument);
 
     entry = MakeEntry(scratch.Path());

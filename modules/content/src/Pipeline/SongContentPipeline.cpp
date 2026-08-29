@@ -202,6 +202,14 @@ namespace CNA::Content::Pipeline
         return {kSongWriterName, "1"};
     }
 
+    std::vector<ContentWriterSchemaIdentity>
+    SongContentWriter::OutputSchemaIdentities() const
+    {
+        return {{Cnb::CnbAssetTypeId::Song, Cnb::CnbMediaSchemaVersion,
+                 "Microsoft.Xna.Framework.Media.Song",
+                 {"CNA.Cnb.EncodeSongToCnb", "1"}}};
+    }
+
     std::string SongContentWriter::InputType() const
     {
         return ProcessedSongType;

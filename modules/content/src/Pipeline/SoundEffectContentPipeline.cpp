@@ -83,6 +83,14 @@ namespace CNA::Content::Pipeline
         return {kSoundEffectWriterName, "1"};
     }
 
+    std::vector<ContentWriterSchemaIdentity>
+    SoundEffectContentWriter::OutputSchemaIdentities() const
+    {
+        return {{Cnb::CnbAssetTypeId::SoundEffect, Cnb::CnbSoundEffectSchemaVersion,
+                 "Microsoft.Xna.Framework.Audio.SoundEffect",
+                 {"CNA.Cnb.EncodeSoundEffectToCnb", "1"}}};
+    }
+
     std::string SoundEffectContentWriter::InputType() const
     {
         return ProcessedSoundEffectType;
