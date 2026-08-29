@@ -519,7 +519,7 @@ TEST(ContentPipelineCliTest, XnbDirectoryBuildIsDeterministicAcrossWorkerCountsA
     EXPECT_NE(changed.find("[SKIP] legacy/sound"), std::string::npos) << changed;
 }
 
-TEST(ContentPipelineCliTest, UnsupportedXnbReaderFailsClearlyWithoutPublishing)
+TEST(ContentPipelineCliTest, UnsupportedXnbModelSubsetFailsClearlyWithoutPublishing)
 {
     const std::filesystem::path model =
         FindXnbFixture("monogame/windows/uncompressed/BlenderDefaultCube.xnb");
@@ -528,8 +528,9 @@ TEST(ContentPipelineCliTest, UnsupportedXnbReaderFailsClearlyWithoutPublishing)
     const std::filesystem::path output = scratch.Path() / "model.cnb";
     std::string log;
     EXPECT_EQ(RunTool({"build", model.string(), "-o", output.string()}, log), 1) << log;
-    EXPECT_NE(log.find("Microsoft.Xna.Framework.Content.ModelReader"), std::string::npos) << log;
-    EXPECT_NE(log.find("shared resource"), std::string::npos) << log;
+    EXPECT_NE(log.find("Model cannot be transcoded losslessly"), std::string::npos) << log;
+    EXPECT_NE(log.find("VertexDeclaration"), std::string::npos) << log;
+    EXPECT_NE(log.find("stride 24 reconstructs 3"), std::string::npos) << log;
     EXPECT_FALSE(std::filesystem::exists(output));
 }
 
