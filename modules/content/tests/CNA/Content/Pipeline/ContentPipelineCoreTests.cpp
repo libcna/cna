@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <future>
 #include <memory>
 #include <string>
 #include <utility>
@@ -298,6 +299,60 @@ TEST(ContentPipelineCoreTest, RegistryRejectsDuplicateStableComponentNames)
             "test.DuplicateOutputs", ".dup", kImportedType, std::filesystem::path{},
             std::vector<std::string>{kImportedType, kImportedType})),
         std::invalid_argument);
+}
+
+TEST(ContentPipelineCoreTest, RegistryFreezesBeforeBuildAndRejectsEveryLaterRegistration)
+{
+    auto registry = MakeRegistry();
+    EXPECT_FALSE(registry->IsFrozen());
+
+    const Pipeline::ContentPipeline pipeline(registry);
+    EXPECT_TRUE(registry->IsFrozen());
+    registry->Freeze();
+    EXPECT_TRUE(registry->IsFrozen());
+
+    EXPECT_THROW(
+        registry->RegisterImporter(
+            std::make_shared<NumberImporter>("test.LateImporter", ".late")),
+        std::logic_error);
+    EXPECT_THROW(
+        registry->RegisterProcessor(std::make_shared<NumberProcessor>("test.LateProcessor")),
+        std::logic_error);
+    EXPECT_THROW(registry->RegisterWriter(std::make_shared<NumberWriter>("test.LateWriter")),
+                 std::logic_error);
+
+    ScratchDirectory scratch("frozen_registry");
+    const Pipeline::ContentBuildResult result = pipeline.Build(MakeRequest(scratch));
+    EXPECT_EQ(result.logicalName, "Numbers/asset");
+}
+
+TEST(ContentPipelineCoreTest, FrozenRegistrySupportsConcurrentBuildCalls)
+{
+    auto registry = MakeRegistry();
+    const Pipeline::ContentPipeline pipeline(registry);
+    ScratchDirectory scratch("concurrent_builds");
+
+    std::vector<std::future<Pipeline::ContentBuildResult>> builds;
+    for (int index = 0; index < 16; ++index)
+    {
+        const std::string fileName = "asset-" + std::to_string(index) + ".num";
+        WriteText(scratch.Path() / fileName, std::to_string(index));
+        builds.push_back(std::async(std::launch::async, [&, index, fileName]
+        {
+            Pipeline::ContentBuildRequest request;
+            request.sourceRoot = scratch.Path();
+            request.source = fileName;
+            request.logicalName = "Numbers/" + std::to_string(index);
+            return pipeline.Build(request);
+        }));
+    }
+
+    for (int index = 0; index < 16; ++index)
+    {
+        const Pipeline::ContentBuildResult result = builds[index].get();
+        EXPECT_EQ(result.logicalName, "Numbers/" + std::to_string(index));
+        EXPECT_EQ(result.output.assetTypeId, 42u);
+    }
 }
 
 TEST(ContentPipelineCoreTest, RegistryNeverUsesRegistrationOrderToResolveAnAmbiguity)

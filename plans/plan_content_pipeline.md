@@ -516,6 +516,33 @@ diagnostic is emitted only once. Subprocess tests prove `A -> A`, `A -> B -> A`,
 `A -> B -> C -> A`, zero publication/manifest replacement, exact failed-node counts, and
 byte-identical diagnostics on a repeated long-cycle invocation.
 
+### 5.15 Frozen registry and scheduler readiness (`CP-026`)
+
+The registry audit found that a `shared_ptr<const ContentPipelineRegistry>` did not prevent its
+owner from retaining a mutable alias. The registry now protects configuration/lookups with a
+shared mutex and has a permanent, idempotent freeze bit. `ContentPipeline` freezes at construction;
+`RunContentCompiler()` freezes before discovery. Every later `Register*()` call fails under the
+same lock, so no retained alias can mutate component tables once workers are possible. A regression
+proves all three late registration families fail and sixteen concurrent direct builds through one
+frozen registry return their own correct results.
+
+The component audit found no mutable state in CNA's built-ins. Component objects are shared `const`;
+contexts, values, dependency collectors, canonical DTOs, cgltf options/data, CNJ readers, and codec
+inputs are invocation-local. Vendored stb uses thread-local failure/configuration state. Model/glTF
+staging directories use atomic `create_directory`; the sole publisher uses exclusive-create sibling
+temporaries, and graph ownership already forbids two nodes from sharing a final path. A reused
+custom logger may receive concurrent calls and must synchronize; the stock CLI currently uses no
+downstream logger.
+
+The coordinator audit identifies the state CP-027 must not expose to workers: manifest maps,
+logical/path ownership, graph states, counters, and stdout/stderr. Parallel work will return
+node-local outcomes. One coordinator integrates outcomes in stable logical-node order, freezes the
+resolved edge set before dependency scheduling/publication, runs deterministic cycle validation,
+and alone commits manifest/ownership/diagnostics. Changed nodes whose processors reveal edges need
+a no-publication preparation step; retained bytes must be bounded or staged rather than allowing
+unbounded cold-build RAM. Registry mutation, streaming worker diagnostics, and direct worker
+manifest writes are rejected designs.
+
 ---
 
 ## 6. First vertical slices
@@ -1020,7 +1047,7 @@ The completed feature branch was synchronized without reopening `CP-001` through
 | `CP-023` | **completed** | Added a backward-extending writer result with at most 256 explicitly named CNB outputs, stable primary-node/output identities, global logical/path ownership checks and manifest v2 output lists. Version 1 is rejected into a safe rebuild. Every artifact and the manifest still use the sole atomic publisher; a later-output failure retains the old manifest so digest mismatch deterministically repairs the whole node. The custom `.greeting` compiler proves generated child publication, stable ordering/no-op, child-tamper repair, primary collision rejection and recovery after partial multi-file publication. The 141-test pipeline/producer/CNJ/golden selection passed 140 with only the expected large-file gate skipped; all 23 C-header compatibility cells and generated inventory gates pass. Frozen built-in encoders and bytes are unchanged. |
 | `CP-024` | **completed** | Added deterministic serial graph scheduling for `ContentBuild` edges between discovered primary node IDs, distinct from file/generated inputs and runtime XREFs. Manifest v3 stores direct/topology and effective dependency fingerprints; versions 1/2 safely rebuild. Shared dependencies execute once before parents, no-op graphs reuse prior edges without running components, dependency changes rebuild every dependent, and missing/failed targets prevent parent publication with Graph-stage context. The `.greeting` subprocess suite proves ordering, shared coordination, cache propagation, failure/recovery and direct/effective hash behavior. The 144-test pipeline/producer/CNJ/golden selection passed 143 with only the expected large-file skip, and all 23 C-header compatibility cells pass with no C ABI/export change. |
 | `CP-025` | **completed** | Added an active-stack cycle detector that reports the complete logical chain with its repeated start node. Sorted root/edge traversal makes selection deterministic; a dedicated error avoids nested duplicate chains while every affected node still fails. Self, two-node and three-node subprocess tests prove exact chains, one diagnostic, no publication/manifest replacement, correct failure counts and byte-identical repeated output. |
-| `CP-026` | **pending** | Audit component reentrancy, registry mutability, logging, manifest access, temporary-name ownership and third-party parser safety; freeze the registry/build graph before execution and specify deterministic scheduling. |
+| `CP-026` | **completed** | Added a permanent mutex-protected registry freeze, invoked before CLI discovery and by direct coordinators, with deterministic late-registration refusal through retained aliases. Public component/logger contracts now state their concurrency obligations. The audit found built-ins invocation-local, cgltf per-call, stb thread-local, and staging/publication names exclusively claimed; it confines manifest, ownership, graph states, counters and terminal diagnostics to a deterministic coordinator. Tests prove all late registration families fail and sixteen direct builds share a frozen registry safely. The 149-test pipeline/producer/CNJ/golden selection passed 148 with only the expected large-file skip, and all seven generated C-API consistency gates pass; the two new experimental declarations are planned under `CBIND-117` with no C export. CP-027 owns the bounded node-local scheduler implementation. |
 | `CP-027` | **pending** | Implement bounded worker scheduling with a serial fallback, one execution per node, shared-dependency coordination, deterministic manifest/diagnostic identity and byte equality for worker counts 1, 2 and N. Run TSan if supported. |
 | `CP-028` | **pending** | Benchmark representative cold, no-op, one-change and shared-dependency builds before/after parallel execution; retain correctness-first defaults. |
 | `CP-029` | **pending** | Follow stable CLI/config/custom-tool behavior through `cna_add_content()`, preserving host-tool separation and one real cache/build implementation. |
@@ -1063,6 +1090,9 @@ the ordering wrong; it is not a promise to build speculative abstractions.
 * Content-to-content dependencies are serially scheduled and fingerprinted, with deterministic
   cycle-chain rejection. Very deep acyclic graphs still use the serial coordinator's DFS call
   stack; parallel scheduling should replace execution mechanics without changing graph semantics.
+* The registry and built-in components are ready for concurrent reads/calls, but the graph
+  coordinator is intentionally still serial. CP-027 must keep prepared outputs bounded and must
+  not let workers mutate manifest/ownership state or stream order-dependent diagnostics.
 * Song/Video compilation records and encodes the streaming media XREF but does not copy raw media
   into the output tree. CP-023 intentionally models compiled CNB outputs, not arbitrary deployment
   files; deployment must still place media at the referenced path until an explicit support-file

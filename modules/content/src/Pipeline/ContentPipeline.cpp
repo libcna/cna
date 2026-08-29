@@ -6,6 +6,7 @@
 #include <cctype>
 #include <cmath>
 #include <exception>
+#include <mutex>
 #include <sstream>
 
 #include "CNA/Content/Cnb/CnbFormat.hpp"
@@ -446,8 +447,31 @@ namespace CNA::Content::Pipeline
                 ContentPipelineStage::Process, component_, std::move(text));
     }
 
+    void ContentPipelineRegistry::Freeze() const
+    {
+        const std::unique_lock lock(configurationMutex_);
+        frozen_.store(true, std::memory_order_release);
+    }
+
+    bool ContentPipelineRegistry::IsFrozen() const noexcept
+    {
+        return frozen_.load(std::memory_order_acquire);
+    }
+
+    void ContentPipelineRegistry::RequireMutable() const
+    {
+        if (frozen_.load(std::memory_order_relaxed))
+        {
+            throw std::logic_error(
+                "content pipeline registry is frozen; configure every component before build "
+                "execution begins.");
+        }
+    }
+
     void ContentPipelineRegistry::RegisterImporter(std::shared_ptr<const ContentImporter> importer)
     {
+        const std::unique_lock lock(configurationMutex_);
+        RequireMutable();
         if (importer == nullptr)
         {
             throw std::invalid_argument("RegisterImporter(): importer must not be null.");
@@ -501,6 +525,8 @@ namespace CNA::Content::Pipeline
     void ContentPipelineRegistry::RegisterProcessor(
         std::shared_ptr<const ContentProcessor> processor)
     {
+        const std::unique_lock lock(configurationMutex_);
+        RequireMutable();
         if (processor == nullptr)
         {
             throw std::invalid_argument("RegisterProcessor(): processor must not be null.");
@@ -519,6 +545,8 @@ namespace CNA::Content::Pipeline
 
     void ContentPipelineRegistry::RegisterWriter(std::shared_ptr<const ContentTypeWriter> writer)
     {
+        const std::unique_lock lock(configurationMutex_);
+        RequireMutable();
         if (writer == nullptr)
         {
             throw std::invalid_argument("RegisterWriter(): writer must not be null.");
@@ -537,6 +565,7 @@ namespace CNA::Content::Pipeline
     std::shared_ptr<const ContentImporter> ContentPipelineRegistry::ResolveImporter(
         const std::filesystem::path& source, const std::string& explicitName) const
     {
+        const std::shared_lock lock(configurationMutex_);
         return ResolveByRoute(importers_, importersByExtension_, LowerExtension(source),
                               explicitName, "importer", "source extension");
     }
@@ -544,6 +573,7 @@ namespace CNA::Content::Pipeline
     bool ContentPipelineRegistry::HasImporterForSource(
         const std::filesystem::path& source) const
     {
+        const std::shared_lock lock(configurationMutex_);
         const auto route = importersByExtension_.find(LowerExtension(source));
         return route != importersByExtension_.end() && !route->second.empty();
     }
@@ -551,6 +581,7 @@ namespace CNA::Content::Pipeline
     std::shared_ptr<const ContentProcessor> ContentPipelineRegistry::ResolveProcessor(
         const std::string& inputType, const std::string& explicitName) const
     {
+        const std::shared_lock lock(configurationMutex_);
         return ResolveByRoute(processors_, processorsByInputType_, inputType, explicitName,
                               "processor", "imported type");
     }
@@ -558,6 +589,7 @@ namespace CNA::Content::Pipeline
     std::shared_ptr<const ContentTypeWriter> ContentPipelineRegistry::ResolveWriter(
         const std::string& inputType, const std::string& explicitName) const
     {
+        const std::shared_lock lock(configurationMutex_);
         return ResolveByRoute(writers_, writersByInputType_, inputType, explicitName, "writer",
                               "processed type");
     }
@@ -617,6 +649,7 @@ namespace CNA::Content::Pipeline
         {
             throw std::invalid_argument("ContentPipeline(): registry must not be null.");
         }
+        registry_->Freeze();
     }
 
     ContentBuildResult ContentPipeline::Build(const ContentBuildRequest& request) const

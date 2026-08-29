@@ -25,8 +25,9 @@ namespace CNA::Content::Pipeline
      *
      * The coordinator owns source discovery, configuration, fingerprints, incremental manifests,
      * diagnostics, and atomic publication. A user-built compiler should finish all registration
-     * before calling this function and must not mutate another alias to @p registry while it runs.
-     * This C++ embedding surface has the same experimental source/ABI status as the component API.
+     * before calling this function. The coordinator permanently freezes @p registry before source
+     * discovery, and later registration through any retained mutable alias fails. This C++
+     * embedding surface has the same experimental source/ABI status as the component API.
      *
      * @param arguments Native command-line arguments excluding the executable name.
      * @param registry Non-null, fully configured registry retained for the complete invocation.

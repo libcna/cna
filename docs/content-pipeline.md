@@ -541,6 +541,25 @@ Self, two-node, and three-node cycles are covered; the long-cycle subprocess is 
 produce byte-for-byte identical diagnostics. No node in or dependent on a cycle publishes and the
 manifest is not replaced.
 
+## Parallel-scheduler readiness boundary
+
+The registry is protected during configuration and permanently read-only once a coordinator
+accepts it. A concurrency regression invokes sixteen independent `ContentPipeline::Build()` calls
+through one frozen registry and verifies their distinct results. The built-in component audit found
+no component-owned mutable state: contexts, dependency collectors, parser data and codec inputs are
+per invocation. cgltf receives per-call options/data; the vendored stb decoder uses thread-local
+failure/configuration state.
+
+Filesystem staging is also reservation based. Model/glTF intermediates claim a directory with an
+exclusive create, and the one atomic publication helper claims sibling temporary files with the
+platform's exclusive-create primitive. Logical/path ownership already prevents two graph nodes
+from targeting the same final artifact.
+
+Parallel graph scheduling is still future work. The current coordinator deliberately keeps graph
+state, output ownership, manifest mutation, summary counters and terminal output serial. CP-027
+must keep those as coordinator-owned deterministic state: workers may produce node-local outcomes,
+but must not write shared diagnostics or mutate the manifest directly.
+
 ## Determinism and publication
 
 Directory discovery is sorted by the UTF-8 logical name. Registries use ordered maps/sets and never
@@ -650,6 +669,18 @@ initializer registration, binary version handshake, or claim that separately dis
 plugins are stable. `ContentPipelineExtensionApiIsExperimental == true` covers both custom
 components and the embedding functions; persistent author-controlled component/type names remain
 the configuration and fingerprint identities, but the C++ declarations and ABI may evolve.
+
+Registration has a permanent configure-then-freeze boundary. `ContentPipeline` freezes its shared
+registry when constructed, and `RunContentCompiler()` freezes it before source discovery. A later
+`Register*()` call through any retained mutable alias fails instead of racing a build. `Freeze()` is
+also public and idempotent for callers that want to make the boundary explicit, while `IsFrozen()`
+exposes it for integration diagnostics.
+
+The registry owns one shared `const` instance of each component. Importer, processor, and writer
+implementations must therefore be reentrant: independent builds may call the same component
+concurrently after freeze. Built-ins satisfy that contract with invocation-local values and
+contexts. A custom logger shared by concurrent direct `Build()` calls must synchronize itself;
+each result still records its own ordered message sequence.
 
 ## CNJ, CNB, and XNB
 

@@ -900,6 +900,7 @@ namespace CNA::Content::Pipeline
         {
             throw std::invalid_argument("RunContentCompiler(): registry must not be null.");
         }
+        registry->Freeze();
         return Run(arguments, std::move(registry));
     }
 } // namespace CNA::Content::Pipeline

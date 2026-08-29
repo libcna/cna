@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <map>
 #include <memory>
 #include <set>
+#include <shared_mutex>
 #include <stdexcept>
 #include <string>
 #include <typeindex>
@@ -95,7 +97,13 @@ namespace CNA::Content::Pipeline
         bool operator==(const ContentLogMessage&) const = default;
     };
 
-    /** @brief Scoped logging sink for content builds. */
+    /**
+     * @brief Scoped logging sink for content builds.
+     *
+     * A sink reused by concurrent Build() calls may receive concurrent Log() calls and must
+     * synchronize its own mutable state. The stock compiler does not share a downstream logger
+     * between build calls; graph diagnostics remain coordinator-owned.
+     */
     class ContentBuildLogger
     {
     public:
@@ -466,7 +474,12 @@ namespace CNA::Content::Pipeline
         ContentBuildLogger* logger_ = nullptr;
     };
 
-    /** @brief Experimental build-time source importer contract. */
+    /**
+     * @brief Experimental build-time source importer contract.
+     *
+     * One registered instance may serve concurrent build nodes after the registry is frozen.
+     * Implementations must therefore be reentrant or internally synchronize mutable state.
+     */
     class ContentImporter
     {
     public:
@@ -499,7 +512,12 @@ namespace CNA::Content::Pipeline
         [[nodiscard]] virtual ContentValue Import(ContentImporterContext& context) const = 0;
     };
 
-    /** @brief Experimental build-time content processor contract. */
+    /**
+     * @brief Experimental build-time content processor contract.
+     *
+     * One registered instance may serve concurrent build nodes after the registry is frozen.
+     * Implementations must therefore be reentrant or internally synchronize mutable state.
+     */
     class ContentProcessor
     {
     public:
@@ -569,7 +587,12 @@ namespace CNA::Content::Pipeline
         std::vector<ContentAdditionalWriteOutput> additionalOutputs;
     };
 
-    /** @brief Experimental pipeline writer contract above the low-level CNB codecs. */
+    /**
+     * @brief Experimental pipeline writer contract above the low-level CNB codecs.
+     *
+     * One registered instance may serve concurrent build nodes after the registry is frozen.
+     * Implementations must therefore be reentrant or internally synchronize mutable state.
+     */
     class ContentTypeWriter
     {
     public:
@@ -603,6 +626,22 @@ namespace CNA::Content::Pipeline
     class ContentPipelineRegistry
     {
     public:
+        /**
+         * @brief Permanently seals this registry for concurrent read-only build use.
+         *
+         * The operation is idempotent. ContentPipeline and RunContentCompiler call it before
+         * build work begins, so callers normally only need it when they want an explicit
+         * configure-then-freeze boundary before constructing either coordinator.
+         */
+        void Freeze() const;
+
+        /**
+         * @brief Returns whether this registry has been permanently sealed.
+         *
+         * @return True after Freeze() or after a coordinator has accepted this registry.
+         */
+        [[nodiscard]] bool IsFrozen() const noexcept;
+
         /**
          * @brief Registers one importer owned by this registry.
          *
@@ -676,6 +715,10 @@ namespace CNA::Content::Pipeline
             const std::string& inputType, const std::string& explicitName = {}) const;
 
     private:
+        void RequireMutable() const;
+
+        mutable std::shared_mutex configurationMutex_;
+        mutable std::atomic_bool frozen_{false};
         std::map<std::string, std::shared_ptr<const ContentImporter>> importers_;
         std::map<std::string, std::shared_ptr<const ContentProcessor>> processors_;
         std::map<std::string, std::shared_ptr<const ContentTypeWriter>> writers_;
@@ -785,7 +828,12 @@ namespace CNA::Content::Pipeline
         std::string component_;
     };
 
-    /** @brief Serial build-to-bytes coordinator over an explicitly configured registry. */
+    /**
+     * @brief Build-to-bytes coordinator over an explicitly configured, frozen registry.
+     *
+     * Separate Build() calls may run concurrently when registered components and any shared
+     * logging sink obey their documented reentrancy contracts.
+     */
     class ContentPipeline
     {
     public:
