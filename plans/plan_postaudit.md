@@ -2309,7 +2309,57 @@ non-indexed pixels. Current native Software effects 7/7, Additive 29/29, and sci
 
 ---
 
-## 31. `REMED-BUILD-017` — the native GDI workflow omitted three correctness targets
+## 31. `REMED-GFX-234` — a stride-32 declaration lost the colour it declared
+
+**Status:** **CLOSED — FOUND AND RESOLVED while triaging the permanently-red suite, 2026-08-29** ·
+**Pre-existing silent wrong result**
+
+**Defect.** `EasyGLRenderer::SelectStockProgramShape`'s `case 32:` routed every stride-32 draw to
+the lit family unconditionally, because stride 32 is `VertexPositionNormalTexture`'s. A
+Position+Colour vertex padded to 32 reaches it too. The lit programs take `{aPos, aNormal, aUV}` and
+carry no colour input — `kLitColor` is chosen only at `stride == 36` — so the declared `Color`
+element had no attribute to bind to and was silently dropped. The draw rendered correct geometry in
+black.
+
+**Why it hid.** The renderer is half-migrated and the two halves disagree. `REMED-GFX-218` landed:
+`ConfigureDeclarationForStockProgramEXT` binds every stock attribute at the declared element's own
+`getOffsetProperty()`, so element ORDER is honoured. `REMED-GFX-217` did not: which stock program a
+draw gets is still decided by byte stride, with two hand-written declaration special cases (strides
+24 and 36). Where a stride is ambiguous, that pair drops whatever the chosen program has no input
+for — silently, because the guard's rule is asymmetric by design and a native attribute the
+declaration does not name is not a violation.
+
+It also hid behind a stale test arm. `VertexDeclarationLayoutTest` demanded that
+`REMED-GFX-DECL-GUARD` REFUSE three colliding declarations on every renderer but bgfx. EasyGL had
+stopped refusing them, so the arm failed on all three with `was ACCEPTED` — the same message for the
+two it now renders correctly and for the one it rendered wrong. The measurement that separates them
+is in the arm's own text: `colorPosition16` and `positionTextureColor24` render **byte-identically**
+to their non-colliding twins, which is what correct binding produces because the fixture writes each
+case's bytes at its own declared offsets; `positionColorPadded32` rendered black.
+
+**Fix.** `case 32:` asks the declaration: one that names no `Normal` cannot be a lit vertex whatever
+its stride, so it takes the coloured program. An absent declaration keeps the stride's answer, which
+is the only thing there is to go on. This is a narrowing, not a translator: `REMED-GFX-217` stays
+open.
+
+`TranslatesDeclarations()` replaces four hand-written `CNA_RENDERER_IS(Bgfx)` skips and the arm's
+own `!CNA_RENDERER_IS(Bgfx)`, so the refusal arms and their translating control can never disagree
+about which renderer is which. EasyGL joins bgfx there; all five GL profiles share the one
+implementation, and the reading was taken on OPENGLES3.
+
+**Evidence.** Before: `positionColorPadded32` four columns `(0,0,0,255)`, geometry correct
+(`lit=5760/4320/2880/1440`). After: `(204,45,35)`, `(51,89,70)`, `(102,22,140)`, `(204,89,140)` —
+the same four its stride-16 twin renders. `VertexDeclarationLayoutTest` + `DeclarationGuardTest`:
+**10 failing → 8 passing, 4 skipped, 0 failing.**
+
+Mutation-checked, and this is the part worth keeping: with the fix reverted the suite no longer says
+`was ACCEPTED`, it says *"positionColorPadded32 column 0: carried (0,0,0,255), expected
+(204,45,35,255) -- the COLOUR attribute is being read from the wrong byte offset or format"*. The
+test change is what turns a stale refusal expectation into an assertion that names the defect.
+
+---
+
+## 32. `REMED-BUILD-017` — the native GDI workflow omitted three correctness targets
 
 **Status:** **CLOSED — DISCOVERED AND RESOLVED in the GDI adaptation, 2026-08-08** ·
 **Build/evidence inventory defect, not a renderer defect**
@@ -2326,7 +2376,7 @@ inventory defect.
 
 ---
 
-## 32. `REMED-BUILD-018` — the capability test used an incomplete backend type
+## 33. `REMED-BUILD-018` — the capability test used an incomplete backend type
 
 **Status:** **CLOSED — DISCOVERED AND RESOLVED in the GDI adaptation, 2026-08-08** ·
 **Shared test-build defect, not a renderer defect**
