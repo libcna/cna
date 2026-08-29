@@ -47,13 +47,54 @@ The two conventions differ on exactly **19 of the 100** pixels -- the same 19 th
 `EasyGL_PointSamplingContract` reports as mismatches. EasyGL's output is XNA-correct and the test
 marks it wrong.
 
+## Second question: the 2x2 identity fixture
+
+`descriptor_capacity_contract_test.cpp` draws a 2x2 texture onto a 2x2 target -- "one texel to one
+pixel" -- and requires every channel of the readback to be a clean 0 or 255, for all 27 sampler
+states it sweeps. With the correction on, EasyGL fails 15 of the 27, and 142 of 256 in the companion
+leg. Those counts are not arbitrary: exactly five of the nine filters magnify with LINEAR
+(`Linear`, `Anisotropic`, `LinearMipPoint`, `MinPointMagLinearMipLinear`, `MinPointMagLinearMipPoint`),
+and 5x3 = 15, while 256 x 5/9 = 142. Only the linear-magnifying states fail.
+
+    LEG-C 2x2 -> 2x2 POINT : dirty=0/4   (255,0,0) (0,255,0) (0,0,255) (255,255,0)
+    LEG-C 2x2 -> 2x2 LINEAR: dirty=3/4   (255,0,0) (128,128,0)* (128,0,128)* (128,128,64)*
+
+XNA blends three of the four pixels, at exactly 128 -- the 50/50 weight that integer pixel centres
+predict, because a pixel centre at window x=1 lands on texture coordinate 1.0, halfway between the
+texel centres at 0.5 and 1.5. The contract's "one texel to one pixel" holds in XNA only for
+magnifying filters that do not interpolate.
+
+So this fixture encodes the same OpenGL convention leg U2 does, and EasyGL fails it for the same
+reason: it is right and the expectation is not.
+
+## The one real defect
+
+Disabling the correction and rebuilding **every** dependent binary (a stale test executable will
+otherwise keep the old renderer linked in and report the opposite result) gives:
+
+| test | correction off | correction on |
+|---|---|---|
+| `EasyGL_XnaPixelCenter` | FAIL | pass |
+| `EasyGL_PointSamplingContract` | pass | FAIL -- test is wrong, see above |
+| `EasyGL_DescriptorCapacityContract` | pass | FAIL -- test is wrong, see above |
+| `ShadowVisibilityTest.TheFilterRadiusChangesHowSoftTheEdgeIs` | pass | **FAIL -- genuine** |
+
+`GltfConformanceL6.ViewAndProjectionReachEveryDrawUnaltered` was previously counted with these. It
+is not: it fails only under `ctest -j` and passes serially every time.
+
+The shadow test is the one failure the correction actually causes. Its assertion is
+`countPartials(2) > 0` -- a 5x5 PCF kernel must produce at least one partially shadowed pixel -- and
+with the correction on it produces none, while `TheCastersShadowIsVisibleOnTheGround` still passes,
+so the shadow is present and only its softness is gone. XNA cannot arbitrate this one: it has no
+shadow-map API. A half-pixel geometry shift should not flatten a PCF kernel, so this is a real
+interaction defect in the CNAEXT shadow layer, not a wrong expectation.
+
 ## What this settles
 
 `xnaPixelCenterScale_` is **not** a divergence to be removed. It is what makes EasyGL agree with
 XNA. Leg U2 of the point-sampling contract encodes the OpenGL/Direct3D 10 convention, which XNA
 does not use, and the six renderers that pass it are passing an expectation XNA never held.
 
-Not answered here: whether the other three tests that the correction breaks
-(`EasyGL_DescriptorCapacityContract`, `ShadowVisibilityTest.TheFilterRadiusChangesHowSoftTheEdgeIs`,
-`CnaGltfConformanceL6`) encode the same wrong convention, or fail for unrelated reasons. Each needs
-the same treatment: state the expectation in terms of a pixel-centre convention, then ask XNA.
+Not answered here: why a half-pixel geometry shift removes every intermediate value from a 5x5
+PCF kernel. That is the shadow layer's own defect and needs its own investigation -- the correction
+only exposes it.

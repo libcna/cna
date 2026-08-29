@@ -63,7 +63,9 @@ public class Probe : Game
     {
         if (done) return;
         done = true;
-        try { LegPixelCenter(); Leg3D("U1 8x4 -> 16x8", 8, 4, 16, 8); Leg3D("U2 3x3 -> 10x10", 3, 3, 10, 10); }
+        try { LegPixelCenter(); Leg3D("U1 8x4 -> 16x8", 8, 4, 16, 8); Leg3D("U2 3x3 -> 10x10", 3, 3, 10, 10);
+              Leg2x2("LEG-C 2x2 -> 2x2 POINT ", TextureFilter.Point);
+              Leg2x2("LEG-C 2x2 -> 2x2 LINEAR", TextureFilter.Linear); }
         catch (Exception e) { Say("EXCEPTION: " + e); }
         File.WriteAllText("probe-output.txt", log.ToString());
         Exit();
@@ -195,6 +197,65 @@ public class Probe : Game
         }
         Say(r0);
     }
+
+
+    // Replicates descriptor_capacity_contract_test.cpp: a 2x2 texture on a 2x2 target with
+    // identity matrices -- "one texel to one pixel". At that scale both pixel-centre conventions
+    // pick the same texel, so what separates them is whether a LINEAR magnification filter lands
+    // on a texel centre (a no-op) or between two texels (a blend that destroys the encoding).
+    void Leg2x2(string label, TextureFilter filter)
+    {
+        var dev = GraphicsDevice;
+        var tex = new Texture2D(dev, 2, 2);
+        // The encoding descriptor-capacity uses: every channel only ever 0 or 255.
+        tex.SetData(new Color[] {
+            new Color(255, 0, 0, 255), new Color(0, 255, 0, 255),
+            new Color(0, 0, 255, 255), new Color(255, 255, 0, 255),
+        });
+
+        var rt = new RenderTarget2D(dev, 2, 2, false, SurfaceFormat.Color, DepthFormat.None,
+                                    0, RenderTargetUsage.DiscardContents);
+        dev.SetRenderTarget(rt);
+        dev.Clear(new Color(13, 17, 19, 255));
+        dev.RasterizerState = RasterizerState.CullNone;
+        dev.DepthStencilState = DepthStencilState.None;
+        dev.BlendState = BlendState.Opaque;
+        dev.SamplerStates[0] = new SamplerState {
+            Filter = filter,
+            AddressU = TextureAddressMode.Clamp,
+            AddressV = TextureAddressMode.Clamp,
+        };
+
+        var quad = new VertexPositionTexture[] {
+            new VertexPositionTexture(new Vector3(-1f,  1f, 0f), new Vector2(0f, 0f)),
+            new VertexPositionTexture(new Vector3(-1f, -1f, 0f), new Vector2(0f, 1f)),
+            new VertexPositionTexture(new Vector3( 1f, -1f, 0f), new Vector2(1f, 1f)),
+            new VertexPositionTexture(new Vector3(-1f,  1f, 0f), new Vector2(0f, 0f)),
+            new VertexPositionTexture(new Vector3( 1f, -1f, 0f), new Vector2(1f, 1f)),
+            new VertexPositionTexture(new Vector3( 1f,  1f, 0f), new Vector2(1f, 0f)),
+        };
+        var fx = new BasicEffect(dev);
+        fx.TextureEnabled = true; fx.Texture = tex;
+        fx.World = Matrix.Identity; fx.View = Matrix.Identity; fx.Projection = Matrix.Identity;
+        fx.CurrentTechnique.Passes[0].Apply();
+        dev.DrawUserPrimitives(PrimitiveType.TriangleList, quad, 0, 2);
+        dev.SetRenderTarget(null);
+
+        var px = new Color[4];
+        rt.GetData(px);
+        int dirty = 0;
+        string dump = "";
+        foreach (var c in px)
+        {
+            bool clean = Clean(c.R) && Clean(c.G) && Clean(c.B);
+            if (!clean) ++dirty;
+            dump += "(" + c.R + "," + c.G + "," + c.B + ")" + (clean ? " " : "* ");
+        }
+        Say(label + ": dirty=" + dirty + "/4   " + dump);
+        Say("        (CNA's descriptor-capacity contract needs dirty=0; * marks a blended channel)");
+    }
+
+    static bool Clean(int v) { return v == 0 || v == 255; }
 
     static void Main() { using (var g = new Probe()) g.Run(); }
 }
