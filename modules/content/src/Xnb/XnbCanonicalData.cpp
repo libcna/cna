@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Xnb/XnbCanonicalData.hpp"
+#include "XnbCanonicalReaderAccess.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -221,7 +222,7 @@ namespace CNA::Internal::Xnb
         [[nodiscard]] std::vector<T> ReadList(
             ContentReader& input, const std::string& expectedReader, ReadElement readElement)
         {
-            RequireReader(input.ReadCanonicalTypeReaderReferenceEXT(), expectedReader,
+            RequireReader(XnbCanonicalReaderAccess::ReadReference(input), expectedReader,
                           input.getAssetNameProperty());
             const std::int32_t count = input.ReadInt32();
             input.CheckCollectionElementCount(count, expectedReader);
@@ -463,7 +464,7 @@ namespace CNA::Internal::Xnb
         ContentReader& input, const std::uint32_t maximumTextureDimension)
     {
         RequireReader(
-            input.ReadCanonicalTypeReaderReferenceEXT(),
+            XnbCanonicalReaderAccess::ReadReference(input),
             "Microsoft.Xna.Framework.Content.Texture2DReader",
             input.getAssetNameProperty());
 
@@ -611,14 +612,14 @@ namespace CNA::Internal::Xnb
         }
 
         RequireReader(
-            input.ReadCanonicalTypeReaderReferenceEXT(),
+            XnbCanonicalReaderAccess::ReadReference(input),
             "Microsoft.Xna.Framework.Content.StringReader",
             input.getAssetNameProperty());
         result.mediaPath = input.ReadString();
         const auto readInt32Object = [&input]
         {
             RequireReader(
-                input.ReadCanonicalTypeReaderReferenceEXT(),
+                XnbCanonicalReaderAccess::ReadReference(input),
                 "Microsoft.Xna.Framework.Content.Int32Reader",
                 input.getAssetNameProperty());
             return input.ReadInt32();
@@ -627,7 +628,7 @@ namespace CNA::Internal::Xnb
         result.width = readInt32Object();
         result.height = readInt32Object();
         RequireReader(
-            input.ReadCanonicalTypeReaderReferenceEXT(),
+            XnbCanonicalReaderAccess::ReadReference(input),
             "Microsoft.Xna.Framework.Content.SingleReader",
             input.getAssetNameProperty());
         result.framesPerSecond = input.ReadSingle();
@@ -830,19 +831,21 @@ namespace CNA::Internal::Xnb
         System::IO::MemoryStream bodyStream(body, static_cast<std::int32_t>(bodySize));
         ContentReader reader(
             nullptr, &bodyStream, origin, header.version, header.platform, nullptr, limits);
-        reader.InitializeCanonicalTypeReadersEXT();
-        const XnbTypeReaderTableEntry& root = reader.ReadCanonicalTypeReaderReferenceEXT();
+        XnbCanonicalReaderAccess::Initialize(reader);
+        const XnbTypeReaderTableEntry& root =
+            XnbCanonicalReaderAccess::ReadReference(reader);
         if (root.version != 0)
         {
             throw ContentLoadException(
                 "'" + origin + "' uses root ContentTypeReader '" + root.normalizedName +
                 "' at unsupported version (" + std::to_string(root.version) + ").");
         }
-        if (reader.getSharedResourceCountEXT() != 0)
+        if (XnbCanonicalReaderAccess::SharedResourceCount(reader) != 0)
         {
             throw ContentLoadException(
                 "'" + origin + "' root ContentTypeReader '" + root.normalizedName +
-                "' uses " + std::to_string(reader.getSharedResourceCountEXT()) +
+                "' uses " +
+                std::to_string(XnbCanonicalReaderAccess::SharedResourceCount(reader)) +
                 " shared resource(s); that reader graph is not supported for native CNB "
                 "transcoding.");
         }

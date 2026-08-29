@@ -6,6 +6,7 @@
 
 #include "CNA/Internal/PathContainment.hpp"
 #include "CNA/Internal/Xnb/XnbCanonicalData.hpp"
+#include "XnbCanonicalReaderAccess.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
@@ -65,7 +66,7 @@ namespace CNA::Internal::Xnb
     {
         (void)existingInstance; // never provided: CanDeserializeIntoExistingObject defaults false, matching FNA
         const XnbVideoData decoded = DecodeVideoXnbData(
-            input, input.getCanonicalTypeReaderCountEXT() > 1u);
+            input, XnbCanonicalReaderAccess::ReaderCount(input) > 1u);
 
         auto* contentManager = input.getContentManagerProperty();
         if (!contentManager)

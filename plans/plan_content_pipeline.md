@@ -1377,9 +1377,10 @@ device-open calls.
 MinGW-w64 compiles every modified source, including `cna_content`, `cna_audio`, the compiler and the
 tool entry point. Linking the executable reaches the pre-existing `wmain` configuration defect: the
 target omits `-municode`, so MinGW's CRT asks for `WinMain`. Native Windows/MSVC execution is not
-available and is not claimed. Eight of the nine build-free C-API consistency gates pass; the
-coverage gate reports the pre-existing four planned rows still owned by completed `CBIND-036`.
-Neither issue is caused by this phase's diff.
+available and is not claimed. All nine build-free C-API consistency gates pass. The four canonical
+reader helpers remain private implementation details behind a source-private friend shim; the 19
+new/changed experimental pipeline declarations are inventoried as planned under open `CBIND-117`,
+without adding a C export.
 
 The primary compatibility oracle compares both runtime results:
 

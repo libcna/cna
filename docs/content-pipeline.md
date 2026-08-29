@@ -859,9 +859,8 @@ the compatibility boundary on the finished implementation:
   CNJ, golden-vector, and containment tests passed normally and again under combined ASan+UBSan;
 - 107 concurrency-relevant tests passed under ThreadSanitizer with no report;
 - the opt-in sparse 2 GiB+1-byte streaming-hash test passed without storing a giant fixture;
-- eight of nine generated C-API consistency gates pass and no Content Pipeline C ABI is exported;
-  the coverage gate reports four pre-existing planned rows still assigned to completed
-  `CBIND-036`;
+- all nine generated C-API consistency gates pass and no Content Pipeline C ABI is exported; the
+  new/changed experimental declarations remain planned under open `CBIND-117`;
 - focused symbol inspection confirms the XNB audio decoder object references only SDL's in-memory
   WAVE load/conversion functions, not SDL initialization, device-open, graphics-device, window, or
   runtime ContentManager load paths. The monolithic content/tool link can still carry SDL/audio and
