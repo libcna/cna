@@ -299,8 +299,6 @@ TEST(CustomContentPipelineTest, BuiltInWritersDeclareStableSchemaAndCodecIdentit
          "Microsoft.Xna.Framework.Media.Song", "CNA.Cnb.EncodeSongToCnb"},
         {Pipeline::ProcessedVideoType, Cnb::CnbAssetTypeId::Video,
          "Microsoft.Xna.Framework.Media.Video", "CNA.Cnb.EncodeVideoToCnb"},
-        {Pipeline::ProcessedModelType, Cnb::CnbAssetTypeId::Model,
-         "Microsoft.Xna.Framework.Graphics.Model", "CNA.Cnb.EncodeModelToCnb"},
         {Pipeline::ProcessedTexture3DType, Cnb::CnbAssetTypeId::Texture3D,
          "Microsoft.Xna.Framework.Graphics.Texture3D", "CNA.Cnb.EncodeTexture3DToCnb"},
         {Pipeline::ProcessedTextureCubeType, Cnb::CnbAssetTypeId::TextureCube,
@@ -323,6 +321,21 @@ TEST(CustomContentPipelineTest, BuiltInWritersDeclareStableSchemaAndCodecIdentit
         EXPECT_EQ(schemas[0].assetTypeName, item.assetTypeName) << item.inputType;
         EXPECT_EQ(schemas[0].codec.name, item.codecName) << item.inputType;
         EXPECT_EQ(schemas[0].codec.version, "1") << item.inputType;
+    }
+
+    const auto modelSchemas =
+        registry.ResolveWriter(Pipeline::ProcessedModelType)->OutputSchemaIdentities();
+    ASSERT_EQ(modelSchemas.size(), 3u);
+    EXPECT_EQ(modelSchemas[0].assetTypeId, Cnb::CnbAssetTypeId::Texture2D);
+    EXPECT_EQ(modelSchemas[0].codec.name, "CNA.Cnb.EncodeTexture2DToCnb");
+    EXPECT_EQ(modelSchemas[1].assetTypeId, Cnb::CnbAssetTypeId::Model);
+    EXPECT_EQ(modelSchemas[1].codec.name, "CNA.Cnb.EncodeModelToCnb");
+    EXPECT_EQ(modelSchemas[2].assetTypeId, Cnb::CnbAssetTypeId::AnimationClip);
+    EXPECT_EQ(modelSchemas[2].codec.name, "CNA.Cnb.EncodeAnimationClipToCnb");
+    for (const Pipeline::ContentWriterSchemaIdentity& schema : modelSchemas)
+    {
+        EXPECT_EQ(schema.assetSchemaVersion, 1u);
+        EXPECT_EQ(schema.codec.version, "1");
     }
 }
 

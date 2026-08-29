@@ -195,14 +195,16 @@ Imported values preserve source semantics where that distinction is meaningful:
 ```text
 PNG/JPEG/etc. -> ImportedImage -> CnbTextureData
 WAV           -> ImportedSound -> CnbSoundEffectData
-glTF          -> ImportedModelDocument -> CnbModelData
+glTF          -> ImportedModelDocument -> ProcessedModelBundle
 ```
 
 `ImportedImage` contains validated RGBA8 pixels and dimensions before texture policy. `ImportedSound`
 preserves whether accepted PCM samples were unsigned 8-bit or signed little-endian 16-bit until the
 processor performs the exact Pcm16 conversion. `ImportedModelDocument` is an owned lifetime seam
 over CNA's existing canonical glTF-to-CNJ interpretation, avoiding a second glTF parser while the
-shared importer is migrated further in memory.
+shared importer is migrated further in memory. `ProcessedModelBundle` always carries one primary
+`CnbModelData` and can additionally carry canonical Model, Texture2D, and AnimationClip values for
+the existing typed encoders.
 
 CNJ routes similarly produce explicit imported image, sound, font, volume, cube, Curve,
 AnimationClip, or Model-document values. A `Cnb*Data` type is used as processor output when it
@@ -227,7 +229,8 @@ Unknown, mistyped, non-finite, or invalid values are rejected by the selected pr
 effective parameter participates in the build fingerprint. Library callers set parameters on
 `ContentBuildRequest`; the optional strict `.cna-content.json` maps the same typed values into CLI
 builds. `TextureProcessor` accepts the string parameter `colorKey` in `R,G,B` decimal form.
-`SongProcessor` accepts `streamReference` and `name` strings plus a `durationMs` u64. Texture2D CNJ
+`SongProcessor` accepts `streamReference` and `name` strings plus a `durationMs` u64. `ModelProcessor`
+accepts the opt-in boolean `generateChildAssets` for glTF only. Texture2D CNJ
 can also author its existing color-key field. `VideoProcessor` requires u64 `width`/`height` and
 f64 `framesPerSecond`; `streamReference`, u64 `durationMs`, and u64 `soundtrackType` are optional.
 
@@ -260,7 +263,7 @@ Texture2DContentWriter    -> EncodeTexture2DToCnb()
 SoundEffectContentWriter -> EncodeSoundEffectToCnb()
 SongContentWriter        -> EncodeSongToCnb()
 VideoContentWriter       -> EncodeVideoToCnb()
-ModelContentWriter       -> EncodeModelToCnb()
+ModelContentWriter       -> EncodeModelToCnb() plus optional generated-child typed encoders
 Texture3DContentWriter    -> EncodeTexture3DToCnb()
 TextureCubeContentWriter -> EncodeTextureCubeToCnb()
 SpriteFontContentWriter  -> EncodeSpriteFontToCnb()
@@ -309,7 +312,7 @@ canonical type name, and loader through `ContentManager::RegisterCnbLoaderEXT<T>
 | `.wav` | `CNA.WavImporter/1` | `ImportedSound` | `CNA.SoundEffectProcessor/1` | `CNA.SoundEffectContentWriter/1` |
 | `.mp3`, `.ogg`, `.oga`, `.qoa`, `.flac`, `.opus`, `.aac`, `.wma` | `CNA.SongImporter/2` | `ImportedSongSource` | `CNA.SongProcessor/2` | `CNA.SongContentWriter/1` |
 | `.mp4`, `.ogv`, `.webm`, `.mkv`, `.avi`, `.mov` | `CNA.VideoImporter/2` | `ImportedVideoSource` | `CNA.VideoProcessor/2` | `CNA.VideoContentWriter/1` |
-| `.gltf`, `.glb` | `CNA.GltfImporter/1` | `ImportedModelDocument` | `CNA.ModelProcessor/1` | `CNA.ModelContentWriter/1` |
+| `.gltf`, `.glb` | `CNA.GltfImporter/2` | `ImportedModelDocument` | `CNA.ModelProcessor/2` | `CNA.ModelContentWriter/2` |
 | `.cnj` Texture2D | `CNA.CnjImporter/1` | `ImportedImage` | same texture processor | same Texture2D writer |
 | `.cnj` SoundEffect | `CNA.CnjImporter/1` | `ImportedSound` | same sound processor | same SoundEffect writer |
 | `.cnj` Model | `CNA.CnjImporter/1` | `ImportedModelDocument` | same Model processor | same Model writer |
@@ -325,6 +328,44 @@ the unambiguous SoundEffect route; it is not also registered as Song. `.ogg` rem
 unambiguous Song route even though FNA's legacy Video reader can probe one; ordinary Video formats
 use the non-colliding route above. Effect remains intentionally outside this project until CNA's
 shader/FX architecture is settled.
+
+### glTF scenes and generated children
+
+The shared glTF interpretation imports exactly the declared default scene, or the first scene when
+no default is declared; a document with no scenes imports its root nodes. Other scenes are not
+silently turned into Models. Within the selected scene the canonical converter groups mesh
+placements by skin, with one additional static group where applicable. One group is one Model.
+
+The default pipeline policy remains one primary Model. A single-group animated glTF succeeds and
+keeps every clip embedded in Model schema 1; the standalone authoring clip documents are not
+published. This path is byte-identical to the established direct glTF producer. A multi-group file
+is refused unless its asset config explicitly sets:
+
+```json
+{
+  "parameters": {
+    "generateChildAssets": { "type": "bool", "value": true }
+  }
+}
+```
+
+With that option, the lexicographically first canonical Model document becomes the primary logical
+asset and the remaining groups become named Model children. Generated standalone clips become
+AnimationClip children. Extracted external, buffer-view, and data-URI PNG/JPEG images are decoded
+headlessly through the shared image front end, processed into native Texture2D data, and written as
+Texture2D children. Their Model XREFs are remapped from temporary source-stem names to children
+under the configured logical Model name. All child values still use the existing schema-1 typed
+encoders; neither Model nor any other frozen schema changes.
+
+Generated names must retain the converter's source-stem prefix and pass ordinary logical-name
+containment. Colliding skin or animation names after filename sanitization are rejected before a
+file can overwrite another. Cross-node/primary collisions are rejected by the existing output
+reservation pass. The whole bundle remains one graph node: its children share one fingerprint,
+staging transaction, manifest owner, rebuild decision, and garbage-collection lifetime. This mode
+improves deployability and reuse by `ContentManager`; it does not claim cache isolation between a
+Model and its extracted texture/clip children. Making those independent graph nodes would require
+a new generated-source scheduling contract and would not reduce Model rebuilds while schema 1
+still embeds clips and material XREF choices.
 
 ### Streaming Song and Video sources
 
@@ -368,7 +409,7 @@ configured. Duration remains zero when unknown, and soundtrack type defaults to 
 
 The compiler publishes the Song/Video metadata `.cnb` and streams a byte-identical media copy to
 the content-root-relative XREF path. The copy is not a writer output and is never embedded in CNB.
-It has a separate manifest-v4 source/path/digest record, participates in output reservation, skip
+It has a separate manifest source/path/digest record, participates in output reservation, skip
 verification, atomic publication and ownership-safe garbage collection, and uses at most 1 MiB of
 copy buffer. A configured `streamReference` changes both the CNB XREF and deployment destination.
 
@@ -992,11 +1033,14 @@ separately fingerprinted/owned support files without embedding it in CNB.
 - custom registration and the user-built `CNA::ContentCompiler` embedding surface;
 - component names/versions as user configuration identifiers, plus explicit writer asset/schema and
   codec identities used by cache fingerprints;
+- opt-in glTF Model/Texture2D/AnimationClip generated bundles and their naming policy;
 - content-build edges, dependency builds, and bounded parallel scheduling.
 
 **Future:**
 
 - optional target profiles, if a concrete portable-output policy requires them;
+- independently scheduled glTF generated assets only if a concrete cache-isolation benefit
+  justifies a generated-source graph contract;
 - broader XNB Model support only through a separately reviewed Model schema revision that can preserve
   the unsupported vertex, effect/material, tag, shared-resource, and external-reference semantics.
 

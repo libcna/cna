@@ -865,7 +865,7 @@ TEST(XnbContentPipelineTest, LosslessModelSubsetProducesCanonicalNativeModel)
     EXPECT_EQ(first.importer,
               (Pipeline::ContentComponentIdentity{"CNA.XnbImporter", "2"}));
     EXPECT_EQ(first.processor,
-              (Pipeline::ContentComponentIdentity{"CNA.ModelProcessor", "1"}));
+              (Pipeline::ContentComponentIdentity{"CNA.ModelProcessor", "2"}));
     EXPECT_EQ(first.output.bytes, second.output.bytes);
     ASSERT_EQ(actual.bones.size(), 1u);
     ASSERT_EQ(actual.meshes.size(), 1u);

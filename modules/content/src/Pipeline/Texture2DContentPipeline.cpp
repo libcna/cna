@@ -5,6 +5,7 @@
 #include <array>
 #include <charconv>
 #include <fstream>
+#include <iterator>
 #include <limits>
 #include <optional>
 #include <stdexcept>
@@ -146,6 +147,28 @@ namespace CNA::Content::Pipeline
         return imported;
     }
 
+    Cnb::CnbTextureData BuildCnbTexture2DData(ImportedImage image)
+    {
+        std::vector<std::vector<std::uint8_t>> levels;
+        levels.reserve(1u + image.additionalRgbaMipLevels.size());
+        levels.push_back(std::move(image.rgbaPixels));
+        levels.insert(levels.end(),
+                      std::make_move_iterator(image.additionalRgbaMipLevels.begin()),
+                      std::make_move_iterator(image.additionalRgbaMipLevels.end()));
+
+        Cnb::CnbTextureData texture;
+        texture.width = image.width;
+        texture.height = image.height;
+        texture.depth = 1u;
+        texture.faceCount = 1u;
+        texture.mipCount = static_cast<std::uint32_t>(levels.size());
+        Cnb::CnbTextureRepresentation representation;
+        representation.format = Cnb::CnbTextureFormat::Rgba8;
+        representation.levels = std::move(levels);
+        texture.representations.push_back(std::move(representation));
+        return texture;
+    }
+
     ContentComponentIdentity TextureProcessor::Identity() const
     {
         return {kTextureProcessorName, "1"};
@@ -179,18 +202,13 @@ namespace CNA::Content::Pipeline
     ContentValue TextureProcessor::Process(const ContentValue& input,
                                            ContentProcessorContext& context) const
     {
-        const ImportedImage& image = input.Get<ImportedImage>();
-        std::vector<std::vector<std::uint8_t>> levels;
-        levels.reserve(1u + image.additionalRgbaMipLevels.size());
-        levels.push_back(image.rgbaPixels);
-        levels.insert(levels.end(), image.additionalRgbaMipLevels.begin(),
-                      image.additionalRgbaMipLevels.end());
+        ImportedImage image = input.Get<ImportedImage>();
         std::optional<std::array<std::uint8_t, 3>> colorKey =
             ReadColorKey(context.Parameters());
         if (!colorKey.has_value()) { colorKey = image.authoredColorKey; }
         if (colorKey.has_value())
         {
-            for (std::vector<std::uint8_t>& pixels : levels)
+            const auto applyColorKey = [&](std::vector<std::uint8_t>& pixels)
             {
                 for (std::size_t index = 0u; index + 3u < pixels.size(); index += 4u)
                 {
@@ -201,21 +219,16 @@ namespace CNA::Content::Pipeline
                         pixels[index + 3u] = 0u;
                     }
                 }
+            };
+            applyColorKey(image.rgbaPixels);
+            for (std::vector<std::uint8_t>& pixels : image.additionalRgbaMipLevels)
+            {
+                applyColorKey(pixels);
             }
         }
-
-        Cnb::CnbTextureData texture;
-        texture.width = image.width;
-        texture.height = image.height;
-        texture.depth = 1u;
-        texture.faceCount = 1u;
-        texture.mipCount = static_cast<std::uint32_t>(levels.size());
-        Cnb::CnbTextureRepresentation representation;
-        representation.format = Cnb::CnbTextureFormat::Rgba8;
-        representation.levels = std::move(levels);
-        texture.representations.push_back(std::move(representation));
         context.LogInfo("prepared Texture2D Rgba8 mip data for CNB encoding.");
-        return ContentValue::Create(ProcessedTexture2DType, std::move(texture));
+        return ContentValue::Create(ProcessedTexture2DType,
+                                    BuildCnbTexture2DData(std::move(image)));
     }
 
     ContentComponentIdentity Texture2DContentWriter::Identity() const

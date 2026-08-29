@@ -280,9 +280,9 @@ TEST(CnjContentPipelineTest, ModelConvergesOnTheExistingModelProcessorAndWriter)
     ASSERT_EQ(std::system(command.c_str()), 0);
 
     const Pipeline::ContentBuildResult result = Build(scratch.Path(), "asset.cnj", "Models/asset");
-    EXPECT_EQ(result.processor, (Pipeline::ContentComponentIdentity{"CNA.ModelProcessor", "1"}));
+    EXPECT_EQ(result.processor, (Pipeline::ContentComponentIdentity{"CNA.ModelProcessor", "2"}));
     EXPECT_EQ(result.writer,
-              (Pipeline::ContentComponentIdentity{"CNA.ModelContentWriter", "1"}));
+              (Pipeline::ContentComponentIdentity{"CNA.ModelContentWriter", "2"}));
     EXPECT_GT(result.dependencies.size(), 2u);
     const Cnb::CnjToCnbResult oracle = Cnb::CompileCnjToCnb(
         (scratch.Path() / "asset.cnj").string(), scratch.Path().string(), "Models/asset");

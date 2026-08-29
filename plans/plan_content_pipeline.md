@@ -401,7 +401,9 @@ Built-in writers are adapters only:
 ```text
 Texture2DContentWriter(CnbTextureData) -> EncodeTexture2DToCnb()
 SoundEffectContentWriter(CnbSoundEffectData) -> EncodeSoundEffectToCnb()
-ModelContentWriter(CnbModelData) -> EncodeModelToCnb()
+ModelContentWriter(ProcessedModelBundle) -> EncodeModelToCnb()
+                                         -> optional EncodeTexture2DToCnb()
+                                         -> optional EncodeAnimationClipToCnb()
 Texture3DContentWriter(CnbTextureData) -> EncodeTexture3DToCnb()
 TextureCubeContentWriter(CnbTextureData) -> EncodeTextureCubeToCnb()
 SpriteFontContentWriter(CnbSpriteFontData) -> EncodeSpriteFontToCnb()
@@ -701,15 +703,17 @@ loading remains the existing typed decoder/loader responsibility.
  -> existing EncodeModelToCnb
 ```
 
-Implemented identities are `CNA.GltfImporter/1`, `CNA.ModelProcessor/1` and
-`CNA.ModelContentWriter/1`. The equivalence-hardened converter is compiled once into
+The CP-009 identities were `CNA.GltfImporter/1`, `CNA.ModelProcessor/1` and
+`CNA.ModelContentWriter/1`; CP-046 deliberately advances all three to version 2 for the processed
+bundle/output-set contract. The equivalence-hardened converter is compiled once into
 `cna_content`; `cna-content` and `cna_tool_gltf_to_cnb` link that same implementation. The
 standalone CNJ tool retains its CLI/oracle entry point. No new cgltf interpretation, CNJ reader or
 Model serializer was introduced.
 
-The importer returns a source-oriented canonical Model document rather than pretending that the
+The importer returns source-oriented canonical Model documents rather than pretending that the
 wire-oriented `CnbModelData` is an import result. The processor is the only stage that invokes
-`BuildCnbModelFromCnj`, registers the returned runtime references, and produces `CnbModelData`.
+`BuildCnbModelFromCnj`, registers the returned runtime references, and produces the canonical
+primary/child bundle.
 External glTF buffers/images are collected through the exact same URI resolver that enforces
 directory and symlink containment, then recorded as source dependencies through
 `ContentImporterContext`. Generated staging paths never enter output bytes or fingerprints.
@@ -722,11 +726,8 @@ builds are deterministic, typed Model decode succeeds, and the resulting CNB loa
 existing `ContentManager` Model path in the HEADLESS configuration. The final focused run passed
 73 pipeline, direct-tool, containment and CNB golden-vector cases.
 
-Two multi-output issues are deliberately not hidden. A glTF producing several Model documents is
-rejected with an explicit graph-scheduling diagnostic by the one-output `ContentPipeline::Build`
-API. Textured glTF currently preserves the legacy generated texture XREF names; producing those
-textures as child `.cnb` artifacts needs the content-build graph decision recorded in section 14.
-The dependency/XREF distinction is nevertheless real and tested now, rather than inferred later.
+This CP-009 snapshot predates the bounded multi-output graph. `CP-046` now supplies the optional
+generated-child policy while preserving this default single-Model byte oracle; see section 22.
 
 ### 6.4 CNJ convergence (`CP-010`)
 
@@ -1186,7 +1187,7 @@ carrying forward task-local results:
 | `CP-043` | **completed** | Added sorted previous-owned minus next-owned collection only after every node succeeds and before manifest replacement. A valid prior manifest plus unchanged recorded SHA-256 proves each regular non-symlink candidate; all parents must be real directories inside the canonical output root. There is no tree/extension scan or recursive deletion. Corrupt manifests authorize nothing, failed builds collect nothing, and changed/symlinked/indeterminate candidates fail conservatively with the old manifest retained. Tests cover removal, logical rename, multi-output contraction, manual files, corruption, failed builds, digest replacement, symlink escape, recovery ordering and workers 1/2/4 deterministic trees. |
 | `CP-044` | **completed** | Added an explicit bounded deployment-file result separate from CNB writer outputs and runtime XREFs. Song/Video and XNB Song/Video register their canonical media source and final XREF path; manifest v4 stores contained source/path/SHA-256 ownership. Preparation and publication stream through the existing atomic helper with a 1 MiB buffer, skip checks verify support digests, reservations reject compiled/cross-node collisions, and CP-043 GC handles renamed/removed support paths. In-place single-file media is never copied or owned; every other destination inside the source root is rejected. Tests cover direct and XNB routes, overrides, tamper repair, source change, removal/rename GC, manual-file survival, collision/escape guards, failed-publication recovery and workers 1/2/4 deterministic trees. Importer/processor identities moved to version 2; frozen Song/Video CNB bytes remain identical. The generated inventory now records 9,298 symbols with all 467 experimental pipeline rows planned under `CBIND-117`; no C route, export or ABI version changed. |
 | `CP-045` | **completed** | Added sorted `ContentWriterSchemaIdentity` declarations containing asset ID/name, native schema version and explicit codec name/version. The core rejects incomplete/duplicate/undeclared identities; manifest v5 persists and fingerprints declarations plus per-output schema/name, and versions 1–4 rebuild safely. The skip path compares the current declaration without executing the writer. All ten built-ins declare their frozen schema-1 encoders, and the real custom compiler proves independently stale asset ID, type name, schema and codec records all force rebuild while unchanged identities skip. The generated inventory records 9,319 symbols/488 experimental pipeline rows under `CBIND-117`; no RTTI, C API route/export/version, CNB schema or encoder byte changed. |
-| `CP-046` | **planned** | Audit real glTF multi-Model/generated-child cases against the existing graph; implement only deterministic optional output behavior that preserves default direct-glTF bytes. |
+| `CP-046` | **completed** | Audited scenes, skin/static Model groups, embedded/standalone clips, external/data-URI textures and the existing output graph. A single animated Model now builds normally with identical primary bytes. Optional bool `generateChildAssets` publishes canonical additional Models, standalone AnimationClips and remapped native Texture2D children through the existing typed encoders; multi-Model input requires this explicit mode. Default-scene selection remains unchanged, the lexicographically first generated Model is primary, sanitized group/clip name collisions fail before overwrite, and ordinary reservations/atomic staging/manifest ownership/CP-043 contraction GC govern the bundle. Real fixtures prove embedded/child clip equivalence, external/embedded texture decode, multi-Model semantics, default producer bytes, no-op/incremental contraction and workers 1/2/4 identical trees. The inventory now records 9,332 symbols/501 pipeline rows under `CBIND-117`; no C route/export/version, frozen schema or default glTF byte changed. |
 | `CP-047` | **planned** | Audit MonoGame XNB LZ4 framing/dependencies and implement bounded decoding only if the exact variant can be supported safely without a bespoke unproven codec. |
 | `CP-048` | **planned** | Fix the MinGW `wmain` entry-point link seam if locally owned, then close the continuation with portability, sanitizer, determinism, security, CMake/C-API and documentation verification. |
 
@@ -1205,10 +1206,9 @@ the ordering wrong; it is not a promise to build speculative abstractions.
 * glTF's last orchestration is physically tool-owned and file-staged even though it is now one
   linked library implementation. An eager in-memory rewrite could break the strongest existing
   equivalence oracle; the staging seam should move only with pinned outputs.
-* The bounded multi-output API can publish generated CNB children, but existing glTF conversion
-  still rejects multi-Model input and does not yet extract standalone clips or texture child
-  assets. Those routes need explicit canonical processor results and CP-024 graph edges rather than
-  being enabled implicitly by the generic writer facility.
+* Optional glTF generated children remain one bounded graph node. This deliberately does not offer
+  independent cache invalidation for extracted clips/textures; Model schema 1 embeds clips and its
+  material references still make the Model dependent on the selected generated texture identities.
 * A string type ID and C++ type can disagree in a custom extension. Checked boxing/unboxing and
   diagnostics are mandatory; the string is persistent identity, the RTTI guard is only defensive.
 * Dependency correctness precedes incremental correctness. An incomplete dependency set must force
@@ -1278,9 +1278,6 @@ the ordering wrong; it is not a promise to build speculative abstractions.
   closure and consumer set are measured.
 * Whether a future build dependency may intentionally live outside source root, and what explicit
   capability grants that access.
-* Whether one source producing several logical assets (glTF skins/clips) should be one graph node
-  with several outputs or deterministic child nodes. Current glTF behavior makes this a real design
-  question; it will be settled before recursive build APIs.
 
 ---
 
@@ -1429,11 +1426,10 @@ removes process-stack depth from graph correctness. The permanent integration or
 proves one complete deterministic chain, 4,096 failed nodes, no publication, and preservation of
 the last valid manifest. The same case passes combined ASan+UBSan.
 
-The review also identified independent policy work. CP-042 subsequently supplied the staging age
-and live-owner protocol without changing the graph/publisher. Orphan-output collection still needs
-an explicit ownership/retention policy; raw Song/Video support-file copying needs deployment
-semantics; and glTF child/multi-Model output or custom schema-version fingerprints change component
-contracts. None was guessed as a side effect of the XNB phase.
+The review also identified independent policy work. CP-042 through CP-046 subsequently supplied
+staging recovery, manifest-proven obsolete ownership collection, Song/Video deployment,
+writer/schema/codec cache identities, and the optional glTF child/multi-Model policy without
+replacing the graph or publisher.
 
 ---
 
@@ -1635,8 +1631,9 @@ media/XNB source -> ordinary importer -> ordinary processor -> ordinary CNB writ
 It is not a raw-media writer output, inferred XREF copy, embedded CNB chunk, alternate scheduler or
 CMake-side copy.
 
-Manifest version 4 adds a sorted `deploymentFiles` list containing source-root-relative source,
-output-root-relative path and SHA-256. Source/destination identity participates in the direct
+CP-044's manifest version 4 added a sorted `deploymentFiles` list containing source-root-relative
+source, output-root-relative path and SHA-256; CP-045's version 5 retains it unchanged.
+Source/destination identity participates in the direct
 fingerprint; source bytes already participate through the primary/source-file dependency. Support
 paths share the coordinator's physical reservations with compiled outputs and other nodes. Skip
 checks require both the CNB and support digests. CP-043 ownership inventories include support paths,
@@ -1711,3 +1708,71 @@ versions 1–4 rebuild without migration because none could prove the full curre
 All ten built-in writers declare their existing schema-1 `Encode*ToCnb()` route with codec version
 1. These are new cache identities only: no frozen container/schema constant, chunk, CRC, encoder,
 golden vector or output byte was modified.
+
+---
+
+## 22. glTF Model/generated-child policy (`CP-046`)
+
+The audit began with real products from the shared `ConvertGltfToCnj()` implementation rather than
+an imagined multi-output design. It found that `GltfImporter` treated every generated CNJ document
+as if it were a Model: a normal animated file therefore failed merely because its standalone clip
+documents made `documents.size() > 1`. A default scene containing static geometry plus a skin, or
+two skins, genuinely produces several Model documents and failed through the same imprecise check.
+Extracted images survived only as temporary loose PNG/JPEG files while the Model retained an XREF
+to their temporary source-stem name.
+
+| glTF semantic/product | Existing native representation | CP-046 policy |
+|---|---|---|
+| declared default scene | one scene graph in Model schema 1 | unchanged: import it only |
+| no declared default | first scene | unchanged and deterministic |
+| no scenes array | root-node fallback | unchanged |
+| other scenes | no place in one Model's selected scene | not emitted or silently selected |
+| one static/skin group | primary `CnbModelData` | default exact path |
+| several skin/static groups | several canonical Model CNJs | explicit generated-child mode; lexicographically first Model is primary |
+| animation clips in a Model | embedded schema-1 animations | always retained in the primary/group Model |
+| standalone clip documents | schema-1 `AnimationClip` | optional generated children; semantic fields compared with embedded clips |
+| external image URI | source dependency plus extracted image | optional native Texture2D child |
+| data URI / buffer-view image | extracted image with no authored image file | optional native Texture2D child |
+| vertex/index/skeleton/morph sidecars | absorbed Model bytes | remain internal; never child assets |
+| material/effect state | Model schema-1 part/material fields | remains in Model; no extraction |
+| generated output ownership | bounded additional outputs | same node, publisher, manifest and CP-043 GC |
+
+`ModelProcessor` accepts one new boolean, `generateChildAssets`, only for glTF imports. It is off by
+default. A single-group animated source now builds by ignoring only the redundant standalone clip
+documents; the clips already embedded in its Model are preserved, and its primary CNB remains
+byte-identical to `cna_tool_gltf_to_cnb`. A true multi-Model source still fails unless the option is
+true, so no arbitrary group silently wins.
+
+When enabled, the processor builds every Model through `BuildCnbModelFromCnj`, parses generated
+clips through shared `ReadCnjAnimationClip`, and decodes each referenced generated image through
+`DecodeImportedImage` plus the same parameter-free `BuildCnbTexture2DData` core used by
+`TextureProcessor`. `ModelContentWriter` declares the three frozen schema/codec identities and
+delegates to `EncodeModelToCnb`, `EncodeAnimationClipToCnb`, or `EncodeTexture2DToCnb`. This is one
+canonical glTF parser and the existing processors/codecs, not a second importer or wire writer.
+
+Child logical names replace the canonical source-stem prefix with the configured primary logical
+name. Texture XREFs are remapped to those names only in the opt-in mode, making the resulting tree
+deployable and avoiding a temporary name leaking into runtime resolution. Default mode does not
+remap and therefore preserves its established Model bytes. Every generated file must be a regular
+non-symlink child of the owned intermediate root. Unsafe names fail the normal CNB logical-name
+check; generated children cannot shadow discovered primaries because the existing physical
+reservation pass sees the complete result before publication.
+
+The shared converter now also rejects two group names or two animation names that sanitize to the
+same filename. Previously the later conversion overwrote the earlier file and document de-duplication
+could make the loss look like a legitimate single output. Rejection occurs during import, before a
+Model can be selected or published.
+
+Independent graph nodes were rejected for this slice. Model schema 1 embeds clips, so extracting a
+clip does not remove it from the Model fingerprint or rebuild. Texture pixels are external at
+runtime, but the canonical glTF conversion still decides texture identity/material references as
+part of the Model. A generated-source scheduling API would add a second ownership lifetime without
+demonstrated rebuild savings. The bounded children instead share one direct/effective fingerprint,
+atomic staging set, manifest owner, and failure outcome. A successful option contraction removes
+only old manifest-owned children through CP-043; a failed rebuild retains the old manifest/content.
+
+Real corpus tests cover one animated Model with two clips, a static-plus-skin two-Model source,
+external and data-URI textures, collision rejection, semantic child decoding, default producer
+byte equality, cold/no-op builds, successful child-set contraction, and byte-identical output trees
+and manifests under workers 1, 2, and 4. No container, asset schema, chunk, CRC, golden vector, or
+default direct-glTF byte changed.

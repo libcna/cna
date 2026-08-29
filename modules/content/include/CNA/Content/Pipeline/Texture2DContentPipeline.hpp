@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "CNA/Content/Cnb/CnbTextureCodec.hpp"
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
 
 namespace CNA::Content::Pipeline
@@ -48,6 +49,17 @@ namespace CNA::Content::Pipeline
      * @return Validated dimensions and exact Rgba8 pixels.
      */
     [[nodiscard]] ImportedImage DecodeImportedImage(const std::filesystem::path& source);
+
+    /**
+     * @brief Converts validated source-oriented pixels into canonical Texture2D CNB data.
+     *
+     * This is the parameter-free core used by TextureProcessor and generated glTF texture
+     * children after any source-specific policy has already been applied.
+     *
+     * @param image Validated decoded image and optional mip levels.
+     * @return One canonical Rgba8 Texture2D representation.
+     */
+    [[nodiscard]] Cnb::CnbTextureData BuildCnbTexture2DData(ImportedImage image);
 
     /** @brief Headless source image importer backed by CNA's shared image decoder. */
     class ImageImporter final : public ContentImporter

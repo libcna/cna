@@ -5,15 +5,19 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include <gtest/gtest.h>
 
+#include "CNA/Content/Cnb/CnbAnimationClipCodec.hpp"
 #include "CNA/Content/Cnb/CnbDocument.hpp"
 #include "CNA/Content/Cnb/CnbModelCodec.hpp"
+#include "CNA/Content/Cnb/CnbTextureCodec.hpp"
 #include "CNA/Content/Pipeline/ContentBuildManifest.hpp"
 #include "CNA/Content/Pipeline/ModelContentPipeline.hpp"
 #include "CNA/GraphicsCapability.hpp"
@@ -98,13 +102,19 @@ namespace
     }
 
     Pipeline::ContentBuildResult BuildModel(const std::filesystem::path& fixture,
-                                            const std::string& logicalName)
+                                            const std::string& logicalName,
+                                            std::optional<bool> generateChildAssets = std::nullopt)
     {
         const Pipeline::ContentPipeline pipeline(MakeRegistry());
         Pipeline::ContentBuildRequest request;
         request.sourceRoot = fixture.parent_path();
         request.source = fixture;
         request.logicalName = logicalName;
+        if (generateChildAssets.has_value())
+        {
+            request.parameters.Set(Pipeline::ModelGenerateChildAssetsParameter,
+                                   *generateChildAssets);
+        }
         return pipeline.Build(request);
     }
 }
@@ -115,11 +125,11 @@ TEST(ModelContentPipelineTest, RunsDistinctHeadlessStagesAndReusesTheFrozenModel
     if (fixture.empty()) { GTEST_SKIP() << "glTF fixture not found"; }
 
     const Pipeline::ContentBuildResult result = BuildModel(fixture, "asset");
-    EXPECT_EQ(result.importer, (Pipeline::ContentComponentIdentity{"CNA.GltfImporter", "1"}));
+    EXPECT_EQ(result.importer, (Pipeline::ContentComponentIdentity{"CNA.GltfImporter", "2"}));
     EXPECT_EQ(result.processor,
-              (Pipeline::ContentComponentIdentity{"CNA.ModelProcessor", "1"}));
+              (Pipeline::ContentComponentIdentity{"CNA.ModelProcessor", "2"}));
     EXPECT_EQ(result.writer,
-              (Pipeline::ContentComponentIdentity{"CNA.ModelContentWriter", "1"}));
+              (Pipeline::ContentComponentIdentity{"CNA.ModelContentWriter", "2"}));
     EXPECT_EQ(result.output.assetTypeId, Cnb::CnbAssetTypeId::Model);
     EXPECT_EQ(result.output.assetTypeName, "Microsoft.Xna.Framework.Graphics.Model");
     ASSERT_EQ(result.dependencies.size(), 1u);
@@ -159,6 +169,176 @@ TEST(ModelContentPipelineTest, IsByteIdenticalToTheExistingDirectGltfProducer)
     EXPECT_EQ(first.output.bytes, second.output.bytes);
     EXPECT_EQ(first.output.bytes, ReadBytes(scratch.Path() / "asset.cnb"));
 #endif
+}
+
+TEST(ModelContentPipelineTest, AnimatedSingleModelKeepsEmbeddedClipsWithoutChangingPrimaryBytes)
+{
+#if !defined(CNA_GLTF_TO_CNB_TOOL_PATH)
+    GTEST_SKIP() << "the direct glTF producer was not built";
+#else
+    const std::filesystem::path fixture = FindFixture("anim-two-clips.gltf");
+    if (fixture.empty()) { GTEST_SKIP() << "animated glTF fixture not found"; }
+    ScratchDirectory scratch("animated_oracle");
+
+    const std::string command = std::string(CNA_GLTF_TO_CNB_TOOL_PATH) + " " +
+                                fixture.string() + " " + scratch.Path().string() +
+                                " actor --quiet >/dev/null 2>&1";
+    ASSERT_EQ(std::system(command.c_str()), 0);
+
+    const Pipeline::ContentBuildResult result = BuildModel(fixture, "actor");
+    EXPECT_TRUE(result.output.additionalOutputs.empty());
+    EXPECT_EQ(result.output.bytes, ReadBytes(scratch.Path() / "actor.cnb"));
+    const Cnb::CnbModelData model = Cnb::DecodeModelFromCnb(
+        Cnb::CnbDocument::Parse(result.output.bytes, "animated model.cnb"));
+    ASSERT_EQ(model.animations.size(), 2u);
+    EXPECT_EQ(model.animations[0].name, "Walk");
+    EXPECT_EQ(model.animations[1].name, "Clip1");
+#endif
+}
+
+TEST(ModelContentPipelineTest, GeneratedChildModePublishesEquivalentStandaloneAnimationClips)
+{
+    const std::filesystem::path fixture = FindFixture("anim-two-clips.gltf");
+    if (fixture.empty()) { GTEST_SKIP() << "animated glTF fixture not found"; }
+
+    const Pipeline::ContentBuildResult result =
+        BuildModel(fixture, "Models/actor", true);
+    const Cnb::CnbModelData model = Cnb::DecodeModelFromCnb(
+        Cnb::CnbDocument::Parse(result.output.bytes, "animated model bundle.cnb"));
+    ASSERT_EQ(model.animations.size(), 2u);
+    ASSERT_EQ(result.output.additionalOutputs.size(), 2u);
+
+    const std::map<std::string, const Cnb::CnbModelAnimation*> embedded = {
+        {"Models/actor_Clip1", &model.animations[1]},
+        {"Models/actor_Walk", &model.animations[0]}};
+    for (const Pipeline::ContentAdditionalWriteOutput& child :
+         result.output.additionalOutputs)
+    {
+        ASSERT_EQ(child.assetTypeId, Cnb::CnbAssetTypeId::AnimationClip);
+        const auto expected = embedded.find(child.logicalName);
+        ASSERT_NE(expected, embedded.end()) << child.logicalName;
+        const auto decoded = Cnb::DecodeAnimationClipFromCnb(
+            Cnb::CnbDocument::Parse(child.bytes, child.logicalName + ".cnb"));
+        EXPECT_EQ(decoded.Duration.getTicksProperty(),
+                  expected->second->clip.Duration.getTicksProperty());
+        EXPECT_EQ(decoded.TargetSpace, expected->second->clip.TargetSpace);
+        EXPECT_EQ(decoded.Tracks.size(), expected->second->clip.Tracks.size());
+    }
+}
+
+TEST(ModelContentPipelineTest, MultiModelGltfRequiresOptInAndPublishesEveryGroupDeterministically)
+{
+    const std::filesystem::path fixture = FindFixture("skin-plus-static-mesh.gltf");
+    if (fixture.empty()) { GTEST_SKIP() << "multi-group glTF fixture not found"; }
+
+    try
+    {
+        static_cast<void>(BuildModel(fixture, "Models/compound"));
+        FAIL() << "multi-Model glTF built without explicit child-output policy";
+    }
+    catch (const Pipeline::ContentPipelineError& error)
+    {
+        EXPECT_EQ(error.Stage(), Pipeline::ContentPipelineStage::Process);
+        EXPECT_NE(std::string(error.what()).find("produced 2 Model documents"),
+                  std::string::npos) << error.what();
+        EXPECT_NE(std::string(error.what()).find("generateChildAssets"),
+                  std::string::npos) << error.what();
+    }
+
+    const Pipeline::ContentBuildResult first =
+        BuildModel(fixture, "Models/compound", true);
+    const Pipeline::ContentBuildResult second =
+        BuildModel(fixture, "Models/compound", true);
+    EXPECT_EQ(first.output.bytes, second.output.bytes);
+    ASSERT_EQ(first.output.additionalOutputs.size(), 1u);
+    EXPECT_EQ(first.output.additionalOutputs[0].logicalName, "Models/compound_static");
+    EXPECT_EQ(first.output.additionalOutputs[0].assetTypeId, Cnb::CnbAssetTypeId::Model);
+    EXPECT_EQ(first.output.additionalOutputs[0].bytes,
+              second.output.additionalOutputs[0].bytes);
+
+    const Cnb::CnbModelData primary = Cnb::DecodeModelFromCnb(
+        Cnb::CnbDocument::Parse(first.output.bytes, "primary multi-Model output"));
+    const Cnb::CnbModelData child = Cnb::DecodeModelFromCnb(
+        Cnb::CnbDocument::Parse(first.output.additionalOutputs[0].bytes,
+                                "static multi-Model child"));
+    EXPECT_TRUE(primary.skeleton.has_value());
+    EXPECT_FALSE(child.skeleton.has_value());
+    EXPECT_FALSE(primary.meshes.empty());
+    EXPECT_FALSE(child.meshes.empty());
+}
+
+TEST(ModelContentPipelineTest, CollidingSanitizedSkinNamesAreRejectedBeforeAnyModelIsSelected)
+{
+    const std::filesystem::path fixture = FindFixture("skin-plus-static-mesh.gltf");
+    if (fixture.empty()) { GTEST_SKIP() << "multi-group glTF fixture not found"; }
+    ScratchDirectory scratch("colliding_skin_names");
+    const std::filesystem::path source = scratch.Path() / "collision.gltf";
+
+    const std::vector<std::uint8_t> original = ReadBytes(fixture);
+    std::string json(original.begin(), original.end());
+    const std::string authored = "\"name\": \"Skin\"";
+    const std::size_t position = json.find(authored);
+    ASSERT_NE(position, std::string::npos);
+    json.replace(position, authored.size(), "\"name\": \"static\"");
+    WriteBytes(source, std::vector<std::uint8_t>(json.begin(), json.end()));
+    for (const char* sidecar : {"skin-plus-static-mesh.vb.bin",
+                                "skin-plus-static-mesh.ib.bin",
+                                "skin-plus-static-mesh.p1.vb.bin",
+                                "skin-plus-static-mesh.p1.ib.bin"})
+    {
+        WriteBytes(scratch.Path() / sidecar, ReadBytes(fixture.parent_path() / sidecar));
+    }
+
+    try
+    {
+        static_cast<void>(BuildModel(source, "Models/collision", true));
+        FAIL() << "colliding sanitized Model names were silently selected or overwritten";
+    }
+    catch (const Pipeline::ContentPipelineError& error)
+    {
+        EXPECT_EQ(error.Stage(), Pipeline::ContentPipelineStage::Import);
+        EXPECT_NE(std::string(error.what()).find("collide after skin-name filename sanitization"),
+                  std::string::npos) << error.what();
+    }
+}
+
+TEST(ModelContentPipelineTest, GeneratedTextureChildrenAreCompiledAndReferencesAreRemapped)
+{
+    for (const char* fixtureName : {"gltf-external-image.gltf", "gltf-data-uri-image.gltf"})
+    {
+        const std::filesystem::path fixture = FindFixture(fixtureName);
+        if (fixture.empty()) { GTEST_SKIP() << fixtureName << " fixture not found"; }
+
+        const Pipeline::ContentBuildResult baseline =
+            BuildModel(fixture, "Models/car");
+        const Pipeline::ContentBuildResult generated =
+            BuildModel(fixture, "Models/car", true);
+        ASSERT_FALSE(baseline.runtimeReferences.empty()) << fixtureName;
+        ASSERT_FALSE(generated.runtimeReferences.empty()) << fixtureName;
+        ASSERT_EQ(generated.output.additionalOutputs.size(), 1u) << fixtureName;
+        const Pipeline::ContentAdditionalWriteOutput& texture =
+            generated.output.additionalOutputs.front();
+        EXPECT_EQ(texture.logicalName, "Models/car_tex0.png") << fixtureName;
+        EXPECT_EQ(texture.assetTypeId, Cnb::CnbAssetTypeId::Texture2D) << fixtureName;
+        EXPECT_EQ(generated.runtimeReferences.front().logicalName,
+                  texture.logicalName) << fixtureName;
+        EXPECT_EQ(generated.runtimeReferences.front().expectedAssetTypeId,
+                  Cnb::CnbAssetTypeId::Texture2D) << fixtureName;
+        EXPECT_NE(baseline.runtimeReferences.front().logicalName,
+                  generated.runtimeReferences.front().logicalName) << fixtureName;
+
+        const Cnb::CnbDocument textureDocument =
+            Cnb::CnbDocument::Parse(texture.bytes, texture.logicalName + ".cnb");
+        const Cnb::CnbTextureData decoded = Cnb::DecodeTexture2DFromCnb(textureDocument);
+        EXPECT_EQ(decoded.width, 16u) << fixtureName;
+        EXPECT_EQ(decoded.height, 16u) << fixtureName;
+
+        const Cnb::CnbModelData model = Cnb::DecodeModelFromCnb(
+            Cnb::CnbDocument::Parse(generated.output.bytes, "generated texture model"));
+        ASSERT_FALSE(model.parts.empty()) << fixtureName;
+        EXPECT_EQ(model.parts.front().material.baseColorTexture,
+                  texture.logicalName) << fixtureName;
+    }
 }
 
 TEST(ModelContentPipelineTest, ReportsSourceDependenciesSeparatelyFromRuntimeXrefs)
@@ -303,5 +483,20 @@ TEST(ModelContentPipelineTest, RejectsParametersAtTheProcessorBoundary)
     {
         EXPECT_EQ(error.Stage(), Pipeline::ContentPipelineStage::Process);
         EXPECT_EQ(error.Component(), "CNA.ModelProcessor");
+    }
+
+    request.parameters = {};
+    request.parameters.Set(Pipeline::ModelGenerateChildAssetsParameter,
+                           std::string("true"));
+    try
+    {
+        static_cast<void>(pipeline.Build(request));
+        FAIL() << "ModelProcessor accepted a mistyped child-output option";
+    }
+    catch (const Pipeline::ContentPipelineError& error)
+    {
+        EXPECT_EQ(error.Stage(), Pipeline::ContentPipelineStage::Process);
+        EXPECT_NE(std::string(error.what()).find("must be a bool"), std::string::npos)
+            << error.what();
     }
 }

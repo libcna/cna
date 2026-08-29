@@ -892,6 +892,90 @@ TEST(ContentPipelineCliTest, GltfImageDependencyInvalidatesOnlyItsRelevantAssets
     EXPECT_EQ(ReadBytes(output / "Textures" / "independent.cnb"), independent);
 }
 
+TEST(ContentPipelineCliTest, GltfGeneratedChildrenAreAtomicOwnedAndWorkerDeterministic)
+{
+    const std::vector<std::string> fixtureFiles = {
+        "anim-two-clips.gltf", "anim-two-clips.vb.bin", "anim-two-clips.ib.bin",
+        "gltf-data-uri-image.gltf", "gltf-data-uri-image.vb.bin",
+        "gltf-data-uri-image.ib.bin", "skin-plus-static-mesh.gltf",
+        "skin-plus-static-mesh.vb.bin", "skin-plus-static-mesh.ib.bin",
+        "skin-plus-static-mesh.p1.vb.bin", "skin-plus-static-mesh.p1.ib.bin"};
+    for (const std::string& file : fixtureFiles)
+    {
+        if (FindGltfFixture(file).empty())
+        {
+            GTEST_SKIP() << "glTF fixture not found: " << file;
+        }
+    }
+
+    ScratchDirectory scratch("gltf_children");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    for (const std::string& file : fixtureFiles)
+    {
+        const std::filesystem::path destination = source / "Models" / file;
+        std::filesystem::create_directories(destination.parent_path());
+        std::filesystem::copy_file(FindGltfFixture(file), destination);
+    }
+
+    const auto writeConfiguration = [&](bool animationChildren, bool textureChildren)
+    {
+        WriteText(
+            source / Pipeline::ContentBuildConfigurationFileName,
+            std::string(
+                R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{)json") +
+            R"json("Models/anim-two-clips.gltf":{"parameters":{"generateChildAssets":{"type":"bool","value":)json" +
+            (animationChildren ? "true" : "false") +
+            R"json(}}},"Models/gltf-data-uri-image.gltf":{"parameters":{"generateChildAssets":{"type":"bool","value":)json" +
+            (textureChildren ? "true" : "false") +
+            R"json(}}},"Models/skin-plus-static-mesh.gltf":{"parameters":{"generateChildAssets":{"type":"bool","value":true}}}}})json");
+    };
+    writeConfiguration(true, true);
+
+    FileTreeSnapshot reference;
+    for (const char* workers : {"1", "2", "4"})
+    {
+        const std::filesystem::path output =
+            scratch.Path() / (std::string("Content-") + workers);
+        std::string log;
+        ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(),
+                           "--workers", workers}, log), 0) << log;
+        EXPECT_TRUE(std::filesystem::is_regular_file(
+            output / "Models" / "anim-two-clips_Clip1.cnb"));
+        EXPECT_TRUE(std::filesystem::is_regular_file(
+            output / "Models" / "anim-two-clips_Walk.cnb"));
+        EXPECT_TRUE(std::filesystem::is_regular_file(
+            output / "Models" / "gltf-data-uri-image_tex0.png.cnb"));
+        EXPECT_TRUE(std::filesystem::is_regular_file(
+            output / "Models" / "skin-plus-static-mesh_static.cnb"));
+        if (reference.empty()) { reference = SnapshotFileTree(output); }
+        else { EXPECT_EQ(SnapshotFileTree(output), reference) << "workers=" << workers; }
+
+        std::string noOp;
+        ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(),
+                           "--workers", workers}, noOp), 0) << noOp;
+        EXPECT_EQ(CountOccurrences(noOp, "[SKIP] Models/"), 3u) << noOp;
+        EXPECT_EQ(SnapshotFileTree(output), reference) << "workers=" << workers;
+    }
+
+    const std::filesystem::path contracted = scratch.Path() / "Content-1";
+    writeConfiguration(false, false);
+    std::string contraction;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", contracted.string(),
+                       "--workers", "4"}, contraction), 0) << contraction;
+    EXPECT_FALSE(std::filesystem::exists(
+        contracted / "Models" / "anim-two-clips_Clip1.cnb"));
+    EXPECT_FALSE(std::filesystem::exists(
+        contracted / "Models" / "anim-two-clips_Walk.cnb"));
+    EXPECT_FALSE(std::filesystem::exists(
+        contracted / "Models" / "gltf-data-uri-image_tex0.png.cnb"));
+    EXPECT_TRUE(std::filesystem::is_regular_file(
+        contracted / "Models" / "skin-plus-static-mesh_static.cnb"));
+    EXPECT_TRUE(std::filesystem::is_regular_file(
+        contracted / "Models" / "anim-two-clips.cnb"));
+    EXPECT_TRUE(std::filesystem::is_regular_file(
+        contracted / "Models" / "gltf-data-uri-image.cnb"));
+}
+
 TEST(ContentPipelineCliTest, RepeatedBuildSkipsWithoutChangingOutputOrManifest)
 {
     ScratchDirectory scratch("deterministic");
