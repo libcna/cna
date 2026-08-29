@@ -1383,6 +1383,320 @@ static int validate_object_dictionary(const CNA_Handle manager)
     return 1;
 }
 
+/*
+ * CBIND-118: the model an XNA game loads, and the Tag its processor wrote.
+ *
+ * This is TrianglePickingSample's shape, which is the reason both routes exist: its content
+ * processor tags every model with the model's world-space triangle vertices and a BoundingSphere,
+ * and the game reads them back off Model.Tag to pick against real triangles rather than against a
+ * bounding volume. In C# that is three steps -- load, cast the tag, index it. It is three steps
+ * here too, and this proves each one against a hand-written .xnb.
+ *
+ * The model carries one bone and no meshes on purpose: what is under test is the load, the resource
+ * graph it rebuilds and the tag, none of which needs a GPU-resident mesh to be wrong.
+ */
+
+static const char TaggedModelPath[] = "cna_c_api_content_tagged_model.xnb";
+static const char TaggedModelName[] = "cna_c_api_content_tagged_model";
+static const char ForeignModelPath[] = "cna_c_api_content_foreign_model.xnb";
+static const char ForeignModelName[] = "cna_c_api_content_foreign_model";
+static const char ForeignTagTypeName[] = "CNA.Test.ModelTagEntry";
+/* A second name, because one canonical name holds one reader: the value-shaped arm needs
+   its own entry in the table rather than a second registration under the first. */
+static const char ValueTagTypeName[] = "CNA.Test.ModelTagEntryValue";
+static const char ValueModelPath[] = "cna_c_api_content_value_model.xnb";
+static const char ValueModelName[] = "cna_c_api_content_value_model";
+
+static DictionaryCustom g_model_tag_object;
+static DictionaryCustom g_model_tag_value_object;
+
+/* Writes the model body every fixture here shares: one named root bone, no meshes. */
+static size_t push_tagged_model_body(uint8_t* const asset, size_t offset)
+{
+    int index = 0;
+    offset = push_u32_le(asset, offset, UINT32_C(1));   /* one bone */
+    offset = push_seven_bit(asset, offset, UINT32_C(2));/* bone name: StringReader */
+    offset = push_utf8(asset, offset, "Root");
+    for (index = 0; index < 16; ++index) {             /* identity transform */
+        offset = push_f32_le(asset, offset, (index % 5) == 0 ? 1.0f : 0.0f);
+    }
+    asset[offset++] = 0U;                              /* no parent */
+    offset = push_u32_le(asset, offset, UINT32_C(0));  /* no children */
+    offset = push_u32_le(asset, offset, UINT32_C(0));  /* no meshes */
+    asset[offset++] = 1U;                              /* root bone reference */
+    return offset;
+}
+
+static void finish_xnb(uint8_t* const asset, const size_t offset)
+{
+    asset[0] = (uint8_t)'X';
+    asset[1] = (uint8_t)'N';
+    asset[2] = (uint8_t)'B';
+    asset[3] = (uint8_t)'w';
+    asset[4] = 5U;
+    asset[5] = 0U;
+    (void)push_u32_le(asset, 6U, (uint32_t)offset);
+}
+
+static int write_tagged_model_asset(void)
+{
+    uint8_t asset[1024];
+    size_t offset = 10U;
+
+    offset = push_seven_bit(asset, offset, UINT32_C(6));
+    offset = push_reader_name(asset, offset, "Microsoft.Xna.Framework.Content.ModelReader");
+    offset = push_reader_name(asset, offset, "Microsoft.Xna.Framework.Content.StringReader");
+    offset = push_reader_name(
+        asset, offset,
+        "Microsoft.Xna.Framework.Content.DictionaryReader`2[[System.String],[System.Object]]");
+    offset = push_reader_name(
+        asset, offset,
+        "Microsoft.Xna.Framework.Content.ArrayReader`1[[Microsoft.Xna.Framework.Vector3]]");
+    offset = push_reader_name(asset, offset, "Microsoft.Xna.Framework.Content.Vector3Reader");
+    offset = push_reader_name(
+        asset, offset, "Microsoft.Xna.Framework.Content.BoundingSphereReader");
+    offset = push_seven_bit(asset, offset, UINT32_C(0));  /* no shared resources */
+    offset = push_seven_bit(asset, offset, UINT32_C(1));  /* root object: ModelReader */
+
+    offset = push_tagged_model_body(asset, offset);
+
+    offset = push_seven_bit(asset, offset, UINT32_C(3));  /* Tag: the dictionary */
+    offset = push_u32_le(asset, offset, UINT32_C(2));     /* two entries */
+    offset = push_seven_bit(asset, offset, UINT32_C(2));
+    offset = push_utf8(asset, offset, "BoundingSphere");
+    offset = push_seven_bit(asset, offset, UINT32_C(6));
+    offset = push_f32_le(asset, offset, 1.0f);
+    offset = push_f32_le(asset, offset, 2.0f);
+    offset = push_f32_le(asset, offset, 3.0f);
+    offset = push_f32_le(asset, offset, 4.0f);
+    offset = push_seven_bit(asset, offset, UINT32_C(2));
+    offset = push_utf8(asset, offset, "Vertices");
+    offset = push_seven_bit(asset, offset, UINT32_C(4));  /* ArrayReader<Vector3> */
+    offset = push_u32_le(asset, offset, UINT32_C(3));
+    offset = push_f32_le(asset, offset, 0.0f);
+    offset = push_f32_le(asset, offset, 0.0f);
+    offset = push_f32_le(asset, offset, 0.0f);
+    offset = push_f32_le(asset, offset, 1.0f);
+    offset = push_f32_le(asset, offset, 0.0f);
+    offset = push_f32_le(asset, offset, 0.0f);
+    offset = push_f32_le(asset, offset, 0.0f);
+    offset = push_f32_le(asset, offset, 1.0f);
+    offset = push_f32_le(asset, offset, 0.0f);
+
+    finish_xnb(asset, offset);
+    return write_binary_file(TaggedModelPath, asset, offset);
+}
+
+/* The same model, tagged with a type the caller declared from C instead. */
+static int write_foreign_tagged_model_asset(
+    const char* const path,
+    const char* const type_name)
+{
+    uint8_t asset[1024];
+    char reader_name[256];
+    uint64_t reader_bytes = 0U;
+    size_t offset = 10U;
+
+    if (cna_reflective_type_reader_copy_canonical_name(
+            view(type_name), reader_name, sizeof(reader_name) - 1U, &reader_bytes) !=
+        CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    reader_name[reader_bytes] = '\0';
+
+    offset = push_seven_bit(asset, offset, UINT32_C(3));
+    offset = push_reader_name(asset, offset, "Microsoft.Xna.Framework.Content.ModelReader");
+    offset = push_reader_name(asset, offset, "Microsoft.Xna.Framework.Content.StringReader");
+    offset = push_reader_name(asset, offset, reader_name);
+    offset = push_seven_bit(asset, offset, UINT32_C(0));
+    offset = push_seven_bit(asset, offset, UINT32_C(1));
+
+    offset = push_tagged_model_body(asset, offset);
+
+    offset = push_seven_bit(asset, offset, UINT32_C(3));  /* Tag: the C-declared type */
+    offset = push_u32_le(asset, offset, UINT32_C(7));     /* magic */
+    offset = push_f32_le(asset, offset, 2.5f);            /* weight */
+
+    finish_xnb(asset, offset);
+    return write_binary_file(path, asset, offset);
+}
+
+/*
+ * The one place the reference shape stops being cosmetic.
+ *
+ * A Dictionary<string, object> value reaches its reader through type-erased dispatch and reads
+ * correctly whichever shape the reader produces, so CBIND-116 could only assert an inequality of
+ * stored types. ModelReader's tag path is the container that actually dispatches on the shape: it
+ * takes a reference and refuses anything else. With the model loader bound, that refusal is
+ * reachable from C, and this is the measurement -- registered reference-shaped the asset loads and
+ * the caller's object comes back; registered value-shaped the SAME asset fails to load.
+ */
+static int validate_foreign_model_tag(const CNA_Handle manager)
+{
+    CNA_ModelHandle model = CNA_INVALID_HANDLE;
+    CNA_ObjectDictionaryHandle tag = UINT64_C(9);
+    CNA_Bool present = CNA_FALSE;
+    void* object = 0;
+
+    if (!register_dictionary_reader(ForeignTagTypeName, &g_model_tag_object, 1) ||
+        !register_dictionary_reader(ValueTagTypeName, &g_model_tag_value_object, 0) ||
+        !write_foreign_tagged_model_asset(ForeignModelPath, ForeignTagTypeName) ||
+        !write_foreign_tagged_model_asset(ValueModelPath, ValueTagTypeName)) {
+        return 0;
+    }
+    /* The measurement CBIND-116 could not make. Same fixture, same fields, one registration each:
+       the reference-shaped reader loads and the value-shaped one is refused by ModelReader's tag
+       path, which takes a reference and accepts nothing else. */
+    if (cna_content_manager_load_model(manager, view(ValueModelName), &model) != CNA_RESULT_IO ||
+        model != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    if (cna_content_manager_load_model(manager, view(ForeignModelName), &model) !=
+            CNA_RESULT_SUCCESS ||
+        cna_model_get_content_tag_foreign_object_ext(model, &present, &object) !=
+            CNA_RESULT_SUCCESS ||
+        present != CNA_TRUE ||
+        object != (void*)&g_model_tag_object ||
+        g_model_tag_object.magic != 7 || g_model_tag_object.weight != 2.5f ||
+        /* A tag of another shape is reported, not failed: the dictionary question simply gets
+           "no" for a model whose tag is a caller-made object. */
+        cna_model_get_content_tag_dictionary_ext(model, &present, &tag) != CNA_RESULT_SUCCESS ||
+        present != CNA_FALSE || tag != CNA_INVALID_HANDLE) {
+        (void)cna_model_destroy(model);
+        return 0;
+    }
+    return cna_model_destroy(model) == CNA_RESULT_SUCCESS;
+}
+
+static int validate_content_model(const CNA_Handle manager)
+{
+    CNA_ModelHandle model = CNA_INVALID_HANDLE;
+    CNA_ObjectDictionaryHandle tag = CNA_INVALID_HANDLE;
+    CNA_ModelBoneCollectionHandle bones = CNA_INVALID_HANDLE;
+    CNA_ModelMeshCollectionHandle meshes = CNA_INVALID_HANDLE;
+    CNA_ModelBoneHandle root = CNA_INVALID_HANDLE;
+    CNA_ObjectDictionaryEntry entry;
+    CNA_BoundingSphere sphere;
+    CNA_Vector3 vertices[3];
+    CNA_Bool present = CNA_FALSE;
+    uint64_t bytes = 0U;
+    uint64_t count = 0U;
+
+    if (!write_tagged_model_asset()) {
+        return 0;
+    }
+
+    /* Refusals first, so a later success cannot be a coincidence. */
+    if (cna_content_manager_load_model(
+            manager, view("cna_c_api_content_absent_model"), &model) != CNA_RESULT_IO ||
+        model != CNA_INVALID_HANDLE ||
+        cna_content_manager_load_model(manager, view(""), &model) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_content_manager_load_model(manager, view(TaggedModelName), 0) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        /* An asset whose root object is not a Model reports the mismatch rather than faulting. */
+        cna_content_manager_load_model(manager, view(DictionaryAssetName), &model) !=
+            CNA_RESULT_IO) {
+        return 0;
+    }
+
+    if (cna_content_manager_load_model(manager, view(TaggedModelName), &model) !=
+            CNA_RESULT_SUCCESS ||
+        model == CNA_INVALID_HANDLE) {
+        return 0;
+    }
+
+    /* The resource graph the load rebuilt: a loaded model that skipped it would report no bones
+       and no meshes while still looking like a valid handle. */
+    if (cna_model_get_bones(model, &bones) != CNA_RESULT_SUCCESS ||
+        cna_model_bone_collection_get_count(bones, &count) != CNA_RESULT_SUCCESS ||
+        count != UINT64_C(1) ||
+        cna_model_get_meshes(model, &meshes) != CNA_RESULT_SUCCESS ||
+        cna_model_mesh_collection_get_count(meshes, &count) != CNA_RESULT_SUCCESS ||
+        count != UINT64_C(0) ||
+        cna_model_get_root(model, &present, &root) != CNA_RESULT_SUCCESS ||
+        present != CNA_TRUE || root == CNA_INVALID_HANDLE) {
+        (void)cna_model_destroy(model);
+        return 0;
+    }
+    {
+        char name[8];
+        if (cna_model_bone_copy_name(root, name, sizeof(name), &bytes) != CNA_RESULT_SUCCESS ||
+            bytes != strlen("Root") || memcmp(name, "Root", (size_t)bytes) != 0) {
+            (void)cna_model_destroy(model);
+            return 0;
+        }
+    }
+
+    /* The tag, read the way TrianglePickingSample reads it. */
+    if (cna_model_get_content_tag_dictionary_ext(model, &present, &tag) != CNA_RESULT_SUCCESS ||
+        present != CNA_TRUE || tag == CNA_INVALID_HANDLE) {
+        (void)cna_model_destroy(model);
+        return 0;
+    }
+    entry.struct_size = (uint32_t)sizeof(entry);
+    if (cna_object_dictionary_ext_contains_key(
+            tag, view("BoundingSphere"), &present) != CNA_RESULT_SUCCESS ||
+        present != CNA_TRUE ||
+        cna_object_dictionary_ext_contains_key(tag, view("NotThere"), &present) !=
+            CNA_RESULT_SUCCESS ||
+        present != CNA_FALSE ||
+        cna_object_dictionary_ext_copy_value(
+            tag, view("BoundingSphere"), CNA_OBJECT_DICTIONARY_VALUE_BOUNDING_SPHERE,
+            &sphere, sizeof(sphere)) != CNA_RESULT_SUCCESS ||
+        sphere.center.x != 1.0f || sphere.center.y != 2.0f || sphere.center.z != 3.0f ||
+        sphere.radius != 4.0f ||
+        cna_object_dictionary_ext_get_entry(tag, view("Vertices"), &entry) !=
+            CNA_RESULT_SUCCESS ||
+        entry.kind != CNA_OBJECT_DICTIONARY_VALUE_VECTOR3 ||
+        entry.is_array != CNA_TRUE || entry.element_count != UINT64_C(3) ||
+        cna_object_dictionary_ext_copy_array(
+            tag, view("Vertices"), CNA_OBJECT_DICTIONARY_VALUE_VECTOR3,
+            vertices, sizeof(vertices), &bytes) != CNA_RESULT_SUCCESS ||
+        bytes != sizeof(vertices) ||
+        vertices[1].x != 1.0f || vertices[2].y != 1.0f) {
+        (void)cna_object_dictionary_ext_destroy(tag);
+        (void)cna_model_destroy(model);
+        return 0;
+    }
+
+    /* The tag handle keeps the loaded asset alive on its own, so destroying the model first is
+       safe -- which is the whole reason it is an owned handle rather than a borrowed one. */
+    if (cna_model_destroy(model) != CNA_RESULT_SUCCESS ||
+        cna_object_dictionary_ext_contains_key(
+            tag, view("Vertices"), &present) != CNA_RESULT_SUCCESS ||
+        present != CNA_TRUE ||
+        cna_object_dictionary_ext_destroy(tag) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    /* A hand-built model has no content tag, and says so without failing. */
+    if (cna_model_create_default(&model) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    present = CNA_TRUE;
+    tag = UINT64_C(7);
+    if (cna_model_get_content_tag_dictionary_ext(model, &present, &tag) != CNA_RESULT_SUCCESS ||
+        present != CNA_FALSE || tag != CNA_INVALID_HANDLE) {
+        (void)cna_model_destroy(model);
+        return 0;
+    }
+    {
+        void* object = (void*)&g_model_tag_object;
+        present = CNA_TRUE;
+        if (cna_model_get_content_tag_foreign_object_ext(model, &present, &object) !=
+                CNA_RESULT_SUCCESS ||
+            present != CNA_FALSE || object != 0) {
+            (void)cna_model_destroy(model);
+            return 0;
+        }
+    }
+    if (cna_model_destroy(model) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    return validate_foreign_model_tag(manager);
+}
+
 static int validate_cnb_loader_through_manager(const CNA_Handle manager)
 {
     CNA_CnbWriterHandle writer = CNA_INVALID_HANDLE;
@@ -1767,6 +2081,7 @@ static CNA_Result on_load(
         !validate_foreign_load(state->content_manager) ||
         !validate_reflective_reader(state->content_manager) ||
         !validate_object_dictionary(state->content_manager) ||
+        !validate_content_model(state->content_manager) ||
         !validate_cnb_loader_through_manager(state->content_manager) ||
         !validate_effect_load(state->content_manager) ||
         !validate_cnj_loader(state->content_manager)) {

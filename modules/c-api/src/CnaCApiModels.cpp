@@ -2,11 +2,15 @@
 
 #include "CNA/C/models.h"
 #include "CNA/GraphicsCapability.hpp"
+#include "CnaCApiContentDetail.hpp"
 #include "CnaCApiDetail.hpp"
 #include "CnaCApiGraphicsStateDetail.hpp"
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
+#include "CNA/Content/ObjectDictionaryEXT.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -14,6 +18,8 @@
 #include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBoneCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelEffectCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMeshCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMeshPartCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
@@ -25,9 +31,11 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 
 #include <algorithm>
+#include <any>
 #include <cmath>
 #include <cstring>
 #include <limits>
+#include <map>
 #include <memory>
 #include <string>
 #include <utility>
@@ -57,6 +65,8 @@ using Microsoft::Xna::Framework::Graphics::ModelBone;
 using Microsoft::Xna::Framework::Graphics::ModelBoneCollection;
 using Microsoft::Xna::Framework::Graphics::ModelEffectCollection;
 using Microsoft::Xna::Framework::Graphics::ModelMesh;
+using Microsoft::Xna::Framework::Graphics::ModelMeshCollection;
+using Microsoft::Xna::Framework::Graphics::ModelMeshPartCollection;
 using Microsoft::Xna::Framework::Graphics::ModelMeshPart;
 using Microsoft::Xna::Framework::Graphics::ApplyBindPoseBoneTransformsEXT;
 using Microsoft::Xna::Framework::Graphics::ApplyClipToBonesEXT;
@@ -215,6 +225,10 @@ struct ModelResource final {
     std::shared_ptr<BoneNode> root;
     CNA_ModelTag tag = 0U;
     bool supportsThreeD = true;
+    // CBIND-118: a content-loaded model publishes handles for the effects and buffers its parts
+    // reference, because the part accessors answer with handles rather than with C++ pointers. The
+    // caller never created them, so the model releases them when it is destroyed.
+    std::vector<CNA_Handle> contentOwnedHandles;
 };
 
 struct SkinnedPartEntry final {
@@ -3301,13 +3315,22 @@ CNA_Result cna_model_destroy(const CNA_ModelHandle modelHandle)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
+        // CBIND-118: taken before the release, because the resource record is what holds them.
+        const std::vector<CNA_Handle> published = model->contentOwnedHandles;
         const CNA_Result result = GetRuntimeHandles().Release(modelHandle);
-        return result == CNA_RESULT_SUCCESS
-            ? CNA_RESULT_SUCCESS
-            : Fail(
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
                 result,
                 ErrorCategoryForResult(result),
                 "The owned Model handle could not be released.");
+        }
+        // A content-loaded model published these; the caller never created them, so releasing the
+        // model is what ends them. Each release is best-effort: a caller that already released one
+        // by hand must not make destroying the model fail.
+        for (const CNA_Handle handle : published) {
+            static_cast<void>(GetRuntimeHandles().Release(handle));
+        }
+        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -7202,3 +7225,327 @@ CNA_Result cna_skinning_data_set_skeleton_root_name_ext(
     });
 }
 
+
+/* --- CBIND-118: loading a Model from content -------------------------------------------------- */
+
+namespace {
+
+/// Borrows a pointer that lives inside the loaded model's owned resources.
+///
+/// `Model` is a lightweight copy-constructible handle whose real contents sit behind one
+/// `shared_ptr<void>` its copies share, and every collection it exposes hands out raw pointers into
+/// that bundle. The aliasing constructor is the exact fit: the result points at the borrowed object
+/// and keeps the model that owns it alive, which is what lets a part's effect or buffer become a
+/// handle without anyone taking a second ownership of it.
+template <typename T>
+[[nodiscard]] std::shared_ptr<T> BorrowFromModel(
+    const std::shared_ptr<Model>& owner,
+    T* const pointer)
+{
+    return pointer == nullptr ? std::shared_ptr<T>() : std::shared_ptr<T>(owner, pointer);
+}
+
+/// Publishes one borrowed graphics resource as a handle, once per distinct object.
+///
+/// Two parts of one mesh routinely share an effect, and the canonical model expects the mesh's
+/// effect collection to hold each one once; publishing per part would hand out two handles for one
+/// object and make that collection wrong. The map is keyed by the object address for that reason,
+/// not as an optimization.
+template <typename TResource, typename TValue>
+[[nodiscard]] CNA_Result PublishModelResource(
+    const std::shared_ptr<Model>& owner,
+    TValue* const pointer,
+    const CNA_Handle parentGame,
+    const ObjectKind kind,
+    std::map<const void*, CNA_Handle>& published,
+    std::vector<CNA_Handle>& ownedHandles,
+    CNA_Handle* const outHandle)
+{
+    *outHandle = CNA_INVALID_HANDLE;
+    if (pointer == nullptr) {
+        return CNA_RESULT_SUCCESS;
+    }
+    const auto existing = published.find(static_cast<const void*>(pointer));
+    if (existing != published.end()) {
+        *outHandle = existing->second;
+        return CNA_RESULT_SUCCESS;
+    }
+    auto resource = std::make_shared<TResource>();
+    resource->value = BorrowFromModel(owner, pointer);
+    resource->parentGame = parentGame;
+    CNA_Handle handle = CNA_INVALID_HANDLE;
+    if (const CNA_Result result = GetRuntimeHandles().Create(kind, resource, &handle);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "A loaded Model resource could not be published as a handle.");
+    }
+    published.emplace(static_cast<const void*>(pointer), handle);
+    ownedHandles.push_back(handle);
+    *outHandle = handle;
+    return CNA_RESULT_SUCCESS;
+}
+
+/// Rebuilds the C resource graph over a model the content pipeline produced.
+///
+/// The bone and mesh accessors answer from this graph rather than from the canonical model, so a
+/// loaded model that skipped it would report no bones and no meshes while looking valid. Every node
+/// borrows: nothing here copies a bone, a mesh or a part, and the loaded model stays the owner.
+[[nodiscard]] CNA_Result MirrorLoadedModel(
+    std::shared_ptr<Model> loaded,
+    const CNA_Handle parentGame,
+    const bool supportsThreeD,
+    std::shared_ptr<ModelResource>* const outModel)
+{
+    auto model = std::make_shared<ModelResource>();
+    model->value = std::move(loaded);
+    model->supportsThreeD = supportsThreeD;
+
+    const ModelBoneCollection& bones = model->value->getBonesProperty();
+    std::map<const ModelBone*, std::shared_ptr<BoneNode>> boneNodes;
+    model->bones.reserve(bones.getCountProperty() < 0
+        ? 0U
+        : static_cast<std::size_t>(bones.getCountProperty()));
+    for (int index = 0; index < bones.getCountProperty(); ++index) {
+        ModelBone* const bone = bones[index];
+        auto node = std::make_shared<BoneNode>();
+        node->value = BorrowFromModel(model->value, bone);
+        boneNodes.emplace(bone, node);
+        model->bones.push_back(std::move(node));
+    }
+    // A second pass, because a bone's parent and children are other bones and the first pass is
+    // what makes every one of them findable.
+    for (const std::shared_ptr<BoneNode>& node : model->bones) {
+        const ModelBone* const bone = node->value.get();
+        const auto parent = boneNodes.find(bone->getParentProperty());
+        if (parent != boneNodes.end()) {
+            node->parent = parent->second;
+        }
+        const ModelBoneCollection& children = bone->getChildrenProperty();
+        node->children.reserve(children.getCountProperty() < 0
+            ? 0U
+            : static_cast<std::size_t>(children.getCountProperty()));
+        for (int index = 0; index < children.getCountProperty(); ++index) {
+            const auto child = boneNodes.find(children[index]);
+            if (child != boneNodes.end()) {
+                node->children.push_back(child->second);
+            }
+        }
+    }
+    if (const auto root = boneNodes.find(model->value->getRootProperty());
+        root != boneNodes.end()) {
+        model->root = root->second;
+    }
+
+    std::map<const void*, CNA_Handle> published;
+    const ModelMeshCollection& meshes = model->value->getMeshesProperty();
+    model->meshes.reserve(meshes.getCountProperty() < 0
+        ? 0U
+        : static_cast<std::size_t>(meshes.getCountProperty()));
+    for (int meshIndex = 0; meshIndex < meshes.getCountProperty(); ++meshIndex) {
+        ModelMesh* const nativeMesh = meshes[meshIndex];
+        auto mesh = std::make_shared<MeshResource>();
+        mesh->value = BorrowFromModel(model->value, nativeMesh);
+        mesh->parentGame = parentGame;
+        mesh->supportsThreeD = supportsThreeD;
+        if (const auto parent = boneNodes.find(nativeMesh->getParentBoneProperty());
+            parent != boneNodes.end()) {
+            mesh->parentBone = parent->second;
+        }
+
+        const ModelMeshPartCollection& parts = nativeMesh->getMeshPartsProperty();
+        mesh->parts.reserve(parts.getCountProperty() < 0
+            ? 0U
+            : static_cast<std::size_t>(parts.getCountProperty()));
+        for (int partIndex = 0; partIndex < parts.getCountProperty(); ++partIndex) {
+            ModelMeshPart* const nativePart = parts[partIndex];
+            auto part = std::make_shared<PartResource>();
+            part->value = BorrowFromModel(model->value, nativePart);
+            part->parentMesh = mesh.get();
+            mesh->parts.push_back(std::move(part));
+        }
+        model->meshes.push_back(std::move(mesh));
+    }
+
+    // The retained slots are filled through the ordinary setters, so a loaded part reaches exactly
+    // the state a hand-built one reaches -- including the mesh effect collection each one maintains.
+    // Re-setting the pointer the part already holds is a no-op on the canonical side.
+    for (const std::shared_ptr<MeshResource>& mesh : model->meshes) {
+        for (const std::shared_ptr<PartResource>& part : mesh->parts) {
+            ModelMeshPart* const nativePart = part->value.get();
+            CNA_Handle handle = CNA_INVALID_HANDLE;
+            if (const CNA_Result result = PublishModelResource<EffectResource>(
+                    model->value, nativePart->getEffectProperty(), parentGame,
+                    ObjectKind::Effect, published, model->contentOwnedHandles, &handle);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (handle != CNA_INVALID_HANDLE) {
+                std::shared_ptr<EffectResource> effect;
+                if (const CNA_Result result = ResolveEffect(handle, &effect);
+                    result == CNA_RESULT_SUCCESS) {
+                    // A model-owned effect is not the caller's to dispose.
+                    effect->disposeAllowed = false;
+                }
+                if (const CNA_Result result = SetPartEffect(part, handle);
+                    result != CNA_RESULT_SUCCESS) {
+                    return result;
+                }
+            }
+            if (const CNA_Result result = PublishModelResource<VertexBufferResource>(
+                    model->value, nativePart->getVertexBufferProperty(), parentGame,
+                    ObjectKind::VertexBuffer, published, model->contentOwnedHandles, &handle);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (handle != CNA_INVALID_HANDLE) {
+                if (const CNA_Result result = SetPartVertexBuffer(part, handle);
+                    result != CNA_RESULT_SUCCESS) {
+                    return result;
+                }
+            }
+            if (const CNA_Result result = PublishModelResource<IndexBufferResource>(
+                    model->value, nativePart->getIndexBufferProperty(), parentGame,
+                    ObjectKind::IndexBuffer, published, model->contentOwnedHandles, &handle);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (handle != CNA_INVALID_HANDLE) {
+                if (const CNA_Result result = SetPartIndexBuffer(part, handle);
+                    result != CNA_RESULT_SUCCESS) {
+                    return result;
+                }
+            }
+        }
+    }
+
+    *outModel = std::move(model);
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+CNA_Result cna_content_manager_load_model(
+    const CNA_Handle contentManagerHandle,
+    const CNA_StringView assetName,
+    CNA_ModelHandle* const outModel)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outModel == nullptr) {
+            return InvalidArgument("The loaded Model output handle is null.");
+        }
+        *outModel = CNA_INVALID_HANDLE;
+        std::string assetNameText;
+        if (const CNA_Result result = CopyStringView(assetName, true, &assetNameText);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The content asset name is not valid UTF-8.");
+        }
+        if (assetNameText.empty()) {
+            return InvalidArgument("The content asset name must not be empty.");
+        }
+        CNA::C::Detail::BorrowedContentManager contentManager;
+        if (const CNA_Result result = CNA::C::Detail::BorrowContentManager(
+                contentManagerHandle, &contentManager);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (contentManager.value == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_HANDLE, CNA_ERROR_CATEGORY_STATE,
+                "The content manager handle does not name a manager.");
+        }
+
+        std::shared_ptr<Model> loaded;
+        bool supportsThreeD = false;
+        try {
+            supportsThreeD = contentManager.value->getGraphicsDeviceInternal()
+                .SupportsCapability(CNA::GraphicsCapability::ThreeD);
+            loaded = std::make_shared<Model>(contentManager.value->Load<Model>(assetNameText));
+        } catch (const Microsoft::Xna::Framework::Content::ContentLoadException& exception) {
+            return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
+        } catch (const std::bad_any_cast&) {
+            // The asset's root reader produced something that is not a Model. Reporting the
+            // mismatch beats the exception barrier's catch-all calling it an internal fault.
+            return Fail(
+                CNA_RESULT_IO,
+                CNA_ERROR_CATEGORY_IO,
+                "The asset's root type reader did not produce a Model.");
+        }
+
+        std::shared_ptr<ModelResource> model;
+        if (const CNA_Result result = MirrorLoadedModel(
+                std::move(loaded), contentManager.parentGame, supportsThreeD, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CreateModelHandle(std::move(model), outModel);
+    });
+}
+
+/* --- CBIND-118: the Tag the content pipeline wrote --------------------------------------------- */
+
+CNA_Result cna_model_get_content_tag_dictionary_ext(
+    const CNA_ModelHandle modelHandle,
+    CNA_Bool* const outHasTag,
+    CNA_ObjectDictionaryHandle* const outDictionary)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outHasTag == nullptr || outDictionary == nullptr) {
+            return InvalidArgument("The Model content-tag outputs are null.");
+        }
+        *outHasTag = CNA_FALSE;
+        *outDictionary = CNA_INVALID_HANDLE;
+        std::shared_ptr<ModelResource> model;
+        if (const CNA_Result result = GetModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto* const tag = dynamic_cast<CNA::Content::ObjectDictionaryEXT*>(
+            model->value->getTagProperty());
+        if (tag == nullptr) {
+            // No tag, or one of another shape. Not an error: XNA's unset Tag is null, and a caller
+            // asking the wrong question about a present tag learns that from out_has_tag.
+            return CNA_RESULT_SUCCESS;
+        }
+        // Aliased onto the model, so the handle keeps the loaded asset alive by itself and a caller
+        // that destroys the model first is left with a dictionary rather than with a dangling one.
+        if (const CNA_Result result = CNA::C::Detail::PublishObjectDictionary(
+                std::shared_ptr<CNA::Content::ObjectDictionaryEXT>(model->value, tag),
+                outDictionary);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outHasTag = CNA_TRUE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_get_content_tag_foreign_object_ext(
+    const CNA_ModelHandle modelHandle,
+    CNA_Bool* const outHasTag,
+    void** const outObject)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outHasTag == nullptr || outObject == nullptr) {
+            return InvalidArgument("The Model content-tag outputs are null.");
+        }
+        *outHasTag = CNA_FALSE;
+        *outObject = nullptr;
+        std::shared_ptr<ModelResource> model;
+        if (const CNA_Result result = GetModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        void* object = nullptr;
+        if (!CNA::C::Detail::TryGetForeignReferenceObject(
+                model->value->getTagProperty(), &object)) {
+            return CNA_RESULT_SUCCESS;
+        }
+        *outObject = object;
+        *outHasTag = CNA_TRUE;
+        return CNA_RESULT_SUCCESS;
+    });
+}

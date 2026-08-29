@@ -2461,3 +2461,39 @@ CNA_Result cna_object_dictionary_ext_destroy(const CNA_ObjectDictionaryHandle di
         return GetRuntimeHandles().Release(dictionaryHandle);
     });
 }
+
+namespace CNA::C::Detail {
+
+CNA_Result PublishObjectDictionary(
+    std::shared_ptr<CNA::Content::ObjectDictionaryEXT> dictionary,
+    CNA_Handle* const outHandle)
+{
+    if (outHandle == nullptr) {
+        return InvalidArgument("The object-dictionary output handle is null.");
+    }
+    *outHandle = CNA_INVALID_HANDLE;
+    if (!dictionary) {
+        return InvalidArgument("The object dictionary to publish is null.");
+    }
+    auto resource = std::make_shared<ObjectDictionaryResource>();
+    resource->value = std::move(dictionary);
+    const CNA_Result result =
+        GetRuntimeHandles().Create(ObjectKind::ObjectDictionaryEXT, resource, outHandle);
+    return result == CNA_RESULT_SUCCESS
+        ? CNA_RESULT_SUCCESS
+        : Fail(
+            result, ErrorCategoryForResult(result),
+            "The object dictionary could not be published as a handle.");
+}
+
+bool TryGetForeignReferenceObject(const System::Object* const tag, void** const outObject)
+{
+    const auto* const carrier = dynamic_cast<const ForeignReferenceObject*>(tag);
+    if (carrier == nullptr) {
+        return false;
+    }
+    *outObject = carrier->getValue();
+    return true;
+}
+
+} // namespace CNA::C::Detail

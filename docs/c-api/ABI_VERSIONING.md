@@ -2,7 +2,19 @@
 
 ## ABI identity
 
-The ABI is `0.18.0`. It adds the **`Dictionary<string, object>` a content processor writes** and
+The ABI is `0.19.0`. It adds **`Load<Model>`** and the **`Tag` its processor wrote**, from
+`plans/plan_binding.md` `CBIND-118`: three routes and no new structures or handle kinds. This is the
+version that makes every other model route reachable for content -- before it a C game could build a
+model but never open one -- and with it `TrianglePickingSample`'s shape works end to end: load the
+model, take `cna_model_get_content_tag_dictionary_ext`, read the `BoundingSphere` and the
+`Vector3[]` of triangle vertices.
+
+It also narrows a boundary `0.18.0` had to state as unreachable. `Model.Tag` is the container that
+dispatches on a reflective reader's shape, so a type registered with
+`cna_reflective_type_reader_builder_register` rather than `..._register_shared` now fails the load
+with `CNA_RESULT_IO` instead of differing only cosmetically.
+
+`0.18.0` added the **`Dictionary<string, object>` a content processor writes** and
 the **reference-shaped reflective reader**, from `plans/plan_binding.md` `CBIND-116`: fifteen routes
 over one new handle kind (`CNA_ObjectDictionaryHandle`), the `CNA_ObjectDictionaryValueKind`
 identity and one versioned structure (`CNA_ObjectDictionaryEntry`). With it a C application reads
@@ -279,7 +291,7 @@ Recording the baseline needs the library:
 python3 tools/c-api/generate_abi_baseline.py --write --library <build>/modules/c-api/libcna_c_api.so
 ```
 
-All four build configurations export the same 4,048 symbols. That is itself part of the contract:
+All four build configurations export the same 4,051 symbols. That is itself part of the contract:
 the ABI **surface** does not vary with the renderer, with `CNA_DEVICES`, or with `CNA_CNAEXT` —
 only the answers do. A route whose backend or layer is absent exists and refuses, rather than
 disappearing from the library. `CNA_CNAEXT` is the newest member of that list and the one with the

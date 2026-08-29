@@ -3,6 +3,7 @@
 #ifndef CNA_C_MODELS_H
 #define CNA_C_MODELS_H
 
+#include "CNA/C/content_readers.h"
 #include "CNA/C/core.h"
 #include "CNA/C/effects.h"
 #include "CNA/C/index_resources.h"
@@ -2639,6 +2640,97 @@ CNA_C_API CNA_Result cna_skinning_data_copy_skeleton_root_name_ext(
 CNA_C_API CNA_Result cna_skinning_data_set_skeleton_root_name_ext(
     CNA_SkinningDataHandle data,
     CNA_StringView name);
+
+/* --- CBIND-118: the Model an XNA game gets from ContentManager.Load<Model> -------------------- */
+
+/**
+ * @brief Loads a `Model` from a compiled `.xnb` asset.
+ *
+ * @param content_manager The content manager.
+ * @param asset_name The asset name, without extension.
+ * @param out_model Receives the owned model handle.
+ * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_IO` for a missing or malformed asset and for one whose
+ *         root object is not a `Model`; or a documented argument/handle failure.
+ *
+ * This maps the canonical `Load<Model>` specialization -- the route an XNA game's
+ * `ContentManager.Load<Model>` takes -- and it is what makes every other model route reachable for
+ * content: before it, every `CNA_ModelHandle` was built by hand from `cna_model_create_*`, so a
+ * game written in C could construct a model but never open one.
+ *
+ * What comes back is an ordinary model handle. Bones, meshes, parts, the root bone and the parent
+ * links all answer as they do for a model built by hand, and so do each part's effect, vertex
+ * buffer and index buffer.
+ *
+ * **The model owns the handles it publishes.** A loaded part's effect and buffers are objects the
+ * model already owned, and the handles this route creates for them are released when the model is
+ * destroyed -- do not release them by hand, and do not keep one past
+ * @ref cna_model_destroy. For the same reason a model-owned effect refuses `cna_effect_destroy`:
+ * disposing it would reach inside an asset the content manager is still caching.
+ *
+ * The asset is cached by name exactly as every other load is, so a second call re-publishes handles
+ * over the same underlying model rather than re-reading the file.
+ */
+CNA_C_API CNA_Result cna_content_manager_load_model(
+    CNA_Handle content_manager,
+    CNA_StringView asset_name,
+    CNA_ModelHandle* out_model);
+
+/* --- CBIND-118: the Tag the content pipeline wrote, beside the C-owned one -------------------- */
+
+/**
+ * @brief Gets a model's content-loaded `Tag` as a `Dictionary<string, object>`.
+ *
+ * @param model Model handle.
+ * @param out_has_tag Receives whether the model carries a dictionary tag.
+ * @param out_dictionary Receives a new owned dictionary handle when it does, otherwise
+ *        `CNA_INVALID_HANDLE`.
+ * @return A CNA result code.
+ *
+ * **This is a different tag from @ref cna_model_get_tag.** That one is a C-owned opaque value a
+ * caller sets and reads back; this one is what a custom `ContentProcessor` wrote into the `.xnb`,
+ * and it is read-only. Both exist because they answer different questions.
+ *
+ * The shape XNA's own `TrianglePickingSample` uses: its processor tags every model with the model's
+ * world-space triangle vertices and a `BoundingSphere`, and the game reads them back off the tag to
+ * pick against real triangles rather than against a bounding volume. That sample is the reason this
+ * route exists, and reading it from C is the same three steps it is in C#: load the model, take the
+ * tag, ask each entry for its value.
+ *
+ * @p out_has_tag is false, with a success result, when the model has no tag or carries one of
+ * another shape -- an unset tag is not an error, exactly as XNA's `null` `Tag` is not.
+ *
+ * The handle is **owned and outlives the model**: release it with
+ * @ref cna_object_dictionary_ext_destroy. It keeps the loaded model's data alive on its own, so
+ * destroying the model first is safe and does not invalidate it.
+ */
+CNA_C_API CNA_Result cna_model_get_content_tag_dictionary_ext(
+    CNA_ModelHandle model,
+    CNA_Bool* out_has_tag,
+    CNA_ObjectDictionaryHandle* out_dictionary);
+
+/**
+ * @brief Gets a model's content-loaded `Tag` as an object a caller's own reflective reader made.
+ *
+ * @param model Model handle.
+ * @param out_has_tag Receives whether the model carries such a tag.
+ * @param out_object Receives the pointer the caller's object factory returned, otherwise null.
+ * @return A CNA result code.
+ *
+ * The other half of @ref cna_reflective_type_reader_builder_register_shared, and the one place its
+ * reference shape is not merely cosmetic: `ModelReader`'s tag path takes a reference and refuses a
+ * value, so a type registered the value-shaped way fails the load here rather than arriving in the
+ * wrong form.
+ *
+ * The pointer is the caller's own -- CNA never dereferences, copies or frees it -- and it stays
+ * valid as long as the caller keeps it valid.
+ *
+ * @p out_has_tag is false, with a success result, when the model has no tag or carries one of
+ * another shape.
+ */
+CNA_C_API CNA_Result cna_model_get_content_tag_foreign_object_ext(
+    CNA_ModelHandle model,
+    CNA_Bool* out_has_tag,
+    void** out_object);
 
 #ifdef __cplusplus
 }

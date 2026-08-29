@@ -1,12 +1,13 @@
 # CNA Native C Binding / Stable C ABI — Implementation Plan
 
-> **Status (2026-08-29, after Content Pipeline integration): B0–B11 complete; B12 is an explicit
+> **Status (2026-08-29, after `CBIND-118`): B0–B11 and B13 complete; B12 is an explicit
 > C-ABI backlog, not Content Pipeline v1 work.** Phase B10 bound all 506 rows the sixth merge
 > reopened, the CNB content format included; Phase B11 bound the seventh merge's 15-row tail. The
 > completed experimental C++ Content Pipeline now adds 342 deliberately unbound inventory rows:
 > 335 under its `CNA::Content::Pipeline`/`Import` surface and seven source-import declarations.
 > Coverage: **544 headers / 9,173 symbols — 8,352 implemented, 15 approved partial, 342 planned, 464 not
-> applicable.** ABI `0.18.0` and its 4,048 exports are unchanged. The release gate is consistently
+> applicable.** Phase B13 then bound `Load<Model>` and the `Tag` a content processor writes,
+> taking the ABI to **`0.19.0`** and **4,048 → 4,051** exports without moving a coverage row. The release gate is consistently
 > **Not ready** on coverage alone until `CBIND-117`; this integration does not invent C routes for
 > a C++ build-time extension API merely because it is public. See *Current status* and Phase B12.
 > This document is
@@ -154,6 +155,7 @@ task. Do not start a later broad API phase merely because an earlier skeleton co
 | B10 | The CNB content format and the sixth merge's tail | `origin/next` merged 2026-08-28; owner deferred the binding itself |
 | B11 | The seventh merge's tail | `feature/bindings` merged into `next` 2026-08-28; three `next`-only commits reopened the matrix; closed by `CBIND-116` |
 | B12 | The Content Pipeline inventory tail | Completed `content-pipeline` integrated with current `next` 2026-08-29; inventory bookkeeping only, with C ABI design deferred to `CBIND-117` |
+| B13 | Content-loaded models | Owner asked 2026-08-29 for the gap `CBIND-116` recorded: no C route loaded a `Model` |
 
 ## Planning baseline
 
@@ -1482,6 +1484,31 @@ mislabelled not-applicable, or attributed to already completed binding phases.
 | # | Task | Rows | Status | Acceptance criteria |
 |---|---|---:|---|---|
 | CBIND-117 | Design or disposition the experimental Content Pipeline C boundary | 342 | ⬜ | Decide whether C consumers need a build-time pipeline API and, if so, design C-native orchestration and extension contracts without exposing C++ RTTI, templates, `std::filesystem`, exceptions or component objects. Bind or owner-approve a documented disposition for every row, add C-only evidence for any route, update ABI/version artifacts when required, and return the generated coverage and release-gate documents to a measured closed state. This is separate future C-ABI work; no route is added by Content Pipeline integration. |
+
+## Phase B13 — the model an XNA game actually loads
+
+`CBIND-116` recorded a gap rather than working around it: `ObjectDictionaryEXT` is reached in C++
+through `Model.Tag`, and **no route in this ABI loaded a `Model` from content at all**. Every
+`CNA_ModelHandle` came from `cna_model_create_*`, so a game written in C could build a model but
+never open one, and two routes written against the tag path were deleted rather than shipped
+because they could only ever answer "no tag". The project owner asked for that gap on 2026-08-29.
+
+This phase is one task, not two, and deliberately so. The tag routes are untestable without the
+loader -- there is no other way to obtain a model carrying a content-written tag -- so splitting
+them would produce a commit whose own acceptance criteria could not be run.
+
+It is numbered B13 rather than B12 because the Content Pipeline integration took B12 and `CBIND-117`
+while this work was in progress; nothing here touches that backlog, and the 342 rows it deferred
+stay deferred.
+
+| # | Task | Rows | Status | Acceptance criteria |
+|---|---|---:|---|---|
+| CBIND-118 | Load a `Model` from content, and reach the `Tag` its processor wrote | — | ✅ | **Done 2026-08-29.** Three routes, no new structures and no new handle kinds; exports 4,048 → **4,051**, ABI `0.18.0` → **`0.19.0`**. **No coverage row moves**: this binds C++ symbols the matrix already recorded, so the inventory stays at 342 planned and the gate stays `Not ready` on `CBIND-117`'s backlog and on nothing this task added.
+**The load rebuilds the C resource graph, because the accessors answer from it rather than from the canonical model.** `cna_model_get_bones`/`_get_meshes` read `ModelResource`'s own vectors, so a loaded model that skipped the mirror would report no bones and no meshes while looking like a valid handle -- which is why the test asserts the bone count, the mesh count and the root bone's name, not only the tag. Every node **borrows**: `Model` is a copy-constructible handle over one `shared_ptr<void>` its copies share, so each bone, mesh and part is an aliasing `shared_ptr` pointing into that bundle and keeping it alive. Nothing is copied and the loaded model stays the owner.
+**Handles the caller never created are owned by the model.** A part's effect and buffers are objects the model already owned, but the part accessors answer with handles, so the load publishes one per **distinct object** -- keyed by address, because two parts of one mesh routinely share an effect and publishing per part would make the mesh's effect collection hold it twice. `cna_model_destroy` releases them. A model-owned effect is created with `disposeAllowed = false`, since disposing it would reach inside an asset the content manager is still caching. The retained slots are filled through the ordinary `SetPart*` setters rather than by hand, so a loaded part reaches exactly the state a hand-built one reaches.
+**The tag handle outlives the model on purpose.** `cna_model_get_content_tag_dictionary_ext` publishes an aliasing `shared_ptr` onto the loaded model, so destroying the model first leaves the caller with a dictionary rather than a dangling handle -- asserted in that order.
+**A boundary `CBIND-116` had to record as unreachable is now measured.** That task could only assert that the two reflective registrations produce different stored C++ types, because a dictionary value is read through type-erased dispatch that consumes the reader index either way. `ModelReader`'s tag path genuinely dispatches on the shape: the test registers the **same two-field type twice under two names**, one each way, and the value-shaped arm fails the whole asset with `CNA_RESULT_IO` while the reference-shaped arm loads and hands back the caller's object. `CBIND-116`'s header text and `ABI_VERSIONING.md` are corrected accordingly, which is the second time this phase pair has had to replace a boundary written from the C++ documentation with one that was measured.
+Tests: two hand-written `.xnb` models in `ContentSmoke.c` -- one tagged with `TrianglePickingSample`'s own shape (a `BoundingSphere` and a `Vector3[]` of triangle vertices), one tagged with a type declared from C -- plus the refusals: a missing asset, an empty name, a null output, an asset whose root object is not a `Model`, and a hand-built model reporting no content tag without failing. Mutation-checked three ways -- the tag's `magic`, the `BoundingSphere` centre, and the value-shaped refusal -- each failing the suite. |
 
 ## Mandatory test layers
 
