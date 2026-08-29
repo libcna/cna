@@ -1277,7 +1277,7 @@ python3 tools/c-api/generate_coverage_inventory.py --check
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
 | `CPP-80DC702492E4` | 21 | public function | `CNA::Content::Pipeline::RegisterBuiltInContentPipeline(ContentPipelineRegistry &registry)` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
-| `CPP-FD5426F046E4` | 37 | public function | `CNA::Content::Pipeline::RunContentCompiler(const std::vector< std::filesystem::path > &arguments, std::shared_ptr< const ContentPipelineRegistry > registry)` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-FD5426F046E4` | 38 | public function | `CNA::Content::Pipeline::RunContentCompiler(const std::vector< std::filesystem::path > &arguments, std::shared_ptr< const ContentPipelineRegistry > registry)` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
 
 #### `modules/content/include/CNA/Content/Pipeline/ContentPipeline.hpp`
 

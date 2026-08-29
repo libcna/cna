@@ -1,9 +1,9 @@
 # CNA Content Pipeline
 
-> Status: implemented and extended pipeline, updated 2026-08-29. The command-line build workflow and
-> built-in byte-compatibility guarantees described here are supported behavior. The custom C++
-> component API is explicitly experimental. CNB container 1.0 and the existing built-in CNB
-> schemas remain frozen.
+> Status: implemented and extended pipeline, updated 2026-08-30. The command-line build/clean
+> workflows and built-in byte-compatibility guarantees described here are supported behavior. The
+> custom C++ component API is explicitly experimental. CNB container 1.0 and the existing built-in
+> CNB schemas remain frozen.
 
 The CNA Content Pipeline is the build-time system that turns authoring files into CNB. It is
 inspired by XNA 4.0's Importer -> Processor -> Writer separation, but it uses CNA-native C++23
@@ -45,6 +45,7 @@ The output preserves extensionless relative content names:
 
 ```text
 Content/
+├── .cna-content.lock
 ├── .cna-content-manifest.json
 ├── Models/
 │   └── robot.cnb
@@ -82,6 +83,17 @@ cna-content build ContentSource -o Content --workers 4
 `--workers` accepts integers from 1 through 64. `--workers 1` is the explicit serial fallback and
 has the same behavior as omitting the option. The worker count changes execution only; it is not
 content identity and does not enter CNB bytes or manifest fingerprints.
+
+After a valid manifest has established ownership, all unchanged pipeline-owned compiled and
+deployment files can be removed without scanning the output tree:
+
+```bash
+cna-content clean Content
+```
+
+Clean preserves manual files, source files, changed former outputs, directories, and anything not
+proven by the manifest. The persistent `.cna-content.lock` coordination file remains so later build
+and clean processes continue to serialize safely for that output root.
 
 Runtime loading remains the existing ContentManager API:
 
@@ -611,6 +623,14 @@ already clean. A corrupt/incompatible old manifest authorizes no deletion; chang
 symlinked parents/targets, directories, containment failures, and I/O errors are preserved and
 fail the build with the prior manifest intact.
 
+The explicit `clean <output-directory>` command calls this same preflight/deletion path with an
+empty next-ownership set; it is not a second tree cleaner. A missing output root or manifest is a
+successful no-op. A corrupt/incompatible/symlinked manifest authorizes nothing. Only after every
+owned candidate passes preflight are files removed in sorted order, followed by the ownership
+manifest. If removal or process execution stops partway, the retained manifest still proves the
+remaining ownership and a later clean can resume. The command never prunes directories and never
+infers ownership from an extension.
+
 ## Content-to-content build graph
 
 Directory discovery still creates the bounded set of primary nodes in sorted logical-name order.
@@ -662,6 +682,13 @@ Filesystem staging is also reservation based. Model/glTF intermediates claim a d
 exclusive create, and the one atomic publication helper claims sibling temporary files with the
 platform's exclusive-create primitive. Logical/path ownership already prevents two graph nodes
 from targeting the same final artifact.
+
+Every build or clean also claims the persistent `.cna-content.lock` beneath its canonical output
+root for the complete operation (`flock` on POSIX, an exclusive no-share handle on Windows). An
+active owner makes another operation fail before manifest inspection or publication; an unlocked
+marker is reclaimed after normal exit or a crash. A symlinked, non-regular, or otherwise unsafe
+marker is rejected. This serializes independent processes as well as worker threads and prevents a
+clean from racing an active publisher.
 
 The CLI uses dependency-aware ready batches capped by `--workers`. Shared dependencies execute
 once; dependent nodes become ready only after all of their content-build inputs succeed. A failed
@@ -1058,6 +1085,7 @@ separately fingerprinted/owned support files without embedding it in CNB.
 - the exact manifest JSON layout and cache implementation;
 - glTF's temporary canonical CNJ staging representation;
 - temporary-file naming used by atomic publication.
+- the persistent output-lease filename and exact OS locking mechanism.
 
 The engineering decisions, rejected alternatives, current risks, and CP task ledger are maintained
 separately in [`plans/plan_content_pipeline.md`](../plans/plan_content_pipeline.md).

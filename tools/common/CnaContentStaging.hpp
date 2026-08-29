@@ -33,6 +33,8 @@ namespace CNA::Tools
         "cna_content_stage_v1_";
     inline constexpr const char* ContentStagingMetadataFile = "owner.cna-stage";
     inline constexpr const char* ContentStagingLeaseFile = "lease.cna-stage";
+    /** @brief Persistent per-output-root lease file shared by build and clean operations. */
+    inline constexpr const char* ContentOutputLeaseFile = ".cna-content.lock";
     inline constexpr std::int64_t ContentStagingMinimumAgeSeconds = 24 * 60 * 60;
     inline constexpr std::size_t ContentStagingMaximumScannedEntries = 4096u;
     inline constexpr std::size_t ContentStagingMaximumCandidates = 256u;

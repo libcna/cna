@@ -1246,6 +1246,192 @@ TEST(ContentPipelineCliTest, ChangedOrSymlinkedObsoleteOutputsAreNeverDeleted)
     EXPECT_EQ(ReadBytes(manifest), linkedManifest);
 }
 
+TEST(ContentPipelineCliTest, CleanSyntaxIsNarrowAndANonexistentRootIsANoOp)
+{
+    ScratchDirectory scratch("clean_syntax");
+    const std::filesystem::path missing = scratch.Path() / "missing";
+    std::string log;
+    EXPECT_EQ(RunTool({"clean"}, log), 2) << log;
+    EXPECT_NE(log.find("clean requires an output directory"), std::string::npos) << log;
+    EXPECT_EQ(RunTool({"clean", missing.string(), "--workers", "2"}, log), 2) << log;
+    EXPECT_NE(log.find("unknown clean option '--workers'"), std::string::npos) << log;
+
+    ASSERT_EQ(RunTool({"clean", missing.string()}, log), 0) << log;
+    EXPECT_NE(log.find("Cleaned: 0  Failed: 0"), std::string::npos) << log;
+    EXPECT_FALSE(std::filesystem::exists(missing));
+
+    const std::filesystem::path file = scratch.Path() / "not-a-directory";
+    WriteText(file, "keep\n");
+    EXPECT_EQ(RunTool({"clean", file.string()}, log), 1) << log;
+    EXPECT_NE(log.find("must be a real directory"), std::string::npos) << log;
+    EXPECT_EQ(ReadBytes(file),
+              (std::vector<std::uint8_t>{'k', 'e', 'e', 'p', '\n'}));
+}
+
+TEST(ContentPipelineCliTest, CleanRemovesOnlyManifestOwnedCompiledAndDeploymentFiles)
+{
+    ScratchDirectory scratch("clean_owned_outputs");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    WriteBytes(source / "Textures" / "wall.png", MakePng(2, 2));
+    WriteBytes(source / "Music" / "theme.ogg", {0x4Fu, 0x67u, 0x67u, 0x53u, 1u});
+
+    std::string log;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--workers", "4"},
+                      log),
+              0)
+        << log;
+    WriteBytes(output / "Manual" / "preserved.cnb", {'u', 's', 'e', 'r'});
+    ASSERT_TRUE(std::filesystem::is_regular_file(output / "Textures" / "wall.cnb"));
+    ASSERT_TRUE(std::filesystem::is_regular_file(output / "Music" / "theme.cnb"));
+    ASSERT_TRUE(std::filesystem::is_regular_file(output / "Music" / "theme.ogg"));
+    ASSERT_TRUE(std::filesystem::is_regular_file(
+        output / Pipeline::ContentBuildManifestFileName));
+    ASSERT_TRUE(std::filesystem::is_regular_file(
+        output / CNA::Tools::ContentOutputLeaseFile));
+
+    ASSERT_EQ(RunTool({"clean", output.string()}, log), 0) << log;
+    EXPECT_EQ(CountOccurrences(log, "[CLEAN]"), 4u) << log;
+    EXPECT_NE(log.find("[CLEAN] Textures/wall.cnb (manifest-owned output)"),
+              std::string::npos)
+        << log;
+    EXPECT_NE(log.find("[CLEAN] Music/theme.ogg (manifest-owned output)"),
+              std::string::npos)
+        << log;
+    EXPECT_NE(log.find("Cleaned: 3  Failed: 0"), std::string::npos) << log;
+    EXPECT_FALSE(std::filesystem::exists(output / "Textures" / "wall.cnb"));
+    EXPECT_FALSE(std::filesystem::exists(output / "Music" / "theme.cnb"));
+    EXPECT_FALSE(std::filesystem::exists(output / "Music" / "theme.ogg"));
+    EXPECT_FALSE(std::filesystem::exists(
+        output / Pipeline::ContentBuildManifestFileName));
+    EXPECT_EQ(ReadBytes(output / "Manual" / "preserved.cnb"),
+              (std::vector<std::uint8_t>{'u', 's', 'e', 'r'}));
+    EXPECT_TRUE(std::filesystem::is_regular_file(
+        output / CNA::Tools::ContentOutputLeaseFile));
+    EXPECT_TRUE(std::filesystem::is_regular_file(source / "Textures" / "wall.png"));
+    EXPECT_TRUE(std::filesystem::is_regular_file(source / "Music" / "theme.ogg"));
+
+    ASSERT_EQ(RunTool({"clean", output.string()}, log), 0) << log;
+    EXPECT_NE(log.find("Cleaned: 0  Failed: 0"), std::string::npos) << log;
+    EXPECT_EQ(ReadBytes(output / "Manual" / "preserved.cnb"),
+              (std::vector<std::uint8_t>{'u', 's', 'e', 'r'}));
+}
+
+TEST(ContentPipelineCliTest, CleanRejectsUntrustedOwnershipWithoutDeletingAnything)
+{
+    ScratchDirectory scratch("clean_guards");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    const std::filesystem::path manifest =
+        output / Pipeline::ContentBuildManifestFileName;
+    WriteBytes(source / "a.png", MakePng(2, 2));
+    WriteBytes(source / "b.png", MakePng(3, 2));
+
+    std::string log;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    const std::vector<std::uint8_t> manifestBytes = ReadBytes(manifest);
+    const std::vector<std::uint8_t> aBytes = ReadBytes(output / "a.cnb");
+    const std::vector<std::uint8_t> bBytes = ReadBytes(output / "b.cnb");
+
+    const std::filesystem::path outputAlias = scratch.Path() / "ContentAlias";
+    std::filesystem::create_directory_symlink(output, outputAlias);
+    EXPECT_EQ(RunTool({"clean", outputAlias.string()}, log), 1) << log;
+    EXPECT_NE(log.find("must be a real directory"), std::string::npos) << log;
+    EXPECT_EQ(ReadBytes(output / "a.cnb"), aBytes);
+    EXPECT_EQ(ReadBytes(output / "b.cnb"), bBytes);
+
+    const std::filesystem::path outsideManifest = scratch.Path() / "outside-manifest.json";
+    WriteBytes(outsideManifest, manifestBytes);
+    ASSERT_TRUE(std::filesystem::remove(manifest));
+    std::filesystem::create_symlink(outsideManifest, manifest);
+    EXPECT_EQ(RunTool({"clean", output.string()}, log), 1) << log;
+    EXPECT_NE(log.find("ownership manifest is unreadable, symlinked"), std::string::npos)
+        << log;
+    EXPECT_EQ(ReadBytes(output / "a.cnb"), aBytes);
+    EXPECT_EQ(ReadBytes(output / "b.cnb"), bBytes);
+    EXPECT_EQ(ReadBytes(outsideManifest), manifestBytes);
+    ASSERT_TRUE(std::filesystem::remove(manifest));
+
+    WriteBytes(manifest, {'b', 'a', 'd'});
+    EXPECT_EQ(RunTool({"clean", output.string()}, log), 1) << log;
+    EXPECT_TRUE(std::filesystem::is_regular_file(output / "a.cnb"));
+    EXPECT_TRUE(std::filesystem::is_regular_file(output / "b.cnb"));
+
+    WriteBytes(manifest, manifestBytes);
+    WriteBytes(output / "a.cnb", {'u', 's', 'e', 'r'});
+    EXPECT_EQ(RunTool({"clean", output.string()}, log), 1) << log;
+    EXPECT_NE(log.find("bytes no longer match"), std::string::npos) << log;
+    EXPECT_EQ(ReadBytes(output / "a.cnb"),
+              (std::vector<std::uint8_t>{'u', 's', 'e', 'r'}));
+    EXPECT_EQ(ReadBytes(output / "b.cnb"), bBytes);
+    EXPECT_EQ(ReadBytes(manifest), manifestBytes);
+
+    WriteBytes(output / "a.cnb", aBytes);
+    ASSERT_TRUE(std::filesystem::remove(output / "b.cnb"));
+    const std::filesystem::path outside = scratch.Path() / "outside.cnb";
+    WriteBytes(outside, {'s', 'a', 'f', 'e'});
+    std::filesystem::create_symlink(outside, output / "b.cnb");
+    EXPECT_EQ(RunTool({"clean", output.string()}, log), 1) << log;
+    EXPECT_NE(log.find("not a real regular file"), std::string::npos) << log;
+    EXPECT_EQ(ReadBytes(output / "a.cnb"), aBytes);
+    EXPECT_EQ(ReadBytes(outside),
+              (std::vector<std::uint8_t>{'s', 'a', 'f', 'e'}));
+    EXPECT_EQ(ReadBytes(manifest), manifestBytes);
+
+    ASSERT_TRUE(std::filesystem::remove(output / "b.cnb"));
+    WriteBytes(output / "b.cnb", bBytes);
+    ASSERT_EQ(RunTool({"clean", output.string(), "--quiet"}, log), 0) << log;
+    EXPECT_TRUE(log.empty()) << log;
+    EXPECT_FALSE(std::filesystem::exists(output / "a.cnb"));
+    EXPECT_FALSE(std::filesystem::exists(output / "b.cnb"));
+    EXPECT_FALSE(std::filesystem::exists(manifest));
+}
+
+TEST(ContentPipelineCliTest, OutputLeaseSerializesBuildAndCleanForOneRoot)
+{
+    ScratchDirectory scratch("output_lease");
+    const std::filesystem::path source = scratch.Path() / "wall.png";
+    const std::filesystem::path outputRoot = scratch.Path() / "Content";
+    const std::filesystem::path output = outputRoot / "wall.cnb";
+    WriteBytes(source, MakePng(2, 2));
+    std::filesystem::create_directories(outputRoot);
+
+    CNA::Tools::ContentStagingDetail::LeaseHandle active;
+    std::string reason;
+    ASSERT_TRUE(active.CreateAndHold(
+        outputRoot / CNA::Tools::ContentOutputLeaseFile, reason)) << reason;
+
+    std::string log;
+    EXPECT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 1) << log;
+    EXPECT_NE(log.find("another content build or clean operation is active"),
+              std::string::npos)
+        << log;
+    EXPECT_FALSE(std::filesystem::exists(output));
+    EXPECT_EQ(RunTool({"clean", outputRoot.string()}, log), 1) << log;
+    EXPECT_NE(log.find("another content build or clean operation is active"),
+              std::string::npos)
+        << log;
+
+    active.Close();
+    ASSERT_TRUE(std::filesystem::remove(
+        outputRoot / CNA::Tools::ContentOutputLeaseFile));
+    const std::filesystem::path outsideLease = scratch.Path() / "outside.lock";
+    WriteText(outsideLease, "user\n");
+    std::filesystem::create_symlink(
+        outsideLease, outputRoot / CNA::Tools::ContentOutputLeaseFile);
+    EXPECT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 1) << log;
+    EXPECT_NE(log.find("content output lease is unsafe"), std::string::npos) << log;
+    EXPECT_EQ(ReadBytes(outsideLease),
+              (std::vector<std::uint8_t>{'u', 's', 'e', 'r', '\n'}));
+    ASSERT_TRUE(std::filesystem::remove(
+        outputRoot / CNA::Tools::ContentOutputLeaseFile));
+
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    ASSERT_TRUE(std::filesystem::is_regular_file(output));
+    ASSERT_EQ(RunTool({"clean", outputRoot.string()}, log), 0) << log;
+    EXPECT_FALSE(std::filesystem::exists(output));
+}
+
 TEST(ContentPipelineCliTest, UnknownExtensionsFailWithoutPublishingAnOutput)
 {
     ScratchDirectory scratch("unknown");
@@ -1800,6 +1986,24 @@ TEST(ContentPipelineCliTest, UserBuiltCompilerCombinesCustomAndBuiltInRoutesEndT
     EXPECT_NE(repairLog.find("[SKIP] Textures/badge"), std::string::npos) << repairLog;
     EXPECT_EQ(ReadBytes(replyPath), replyBytes);
     EXPECT_EQ(ReadBytes(manifestPath), manifestBytes);
+
+    WriteBytes(output / "manual.cnb", {'k', 'e', 'e', 'p'});
+    std::string cleanLog;
+    ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
+                            {"clean", output.string()}, cleanLog),
+              0)
+        << cleanLog;
+    EXPECT_NE(cleanLog.find(
+                  "[CLEAN] Generated/Messages/welcome-reply.cnb (manifest-owned output)"),
+              std::string::npos)
+        << cleanLog;
+    EXPECT_NE(cleanLog.find("Cleaned: 3  Failed: 0"), std::string::npos) << cleanLog;
+    EXPECT_FALSE(std::filesystem::exists(greetingPath));
+    EXPECT_FALSE(std::filesystem::exists(replyPath));
+    EXPECT_FALSE(std::filesystem::exists(texturePath));
+    EXPECT_FALSE(std::filesystem::exists(manifestPath));
+    EXPECT_EQ(ReadBytes(output / "manual.cnb"),
+              (std::vector<std::uint8_t>{'k', 'e', 'e', 'p'}));
 }
 
 TEST(ContentPipelineCliTest, CustomWriterSchemaAndCodecEvolutionCannotSkipStaleOutput)

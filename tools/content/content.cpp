@@ -36,8 +36,15 @@ namespace Pipeline = CNA::Content::Pipeline;
 
 namespace
 {
+    enum class ContentCommand
+    {
+        Build,
+        Clean,
+    };
+
     struct CommandLine
     {
+        ContentCommand operation = ContentCommand::Build;
         std::filesystem::path source;
         std::filesystem::path output;
         std::filesystem::path configuration;
@@ -74,12 +81,15 @@ namespace
     {
         std::cerr
             << "Usage: cna-content build <source-file-or-directory> -o <output> "
-               "[--config <file>] [--workers <1..64>] [--quiet]\n\n"
+               "[--config <file>] [--workers <1..64>] [--quiet]\n"
+            << "       cna-content clean <output-directory> [--quiet]\n\n"
             << "Builds source content through Importer -> Processor -> Content Type Writer -> "
                "CNB.\n"
             << "A source file requires an output .cnb path. A source directory requires an "
                "output\n"
-            << "directory; relative paths and logical content names are preserved.\n";
+            << "directory; relative paths and logical content names are preserved. Clean removes "
+               "only\n"
+            << "unchanged files proven to be pipeline-owned by a valid output manifest.\n";
     }
 
     std::size_t ParseWorkerCount(const std::filesystem::path& argument)
@@ -104,12 +114,47 @@ namespace
 
     CommandLine ParseCommandLine(const std::vector<std::filesystem::path>& arguments)
     {
-        if (arguments.empty() || !IsOption(arguments[0], "build"))
+        if (arguments.empty() ||
+            (!IsOption(arguments[0], "build") && !IsOption(arguments[0], "clean")))
         {
-            throw std::invalid_argument("the first argument must be 'build'.");
+            throw std::invalid_argument("the first argument must be 'build' or 'clean'.");
         }
 
         CommandLine command;
+        if (IsOption(arguments[0], "clean"))
+        {
+            command.operation = ContentCommand::Clean;
+            for (std::size_t index = 1u; index < arguments.size(); ++index)
+            {
+                const std::filesystem::path& argument = arguments[index];
+                if (IsOption(argument, "--quiet"))
+                {
+                    command.quiet = true;
+                }
+                else if (!argument.empty() && argument.native().front() ==
+                                                  std::filesystem::path("-").native().front())
+                {
+                    throw std::invalid_argument("unknown clean option '" +
+                                                CNA::Internal::ContentPathToUtf8(argument) +
+                                                "'.");
+                }
+                else if (command.output.empty())
+                {
+                    command.output = argument;
+                }
+                else
+                {
+                    throw std::invalid_argument(
+                        "more than one clean output directory was provided.");
+                }
+            }
+            if (command.output.empty())
+            {
+                throw std::invalid_argument("clean requires an output directory.");
+            }
+            return command;
+        }
+
         bool workersSpecified = false;
         for (std::size_t index = 1u; index < arguments.size(); ++index)
         {
@@ -199,6 +244,64 @@ namespace
             ++pathPart;
         }
         return rootPart == root.end();
+    }
+
+    void AcquireOutputLease(
+        const std::filesystem::path& outputRoot,
+        CNA::Tools::ContentStagingDetail::LeaseHandle& lease)
+    {
+        std::error_code error;
+        std::filesystem::create_directories(outputRoot, error);
+        if (error)
+        {
+            throw std::runtime_error("cannot create the content output root: " +
+                                     error.message() + ".");
+        }
+
+        const std::filesystem::path path =
+            outputRoot / CNA::Tools::ContentOutputLeaseFile;
+        const std::filesystem::file_status status =
+            std::filesystem::symlink_status(path, error);
+        if (error && error != std::errc::no_such_file_or_directory)
+        {
+            throw std::runtime_error("cannot inspect the content output lease: " +
+                                     error.message() + ".");
+        }
+
+        std::string reason;
+        if (!error && status.type() != std::filesystem::file_type::not_found)
+        {
+            const auto result = lease.ClaimExisting(path, reason);
+            if (result ==
+                CNA::Tools::ContentStagingDetail::LeaseHandle::ClaimResult::Claimed)
+            {
+                return;
+            }
+            if (result ==
+                CNA::Tools::ContentStagingDetail::LeaseHandle::ClaimResult::Active)
+            {
+                throw std::runtime_error(
+                    "another content build or clean operation is active for output root '" +
+                    CNA::Internal::ContentPathToUtf8(outputRoot) + "'.");
+            }
+            throw std::runtime_error("the content output lease is unsafe: " + reason + ".");
+        }
+
+        error.clear();
+        if (lease.CreateAndHold(path, reason)) { return; }
+
+        const auto raced = lease.ClaimExisting(path, reason);
+        if (raced == CNA::Tools::ContentStagingDetail::LeaseHandle::ClaimResult::Active)
+        {
+            throw std::runtime_error(
+                "another content build or clean operation is active for output root '" +
+                CNA::Internal::ContentPathToUtf8(outputRoot) + "'.");
+        }
+        if (raced == CNA::Tools::ContentStagingDetail::LeaseHandle::ClaimResult::Claimed)
+        {
+            return;
+        }
+        throw std::runtime_error("cannot establish the content output lease: " + reason + ".");
     }
 
     std::string LogicalName(const std::filesystem::path& relativeSource)
@@ -453,7 +556,7 @@ namespace
             std::filesystem::symlink_status(path, error);
         if (error && error != std::errc::no_such_file_or_directory)
         {
-            throw std::runtime_error("cannot inspect obsolete owned output '" +
+            throw std::runtime_error("cannot inspect manifest-owned output '" +
                                      CNA::Internal::ContentPathToUtf8(path) + "': " +
                                      error.message() + ".");
         }
@@ -472,7 +575,7 @@ namespace
             if (std::filesystem::is_symlink(status) || !std::filesystem::is_directory(status))
             {
                 throw std::runtime_error(
-                    "refusing to collect obsolete owned output '" +
+                    "refusing to collect manifest-owned output '" +
                     CNA::Internal::ContentPathToUtf8(relative) +
                     "' because an output-path parent is not a real directory.");
             }
@@ -482,7 +585,8 @@ namespace
     std::size_t CollectObsoleteOwnedOutputs(
         const Pipeline::ContentBuildManifest& previousManifest,
         const Pipeline::ContentBuildManifest& nextManifest,
-        const std::filesystem::path& outputRoot, bool quiet)
+        const std::filesystem::path& outputRoot, bool quiet,
+        const char* deletionReason)
     {
         const std::map<std::string, std::string> previous =
             OwnedOutputDigests(previousManifest);
@@ -504,19 +608,19 @@ namespace
                 !std::filesystem::is_regular_file(status))
             {
                 throw std::runtime_error(
-                    "refusing to collect obsolete owned output '" + relativeText +
+                    "refusing to collect manifest-owned output '" + relativeText +
                     "' because it is not a real regular file.");
             }
             const std::filesystem::path canonicalCandidate = WeaklyCanonical(candidate);
             if (!IsWithin(canonicalRoot, canonicalCandidate))
             {
-                throw std::runtime_error("refusing to collect obsolete owned output '" +
+                throw std::runtime_error("refusing to collect manifest-owned output '" +
                                          relativeText + "' because it escapes the output root.");
             }
             if (Pipeline::ContentFileSha256(candidate) != sha256)
             {
                 throw std::runtime_error(
-                    "refusing to collect obsolete owned output '" + relativeText +
+                    "refusing to collect manifest-owned output '" + relativeText +
                     "' because its bytes no longer match the previous manifest.");
             }
             obsolete.emplace_back(candidate, relativeText);
@@ -529,7 +633,7 @@ namespace
             const bool deleted = std::filesystem::remove(path, error);
             if (error)
             {
-                throw std::runtime_error("cannot remove obsolete owned output '" + relative +
+                throw std::runtime_error("cannot remove manifest-owned output '" + relative +
                                          "': " + error.message() + ".");
             }
             if (deleted)
@@ -537,11 +641,105 @@ namespace
                 ++removed;
                 if (!quiet)
                 {
-                    std::cout << "[CLEAN] " << relative << " (obsolete manifest-owned output)\n";
+                    std::cout << "[CLEAN] " << relative << " (" << deletionReason << ")\n";
                 }
             }
         }
         return removed;
+    }
+
+    int RunClean(const CommandLine& command)
+    {
+        std::size_t removed = 0u;
+        std::size_t failed = 0u;
+        try
+        {
+            std::error_code error;
+            const std::filesystem::file_status requestedStatus =
+                std::filesystem::symlink_status(command.output, error);
+            if (error == std::errc::no_such_file_or_directory ||
+                requestedStatus.type() == std::filesystem::file_type::not_found)
+            {
+                if (!command.quiet)
+                {
+                    std::cout << "Cleaned: 0  Failed: 0\n";
+                }
+                return 0;
+            }
+            if (error)
+            {
+                throw std::runtime_error("cannot inspect the clean output directory: " +
+                                         error.message() + ".");
+            }
+            if (std::filesystem::is_symlink(requestedStatus) ||
+                !std::filesystem::is_directory(requestedStatus))
+            {
+                throw std::runtime_error(
+                    "the clean output path must be a real directory, not a symlink or file.");
+            }
+
+            const std::filesystem::path outputRoot = WeaklyCanonical(command.output);
+            CNA::Tools::ContentStagingDetail::LeaseHandle outputLease;
+            AcquireOutputLease(outputRoot, outputLease);
+
+            const std::filesystem::path manifestPath =
+                outputRoot / Pipeline::ContentBuildManifestFileName;
+            error.clear();
+            const std::filesystem::file_status manifestStatus =
+                std::filesystem::symlink_status(manifestPath, error);
+            if (error == std::errc::no_such_file_or_directory ||
+                manifestStatus.type() == std::filesystem::file_type::not_found)
+            {
+                if (!command.quiet)
+                {
+                    std::cout << "Cleaned: 0  Failed: 0\n";
+                }
+                return 0;
+            }
+            if (error || std::filesystem::is_symlink(manifestStatus) ||
+                !std::filesystem::is_regular_file(manifestStatus))
+            {
+                throw std::runtime_error(
+                    "the ownership manifest is unreadable, symlinked, or not a regular file.");
+            }
+
+            const std::string originalManifest = ReadText(manifestPath);
+            const Pipeline::ContentBuildManifest previousManifest =
+                Pipeline::ContentBuildManifest::Parse(originalManifest);
+            removed = CollectObsoleteOwnedOutputs(
+                previousManifest, Pipeline::ContentBuildManifest{}, outputRoot, command.quiet,
+                "manifest-owned output");
+
+            if (ReadText(manifestPath) != originalManifest)
+            {
+                throw std::runtime_error(
+                    "the ownership manifest changed while clean was running; it was retained.");
+            }
+            error.clear();
+            const bool manifestRemoved = std::filesystem::remove(manifestPath, error);
+            if (error || !manifestRemoved)
+            {
+                throw std::runtime_error(
+                    "cannot remove the ownership manifest" +
+                    std::string(error ? ": " + error.message() : "") + ".");
+            }
+            if (!command.quiet)
+            {
+                std::cout << "[CLEAN] " << Pipeline::ContentBuildManifestFileName
+                          << " (ownership manifest)\n";
+            }
+        }
+        catch (const std::exception& error)
+        {
+            ++failed;
+            std::cerr << "content clean failed: " << error.what() << "\n";
+        }
+
+        if (!command.quiet || failed != 0u)
+        {
+            std::cout << "Cleaned: " << removed << "  Failed: " << failed << "\n";
+        }
+        return failed == 0u ? 0 : 1;
     }
 
     std::vector<std::string> ContentBuildDependencies(
@@ -1190,6 +1388,7 @@ namespace
             PrintUsage();
             return 2;
         }
+        if (command.operation == ContentCommand::Clean) { return RunClean(command); }
 
         std::filesystem::path sourceRoot;
         std::filesystem::path outputRoot;
@@ -1217,6 +1416,16 @@ namespace
         const Pipeline::ContentPipeline pipeline(registry);
         const std::filesystem::path manifestPath =
             outputRoot / Pipeline::ContentBuildManifestFileName;
+        CNA::Tools::ContentStagingDetail::LeaseHandle outputLease;
+        try
+        {
+            AcquireOutputLease(outputRoot, outputLease);
+        }
+        catch (const std::exception& error)
+        {
+            std::cerr << "content output lease failed: " << error.what() << "\n";
+            return 1;
+        }
         std::string originalManifest;
         bool previousOwnershipTrusted = false;
         const Pipeline::ContentBuildManifest previousManifest =
@@ -1625,7 +1834,8 @@ namespace
                 try
                 {
                     static_cast<void>(CollectObsoleteOwnedOutputs(
-                        previousManifest, nextManifest, outputRoot, command.quiet));
+                        previousManifest, nextManifest, outputRoot, command.quiet,
+                        "obsolete manifest-owned output"));
                 }
                 catch (const std::exception& error)
                 {

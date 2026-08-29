@@ -1190,6 +1190,7 @@ carrying forward task-local results:
 | `CP-046` | **completed** | Audited scenes, skin/static Model groups, embedded/standalone clips, external/data-URI textures and the existing output graph. A single animated Model now builds normally with identical primary bytes. Optional bool `generateChildAssets` publishes canonical additional Models, standalone AnimationClips and remapped native Texture2D children through the existing typed encoders; multi-Model input requires this explicit mode. Default-scene selection remains unchanged, the lexicographically first generated Model is primary, sanitized group/clip name collisions fail before overwrite, and ordinary reservations/atomic staging/manifest ownership/CP-043 contraction GC govern the bundle. Real fixtures prove embedded/child clip equivalence, external/embedded texture decode, multi-Model semantics, default producer bytes, no-op/incremental contraction and workers 1/2/4 identical trees. The inventory now records 9,332 symbols/501 pipeline rows under `CBIND-117`; no C route/export/version, frozen schema or default glTF byte changed. |
 | `CP-047` | **completed** | Confirmed from MonoGame `ContentWriter`/`Lz4DecoderStream` that flag `0x40` carries one raw LZ4 block after the ordinary decompressed-size field, never an LZ4 frame. Added one bounds-checked shared decoder used by runtime and canonical compiler paths with no runtime dependency. A fixture whose real MonoGame body was compressed by upstream liblz4 proves exact bytes; runtime and headless XNB-to-CNB pixels agree. Negative tests cover every token/length/offset/input/output boundary, size limits and 1,500 deterministic whole-container mutations. Both compression bits remain invalid. |
 | `CP-048` | **completed** | Added MinGW's Unicode-console startup option only to the stock and custom content compiler executables that define `wmain`. Both link as x86-64 PE console programs; Wine 10 runs each, the stock tool builds through a native non-ASCII path, and the custom tool publishes its two-output fixture. A Windows-target Curve CNB is byte-identical to the Linux build. Linux entry points still build/run normally. Native Windows and MSVC remain untested and unclaimed. |
+| `CP-049` | **completed** | Added `clean <output-directory> [--quiet]` as an empty-next-manifest call through CP-043's exact sorted digest/containment preflight; it removes the valid manifest last and never scans or prunes the tree. Builds and cleans now hold one persistent per-output-root OS lease, so an active operation, unsafe lease, corrupt/symlinked manifest, changed output, or symlinked path fails before destructive work. Compiled, generated and deployment outputs are covered; manual/source files survive. The 53-test CLI suite and focused ASan+UBSan/TSan selections pass, and the MinGW build plus Wine build/clean route succeeds. |
 
 Tasks are intentionally vertical/coherent. The ledger is revised when implementation evidence makes
 the ordering wrong; it is not a promise to build speculative abstractions.
@@ -1846,3 +1847,47 @@ their Ninja link edges contain `-municode`. Wine 10.0 then exercises more than p
 The ordinary Linux stock/custom compiler targets and corresponding fixture builds also pass after
 the CMake change. This evidence is specifically MinGW compile/link plus Wine execution. It is not a
 native Windows run and provides no MSVC result; those two platform claims remain open.
+
+---
+
+## 25. Manifest-owned clean and output-root serialization (`CP-049`)
+
+The post-backlog review selected a clean command because CP-043 now provides a strict ownership
+proof and users otherwise have to delete an output tree indiscriminately. The implementation adds
+only this narrow syntax:
+
+```text
+cna-content clean <output-directory> [--quiet]
+```
+
+Clean parses one current valid regular, non-symlink manifest, then calls the existing
+`CollectObsoleteOwnedOutputs` with an empty next manifest. That same function enumerates only the
+sorted manifest ownership map, preflights every candidate before deleting any, requires real
+non-symlink parents and regular files under the canonical root, and compares each SHA-256. It
+therefore covers primary/additional CNBs and Song/Video deployment files without an extension or
+directory scan. Manual files, authored source, modified former outputs, unknown files and
+directories are never inferred as owned. A missing root or manifest is a successful no-op; a
+corrupt/incompatible/symlinked manifest authorizes nothing.
+
+The manifest is removed only after every eligible artifact deletion succeeds and after its text is
+rechecked. A crash or removal failure before that point leaves the manifest as recovery evidence;
+missing previously owned paths are accepted on the next clean. Clean deliberately does not remove
+empty directories or the persistent coordination marker.
+
+The audit also found that a clean command could not safely coexist with an independent active
+publisher under the prior process-local scheduler. Both build and clean now claim
+`.cna-content.lock` below the canonical output root for their complete lifetime, using the already
+portable staging lease primitive (`flock` on POSIX, exclusive no-share `CreateFileW` on Windows).
+The regular marker persists across clean exit and crashes; a later operation claims its released
+OS lock. An active owner fails a second operation before manifest inspection/publication, while a
+symlinked/non-regular/indeterminate marker is rejected rather than replaced.
+
+Tests cover narrow syntax and missing-root no-op, compiled plus deployment cleanup, custom generated
+child cleanup, manual/source survival, corrupt manifest, modified bytes, symlinked root/output/lock,
+an actively held build/clean lease, quiet behavior, retry and the pre-existing CP-043 orphan cases.
+All 53 CLI tests pass. The seven most relevant subprocess cases pass under combined ASan+UBSan
+(`detect_leaks=0`, so no LSan claim) and TSan with `halt_on_error=1`. Both MinGW executables compile
+and link after the change; Wine performs a real Windows-target build followed by clean while a
+manual file and the persistent lease survive. The generated C-API inventory remains 9,332 symbols
+with 501 experimental pipeline rows planned under `CBIND-117`, and all nine C-API consistency gates
+pass; no C route/export/version or CNB definition/byte changed.
