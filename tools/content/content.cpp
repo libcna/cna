@@ -18,6 +18,7 @@
 #include "CNA/Content/Pipeline/CnjContentPipeline.hpp"
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
 #include "CNA/Content/Pipeline/ModelContentPipeline.hpp"
+#include "CNA/Content/Pipeline/SongContentPipeline.hpp"
 #include "CNA/Content/Pipeline/SoundEffectContentPipeline.hpp"
 #include "CNA/Content/Pipeline/Texture2DContentPipeline.hpp"
 #include "CNA/Internal/ContentPath.hpp"
@@ -222,6 +223,7 @@ namespace
         auto registry = std::make_shared<Pipeline::ContentPipelineRegistry>();
         Pipeline::RegisterTexture2DContentPipeline(*registry);
         Pipeline::RegisterSoundEffectContentPipeline(*registry);
+        Pipeline::RegisterSongContentPipeline(*registry);
         Pipeline::RegisterModelContentPipeline(*registry);
         Pipeline::RegisterCnjContentPipeline(*registry);
         return registry;

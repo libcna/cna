@@ -21,7 +21,7 @@ subset; `planned` is not coverage and names the task that owns its design; and
 behavior to expose. Nothing is treated as implemented merely because a related C
 operation exists.
 
-Snapshot: **545 headers**, **9187 symbols**, **8352 implemented**, **15 partial**, **356 planned**, **464 not applicable**. Explicitly excluded internal/detail headers: **130**.
+Snapshot: **546 headers**, **9212 symbols**, **8352 implemented**, **15 partial**, **381 planned**, **464 not applicable**. Explicitly excluded internal/detail headers: **130**.
 
 Regenerate with:
 
@@ -39,7 +39,7 @@ python3 tools/c-api/generate_coverage_inventory.py --check
 | Module | Headers | Symbols | Implemented | Partial | Planned | N/A |
 |---|---:|---:|---:|---:|---:|---:|
 | `audio` | 22 | 310 | 217 | 0 | 0 | 93 |
-| `content` | 42 | 956 | 561 | 10 | 356 | 29 |
+| `content` | 43 | 981 | 561 | 10 | 381 | 29 |
 | `core` | 15 | 168 | 162 | 0 | 0 | 6 |
 | `devices` | 18 | 209 | 182 | 0 | 0 | 27 |
 | `devices-ext` | 17 | 84 | 79 | 0 | 0 | 5 |
@@ -1423,6 +1423,36 @@ python3 tools/c-api/generate_coverage_inventory.py --check
 | `CPP-E2B02D93AE4F` | 107 | public method | `CNA::Content::Pipeline::ModelContentWriter::InputType() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
 | `CPP-74F5D6F3417A` | 116 | public method | `CNA::Content::Pipeline::ModelContentWriter::Write(const ContentValue &input, const std::string &logicalName) const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
 | `CPP-5DC06C5C93C8` | 125 | public function | `CNA::Content::Pipeline::RegisterModelContentPipeline(ContentPipelineRegistry &registry)` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+
+#### `modules/content/include/CNA/Content/Pipeline/SongContentPipeline.hpp`
+
+| ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
+|---|---:|---|---|---|---|---|
+| `CPP-12B6C6075206` | 12 | public field | `CNA::Content::Pipeline::ImportedSongSourceType = "CNA.Content.Pipeline.ImportedSongSource"` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-BC36A5605B89` | 16 | public field | `CNA::Content::Pipeline::ProcessedSongType = "CNA.Content.Cnb.SongData"` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-99C4C9DAA19B` | 19 | public field | `CNA::Content::Pipeline::SongStreamReferenceParameter = "streamReference"` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-7C123F038F97` | 22 | public field | `CNA::Content::Pipeline::SongNameParameter = "name"` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-6383490E269C` | 25 | public field | `CNA::Content::Pipeline::SongDurationMsParameter = "durationMs"` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-A6396CDAC28F` | 28 | public struct | `CNA::Content::Pipeline::ImportedSongSource` | Planned `CNA_*` POD or validated handle design (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-9B5755C47163` | 31 | public field | `CNA::Content::Pipeline::ImportedSongSource::streamReference` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-FB7AE25AF4FC` | 34 | public field | `CNA::Content::Pipeline::ImportedSongSource::byteSize = 0u` | Planned POD field or `cna_*_get/set_*` access (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-76B2E4F4C51B` | 37 | public operator | `CNA::Content::Pipeline::ImportedSongSource::operator==(const ImportedSongSource &) const =default` | Planned named `cna_*` value operation (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-D67A54758448` | 41 | public class | `CNA::Content::Pipeline::SongImporter` | Planned `CNA_*` POD or validated handle design (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-EBB24C2F5FC4` | 45 | public method | `CNA::Content::Pipeline::SongImporter::Identity() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-AC60860BC496` | 48 | public method | `CNA::Content::Pipeline::SongImporter::SourceExtensions() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-33FD036DE0B2` | 54 | public method | `CNA::Content::Pipeline::SongImporter::OutputTypes() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-864CB888C752` | 62 | public method | `CNA::Content::Pipeline::SongImporter::Import(ContentImporterContext &context) const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-F09C1CF4257F` | 66 | public class | `CNA::Content::Pipeline::SongProcessor` | Planned `CNA_*` POD or validated handle design (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-071B34601643` | 70 | public method | `CNA::Content::Pipeline::SongProcessor::Identity() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-83EC8EFF460D` | 73 | public method | `CNA::Content::Pipeline::SongProcessor::InputType() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-6A5398FAB135` | 76 | public method | `CNA::Content::Pipeline::SongProcessor::OutputType() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-45B7F57677A0` | 83 | public method | `CNA::Content::Pipeline::SongProcessor::ValidateParameters(const ContentProcessorParameters &parameters) const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-B020F837C3B1` | 92 | public method | `CNA::Content::Pipeline::SongProcessor::Process(const ContentValue &input, ContentProcessorContext &context) const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-109872D847E0` | 97 | public class | `CNA::Content::Pipeline::SongContentWriter` | Planned `CNA_*` POD or validated handle design (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-C8AC0D82A347` | 101 | public method | `CNA::Content::Pipeline::SongContentWriter::Identity() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-388E811C80CE` | 104 | public method | `CNA::Content::Pipeline::SongContentWriter::InputType() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-1B83B238BBC2` | 113 | public method | `CNA::Content::Pipeline::SongContentWriter::Write(const ContentValue &input, const std::string &logicalName) const override` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
+| `CPP-566357FE9F3B` | 122 | public function | `CNA::Content::Pipeline::RegisterSongContentPipeline(ContentPipelineRegistry &registry)` | Planned `cna_*` operation with C-safe arguments (CBIND-117) | Pending C-only behavior/lifetime/ABI evidence (CBIND-117) | ⬜ planned (`CBIND-117`) |
 
 #### `modules/content/include/CNA/Content/Pipeline/SoundEffectContentPipeline.hpp`
 

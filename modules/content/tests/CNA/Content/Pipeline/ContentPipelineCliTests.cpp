@@ -16,6 +16,7 @@
 #include <unistd.h>
 
 #include "CNA/Content/Cnb/CnbDocument.hpp"
+#include "CNA/Content/Cnb/CnbMediaCodec.hpp"
 #include "CNA/Content/Pipeline/ContentBuildConfiguration.hpp"
 #include "CNA/Content/Pipeline/ContentBuildManifest.hpp"
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
@@ -644,4 +645,70 @@ TEST(ContentPipelineCliTest, RefusesDestructiveOrSelfDiscoveringOutputLayouts)
                        (sourceDirectory / "Generated").string()}),
               1);
     EXPECT_FALSE(std::filesystem::exists(sourceDirectory / "Generated"));
+}
+
+TEST(ContentPipelineCliTest, SongSingleAndDirectoryBuildsPreserveExternalMediaSemantics)
+{
+    ScratchDirectory scratch("song_routes");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    const std::filesystem::path media = source / "Music" / "theme.ogg";
+    WriteBytes(media, {0x4Fu, 0x67u, 0x67u, 0x53u, 1u, 2u, 3u});
+    WriteBytes(source / "Textures" / "wall.png", MakePng(2, 2));
+    WriteText(
+        source / Pipeline::ContentBuildConfigurationFileName,
+        R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"Music/theme.ogg":{"parameters":{"name":{"type":"string","value":"Main Theme"},"durationMs":{"type":"u64","value":"185000"}}}}})json");
+    WriteText(
+        media.parent_path() / Pipeline::ContentBuildConfigurationFileName,
+        R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"theme.ogg":{"parameters":{"streamReference":{"type":"string","value":"Music/theme.ogg"},"name":{"type":"string","value":"Main Theme"},"durationMs":{"type":"u64","value":"185000"}}}}})json");
+
+    const std::filesystem::path single = scratch.Path() / "Single" / "theme.cnb";
+    std::string singleLog;
+    ASSERT_EQ(RunTool({"build", media.string(), "-o", single.string()}, singleLog), 0)
+        << singleLog;
+    const Cnb::CnbSongData singleSong = Cnb::DecodeSongFromCnb(
+        Cnb::CnbDocument::Parse(ReadBytes(single), "single Song route"));
+    EXPECT_EQ(singleSong.streamReference, "Music/theme.ogg");
+    EXPECT_EQ(singleSong.name, "Main Theme");
+    EXPECT_EQ(singleSong.durationMs, 185000u);
+
+    std::string first;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, first), 0) << first;
+    EXPECT_NE(first.find("[BUILD] Music/theme"), std::string::npos) << first;
+    EXPECT_NE(first.find("[BUILD] Textures/wall"), std::string::npos) << first;
+    const std::filesystem::path songOutput = output / "Music" / "theme.cnb";
+    EXPECT_TRUE(std::filesystem::is_regular_file(songOutput));
+    EXPECT_FALSE(std::filesystem::exists(output / "Music" / "theme.ogg"));
+
+    const std::vector<std::uint8_t> songBytes = ReadBytes(songOutput);
+    Cnb::CnbSongData expected;
+    expected.streamReference = "Music/theme.ogg";
+    expected.name = "Main Theme";
+    expected.durationMs = 185000u;
+    EXPECT_EQ(songBytes, Cnb::EncodeSongToCnb(expected, "Music/theme"));
+
+    const std::filesystem::path manifestPath =
+        output / Pipeline::ContentBuildManifestFileName;
+    const std::vector<std::uint8_t> manifestBytes = ReadBytes(manifestPath);
+    const Pipeline::ContentBuildManifest manifest = Pipeline::ContentBuildManifest::Parse(
+        std::string(manifestBytes.begin(), manifestBytes.end()));
+    const Pipeline::ContentBuildManifestEntry* entry = manifest.Find("Music/theme");
+    ASSERT_NE(entry, nullptr);
+    ASSERT_EQ(entry->runtimeReferences.size(), 1u);
+    EXPECT_EQ(entry->runtimeReferences.front().logicalName, "Music/theme.ogg");
+    EXPECT_EQ(entry->runtimeReferences.front().expectedAssetTypeId, 0u);
+
+    std::string second;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, second), 0) << second;
+    EXPECT_NE(second.find("[SKIP] Music/theme"), std::string::npos) << second;
+    EXPECT_NE(second.find("[SKIP] Textures/wall"), std::string::npos) << second;
+    EXPECT_EQ(ReadBytes(songOutput), songBytes);
+
+    WriteBytes(media, {0x4Fu, 0x67u, 0x67u, 0x53u, 9u, 8u, 7u});
+    std::string changed;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, changed), 0)
+        << changed;
+    EXPECT_NE(changed.find("[BUILD] Music/theme"), std::string::npos) << changed;
+    EXPECT_NE(changed.find("[SKIP] Textures/wall"), std::string::npos) << changed;
+    EXPECT_EQ(ReadBytes(songOutput), songBytes);
 }

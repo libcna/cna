@@ -204,10 +204,11 @@ bool, signed 64-bit integer, unsigned 64-bit integer, double, UTF-8 string
 ```
 
 Unknown, mistyped, non-finite, or invalid values are rejected by the selected processor. Every
-effective parameter participates in the build fingerprint. The current built-in CLI has no
-project/configuration syntax and therefore supplies defaults. Library callers can set parameters
-on `ContentBuildRequest`; `TextureProcessor` currently accepts the string parameter `colorKey` in
-`R,G,B` decimal form. Texture2D CNJ can also author its existing color-key field.
+effective parameter participates in the build fingerprint. Library callers set parameters on
+`ContentBuildRequest`; the optional strict `.cna-content.json` maps the same typed values into CLI
+builds. `TextureProcessor` accepts the string parameter `colorKey` in `R,G,B` decimal form.
+`SongProcessor` accepts `streamReference` and `name` strings plus a `durationMs` u64. Texture2D CNJ
+can also author its existing color-key field.
 
 ### ContentProcessorContext
 
@@ -231,6 +232,7 @@ Every built-in writer is a small adapter:
 ```text
 Texture2DContentWriter    -> EncodeTexture2DToCnb()
 SoundEffectContentWriter -> EncodeSoundEffectToCnb()
+SongContentWriter        -> EncodeSongToCnb()
 ModelContentWriter       -> EncodeModelToCnb()
 Texture3DContentWriter    -> EncodeTexture3DToCnb()
 TextureCubeContentWriter -> EncodeTextureCubeToCnb()
@@ -262,6 +264,7 @@ canonical type name, and loader through `ContentManager::RegisterCnbLoaderEXT<T>
 |---|---|---|---|---|
 | `.png`, `.jpg`, `.jpeg`, `.bmp`, `.tga`, `.gif`, `.psd`, `.hdr`, `.pic`, `.pnm` | `CNA.ImageImporter/1` | `ImportedImage` | `CNA.TextureProcessor/1` | `CNA.Texture2DContentWriter/1` |
 | `.wav` | `CNA.WavImporter/1` | `ImportedSound` | `CNA.SoundEffectProcessor/1` | `CNA.SoundEffectContentWriter/1` |
+| `.mp3`, `.ogg`, `.oga`, `.qoa`, `.flac`, `.opus`, `.aac`, `.wma` | `CNA.SongImporter/1` | `ImportedSongSource` | `CNA.SongProcessor/1` | `CNA.SongContentWriter/1` |
 | `.gltf`, `.glb` | `CNA.GltfImporter/1` | `ImportedModelDocument` | `CNA.ModelProcessor/1` | `CNA.ModelContentWriter/1` |
 | `.cnj` Texture2D | `CNA.CnjImporter/1` | `ImportedImage` | same texture processor | same Texture2D writer |
 | `.cnj` SoundEffect | `CNA.CnjImporter/1` | `ImportedSound` | same sound processor | same SoundEffect writer |
@@ -272,9 +275,39 @@ canonical type name, and loader through `ContentManager::RegisterCnbLoaderEXT<T>
 | `.cnj` Curve | `CNA.CnjImporter/1` | `ImportedCurve` | `CNA.CurveProcessor/1` | `CNA.CurveContentWriter/1` |
 | `.cnj` AnimationClip | `CNA.CnjImporter/1` | `ImportedAnimationClip` | `CNA.AnimationClipProcessor/1` | `CNA.AnimationClipContentWriter/1` |
 
-DDS is currently a contained TextureCube CNJ sidecar, not a direct default route. Song and Video
-have frozen CNB codecs and legacy producers but do not yet have source importers in `cna-content`.
-Effect remains intentionally outside this project until CNA's shader/FX architecture is settled.
+DDS is currently a contained TextureCube CNJ sidecar, not a direct default route. `.wav` remains
+the unambiguous SoundEffect route; it is not also registered as Song. Video has a frozen CNB codec
+and legacy producer but does not yet have a source importer in `cna-content`. Effect remains
+intentionally outside this project until CNA's shader/FX architecture is settled.
+
+### Streaming Song sources
+
+`SongImporter` never decodes or buffers the audio payload. It validates that the primary source is
+non-empty, retains its normalized root-relative path as the default stream reference, and relies on
+the normal primary-source fingerprint for byte dependency tracking. `SongProcessor` produces only
+`CnbSongData`, records the media path as a runtime reference with unconstrained asset type, and the
+writer delegates to `EncodeSongToCnb()`. This keeps build dependencies and runtime XREFs separate
+while preserving bounded compiler memory and HEADLESS operation.
+
+Duration cannot be inferred without introducing a media decoder into the build tool, so it defaults
+to zero (unknown). The optional display name defaults empty, which makes the runtime use the asset
+name. Both can be authored per asset:
+
+```json
+{
+  "parameters": {
+    "name": { "type": "string", "value": "Main Theme" },
+    "durationMs": { "type": "u64", "value": "185000" },
+    "streamReference": { "type": "string", "value": "Music/theme.ogg" }
+  }
+}
+```
+
+The current one-output build publishes the `.cnb`, not a second copy of the streaming media. The
+referenced media must be deployed at that content-root-relative path. The container XREF makes this
+support artifact discoverable. Automatic copying is intentionally deferred until CP-023 defines
+multi-output ownership, collision, failure-recovery, and manifest semantics; the compiler does not
+pretend two files were atomically published when only one was.
 
 ## Registry and selection
 
@@ -494,9 +527,9 @@ not replace CNA's XNB readers.
 
 ## Configuration, profiles, parallelism, and CMake
 
-The initial command works without a project file. No `.cnaproj`, `.contentproj`, XML, TOML, or other
-per-asset configuration format is defined. Such a format should follow proven importer/processor
-selection and parameter needs rather than lead them.
+The initial command still works without a project file. The optional strict per-asset JSON format
+described above supplies only proven selection/parameter/logical-name needs; it is not a
+`.cnaproj`, `.contentproj`, profile system, or second build graph.
 
 There is no platform ID or target profile in CNB v1 processing. Current schemas use their existing
 portable representations. A future profile can be added only when a demonstrated policy needs it;
