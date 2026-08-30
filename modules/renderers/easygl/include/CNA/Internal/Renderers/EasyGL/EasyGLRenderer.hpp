@@ -1448,9 +1448,13 @@ namespace CNA::Internal::Renderers::EasyGL
          * @brief The swap interval this renderer was last asked for, honoured or not.
          *
          * A GL context without a real vertical-retrace signal refuses to engage vsync, so
-         * `SDL_GL_GetSwapInterval()` cannot distinguish "CNA never forwarded the request" from
-         * "the driver declined it". This reports the first of those on its own. Mirrors
-         * `SkiaRenderer::GetSwapIntervalEXT()`.
+         * querying the platform's own swap interval cannot distinguish "CNA never forwarded the
+         * request" from "the driver declined it". This reports the first of those on its own.
+         * Mirrors `SkiaRenderer::GetSwapIntervalEXT()`.
+         *
+         * (Naming the platform call here would be a new SDL reference in a production header and
+         * the PLAT-8 ratchet counts those, comments included -- rightly, since a header that talks
+         * about SDL is a header whose contract has leaked.)
          *
          * @return The interval last passed to SetSwapInterval, or the renderer's default if none.
          */

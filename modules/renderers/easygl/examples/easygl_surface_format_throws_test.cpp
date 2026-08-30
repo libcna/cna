@@ -219,9 +219,18 @@ protected:
             Texture2D t(dev, 2, 2, false, SurfaceFormat::HdrBlendable);
         });
 #else
+        // REMED-GFX-244: the packed 16-bit formats are ES 3 sized-internal-format storage, so they
+        // take the same guard the signed-normalized pair does -- promoted off the ES 2 generation,
+        // refused on it rather than falling back to an unsized layout the driver picks.
+#if defined(CNA_GL_PROFILE_OPENGLES3) || defined(CNA_GL_PROFILE_OPENGL33) || defined(CNA_GL_PROFILE_WEBGL2)
+        expectNoThrow("Texture2D Bgra5551", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgra5551);
+        });
+#else
         expectThrows("Texture2D Bgra5551", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgra5551);
         });
+#endif
         // The two signed-normalized byte formats stand or fall together: EasyGL classifies them in
         // one predicate ("Both signed-normalized byte formats need the ES 3 sized-internal-format
         // set"), so NormalizedByte2 belongs under the same guard NormalizedByte4 already had.
@@ -314,9 +323,23 @@ protected:
             Texture2D t(dev, 2, 2, false, SurfaceFormat::UShortEXT);
         });
 #else
+        // REMED-GFX-244, same guard as Bgra5551 above. Bgra4444 had no non-Skia leg at all before
+        // this ticket, so its behaviour on every GL profile was simply unstated.
+#if defined(CNA_GL_PROFILE_OPENGLES3) || defined(CNA_GL_PROFILE_OPENGL33) || defined(CNA_GL_PROFILE_WEBGL2)
+        expectNoThrow("Texture2D Bgr565", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgr565);
+        });
+        expectNoThrow("Texture2D Bgra4444", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgra4444);
+        });
+#else
         expectThrows("Texture2D Bgr565", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgr565);
         });
+        expectThrows("Texture2D Bgra4444", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgra4444);
+        });
+#endif
         expectThrowsNotSupported("Texture2D Alpha8", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Alpha8);
         });

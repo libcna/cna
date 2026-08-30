@@ -2354,6 +2354,65 @@ else
         // what a content pipeline picks for a 2D displacement map, where a third and fourth
         // channel would carry nothing (SAMPLE-032's DisplacementMapProcessor ends with exactly
         // that conversion).
+        // REMED-GFX-244: the three packed 16-bit formats a Reach-profile XNA game may use.
+        // Only Bgr565 can be handed to GL as it stands: XNA packs it R:11 G:5 B:0, which is exactly
+        // what GL_UNSIGNED_SHORT_5_6_5 reads. The two with alpha do NOT match -- XNA puts alpha in
+        // the HIGH bits (A R G B) and GL's 5_5_5_1 and 4_4_4_4 put it in the LOW ones (R G B A) --
+        // so each texel is rotated left by one channel width. That is a pure bit permutation: no
+        // channel is resampled and no precision is lost, unlike a widening to RGBA8.
+        if (uploadFormat == SurfaceFormat::Bgr565 ||
+            uploadFormat == SurfaceFormat::Bgra5551 ||
+            uploadFormat == SurfaceFormat::Bgra4444)
+        {
+            const bool fiveSixFive = uploadFormat == SurfaceFormat::Bgr565;
+            const int rotate = fiveSixFive ? 0 : (uploadFormat == SurfaceFormat::Bgra5551 ? 1 : 4);
+
+            std::vector<std::uint16_t> rotated;
+            const void* upload = pixels;
+            if (pixels != nullptr && rotate != 0)
+            {
+                const std::size_t texels =
+                    static_cast<std::size_t>(levelWidth) * static_cast<std::size_t>(levelHeight);
+                const auto* source = static_cast<const std::uint16_t*>(pixels);
+                rotated.resize(texels);
+                for (std::size_t i = 0; i < texels; ++i)
+                {
+                    const std::uint16_t v = source[i];
+                    rotated[i] = static_cast<std::uint16_t>((v << rotate) | (v >> (16 - rotate)));
+                }
+                upload = rotated.data();
+            }
+
+            texture.bind(::easygl::TextureTarget::Texture2D);
+            ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment, 2);
+            texture.set_image_2d(::easygl::TextureTarget::Texture2D, level,
+                                 fiveSixFive ? ::easygl::InternalFormat::Rgb565
+                                             : (uploadFormat == SurfaceFormat::Bgra5551
+                                                    ? ::easygl::InternalFormat::Rgb5A1
+                                                    : ::easygl::InternalFormat::Rgba4),
+                                 levelWidth, levelHeight,
+                                 fiveSixFive ? ::easygl::PixelFormat::Rgb
+                                             : ::easygl::PixelFormat::Rgba,
+                                 fiveSixFive ? ::easygl::PixelType::UnsignedShort565
+                                             : (uploadFormat == SurfaceFormat::Bgra5551
+                                                    ? ::easygl::PixelType::UnsignedShort5551
+                                                    : ::easygl::PixelType::UnsignedShort4444),
+                                 upload);
+            ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment, 4);
+            texture.set_parameter(::easygl::TextureTarget::Texture2D,
+                                  ::easygl::TextureParameterSetter::MinFilter,
+                                  static_cast<int>(::easygl::TextureMinFilter::Linear));
+            texture.set_parameter(::easygl::TextureTarget::Texture2D,
+                                  ::easygl::TextureParameterSetter::MagFilter,
+                                  static_cast<int>(::easygl::TextureMagFilter::Linear));
+            texture.set_parameter(::easygl::TextureTarget::Texture2D,
+                                  ::easygl::TextureParameterSetter::WrapS,
+                                  static_cast<int>(::easygl::TextureWrapMode::ClampToEdge));
+            texture.set_parameter(::easygl::TextureTarget::Texture2D,
+                                  ::easygl::TextureParameterSetter::WrapT,
+                                  static_cast<int>(::easygl::TextureWrapMode::ClampToEdge));
+            return;
+        }
         if (uploadFormat == SurfaceFormat::NormalizedByte4 ||
             uploadFormat == SurfaceFormat::NormalizedByte2)
         {
@@ -4310,7 +4369,8 @@ if (ProfileUsesGlslEs100())
                       << "; texture SurfaceFormat: Color"
                       << (ProfileIsEs2ApiGeneration()
                               ? " only"
-                              : " + NormalizedByte4 (RGBA8_SNORM) + NormalizedByte2 (RG8_SNORM)")
+                              : " + NormalizedByte4 (RGBA8_SNORM) + NormalizedByte2 (RG8_SNORM)"
+                                " + Bgr565 (RGB565) + Bgra5551 (RGB5_A1) + Bgra4444 (RGBA4)")
                       // plans/plan_modern.md MOD-117: render targets are no longer Color-only, and the
                       // answer is driver-dependent, so it is probed rather than asserted.
                       << "; render-target SurfaceFormat: Color"
@@ -4853,6 +4913,16 @@ if (!ProfileIsEs2ApiGeneration())
             return RendererFormatVerdict::Supported;
         // Both signed-normalized byte formats need the ES 3 sized-internal-format set.
         if (format == SurfaceFormat::NormalizedByte4 || format == SurfaceFormat::NormalizedByte2)
+        {
+            return ProfileIsEs2ApiGeneration()
+                ? RendererFormatVerdict::Unsupported
+                : RendererFormatVerdict::Supported;
+        }
+        // REMED-GFX-244: the packed 16-bit formats GraphicsProfile.Reach permits. Sized
+        // GL_RGB565/GL_RGB5_A1/GL_RGBA4 storage is ES 3, so the ES 2 generation keeps refusing them
+        // rather than falling back to an unsized guess whose layout the driver chooses.
+        if (format == SurfaceFormat::Bgr565 || format == SurfaceFormat::Bgra5551 ||
+            format == SurfaceFormat::Bgra4444)
         {
             return ProfileIsEs2ApiGeneration()
                 ? RendererFormatVerdict::Unsupported

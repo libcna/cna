@@ -430,7 +430,8 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
 
 TEST_F(UnsupportedFormatConstructionTest, Bgra5551Throws)
 {
-    if (CNA_RENDERER_IS(Skia))
+    // REMED-GFX-244 promoted the packed 16-bit formats on EasyGL's ES 3 generation too.
+    if (CNA_RENDERER_IS(Skia, OpenGLES3, OpenGL33, WebGL2))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Bgra5551));
     }
@@ -689,6 +690,11 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         const bool igl = CNA_RENDERER_IS(Igl);
         const bool easyGlSignedNormalized =
             CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2);
+        // REMED-GFX-244: the packed 16-bit formats Reach permits, promoted on the same ES 3
+        // generation the signed-normalized pair needs and verified by a real sampled draw
+        // (EasyGL_Packed16Format) rather than by a readback, which this renderer serves from a CPU
+        // copy and which therefore cannot see a wrong channel order.
+        const bool easyGlPacked16 = CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2);
         // REMED-GFX-242: this fixture's device is Reach, and a format the profile excludes is
         // refused however capable the renderer is -- so the profile is a factor of "supported",
         // not an alternative to it.
@@ -697,6 +703,9 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         const bool supported = profileAllows && (format == SurfaceFormat::Color
             || (easyGlSignedNormalized && (format == SurfaceFormat::NormalizedByte4
                                            || format == SurfaceFormat::NormalizedByte2))
+            || (easyGlPacked16 && (format == SurfaceFormat::Bgr565
+                                   || format == SurfaceFormat::Bgra5551
+                                   || format == SurfaceFormat::Bgra4444))
             || (igl && (format == SurfaceFormat::Rg32 || format == SurfaceFormat::Single))
             || (skia && (false
             || format == SurfaceFormat::Bgr565

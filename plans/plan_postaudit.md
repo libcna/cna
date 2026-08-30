@@ -2840,7 +2840,8 @@ HiDef arms are therefore unrun.
 
 ## 43. `REMED-GFX-244` — EasyGL refuses six texture formats XNA accepts at Reach
 
-**Status:** **OPEN — measured 2026-08-30** · **Renderer capability gap**
+**Status:** **PARTLY CLOSED — the three packed formats landed 2026-08-30; the three
+block-compressed ones remain open** · **Renderer capability gap**
 
 **Defect.** `EasyGLRenderer::ClassifySurfaceFormatEXT` reports `Supported` for `Color`,
 `NormalizedByte2` and `NormalizedByte4` and defers everything else, and the framework's deferred rule
@@ -2851,12 +2852,46 @@ accepted by the real runtime at both profiles (`REMED-GFX-242`).
 After `REMED-GFX-242` these are refused with the renderer's own exception and message rather than
 being conflated with a profile decision, so the gap is now *stated* correctly. It is still a gap.
 
-**Planned fix.** The three packed formats are inexpensive on the ES 3 sized-internal-format set
-(`GL_RGB565`, `GL_RGB5_A1`, `GL_RGBA4`). The three block-compressed ones need a real decision:
-either an extension gate (`EXT_texture_compression_s3tc`, absent on plenty of ES targets) or the
-CPU decode-to-`Color` path other renderers already take on load. Do not promote a format without
-verifying the whole public path the way IGL-71 did — storage alone was deliberately not enough
-there, and the same bar applies here.
+**Fix as landed — the three packed formats.** `Bgr565`, `Bgra5551` and `Bgra4444` are promoted on
+the ES 3 sized-internal-format set (`GL_RGB565`, `GL_RGB5_A1`, `GL_RGBA4`) and refused on the ES 2
+generation, the same guard the signed-normalized pair already takes — an unsized fallback would let
+the driver choose a layout.
+
+**The channel order is the whole difficulty, and only one of the three matches.** XNA packs
+`Bgr565` as `R:11 G:5 B:0`, which is exactly what `GL_UNSIGNED_SHORT_5_6_5` reads, so it is handed
+over untouched. The two with alpha do not match: XNA packs them `A R G B` with alpha in the **high**
+bits and GL's `5_5_5_1` and `4_4_4_4` put it in the **low** ones. Each texel is therefore rotated
+left by one channel width — 1 bit for `Bgra5551`, 4 for `Bgra4444`. A rotation is a pure bit
+permutation, so no channel is resampled and no precision is lost, unlike widening to RGBA8.
+
+**Verified by a sampled draw, because a readback here cannot see the defect.** `EasyGL_Packed16Format`
+uploads four full-intensity texels through the typed `SetData` overloads, draws them 1:1 through
+`SpriteBatch` under `PointClamp` and compares exactly — 31/31, 63/63 and 15/15 all expand back to
+precisely 255, so no tolerance can hide a swap. Mutation-checked by removing the rotation: `Bgr565`
+stays correct (it needs none) while the other two come back channel-swapped, red reading as
+(255,132,0) and (255,255,0).
+
+**A readback-based test would have passed for a completely wrong upload, and that was measured.**
+With the rotation deliberately removed, `Texture2D::GetData` still round-trips all three formats
+*exactly* while the texture samples with its channels swapped: the typed readback is served from
+this renderer's CPU-side copy and never asks the GPU what it stored. That is why IGL-71's bar is a
+real draw, and the finding is recorded in the fixture's own header so the next person does not reach
+for the cheaper test.
+
+**One self-inflicted gate failure worth recording.** The `PLAT-8` SDL ratchet went red at
+`+1 file, +1 reference` — not from any new SDL call, but because `REMED-GFX-243`'s doc comment in
+`EasyGLRenderer.hpp` *named* `SDL_GL_GetSwapInterval()`. The scanner counts `SDL_*` in comments too,
+which is right: a production header that talks about SDL is one whose contract has leaked. Reworded;
+all four platform gates (`sdl_inventory`, `sdl_classify`, `renderer_sdl_audit`, `hot_path_lint`) are
+green, and the `sdl_inventory` drift seen alongside it was the same reference and cleared with it.
+
+**Still open: the three block-compressed formats.** `Dxt1`, `Dxt3` and `Dxt5` need a decision that is
+not mine to make — either an extension gate (`EXT_texture_compression_s3tc`, absent on plenty of ES
+targets) or the CPU decode-to-`Color` path other renderers already take on load. The two have
+different consequences for memory and for what a game can rely on.
+
+**Evidence.** `EasyGL_Packed16Format` 3/3; `EasyGL_SurfaceFormat_Throws` 28/28 and Vulkan's build of
+the same shared fixture 28/28 on a freshly built binary; EasyGL `314/314` serially.
 
 ---
 
