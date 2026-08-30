@@ -2840,8 +2840,7 @@ HiDef arms are therefore unrun.
 
 ## 43. `REMED-GFX-244` — EasyGL refuses six texture formats XNA accepts at Reach
 
-**Status:** **PARTLY CLOSED — the three packed formats landed 2026-08-30; the three
-block-compressed ones remain open** · **Renderer capability gap**
+**Status:** **CLOSED — 2026-08-30** · **Renderer capability gap**
 
 **Defect.** `EasyGLRenderer::ClassifySurfaceFormatEXT` reports `Supported` for `Color`,
 `NormalizedByte2` and `NormalizedByte4` and defers everything else, and the framework's deferred rule
@@ -2885,13 +2884,39 @@ which is right: a production header that talks about SDL is one whose contract h
 all four platform gates (`sdl_inventory`, `sdl_classify`, `renderer_sdl_audit`, `hot_path_lint`) are
 green, and the `sdl_inventory` drift seen alongside it was the same reference and cleared with it.
 
-**Still open: the three block-compressed formats.** `Dxt1`, `Dxt3` and `Dxt5` need a decision that is
-not mine to make — either an extension gate (`EXT_texture_compression_s3tc`, absent on plenty of ES
-targets) or the CPU decode-to-`Color` path other renderers already take on load. The two have
-different consequences for memory and for what a game can rely on.
+**The three block-compressed formats — extension where there is one, decode where there is not.**
+The owner chose this of three options on 2026-08-30. `Dxt1`, `Dxt3` and `Dxt5` are accepted on
+**every** GL profile, unlike the packed three: storing blocks needs `EXT_texture_compression_s3tc`
+(or the WebGL/ANGLE spellings, all probed once), but decoding them needs nothing at all, and Reach
+promises the game these formats work — a missing extension is not the game's problem. The driver
+therefore decides how they are *stored*, never whether they are *refused*. Decoding reuses
+`CNA::Internal::Graphics::DxtUtil`, which already existed for the content path.
 
-**Evidence.** `EasyGL_Packed16Format` 3/3; `EasyGL_SurfaceFormat_Throws` 28/28 and Vulkan's build of
-the same shared fixture 28/28 on a freshly built binary; EasyGL `314/314` serially.
+`IsCompressedTransferFormatEXT` is overridden so `SetData` hands the renderer raw 4×4 blocks rather
+than pixels the framework would have to compress again. A partial-rect update still refuses cleanly:
+the framework reads the level back first and throws `NotSupportedException` when the renderer cannot
+return compressed bytes, which this one cannot.
+
+**Both paths were run, which is the only way to know the fallback is real rather than merely
+written.** This Mesa reports `GL_EXT_texture_compression_s3tc`, so the configured run exercises the
+compressed path; forcing the probe to false exercises the decode path. **3/3 either way, with
+identical pixels** — which is the contract.
+
+`EasyGL_DxtFormat` uses two blocks side by side, red beside blue, so a mis-sized block or a stream
+walked in the wrong order shows as a wrong half instead of passing. Mutation-checked by reporting a
+DXT1 block as 16 bytes: `Dxt1` fails on all 32 pixels while `Dxt3` and `Dxt5` stay green, since 16 is
+genuinely their size.
+
+**One thing deliberately not done.** The four S3TC internal formats are spelled as local constants
+cast to `metagl::CompressedInternalFormat`, which carries the ES-core ETC2 and ASTC sets only. Their
+tidier home is meta-gl itself, but that is a separate sibling repository and not among this task's
+working directories, so they were not added there. The cast is well defined — the enum has `GLenum`
+as its fixed underlying type — and the constants are commented with their GL names.
+
+**Evidence.** `EasyGL_Packed16Format` 3/3, `EasyGL_DxtFormat` 3/3 on both paths;
+`EasyGL_SurfaceFormat_Throws` 30/30 and the shared fixture 30/30 on Vulkan with a freshly built
+binary — the Dxt legs are guarded to the GL profile macros, since Vulkan and Bgfx link the same file
+and store no compressed content. EasyGL `315/315` serially; all five platform gates green.
 
 ---
 

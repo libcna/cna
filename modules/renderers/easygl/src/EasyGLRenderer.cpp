@@ -1,4 +1,5 @@
 #include "CNA/Internal/Renderers/EasyGL/EasyGLRenderer.hpp"
+#include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "CNA/Internal/Graphics/SrgbTransfer.hpp"
 #include "CNA/Internal/Renderers/EasyGL/GlProfile.hpp"
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
@@ -2345,6 +2346,43 @@ else
         if (auto reg = registry_.lock()) reg->add(this);
     }
 
+
+namespace
+{
+    /// REMED-GFX-244: the four S3TC internal formats, spelled here because meta-gl's
+    /// CompressedInternalFormat carries ETC2 and ASTC only -- the ES-core sets -- and S3TC is an
+    /// extension. Adding them upstream is the tidier home; meta-gl is a separate sibling repository
+    /// and outside this task, so they are cast locally instead. The cast is well defined: the enum
+    /// has GLenum as its fixed underlying type.
+    constexpr ::metagl::CompressedInternalFormat kDxt1Rgb =
+        static_cast<::metagl::CompressedInternalFormat>(0x83F0);   // COMPRESSED_RGB_S3TC_DXT1_EXT
+    constexpr ::metagl::CompressedInternalFormat kDxt1Rgba =
+        static_cast<::metagl::CompressedInternalFormat>(0x83F1);   // COMPRESSED_RGBA_S3TC_DXT1_EXT
+    constexpr ::metagl::CompressedInternalFormat kDxt3 =
+        static_cast<::metagl::CompressedInternalFormat>(0x83F2);   // COMPRESSED_RGBA_S3TC_DXT3_EXT
+    constexpr ::metagl::CompressedInternalFormat kDxt5 =
+        static_cast<::metagl::CompressedInternalFormat>(0x83F3);   // COMPRESSED_RGBA_S3TC_DXT5_EXT
+
+    /// Whether this context can store S3TC blocks natively. Probed once: an XNA Reach game may use
+    /// Dxt1/3/5 whatever the driver offers, so this decides between keeping the blocks compressed
+    /// and decoding them, never between working and refusing.
+    bool ContextHasS3tcEXT()
+    {
+        static const bool present =
+            ::metagl::HasExtension("GL_EXT_texture_compression_s3tc") ||
+            ::metagl::HasExtension("GL_WEBGL_compressed_texture_s3tc") ||
+            ::metagl::HasExtension("WEBGL_compressed_texture_s3tc") ||
+            ::metagl::HasExtension("GL_ANGLE_texture_compression_dxt5");
+        return present;
+    }
+
+    /// Bytes per 4x4 block: DXT1 carries colour only, DXT3 and DXT5 add an alpha block.
+    constexpr std::size_t DxtBlockBytesEXT(Microsoft::Xna::Framework::Graphics::SurfaceFormat f)
+    {
+        return f == Microsoft::Xna::Framework::Graphics::SurfaceFormat::Dxt1 ? 8u : 16u;
+    }
+}
+
     void EasyGLTextureRenderer::UploadLevel(int level, int levelWidth, int levelHeight,
                                             const void* pixels)
     {
@@ -2354,6 +2392,64 @@ else
         // what a content pipeline picks for a 2D displacement map, where a third and fourth
         // channel would carry nothing (SAMPLE-032's DisplacementMapProcessor ends with exactly
         // that conversion).
+        // REMED-GFX-244: block-compressed content. Where the driver has S3TC the blocks are stored
+        // as they arrived, which is the whole point of the format; where it does not, they are
+        // decoded to Color rather than refused, because GraphicsProfile.Reach promises a game that
+        // Dxt1/3/5 work and a missing extension is not the game's problem. The two paths differ in
+        // memory, never in what is drawn.
+        if (uploadFormat == SurfaceFormat::Dxt1 || uploadFormat == SurfaceFormat::Dxt3 ||
+            uploadFormat == SurfaceFormat::Dxt5)
+        {
+            const std::size_t blockBytes = DxtBlockBytesEXT(uploadFormat);
+            const std::size_t blockCols = (static_cast<std::size_t>(levelWidth) + 3u) / 4u;
+            const std::size_t blockRows = (static_cast<std::size_t>(levelHeight) + 3u) / 4u;
+            const std::size_t imageBytes = blockCols * blockRows * blockBytes;
+
+            texture.bind(::easygl::TextureTarget::Texture2D);
+            if (pixels != nullptr && ContextHasS3tcEXT())
+            {
+                ::metagl::glCompressedTexImage2D(
+                    ::metagl::TextureTarget::Texture2D, level,
+                    uploadFormat == SurfaceFormat::Dxt1
+                        ? kDxt1Rgba
+                        : (uploadFormat == SurfaceFormat::Dxt3 ? kDxt3 : kDxt5),
+                    levelWidth, levelHeight, 0,
+                    static_cast<GLsizei>(imageBytes), pixels);
+            }
+            else
+            {
+                // Storage still has to exist when there are no pixels yet (a declared mip chain),
+                // so the decode path also covers the null case with an empty RGBA8 level.
+                std::vector<std::uint8_t> rgba;
+                if (pixels != nullptr)
+                {
+                    const auto* blocks = static_cast<const std::uint8_t*>(pixels);
+                    using CNA::Internal::Graphics::DxtUtil;
+                    rgba = uploadFormat == SurfaceFormat::Dxt1
+                               ? DxtUtil::DecompressDxt1(blocks, imageBytes, levelWidth, levelHeight)
+                               : (uploadFormat == SurfaceFormat::Dxt3
+                                      ? DxtUtil::DecompressDxt3(blocks, imageBytes, levelWidth,
+                                                                levelHeight)
+                                      : DxtUtil::DecompressDxt5(blocks, imageBytes, levelWidth,
+                                                                levelHeight));
+                }
+                texture.set_image_2d(::easygl::TextureTarget::Texture2D, level, levelWidth,
+                                     levelHeight, rgba.empty() ? nullptr : rgba.data());
+            }
+            texture.set_parameter(::easygl::TextureTarget::Texture2D,
+                                  ::easygl::TextureParameterSetter::MinFilter,
+                                  static_cast<int>(::easygl::TextureMinFilter::Linear));
+            texture.set_parameter(::easygl::TextureTarget::Texture2D,
+                                  ::easygl::TextureParameterSetter::MagFilter,
+                                  static_cast<int>(::easygl::TextureMagFilter::Linear));
+            texture.set_parameter(::easygl::TextureTarget::Texture2D,
+                                  ::easygl::TextureParameterSetter::WrapS,
+                                  static_cast<int>(::easygl::TextureWrapMode::ClampToEdge));
+            texture.set_parameter(::easygl::TextureTarget::Texture2D,
+                                  ::easygl::TextureParameterSetter::WrapT,
+                                  static_cast<int>(::easygl::TextureWrapMode::ClampToEdge));
+            return;
+        }
         // REMED-GFX-244: the three packed 16-bit formats a Reach-profile XNA game may use.
         // Only Bgr565 can be handed to GL as it stands: XNA packs it R:11 G:5 B:0, which is exactly
         // what GL_UNSIGNED_SHORT_5_6_5 reads. The two with alpha do NOT match -- XNA puts alpha in
@@ -4371,6 +4467,9 @@ if (ProfileUsesGlslEs100())
                               ? " only"
                               : " + NormalizedByte4 (RGBA8_SNORM) + NormalizedByte2 (RG8_SNORM)"
                                 " + Bgr565 (RGB565) + Bgra5551 (RGB5_A1) + Bgra4444 (RGBA4)")
+                      << (ContextHasS3tcEXT()
+                              ? " + Dxt1/Dxt3/Dxt5 (S3TC blocks)"
+                              : " + Dxt1/Dxt3/Dxt5 (decoded, no S3TC extension)")
                       // plans/plan_modern.md MOD-117: render targets are no longer Color-only, and the
                       // answer is driver-dependent, so it is probed rather than asserted.
                       << "; render-target SurfaceFormat: Color"
@@ -4928,7 +5027,26 @@ if (!ProfileIsEs2ApiGeneration())
                 ? RendererFormatVerdict::Unsupported
                 : RendererFormatVerdict::Supported;
         }
+        // REMED-GFX-244: block-compressed content is supported on every profile, because the
+        // decode fallback needs no extension and no ES 3 storage -- the driver decides only whether
+        // the blocks stay compressed.
+        if (format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+            format == SurfaceFormat::Dxt5)
+        {
+            return RendererFormatVerdict::Supported;
+        }
         return RendererFormatVerdict::Defer;
+    }
+
+    bool EasyGLRenderer::IsCompressedTransferFormatEXT(int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat);
+        // REMED-GFX-244: SetData hands this renderer raw 4x4 blocks for these three. That is true
+        // whether or not the driver has S3TC -- the decode, when it is needed, happens here rather
+        // than making the framework transfer pixels it would have to compress again.
+        return format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+               format == SurfaceFormat::Dxt5;
     }
 
     RendererFormatVerdict EasyGLRenderer::ClassifyColorTransferFormatEXT(int surfaceFormat) const

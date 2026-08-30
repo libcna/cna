@@ -706,6 +706,12 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
             || (easyGlPacked16 && (format == SurfaceFormat::Bgr565
                                    || format == SurfaceFormat::Bgra5551
                                    || format == SurfaceFormat::Bgra4444))
+            // REMED-GFX-244: block-compressed content is accepted on every EasyGL profile, since
+            // the decode fallback needs no extension -- unlike the packed formats one line up,
+            // whose sized storage is ES 3.
+            || (CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2)
+                && (format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3
+                    || format == SurfaceFormat::Dxt5))
             || (igl && (format == SurfaceFormat::Rg32 || format == SurfaceFormat::Single))
             || (skia && (false
             || format == SurfaceFormat::Bgr565

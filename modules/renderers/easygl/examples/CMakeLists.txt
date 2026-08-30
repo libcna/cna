@@ -1755,6 +1755,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_RasterizerState_CullMode COMMAND cna_test_easygl_rasterizerstate_cullmode
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-244: the three block-compressed formats GraphicsProfile.Reach permits, uploaded
+        # as raw 4x4 blocks and sampled. Two blocks side by side, so a mis-sized block or a stream
+        # walked in the wrong order shows as a wrong half rather than passing.
+        cna_easygl_test(cna_test_easygl_dxt_format
+                        easygl_dxt_format_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_DxtFormat COMMAND cna_test_easygl_dxt_format
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # REMED-GFX-244: the three packed 16-bit formats GraphicsProfile.Reach permits, uploaded
         # through their typed SetData overloads and sampled in a real draw -- the channel order
         # differs between XNA and GL for the two with alpha, so this is the case that proves the

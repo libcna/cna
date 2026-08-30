@@ -290,9 +290,36 @@ protected:
             Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt5);
         });
 #else
+        // REMED-GFX-244: block-compressed content is accepted on EVERY GL profile, unlike the
+        // packed formats above. Storing the blocks needs the S3TC extension, but decoding them
+        // needs nothing, and GraphicsProfile.Reach promises the game these formats work -- so the
+        // driver decides how they are stored, never whether they are refused.
+        //
+        // Guarded rather than asserted because this file is shared with the Vulkan and Bgfx
+        // registrations, which carry no GL profile macro and store no block-compressed content.
+#if defined(CNA_GL_PROFILE_OPENGLES2) || defined(CNA_GL_PROFILE_OPENGLES3) \
+ || defined(CNA_GL_PROFILE_OPENGL33)  || defined(CNA_GL_PROFILE_WEBGL1)    \
+ || defined(CNA_GL_PROFILE_WEBGL2)
+        expectNoThrow("Texture2D Dxt1", [&]{
+            Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt1);
+        });
+        expectNoThrow("Texture2D Dxt3", [&]{
+            Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt3);
+        });
+        expectNoThrow("Texture2D Dxt5", [&]{
+            Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt5);
+        });
+#else
         expectThrows("Texture2D Dxt1", [&]{
             Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt1);
         });
+        expectThrows("Texture2D Dxt3", [&]{
+            Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt3);
+        });
+        expectThrows("Texture2D Dxt5", [&]{
+            Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt5);
+        });
+#endif
 #endif
 #if defined(CNA_RENDERER_SKIA)
         // SKIA-135–139 promote these exact transfer/sampling formats for Texture2D only.
