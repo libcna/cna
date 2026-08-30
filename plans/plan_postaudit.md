@@ -1,7 +1,7 @@
 # CNA Post-Audit Development Plan
 
 **Created:** 2026-08-03, on `feature/audit`, immediately after `REMED-GFX-202` closed.
-**Owns:** `REMED-GFX-203` … `REMED-GFX-213` and any future finding admitted by the rules below.
+**Owns:** `REMED-GFX-203` … `REMED-GFX-240` and any future finding admitted by the rules below.
 **Does not own:** the remediation campaign. `remediation/REMEDIATION_INDEX.md` and
 `remediation/REMEDIATION_PROGRESS.md` remain the authoritative status of record for every ticket,
 including the ones scheduled here.
@@ -2519,3 +2519,159 @@ The focused native sanitizer object build exposed the incomplete-type compile fa
 ASan/UBSan focused harness compiled with the sanitizers proven active and selected 151 tests:
 149 passed, 2 intentionally skipped, and zero CNA sanitizer report was emitted. LeakSanitizer used
 `detect_leaks=0` only because the supervising ptrace environment makes its leak mode unusable.
+
+---
+
+## 37. `REMED-GFX-238` — two contracts assert a pixel-centre convention XNA does not use
+
+**Status:** **CLOSED — 2026-08-30** · **Test defect, not a renderer defect**
+
+**Defect.** `EasyGLRenderer`'s `xnaPixelCenterScale_` (see `REMED-GFX-235`) reproduces XNA's
+Direct3D 9 **integer** pixel-centre addressing. Two contracts assert the OpenGL/Direct3D 10
+**half-integer** convention instead, so they mark XNA-correct output wrong and only EasyGL — the one
+renderer that applies the correction — fails them:
+
+- `point_sampling_contract_test.cpp` leg **U2** (3×3 point-sampled onto 10×10) expects destination
+  pixel *x* to select `floor((x+0.5)/w · texw)`. Leg **U1** (8×4 onto 16×8) cannot see the question:
+  at an integer magnification both conventions select the same texels.
+- `descriptor_capacity_contract_test.cpp` legs **B1/C1** (2×2 onto 2×2) require every readback
+  channel to be a clean 0 or 255 for all 27 sampler states.
+
+**Measured on the real runtime.** `spikes/xna-pixel-center-spike/` compiles a C# probe against the
+XNA 4.0 assemblies in `~/.wine-cna-xna40` and runs it. That prefix routes Direct3D 9 through
+**DXVK, not wined3d**, so a D3D9-over-OpenGL translation cannot itself supply the half-pixel shift
+under investigation.
+
+    U1 8x4 -> 16x8:   HALF-INTEGER 128/128   INTEGER 128/128
+    U2 3x3 -> 10x10:  HALF-INTEGER  81/100   INTEGER 100/100
+            row0 selected i: 0000111222              = floor(x/10*3)
+
+    LEG-C 2x2 -> 2x2 POINT : dirty=0/4   (255,0,0) (0,255,0) (0,0,255) (255,255,0)
+    LEG-C 2x2 -> 2x2 LINEAR: dirty=3/4   (255,0,0) (128,128,0)* (128,0,128)* (128,128,64)*
+
+XNA lands on integer centres **100/100**, and at 1:1 it blends three of four pixels at exactly
+128 — the 50/50 weight integer centres predict, because a pixel centre at window x=1 falls on
+texture coordinate 1.0, halfway between the texel centres at 0.5 and 1.5. The contract's "one texel
+to one pixel" holds in XNA only for magnifying filters that do not interpolate.
+
+**The failing counts identify the mechanism exactly.** Five of the nine filters `kFilters` sweeps
+magnify with LINEAR (`Linear`, `Anisotropic`, `LinearMipPoint`, `MinPointMagLinearMipLinear`,
+`MinPointMagLinearMipPoint`). B1 fails 5×3 = **15** of 27; C1 fails 256×5/9 = **142** of 256. No
+mag-point state fails. U2's 19 wrong pixels of 100 are exactly the 19 on which the two conventions
+disagree.
+
+**Planned fix.** State both expectations in terms of integer pixel centres, and say in each fixture
+**why**, so the OpenGL form is not restored later as an obvious correction. U2's expectation becomes
+`floor(x/w · texw)`; B1/C1 keep the byte-exact identity requirement for mag-point states and expect
+a blend from the mag-linear ones rather than treating it as a dropped draw. Do not weaken the legs
+to tolerate either answer — that would blind them to the defect they were written for.
+
+**Not to be confused with a renderer change.** EasyGL is already correct here. Nothing in
+`EasyGLRenderer` was touched.
+
+**XNA uses both conventions, chosen by path — which is why only the 3D legs moved.** Asked the same
+magnification through `SpriteBatch`, the runtime answers **half-integer 100/100** and integer 81/100,
+the exact mirror of its 3D answer: `SpriteEffect` applies its own `-0.5` offset. CNA reproduces both
+already (no correction on the sprite path, `xnaPixelCenterScale_` on the 3D one), so legs A–I are
+right as they stand and were left alone.
+
+**Fix as landed.**
+- `Exact3DLeg` samples at `x/rtW`, with the measurement and a "do not simplify this back" note in
+  place, and the leg inventory marks U as the one entry on integer centres.
+- The tie guard became a parameter. Under integer centres an *integer* magnification is
+  structurally tied — `x/rtW · texw` is a whole number for every other `x` — so U1, V1 and V2 now
+  **assert `ties > 0`** rather than zero. That is deliberate: it is the reversion guard. Flipping
+  the formula back takes all three to `ties == 0` and fails them. U2, the non-integer leg, keeps
+  the strict `ties == 0` and stays the discriminating one.
+- `descriptor_capacity` legs B1/C1 judge the five magnifying-linear filters on coverage **and a
+  visible blend** — a state collapsed onto a cached point descriptor would reproduce the identity
+  exactly and pass a mere coverage check — and the other four on the byte-exact identity. Both legs
+  assert the split (15 of 27, 142 of 256) so a filter added to `kFilters` cannot land in the wrong
+  half unnoticed.
+
+**Two arithmetic errors found by running it, not by reading it.** The rotation in C1 yields **143**
+magnifying-linear draws, not the `256·5/9 ≈ 142` shortcut: `256 = 28·9 + 4`, and three of the
+four-element tail are magnifying. And identity **0** encodes four identical texels, so interpolating
+it is a no-op and it reads back clean; it is judged on the identity like a point draw, which brings
+the count back to 142 and explains why the old leg reported 142 wrong rather than 143.
+
+**Evidence.** EasyGL `146/146` and `29/29`, both with the correction on. Mutation-checked both
+files: restoring `(x + 0.5)` fails U2 on 19 mismatches and all three tie guards; declaring every
+filter magnification-point fails B1 and C1.
+
+**The consequence REMED-GFX-239 predicted is now visible.** Rebuilt and run against Vulkan, the
+same legs fail with the same counts EasyGL used to produce — U2 by 19, B1 by 15, C1 by 142. The
+roles have swapped, which is the honest state: EasyGL matches XNA, Vulkan does not, and the suite
+now says so instead of the reverse. The other five renderers registered for these contracts are not
+buildable in this configuration and were not measured.
+
+---
+
+## 38. `REMED-GFX-239` — the XNA pixel-centre convention is guarded on one renderer only
+
+**Status:** **OPEN — measured 2026-08-30** · **Coverage defect**
+
+**Defect.** `EasyGL_XnaPixelCenter` is registered for **EasyGL alone**. No other renderer is held to
+XNA's pixel-centre convention, and the six others that pass `PointSamplingContract` are passing an
+expectation XNA never held (`REMED-GFX-238`). Built against the Vulkan renderer and run,
+`SAMPLE-001`'s own fixture reports:
+
+    [FAIL] XNA 1x1 triangle: 0 covered pixel(s), expected at least 1
+    [PASS] BasicEffect control triangle: 120 covered pixel(s), expected at least 32
+
+The control triangle rules out a broken effect or readback path: Vulkan simply does not implement
+the convention, and nothing in the suite says so. CNA therefore gives **different pixel coverage
+depending on the renderer**, silently.
+
+**Planned fix.** Promote the fixture to a renderer-neutral contract registered for every renderer
+that can run it, the way `PointSamplingContract` already is. Renderers that do not implement the
+convention then fail visibly and take a recorded capability boundary, rather than passing by not
+being asked. Implementing the convention on the other renderers is **not** in this ticket's scope —
+naming the divergence is.
+
+**Sequencing.** Land `REMED-GFX-238` first. Promoting this fixture while the two contracts still
+assert the opposite convention would put two registered cross-renderer contracts in direct
+contradiction.
+
+---
+
+## 39. `REMED-GFX-240` — the pixel-centre correction flattens the CNAEXT PCF kernel
+
+**Status:** **OPEN — measured 2026-08-30** · **CNAEXT shadow-layer defect**
+
+**Defect.** With `xnaPixelCenterScale_` at its shipped value,
+`ShadowVisibilityTest.TheFilterRadiusChangesHowSoftTheEdgeIs` fails its **second** assertion —
+`countPartials(2) > 0`, "a 5×5 kernel produced no soft edge at all" — with an actual of 0. The
+radius-0 assertion passes. `ShadowVisibilityTest.TheCastersShadowIsVisibleOnTheGround` also passes,
+so the shadow is present and only its softness is gone; this is not a vacuous pass on an absent
+shadow.
+
+**Attribution is direct, not inferred.** Setting `xnaPixelCenterScale_ = 0` and rebuilding **every**
+dependent binary takes this test to green and takes `EasyGL_XnaPixelCenter` red; restoring it
+reverses both. Rebuilding only the test executable and not the renderer that holds the constant
+reports the opposite result — a stale binary keeps the old renderer linked in, and that trap cost a
+wrong conclusion once already in this investigation.
+
+| test | correction off | correction on |
+|---|---|---|
+| `EasyGL_XnaPixelCenter` | FAIL | pass |
+| `EasyGL_PointSamplingContract` | pass | FAIL — `REMED-GFX-238` |
+| `EasyGL_DescriptorCapacityContract` | pass | FAIL — `REMED-GFX-238` |
+| `ShadowVisibilityTest.TheFilterRadiusChangesHowSoftTheEdgeIs` | pass | **FAIL — this ticket** |
+
+**Why this one is a real defect.** A ~0.49px geometry shift should move where a shadow edge falls;
+it should not remove every intermediate value a 5×5 kernel produces. XNA cannot arbitrate — it has
+no shadow-map API — so the question is not which convention is right but why the kernel degenerates.
+Investigate whether the shadow layer derives its tap offsets from a matrix that now carries the
+clip-space translation, which would scale the offsets rather than translate them.
+
+**Do not "fix" this by removing the correction.** The correction is XNA-correct
+(`REMED-GFX-238`); this ticket is the shadow layer's own interaction with it.
+
+**Evidence.** `spikes/xna-pixel-center-spike/README.md`, commits `55b93f910` and `91be3f7a8`.
+
+---
+
+**Also corrected while measuring the above:**
+`GltfConformanceL6.ViewAndProjectionReachEveryDrawUnaltered` had been counted among the correction's
+casualties. It is not one. It fails only under `ctest -j` and passes serially every time.
