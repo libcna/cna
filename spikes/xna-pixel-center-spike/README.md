@@ -129,6 +129,27 @@ for `NormalizedByte2`, which XNA accepts at either profile and the renderer had 
 refusing) and opened `REMED-GFX-242` (`Bgra5551` is refused by CNA and accepted by XNA, and the
 eleven HiDef-only formats stay refused even on a HiDef device).
 
+## Fourth question: the other two resource kinds
+
+`LEG-G` and `LEG-H` ask the same sweep of `TextureCube` and `RenderTarget2D`, at both profiles.
+
+| kind | Reach | HiDef | outside the list |
+|---|---|---|---|
+| `Texture2D` | 9 | all 20 | throws `NotSupportedException` |
+| `TextureCube` | 7 | 18 | throws `NotSupportedException` |
+| `RenderTarget2D` | 6 honoured | 17 honoured | **silently substitutes `Color`** |
+
+`TextureCube` is the `Texture2D` list minus `NormalizedByte2`/`NormalizedByte4`, refused at *both*
+profiles -- the resource kind saying no, not the hardware. `RenderTarget2D` is the `Texture2D` list
+minus the three block-compressed formats.
+
+**The render-target mechanism is the finding.** XNA never refuses a render-target format; asked for
+`Single` at Reach it hands back a target whose `Format` is `Color`. The first version of `LEG-H`
+reported all twenty formats "accepted" at both profiles, which was implausible enough to make the
+leg report what the target actually IS rather than that construction had not thrown -- and that is
+where the substitution appeared. CNA deliberately does NOT follow this (MOD-115); see
+`REMED-GFX-245`.
+
 ## What this settles
 
 `xnaPixelCenterScale_` is **not** a divergence to be removed. It is what makes EasyGL agree with

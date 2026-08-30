@@ -82,6 +82,19 @@ namespace Microsoft::Xna::Framework::Graphics
         // rule that keeps that finding fixed is no longer "Color only" but "whatever the renderer
         // says it really creates". The same tri-state verdict RenderTarget2D consults answers it,
         // so a cube and a 2D target can never disagree about a format.
+        // REMED-GFX-245: the profile is asked first, exactly as Texture2D does, and refuses with
+        // XNA's own exception type. The cube list is measured, not inferred from the 2D one -- it
+        // excludes NormalizedByte2/4 at BOTH profiles.
+        if (!Texture::IsCubeFormatAllowedByProfileEXT(device.getGraphicsProfileProperty(), format))
+        {
+            throw System::NotSupportedException(
+                "TextureCube: SurfaceFormat " + std::to_string(static_cast<int>(format)) +
+                " is not available for a cube on GraphicsProfile." +
+                (device.getGraphicsProfileProperty() == GraphicsProfile::HiDef
+                     ? std::string("HiDef")
+                     : std::string("Reach")) +
+                " -- this is the profile's own restriction, not the renderer's capability");
+        }
         switch (device.GetRenderer().ClassifyRenderTargetFormatEXT(static_cast<int>(format)))
         {
             case CNA::Internal::Renderers::RendererFormatVerdict::Supported:

@@ -16,6 +16,12 @@
 //
 // The larger control triangle stays so a failure cannot be mistaken for a broken BasicEffect or
 // readback path: on a renderer that merely lacks the convention, the control triangle is intact.
+//
+// REMED-GFX-246: a renderer that does not rasterize at all cannot answer this question, and asking
+// it to would be a category error rather than a finding. HEADLESS therefore takes the same arm it
+// takes in the point-sampling contract -- the honest assertion there is that the readback is
+// REFUSED rather than fabricated, which is a real contract of its own and the reason registering
+// this case for it is worth anything.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -59,10 +65,28 @@ class XnaPixelCenterTest final : public Game
     std::unique_ptr<GraphicsDeviceManager> graphics_;
     int result_ = 1;
 
+    /// A non-rasterizing renderer owes a refusal, not a picture.
+    void RunNonRasterizing(GraphicsDevice& device)
+    {
+        std::vector<Color> frame(static_cast<std::size_t>(kSize) * kSize, kBackground);
+        const Rectangle full(0, 0, kSize, kSize);
+        bool threw = false;
+        try { device.GetBackBufferData(&full, frame.data(), 0, static_cast<int>(frame.size())); }
+        catch (const std::exception&) { threw = true; }
+        std::printf("[%s] a non-rasterizing renderer refuses the readback instead of fabricating a "
+                    "frame to answer the pixel-centre question with\n", threw ? "PASS" : "FAIL");
+        result_ = threw ? 0 : 1;
+        Exit();
+    }
+
 protected:
     void Draw(const GameTime&) override
     {
         auto& device = getGraphicsDeviceProperty();
+#if defined(CNA_RENDERER_HEADLESS)
+        RunNonRasterizing(device);
+        return;
+#endif
         device.Clear(kBackground);
         device.setBlendStateProperty(BlendState::Opaque);
         device.setRasterizerStateProperty(RasterizerState::CullNone);

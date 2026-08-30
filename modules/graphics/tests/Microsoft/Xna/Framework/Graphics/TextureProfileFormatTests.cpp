@@ -95,3 +95,55 @@ TEST(TextureProfileFormat, ACnaExtensionFormatIsNotTheProfilesBusiness)
     EXPECT_TRUE(Texture::IsFormatAllowedByProfileEXT(GraphicsProfile::Reach,
                                                      SurfaceFormat::Bc7EXT));
 }
+
+// --- REMED-GFX-245: the other two resource kinds ---------------------------------------------
+
+TEST(TextureProfileFormat, ACubeNeverCarriesTheSignedNormalizedFormatsOnEitherProfile)
+{
+    // Measured, and the "either profile" half is the whole point: HiDef refuses these two for a
+    // cube on a device that carries them as a Texture2D without complaint, so it is the resource
+    // kind saying no rather than the hardware. spikes/xna-pixel-center-spike/ leg LEG-G.
+    for (const GraphicsProfile profile : {GraphicsProfile::Reach, GraphicsProfile::HiDef})
+    {
+        SCOPED_TRACE(static_cast<int>(profile));
+        EXPECT_FALSE(Texture::IsCubeFormatAllowedByProfileEXT(profile,
+                                                              SurfaceFormat::NormalizedByte2));
+        EXPECT_FALSE(Texture::IsCubeFormatAllowedByProfileEXT(profile,
+                                                              SurfaceFormat::NormalizedByte4));
+        EXPECT_TRUE(Texture::IsCubeFormatAllowedByProfileEXT(profile, SurfaceFormat::Color));
+        EXPECT_TRUE(Texture::IsCubeFormatAllowedByProfileEXT(profile, SurfaceFormat::Dxt1));
+    }
+}
+
+TEST(TextureProfileFormat, TheCubeGateIsDeliberatelyNarrowerThanXnasOwnCubeList)
+{
+    // XNA's Reach tier also refuses the eleven HiDef-only formats for a cube. CNA does NOT enforce
+    // that, because MOD-107 guarantees a float cube on the default profile for image-based
+    // lighting. This case exists so the omission is a recorded decision rather than an oversight
+    // someone later "fixes" -- see REMED-GFX-245.
+    EXPECT_TRUE(Texture::IsCubeFormatAllowedByProfileEXT(GraphicsProfile::Reach,
+                                                         SurfaceFormat::HdrBlendable));
+    EXPECT_TRUE(Texture::IsCubeFormatAllowedByProfileEXT(GraphicsProfile::Reach,
+                                                         SurfaceFormat::Single));
+}
+
+TEST(TextureProfileFormat, NothingRendersIntoABlockCompressedSurface)
+{
+    // The render-target list is the Texture2D list minus the three compressed formats, at both
+    // profiles. The predicate is exposed and measured even though RenderTarget2D does not yet
+    // consult it: XNA SUBSTITUTES Color rather than refusing, and MOD-115 deliberately refuses
+    // instead, so wiring it in is the owner's call. REMED-GFX-245.
+    for (const GraphicsProfile profile : {GraphicsProfile::Reach, GraphicsProfile::HiDef})
+    {
+        SCOPED_TRACE(static_cast<int>(profile));
+        for (const SurfaceFormat fmt : {SurfaceFormat::Dxt1, SurfaceFormat::Dxt3,
+                                        SurfaceFormat::Dxt5})
+            EXPECT_FALSE(Texture::IsRenderTargetFormatAllowedByProfileEXT(profile, fmt));
+        EXPECT_TRUE(Texture::IsRenderTargetFormatAllowedByProfileEXT(profile, SurfaceFormat::Color));
+    }
+    // And the profile tier still applies on top of that.
+    EXPECT_FALSE(Texture::IsRenderTargetFormatAllowedByProfileEXT(GraphicsProfile::Reach,
+                                                                  SurfaceFormat::HdrBlendable));
+    EXPECT_TRUE(Texture::IsRenderTargetFormatAllowedByProfileEXT(GraphicsProfile::HiDef,
+                                                                 SurfaceFormat::HdrBlendable));
+}

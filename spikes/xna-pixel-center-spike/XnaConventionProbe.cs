@@ -70,7 +70,7 @@ public class Probe : Game
               Leg2x2("LEG-C 2x2 -> 2x2 LINEAR", TextureFilter.Linear);
               LegSprite("LEG-S SpriteBatch 3x3 -> 10x10", 3, 3, 10, 10);
               LegSprite("LEG-S SpriteBatch 8x4 -> 21x13", 8, 4, 21, 13);
-              LegFormats(); }
+              LegFormats(); LegOtherKinds(); }
         catch (Exception e) { Say("EXCEPTION: " + e); }
         File.WriteAllText("probe-output.txt", log.ToString());
         Exit();
@@ -261,6 +261,50 @@ public class Probe : Game
     }
 
     static bool Clean(int v) { return v == 0 || v == 255; }
+
+    /// The same sweep for the two resource kinds REMED-GFX-242 did not cover. XNA's profile rules
+    /// are not one list: a render target is a far narrower thing than a texture, and guessing which
+    /// of the twenty formats each kind allows is exactly what this spike exists to avoid.
+    void LegOtherKinds()
+    {
+        var dev = GraphicsDevice;
+        var formats = new SurfaceFormat[] {
+            SurfaceFormat.Color, SurfaceFormat.Bgr565, SurfaceFormat.Bgra5551,
+            SurfaceFormat.Bgra4444, SurfaceFormat.Dxt1, SurfaceFormat.Dxt3, SurfaceFormat.Dxt5,
+            SurfaceFormat.NormalizedByte2, SurfaceFormat.NormalizedByte4,
+            SurfaceFormat.Rgba1010102, SurfaceFormat.Rg32, SurfaceFormat.Rgba64,
+            SurfaceFormat.Alpha8, SurfaceFormat.Single, SurfaceFormat.Vector2,
+            SurfaceFormat.Vector4, SurfaceFormat.HalfSingle, SurfaceFormat.HalfVector2,
+            SurfaceFormat.HalfVector4, SurfaceFormat.HdrBlendable,
+        };
+
+        Say("LEG-G TextureCube formats accepted, GraphicsProfile=" + dev.GraphicsProfile);
+        foreach (var f in formats)
+        {
+            string verdict;
+            try { using (var t = new TextureCube(dev, 4, false, f)) verdict = "accepted"; }
+            catch (Exception e) { verdict = "THREW " + e.GetType().Name; }
+            Say("        " + f.ToString().PadRight(16) + " " + verdict);
+        }
+
+        Say("LEG-H RenderTarget2D formats accepted, GraphicsProfile=" + dev.GraphicsProfile);
+        foreach (var f in formats)
+        {
+            string verdict;
+            try
+            {
+                // "Accepted" is not the same as "honoured": XNA may silently substitute a format it
+                // cannot give you rather than refusing. Report what the target actually IS.
+                using (var rt = new RenderTarget2D(dev, 4, 4, false, f, DepthFormat.None))
+                    verdict = rt.Format == f
+                        ? "accepted"
+                        : "SUBSTITUTED -> " + rt.Format.ToString();
+            }
+            catch (Exception e) { verdict = "THREW " + e.GetType().Name; }
+            Say("        " + f.ToString().PadRight(16) + " " + verdict);
+        }
+    }
+
 
     // Which SurfaceFormats XNA accepts for a Texture2D, and at which GraphicsProfile. CNA's
     // easygl_surface_format_throws_test.cpp requires several of these to throw; XNA's own answer

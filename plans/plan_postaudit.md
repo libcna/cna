@@ -1,7 +1,7 @@
 # CNA Post-Audit Development Plan
 
 **Created:** 2026-08-03, on `feature/audit`, immediately after `REMED-GFX-202` closed.
-**Owns:** `REMED-GFX-203` … `REMED-GFX-244` and any future finding admitted by the rules below.
+**Owns:** `REMED-GFX-203` … `REMED-GFX-246` and any future finding admitted by the rules below.
 **Does not own:** the remediation campaign. `remediation/REMEDIATION_INDEX.md` and
 `remediation/REMEDIATION_PROGRESS.md` remain the authoritative status of record for every ticket,
 including the ones scheduled here.
@@ -2964,3 +2964,101 @@ would hide a check that did execute.
 **Evidence.** `3/3 PASS (driver half skipped)`, exit 0, and `ctest` now says `Passed` rather than
 `Skipped`. Mutation-checked: with the `Reset()` forward deleted the case fails on `P1` with exit 1,
 where before this ticket the same deletion produced `PASS` and exit 77.
+
+---
+
+## 44. `REMED-GFX-245` — the profile gate reaches TextureCube; RenderTarget2D turns out to be a different question
+
+**Status:** **CLOSED for `TextureCube`; the render-target half is filed unimplemented and deliberate** ·
+**2026-08-30**
+
+**What was asked.** `REMED-GFX-242` made texture-format legality `(profile, renderer capability)`
+for `Texture2D` only, noting that XNA's render-target rules are a different list. This extends the
+measurement to the other two resource kinds.
+
+**Measured on the real XNA 4.0 runtime** (`spikes/xna-pixel-center-spike/`, legs `LEG-G` and
+`LEG-H`, both profiles):
+
+| kind | Reach | HiDef | on a format outside the list |
+|---|---|---|---|
+| `Texture2D` | 9 formats | all 20 | **throws** `NotSupportedException` |
+| `TextureCube` | 7 | 18 | **throws** `NotSupportedException` |
+| `RenderTarget2D` | 6 honoured | 17 honoured | **silently substitutes `Color`** |
+
+The lists derive cleanly once measured, and each derivation was checked rather than assumed:
+`TextureCube` is the `Texture2D` list **minus `NormalizedByte2`/`NormalizedByte4`** — refused at
+*both* profiles, so it is the resource kind saying no and not the hardware — and `RenderTarget2D` is
+the `Texture2D` list **minus the three block-compressed formats**, which nothing renders into.
+
+**The render-target mechanism is the finding, not the list.** XNA never refuses a render-target
+format. Asked for `Single` at Reach it returns a target whose `Format` is `Color`, and the caller
+learns nothing unless it looks. This was measured only because the first probe reported all twenty
+formats "accepted" at both profiles, which was implausible enough to check what the target actually
+*was* rather than that construction had not thrown.
+
+**`TextureCube` — closed, and deliberately narrower than the measurement.**
+`Texture::IsCubeFormatAllowedByProfileEXT` enforces only the part of the cube rule nothing in CNA
+contests: a cube never carries `NormalizedByte2` or `NormalizedByte4`, at **either** profile.
+`TextureCube`'s constructor asks it before the renderer and refuses with `NotSupportedException`.
+
+**The profile-TIER half of the cube list was measured and left unenforced, for the same reason as
+the render target.** Enforcing it refuses a float cube on the default (Reach) profile, and MOD-107
+guarantees the opposite in as many words: an irradiance or prefiltered-specular cube is rendered
+face by face into float storage, and *"a cube that reported HdrBlendable while holding 8-bit texels
+would make every IBL product quietly wrong."* Both halves of this ticket therefore run into the same
+standing decision, from two directions.
+
+**Two attempts were made and both reverted, which is how the boundary was found.** The full cube
+gate first failed five CNAEXT shadow cases; making `CubeShadowMap` consult the profile fixed those
+and looked finished — until the full suite produced
+`HdrRenderTargetRoundTripTest.AFloatCubeTargetIsCreatedInTheRequestedFormat`, MOD-107's own guard,
+which no amount of graceful degradation inside CNAEXT can satisfy because it asserts the framework's
+promise rather than the engine layer's behaviour. The narrowed gate needs no CNAEXT change at all:
+`CubeShadowMap` is untouched.
+
+**`RenderTarget2D` — measured, NOT implemented, and that is the point.** Substitution was implemented
+and then reverted, because it reverses a deliberate CNA decision:
+`GraphicsCapabilityFloatRenderTargetTest.AnUnsupportedFormatIsRefusedRatherThanSubstituted` (MOD-115)
+exists to stop exactly this behaviour, in its own words *"asking for a format the renderer cannot
+make and receiving an 8-bit Color target that looks like success."* Faithfully substituting also
+turned the CNAEXT HDR chain off on a default (Reach) device, since the engine layer's float targets
+are HiDef-class formats.
+
+So CNA knowingly diverges from XNA here, and the divergence is better than the fidelity: XNA's
+silent substitution is the failure mode MOD-115 was written to remove. **Adopting XNA's behaviour
+would be the owner's call, not a bug fix**, and it would need the engine layer to require HiDef.
+Recorded rather than done.
+
+**What the owner would actually be deciding**, stated once for both halves: whether a CNA game on
+the default `GraphicsProfile.Reach` may use float render targets and float cubes, which XNA reserves
+for HiDef. Today it may, and the engine layer depends on it. The XNA-faithful alternative is not to
+refuse them but to make CNAEXT require a HiDef device — a coherent position, and a larger change
+than either gate.
+
+---
+
+## 45. `REMED-GFX-246` — the pixel-centre contract reaches a third renderer
+
+**Status:** **CLOSED — 2026-08-30** · **Coverage**
+
+**Defect.** `REMED-GFX-239` registered `xna_pixel_center_contract_test.cpp` for EasyGL and Vulkan and
+left the other five renderers that carry `PointSamplingContract` unregistered, because none of them
+built in this tree. `HEADLESS` is the cheapest of the five to configure — no GPU, no driver — so it
+went first, in a new `cmake-build-headless/` per-renderer directory.
+
+**Headless cannot answer the question, and that is itself the contract.** It does not rasterize:
+`GetBackBufferData` refuses with *"the Headless renderer does not rasterize and has no backbuffer
+pixel storage to read back."* Asking it about pixel centres is a category error. `PointSamplingContract`
+already had the right shape for this — on Headless it runs **one** leg, that a non-rasterizing
+renderer *rejects the readback instead of fabricating a sampled image* — so this fixture took the
+same arm rather than inventing a Headless-specific answer.
+
+**Evidence.**
+
+    EasyGL    2 checks pass                       -- implements the convention
+    Vulkan    [FAIL] 1x1 triangle: 0 covered      -- documented divergence, control triangle intact
+    Headless  [PASS] refuses the readback         -- the only honest answer for a non-rasterizer
+
+**Still unregistered: bgfx, llgl, sdl-gpu, webgpu.** None configures in this tree, and registering a
+case whose outcome has not been observed would be speculation rather than coverage — the same reason
+`REMED-GFX-239` stopped at two.
