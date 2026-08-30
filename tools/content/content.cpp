@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include <cmath>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
@@ -29,6 +30,7 @@
 #include "CNA/Content/Pipeline/VideoContentPipeline.hpp"
 #include "CNA/Content/Pipeline/XnbContentPipeline.hpp"
 #include "CNA/Internal/ContentPath.hpp"
+#include "CNA/Internal/Json.hpp"
 #include "CnaContentStaging.hpp"
 #include "CnaToolAtomicWrite.hpp"
 
@@ -50,6 +52,7 @@ namespace
         std::filesystem::path configuration;
         std::size_t workers = 1u;
         bool quiet = false;
+        bool explain = false;
     };
 
     constexpr std::size_t MaxContentCompilerWorkers = 64u;
@@ -66,6 +69,136 @@ namespace
         Pipeline::ContentProcessorParameters parameters;
     };
 
+    enum class ContentBuildReasonCode
+    {
+        ManifestUnavailable,
+        ManifestIncompatible,
+        ManifestCorrupt,
+        NewAsset,
+        LogicalIdentityChanged,
+        PrimarySourceBytesChanged,
+        ImporterIdentityChanged,
+        ProcessorIdentityChanged,
+        WriterIdentityChanged,
+        WriterSchemaIdentityChanged,
+        WriterCodecIdentityChanged,
+        ProcessorParametersChanged,
+        SourceDependencySetChanged,
+        SourceDependencyBytesChanged,
+        ContentDependencySetChanged,
+        ContentDependencyFingerprintChanged,
+        OutputDefinitionsChanged,
+        DeploymentDefinitionsChanged,
+        CompiledOutputMissing,
+        CompiledOutputDigestMismatch,
+        DeploymentOutputMissing,
+        DeploymentOutputDigestMismatch,
+        PublishedOutputUnsafe,
+        DirectFingerprintChanged,
+        EffectiveFingerprintChanged,
+        FingerprintUnchanged,
+    };
+
+    struct ContentBuildReason
+    {
+        ContentBuildReasonCode code = ContentBuildReasonCode::NewAsset;
+        std::string detail;
+
+        bool operator==(const ContentBuildReason&) const = default;
+    };
+
+    struct ContentBuildDecision
+    {
+        std::vector<ContentBuildReason> reasons;
+    };
+
+    void NormalizeReasons(ContentBuildDecision& decision)
+    {
+        std::sort(decision.reasons.begin(), decision.reasons.end(),
+                  [](const ContentBuildReason& left, const ContentBuildReason& right)
+        {
+            if (left.code != right.code) { return left.code < right.code; }
+            return left.detail < right.detail;
+        });
+        decision.reasons.erase(
+            std::unique(decision.reasons.begin(), decision.reasons.end()),
+            decision.reasons.end());
+    }
+
+    const char* ContentBuildReasonText(ContentBuildReasonCode code)
+    {
+        switch (code)
+        {
+        case ContentBuildReasonCode::ManifestUnavailable:
+            return "manifest unavailable";
+        case ContentBuildReasonCode::ManifestIncompatible:
+            return "manifest format changed or is incompatible";
+        case ContentBuildReasonCode::ManifestCorrupt:
+            return "manifest corrupt";
+        case ContentBuildReasonCode::NewAsset:
+            return "new asset";
+        case ContentBuildReasonCode::LogicalIdentityChanged:
+            return "logical asset/output identity changed";
+        case ContentBuildReasonCode::PrimarySourceBytesChanged:
+            return "primary source bytes changed";
+        case ContentBuildReasonCode::ImporterIdentityChanged:
+            return "importer identity/version changed";
+        case ContentBuildReasonCode::ProcessorIdentityChanged:
+            return "processor identity/version changed";
+        case ContentBuildReasonCode::WriterIdentityChanged:
+            return "writer identity/version changed";
+        case ContentBuildReasonCode::WriterSchemaIdentityChanged:
+            return "writer asset schema identity changed";
+        case ContentBuildReasonCode::WriterCodecIdentityChanged:
+            return "writer codec identity/version changed";
+        case ContentBuildReasonCode::ProcessorParametersChanged:
+            return "processor parameters changed";
+        case ContentBuildReasonCode::SourceDependencySetChanged:
+            return "source dependency set changed";
+        case ContentBuildReasonCode::SourceDependencyBytesChanged:
+            return "source dependency bytes changed";
+        case ContentBuildReasonCode::ContentDependencySetChanged:
+            return "content-build dependency set changed";
+        case ContentBuildReasonCode::ContentDependencyFingerprintChanged:
+            return "content-build dependency effective fingerprint changed";
+        case ContentBuildReasonCode::OutputDefinitionsChanged:
+            return "compiled output definition set changed";
+        case ContentBuildReasonCode::DeploymentDefinitionsChanged:
+            return "deployment definition set changed";
+        case ContentBuildReasonCode::CompiledOutputMissing:
+            return "compiled output missing";
+        case ContentBuildReasonCode::CompiledOutputDigestMismatch:
+            return "compiled output digest mismatch";
+        case ContentBuildReasonCode::DeploymentOutputMissing:
+            return "deployment output missing";
+        case ContentBuildReasonCode::DeploymentOutputDigestMismatch:
+            return "deployment output digest mismatch";
+        case ContentBuildReasonCode::PublishedOutputUnsafe:
+            return "published output path is unsafe or not a regular file";
+        case ContentBuildReasonCode::DirectFingerprintChanged:
+            return "direct fingerprint changed outside a persisted reason domain";
+        case ContentBuildReasonCode::EffectiveFingerprintChanged:
+            return "effective fingerprint changed outside a persisted reason domain";
+        case ContentBuildReasonCode::FingerprintUnchanged:
+            return "fingerprint and published output digests unchanged";
+        }
+        return "unknown build reason";
+    }
+
+    std::string FormatExplainedStatus(const std::string& status,
+                                      ContentBuildDecision decision)
+    {
+        NormalizeReasons(decision);
+        std::ostringstream output;
+        output << status;
+        for (const ContentBuildReason& reason : decision.reasons)
+        {
+            output << "\n  reason: " << ContentBuildReasonText(reason.code);
+            if (!reason.detail.empty()) { output << ": " << reason.detail; }
+        }
+        return output.str();
+    }
+
     class ContentBuildCycleError final : public Pipeline::ContentPipelineError
     {
     public:
@@ -81,7 +214,7 @@ namespace
     {
         std::cerr
             << "Usage: cna-content build <source-file-or-directory> -o <output> "
-               "[--config <file>] [--workers <1..64>] [--quiet]\n"
+               "[--config <file>] [--workers <1..64>] [--explain] [--quiet]\n"
             << "       cna-content clean <output-directory> [--quiet]\n\n"
             << "Builds source content through Importer -> Processor -> Content Type Writer -> "
                "CNB.\n"
@@ -174,6 +307,10 @@ namespace
             else if (IsOption(argument, "--quiet"))
             {
                 command.quiet = true;
+            }
+            else if (IsOption(argument, "--explain"))
+            {
+                command.explain = true;
             }
             else if (IsOption(argument, "--config"))
             {
@@ -488,31 +625,68 @@ namespace
         }
     }
 
-    Pipeline::ContentBuildManifest LoadManifest(const std::filesystem::path& path,
-                                                std::string& original,
-                                                bool quiet,
-                                                bool& ownershipTrusted)
+    enum class ManifestLoadState
     {
-        ownershipTrusted = false;
+        Missing,
+        Current,
+        Incompatible,
+        Corrupt,
+    };
+
+    struct LoadedManifest
+    {
+        Pipeline::ContentBuildManifest manifest;
+        std::string original;
+        ManifestLoadState state = ManifestLoadState::Missing;
+    };
+
+    bool HasIncompatibleManifestVersion(const std::string& json)
+    {
         try
         {
-            if (!std::filesystem::exists(path)) { return {}; }
-            original = ReadText(path);
-            Pipeline::ContentBuildManifest manifest =
-                Pipeline::ContentBuildManifest::Parse(original);
-            ownershipTrusted = true;
-            return manifest;
+            const CNA::Internal::JsonValue root = CNA::Internal::ParseJson(json);
+            if (root.type != CNA::Internal::JsonType::Object) { return false; }
+            const CNA::Internal::JsonValue* version = root.FindMember("version");
+            if (version == nullptr || version->type != CNA::Internal::JsonType::Number ||
+                !std::isfinite(version->numberValue) ||
+                std::floor(version->numberValue) != version->numberValue ||
+                version->numberValue < 0.0)
+            {
+                return false;
+            }
+            return version->numberValue !=
+                   static_cast<double>(Pipeline::ContentBuildManifestVersion);
+        }
+        catch (...)
+        {
+            return false;
+        }
+    }
+
+    LoadedManifest LoadManifest(const std::filesystem::path& path, bool quiet)
+    {
+        LoadedManifest result;
+        try
+        {
+            if (!std::filesystem::exists(path)) { return result; }
+            result.original = ReadText(path);
+            result.manifest = Pipeline::ContentBuildManifest::Parse(result.original);
+            result.state = ManifestLoadState::Current;
+            return result;
         }
         catch (const std::exception& error)
         {
-            original.clear();
+            result.state = HasIncompatibleManifestVersion(result.original)
+                               ? ManifestLoadState::Incompatible
+                               : ManifestLoadState::Corrupt;
+            result.original.clear();
             if (!quiet)
             {
                 std::cout << "[WARN] Ignoring incompatible or corrupt manifest '"
                           << CNA::Internal::ContentPathToUtf8(path) << "': " << error.what()
                           << "\n";
             }
-            return {};
+            return result;
         }
     }
 
@@ -838,47 +1012,268 @@ namespace
         }
     }
 
-    bool CanSkipEffective(
+    std::string ComponentIdentityText(const Pipeline::ContentComponentIdentity& identity)
+    {
+        return identity.name + "/" + identity.version;
+    }
+
+    ContentBuildDecision CompareDirectBuildState(
+        const Pipeline::ContentBuildManifestEntry& previous,
+        const Pipeline::ContentBuildManifestEntry& current)
+    {
+        ContentBuildDecision decision;
+        const auto add = [&](ContentBuildReasonCode code, std::string detail = {})
+        {
+            decision.reasons.push_back({code, std::move(detail)});
+        };
+        if (previous.nodeId != current.nodeId || previous.source != current.source)
+        {
+            add(ContentBuildReasonCode::LogicalIdentityChanged,
+                previous.nodeId + " (" + previous.source + ") -> " + current.nodeId + " (" +
+                    current.source + ")");
+        }
+        if (previous.importer != current.importer)
+        {
+            add(ContentBuildReasonCode::ImporterIdentityChanged,
+                ComponentIdentityText(previous.importer) + " -> " +
+                    ComponentIdentityText(current.importer));
+        }
+        if (previous.processor != current.processor)
+        {
+            add(ContentBuildReasonCode::ProcessorIdentityChanged,
+                ComponentIdentityText(previous.processor) + " -> " +
+                    ComponentIdentityText(current.processor));
+        }
+        if (previous.writer != current.writer)
+        {
+            add(ContentBuildReasonCode::WriterIdentityChanged,
+                ComponentIdentityText(previous.writer) + " -> " +
+                    ComponentIdentityText(current.writer));
+        }
+
+        std::vector<Pipeline::ContentWriterSchemaIdentity> previousSchemas =
+            previous.writerSchemas;
+        std::vector<Pipeline::ContentWriterSchemaIdentity> currentSchemas = current.writerSchemas;
+        const auto schemaOrder = [](const Pipeline::ContentWriterSchemaIdentity& left,
+                                    const Pipeline::ContentWriterSchemaIdentity& right)
+        {
+            if (left.assetTypeId != right.assetTypeId)
+            {
+                return left.assetTypeId < right.assetTypeId;
+            }
+            return left.assetTypeName < right.assetTypeName;
+        };
+        std::sort(previousSchemas.begin(), previousSchemas.end(), schemaOrder);
+        std::sort(currentSchemas.begin(), currentSchemas.end(), schemaOrder);
+        bool schemaIdentityChanged = previousSchemas.size() != currentSchemas.size();
+        bool codecIdentityChanged = false;
+        for (std::size_t index = 0u;
+             index < std::min(previousSchemas.size(), currentSchemas.size()); ++index)
+        {
+            const auto& oldSchema = previousSchemas[index];
+            const auto& newSchema = currentSchemas[index];
+            schemaIdentityChanged =
+                schemaIdentityChanged || oldSchema.assetTypeId != newSchema.assetTypeId ||
+                oldSchema.assetSchemaVersion != newSchema.assetSchemaVersion ||
+                oldSchema.assetTypeName != newSchema.assetTypeName;
+            codecIdentityChanged = codecIdentityChanged || oldSchema.codec != newSchema.codec;
+        }
+        if (schemaIdentityChanged)
+        {
+            add(ContentBuildReasonCode::WriterSchemaIdentityChanged);
+        }
+        if (codecIdentityChanged)
+        {
+            add(ContentBuildReasonCode::WriterCodecIdentityChanged);
+        }
+
+        const Pipeline::ContentBuildFingerprintState& oldState = previous.fingerprintState;
+        const Pipeline::ContentBuildFingerprintState& newState = current.fingerprintState;
+        if (oldState.primarySourceBytes != newState.primarySourceBytes)
+        {
+            add(ContentBuildReasonCode::PrimarySourceBytesChanged, current.source);
+        }
+        if (oldState.processorParameters != newState.processorParameters)
+        {
+            add(ContentBuildReasonCode::ProcessorParametersChanged);
+        }
+        if (oldState.writerSchemas != newState.writerSchemas &&
+            !schemaIdentityChanged && !codecIdentityChanged)
+        {
+            add(ContentBuildReasonCode::WriterSchemaIdentityChanged);
+        }
+        if (oldState.sourceDependencySet != newState.sourceDependencySet)
+        {
+            add(ContentBuildReasonCode::SourceDependencySetChanged);
+        }
+        else if (oldState.sourceDependencyBytes != newState.sourceDependencyBytes)
+        {
+            add(ContentBuildReasonCode::SourceDependencyBytesChanged);
+        }
+        if (oldState.contentDependencySet != newState.contentDependencySet)
+        {
+            add(ContentBuildReasonCode::ContentDependencySetChanged);
+        }
+        if (oldState.outputDefinitions != newState.outputDefinitions)
+        {
+            add(ContentBuildReasonCode::OutputDefinitionsChanged);
+        }
+        if (oldState.deploymentDefinitions != newState.deploymentDefinitions)
+        {
+            add(ContentBuildReasonCode::DeploymentDefinitionsChanged);
+        }
+        if (previous.directFingerprint != current.directFingerprint &&
+            decision.reasons.empty())
+        {
+            add(ContentBuildReasonCode::DirectFingerprintChanged);
+        }
+        NormalizeReasons(decision);
+        return decision;
+    }
+
+    const Pipeline::ContentBuildManifestEntry* FindPreviousEntryForReason(
+        const Pipeline::ContentBuildManifest& manifest, const BuildItem& item)
+    {
+        if (const Pipeline::ContentBuildManifestEntry* exact =
+                manifest.Find(item.logicalName))
+        {
+            return exact;
+        }
+        const Pipeline::ContentBuildManifestEntry* match = nullptr;
+        for (const auto& [nodeId, entry] : manifest.Entries())
+        {
+            static_cast<void>(nodeId);
+            if (entry.source != item.relativeSource) { continue; }
+            if (match != nullptr) { return nullptr; }
+            match = &entry;
+        }
+        return match;
+    }
+
+    ContentBuildDecision InitialBuildDecision(
+        ManifestLoadState manifestState,
+        const Pipeline::ContentBuildManifestEntry* previousForReason,
+        const Pipeline::ContentBuildManifestEntry& current)
+    {
+        if (previousForReason != nullptr)
+        {
+            return CompareDirectBuildState(*previousForReason, current);
+        }
+        ContentBuildDecision decision;
+        switch (manifestState)
+        {
+        case ManifestLoadState::Missing:
+            decision.reasons.push_back(
+                {ContentBuildReasonCode::ManifestUnavailable, {}});
+            decision.reasons.push_back({ContentBuildReasonCode::NewAsset, current.source});
+            break;
+        case ManifestLoadState::Incompatible:
+            decision.reasons.push_back(
+                {ContentBuildReasonCode::ManifestIncompatible, {}});
+            break;
+        case ManifestLoadState::Corrupt:
+            decision.reasons.push_back({ContentBuildReasonCode::ManifestCorrupt, {}});
+            break;
+        case ManifestLoadState::Current:
+            decision.reasons.push_back({ContentBuildReasonCode::NewAsset, current.source});
+            break;
+        }
+        NormalizeReasons(decision);
+        return decision;
+    }
+
+    ContentBuildReason AssessPublishedOutput(
+        const std::filesystem::path& outputRoot, const std::string& relativePath,
+        const std::string& expectedDigest, ContentBuildReasonCode missing,
+        ContentBuildReasonCode mismatch)
+    {
+        try
+        {
+            const std::filesystem::path path =
+                outputRoot / CNA::Internal::ContentPathFromUtf8(relativePath);
+            std::error_code error;
+            const std::filesystem::file_status status =
+                std::filesystem::symlink_status(path, error);
+            if (error == std::errc::no_such_file_or_directory ||
+                status.type() == std::filesystem::file_type::not_found)
+            {
+                return {missing, relativePath};
+            }
+            if (error || std::filesystem::is_symlink(status) ||
+                !std::filesystem::is_regular_file(status))
+            {
+                return {ContentBuildReasonCode::PublishedOutputUnsafe, relativePath};
+            }
+            const std::filesystem::path canonicalPath = WeaklyCanonical(path);
+            if (!IsWithin(WeaklyCanonical(outputRoot), canonicalPath))
+            {
+                return {ContentBuildReasonCode::PublishedOutputUnsafe, relativePath};
+            }
+            if (Pipeline::ContentFileSha256(canonicalPath) != expectedDigest)
+            {
+                return {mismatch, relativePath};
+            }
+            return {};
+        }
+        catch (...)
+        {
+            return {ContentBuildReasonCode::PublishedOutputUnsafe, relativePath};
+        }
+    }
+
+    ContentBuildDecision AssessEffectiveBuildState(
         const Pipeline::ContentBuildManifestEntry& entry,
         const std::filesystem::path& outputRoot,
         const std::map<std::string, std::string>& contentBuildFingerprints)
     {
+        ContentBuildDecision decision;
         try
         {
-            if (Pipeline::ComputeContentBuildEffectiveFingerprint(
-                    entry, contentBuildFingerprints) != entry.fingerprint)
+            Pipeline::ContentBuildManifestEntry current = entry;
+            Pipeline::RefreshContentBuildEffectiveFingerprint(
+                current, contentBuildFingerprints);
+            if (current.fingerprintState.contentDependencyFingerprints !=
+                entry.fingerprintState.contentDependencyFingerprints)
             {
-                return false;
+                decision.reasons.push_back(
+                    {ContentBuildReasonCode::ContentDependencyFingerprintChanged, {}});
+            }
+            if (current.fingerprint != entry.fingerprint && decision.reasons.empty())
+            {
+                decision.reasons.push_back(
+                    {ContentBuildReasonCode::EffectiveFingerprintChanged, {}});
             }
             for (const Pipeline::ContentBuildManifestOutput& output : entry.outputs)
             {
-                const std::filesystem::path path = WeaklyCanonical(
-                    outputRoot / CNA::Internal::ContentPathFromUtf8(output.path));
-                if (!IsWithin(WeaklyCanonical(outputRoot), path) ||
-                    !std::filesystem::is_regular_file(path) ||
-                    Pipeline::ContentFileSha256(path) != output.sha256)
+                ContentBuildReason reason = AssessPublishedOutput(
+                    outputRoot, output.path, output.sha256,
+                    ContentBuildReasonCode::CompiledOutputMissing,
+                    ContentBuildReasonCode::CompiledOutputDigestMismatch);
+                if (!reason.detail.empty())
                 {
-                    return false;
+                    decision.reasons.push_back(std::move(reason));
                 }
             }
             for (const Pipeline::ContentBuildManifestDeploymentFile& deployment :
                  entry.deploymentFiles)
             {
-                const std::filesystem::path path = WeaklyCanonical(
-                    outputRoot / CNA::Internal::ContentPathFromUtf8(deployment.path));
-                if (!IsWithin(WeaklyCanonical(outputRoot), path) ||
-                    !std::filesystem::is_regular_file(path) ||
-                    Pipeline::ContentFileSha256(path) != deployment.sha256)
+                ContentBuildReason reason = AssessPublishedOutput(
+                    outputRoot, deployment.path, deployment.sha256,
+                    ContentBuildReasonCode::DeploymentOutputMissing,
+                    ContentBuildReasonCode::DeploymentOutputDigestMismatch);
+                if (!reason.detail.empty())
                 {
-                    return false;
+                    decision.reasons.push_back(std::move(reason));
                 }
             }
-            return true;
         }
         catch (...)
         {
-            return false;
+            decision.reasons.push_back(
+                {ContentBuildReasonCode::EffectiveFingerprintChanged, {}});
         }
+        NormalizeReasons(decision);
+        return decision;
     }
 
     class OutputReservationConflict final : public std::runtime_error
@@ -1045,6 +1440,7 @@ namespace
         Pipeline::ContentBuildManifestEntry manifest;
         std::map<std::string, StagedOutput> stagedOutputs;
         std::map<std::string, StagedOutput> stagedDeploymentFiles;
+        ContentBuildDecision decision;
         bool prepared = false;
         bool hasManifest = false;
         std::string failure;
@@ -1055,6 +1451,7 @@ namespace
         Pipeline::ContentBuildManifestEntry manifest;
         bool success = false;
         bool skipped = false;
+        ContentBuildDecision decision;
         std::string failure;
         std::string statusLine;
     };
@@ -1197,6 +1594,7 @@ namespace
         const BuildItem& item, std::size_t index, const Pipeline::ContentPipeline& pipeline,
         const Pipeline::ContentPipelineRegistry& registry,
         const Pipeline::ContentBuildManifest& previousManifest,
+        ManifestLoadState manifestState,
         const std::filesystem::path& sourceRoot, const std::filesystem::path& outputRoot,
         const std::filesystem::path& stagingRoot)
     {
@@ -1206,6 +1604,8 @@ namespace
         {
             const Pipeline::ContentBuildManifestEntry* previous =
                 previousManifest.Find(item.logicalName);
+            const Pipeline::ContentBuildManifestEntry* previousForReason =
+                FindPreviousEntryForReason(previousManifest, item);
             if (previous != nullptr &&
                 IsPreviousGraphCurrent(*previous, registry, item, sourceRoot, outputRoot))
             {
@@ -1227,6 +1627,8 @@ namespace
             plan.manifest = Pipeline::MakeContentBuildManifestEntry(
                 result, sourceRoot, outputRoot, item.output);
             Pipeline::RefreshContentBuildDirectFingerprint(plan.manifest, sourceRoot);
+            plan.decision =
+                InitialBuildDecision(manifestState, previousForReason, plan.manifest);
             const std::filesystem::path nodeStage = stagingRoot / std::to_string(index);
             try
             {
@@ -1286,6 +1688,7 @@ namespace
     {
         BuildNodeOutcome outcome;
         const BuildItem& item = *plan.item;
+        outcome.decision = plan.decision;
         try
         {
             if (plan.prepared)
@@ -1293,6 +1696,11 @@ namespace
                 outcome.manifest = plan.manifest;
                 Pipeline::RefreshContentBuildEffectiveFingerprint(
                     outcome.manifest, effectiveFingerprints);
+                if (outcome.decision.reasons.empty())
+                {
+                    outcome.decision.reasons.push_back(
+                        {ContentBuildReasonCode::DirectFingerprintChanged, {}});
+                }
                 try
                 {
                     const std::uintmax_t outputBytes = PublishStagedResult(plan, outputRoot);
@@ -1308,11 +1716,15 @@ namespace
                 return outcome;
             }
 
-            if (CanSkipEffective(plan.manifest, outputRoot, effectiveFingerprints))
+            outcome.decision = AssessEffectiveBuildState(
+                plan.manifest, outputRoot, effectiveFingerprints);
+            if (outcome.decision.reasons.empty())
             {
                 outcome.manifest = plan.manifest;
                 outcome.success = true;
                 outcome.skipped = true;
+                outcome.decision.reasons.push_back(
+                    {ContentBuildReasonCode::FingerprintUnchanged, {}});
                 outcome.statusLine = "[SKIP] " + item.logicalName + " -> " +
                                      CNA::Internal::ContentPathToUtf8(item.output);
                 return outcome;
@@ -1422,11 +1834,11 @@ namespace
             std::cerr << "content output lease failed: " << error.what() << "\n";
             return 1;
         }
-        std::string originalManifest;
-        bool previousOwnershipTrusted = false;
-        const Pipeline::ContentBuildManifest previousManifest =
-            LoadManifest(manifestPath, originalManifest, command.quiet,
-                         previousOwnershipTrusted);
+        const LoadedManifest loadedManifest = LoadManifest(manifestPath, command.quiet);
+        const Pipeline::ContentBuildManifest& previousManifest = loadedManifest.manifest;
+        const std::string& originalManifest = loadedManifest.original;
+        const bool previousOwnershipTrusted =
+            loadedManifest.state == ManifestLoadState::Current;
         Pipeline::ContentBuildManifest nextManifest = previousManifest;
         if (directoryBuild) { nextManifest.Clear(); }
 
@@ -1478,8 +1890,8 @@ namespace
                 if (command.workers == 1u)
                 {
                     plans[offset] = PrepareBuildNode(
-                        builds[offset], offset, pipeline, *registry, previousManifest, sourceRoot,
-                        outputRoot, staging->Path());
+                        builds[offset], offset, pipeline, *registry, previousManifest,
+                        loadedManifest.state, sourceRoot, outputRoot, staging->Path());
                     continue;
                 }
 
@@ -1493,7 +1905,7 @@ namespace
                         {
                             return PrepareBuildNode(
                                 builds[index], index, pipeline, *registry, previousManifest,
-                                sourceRoot, outputRoot, staging->Path());
+                                loadedManifest.state, sourceRoot, outputRoot, staging->Path());
                         }));
                 }
                 for (std::size_t index = offset; index < end; ++index)
@@ -1799,6 +2211,11 @@ namespace
                     effectiveFingerprints.insert_or_assign(nodeId,
                                                            outcome.manifest.fingerprint);
                     nextManifest.Set(std::move(outcome.manifest));
+                    if (command.explain)
+                    {
+                        outcome.statusLine = FormatExplainedStatus(
+                            outcome.statusLine, std::move(outcome.decision));
+                    }
                     events.push_back({false, std::move(outcome.statusLine)});
                     if (outcome.skipped) { ++skipped; }
                     else { ++built; }

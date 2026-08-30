@@ -1204,7 +1204,7 @@ carrying forward task-local results:
 | `CP-050` | **completed** | Closed the post-XNB continuation with a complete HEADLESS Debug build and a 1,535-case passing boundary (1,527 pass/eight opt-in or fixture skips) after separately reproducing the three known renderer-only HEADLESS TextureCube/Texture3D failures. Independent gates pass for CNB 371/371, CNJ 137 plus two skips, XNB/runtime readers 221 plus four skips, glTF/Model 608 plus three skips, and all 11 frozen golden vectors. Combined ASan+UBSan passes 1,537 plus eight skips (`detect_leaks=0`; no LSan claim), TSan passes 91 plus the large-file skip, the opt-in >2 GiB hash passes, both CMake fixtures and all nine C-API gates pass. Representative workers 1/4 trees remain identical; a 1,024-output ownership-clean benchmark removes about 480 MiB in 7.05 seconds and preserves only the lease. No frozen CNB definition, byte, default glTF output, C ABI, merge, or push changed. |
 | `CP-051` | **completed** | Audited the combined post-CP-050 implementation and converted the remaining documented questions into evidence-gated tasks. Manifest v5 persists route/configuration/topology/output records but collapses authored bytes and effective content dependencies into final hashes; artifact checks and manifest loading also return booleans/empty state that cannot support trustworthy reason identity. Named external source roots require an explicit configuration and containment design. Model schema 1 remains frozen and any schema 2 is gated behind a field/runtime audit. Same-node glTF children, target profiles and MSVC/Windows remain audits rather than assumed features. |
 | `CP-052` | **completed** | Evolved the manifest to v6 with nine bounded canonical SHA-256 domains: primary bytes; source-dependency set/bytes; content-dependency set/effective fingerprints; parameters; writer schemas/codecs; compiled-output/XREF definitions; and deployment definitions. Direct/effective aggregate hashes now derive from the same domains. Versions 1-5 rebuild as incompatible without granting orphan-deletion authority; deterministic round-trip/domain-isolation/migration tests and the complete 66-case manifest/configuration/CLI/custom/CMake boundary pass. No CNB definition or byte changed. |
-| `CP-053` | **planned** | Add structured build decisions and `build ... --explain`, classifying manifest state, stable route/configuration/domain changes and compiled/deployment integrity without guessing from aggregate hashes. Define `--quiet`, cover all reason categories under workers 1 and 4, and measure no-op overhead. |
+| `CP-053` | **completed** | Added private structured build decisions and `build ... --explain`. Reasons compare inspectable route/schema/codec fields plus the persisted v6 domains, effective graph inputs and per-artifact digests; they distinguish manifest state, source/dependency/configuration/component/output/deployment changes and missing versus tampered artifacts without guessing from aggregate hashes. Root-relative sorted explanations are byte-identical under workers 1/2/4; `--quiet` suppresses successful explanations and `clean` rejects the option. The complete 71-case manifest/CLI ASan+UBSan boundary and an 11-case TSan selection pass. On the 128-node no-op fixture the median was 0.291 s with explanations versus 0.276 s normally (5.6%, about 15 ms). |
 | `CP-054` | **planned** | Specify explicit named read-only external source capabilities in strict configuration, including stable alias-relative persisted identities, overlap policy and deployment interaction. Default containment must remain unchanged. |
 | `CP-055` | **planned** | Implement the approved external-root capability model through dependency collection, hashing, staging/deployment and security tests. Prove traversal/symlink/absolute/overlap failures and prove clean, GC and scavenging never gain external-root deletion authority. |
 | `CP-056` | **planned** | Audit actual XNB Model reader semantics, CNA runtime vertex/buffer/effect capabilities, schema-1 wire/runtime behavior and glTF/CNJ carriers. Produce a support matrix and a precise schema-2 design only if the runtime can consume the proposed semantics without arbitrary CLR object serialization. |
@@ -2060,3 +2060,45 @@ selection passed 14 plus the disabled large-file test with halt-on-error and `de
 boundary passed under TSan. An accidentally broad TSan selection reached the known PulseAudio
 runtime boundary and reported a libpulse race; it is outside the pipeline and the corrected
 manifest/scheduler selection remained green.
+
+---
+
+## 29. Trustworthy incremental explanations (`CP-053`)
+
+The compiler now represents an incremental outcome before formatting it as
+`ContentBuildDecision` containing sorted `ContentBuildReason` values. These types remain private
+to the tool coordinator: the human log is not the source of truth, but this task also does not
+prematurely establish a stable JSON protocol or add experimental C++ declarations. The reason
+codes cover manifest unavailable/incompatible/corrupt, new asset, logical identity, each component
+identity, writer schema and codec identities, primary bytes, source-dependency set and bytes,
+processor parameters, content-dependency set and effective fingerprints, compiled/XREF and
+deployment definition sets, missing/tampered/unsafe compiled or deployment artifacts, defensive
+unknown direct/effective fingerprint changes, and the intact unchanged state.
+
+Manifest loading preserves its missing/current/incompatible/corrupt state instead of collapsing
+every untrusted file into one empty manifest. A current entry is compared through its inspectable
+component fields and CP-052 domains. Effective dependency inputs and published artifact digests
+are assessed after the graph becomes ready. The ordinary valid skip remains fast: it does not rerun
+an importer or processor to rediscover history, and enabling explanations adds only structured
+comparison/formatting to work the skip path already performs. Source and published-path detail is
+root-relative; temporary and absolute host paths are not exposed.
+
+`cna-content build ... --explain` renders each reason below the existing `BUILD` or `SKIP` event.
+Normal output remains byte-for-byte unchanged when the flag is absent. `--quiet` wins over
+`--explain` for successful events and the summary but does not hide errors; `clean --explain` is an
+unknown-option failure. Sorted reason codes/details and the coordinator's existing ordered event
+flush make complete cold, no-op and shared-dependency-change logs identical for workers 1, 2 and 4.
+
+Tests prove new/unchanged assets, primary source changes, source-dependency set/bytes, content-edge
+set/effective changes, typed parameters, importer/processor/writer versions, writer schema and
+codec versions, logical rename, compiled and deployment missing/tamper cases, corruption, v5-to-v6
+transition, and multi-output contraction. The normal 59-case CLI suite passes. The complete
+12-manifest plus 59-CLI boundary passed under combined ASan+UBSan (70 pass, the expected opt-in
+large-file case skipped, `detect_leaks=0` so no LSan claim). Eleven focused explain, artifact,
+schema/codec, worker and multi-output cases passed under TSan with no report.
+
+On the retained repository benchmark's 128 mixed-asset no-op tree, 20 alternating four-worker
+runs measured a 0.275540-second median without the flag and 0.291001 seconds with it: 0.015460
+seconds or 5.61% on this host. This is engineering evidence rather than a threshold. The task
+changes no CNB definition, encoder, output byte, atomic publisher, public C++ inventory, C route,
+export or ABI version.

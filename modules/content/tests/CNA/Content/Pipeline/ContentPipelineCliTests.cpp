@@ -440,7 +440,7 @@ TEST(ContentPipelineCliTest, XnbSingleFileUsesTheOrdinaryIncrementalAndOutputVer
 
     WriteBytes(output, {'b', 'a', 'd'});
     std::string repaired;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, repaired), 0)
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain"}, repaired), 0)
         << repaired;
     EXPECT_NE(repaired.find("[BUILD] legacy_texture"), std::string::npos) << repaired;
     EXPECT_EQ(ReadBytes(output), expected);
@@ -885,10 +885,13 @@ TEST(ContentPipelineCliTest, GltfImageDependencyInvalidatesOnlyItsRelevantAssets
 
     WriteBytes(source / "Models" / "gltf-external-image.texture.png", MakePng(2, 2));
     std::string log;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain"}, log), 0)
+        << log;
     EXPECT_NE(log.find("[BUILD] Models/car"), std::string::npos) << log;
     EXPECT_NE(log.find("[BUILD] Models/gltf-external-image.texture"), std::string::npos) << log;
     EXPECT_NE(log.find("[SKIP] Textures/independent"), std::string::npos) << log;
+    EXPECT_NE(log.find("reason: source dependency bytes changed"), std::string::npos)
+        << log;
     EXPECT_EQ(ReadBytes(output / "Textures" / "independent.cnb"), independent);
 }
 
@@ -996,6 +999,107 @@ TEST(ContentPipelineCliTest, RepeatedBuildSkipsWithoutChangingOutputOrManifest)
     EXPECT_EQ(ReadBytes(manifest), firstManifest);
 }
 
+TEST(ContentPipelineCliTest, ExplainReportsNewAndUnchangedAssetsAndQuietSuppressesIt)
+{
+    ScratchDirectory scratch("explain_new_skip_quiet");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    WriteBytes(source / "first.png", MakePng(2, 2));
+
+    std::string log;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain"}, log), 0)
+        << log;
+    EXPECT_NE(log.find("reason: manifest unavailable"), std::string::npos) << log;
+    EXPECT_NE(log.find("reason: new asset: first.png"), std::string::npos) << log;
+
+    log.clear();
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain"}, log), 0)
+        << log;
+    EXPECT_NE(log.find("[SKIP] first"), std::string::npos) << log;
+    EXPECT_NE(log.find("reason: fingerprint and published output digests unchanged"),
+              std::string::npos)
+        << log;
+
+    WriteBytes(source / "second.png", MakePng(3, 2));
+    log.clear();
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain"}, log), 0)
+        << log;
+    EXPECT_NE(log.find("[BUILD] second"), std::string::npos) << log;
+    EXPECT_NE(log.find("reason: new asset: second.png"), std::string::npos) << log;
+
+    log.clear();
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain",
+                       "--quiet"},
+                      log),
+              0)
+        << log;
+    EXPECT_TRUE(log.empty()) << log;
+}
+
+TEST(ContentPipelineCliTest, ExplainClassifiesSourceParametersAndLogicalOutputChanges)
+{
+    ScratchDirectory scratch("explain_direct_changes");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    const std::filesystem::path configuration =
+        source / Pipeline::ContentBuildConfigurationFileName;
+    WriteBytes(source / "wall.png", MakePng(2, 2));
+    std::string log;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--quiet"}), 0);
+
+    WriteBytes(source / "wall.png", MakePng(3, 2));
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain"}, log), 0)
+        << log;
+    EXPECT_NE(log.find("reason: primary source bytes changed: wall.png"),
+              std::string::npos)
+        << log;
+
+    WriteText(configuration,
+              R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"wall.png":{"parameters":{"colorKey":{"type":"string","value":"3,20,37"}}}}})json");
+    log.clear();
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain"}, log), 0)
+        << log;
+    EXPECT_NE(log.find("reason: processor parameters changed"), std::string::npos) << log;
+
+    WriteText(configuration,
+              R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"wall.png":{"logicalName":"Environment/stone","parameters":{"colorKey":{"type":"string","value":"3,20,37"}}}}})json");
+    log.clear();
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain"}, log), 0)
+        << log;
+    EXPECT_NE(log.find("reason: logical asset/output identity changed"), std::string::npos)
+        << log;
+    EXPECT_NE(log.find("reason: compiled output definition set changed"),
+              std::string::npos)
+        << log;
+    EXPECT_TRUE(std::filesystem::is_regular_file(output / "Environment" / "stone.cnb"));
+}
+
+TEST(ContentPipelineCliTest, ExplainClassifiesSourceDependencySetChanges)
+{
+    ScratchDirectory scratch("explain_source_dependency_set");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    WriteBytes(source / "Fonts" / "atlas-a.png", MakePng(4, 4));
+    WriteBytes(source / "Fonts" / "atlas-b.png", MakePng(4, 4));
+    const auto writeFont = [&](const char* atlas)
+    {
+        WriteText(
+            source / "Fonts" / "ui.cnj",
+            std::string(
+                R"json({"cnjVersion":1,"type":"SpriteFont","texture":")json") + atlas +
+                R"json(","lineSpacing":8,"spacing":0,"defaultCharacter":"?","glyphs":[{"char":63,"source":[0,0,2,2],"crop":[0,0,2,2],"kerning":[0,2,0]}]})json");
+    };
+    writeFont("atlas-a.png");
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--quiet"}), 0);
+
+    writeFont("atlas-b.png");
+    std::string log;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain"}, log), 0)
+        << log;
+    EXPECT_NE(log.find("reason: source dependency set changed"), std::string::npos)
+        << log;
+}
+
 TEST(ContentPipelineCliTest, ChangingOneIndependentSourceRebuildsOnlyThatAsset)
 {
     ScratchDirectory scratch("independent");
@@ -1026,12 +1130,19 @@ TEST(ContentPipelineCliTest, MissingOrTamperedOutputForcesARebuild)
 
     WriteBytes(output, {'b', 'a', 'd'});
     std::string log;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain"}, log), 0)
+        << log;
     EXPECT_NE(log.find("[BUILD] wall"), std::string::npos) << log;
+    EXPECT_NE(log.find("reason: compiled output digest mismatch: wall.cnb"),
+              std::string::npos)
+        << log;
     EXPECT_EQ(ReadBytes(output), expected);
 
     std::filesystem::remove(output);
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain"}, log), 0)
+        << log;
+    EXPECT_NE(log.find("reason: compiled output missing: wall.cnb"), std::string::npos)
+        << log;
     EXPECT_EQ(ReadBytes(output), expected);
 }
 
@@ -1047,10 +1158,12 @@ TEST(ContentPipelineCliTest, CorruptManifestSafelyRebuildsAndIsReplaced)
     WriteBytes(manifest, {'b', 'a', 'd'});
 
     std::string log;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain"}, log), 0)
+        << log;
     EXPECT_NE(log.find("[WARN] Ignoring incompatible or corrupt manifest"), std::string::npos)
         << log;
     EXPECT_NE(log.find("[BUILD] wall"), std::string::npos) << log;
+    EXPECT_NE(log.find("reason: manifest corrupt"), std::string::npos) << log;
     const std::vector<std::uint8_t> manifestBytes = ReadBytes(manifest);
     EXPECT_NO_THROW((void)Pipeline::ContentBuildManifest::Parse(
         std::string(manifestBytes.begin(), manifestBytes.end())));
@@ -1066,7 +1179,8 @@ TEST(ContentPipelineCliTest, VersionFiveManifestRebuildsWithoutAuthorizingOldOut
     WriteBytes(source / "current.png", MakePng(2, 2));
     WriteBytes(source / "legacy.png", MakePng(3, 2));
     std::string log;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain"}, log), 0)
+        << log;
     const std::vector<std::uint8_t> legacyOutput = ReadBytes(output / "legacy.cnb");
 
     const std::vector<std::uint8_t> oldManifestBytes = ReadBytes(manifest);
@@ -1078,10 +1192,14 @@ TEST(ContentPipelineCliTest, VersionFiveManifestRebuildsWithoutAuthorizingOldOut
     ASSERT_TRUE(std::filesystem::remove(source / "legacy.png"));
 
     log.clear();
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain"}, log), 0)
+        << log;
     EXPECT_NE(log.find("[WARN] Ignoring incompatible or corrupt manifest"), std::string::npos)
         << log;
     EXPECT_NE(log.find("[BUILD] current"), std::string::npos) << log;
+    EXPECT_NE(log.find("reason: manifest format changed or is incompatible"),
+              std::string::npos)
+        << log;
     EXPECT_EQ(ReadBytes(output / "legacy.cnb"), legacyOutput);
     const std::vector<std::uint8_t> currentManifestBytes = ReadBytes(manifest);
     const Pipeline::ContentBuildManifest current = Pipeline::ContentBuildManifest::Parse(
@@ -1289,6 +1407,8 @@ TEST(ContentPipelineCliTest, CleanSyntaxIsNarrowAndANonexistentRootIsANoOp)
     EXPECT_NE(log.find("clean requires an output directory"), std::string::npos) << log;
     EXPECT_EQ(RunTool({"clean", missing.string(), "--workers", "2"}, log), 2) << log;
     EXPECT_NE(log.find("unknown clean option '--workers'"), std::string::npos) << log;
+    EXPECT_EQ(RunTool({"clean", missing.string(), "--explain"}, log), 2) << log;
+    EXPECT_NE(log.find("unknown clean option '--explain'"), std::string::npos) << log;
 
     ASSERT_EQ(RunTool({"clean", missing.string()}, log), 0) << log;
     EXPECT_NE(log.find("Cleaned: 0  Failed: 0"), std::string::npos) << log;
@@ -1563,7 +1683,7 @@ TEST(ContentPipelineCliTest, SongSingleAndDirectoryBuildsPreserveExternalMediaSe
 
     WriteBytes(deployedMedia, {'b', 'a', 'd'});
     std::string repaired;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, repaired), 0)
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain"}, repaired), 0)
         << repaired;
     EXPECT_NE(repaired.find("[BUILD] Music/theme"), std::string::npos) << repaired;
     EXPECT_NE(repaired.find("[SKIP] Textures/wall"), std::string::npos) << repaired;
@@ -1666,12 +1786,25 @@ TEST(ContentPipelineCliTest, VideoSingleAndDirectoryBuildsUseConfiguredMetadataA
 
     WriteBytes(deployedMedia, {'b', 'a', 'd'});
     std::string repaired;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, repaired), 0)
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain"}, repaired), 0)
         << repaired;
     EXPECT_NE(repaired.find("[BUILD] Movies/intro"), std::string::npos) << repaired;
     EXPECT_NE(repaired.find("[SKIP] Textures/wall"), std::string::npos) << repaired;
+    EXPECT_NE(repaired.find(
+                  "reason: deployment output digest mismatch: Movies/intro.mp4"),
+              std::string::npos)
+        << repaired;
     EXPECT_EQ(ReadBytes(deployedMedia), ReadBytes(media));
     EXPECT_EQ(ReadBytes(videoOutput), videoBytes);
+
+    ASSERT_TRUE(std::filesystem::remove(deployedMedia));
+    repaired.clear();
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain"}, repaired), 0)
+        << repaired;
+    EXPECT_NE(repaired.find("reason: deployment output missing: Movies/intro.mp4"),
+              std::string::npos)
+        << repaired;
+    EXPECT_EQ(ReadBytes(deployedMedia), ReadBytes(media));
 
     WriteBytes(media, {0u, 0u, 0u, 24u, 'f', 't', 'y', 'p', 9u});
     std::string changed;
@@ -1709,9 +1842,13 @@ TEST(ContentPipelineCliTest, DeploymentFilesFollowConfiguredPathsAndOwnedGarbage
 
     WriteText(configuration,
               R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"Music/theme.ogg":{"parameters":{"streamReference":{"type":"string","value":"Streaming/theme.ogg"}}}}})json");
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--workers", "4"},
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--workers", "4",
+                       "--explain"},
                       log),
               0)
+        << log;
+    EXPECT_NE(log.find("reason: processor parameters changed"), std::string::npos) << log;
+    EXPECT_NE(log.find("reason: deployment definition set changed"), std::string::npos)
         << log;
     EXPECT_NE(log.find("[CLEAN] Deploy/theme.ogg (obsolete manifest-owned output)"),
               std::string::npos)
@@ -1835,6 +1972,35 @@ TEST(ContentPipelineCliTest, DeploymentPublicationFailureKeepsOldManifestAndReco
 }
 
 #if defined(CNA_CUSTOM_CONTENT_COMPILER_PATH)
+TEST(ContentPipelineCliTest, ExplainClassifiesContentDependencySetChanges)
+{
+    ScratchDirectory scratch("explain_content_dependency_set");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    const std::filesystem::path configuration =
+        source / Pipeline::ContentBuildConfigurationFileName;
+    WriteText(source / "A" / "dependent.greeting", "dependent\n");
+    WriteText(source / "Z" / "shared.greeting", "shared\n");
+    std::string log;
+    ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
+                            {"build", source.string(), "-o", output.string(),
+                             "--quiet"}, log),
+              0);
+
+    WriteText(
+        configuration,
+        R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"A/dependent.greeting":{"parameters":{"dependsOn":{"type":"string","value":"Z/shared"}}}}})json");
+    log.clear();
+    ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
+                            {"build", source.string(), "-o", output.string(),
+                             "--workers", "4", "--explain"}, log),
+              0)
+        << log;
+    EXPECT_NE(log.find("reason: content-build dependency set changed"),
+              std::string::npos)
+        << log;
+}
+
 TEST(ContentPipelineCliTest, WorkerCountsProduceIdenticalColdNoOpAndDependencyRebuilds)
 {
     ScratchDirectory scratch("worker_determinism");
@@ -1855,7 +2021,7 @@ TEST(ContentPipelineCliTest, WorkerCountsProduceIdenticalColdNoOpAndDependencyRe
         return RunExecutable(
             CNA_CUSTOM_CONTENT_COMPILER_PATH,
             {"build", source.string(), "-o", output.string(), "--workers",
-             std::to_string(workers)},
+             std::to_string(workers), "--explain"},
             log);
     };
 
@@ -1871,6 +2037,8 @@ TEST(ContentPipelineCliTest, WorkerCountsProduceIdenticalColdNoOpAndDependencyRe
     ASSERT_NE(secondPosition, std::string::npos) << serialColdLog;
     EXPECT_LT(sharedPosition, firstPosition);
     EXPECT_LT(sharedPosition, secondPosition);
+    EXPECT_NE(serialColdLog.find("reason: manifest unavailable"), std::string::npos)
+        << serialColdLog;
 
     for (const std::size_t workers : {2u, 4u})
     {
@@ -1885,6 +2053,11 @@ TEST(ContentPipelineCliTest, WorkerCountsProduceIdenticalColdNoOpAndDependencyRe
     std::string serialNoOpLog;
     ASSERT_EQ(run(1u, serialNoOpLog), 0) << serialNoOpLog;
     EXPECT_NE(serialNoOpLog.find("Built: 0  Skipped: 6  Failed: 0"), std::string::npos)
+        << serialNoOpLog;
+    EXPECT_EQ(CountOccurrences(
+                  serialNoOpLog,
+                  "reason: fingerprint and published output digests unchanged"),
+              6u)
         << serialNoOpLog;
     for (const std::size_t workers : {2u, 4u})
     {
@@ -1903,6 +2076,11 @@ TEST(ContentPipelineCliTest, WorkerCountsProduceIdenticalColdNoOpAndDependencyRe
     EXPECT_EQ(CountOccurrences(serialChangedLog, "[BUILD] A/first"), 1u)
         << serialChangedLog;
     EXPECT_EQ(CountOccurrences(serialChangedLog, "[BUILD] B/second"), 1u)
+        << serialChangedLog;
+    EXPECT_EQ(CountOccurrences(
+                  serialChangedLog,
+                  "reason: content-build dependency effective fingerprint changed"),
+              2u)
         << serialChangedLog;
 
     RestoreFileTree(output, noOpBefore);
@@ -2050,7 +2228,8 @@ TEST(ContentPipelineCliTest, CustomWriterSchemaAndCodecEvolutionCannotSkipStaleO
     const auto run = [&](std::string& log)
     {
         return RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                             {"build", source.string(), "-o", output.string()}, log);
+                             {"build", source.string(), "-o", output.string(),
+                              "--explain"}, log);
     };
     std::string log;
     ASSERT_EQ(run(log), 0) << log;
@@ -2104,6 +2283,18 @@ TEST(ContentPipelineCliTest, CustomWriterSchemaAndCodecEvolutionCannotSkipStaleO
         log.clear();
         ASSERT_EQ(run(log), 0) << log;
         EXPECT_NE(log.find("[BUILD] welcome"), std::string::npos) << log;
+        if (evolution == Evolution::Codec)
+        {
+            EXPECT_NE(log.find("reason: writer codec identity/version changed"),
+                      std::string::npos)
+                << log;
+        }
+        else
+        {
+            EXPECT_NE(log.find("reason: writer asset schema identity changed"),
+                      std::string::npos)
+                << log;
+        }
         EXPECT_EQ(ReadBytes(artifact), originalArtifact);
         const std::vector<std::uint8_t> repairedBytes = ReadBytes(manifestPath);
         const Pipeline::ContentBuildManifest repaired =
@@ -2120,6 +2311,56 @@ TEST(ContentPipelineCliTest, CustomWriterSchemaAndCodecEvolutionCannotSkipStaleO
     log.clear();
     ASSERT_EQ(run(log), 0) << log;
     EXPECT_NE(log.find("[SKIP] welcome"), std::string::npos) << log;
+}
+
+TEST(ContentPipelineCliTest, ExplainClassifiesImporterProcessorAndWriterVersionChanges)
+{
+    ScratchDirectory scratch("explain_component_versions");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    const std::filesystem::path manifestPath =
+        output / Pipeline::ContentBuildManifestFileName;
+    WriteText(source / "welcome.greeting", "CNA\n");
+    std::string log;
+    ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
+                            {"build", source.string(), "-o", output.string()}, log),
+              0)
+        << log;
+
+    enum class Component
+    {
+        Importer,
+        Processor,
+        Writer,
+    };
+    for (const Component component :
+         {Component::Importer, Component::Processor, Component::Writer})
+    {
+        const std::vector<std::uint8_t> manifestBytes = ReadBytes(manifestPath);
+        Pipeline::ContentBuildManifest stale = Pipeline::ContentBuildManifest::Parse(
+            std::string(manifestBytes.begin(), manifestBytes.end()));
+        Pipeline::ContentBuildManifestEntry entry = *stale.Find("welcome");
+        if (component == Component::Importer) { entry.importer.version = "stale"; }
+        else if (component == Component::Processor) { entry.processor.version = "stale"; }
+        else { entry.writer.version = "stale"; }
+        Pipeline::RefreshContentBuildDirectFingerprint(entry, source);
+        Pipeline::RefreshContentBuildEffectiveFingerprint(entry);
+        stale.Set(std::move(entry));
+        WriteText(manifestPath, stale.Serialize());
+
+        log.clear();
+        ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
+                                {"build", source.string(), "-o", output.string(),
+                                 "--explain"}, log),
+                  0)
+            << log;
+        const char* expected = component == Component::Importer
+                                   ? "reason: importer identity/version changed"
+                               : component == Component::Processor
+                                   ? "reason: processor identity/version changed"
+                                   : "reason: writer identity/version changed";
+        EXPECT_NE(log.find(expected), std::string::npos) << log;
+    }
 }
 
 TEST(ContentPipelineCliTest, MultiOutputContractionCollectsOnlyTheObsoleteChild)
@@ -2142,8 +2383,12 @@ TEST(ContentPipelineCliTest, MultiOutputContractionCollectsOnlyTheObsoleteChild)
     ASSERT_TRUE(std::filesystem::remove(source / "welcome.greeting"));
     WriteBytes(source / "welcome.png", MakePng(2, 2));
     ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                            {"build", source.string(), "-o", output.string()}, log),
+                            {"build", source.string(), "-o", output.string(),
+                             "--explain"}, log),
               0)
+        << log;
+    EXPECT_NE(log.find("reason: compiled output definition set changed"),
+              std::string::npos)
         << log;
     EXPECT_NE(log.find("[CLEAN] Generated/welcome-reply.cnb "
                        "(obsolete manifest-owned output)"),

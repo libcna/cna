@@ -84,6 +84,16 @@ cna-content build ContentSource -o Content --workers 4
 has the same behavior as omitting the option. The worker count changes execution only; it is not
 content identity and does not enter CNB bytes or manifest fingerprints.
 
+To show the persisted reason for each incremental decision, add `--explain`:
+
+```bash
+cna-content build ContentSource -o Content --explain
+```
+
+Each normal `BUILD` or `SKIP` line is followed by sorted `reason:` lines. Paths in those reasons
+are source- or output-root-relative. `--quiet` takes precedence over `--explain` and suppresses all
+successful build/skip/reason output while retaining failures. `clean` does not accept `--explain`.
+
 After a valid manifest has established ownership, all unchanged pipeline-owned compiled and
 deployment files can be removed without scanning the output tree:
 
@@ -598,6 +608,27 @@ in-place migration. An incompatible/corrupt manifest grants no deletion authorit
 outputs remain unless the new build replaces the same paths. A corrupt or future incompatible
 manifest is handled the same way.
 
+`build ... --explain` compares the current structured decision inputs with this persisted v6
+state; it never guesses a field-level cause from unequal aggregate hashes. The internal decision
+is a list of reason codes plus optional root-relative detail, and the CLI renders that structure
+only after deterministic scheduling has completed. It classifies:
+
+- missing, incompatible, or corrupt manifests and genuinely new assets;
+- logical node/output identity and importer, processor, writer, writer-schema, or codec identity
+  changes;
+- primary-source bytes, source-dependency identity sets, and source-dependency bytes;
+- typed processor parameters;
+- content-build dependency identity sets and effective dependency fingerprints;
+- compiled-output/XREF definitions and deployment definitions;
+- missing, tampered, or unsafe compiled and deployment artifacts; and
+- an unchanged effective fingerprint with intact published digests.
+
+The bounded per-domain hashes can identify a changed dependency domain but intentionally do not
+duplicate every dependency digest merely to name one leaf. Aggregate direct/effective mismatch
+fallbacks remain explicit defensive reasons for a future unknown input rather than being reported
+as a fabricated source change. Manifest v5 and earlier produce one broad incompatible-format
+reason on their first rebuild; subsequent v6 builds have the precise persisted domains.
+
 ## Multi-output nodes and ownership
 
 One primary source still defines one build node. Its stable node ID is the configured or
@@ -1085,8 +1116,9 @@ plus clean through a non-ASCII path. Native Windows and MSVC remain untested and
 - component names/versions as user configuration identifiers, plus explicit writer asset/schema and
   codec identities used by cache fingerprints;
 - opt-in glTF Model/Texture2D/AnimationClip generated bundles and their naming policy;
-- content-build edges, dependency builds, and bounded parallel scheduling.
+- content-build edges, dependency builds, and bounded parallel scheduling;
 - the manifest-v6 persisted fingerprint-domain decomposition used by incremental decisions;
+- structured incremental decisions and the human-readable `build --explain` rendering;
 
 **Future:**
 
@@ -1096,7 +1128,8 @@ plus clean through a non-ASCII path. Native Windows and MSVC remain untested and
 - broader XNB Model support only through a separately reviewed Model schema revision that can
   preserve the unsupported vertex, effect/material, tag, shared-resource, and external-reference
   semantics;
-- human and machine-readable detailed build explanations over the persisted v6 reason domains;
+- stable machine-readable build-decision output, if an IDE/build integration contract justifies a
+  separately versioned format;
 
 **Not provided:**
 
