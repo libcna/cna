@@ -34,10 +34,12 @@ namespace Microsoft::Xna::Framework::Net
         std::optional<std::vector<SignedInGamer*>> localGamers,
         int maxPrivateSlots,
         NetworkSessionProperties properties,
-        NetworkSessionType type
+        NetworkSessionType type,
+        int maxGamers
     )
         : Callback(std::move(callback))
         , MaxLocalGamers(maxLocal)
+        , MaxGamers(maxGamers)
         , LocalGamers(std::move(localGamers))
         , MaxPrivateSlots(maxPrivateSlots)
         , SessionProperties(std::move(properties))
@@ -656,7 +658,7 @@ namespace Microsoft::Xna::Framework::Net
     System::IAsyncResult* NetworkSession::BeginCreate(
         NetworkSessionType sessionType,
         int maxLocalGamers,
-        int /*maxGamers*/, // FNA never uses this parameter in this overload's body; preserved as-is.
+        int maxGamers,
         System::AsyncCallback callback,
         std::any asyncState
     )
@@ -665,6 +667,10 @@ namespace Microsoft::Xna::Framework::Net
         {
             throw System::ArgumentOutOfRangeException("maxLocalGamers");
         }
+        if (maxGamers < 2 || maxGamers > MaxSupportedGamers)
+        {
+            throw System::ArgumentOutOfRangeException("maxGamers");
+        }
         if (activeAction_ != nullptr || activeSession_ != nullptr)
         {
             throw System::InvalidOperationException();
@@ -672,7 +678,7 @@ namespace Microsoft::Xna::Framework::Net
 
         activeAction_ = new NetworkSessionAction(
             std::move(asyncState), std::move(callback), maxLocalGamers, std::nullopt, 0,
-            NetworkSessionProperties{}, sessionType
+            NetworkSessionProperties{}, sessionType, maxGamers
         );
         return InvokeActiveActionCallback();
     }
@@ -691,6 +697,10 @@ namespace Microsoft::Xna::Framework::Net
         {
             throw System::ArgumentOutOfRangeException("maxLocalGamers");
         }
+        if (maxGamers < 2 || maxGamers > MaxSupportedGamers)
+        {
+            throw System::ArgumentOutOfRangeException("maxGamers");
+        }
         if (privateGamerSlots < 0 || privateGamerSlots > maxGamers)
         {
             throw System::ArgumentOutOfRangeException("privateGamerSlots");
@@ -702,7 +712,7 @@ namespace Microsoft::Xna::Framework::Net
 
         activeAction_ = new NetworkSessionAction(
             std::move(asyncState), std::move(callback), maxLocalGamers, std::nullopt, privateGamerSlots,
-            std::move(sessionProperties), sessionType
+            std::move(sessionProperties), sessionType, maxGamers
         );
         return InvokeActiveActionCallback();
     }
@@ -717,6 +727,10 @@ namespace Microsoft::Xna::Framework::Net
         std::any asyncState
     )
     {
+        if (maxGamers < 2 || maxGamers > MaxSupportedGamers)
+        {
+            throw System::ArgumentOutOfRangeException("maxGamers");
+        }
         if (privateGamerSlots < 0 || privateGamerSlots > maxGamers)
         {
             throw System::ArgumentOutOfRangeException("privateGamerSlots");
@@ -728,7 +742,7 @@ namespace Microsoft::Xna::Framework::Net
 
         activeAction_ = new NetworkSessionAction(
             std::move(asyncState), std::move(callback), 0, localGamers, privateGamerSlots,
-            std::move(sessionProperties), sessionType
+            std::move(sessionProperties), sessionType, maxGamers
         );
         return InvokeActiveActionCallback();
     }
@@ -749,12 +763,12 @@ namespace Microsoft::Xna::Framework::Net
         NetworkSession* created;
         try
         {
-            // FNA hardcodes 69 here instead of forwarding the caller's original maxGamers argument
-            // (which BeginCreate never even stored) — preserved as-is.
+            // Intentional correction over FNA's stub: XNA documents this exact value as the
+            // session limit, and CNA's functional networking consumes it for capacity/discovery.
             created = new NetworkSession(
                 activeAction_->SessionProperties,
                 activeAction_->SessionType,
-                69,
+                activeAction_->MaxGamers,
                 activeAction_->MaxPrivateSlots,
                 activeAction_->MaxLocalGamers,
                 activeAction_->LocalGamers,

@@ -93,11 +93,9 @@ TEST(ENetDiscoveryServiceTest, FindSessionsDiscoversRegisteredHost) {
     EXPECT_EQ(found[0].GetConnectPort(), hostPort);
     EXPECT_FALSE(found[0].GetConnectAddress().empty());
     EXPECT_EQ(found[0].getCurrentGamerCountProperty(), 1);
-    // NetworkSession::Create()'s EndCreate hardcodes MaxGamers to 69 rather than forwarding the
-    // caller's argument (a real, preserved FNA quirk — see NetworkSessionTests.cpp), so open
-    // public slots is 69 - privateSlots(0) - currentGamerCount(1), not derived from the 8 passed
-    // to Create() here.
-    EXPECT_EQ(found[0].getOpenPublicGamerSlotsProperty(), 68);
+    // The advertised capacity comes from the caller's requested limit: 8 total slots, no private
+    // slots, and the host already occupies one.
+    EXPECT_EQ(found[0].getOpenPublicGamerSlotsProperty(), 7);
     // Task 4.2: QualityOfService::CreateInternal() used to be called with no arguments here,
     // always yielding the same hardcoded all-zero-rates stub regardless of any real measurement.
     // A real query/reply round trip genuinely happened just above to produce this very result, so

@@ -205,10 +205,10 @@ the pair before `Begin` returns. Each `*_async` route still takes the canonical 
 and invokes it before returning; the callback receives only the caller's own context, because no
 operation object may cross the ABI, and no `std::any` state is exposed.
 
-The three `cna_network_session_create_*_async` routes are **not** aliases of their synchronous
-counterparts. The canonical end step substitutes its own gamer limit rather than forwarding the
-caller's, so a session created asynchronously reports a different maximum. That is canonical
-behavior, preserved rather than smoothed over.
+The three `cna_network_session_create_*_async` routes preserve the requested `max_gamers`, exactly
+like their synchronous counterparts. CNA retains the value through its internal Begin/End action
+instead of inheriting FNA's stubbed hardcoded value; the resulting limit drives both readback and
+the functional session-capacity behavior.
 
 `cna_network_session_find` refuses a local-only session type outright, matching the canonical
 search, and only a `SystemLink` search reaches real discovery — every other type returns an empty

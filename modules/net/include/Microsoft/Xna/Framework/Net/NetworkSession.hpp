@@ -794,6 +794,7 @@ namespace Microsoft::Xna::Framework::Net
              * @param maxPrivateSlots The maximum number of private gamer slots.
              * @param properties The session properties to search/create with.
              * @param type The NetworkSessionType this action operates on.
+             * @param maxGamers The maximum gamer count retained for a create action.
              */
             NetworkSessionAction(
                 std::any state,
@@ -802,7 +803,8 @@ namespace Microsoft::Xna::Framework::Net
                 std::optional<std::vector<GamerServices::SignedInGamer*>> localGamers,
                 int maxPrivateSlots,
                 NetworkSessionProperties properties,
-                NetworkSessionType type
+                NetworkSessionType type,
+                int maxGamers = MaxSupportedGamers
             );
 
             /**
@@ -838,6 +840,7 @@ namespace Microsoft::Xna::Framework::Net
 
             const System::AsyncCallback Callback;
             const int MaxLocalGamers;
+            const int MaxGamers;
             const std::optional<std::vector<GamerServices::SignedInGamer*>> LocalGamers;
             const int MaxPrivateSlots;
             const NetworkSessionProperties SessionProperties;

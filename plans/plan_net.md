@@ -161,22 +161,13 @@ new observations, not already-covered ground.
   conclusion the prior pass (`plan_net_20260707.md`) reached repeatedly for similar FNA-stub
   cases. **No code change needed** — already correct and already tested.
 
-- [x] **Task 1.3** — `NetworkSession::BeginCreate(NetworkSessionType, int maxLocalGamers, int
-  maxGamers, AsyncCallback, object)` (the simplest/original 3-arg-plus-callback overload,
-  `src/Microsoft/Xna/Framework/Net/NetworkSession.cpp:601-621`) silently ignores its own
-  `maxGamers` parameter; the actually-used private constructor call in `EndCreate`
-  (`NetworkSession.cpp:697-699`) hardcodes `69` instead of forwarding it, with an explicit
-  comment: "FNA hardcodes 69 here instead of forwarding the caller's original maxGamers argument
-  (which BeginCreate never even stored) — preserved as-is." **Verified: already locked in by
-  tests** — `tests/Microsoft/Xna/Framework/Net/NetworkSessionTests.cpp:38-39` and `:895` both
-  assert `getMaxGamersProperty() == 69` regardless of the caller's argument, with the same
-  "real, preserved [FNA behavior]" framing. FNA's fidelity-first design philosophy (a
-  byte-exact reverse-engineered port, not a "close enough" reimplementation) makes it very
-  unlikely this specific hardcoded-69 quirk is an FNA-only bug rather than genuine historical
-  XNA behavior being faithfully preserved — this exact quirk is also independently documented in
-  XNA community knowledge as real behavior of `NetworkSession.Create`'s simplest overload.
-  **No code change needed** — already correct and already tested under the Xbox-360-reference
-  decision.
+- [x] **Task 1.3** — `NetworkSession::BeginCreate` previously discarded `maxGamers` and
+  `EndCreate` substituted 69. **Superseded by the 2026-08-31 cross-binding runtime audit:** the
+  local XNA 4.0 documentation defines the caller's value (2–31 on Windows) as the resulting
+  session limit, while 69 is outside the supported range and breaks CNA's functional capacity and
+  discovery behavior. `NetworkSessionAction` now retains the requested value for all three create
+  overloads, validates 2–31, and `EndCreate` forwards it. Native tests cover readback, validation
+  and advertised open slots; strict-C coverage proves all synchronous and fake-async routes.
 
 - [x] **Task 1.4** — `PropertyDictionary::CopyTo` (`PropertyDictionary.cpp:188`) always throws
   `System::NotImplementedException`. Initially misdiagnosed (from a grep hit alone) as a silent

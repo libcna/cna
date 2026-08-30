@@ -35,8 +35,7 @@ TEST(NetworkSessionTest, CreateWithExplicitLocalGamers) {
     );
 
     EXPECT_EQ(session->getSessionTypeProperty(), NetworkSessionType::Local);
-    // FNA's EndCreate hardcodes 69 instead of forwarding the caller's maxGamers — preserved as-is.
-    EXPECT_EQ(session->getMaxGamersProperty(), 69);
+    EXPECT_EQ(session->getMaxGamersProperty(), 8);
     EXPECT_EQ(session->getPrivateGamerSlotsProperty(), 2);
     EXPECT_EQ(session->getLocalGamersProperty().getCountProperty(), 1);
     EXPECT_EQ(session->getAllGamersProperty().getCountProperty(), 1);
@@ -108,6 +107,7 @@ TEST(NetworkSessionTest, BeginCreateInvokesCallbackExactlyOnceWithCorrectIdentit
     EXPECT_EQ(std::any_cast<int>(result->getAsyncStateProperty()), 42);
 
     NetworkSession* session = NetworkSession::EndCreate(result);
+    EXPECT_EQ(session->getMaxGamersProperty(), 8);
     session->Dispose();
 }
 
@@ -679,14 +679,10 @@ TEST(NetworkSessionTest, GamerJoinedReplaysForALateSubscriber) {
 // Gamer::SignedInGamers, which is empty in this test binary (GamerServicesDispatcher::
 // Initialize() is deliberately never called from tests; see its own "cannot be unit tested"
 // note). That makes the constructor's Host = LocalGamers[0] throw std::out_of_range from
-// inside EndCreate — and FNA's EndCreate (faithfully preserved here) sets activeAction = null
-// *after* constructing the NetworkSession, so a constructor throw leaves activeAction
-// permanently non-null for the rest of the process, with no public API to clear it. Exercising
-// that path would permanently break every later test that calls any NetworkSession Begin*
-// method. Matches the same "cannot be safely unit-tested" category as
-// GamerServicesDispatcher::Initialize(). The identical constructor-throw risk applies to
-// Join(AvailableNetworkSession*) and JoinInvited(int) below, for the same reason — both also
-// route through a std::nullopt LocalGamers list.
+// inside EndCreate. The constructor-failure cleanup is tested separately; this note only explains
+// why the ordinary successful simple overload needs a temporary published gamer as used above.
+// The identical empty-global constraint applies to Join(AvailableNetworkSession*) and
+// JoinInvited(int) below, because both also route through a std::nullopt LocalGamers list.
 
 TEST(NetworkSessionTest, BeginCreateSimpleOverloadValidatesMaxLocalGamers) {
     EXPECT_THROW(
@@ -695,6 +691,28 @@ TEST(NetworkSessionTest, BeginCreateSimpleOverloadValidatesMaxLocalGamers) {
     );
     EXPECT_THROW(
         NetworkSession::BeginCreate(NetworkSessionType::Local, 5, 4, System::AsyncCallback{}, std::any{}),
+        System::ArgumentOutOfRangeException
+    );
+}
+
+TEST(NetworkSessionTest, BeginCreateOverloadsValidateMaxGamers) {
+    auto gamer = MakeSignedInGamer();
+
+    EXPECT_THROW(
+        NetworkSession::BeginCreate(
+            NetworkSessionType::Local, 1, 1, System::AsyncCallback{}, std::any{}),
+        System::ArgumentOutOfRangeException
+    );
+    EXPECT_THROW(
+        NetworkSession::BeginCreate(
+            NetworkSessionType::Local, 1, 32, 0, NetworkSessionProperties{},
+            System::AsyncCallback{}, std::any{}),
+        System::ArgumentOutOfRangeException
+    );
+    EXPECT_THROW(
+        NetworkSession::BeginCreate(
+            NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 1, 0,
+            NetworkSessionProperties{}, System::AsyncCallback{}, std::any{}),
         System::ArgumentOutOfRangeException
     );
 }
@@ -1026,9 +1044,8 @@ TEST(NetworkSessionTest, AddRemoteGamerThrowsWhenSessionIsAlreadyAtMaxGamers) {
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
     ASSERT_EQ(session->getAllGamersProperty().getCountProperty(), 1);
-    // Create() hardcodes MaxGamers to 69 regardless of the caller's argument (a real, preserved
-    // FNA quirk - see EndCreate's own comment), so setMaxGamersProperty is used directly to force
-    // the host's own local gamer to already fill the only slot.
+    // This setter deliberately exercises the full-session branch with the host already occupying
+    // the only slot; XNA creation itself requires a maximum between 2 and 31.
     session->setMaxGamersProperty(1);
 
     NetworkGamer remote = NetworkGamer::CreateInternal(session, "RemotePlayer");
