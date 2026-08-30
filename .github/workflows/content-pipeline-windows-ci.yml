@@ -1,0 +1,133 @@
+# CP-062: native MSVC build and CPU/CLI regression gate for the build-time Content Pipeline.
+# This does not claim validation until the workflow has actually run. It is deliberately manual,
+# matching this repository's existing Windows-CI policy, and uses HEADLESS with no runtime-device
+# tests so the job tests content compilation rather than a display, GPU, or media playback backend.
+
+name: Content Pipeline Windows CI (MSVC)
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: content-pipeline-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  msvc-content-build-and-test:
+    name: Content Pipeline (native MSVC, windows-latest)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout CNA
+        uses: actions/checkout@v4
+        with:
+          path: cna
+          submodules: true
+
+      - name: Checkout pinned sharp-runtime sibling
+        uses: actions/checkout@v4
+        with:
+          repository: openeggbert/sharp-runtime
+          ref: df1b42abfcdefda030d63e97f16d2f7ea883837f
+          path: sharp-runtime
+
+      - name: Set up MSVC developer environment (x64)
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Set up Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v4
+
+      - name: Record SDL submodule commit
+        id: sdlsha
+        run: echo "sha=$(git -C cna/third_party/SDL rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache vendored SDL prebuilt tree
+        uses: actions/cache@v4
+        with:
+          path: cna/.sdl-prebuilt-Windows-*
+          key: sdl-prebuilt-windows-msvc-${{ steps.sdlsha.outputs.sha }}
+
+      - name: Configure HEADLESS content build
+        working-directory: cna
+        run: |
+          cmake -S . -B build-content -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCNA_PLATFORM=HEADLESS \
+            -DCNA_GRAPHICS_RENDERER=HEADLESS \
+            -DCNA_AUDIO_PLATFORM=SDL3 \
+            -DCNA_BUILD_TESTS=ON \
+            -DCNA_BUILD_EXAMPLES=OFF \
+            -DCNA_ENABLE_NET=OFF \
+            -DCNA_ENABLE_VIDEO=OFF \
+            -DCNA_ENABLE_DRACO=OFF \
+            -DCNA_USE_CCACHE=OFF
+
+      - name: Build compiler and focused content tests
+        working-directory: cna
+        run: cmake --build build-content --parallel 2 --target cna_content_tool CnaContentTests
+
+      - name: Run CPU pipeline, codec, manifest, and compatibility tests
+        working-directory: cna
+        run: |
+          set -o pipefail
+          filter='ContentBuildConfigurationTest.*:ContentBuildManifestTest.*:ContentPipelineTest.*:ContentPipelineRegistryTest.*:Texture2DContentPipelineTest.*:SoundEffectContentPipelineTest.*:CnjContentPipelineTest.*:ModelContentPipelineTest.*:SongContentPipelineTest.*:VideoContentPipelineTest.*:Cnb*CodecTest.*:*GoldenVectorTest.*:XnbContentPipelineTest.*-*Runtime*:*MatchesRuntime*:*LoadsThrough*ContentManager*:CnbSoundEffectCodecTest.*'
+          ./build-content/CnaContentTests.exe --gtest_filter="${filter}" 2>&1 \
+            | tee "${RUNNER_TEMP}/cna-content-tests.log"
+
+      - name: Exercise Unicode CLI, explain, workers, clean, and deterministic rebuild
+        working-directory: cna
+        run: |
+          set -euo pipefail
+          fixture="${RUNNER_TEMP}/CNA-MSVC-Zażółć-曲線"
+          source_root="${fixture}/source"
+          output_root="${fixture}/Content"
+          mkdir -p "${fixture}"
+          cp -R tests/assets/content_pipeline_cmake "${source_root}"
+
+          ./build-content/cna-content.exe build "${source_root}" -o "${output_root}" \
+            --config "${source_root}/pipeline-config.json" --workers 4 --explain \
+            | tee "${RUNNER_TEMP}/cna-content-first.log"
+          test -f "${output_root}/Configured/curve.cnb"
+          grep -F '[BUILD] Configured/curve' "${RUNNER_TEMP}/cna-content-first.log"
+          grep -F 'reason: manifest unavailable' "${RUNNER_TEMP}/cna-content-first.log"
+          first_hash=$(cmake -E sha256sum "${output_root}/Configured/curve.cnb" | awk '{print $1}')
+
+          ./build-content/cna-content.exe build "${source_root}" -o "${output_root}" \
+            --config "${source_root}/pipeline-config.json" --workers 1 --explain \
+            | tee "${RUNNER_TEMP}/cna-content-noop.log"
+          grep -F '[SKIP] Configured/curve' "${RUNNER_TEMP}/cna-content-noop.log"
+          grep -F 'reason: fingerprint and published output digests unchanged' \
+            "${RUNNER_TEMP}/cna-content-noop.log"
+
+          ./build-content/cna-content.exe clean "${output_root}" \
+            | tee "${RUNNER_TEMP}/cna-content-clean.log"
+          test ! -e "${output_root}/Configured/curve.cnb"
+          test ! -e "${output_root}/.cna-content-manifest.json"
+          test -f "${output_root}/.cna-content.lock"
+
+          ./build-content/cna-content.exe build "${source_root}" -o "${output_root}" \
+            --config "${source_root}/pipeline-config.json" --workers 1 --quiet
+          second_hash=$(cmake -E sha256sum "${output_root}/Configured/curve.cnb" | awk '{print $1}')
+          test "${first_hash}" = "${second_hash}"
+          grep -E '"version"[[:space:]]*:[[:space:]]*8' \
+            "${output_root}/.cna-content-manifest.json"
+
+      - name: Upload content diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: content-pipeline-msvc-diagnostics
+          path: |
+            ${{ runner.temp }}/cna-content-*.log
+            cna/build-content/Testing/Temporary/**
+            cna/build-content/CMakeFiles/CMakeConfigureLog.yaml
+          if-no-files-found: warn

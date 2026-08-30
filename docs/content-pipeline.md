@@ -1134,10 +1134,11 @@ compatibility boundary on the finished implementation:
 
 LeakSanitizer cannot run the subprocess-heavy selection in the current `ptrace` environment, so
 the successful ASan+UBSan run used `detect_leaks=0` and is not leak evidence. Native Windows/MSVC
-execution is still required to close the last platform-verification gap. Cycle preflight now uses
-an explicit visit stack: a 4,096-node acyclic chain builds with four workers and the same graph
-closed into a 4,096-node cycle retains deterministic diagnostics without replacing the prior
-manifest.
+execution is still required to close the last platform-verification gap. CP-062 adds a narrow,
+manual `windows-latest` workflow for that evidence, but it has not run from this unpushed branch and
+is not counted as verification. Cycle preflight now uses an explicit visit stack: a 4,096-node
+acyclic chain builds with four workers and the same graph closed into a 4,096-node cycle retains
+deterministic diagnostics without replacing the prior manifest.
 
 Multi-file publication is recoverable, not a portable filesystem transaction. Prepared cold
 outputs can temporarily consume disk space comparable to the compiled output set, and an abrupt
@@ -1154,7 +1155,16 @@ The representative scheduler benchmark again proved complete-tree equality betwe
 preflighted and removed about 480 MiB of manifest-owned compiled data in 7.05 seconds while leaving
 the persistent lease marker. These are host-specific measurements, not compatibility thresholds.
 MinGW links both Unicode-entry-point compiler executables, and Wine 10 exercises stock/custom build
-plus clean through a non-ASCII path. Native Windows and MSVC remain untested and unclaimed.
+plus clean through a non-ASCII path. The manual native-MSVC workflow builds `cna-content` and
+`CnaContentTests` in a HEADLESS configuration, runs CPU pipeline/codec/manifest/XNB coverage,
+and directly probes Unicode paths, explanations, workers 1/4, clean, manifest v8 and deterministic
+rebuild bytes. Its definition is checked locally; native Windows and MSVC remain untested and
+unclaimed until that workflow actually succeeds.
+
+The equivalent fresh Linux HEADLESS/SDL3 configuration builds both workflow targets, passes 177 of
+178 selected tests (only the opt-in sparse-file gate is skipped), and passes the complete Unicode
+CLI lifecycle. This validates the workflow's test boundary and commands, not the unexecuted MSVC
+compiler/runtime result.
 
 ## Stability summary
 
@@ -1212,7 +1222,9 @@ plus clean through a non-ASCII path. Native Windows and MSVC remain untested and
 
 Output-root locking is cooperative among current compiler binaries. Concurrently mixing a build or
 clean with an older compiler that predates `.cna-content.lock` is unsupported because that older
-binary cannot honor the lease.
+binary cannot honor the lease. No manifest generation, diagnostic, or check performed by the new
+binary can make a concurrently running legacy executable acquire a lock it does not implement;
+different compiler generations must not overlap against the same output root.
 
 The engineering decisions, rejected alternatives, current risks, and CP task ledger are maintained
 separately in [`plans/plan_content_pipeline.md`](../plans/plan_content_pipeline.md).

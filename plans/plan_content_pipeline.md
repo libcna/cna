@@ -44,11 +44,12 @@
 > new `content-pipeline-final` branch was created from it, and current `next` was merged normally.
 > The resulting combined baseline is `5671ebb54`; neither history was rebased, squashed or reset,
 > and `next` remains untouched. `CP-051` resumes the remaining evidence-backed backlog from that
-> combined history. `CP-051` through `CP-061` are complete: the manifest/explain and named-source-
+> combined history. `CP-051` through `CP-062` are complete: the manifest/explain and named-source-
 > root work is implemented, the bounded Model schema-2 codec/runtime proof is complete, and the XNB
 > route now selects it only for exactly representable semantics that do not fit frozen schema 1.
 > Measured generated-child scheduling and target-profile audits retained the current same-node and
-> portable-output policies rather than adding unproven graph or configuration abstractions.
+> portable-output policies rather than adding unproven graph or configuration abstractions. A
+> manual native-MSVC CI gate now exists, but has not been executed from this unpushed branch.
 >
 > **Boundary:** this plan owns the build-time CNA Content Pipeline. `plans/plan_cnb.md` remains the
 > engineering record for the frozen CNB compiled format. The pipeline consumes the existing CNB
@@ -1217,7 +1218,7 @@ carrying forward task-local results:
 | `CP-059` | **completed** | Broadened lossless XNB Model transcoding onto schema 2 without changing the schema-1 route or bytes. The headless canonical graph now preserves all five stock effects and shared resources; the converter maps every XNA declaration format/usage, exact buffers/windows/bounds/root hierarchy, stock material fields and typed texture references. Selection attempts the proved schema-1 converter first and uses schema 2 only after complete independent validation. Null tags remain the only policy; custom effects and malformed graphs fail. The writer now declares both Model schema tuples and every output reports its actual schema, requiring manifest v8; v7 rebuilds safely without deletion authority. Synthetic and real MonoGame tests compare runtime XNB against runtime schema-2 CNB field-by-field and prove schema-1-compatible XNB bytes remain exactly equal to the unchanged encoder. |
 | `CP-060` | **completed** | Measured generated glTF child rebuild behavior and retained same-node scheduling. An external image pixel-only edit changed the Texture2D child while leaving Model bytes identical, but a representative full glTF node took about 1.47 ms warm and both full-node and texture-only CLI rebuilds rounded to 0.03 s. Animation names/values remain embedded in schema-1 Model; renaming one clip changed the Model and child set while another child stayed byte-identical. Every proposed split still requires the shared glTF parse/scene/material conversion, and embedded/data-URI images have no independent authored input. That bounded cache opportunity does not justify a generated-source graph, ownership, or partial-publication contract. |
 | `CP-061` | **completed** | Audited every built-in importer/processor/writer and found no target-dependent output policy. Images and font/volume atlases use portable Rgba8; WAV uses Pcm16; authored DDS/XNB representations are preserved or losslessly normalized; Model schemas encode source semantics; Curve/Animation are canonical pass-through; Song/Video copy their exact media and emit portable metadata; and no Effect/shader compiler exists. Container compression is an explicit codec concern, not a platform profile, and renderer selection belongs to runtime. No profile ID, API, CLI/config key, fingerprint field, CMake forwarding, CNB field, or C ABI was added. Existing per-asset typed parameters already cover real policies such as color key and deployment metadata. |
-| `CP-062` | **planned** | Audit available native Windows/MSVC execution and existing CI conventions; add only a meaningful, maintainable gate executable in the available environment. Preserve the honest cooperative mixed-version lock limitation. |
+| `CP-062` | **completed** | Confirmed this host has MinGW and Wine but no `cl`, `clang-cl`, PowerShell, native Windows host, or way to execute GitHub Actions locally. Added a single manual `windows-latest` workflow matching the repository's existing native-MSVC convention: pinned sharp-runtime, HEADLESS platform/renderer, SDL3's in-memory audio conversion path, two focused targets, bounded parallelism, CPU manifest/codec/pipeline/XNB tests, and a real Unicode CLI build/no-op/explain/workers/clean/deterministic-rebuild probe. A fresh equivalent configuration builds both targets, passes 177 of 178 selected tests with the opt-in sparse-file gate skipped, and passes the complete Unicode CLI probe. The YAML parses locally, but the workflow is deliberately unclaimed until manually dispatched after publication. Documentation now states that neither a manifest generation nor modern diagnostic can force pre-CP-049 binaries to honor `.cna-content.lock`; mixed-generation overlap remains unsupported. |
 | `CP-063` | **planned** | Perform final Content Pipeline compatibility, security, performance, sanitizer, portability, CMake and C-API-inventory review; reconcile plans/docs and record remaining evidence-backed backlog. |
 
 Tasks are intentionally vertical/coherent. The ledger is revised when implementation evidence makes
@@ -2817,3 +2818,44 @@ participate in the canonical parameter fingerprint and are the smallest correct 
 single-route policy. A shared profile identity becomes justified only when an implemented policy
 must coordinate multiple processors and has defined output consequences; names such as desktop,
 mobile, Windows, Linux or Xbox without such consequences are explicitly insufficient.
+
+---
+
+## 37. Native Windows/MSVC gate and lock boundary (`CP-062`)
+
+The working host is Linux and exposes `x86_64-w64-mingw32-g++` plus Wine 10, but no `cl`,
+`clang-cl`, PowerShell, native Windows environment, or local GitHub Actions runner. CP-048/CP-059's
+MinGW compile/link and Wine Unicode/schema-2 executions remain valid cross-toolchain evidence; they
+cannot be relabeled as MSVC or native Windows verification.
+
+The repository already uses bounded manual `windows-latest` workflows for D3D, GDI and the Windows
+leg of focused cross-platform renderer tests. CP-062 follows that convention with
+`.github/workflows/content-pipeline-windows-ci.yml`: one `workflow_dispatch` job, a pinned
+sharp-runtime sibling, MSVC x64 plus Ninja, `HEADLESS` platform/renderer, SDL3 audio for the
+compiler's existing device-free in-memory XNB conversion, video/net/Draco disabled, two explicit
+build targets, two-way parallelism and a 45-minute timeout. It neither adds an automatic branch
+trigger nor builds unrelated renderer/example targets beyond dependencies of the focused tests.
+
+The native job builds `cna_content_tool` and `CnaContentTests`. Its focused unit selection covers
+strict configuration, manifest v8/migration/reason domains, component/registry contracts, built-in
+processors, CNB codecs/golden vectors, and CPU XNB transcoding while excluding runtime device tests.
+Windows intentionally omits the POSIX-only `ContentPipelineCliTests.cpp`, so a separate shell probe
+runs the real `cna-content.exe` through a non-ASCII source/output path. It proves workers 4 build,
+persisted explanation output, workers 1 no-op, manifest-owned clean with the lease retained, a
+workers 1 rebuild, byte-identical SHA-256 and manifest version 8. Failure logs are uploaded without
+requiring credentials beyond read-only checkout access.
+
+The workflow YAML parses locally. A fresh equivalent HEADLESS/SDL3 configuration builds both
+targets, passes 177 of 178 selected tests (the opt-in sparse-file gate is skipped), and passes the
+complete Unicode CLI probe including byte-identical rebuild output. The branch is intentionally
+neither pushed nor dispatched. Native MSVC execution therefore remains an open verification
+result, not a completed claim. The exact next portability action is to publish the branch only when
+authorized, manually dispatch this workflow, and record its run URL/result; code changes should
+follow only an observed compiler/runtime failure.
+
+The output-root lease boundary remains honest. Modern build and clean processes take the same
+`.cna-content.lock` OS lock for their complete lifetimes. A pre-CP-049 executable has no code that
+opens or observes that file. No newer manifest version, minimum-generation field, warning, process
+scan or diagnostic can retroactively force that concurrently running legacy process to cooperate.
+Mixed-generation overlap on one output root is unsupported; serialize those invocations externally
+or use different output roots. No false backward-compatible locking mechanism is added.
