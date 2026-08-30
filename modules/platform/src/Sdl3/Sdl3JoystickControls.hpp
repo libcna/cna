@@ -22,6 +22,7 @@ namespace CNA::Platform::Sdl3 {
             case SDL_JOYSTICK_TYPE_ARCADE_PAD:   return JoystickKind::ArcadePad;
             case SDL_JOYSTICK_TYPE_THROTTLE:     return JoystickKind::Throttle;
             case SDL_JOYSTICK_TYPE_UNKNOWN:      return JoystickKind::Unknown;
+            case SDL_JOYSTICK_TYPE_COUNT:        return JoystickKind::Unknown;
         }
         return JoystickKind::Unknown;
     }

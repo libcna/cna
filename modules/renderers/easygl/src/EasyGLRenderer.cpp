@@ -53,8 +53,10 @@ namespace CNA::Internal::Renderers::EasyGL
 #include <cstdint>
 #include <cstring>
 #include <cstdlib>
+#include <functional>
 #include <iostream>
 #include <span>
+#include <unordered_map>
 
 #include "CNA/TargetPlatform.hpp"
 
@@ -532,6 +534,8 @@ namespace CNA::Internal::Renderers::EasyGL
         }
 
         void SwapBuffers() { service_.SwapBuffers(window_); }
+        void MakeCurrent() { service_.MakeCurrent(window_, context_); }
+        void ClearCurrent() { service_.MakeCurrent(window_, nullptr); }
         bool SetSwapInterval(const int interval) { return service_.SetSwapInterval(interval); }
         [[nodiscard]] CNA::Platform::GlProcAddressLoader GetLoader() const
         {
@@ -544,6 +548,32 @@ namespace CNA::Internal::Renderers::EasyGL
         CNA::Platform::GlContextDescription description_;
         CNA::Platform::GlContextHandle context_ = nullptr;
     };
+
+    namespace
+    {
+        class EasyGLThreadContextLease final : public IRendererThreadContextLease
+        {
+        public:
+            explicit EasyGLThreadContextLease(std::function<void()> release)
+                : release_(std::move(release))
+            {
+            }
+
+            ~EasyGLThreadContextLease() override
+            {
+                release_();
+            }
+
+        private:
+            std::function<void()> release_;
+        };
+
+        std::unordered_map<const EasyGLRenderer*, std::size_t>& ThreadContextLeaseDepths()
+        {
+            static thread_local std::unordered_map<const EasyGLRenderer*, std::size_t> depths;
+            return depths;
+        }
+    }
 
     EasyGLSurfaceState::EasyGLSurfaceState(
         const RendererSurfaceInfo& surface, const int virtualWidth, const int virtualHeight,
@@ -4949,23 +4979,113 @@ if (!ProfileIsEs2ApiGeneration())
         surfaceState_.GetDefaultViewportRect(x, y, width, height);
     }
 
+    void EasyGLRenderer::EnsureCallingThreadContext()
+    {
+        // meta-gl's dispatch is deliberately thread-local. ContentManager is allowed to construct
+        // graphics resources on a loading thread, as the XNA Marble Maze sample does, so establish
+        // the device context and initialize that thread's dispatch before its first GL call.
+        // Under Emscripten OFFSCREEN_FRAMEBUFFER MakeCurrent proxies calls to the browser thread;
+        // native SDL backends bind the same device context to the calling owner thread.
+        ActiveGlProfile() = profile_;
+        platformContext_->MakeCurrent();
+        if (!metagl::IsInitialized() && !metagl::Initialize(glProcAddressLoader))
+        {
+            throw CNA::Platform::PlatformException(
+                "EasyGLRenderer::EnsureCallingThreadContext",
+                "failed to initialize GL dispatch for the calling thread");
+        }
+    }
+
+    std::unique_ptr<IRendererThreadContextLease>
+    EasyGLRenderer::AcquireThreadContextLeaseEXT()
+    {
+#if defined(__EMSCRIPTEN__)
+        // Emscripten's OFFSCREEN_FRAMEBUFFER path proxies GL work to the browser thread and does
+        // not expose native thread-affine context ownership that can be released here.
+        return nullptr;
+#else
+        threadContextMutex_.lock();
+        try
+        {
+            auto& depth = ThreadContextLeaseDepths()[this];
+            if (depth == 0)
+            {
+                EnsureCallingThreadContext();
+            }
+            ++depth;
+        }
+        catch (...)
+        {
+            threadContextMutex_.unlock();
+            throw;
+        }
+
+        try
+        {
+            return std::make_unique<EasyGLThreadContextLease>(
+                [this]() { ReleaseCallingThreadContextLease(); });
+        }
+        catch (...)
+        {
+            ReleaseCallingThreadContextLease();
+            throw;
+        }
+#endif
+    }
+
+    void EasyGLRenderer::ReleaseCallingThreadContextLease() noexcept
+    {
+#if !defined(__EMSCRIPTEN__)
+        auto& depths = ThreadContextLeaseDepths();
+        const auto it = depths.find(this);
+        if (it == depths.end() || it->second == 0)
+        {
+            CNA::Logger::Error(
+                "EasyGL renderer context lease released without matching acquisition",
+                CNA::LogCategory::RENDER);
+            return;
+        }
+
+        --it->second;
+        if (it->second == 0)
+        {
+            try
+            {
+                platformContext_->ClearCurrent();
+            }
+            catch (const std::exception& error)
+            {
+                CNA::Logger::Error(
+                    std::string("Failed to release EasyGL context ownership: ") + error.what(),
+                    CNA::LogCategory::RENDER);
+            }
+            depths.erase(it);
+        }
+        threadContextMutex_.unlock();
+#endif
+    }
+
     std::unique_ptr<ITextureRenderer> EasyGLRenderer::CreateTexture(const ImageData& data)
     {
+        EnsureCallingThreadContext();
         return std::make_unique<EasyGLTextureRenderer>(data, RegistryPtr());
     }
 
     std::unique_ptr<ISpriteBatchRenderer> EasyGLRenderer::CreateSpriteBatch()
     {
+        EnsureCallingThreadContext();
         return std::make_unique<EasyGLSpriteBatchRenderer>(device, RegistryPtr(), this);
     }
 
     std::unique_ptr<IOcclusionQueryRenderer> EasyGLRenderer::CreateOcclusionQuery()
     {
+        EnsureCallingThreadContext();
         return std::make_unique<EasyGLOcclusionQueryRenderer>(RegistryPtr());
     }
 
     std::unique_ptr<IRenderTargetRenderer> EasyGLRenderer::CreateRenderTarget2D(int w, int h, int depthFormat, bool /*preserveContents*/, bool mipMap, int multiSampleCount)
     {
+        EnsureCallingThreadContext();
         // REMED-GFX-168: `bound_` is handed over as a weak_ptr so the target can clear its own slot
         // when it is destroyed while still bound. Weak, not shared: a target must never keep this
         // renderer's binding record alive past the renderer itself.
@@ -4977,6 +5097,7 @@ if (!ProfileIsEs2ApiGeneration())
         int w, int h, int depthFormat, bool preserveContents, bool mipMap,
         int multiSampleCount, int surfaceFormat)
     {
+        EnsureCallingThreadContext();
         // plans/plan_modern.md MOD-115: refuse rather than substitute. The shared default of this factory
         // drops the format and hands back a Color target, which is invisible to the caller; a
         // renderer that has genuinely implemented formats owes an honest answer instead, and
@@ -5110,6 +5231,7 @@ if (!ProfileIsEs2ApiGeneration())
 
     std::unique_ptr<IGpuTimerRenderer> EasyGLRenderer::CreateGpuTimerEXT()
     {
+        EnsureCallingThreadContext();
         if (!SupportsGpuTimerEXT()) return nullptr;
         return std::make_unique<EasyGLGpuTimerRenderer>(RegistryPtr());
     }
@@ -5174,6 +5296,7 @@ if (!ProfileIsEs2ApiGeneration())
     std::unique_ptr<IComputeShaderRenderer> EasyGLRenderer::CreateComputeShader(
         const std::string& computeSrc)
     {
+        EnsureCallingThreadContext();
         if (!SupportsComputeShadersEXT()) return nullptr;
         auto shader = std::make_unique<EasyGLComputeShaderRenderer>();
         // A failed compile still returns the object: its GetCompileError() is the diagnostic the
@@ -5185,6 +5308,7 @@ if (!ProfileIsEs2ApiGeneration())
     std::unique_ptr<IStorageBufferRenderer> EasyGLRenderer::CreateStorageBuffer(
         const std::size_t byteSize)
     {
+        EnsureCallingThreadContext();
         if (!SupportsComputeShadersEXT() || byteSize == 0) return nullptr;
         return std::make_unique<EasyGLStorageBufferRenderer>(byteSize);
     }
@@ -5297,6 +5421,7 @@ if (!ProfileIsEs2ApiGeneration())
 
     std::unique_ptr<IRenderTargetCubeRenderer> EasyGLRenderer::CreateRenderTargetCube(int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
+        EnsureCallingThreadContext();
         // REMED-GFX-136: consumed by being deliberately unused, exactly like this renderer's own
         // CreateRenderTarget2D above. A GL framebuffer object's colour attachment IS the cube
         // texture and binding an FBO never touches its contents, so a single-sample face is
@@ -5316,6 +5441,7 @@ if (!ProfileIsEs2ApiGeneration())
         int size, int depthFormat, bool preserveContents, bool mipMap,
         int multiSampleCount, int surfaceFormat)
     {
+        EnsureCallingThreadContext();
         (void)preserveContents;   // REMED-GFX-136: deliberately unused, see CreateRenderTargetCube.
         if (ClassifyRenderTargetFormatEXT(surfaceFormat) == RendererFormatVerdict::Unsupported)
         {
@@ -5331,18 +5457,21 @@ if (!ProfileIsEs2ApiGeneration())
     std::unique_ptr<ITexture3DRenderer> EasyGLRenderer::CreateTexture3D(
         int w, int h, int depth, bool mipMap, int surfaceFormat)
     {
+        EnsureCallingThreadContext();
         return std::make_unique<EasyGLTexture3DRenderer>(w, h, depth, mipMap, surfaceFormat);
     }
 
     std::unique_ptr<ITextureCubeRenderer> EasyGLRenderer::CreateTextureCube(
         int size, bool mipMap, int surfaceFormat)
     {
+        EnsureCallingThreadContext();
         return std::make_unique<EasyGLTextureCubeRenderer>(size, mipMap, surfaceFormat);
     }
 
     std::unique_ptr<IEffectRenderer> EasyGLRenderer::CreateEffectRenderer(
         const std::string& vertSrc, const std::string& fragSrc)
     {
+        EnsureCallingThreadContext();
         auto renderer = std::make_unique<EasyGLEffectRenderer>();
         renderer->CompileProgram(vertSrc, fragSrc);
         return renderer;
@@ -10262,16 +10391,19 @@ if (ProfileIsEs2ApiGeneration())
 
     std::unique_ptr<IVertexBufferRenderer> EasyGLRenderer::CreateVertexBuffer(int vertex_capacity)
     {
+        EnsureCallingThreadContext();
         return std::make_unique<EasyGLVertexBufferRenderer>(vertex_capacity, RegistryPtr());
     }
 
     std::unique_ptr<IIndexBufferRenderer> EasyGLRenderer::CreateIndexBuffer16(int index_capacity)
     {
+        EnsureCallingThreadContext();
         return std::make_unique<EasyGLIndexBufferRenderer>(index_capacity, false, RegistryPtr());
     }
 
     std::unique_ptr<IIndexBufferRenderer> EasyGLRenderer::CreateIndexBuffer32(int index_capacity)
     {
+        EnsureCallingThreadContext();
         return std::make_unique<EasyGLIndexBufferRenderer>(index_capacity, true, RegistryPtr());
     }
 

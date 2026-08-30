@@ -905,6 +905,16 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_ModelDraw_RedQuad COMMAND cna_test_easygl_model_draw
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # SAMPLE-061: ContentManager may construct model buffers on XNA's background loading
+        # thread. The renderer must move one native GL context between complete frame/content
+        # operations instead of leaving the main thread current or issuing context-free GL calls.
+        cna_easygl_test(cna_test_easygl_background_content_context
+                        easygl_background_content_context_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_BackgroundContent_ContextOwnership
+            COMMAND cna_test_easygl_background_content_context
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 927: Content.Load<Model>() via a real .model.json + binary vertex/index file
         # fixture -- exercises ModelTypeReader::Read() itself (the vertex-stride/vtable-size
         # corruption bug found while porting ../cna-samples), unlike Task 144's hand-built-in-C++

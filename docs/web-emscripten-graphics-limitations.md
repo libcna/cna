@@ -15,44 +15,56 @@ validation error, and the 3D `BasicEffect` path plus every stock effect shader
 in-browser too (`plans/plan_webgpu.md` `WEBGPU-119`/`120`/`121`/`122` all ✅). Nothing below should be
 read as a status report for either WebGPU path.
 
-> **2026-07-15 update, scoped to the new `CANVAS` renderer (`plans/plan_canvas.md`), not EasyGL**: this
-> document's own "no `.sdl-prebuilt-emscripten` directory... no `cmake-build-*emscripten*` directory
-> has ever existed" claim below is now out of date in one narrow respect — bringing up `CANVAS` on
-> `feature/canvas` required a real `emcmake`/`emcc` 6.0.2 configure+build, which succeeded and
-> produced exactly such a directory (`cmake-build-canvas`) for the first time in this project's
-> history, confirming `emsdk` is genuinely available in this dev environment. `CnaTests` links and a
-> real, renderer-agnostic GTest suite genuinely passes under `node CnaTests.js` for `CANVAS`. This
-> does **not** extend to `EasyGL`/WebGL2 specifically — nothing below about that path has been
-> re-verified — but the *tooling* premise ("no one has ever actually run `emcc` here") no longer
-> holds project-wide. See `docs/canvas-renderer.md` and `plans/plan_canvas.md` for what was actually
-> verified.
+## Status headline: verified WebGL 2 execution, including background content loading
 
-## Status headline: real build scaffolding, zero verified execution
+The EasyGL/WebGL 2 path now has real browser evidence. On 2026-08-30, SAMPLE-061 (`MarbleMaze`) was
+built with Emscripten pthreads and run in Chrome with a real WebGL 2 context. Browser touch events
+navigated the menu and instruction screens; the original loading thread decoded the compiled XNB
+models and created their textures and vertex/index buffers; gameplay rendered; and Escape reached
+the pause screen. The run was cross-origin isolated and recorded no JavaScript exception, rejected
+promise, or failed HTTP response.
 
-The CMake/link-flag infrastructure below is real, non-trivial engineering — not a stub. However:
+This does not turn every desktop graphics test into a browser test: most device-backed
+`examples/*_test.cpp` targets remain native-only, and Node.js still cannot supply a browser canvas.
+It does establish that the application, SDL3 platform, EasyGL renderer, compiled XNB model path,
+input path, and `System.Threading.Thread` can operate together in a real WebGL 2 browser build.
 
-- **No `.sdl-prebuilt-emscripten` directory exists on disk** (the cache convention `cmake/ThirdPartySDL.cmake`
-  defines for it), and **no `cmake-build-*emscripten*` directory has ever existed in this project's
-  history**. No `.github/workflows/*.yml` file configures or builds an Emscripten target at all.
-- The graphics-specific integration/pixel-readback test suite (`examples/*_test.cpp`, registered via
-  the `cna_easygl_test()`/`cna_vulkan_test()`/etc. CMake macros) is **explicitly excluded on
-  Emscripten** (`CMakeLists.txt`: `if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32 ...)`, 4 call
-  sites). None of this project's hundreds of pixel-correctness tests — the actual mechanism this
-  whole session's graphics audit has relied on to verify every renderer — have ever run, or could
-  currently run, under Emscripten.
-- `CnaTests` (the shared gtest unit-test binary, containing e.g. `TextureCubeTests.cpp`) **is**
-  Emscripten-buildable and has real, evidently-exercised link-time tuning (`-sASYNCIFY=1`,
-  `-sEXIT_RUNTIME=1`, with a comment noting the Asyncify requirement was "confirmed empirically" —
-  see `CMakeLists.txt` around the `CnaTests` `add_executable` call). That empirical confirmation is
-  documented in the context of the `SystemLink`/networking test suite, not graphics — Node.js (the
-  usual local Emscripten test runner) has no WebGL/canvas implementation at all, so even if
-  `CnaTests` links successfully against the `EasyGL` renderer for Emscripten, any test that
-  default-constructs a real `GraphicsDevice` would need an actual browser (or a headless-browser
-  harness this project does not have) to run at all.
-- **Conclusion**: every claim below about WebGL2/GLES3 behavior is a **design-time expectation**,
-  not something empirically verified in this project. Treat this document as "what to expect and
-  check first" when someone eventually does the first real `emcc` build and opens it in a browser —
-  not as a completed audit.
+## Threaded Wasm mode
+
+Thread support is deliberately opt-in because `-pthread` changes the ABI of every object in the
+final Wasm module:
+
+```bash
+emcmake cmake -S . -B cmake-build-webgl2-threads \
+  -DCNA_GRAPHICS_RENDERER=WEBGL2 \
+  -DCNA_ENABLE_EMSCRIPTEN_THREADS=ON
+cmake --build cmake-build-webgl2-threads --parallel 8
+```
+
+`CNA_ENABLE_EMSCRIPTEN_THREADS=ON` does all of the application-wide wiring:
+
+- compiles and links CNA and final consumers with `-pthread`;
+- enables `SHARP_RUNTIME_ENABLE_EMSCRIPTEN_THREADS` for `System.Threading`;
+- enables Emscripten's `OFFSCREEN_FRAMEBUFFER` GL proxy so resource creation from a loading pthread
+  reaches the browser thread that owns the WebGL context; and
+- uses `.sdl-prebuilt-emscripten-pthreads`, separate from the incompatible single-threaded
+  `.sdl-prebuilt-emscripten` SDL archive cache.
+
+The default preallocated worker count is one. Override it at configure time with
+`-DSHARP_RUNTIME_EMSCRIPTEN_PTHREAD_POOL_SIZE=<positive integer>` when an application needs more
+simultaneously active threads.
+
+Browsers expose `SharedArrayBuffer` only in a cross-origin-isolated page. The HTTP server must send
+at least these response headers for the HTML, JavaScript, Wasm, worker, and preloaded content:
+
+```text
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: require-corp
+Cross-Origin-Resource-Policy: cross-origin
+```
+
+Verify `window.crossOriginIsolated === true` before treating a browser failure as a CNA threading
+bug. Opening the generated HTML directly from disk is not a valid threaded-Wasm test.
 
 ## What already exists (real CMake/build-system work)
 
@@ -95,16 +107,15 @@ crashes) that has no equivalent on desktop GL:
   of the real SDL GL context (there's no equivalent async browser event to wait for), and
   `DebugRestoreContext()` just calls it again since desktop loss+restore is atomic.
 
-This is real, thought-through code addressing a genuine WebGL-specific concern — not a stub — but,
-per the status headline above, it has never been exercised against a real browser's WebGL
-implementation; only the desktop `else` branch has ever actually run (via the ordinary desktop GL
-context-loss tests already covered elsewhere in this project's test suite).
+This is real, thought-through code addressing a genuine WebGL-specific concern — not a stub — but
+the 2026-08-30 MarbleMaze run did not deliberately lose and restore its context. That callback path
+therefore remains a separate browser test obligation.
 
-## Anticipated WebGL2/GLES3 capability gaps (design-time, unverified)
+## WebGL2/GLES3 capability gaps
 
 These are expectations based on the WebGL 2 / OpenGL ES 3.0 specification versus the desktop OpenGL
-`EasyGL` otherwise targets — **none of these have been empirically confirmed against a real browser
-in this project**:
+`EasyGL` otherwise targets. The MarbleMaze run confirms the subset it exercises, not every optional
+format, extension, shader path, or context-loss transition:
 
 - **No geometry or tessellation shaders.** GLES 3.0/WebGL 2 has neither stage. CNA's `Effect`/shader
   pipeline does not currently use either, so this is likely a non-issue in practice, but any future
@@ -115,9 +126,9 @@ in this project**:
   near-universal). **Task 918 (fixed, 2026-07-09)** added real `EasyGL` anisotropic filtering,
   gated on `HasExtension("GL_EXT_texture_filter_anisotropic")` and clamped to the live driver's
   reported cap — so on Emscripten specifically, whether anisotropic filtering actually does anything
-  now genuinely depends on whether the browser/GPU exposes the WebGL variant of that extension; this
-  has **not been empirically confirmed against a real browser** (matching this whole section's own
-  "design-time, unverified" scope) — if the extension is absent, `TextureFilter::Anisotropic`
+  now genuinely depends on whether the browser/GPU exposes the WebGL variant of that extension. The
+  2026-08-30 Chrome/SwiftShader gate exposed it with a reported 16x limit, but other browsers and
+  GPUs may differ. If the extension is absent, `TextureFilter::Anisotropic`
   correctly falls back to the plain trilinear filter set already in place, it just won't be a
   currently-untracked bug if that happens on Web the way it briefly was on desktop EasyGL pre-918.
 - **Texture format support is narrower** than desktop GL's — WebGL 2 guarantees a smaller baseline
@@ -142,15 +153,14 @@ device/adapter-model concern rather than a rendering-renderer one.
 
 | Area | Status |
 |---|---|
-| CMake/link-flag scaffolding (renderer selection, exception handling, memory/preload flags, WebGL version pin on the 3D demo) | Real, present, never exercised end-to-end |
+| CMake/link-flag scaffolding (renderer selection, exceptions, preload, optional pthread ABI) | Built and exercised end-to-end in Chrome |
 | `CnaTests` Emscripten build | Links (with real Asyncify tuning for the networking suite); cannot meaningfully run graphics-touching tests without a real browser/WebGL context |
-| Graphics integration/pixel tests (`examples/*_test.cpp`) | Explicitly excluded on Emscripten — zero coverage |
-| WebGL context-loss handling (`EasyGLRenderer.cpp`) | Real, non-trivial code; never run against a real browser |
-| GLES3/WebGL2 capability gaps vs. desktop GL | Anticipated only, not verified; current `SurfaceFormat`/anisotropy constraints happen to sidestep most of them today |
+| SAMPLE-061 browser integration | Menu, touch, background XNB model/resource loading, gameplay and pause verified in real Chrome/WebGL 2 |
+| Graphics integration/pixel tests (`examples/*_test.cpp`) | Mostly native-only; SAMPLE-061 now supplies a real browser integration gate, not exhaustive pixel coverage |
+| WebGL context-loss handling (`EasyGLRenderer.cpp`) | Implemented; deliberate browser loss/restore remains separately unverified |
+| GLES3/WebGL2 capability gaps vs. desktop GL | Core SAMPLE-061 paths verified; optional capabilities remain browser/GPU dependent |
 | WebGPU | Native `wgpu-native` renderer is active and experimental; the browser/Emscripten WebGPU path (same `WEBGPU` identity, via the emdawnwebgpu port) runs the 2D AND 3D paths in headless Chrome as of 2026-08-26 -- 2D SpriteBatch, 3D `BasicEffect`, and every stock effect shader all render in-browser (`WEBGPU-121`/`122` ✅). Run it with `scripts/run-webgpu-browser-test.sh` |
 
-**Recommendation for whoever eventually does the first real Emscripten build**: start by getting
-`cna_house3d_demo` (the one target with a WebGL version pin already) running in an actual browser
-and confirming the WebGL context-loss debug hooks fire correctly, before attempting to get any part
-of `CnaTests` running there — the graphics pixel-test suite's Emscripten exclusion means that would
-be genuinely new coverage, not a re-run of already-proven tests.
+The next high-value browser gate is deliberate `WEBGL_lose_context` loss/restoration followed by a
+resource-backed draw. It covers a different failure mode than SAMPLE-061's threaded loading gate and
+should remain a separate test rather than being inferred from it.

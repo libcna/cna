@@ -65,9 +65,15 @@ namespace Microsoft::Xna::Framework::Graphics
     class RenderTargetCube;
 }
 
+namespace Microsoft::Xna::Framework::Content
+{
+    class ContentReader;
+}
+
 namespace CNA::Internal::Renderers
 {
     class IGraphicsRenderer;
+    class IRendererThreadContextLease;
     class IStorageBufferRenderer;
 
     // Mirrors the definition in CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp. Declared here
@@ -1604,6 +1610,9 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void MapLogicalRectToPresentation(int& x, int& y, int& width, int& height) const;
 
+        CNAEXT [[nodiscard]] std::unique_ptr<CNA::Internal::Renderers::IRendererThreadContextLease>
+            AcquireRendererThreadContextLease();
+
         friend class Texture2D;
         friend class RenderTargetCube;
         friend class ShaderEffect;
@@ -1612,5 +1621,6 @@ namespace Microsoft::Xna::Framework::Graphics
         friend class Microsoft::Xna::Framework::GameWindow;
         friend class Microsoft::Xna::Framework::GraphicsDeviceManager;
         friend class Microsoft::Xna::Framework::Game;
+        friend class Microsoft::Xna::Framework::Content::ContentReader;
     };
 }

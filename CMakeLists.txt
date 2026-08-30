@@ -22,6 +22,24 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+option(CNA_ENABLE_EMSCRIPTEN_THREADS
+    "Build CNA's Emscripten ABI with shared-memory pthread support" OFF)
+if(CNA_ENABLE_EMSCRIPTEN_THREADS AND NOT EMSCRIPTEN)
+    message(FATAL_ERROR "CNA_ENABLE_EMSCRIPTEN_THREADS is available only with Emscripten.")
+endif()
+if(EMSCRIPTEN AND CNA_ENABLE_EMSCRIPTEN_THREADS)
+    # Emscripten pthreads are an application-wide WebAssembly ABI choice: every object linked
+    # into shared memory must advertise atomics/bulk-memory support, even if that object never
+    # creates a thread. Set the directory option before any CNA or third-party target exists.
+    add_compile_options(-pthread)
+    add_link_options(-pthread)
+
+    # Sharp Runtime owns System.Threading and keeps its web pthread support opt-in for
+    # single-threaded consumers. A threaded CNA build necessarily selects the matching mode.
+    set(SHARP_RUNTIME_ENABLE_EMSCRIPTEN_THREADS ON CACHE BOOL
+        "Build Emscripten targets with shared-memory pthread support" FORCE)
+endif()
+
 # The native C ABI is intentionally opt-in while it is experimental. Enabling it must happen
 # before sharp-runtime and the CNA static modules are created: the exported shared C API links
 # those archives, so they all need position-independent code.

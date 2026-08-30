@@ -10,6 +10,10 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 
+#if defined(__EMSCRIPTEN__)
+#include <emscripten/html5_webgl.h>
+#endif
+
 #include <mutex>
 #include <type_traits>
 
@@ -166,6 +170,19 @@ namespace CNA::Platform::Sdl3 {
     void Sdl3GlContext::MakeCurrent(const WindowId window, const GlContextHandle context)
     {
         SDL_Window* nativeWindow = RequireSdl3Window(window, "GlContext::MakeCurrent");
+#if defined(__EMSCRIPTEN__)
+        // SDL's current-context cache can say that a context is already current on a freshly
+        // created Wasm pthread even though Emscripten's GL TLS still has no current context.
+        // Bind the real WebGL handle first so OFFSCREEN_FRAMEBUFFER can proxy this thread's GL
+        // calls to the browser thread that owns it.
+        const auto webGlContext = reinterpret_cast<EMSCRIPTEN_WEBGL_CONTEXT_HANDLE>(context);
+        if (emscripten_webgl_get_current_context() != webGlContext &&
+            emscripten_webgl_make_context_current(webGlContext) != EMSCRIPTEN_RESULT_SUCCESS)
+        {
+            throw PlatformException(
+                "GlContext::MakeCurrent", "Emscripten could not make the WebGL context current");
+        }
+#endif
         if (!SDL_GL_MakeCurrent(nativeWindow, static_cast<SDL_GLContext>(context)))
         {
             throw PlatformException("GlContext::MakeCurrent", SDL_GetError());

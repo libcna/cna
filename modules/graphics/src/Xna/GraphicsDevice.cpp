@@ -544,6 +544,12 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
+    std::unique_ptr<CNA::Internal::Renderers::IRendererThreadContextLease>
+    GraphicsDevice::AcquireRendererThreadContextLease()
+    {
+        return renderer_ != nullptr ? renderer_->AcquireThreadContextLeaseEXT() : nullptr;
+    }
+
     void GraphicsDevice::Reset(const PresentationParameters& presentationParameters, GraphicsAdapter& adapter)
     {
         Reset(presentationParameters, &adapter);

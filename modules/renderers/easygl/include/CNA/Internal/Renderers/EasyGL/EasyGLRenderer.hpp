@@ -14,6 +14,7 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
@@ -847,6 +848,7 @@ namespace CNA::Internal::Renderers::EasyGL
         // Declared first so it is destroyed last: all GL resources below release while the
         // platform context is still current and alive.
         std::unique_ptr<EasyGLPlatformContext> platformContext_;
+        std::recursive_mutex threadContextMutex_;
         // The viewport's own depth range. SetViewport() writes it unconditionally, so it cannot
         // live behind CNA_EASYGL_COMPILED_EFFECTS -- a build without compiled effects, which is
         // the default, would not compile. Compiled-effect draws narrow it and put it back
@@ -934,6 +936,8 @@ namespace CNA::Internal::Renderers::EasyGL
         void CreateMsaaBuffers(int w, int h);
         void BindDefaultFramebuffer();
         void ResolveMsaa();
+        void EnsureCallingThreadContext();
+        void ReleaseCallingThreadContextLease() noexcept;
 
         /// Returns the shared registry when context recovery is enabled, an empty pointer
         /// otherwise. Children keep only a weak reference to what this returns.
@@ -1230,6 +1234,13 @@ namespace CNA::Internal::Renderers::EasyGL
             bool contextRecoveryEnabled = true, int multiSampleCount = 1,
             int swapInterval = 1, GlProfile profile = kCompileTimeGlProfile);
         ~EasyGLRenderer() override;
+
+        /**
+         * @brief Serializes a complete operation while owning this renderer's GL context.
+         * @return A token that releases the calling thread's context ownership when destroyed.
+         */
+        [[nodiscard]] std::unique_ptr<IRendererThreadContextLease>
+            AcquireThreadContextLeaseEXT() override;
 
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
         /**

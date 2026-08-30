@@ -1775,10 +1775,34 @@ namespace CNA::Internal::Renderers
         Unsupported
     };
 
+    /**
+     * @brief Owns a renderer context on the calling thread for one bounded operation.
+     *
+     * Native GL renderers use this internal lease to serialize a complete content decode against
+     * frame rendering while moving their context between threads. Other renderer families return
+     * no lease because their APIs either support concurrent resource creation directly or own a
+     * different synchronization boundary.
+     */
+    class IRendererThreadContextLease
+    {
+    public:
+        /** @brief Releases the calling thread's renderer context ownership. */
+        virtual ~IRendererThreadContextLease() = default;
+    };
+
     class IGraphicsRenderer
     {
     public:
         virtual ~IGraphicsRenderer() = default;
+        /**
+         * @brief Acquires this renderer's context for a complete caller-owned operation.
+         * @return A lifetime token, or null when this renderer needs no explicit context lease.
+         */
+        [[nodiscard]] virtual std::unique_ptr<IRendererThreadContextLease>
+            AcquireThreadContextLeaseEXT()
+        {
+            return nullptr;
+        }
         virtual void Clear(float r, float g, float b, float a) = 0;
         virtual void Present() = 0;
         virtual void GetViewportSize(int& width, int& height) = 0;

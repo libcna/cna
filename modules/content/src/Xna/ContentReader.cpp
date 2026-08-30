@@ -12,6 +12,7 @@
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -130,6 +131,10 @@ namespace Microsoft::Xna::Framework::Content
         const CNA::Internal::Xnb::XnbReadLimits& limits)
         : System::IO::BinaryReader(stream)
         , contentManager_(manager)
+        , rendererThreadContextLease_(
+              manager != nullptr && manager->graphicsDevice_ != nullptr
+                  ? manager->graphicsDevice_->AcquireRendererThreadContextLease()
+                  : nullptr)
         , assetName_(std::move(assetName))
         , version_(version)
         , platform_(platform)
@@ -137,6 +142,8 @@ namespace Microsoft::Xna::Framework::Content
         , limits_(limits)
     {
     }
+
+    ContentReader::~ContentReader() = default;
 
     Matrix ContentReader::ReadMatrix()
     {

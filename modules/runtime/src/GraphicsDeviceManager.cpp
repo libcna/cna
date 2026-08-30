@@ -2,6 +2,8 @@
 
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+
 #include "CNA/Platform/CurrentPlatform.hpp"
 #include "CNA/Platform/IPlatform.hpp"
 
@@ -341,6 +343,7 @@ namespace Microsoft::Xna::Framework
             return false;
         }
 
+        frameContextLease_ = graphicsDevice_->AcquireRendererThreadContextLease();
         drawBegun_ = true;
         return true;
     }
@@ -350,7 +353,16 @@ namespace Microsoft::Xna::Framework
         if (graphicsDevice_ != nullptr && drawBegun_)
         {
             drawBegun_ = false;
-            graphicsDevice_->Present();
+            try
+            {
+                graphicsDevice_->Present();
+            }
+            catch (...)
+            {
+                frameContextLease_.reset();
+                throw;
+            }
+            frameContextLease_.reset();
         }
     }
 

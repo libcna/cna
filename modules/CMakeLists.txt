@@ -242,6 +242,16 @@ if(EMSCRIPTEN)
     # across the browser versions supported by Emscripten without legacy Wasm `try` instructions.
     target_link_libraries(cna_build_config INTERFACE cna_emscripten_abi)
     target_link_options(cna_build_config INTERFACE -sSTACK_SIZE=1048576)
+    if(CNA_ENABLE_EMSCRIPTEN_THREADS)
+        # Parent-project executables are outside this directory's add_compile_options scope.
+        # Publish the shared-memory ABI so those final consumer translation units and their link
+        # command use the same mode as every CNA archive.
+        target_compile_options(cna_build_config INTERFACE -pthread)
+        target_link_options(cna_build_config INTERFACE
+            -pthread
+            -sOFFSCREEN_FRAMEBUFFER=1
+            -Wno-pthreads-mem-growth)
+    endif()
 endif()
 
 # The current high-level mixer is SDL3_mixer based.  Do not advertise sound support in a

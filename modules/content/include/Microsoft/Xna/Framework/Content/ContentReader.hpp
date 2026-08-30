@@ -22,6 +22,11 @@ namespace CNA::Internal::Xnb
     class XnbCanonicalReaderAccess;
 }
 
+namespace CNA::Internal::Renderers
+{
+    class IRendererThreadContextLease;
+}
+
 namespace Microsoft::Xna::Framework
 {
     struct BoundingSphere;
@@ -94,6 +99,9 @@ namespace Microsoft::Xna::Framework::Content
             char platform,
             RecordDisposableFn recordDisposableObject = nullptr,
             const CNA::Internal::Xnb::XnbReadLimits& limits = CNA::Internal::Xnb::DefaultXnbReadLimits());
+
+        /** @brief Destroys the reader and releases any renderer-thread context lease. */
+        ~ContentReader() override;
 
         /** @brief FNA's `ContentReader.ContentManager` property. May be null (see class docs). */
         [[nodiscard]] ContentManager* getContentManagerProperty() const { return contentManager_; }
@@ -509,6 +517,8 @@ namespace Microsoft::Xna::Framework::Content
         }
 
         ContentManager* contentManager_;
+        std::unique_ptr<CNA::Internal::Renderers::IRendererThreadContextLease>
+            rendererThreadContextLease_;
         std::string assetName_;
         int version_;
         char platform_;

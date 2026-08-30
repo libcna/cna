@@ -20,7 +20,19 @@ endif()
 #   rm -rf <the exact CNA_SDL_PREBUILT_ROOT reported by CMake>
 set(_cna_sdl_wayland_build_capable OFF)
 if(EMSCRIPTEN)
-    set(_cna_sdl_prebuilt_default "${CMAKE_CURRENT_SOURCE_DIR}/.sdl-prebuilt-emscripten")
+    if(CNA_ENABLE_EMSCRIPTEN_THREADS)
+        # Threaded and single-threaded Wasm archives have different memory feature sets and
+        # cannot be linked together. Keep both persistent installs reusable without ever
+        # selecting the wrong ABI merely because that cache was built first.
+        set(_cna_sdl_prebuilt_default
+            "${CMAKE_CURRENT_SOURCE_DIR}/.sdl-prebuilt-emscripten-pthreads")
+        set(_cna_sdl_prebuilt_legacy_default
+            "${CMAKE_CURRENT_SOURCE_DIR}/.sdl-prebuilt-emscripten")
+    else()
+        set(_cna_sdl_prebuilt_default "${CMAKE_CURRENT_SOURCE_DIR}/.sdl-prebuilt-emscripten")
+        set(_cna_sdl_prebuilt_legacy_default
+            "${CMAKE_CURRENT_SOURCE_DIR}/.sdl-prebuilt-emscripten-pthreads")
+    endif()
 else()
     # Keyed by target platform/arch so a cross-build (e.g. Windows via mingw-w64) cannot
     # silently overwrite the native build's cached SDL3 install, and vice versa.
@@ -88,9 +100,9 @@ endif()
 # may intentionally contain a narrower SDL and must never be silently redirected. This makes an
 # already-configured native build pick up the new Wayland-capable key without requiring users to
 # discover and clear a CMake cache variable by hand.
-if(_cna_sdl_wayland_build_capable
-   AND DEFINED CNA_SDL_PREBUILT_ROOT
-   AND "${CNA_SDL_PREBUILT_ROOT}" STREQUAL "${_cna_sdl_prebuilt_legacy_default}")
+if(DEFINED CNA_SDL_PREBUILT_ROOT
+   AND "${CNA_SDL_PREBUILT_ROOT}" STREQUAL "${_cna_sdl_prebuilt_legacy_default}"
+   AND (EMSCRIPTEN OR _cna_sdl_wayland_build_capable))
     set(CNA_SDL_PREBUILT_ROOT "${_cna_sdl_prebuilt_default}" CACHE PATH
         "Persistent SDL3 install root (survives cmake --clean and build-tree deletion)" FORCE)
 else()
@@ -382,6 +394,13 @@ function(_cna_build_sdl_dep)
     )
     if(CMAKE_TOOLCHAIN_FILE)
         list(APPEND _base_args "-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}")
+    endif()
+    if(EMSCRIPTEN AND CNA_ENABLE_EMSCRIPTEN_THREADS)
+        # These are independent configure/build invocations and inherit no directory options
+        # from CNA. Compile their complete static archives for the same shared-memory ABI.
+        list(APPEND _base_args
+            "-DCMAKE_C_FLAGS=-pthread"
+            "-DCMAKE_EXE_LINKER_FLAGS=-pthread")
     endif()
     if(ANDROID)
         # The NDK's own toolchain file determines the target ABI/platform from these cache

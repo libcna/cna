@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -24,6 +25,10 @@
 #include "System/IDisposable.hpp"
 #include "System/Object.hpp"
 
+namespace CNA::Internal::Renderers
+{
+    class IRendererThreadContextLease;
+}
 
 namespace Microsoft::Xna::Framework
 {
@@ -331,6 +336,7 @@ namespace Microsoft::Xna::Framework
         bool ownsGraphicsDevice_;
         bool deviceEventsSubscribed_;
         bool drawBegun_;
+        std::unique_ptr<CNA::Internal::Renderers::IRendererThreadContextLease> frameContextLease_;
         bool disposed_;
         bool prefsChanged_;
         bool supportsOrientations_;
