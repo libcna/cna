@@ -319,7 +319,8 @@ namespace CNA::Content::Pipeline
         const Cnb::CnbTextureData& texture = input.Get<Cnb::CnbTextureData>();
         return {Cnb::EncodeTexture3DToCnb(texture, logicalName),
                 Cnb::CnbAssetTypeId::Texture3D,
-                "Microsoft.Xna.Framework.Graphics.Texture3D"};
+                "Microsoft.Xna.Framework.Graphics.Texture3D",
+                Cnb::CnbTextureSchemaVersion};
     }
 
     ContentComponentIdentity TextureCubeProcessor::Identity() const
@@ -365,7 +366,8 @@ namespace CNA::Content::Pipeline
         const Cnb::CnbTextureData& texture = input.Get<Cnb::CnbTextureData>();
         return {Cnb::EncodeTextureCubeToCnb(texture, logicalName),
                 Cnb::CnbAssetTypeId::TextureCube,
-                "Microsoft.Xna.Framework.Graphics.TextureCube"};
+                "Microsoft.Xna.Framework.Graphics.TextureCube",
+                Cnb::CnbTextureSchemaVersion};
     }
 
     ContentComponentIdentity CurveProcessor::Identity() const
@@ -409,7 +411,7 @@ namespace CNA::Content::Pipeline
     {
         const ProcessedCurve& curve = input.Get<ProcessedCurve>();
         return {Cnb::EncodeCurveToCnb(curve.value, logicalName), Cnb::CnbAssetTypeId::Curve,
-                "Microsoft.Xna.Framework.Curve"};
+                "Microsoft.Xna.Framework.Curve", Cnb::CnbCurveSchemaVersion};
     }
 
     ContentComponentIdentity AnimationClipProcessor::Identity() const
@@ -459,7 +461,8 @@ namespace CNA::Content::Pipeline
         const ProcessedAnimationClip& clip = input.Get<ProcessedAnimationClip>();
         return {Cnb::EncodeAnimationClipToCnb(clip.value, logicalName),
                 Cnb::CnbAssetTypeId::AnimationClip,
-                "Microsoft.Xna.Framework.Graphics.AnimationClipEXT"};
+                "Microsoft.Xna.Framework.Graphics.AnimationClipEXT",
+                Cnb::CnbAnimationClipSchemaVersion};
     }
 
     ContentComponentIdentity SpriteFontProcessor::Identity() const
@@ -546,7 +549,8 @@ namespace CNA::Content::Pipeline
     {
         const Cnb::CnbSpriteFontData& font = input.Get<Cnb::CnbSpriteFontData>();
         return {Cnb::EncodeSpriteFontToCnb(font, logicalName), Cnb::CnbAssetTypeId::SpriteFont,
-                "Microsoft.Xna.Framework.Graphics.SpriteFont"};
+                "Microsoft.Xna.Framework.Graphics.SpriteFont",
+                Cnb::CnbSpriteFontSchemaVersion};
     }
 
     void RegisterCnjContentPipeline(ContentPipelineRegistry& registry)

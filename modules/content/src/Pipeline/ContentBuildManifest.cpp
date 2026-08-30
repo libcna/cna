@@ -13,6 +13,7 @@
 #include <set>
 #include <stdexcept>
 #include <string_view>
+#include <tuple>
 #include <type_traits>
 
 #include "CNA/Content/Cnb/CnbFormat.hpp"
@@ -574,7 +575,11 @@ namespace CNA::Content::Pipeline
                 {
                     return left.assetTypeId < right.assetTypeId;
                 }
-                return left.assetTypeName < right.assetTypeName;
+                if (left.assetTypeName != right.assetTypeName)
+                {
+                    return left.assetTypeName < right.assetTypeName;
+                }
+                return left.assetSchemaVersion < right.assetSchemaVersion;
             });
             CanonicalFingerprint schemas;
             schemas.AddString("CNA.ContentPipeline.WriterSchemas");
@@ -987,9 +992,13 @@ namespace CNA::Content::Pipeline
             {
                 return left.assetTypeId < right.assetTypeId;
             }
-            return left.assetTypeName < right.assetTypeName;
+            if (left.assetTypeName != right.assetTypeName)
+            {
+                return left.assetTypeName < right.assetTypeName;
+            }
+            return left.assetSchemaVersion < right.assetSchemaVersion;
         });
-        std::set<std::pair<std::uint32_t, std::string>> writerSchemaKeys;
+        std::set<std::tuple<std::uint32_t, std::string, std::uint32_t>> writerSchemaKeys;
         for (const ContentWriterSchemaIdentity& schema : entry.writerSchemas)
         {
             if (schema.assetTypeId == 0u || schema.assetSchemaVersion == 0u ||
@@ -999,11 +1008,14 @@ namespace CNA::Content::Pipeline
                 throw std::invalid_argument(
                     "content manifest writer schema identities must be complete and nonzero.");
             }
-            if (!writerSchemaKeys.emplace(schema.assetTypeId, schema.assetTypeName).second)
+            if (!writerSchemaKeys.emplace(
+                    schema.assetTypeId, schema.assetTypeName,
+                    schema.assetSchemaVersion).second)
             {
                 throw std::invalid_argument(
-                    "content manifest repeats writer schema asset identity " +
-                    std::to_string(schema.assetTypeId) + " ('" + schema.assetTypeName + "').");
+                    "content manifest repeats writer schema asset/schema identity " +
+                    std::to_string(schema.assetTypeId) + " ('" + schema.assetTypeName +
+                    "') schema " + std::to_string(schema.assetSchemaVersion) + ".");
             }
         }
         if (entry.outputs.empty() || entry.outputs.size() > MaxContentBuildOutputs)
@@ -1302,7 +1314,8 @@ namespace CNA::Content::Pipeline
         entry.parameters = result.parameters;
         entry.runtimeReferences = result.runtimeReferences;
         const auto schemaFor = [&](std::uint32_t assetTypeId,
-                                   const std::string& assetTypeName)
+                                   const std::string& assetTypeName,
+                                   const std::uint32_t assetSchemaVersion)
             -> const ContentWriterSchemaIdentity&
         {
             const auto found = std::find_if(
@@ -1310,7 +1323,8 @@ namespace CNA::Content::Pipeline
                 [&](const ContentWriterSchemaIdentity& schema)
             {
                 return schema.assetTypeId == assetTypeId &&
-                       schema.assetTypeName == assetTypeName;
+                       schema.assetTypeName == assetTypeName &&
+                       schema.assetSchemaVersion == assetSchemaVersion;
             });
             if (found == result.writerSchemas.end())
             {
@@ -1321,7 +1335,8 @@ namespace CNA::Content::Pipeline
         };
         entry.outputs.reserve(1u + result.output.additionalOutputs.size());
         const ContentWriterSchemaIdentity& primarySchema =
-            schemaFor(result.output.assetTypeId, result.output.assetTypeName);
+            schemaFor(result.output.assetTypeId, result.output.assetTypeName,
+                      result.output.assetSchemaVersion);
         entry.outputs.push_back(
             {result.logicalName, RelativeContained(outputRoot, outputPath, "primary output"),
              result.output.assetTypeId, primarySchema.assetSchemaVersion,
@@ -1332,7 +1347,8 @@ namespace CNA::Content::Pipeline
                 outputRoot / CNA::Internal::ContentPathFromUtf8(output.logicalName);
             path += ".cnb";
             const ContentWriterSchemaIdentity& schema =
-                schemaFor(output.assetTypeId, output.assetTypeName);
+                schemaFor(output.assetTypeId, output.assetTypeName,
+                          output.assetSchemaVersion);
             entry.outputs.push_back(
                 {output.logicalName, RelativeContained(outputRoot, path, "additional output"),
                  output.assetTypeId, schema.assetSchemaVersion, output.assetTypeName,

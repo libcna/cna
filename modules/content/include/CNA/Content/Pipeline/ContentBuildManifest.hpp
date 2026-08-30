@@ -12,7 +12,7 @@
 namespace CNA::Content::Pipeline
 {
     /** @brief Current on-disk CNA Content Pipeline manifest format version. */
-    inline constexpr std::uint32_t ContentBuildManifestVersion = 7u;
+    inline constexpr std::uint32_t ContentBuildManifestVersion = 8u;
 
     /** @brief File name used for the inspectable manifest below a content output
      * root. */

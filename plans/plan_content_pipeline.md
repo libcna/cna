@@ -44,9 +44,9 @@
 > new `content-pipeline-final` branch was created from it, and current `next` was merged normally.
 > The resulting combined baseline is `5671ebb54`; neither history was rebased, squashed or reset,
 > and `next` remains untouched. `CP-051` resumes the remaining evidence-backed backlog from that
-> combined history. `CP-051` through `CP-058` are complete: the manifest/explain and named-source-
-> root work is implemented, and the bounded Model schema-2 codec, runtime loader, malformed corpus,
-> and independent golden proof are complete without changing schema 1.
+> combined history. `CP-051` through `CP-059` are complete: the manifest/explain and named-source-
+> root work is implemented, the bounded Model schema-2 codec/runtime proof is complete, and the XNB
+> route now selects it only for exactly representable semantics that do not fit frozen schema 1.
 >
 > **Boundary:** this plan owns the build-time CNA Content Pipeline. `plans/plan_cnb.md` remains the
 > engineering record for the frozen CNB compiled format. The pipeline consumes the existing CNB
@@ -1212,7 +1212,7 @@ carrying forward task-local results:
 | `CP-056` | **completed** | Audited FNA's complete Model/vertex/index/stock-effect readers against CNA's canonical XNB graph, frozen schema-1 carrier, runtime Model/buffer/effect APIs, CNB adapter and renderer declaration boundary. Section 32 records the field matrix and a demonstrated real use case: MonoGame's Blender cube needs an explicit Position+Normal declaration, serialized sphere and non-default BasicEffect SpecularPower, all of which CNA already constructs and exposes. A separate resource-table schema is coherent without CLR object graphs; null tags remain the only supported tag policy, custom effects remain rejected, and declaration-limited renderers retain their existing explicit fidelity rejection. No CNB definition or byte changed in this audit. |
 | `CP-057` | **completed** | Specified the byte-exact candidate in section 33: eleven schema chunk types plus typed container XREFs; fixed header/bone/mesh/part/declaration/resource/effect rows; complete stable vertex/effect ID tables; resource identity, null-tag and canonical ordering rules; overflow/count/index/window validation; schema selection; runtime construction; and an independent conformance vector. CP-058 subsequently proved and froze that candidate without changing schema 1. |
 | `CP-058` | **completed** | Added a separate CPU carrier/codec for Model asset type 5/schema 2 and runtime dispatch by schema version. Exact declarations, shared vertex/index/effect resources, part windows, authored spheres, explicit root identity/transforms, typed XREFs, null-only tags, and all five stock effects round-trip and construct exactly. The decoder validates mandatory topology/alignment, every count/table/product/range/reserved value, graph/resource identity, typed references, and inactive fields before GPU construction. A manually specified Python vector pins all 1,468 bytes, fixed offsets, and SHA-256 `6a9dc3f5363ae82a93ba8e01fee1059802ac1325d5fd76565ccddb09d928ad78`; production encode and CPU/runtime decode match it. Schema 1 and every prior golden remain byte-identical. |
-| `CP-059` | **conditional** | Broaden lossless XNB Model transcoding onto schema 2 for the exact support matrix CP-057/058 prove. Schema-1-compatible XNB Models continue to emit schema 1; unsupported tags/custom effects fail explicitly. |
+| `CP-059` | **completed** | Broadened lossless XNB Model transcoding onto schema 2 without changing the schema-1 route or bytes. The headless canonical graph now preserves all five stock effects and shared resources; the converter maps every XNA declaration format/usage, exact buffers/windows/bounds/root hierarchy, stock material fields and typed texture references. Selection attempts the proved schema-1 converter first and uses schema 2 only after complete independent validation. Null tags remain the only policy; custom effects and malformed graphs fail. The writer now declares both Model schema tuples and every output reports its actual schema, requiring manifest v8; v7 rebuilds safely without deletion authority. Synthetic and real MonoGame tests compare runtime XNB against runtime schema-2 CNB field-by-field and prove schema-1-compatible XNB bytes remain exactly equal to the unchanged encoder. |
 | `CP-060` | **planned** | Measure generated glTF child rebuild behavior and retain same-node scheduling unless independent nodes provide real cache isolation without changing embedded-clip or texture-XREF semantics. |
 | `CP-061` | **planned** | Audit current processors for a concrete output-affecting target policy. Add no profile abstraction unless an existing implementable policy justifies stable fingerprint identity. |
 | `CP-062` | **planned** | Audit available native Windows/MSVC execution and existing CI conventions; add only a meaningful, maintainable gate executable in the available environment. Preserve the honest cooperative mixed-version lock limitation. |
@@ -1310,8 +1310,6 @@ the ordering wrong; it is not a promise to build speculative abstractions.
   need explicit external-root reference syntax. In particular, glTF's shared converter validates
   and opens URIs before the pipeline context observes them, so it must not claim capability support
   without a separately reviewed resolver callback.
-* Which additional lossless XNB Model semantics can select the now-frozen schema 2 while retaining
-  schema-1 bytes for every source that already fits; CP-059 owns that exact support matrix.
 
 ---
 
@@ -2316,12 +2314,13 @@ the existing schema-1 decoder accept version 2.
 
 Pipeline routing must also remain explicit. A schema-1-compatible XNB Model continues through the
 existing `ImportedModelDocument -> ModelProcessor -> ModelContentWriter` route and emits schema 1.
-A Model that requires schema 2 uses a distinct imported/processed stable type and writer, so the
-writer's declared schema/codec identity matches the bytes it actually emits. PNG/WAV/CNJ/glTF and
-generated Model children therefore never change merely because a second schema exists. Catching a
-schema-1 subset error and blindly upgrading is insufficient: the schema-2 converter must revalidate
-the original canonical graph and reject malformed windows, inconsistent bone links, non-null tags,
-unsupported effects and unsafe XREFs on their own merits.
+The imported/processed carrier is a schema-tagged C++ variant: the writer declares both exact Model
+schema/codec tuples and every emitted output states its selected schema. This keeps one component
+route without labeling schema-1 bytes as schema 2. PNG/WAV/CNJ/glTF and generated Model children
+therefore never select schema 2 merely because it exists. Catching a schema-1 subset error and
+blindly upgrading is insufficient: the schema-2 converter must revalidate the original canonical
+graph and reject malformed windows, inconsistent bone links, non-null tags, unsupported effects
+and unsafe XREFs on their own merits.
 
 The wire format must bound and cross-check every header count, fixed-stride table size, string/XREF
 index, declaration element range, buffer byte product, mesh-part slot, resource index, root/parent
@@ -2598,15 +2597,18 @@ must not rewrite, infer or silently substitute a declaration to make that render
 
 `DecodeModelFromCnb()` remains the exact schema-1 function. A new schema-2 decoder and CPU carrier
 are selected by ContentManager from `document.AssetSchemaVersion()`; neither function accepts the
-other version. The schema-1 writer constant remains 1. A distinct schema-2 pipeline writer declares
-asset type 5/schema 2 and its own codec version, so the manifest never labels schema-1 bytes as
-schema 2.
+other version. The schema-1 writer constant remains 1. The Model writer declares distinct asset
+type 5/schema 1 and asset type 5/schema 2 codec identities, and reports the exact selected schema
+with every output, so the manifest never labels schema-1 bytes as schema 2.
 
 The XNB route validates and attempts the existing schema-1 conversion first. Success retains the
-existing stable type, processor, writer, codec and output bytes. Only a canonical graph that fails
-a schema-1 representability condition but passes every schema-2 condition is boxed as the distinct
-schema-2 imported type. A malformed graph, unsafe texture name, non-null tag or unsupported effect
-fails rather than upgrades. CNJ/glTF/default generated Models never select the new route.
+existing schema-1 carrier, codec and output bytes. Only a canonical graph that fails a schema-1
+representability condition but passes every schema-2 condition enters the schema-2 variant. A
+malformed graph, unsafe texture name, non-null tag or unsupported effect fails rather than
+upgrades. CNJ/glTF/default generated Models never select the new carrier. `CP-059` advances the
+XNB importer and shared Model processor/writer identities to version 3 because their accepted
+semantics and declared output set changed; that intentionally causes one safe cache rebuild while
+leaving the selected schema-1 CNB bytes unchanged.
 
 ### 33.5 Independent conformance result
 
@@ -2657,3 +2659,89 @@ threshold.
 The public C++ carrier/codec adds 122 inventory rows. They are assigned to open `CBIND-117`, taking
 the generated inventory to 551 headers / 9,482 symbols with 651 planned rows. No C header, export,
 ABI version, or C route changed; wire-format stability does not silently authorize a C ABI design.
+
+---
+
+## 34. Broader lossless XNB Model transcoding (`CP-059`)
+
+CP-059 extends the shared headless XNB graph rather than adding a second Model parser. The same
+canonical readers used by runtime XNB loading now expose all five stock-effect records and retain
+vertex-buffer, index-buffer, and effect shared-resource identity. The runtime stock-effect readers
+delegate their field decoding to those CPU routines after resolving their ordinary external
+references. The compiler neither creates a `GraphicsDevice` nor constructs a runtime Effect.
+
+`ConvertXnbModelToCnbV2()` independently validates and maps the canonical graph. It uses explicit
+switches for all twelve `VertexElementFormat` and thirteen `VertexElementUsage` values rather than
+persisting ABI enum ordinals. It interns exact declarations, keeps each shared vertex/index/effect
+resource as one document-local row (including supported unused resources), and preserves exact
+buffer bytes, part windows, spheres, bone order/parents/transforms, explicit root, material fields,
+and typed Texture2D/TextureCube XREFs. Schema-2's authoritative encoder applies the complete frozen
+wire validator before any artifact is published.
+
+### 34.1 XNB Model support matrix
+
+| Source semantic | Native result |
+|---|---|
+| canonical schema-1 declaration, unique whole buffers, root 0/identity, reproducible sphere, unique BasicEffect with default `SpecularPower` | schema 1, through the unchanged converter/encoder, with exactly the pre-CP-059 bytes |
+| all XNA declaration formats/usages, exact offsets/stride/usage index | schema 2, exact stable declaration IDs |
+| shared or unused supported vertex/index/effect resources | schema 2, document-local identity retained; equal bytes are not deduplicated |
+| `VertexOffset`, `NumVertices`, `StartIndex`, `PrimitiveCount` | schema 2, exact validated windows |
+| serialized mesh sphere | schema 2, exact finite center and nonnegative radius |
+| nonzero explicit root, multiple parentless bones, every bone transform | schema 2, exact hierarchy/root semantics |
+| `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect` | schema 2, every field admitted by §11.4 plus shared effect identity |
+| contained stock-effect texture references | schema 2, normalized logical XREF with exact Texture2D/TextureCube type |
+| null Model/Mesh/MeshPart tags | supported in both schemas |
+| non-null tag | rejected; no CLR object serialization is invented |
+| custom Effect reader/material graph or another shared-resource reader | rejected; no approximation or generic Effect encoding |
+| invalid fixup/resource reference, parent/child graph, range/count/window/index, compare function, or skin weight count | rejected before publication |
+| absolute, traversal, empty, or otherwise unsafe logical texture reference | rejected through the existing content-path policy |
+
+Selection is deterministic: `XnbImporter` first runs the existing schema-1 representability
+converter. If it succeeds, that carrier goes to `EncodeModelToCnb()` unchanged. If and only if it
+reports a fidelity failure, the schema-2 converter must validate the original graph completely;
+its success selects `EncodeModelV2ToCnb()`, and its failure is fatal. The compiler logs which
+schema was selected and, for schema 2, the specific schema-1 fidelity boundary. CNJ and glTF
+continue to produce schema 1, including every existing default and generated-child byte.
+
+### 34.2 Writer and manifest contract
+
+One Model writer can legitimately emit two schemas for the same asset type/name. Writer schema
+declarations are therefore unique and sorted by `(assetTypeId, assetTypeName, assetSchemaVersion)`,
+and `ContentWriteResult` plus each additional output reports the exact emitted schema. The core
+rejects an emitted tuple the writer did not declare. This is structured cache identity; the writer
+does not parse its own CNB bytes and the manifest does not infer a schema from RTTI.
+
+Manifest version 8 records the resulting exact output schema and permits multiple declared schemas
+for one asset identity. Version 7 cannot express that declaration contract unambiguously and is
+therefore incompatible rather than being reinterpreted. Its outputs are not deletion authority:
+the first v8 build safely rebuilds/replaces requested paths, preserves old-only paths, and publishes
+a fresh manifest atomically. The persisted CP-052 reason domains and CP-053 structured explanations
+remain unchanged. Importer/processor/writer identities advance to version 3 because accepted
+semantics and the declared output set changed; the selected schema-1 CNB bytes themselves do not.
+
+### 34.3 Semantic equivalence boundary
+
+Synthetic fixtures compare runtime XNB A with XNB-to-schema-2-CNB runtime B for bone graph/root/
+transforms, mesh names/parents/bounds, exact declarations and vertex/index bytes, part windows,
+shared object identity, all five stock-effect properties, typed texture references, and null tags.
+The repository's real MonoGame Blender cube independently proves a Position+Normal declaration,
+authored sphere, and non-default BasicEffect `SpecularPower` through the same comparison. A
+schema-1-compatible fixture additionally compares compiler output byte-for-byte with a direct call
+to the unchanged schema-1 encoder. Counts alone are not treated as equivalence.
+
+The normal affected boundary passes 143/143 cases across seven suites (142 pass plus the expected
+disabled >2 GiB hash gate), including the 20,000-node deep graph/cycle case. The same 143-case
+selection passes combined ASan+UBSan with both sanitizers halting on first error and
+`detect_leaks=0`; LeakSanitizer is not claimed because this runner still reports its explicit
+ptrace incompatibility. No scheduler/shared mutable state changed, so CP-059 adds no new TSan
+obligation beyond the already passing frozen-registry and worker determinism cases.
+
+MinGW-w64 compiles and links both PE32+ Unicode-console compiler executables. Wine 10 runs the new
+stock executable against the real MonoGame Blender cube: it publishes a 1,896-byte Model type 5/
+schema-2 document on the first invocation, then reports the manifest-v8 fingerprint/output-digest
+no-op on the second. Native inspection confirms all thirteen schema-2 chunks. This is Wine evidence,
+not native MSVC/Windows evidence.
+
+The generated C-API inventory records the two emitted-schema fields and `CanonicalModelValue`
+alias under open `CBIND-117`: 551 headers / 9,485 symbols, 654 planned rows. No C header, export,
+ABI version, or C route changed.

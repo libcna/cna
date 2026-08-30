@@ -12,6 +12,7 @@
 
 #include "CNA/Content/Cnb/CnbTextureCodec.hpp"
 #include "CNA/Content/Cnb/CnbModelData.hpp"
+#include "CNA/Content/Cnb/CnbModelV2Data.hpp"
 #include "CNA/Content/Import/ImportedSound.hpp"
 #include "CNA/Internal/Xnb/XnbHeader.hpp"
 #include "CNA/Internal/Xnb/XnbReadLimits.hpp"
@@ -218,6 +219,78 @@ namespace CNA::Internal::Xnb
         bool vertexColorEnabled = false;
     };
 
+    /** @brief Serialized AlphaTestEffect state from an XNB shared resource. */
+    struct XnbAlphaTestEffectData
+    {
+        /** @brief Authored external Texture2D reference, or empty. */
+        std::string textureReference;
+        /** @brief Serialized CompareFunction ordinal. */
+        std::int32_t alphaFunction = 0;
+        /** @brief Serialized reference-alpha bits. */
+        std::uint32_t referenceAlpha = 0u;
+        /** @brief Diffuse RGB multiplier. */
+        Microsoft::Xna::Framework::Vector3 diffuseColor{1.0f, 1.0f, 1.0f};
+        /** @brief Opacity multiplier. */
+        float alpha = 1.0f;
+        /** @brief Whether the effect consumes the vertex-colour element. */
+        bool vertexColorEnabled = false;
+    };
+
+    /** @brief Serialized DualTextureEffect state from an XNB shared resource. */
+    struct XnbDualTextureEffectData
+    {
+        /** @brief Authored primary external Texture2D reference, or empty. */
+        std::string textureReference;
+        /** @brief Authored secondary external Texture2D reference, or empty. */
+        std::string texture2Reference;
+        /** @brief Diffuse RGB multiplier. */
+        Microsoft::Xna::Framework::Vector3 diffuseColor{1.0f, 1.0f, 1.0f};
+        /** @brief Opacity multiplier. */
+        float alpha = 1.0f;
+        /** @brief Whether the effect consumes the vertex-colour element. */
+        bool vertexColorEnabled = false;
+    };
+
+    /** @brief Serialized EnvironmentMapEffect state from an XNB shared resource. */
+    struct XnbEnvironmentMapEffectData
+    {
+        /** @brief Authored primary external Texture2D reference, or empty. */
+        std::string textureReference;
+        /** @brief Authored external TextureCube reference, or empty. */
+        std::string environmentMapReference;
+        /** @brief Environment-map contribution. */
+        float environmentMapAmount = 1.0f;
+        /** @brief Environment-map specular RGB multiplier. */
+        Microsoft::Xna::Framework::Vector3 environmentMapSpecular{1.0f, 1.0f, 1.0f};
+        /** @brief Fresnel multiplier. */
+        float fresnelFactor = 1.0f;
+        /** @brief Diffuse RGB multiplier. */
+        Microsoft::Xna::Framework::Vector3 diffuseColor{1.0f, 1.0f, 1.0f};
+        /** @brief Emissive RGB contribution. */
+        Microsoft::Xna::Framework::Vector3 emissiveColor{};
+        /** @brief Opacity multiplier. */
+        float alpha = 1.0f;
+    };
+
+    /** @brief Serialized SkinnedEffect state from an XNB shared resource. */
+    struct XnbSkinnedEffectData
+    {
+        /** @brief Authored external Texture2D reference, or empty. */
+        std::string textureReference;
+        /** @brief Number of skinning weights consumed per vertex. */
+        std::int32_t weightsPerVertex = 4;
+        /** @brief Diffuse RGB multiplier. */
+        Microsoft::Xna::Framework::Vector3 diffuseColor{1.0f, 1.0f, 1.0f};
+        /** @brief Emissive RGB contribution. */
+        Microsoft::Xna::Framework::Vector3 emissiveColor{};
+        /** @brief Specular RGB multiplier. */
+        Microsoft::Xna::Framework::Vector3 specularColor{1.0f, 1.0f, 1.0f};
+        /** @brief Specular exponent. */
+        float specularPower = 16.0f;
+        /** @brief Opacity multiplier. */
+        float alpha = 1.0f;
+    };
+
     /** @brief One bone in the canonical XNB Model graph. */
     struct XnbModelBoneData
     {
@@ -269,7 +342,9 @@ namespace CNA::Internal::Xnb
         /** @brief Exact normalized reader identity. */
         std::string reader;
         /** @brief CPU value produced by that reader. */
-        std::variant<XnbVertexBufferData, XnbIndexBufferData, XnbBasicEffectData> value;
+        std::variant<XnbVertexBufferData, XnbIndexBufferData, XnbBasicEffectData,
+                     XnbAlphaTestEffectData, XnbDualTextureEffectData,
+                     XnbEnvironmentMapEffectData, XnbSkinnedEffectData> value;
     };
 
     /** @brief Complete device-independent XNB Model graph before schema-1 subset conversion. */
@@ -431,12 +506,64 @@ namespace CNA::Internal::Xnb
         std::string textureReference);
 
     /**
+     * @brief Reads AlphaTestEffect fields after its external texture-reference string.
+     * @param input Content reader positioned at AlphaFunction.
+     * @param textureReference Raw authored texture reference already read by the caller.
+     * @return Canonical serialized AlphaTestEffect state.
+     */
+    [[nodiscard]] XnbAlphaTestEffectData DecodeAlphaTestEffectXnbData(
+        Microsoft::Xna::Framework::Content::ContentReader& input,
+        std::string textureReference);
+
+    /**
+     * @brief Reads DualTextureEffect fields after its two external texture-reference strings.
+     * @param input Content reader positioned at DiffuseColor.
+     * @param textureReference Raw authored primary texture reference.
+     * @param texture2Reference Raw authored secondary texture reference.
+     * @return Canonical serialized DualTextureEffect state.
+     */
+    [[nodiscard]] XnbDualTextureEffectData DecodeDualTextureEffectXnbData(
+        Microsoft::Xna::Framework::Content::ContentReader& input,
+        std::string textureReference, std::string texture2Reference);
+
+    /**
+     * @brief Reads EnvironmentMapEffect fields after its external texture references.
+     * @param input Content reader positioned at EnvironmentMapAmount.
+     * @param textureReference Raw authored primary Texture2D reference.
+     * @param environmentMapReference Raw authored TextureCube reference.
+     * @return Canonical serialized EnvironmentMapEffect state.
+     */
+    [[nodiscard]] XnbEnvironmentMapEffectData DecodeEnvironmentMapEffectXnbData(
+        Microsoft::Xna::Framework::Content::ContentReader& input,
+        std::string textureReference, std::string environmentMapReference);
+
+    /**
+     * @brief Reads SkinnedEffect fields after its external texture-reference string.
+     * @param input Content reader positioned at WeightsPerVertex.
+     * @param textureReference Raw authored Texture2D reference.
+     * @return Canonical serialized SkinnedEffect state.
+     */
+    [[nodiscard]] XnbSkinnedEffectData DecodeSkinnedEffectXnbData(
+        Microsoft::Xna::Framework::Content::ContentReader& input,
+        std::string textureReference);
+
+    /**
      * @brief Converts the lossless CP-040 XNB Model subset to frozen Model schema-1 data.
      * @param source Validated canonical Model graph and shared resources.
      * @param resolveTexture Converts an authored relative texture reference to a CNB logical name.
      * @return Model schema-1 data for the existing processor/writer path.
      */
     [[nodiscard]] CNA::Content::Cnb::CnbModelData ConvertXnbModelToCnb(
+        const XnbModelData& source,
+        const std::function<std::string(const std::string&)>& resolveTexture);
+
+    /**
+     * @brief Converts a validated XNB Model graph to exact Model schema-2 resource data.
+     * @param source Canonical Model graph and supported stock shared resources.
+     * @param resolveTexture Converts each authored texture reference to a CNB logical name.
+     * @return Model schema-2 data preserving declarations, sharing, bounds, root, and windows.
+     */
+    [[nodiscard]] CNA::Content::Cnb::CnbModelV2Data ConvertXnbModelToCnbV2(
         const XnbModelData& source,
         const std::function<std::string(const std::string&)>& resolveTexture);
 

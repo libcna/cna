@@ -203,6 +203,8 @@ namespace
             DuplicateSchemaDeclarations,
             UnsortedSchemaDeclarations,
             UndeclaredPrimaryIdentity,
+            AlternateDeclaredSchema,
+            UndeclaredPrimarySchema,
         };
 
         explicit NumberWriter(std::string name = "test.NumberWriter",
@@ -223,7 +225,7 @@ namespace
             if (behavior_ == OutputBehavior::DuplicateSchemaDeclarations)
             {
                 return {{42u, 1u, "Test.ProcessedNumber", {"Test.NumberCodec", "1"}},
-                        {42u, 2u, "Test.ProcessedNumber", {"Test.NumberCodec", "2"}}};
+                        {42u, 1u, "Test.ProcessedNumber", {"Test.NumberCodec", "1"}}};
             }
             if (behavior_ == OutputBehavior::UnsortedSchemaDeclarations)
             {
@@ -233,6 +235,12 @@ namespace
             if (behavior_ == OutputBehavior::UndeclaredPrimaryIdentity)
             {
                 return {{43u, 1u, "Test.NumberIndex", {"Test.NumberIndexCodec", "1"}}};
+            }
+            if (behavior_ == OutputBehavior::AlternateDeclaredSchema)
+            {
+                return {{42u, 1u, "Test.ProcessedNumber", {"Test.NumberCodec", "1"}},
+                        {42u, 2u, "Test.ProcessedNumber", {"Test.NumberCodec", "2"}},
+                        {43u, 1u, "Test.NumberIndex", {"Test.NumberIndexCodec", "1"}}};
             }
             return {{42u, 1u, "Test.ProcessedNumber", {"Test.NumberCodec", "1"}},
                     {43u, 1u, "Test.NumberIndex", {"Test.NumberIndexCodec", "1"}}};
@@ -251,26 +259,30 @@ namespace
                 {static_cast<std::uint8_t>(number.value),
                  static_cast<std::uint8_t>(logicalName.size())},
                 42u,
-                "Test.ProcessedNumber"};
+                "Test.ProcessedNumber",
+                behavior_ == OutputBehavior::AlternateDeclaredSchema ||
+                        behavior_ == OutputBehavior::UndeclaredPrimarySchema
+                    ? 2u
+                    : 1u};
             if (behavior_ == OutputBehavior::ValidAdditional)
             {
                 result.additionalOutputs.push_back(
-                    {logicalName + "-index", {1u, 2u}, 43u, "Test.NumberIndex"});
+                    {logicalName + "-index", {1u, 2u}, 43u, "Test.NumberIndex", 1u});
             }
             else if (behavior_ == OutputBehavior::DuplicateName)
             {
                 result.additionalOutputs.push_back(
-                    {logicalName, {1u}, 43u, "Test.NumberIndex"});
+                    {logicalName, {1u}, 43u, "Test.NumberIndex", 1u});
             }
             else if (behavior_ == OutputBehavior::TraversalName)
             {
                 result.additionalOutputs.push_back(
-                    {"../escape", {1u}, 43u, "Test.NumberIndex"});
+                    {"../escape", {1u}, 43u, "Test.NumberIndex", 1u});
             }
             else if (behavior_ == OutputBehavior::EmptyAdditional)
             {
                 result.additionalOutputs.push_back(
-                    {logicalName + "-index", {}, 43u, "Test.NumberIndex"});
+                    {logicalName + "-index", {}, 43u, "Test.NumberIndex", 1u});
             }
             else if (behavior_ == OutputBehavior::TooMany)
             {
@@ -278,7 +290,7 @@ namespace
                 {
                     result.additionalOutputs.push_back(
                         {logicalName + "-" + std::to_string(index), {1u}, 43u,
-                         "Test.NumberIndex"});
+                         "Test.NumberIndex", 1u});
                 }
             }
             return result;
@@ -815,6 +827,25 @@ TEST(ContentPipelineCoreTest, BuildAcceptsBoundedExplicitlyNamedAdditionalOutput
     EXPECT_EQ(result.output.additionalOutputs.front().bytes,
               (std::vector<std::uint8_t>{1u, 2u}));
     EXPECT_EQ(result.output.additionalOutputs.front().assetTypeId, 43u);
+    EXPECT_EQ(result.output.additionalOutputs.front().assetSchemaVersion, 1u);
+}
+
+TEST(ContentPipelineCoreTest, WriterMayDeclareMultipleSchemasForOneAssetIdentity)
+{
+    ScratchDirectory scratch("multiple_schemas");
+    Pipeline::ContentBuildRequest request = MakeRequest(scratch);
+    auto registry = std::make_shared<Pipeline::ContentPipelineRegistry>();
+    registry->RegisterImporter(std::make_shared<NumberImporter>());
+    registry->RegisterProcessor(std::make_shared<NumberProcessor>());
+    registry->RegisterWriter(std::make_shared<NumberWriter>(
+        "test.MultiSchemaWriter", NumberWriter::OutputBehavior::AlternateDeclaredSchema));
+
+    const Pipeline::ContentBuildResult result = Pipeline::ContentPipeline(registry).Build(request);
+    EXPECT_EQ(result.output.assetTypeId, 42u);
+    EXPECT_EQ(result.output.assetSchemaVersion, 2u);
+    ASSERT_EQ(result.writerSchemas.size(), 3u);
+    EXPECT_EQ(result.writerSchemas[0].assetSchemaVersion, 1u);
+    EXPECT_EQ(result.writerSchemas[1].assetSchemaVersion, 2u);
 }
 
 TEST(ContentPipelineCoreTest, BuildRejectsUnsafeDuplicateEmptyAndUnboundedOutputsAtWriteStage)
@@ -829,7 +860,8 @@ TEST(ContentPipelineCoreTest, BuildRejectsUnsafeDuplicateEmptyAndUnboundedOutput
           NumberWriter::OutputBehavior::EmptySchemaDeclarations,
           NumberWriter::OutputBehavior::DuplicateSchemaDeclarations,
           NumberWriter::OutputBehavior::UnsortedSchemaDeclarations,
-          NumberWriter::OutputBehavior::UndeclaredPrimaryIdentity})
+          NumberWriter::OutputBehavior::UndeclaredPrimaryIdentity,
+          NumberWriter::OutputBehavior::UndeclaredPrimarySchema})
     {
         auto registry = std::make_shared<Pipeline::ContentPipelineRegistry>();
         registry->RegisterImporter(std::make_shared<NumberImporter>());

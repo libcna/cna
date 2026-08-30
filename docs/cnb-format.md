@@ -915,6 +915,14 @@ load schema 1, and creates the exact schema-2 root, transforms, declarations, sh
 bounds, windows, and stock effects. The independent Model-v2 conformance vector is 1,468 bytes
 with SHA-256 `6a9dc3f5363ae82a93ba8e01fee1059802ac1325d5fd76565ccddb09d928ad78`.
 
+The XNB compatibility producer attempts the unchanged schema-1 representability converter first.
+Success uses `EncodeModelToCnb()` and retains the existing bytes. Only a graph that fails that
+fidelity boundary and then passes the complete schema-2 validator uses `EncodeModelV2ToCnb()`.
+This preserves exact XNA declarations, shared resources, part windows, authored spheres/root, and
+the five stock effects where schema 1 cannot. Non-null tags, custom effects, unknown resource
+readers, unsafe references, and malformed semantics remain explicit failures. CNJ and glTF
+producer policy remains schema 1; adding schema 2 did not change their existing output bytes.
+
 ---
 
 ## 12. Error handling and limits
@@ -1134,7 +1142,7 @@ A type can be fully readable at runtime and still have no supported way to *prod
 | `TextureCube` | §16 | yes | `EncodeTextureCubeToCnb` | **yes** — DDS source, and `.cnj` |
 | `Texture3D` | §16 | yes | `EncodeTexture3DToCnb` | **yes** — `.cnj` (raw RGBA sidecar) |
 | `SpriteFont` | §17 | yes | `EncodeSpriteFontToCnb` | **yes** — `.cnj`, atlas absorbed |
-| `Model` | §11 | yes | `EncodeModelToCnb` | **yes** — glTF direct, and `.cnj` |
+| `Model` | §11 | yes | `EncodeModelToCnb`, `EncodeModelV2ToCnb` | **yes** — glTF/`.cnj` schema 1; compatible XNB schema 1 or exact schema 2 |
 | `AnimationClip` | §10 | yes | `EncodeAnimationClipToCnb` | **yes** — `.cnj` |
 | `Curve` | §9 | yes | `EncodeCurveToCnb` | **yes** — `.cnj` |
 | `SoundEffect` | §18 | yes | `EncodeSoundEffectToCnb` | **yes** — WAV source, and `.cnj`. PCM16 and 8-bit unsigned PCM only |

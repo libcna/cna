@@ -9,11 +9,17 @@
 #include <vector>
 
 #include "CNA/Content/Cnb/CnbModelData.hpp"
+#include "CNA/Content/Cnb/CnbModelV2Data.hpp"
 #include "CNA/Content/Cnb/CnbTextureCodec.hpp"
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
 
 namespace CNA::Content::Pipeline
 {
+    /** @brief Canonical Model carrier selected between frozen schemas 1 and 2. */
+    using CanonicalModelValue =
+        std::variant<CNA::Content::Cnb::CnbModelData,
+                     CNA::Content::Cnb::CnbModelV2Data>;
+
     /** @brief Stable in-memory type identity for an imported glTF model document. */
     inline constexpr const char* ImportedModelDocumentType =
         "CNA.Content.Pipeline.ImportedModelDocument";
@@ -60,7 +66,7 @@ namespace CNA::Content::Pipeline
         bool recordAuthoredSidecars = false;
 
         /** @brief Canonical CPU Model supplied directly by XNB import, bypassing CNJ staging. */
-        std::optional<CNA::Content::Cnb::CnbModelData> canonicalModel;
+        std::optional<CanonicalModelValue> canonicalModel;
     };
 
     /** @brief Canonical value carried by one generated glTF child output. */
@@ -82,8 +88,8 @@ namespace CNA::Content::Pipeline
     /** @brief Primary Model plus optional deterministic generated child assets. */
     struct ProcessedModelBundle
     {
-        /** @brief Primary canonical Model value. */
-        CNA::Content::Cnb::CnbModelData primary;
+        /** @brief Primary canonical Model value with its selected schema carrier. */
+        CanonicalModelValue primary;
 
         /** @brief Generated child values sorted by logical name. */
         std::vector<ProcessedModelChild> children;

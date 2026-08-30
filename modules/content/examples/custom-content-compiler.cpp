@@ -185,12 +185,13 @@ namespace
         {
             const ProcessedGreeting& greeting = input.Get<ProcessedGreeting>();
             Pipeline::ContentWriteResult result{
-                EncodeGreetingToCnb(greeting, logicalName), GreetingAssetTypeId(), kAssetTypeName};
+                EncodeGreetingToCnb(greeting, logicalName), GreetingAssetTypeId(),
+                kAssetTypeName, 1u};
             const std::string replyLogicalName = "Generated/" + logicalName + "-reply";
             const ProcessedGreeting reply{"Reply: " + greeting.text};
             result.additionalOutputs.push_back(
                 {replyLogicalName, EncodeGreetingToCnb(reply, replyLogicalName),
-                 GreetingAssetTypeId(), kAssetTypeName});
+                 GreetingAssetTypeId(), kAssetTypeName, 1u});
             return result;
         }
     };

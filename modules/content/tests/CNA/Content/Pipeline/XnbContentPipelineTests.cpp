@@ -18,6 +18,7 @@
 #include "CNA/Content/Cnb/CnbDocument.hpp"
 #include "CNA/Content/Cnb/CnbMediaCodec.hpp"
 #include "CNA/Content/Cnb/CnbModelCodec.hpp"
+#include "CNA/Content/Cnb/CnbModelV2Codec.hpp"
 #include "CNA/Content/Cnb/CnbSoundEffectCodec.hpp"
 #include "CNA/Content/Cnb/CnbSourceImport.hpp"
 #include "CNA/Content/Cnb/CnbSpriteFontCodec.hpp"
@@ -39,11 +40,15 @@
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/AlphaTestEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -320,36 +325,60 @@ namespace
             payload.bytes);
     }
 
+    enum class ModelStockEffect
+    {
+        Basic,
+        AlphaTest,
+        DualTexture,
+        EnvironmentMap,
+        Skinned,
+        Unsupported,
+    };
+
     struct ModelXnbOptions
     {
         bool nonNullMeshTag = false;
         bool nonNullPartTag = false;
         bool nonNullModelTag = false;
         bool unsupportedDeclaration = false;
-        bool unsupportedEffect = false;
+        ModelStockEffect effect = ModelStockEffect::Basic;
         bool extraUnusedSharedResource = false;
         bool duplicatePart = false;
         bool use32BitIndices = false;
         bool childBone = false;
+        bool childBoneHasParent = true;
         bool invalidSharedReference = false;
         float specularPower = 16.0f;
         std::int32_t vertexOffset = 0;
+        std::int32_t vertexCount = 3;
+        std::int32_t startIndex = 0;
         std::int32_t primitiveCount = 1;
+        std::uint32_t vertexBufferVertexCount = 3u;
+        std::vector<std::uint32_t> indices{0u, 1u, 2u};
         std::uint8_t rootBoneReference = 1u;
         std::string textureReference;
+        std::string texture2Reference;
+        std::string cubeTextureReference;
         std::array<float, 4> boundingSphere{{1.0f, 0.0f, 0.0f, 1.0f}};
     };
 
     std::vector<std::uint8_t> MakeModelXnb(const ModelXnbOptions& options = {})
     {
-        const std::vector<std::string> readers{
+        std::vector<std::string> readers{
             "Microsoft.Xna.Framework.Content.ModelReader",
             "Microsoft.Xna.Framework.Content.StringReader",
             "Microsoft.Xna.Framework.Content.VertexBufferReader",
             "Microsoft.Xna.Framework.Content.VertexDeclarationReader",
             "Microsoft.Xna.Framework.Content.IndexBufferReader",
             "Microsoft.Xna.Framework.Content.BasicEffectReader",
-            "Microsoft.Xna.Framework.Content.AlphaTestEffectReader"};
+            "Microsoft.Xna.Framework.Content.AlphaTestEffectReader",
+            "Microsoft.Xna.Framework.Content.DualTextureEffectReader",
+            "Microsoft.Xna.Framework.Content.EnvironmentMapEffectReader",
+            "Microsoft.Xna.Framework.Content.SkinnedEffectReader"};
+        if (options.effect == ModelStockEffect::Unsupported)
+        {
+            readers.push_back("Game.Content.CustomEffectReader");
+        }
 
         ByteWriter payload;
         payload.U32(options.childBone ? 2u : 1u);
@@ -370,9 +399,9 @@ namespace
         if (options.childBone)
         {
             payload.U8(0u);  // root has no parent
-            payload.U32(1u); // root has one child
-            payload.U8(2u);  // child bone reference
-            payload.U8(1u);  // child parent is root
+            payload.U32(options.childBoneHasParent ? 1u : 0u);
+            if (options.childBoneHasParent) { payload.U8(2u); }
+            payload.U8(options.childBoneHasParent ? 1u : 0u);
             payload.U32(0u); // child has no children
         }
         else
@@ -393,8 +422,8 @@ namespace
         {
             if (part == 1 && !options.duplicatePart) { break; }
             payload.I32(options.vertexOffset);
-            payload.I32(3); // NumVertices
-            payload.I32(0); // StartIndex
+            payload.I32(options.vertexCount);
+            payload.I32(options.startIndex);
             payload.I32(options.primitiveCount);
             payload.SevenBit(options.nonNullPartTag ? 2u : 0u);
             if (options.nonNullPartTag) { payload.String("unsafe part tag"); }
@@ -413,30 +442,44 @@ namespace
         payload.I32(12); payload.I32(2);
         payload.I32(options.unsupportedDeclaration ? 1 : 3); payload.I32(0);
         payload.I32(24); payload.I32(1); payload.I32(2); payload.I32(0);
-        payload.U32(3u);
-        for (const std::array<float, 8>& vertex :
-             std::array<std::array<float, 8>, 3>{
+        payload.U32(options.vertexBufferVertexCount);
+        const std::array<std::array<float, 8>, 4> vertices{
                  std::array<float, 8>{0, 0, 0, 0, 0, 1, 0, 0},
                  std::array<float, 8>{2, 0, 0, 0, 0, 1, 1, 0},
-                 std::array<float, 8>{1, 0, 0, 0, 0, 1, 0.5f, 1}})
+                 std::array<float, 8>{1, 0, 0, 0, 0, 1, 0.5f, 1},
+                 std::array<float, 8>{3, 0, 0, 0, 0, 1, 1, 1}};
+        for (std::uint32_t vertexIndex = 0u;
+             vertexIndex < options.vertexBufferVertexCount; ++vertexIndex)
         {
+            const std::array<float, 8>& vertex = vertices.at(vertexIndex);
             for (const float value : vertex) { payload.F32(value); }
         }
 
         payload.SevenBit(5u); // shared resource 2: IndexBufferReader
         payload.U8(options.use32BitIndices ? 0u : 1u);
-        payload.I32(options.use32BitIndices ? 12 : 6);
-        if (options.use32BitIndices)
+        payload.I32(static_cast<std::int32_t>(
+            options.indices.size() * (options.use32BitIndices ? 4u : 2u)));
+        for (const std::uint32_t index : options.indices)
         {
-            payload.U32(0u); payload.U32(1u); payload.U32(2u);
-        }
-        else
-        {
-            payload.U16(0u); payload.U16(1u); payload.U16(2u);
+            if (options.use32BitIndices) { payload.U32(index); }
+            else { payload.U16(static_cast<std::uint16_t>(index)); }
         }
 
-        payload.SevenBit(options.unsupportedEffect ? 7u : 6u);
-        if (!options.unsupportedEffect)
+        const std::uint8_t effectReader = [&]
+        {
+            switch (options.effect)
+            {
+                case ModelStockEffect::Basic: return static_cast<std::uint8_t>(6u);
+                case ModelStockEffect::AlphaTest: return static_cast<std::uint8_t>(7u);
+                case ModelStockEffect::DualTexture: return static_cast<std::uint8_t>(8u);
+                case ModelStockEffect::EnvironmentMap: return static_cast<std::uint8_t>(9u);
+                case ModelStockEffect::Skinned: return static_cast<std::uint8_t>(10u);
+                case ModelStockEffect::Unsupported: return static_cast<std::uint8_t>(11u);
+            }
+            return static_cast<std::uint8_t>(11u);
+        }();
+        payload.SevenBit(effectReader);
+        if (options.effect == ModelStockEffect::Basic)
         {
             payload.String(options.textureReference);
             for (const float value : std::array<float, 3>{0.25f, 0.5f, 0.75f}) payload.F32(value);
@@ -445,6 +488,44 @@ namespace
             payload.F32(options.specularPower);
             payload.F32(0.5f);
             payload.U8(1u); // vertex colour enabled
+        }
+        else if (options.effect == ModelStockEffect::AlphaTest)
+        {
+            payload.String(options.textureReference);
+            payload.I32(6); // Greater
+            payload.U32(117u);
+            for (const float value : std::array<float, 3>{0.2f, 0.4f, 0.6f}) payload.F32(value);
+            payload.F32(0.7f);
+            payload.U8(1u);
+        }
+        else if (options.effect == ModelStockEffect::DualTexture)
+        {
+            payload.String(options.textureReference);
+            payload.String(options.texture2Reference);
+            for (const float value : std::array<float, 3>{0.3f, 0.5f, 0.7f}) payload.F32(value);
+            payload.F32(0.8f);
+            payload.U8(1u);
+        }
+        else if (options.effect == ModelStockEffect::EnvironmentMap)
+        {
+            payload.String(options.textureReference);
+            payload.String(options.cubeTextureReference);
+            payload.F32(0.35f);
+            for (const float value : std::array<float, 3>{0.8f, 0.6f, 0.4f}) payload.F32(value);
+            payload.F32(0.55f);
+            for (const float value : std::array<float, 3>{0.2f, 0.3f, 0.4f}) payload.F32(value);
+            for (const float value : std::array<float, 3>{0.05f, 0.1f, 0.15f}) payload.F32(value);
+            payload.F32(0.9f);
+        }
+        else if (options.effect == ModelStockEffect::Skinned)
+        {
+            payload.String(options.textureReference);
+            payload.I32(4);
+            for (const float value : std::array<float, 3>{0.4f, 0.5f, 0.6f}) payload.F32(value);
+            for (const float value : std::array<float, 3>{0.1f, 0.15f, 0.2f}) payload.F32(value);
+            for (const float value : std::array<float, 3>{0.7f, 0.8f, 0.9f}) payload.F32(value);
+            payload.F32(23.0f);
+            payload.F32(0.65f);
         }
 
         if (options.extraUnusedSharedResource)
@@ -471,7 +552,6 @@ namespace
         }
         catch (const Pipeline::ContentPipelineError& error)
         {
-            EXPECT_EQ(error.Stage(), Pipeline::ContentPipelineStage::Import);
             return error.what();
         }
         ADD_FAILURE() << "Model XNB unexpectedly transcoded";
@@ -514,7 +594,7 @@ TEST(XnbContentPipelineTest, Texture2DContainerCompressionVariantsProduceCanonic
         const Pipeline::ContentBuildResult first = BuildFixture(fixture, "Textures/legacy");
         const Pipeline::ContentBuildResult second = BuildFixture(fixture, "Textures/legacy");
         EXPECT_EQ(first.importer,
-                  (Pipeline::ContentComponentIdentity{"CNA.XnbImporter", "2"}));
+                  (Pipeline::ContentComponentIdentity{"CNA.XnbImporter", "3"}));
         EXPECT_EQ(first.processor,
                   (Pipeline::ContentComponentIdentity{"CNA.TextureProcessor", "1"}));
         EXPECT_EQ(first.output.bytes, second.output.bytes);
@@ -887,6 +967,8 @@ TEST(XnbContentPipelineTest, LosslessModelSubsetProducesCanonicalNativeModel)
     const auto& decoded = std::get<Xnb::XnbModelData>(canonical.value);
     const Cnb::CnbModelData expected = Xnb::ConvertXnbModelToCnb(
         decoded, [](const std::string& reference) { return reference; });
+    const std::vector<std::uint8_t> expectedBytes =
+        Cnb::EncodeModelToCnb(expected, "Models/triangle");
     const Pipeline::ContentBuildResult first =
         Build(scratch.Path(), "triangle.xnb", "Models/triangle");
     const Pipeline::ContentBuildResult second =
@@ -895,9 +977,14 @@ TEST(XnbContentPipelineTest, LosslessModelSubsetProducesCanonicalNativeModel)
 
     EXPECT_EQ(first.output.assetTypeId, Cnb::CnbAssetTypeId::Model);
     EXPECT_EQ(first.importer,
-              (Pipeline::ContentComponentIdentity{"CNA.XnbImporter", "2"}));
+              (Pipeline::ContentComponentIdentity{"CNA.XnbImporter", "3"}));
     EXPECT_EQ(first.processor,
-              (Pipeline::ContentComponentIdentity{"CNA.ModelProcessor", "2"}));
+              (Pipeline::ContentComponentIdentity{"CNA.ModelProcessor", "3"}));
+    EXPECT_EQ(first.writer,
+              (Pipeline::ContentComponentIdentity{"CNA.ModelContentWriter", "3"}));
+    EXPECT_EQ(first.output.assetSchemaVersion, Cnb::CnbModelSchemaVersion);
+    EXPECT_EQ(ParseOutput(first).AssetSchemaVersion(), Cnb::CnbModelSchemaVersion);
+    EXPECT_EQ(first.output.bytes, expectedBytes);
     EXPECT_EQ(first.output.bytes, second.output.bytes);
     ASSERT_EQ(actual.bones.size(), 1u);
     ASSERT_EQ(actual.meshes.size(), 1u);
@@ -1026,22 +1113,425 @@ TEST(XnbContentPipelineTest, LosslessModelSubsetMatchesRuntimeXnbModel)
     EXPECT_EQ(cnbMesh->getEffectsProperty().getCountProperty(), 1);
 }
 
-TEST(XnbContentPipelineTest, ModelRejectsEveryUnrepresentableSemanticPrecisely)
+TEST(XnbContentPipelineTest, BroaderLosslessModelsSelectSchemaTwoAndPreserveExactResources)
 {
     const std::filesystem::path model = FindXnbFixture(
         "monogame/windows/uncompressed/BlenderDefaultCube.xnb");
     ASSERT_FALSE(model.empty());
-    try
+    const Pipeline::ContentBuildResult fixture = BuildFixture(model, "Models/cube");
+    EXPECT_EQ(fixture.output.assetSchemaVersion, Cnb::CnbModelV2SchemaVersion);
+    const Cnb::CnbModelV2Data cube = Cnb::DecodeModelV2FromCnb(ParseOutput(fixture));
+    ASSERT_EQ(cube.bones.size(), 2u);
+    EXPECT_EQ(cube.rootBone, 0u);
+    EXPECT_EQ(cube.bones[0].name, "RootNode");
+    EXPECT_EQ(cube.bones[1].parent, 0);
+    ASSERT_EQ(cube.meshes.size(), 1u);
+    EXPECT_EQ(cube.meshes[0].name, "Cube");
+    EXPECT_EQ(cube.meshes[0].parentBone, 1);
+    EXPECT_FLOAT_EQ(cube.meshes[0].boundingSphere[0], -1.4901161193847656e-07f);
+    EXPECT_FLOAT_EQ(cube.meshes[0].boundingSphere[1], -1.1920928955078125e-07f);
+    EXPECT_FLOAT_EQ(cube.meshes[0].boundingSphere[3], 1.732050895690918f);
+    ASSERT_EQ(cube.vertexDeclarations.size(), 1u);
+    EXPECT_EQ(cube.vertexDeclarations[0].vertexStride, 24u);
+    ASSERT_EQ(cube.vertexDeclarations[0].elements.size(), 2u);
+    EXPECT_EQ(cube.vertexDeclarations[0].elements[0].usage,
+              Cnb::CnbModelV2VertexUsage::Position);
+    EXPECT_EQ(cube.vertexDeclarations[0].elements[1].usage,
+              Cnb::CnbModelV2VertexUsage::Normal);
+    ASSERT_EQ(cube.effects.size(), 1u);
+    EXPECT_FLOAT_EQ(cube.effects[0].specularPower, 9.607843399047852f);
+
+    ScratchDirectory advancedRoot("model_schema2_resources");
+    ModelXnbOptions advanced;
+    advanced.unsupportedDeclaration = true;
+    advanced.specularPower = 17.0f;
+    advanced.vertexOffset = 1;
+    advanced.vertexBufferVertexCount = 4u;
+    advanced.startIndex = 3;
+    advanced.indices = {2u, 1u, 0u, 0u, 1u, 2u};
+    advanced.boundingSphere[3] = 2.0f;
+    advanced.extraUnusedSharedResource = true;
+    advanced.duplicatePart = true;
+    advanced.childBone = true;
+    advanced.childBoneHasParent = false;
+    advanced.rootBoneReference = 2u;
+    WriteBytes(advancedRoot.Path() / "advanced.xnb", MakeModelXnb(advanced));
+    const Pipeline::ContentBuildResult built =
+        Build(advancedRoot.Path(), "advanced.xnb", "Models/advanced");
+    EXPECT_EQ(built.output.assetSchemaVersion, Cnb::CnbModelV2SchemaVersion);
+    const Cnb::CnbModelV2Data decoded = Cnb::DecodeModelV2FromCnb(ParseOutput(built));
+    EXPECT_EQ(decoded.rootBone, 1u);
+    EXPECT_EQ(decoded.bones[0].parent, -1);
+    EXPECT_EQ(decoded.bones[1].parent, -1);
+    EXPECT_EQ(decoded.meshes[0].boundingSphere,
+              (std::array<float, 4>{1.0f, 0.0f, 0.0f, 2.0f}));
+    ASSERT_EQ(decoded.vertexDeclarations.size(), 1u);
+    EXPECT_EQ(decoded.vertexDeclarations[0].elements[1].usage,
+              Cnb::CnbModelV2VertexUsage::Color);
+    ASSERT_EQ(decoded.vertexBuffers.size(), 1u);
+    EXPECT_EQ(decoded.vertexBuffers[0].vertexCount, 4u);
+    ASSERT_EQ(decoded.indexBuffers.size(), 1u);
+    EXPECT_EQ(decoded.indexBuffers[0].indexCount, 6u);
+    ASSERT_EQ(decoded.meshes[0].parts.size(), 2u);
+    EXPECT_EQ(decoded.meshes[0].parts[0].vertexOffset, 1u);
+    EXPECT_EQ(decoded.meshes[0].parts[0].startIndex, 3u);
+    EXPECT_EQ(decoded.meshes[0].parts[0].vertexBuffer,
+              decoded.meshes[0].parts[1].vertexBuffer);
+    EXPECT_EQ(decoded.meshes[0].parts[0].indexBuffer,
+              decoded.meshes[0].parts[1].indexBuffer);
+    EXPECT_EQ(decoded.meshes[0].parts[0].effect,
+              decoded.meshes[0].parts[1].effect);
+    ASSERT_EQ(decoded.effects.size(), 2u);
+    EXPECT_FLOAT_EQ(decoded.effects[0].specularPower, 17.0f);
+}
+
+TEST(XnbContentPipelineTest, RealMonoGameModelSchemaTwoMatchesRuntimeXnbSemantics)
+{
+    const std::filesystem::path source = FindXnbFixture(
+        "monogame/windows/uncompressed/BlenderDefaultCube.xnb");
+    ASSERT_FALSE(source.empty());
+    const Pipeline::ContentBuildResult built = BuildFixture(source, "Models/cube");
+    ASSERT_EQ(built.output.assetSchemaVersion, Cnb::CnbModelV2SchemaVersion);
+
+    ScratchDirectory scratch("model_schema2_real_runtime");
+    WriteBytes(scratch.Path() / "Models/cube.cnb", built.output.bytes);
+    GraphicsDevice device;
+    if (!device.SupportsCapability(CNA::GraphicsCapability::ThreeD))
     {
-        static_cast<void>(BuildFixture(model, "Models/cube"));
-        FAIL() << "Model XNB should be rejected until its shared GPU/effect graph is representable";
+        GTEST_SKIP() << "renderer has no 3D pipeline for runtime Model equivalence";
     }
-    catch (const Pipeline::ContentPipelineError& error)
+    Xnb::RegisterAllBuiltInXnbReaders();
+    ContentManager xnbContent(nullptr, source.parent_path().string());
+    xnbContent.setGraphicsDevice(device);
+    ContentManager cnbContent(nullptr, scratch.Path().string());
+    cnbContent.setGraphicsDevice(device);
+    const Model xnb = xnbContent.Load<Model>("BlenderDefaultCube");
+    const Model cnb = cnbContent.Load<Model>("Models/cube");
+
+    ASSERT_EQ(cnb.getBonesProperty().getCountProperty(),
+              xnb.getBonesProperty().getCountProperty());
+    EXPECT_EQ(cnb.getRootProperty()->getIndexProperty(),
+              xnb.getRootProperty()->getIndexProperty());
+    for (int bone = 0; bone < xnb.getBonesProperty().getCountProperty(); ++bone)
     {
-        EXPECT_EQ(error.Stage(), Pipeline::ContentPipelineStage::Import);
-        EXPECT_NE(std::string(error.what()).find("VertexDeclaration"), std::string::npos);
-        EXPECT_NE(std::string(error.what()).find("stride 24"), std::string::npos);
+        const auto* a = xnb.getBonesProperty()[bone];
+        const auto* b = cnb.getBonesProperty()[bone];
+        EXPECT_EQ(b->getNameProperty(), a->getNameProperty());
+        EXPECT_EQ(b->getTransformProperty(), a->getTransformProperty());
+        EXPECT_EQ(b->getParentProperty() == nullptr, a->getParentProperty() == nullptr);
+        if (a->getParentProperty() != nullptr)
+        {
+            ASSERT_NE(b->getParentProperty(), nullptr);
+            EXPECT_EQ(b->getParentProperty()->getIndexProperty(),
+                      a->getParentProperty()->getIndexProperty());
+        }
+        EXPECT_EQ(b->getChildrenProperty().getCountProperty(),
+                  a->getChildrenProperty().getCountProperty());
     }
+    ASSERT_EQ(cnb.getMeshesProperty().getCountProperty(), 1);
+    const auto* xnbMesh = xnb.getMeshesProperty()[0];
+    const auto* cnbMesh = cnb.getMeshesProperty()[0];
+    EXPECT_EQ(cnbMesh->getNameProperty(), xnbMesh->getNameProperty());
+    EXPECT_EQ(cnbMesh->getParentBoneProperty()->getIndexProperty(),
+              xnbMesh->getParentBoneProperty()->getIndexProperty());
+    EXPECT_EQ(cnbMesh->getBoundingSphereProperty(), xnbMesh->getBoundingSphereProperty());
+    ASSERT_EQ(cnbMesh->getMeshPartsProperty().getCountProperty(), 1);
+    const auto* xnbPart = xnbMesh->getMeshPartsProperty()[0];
+    const auto* cnbPart = cnbMesh->getMeshPartsProperty()[0];
+    EXPECT_EQ(cnbPart->getVertexOffsetProperty(), xnbPart->getVertexOffsetProperty());
+    EXPECT_EQ(cnbPart->getNumVerticesProperty(), xnbPart->getNumVerticesProperty());
+    EXPECT_EQ(cnbPart->getStartIndexProperty(), xnbPart->getStartIndexProperty());
+    EXPECT_EQ(cnbPart->getPrimitiveCountProperty(), xnbPart->getPrimitiveCountProperty());
+    const auto& xnbDeclaration =
+        xnbPart->getVertexBufferProperty()->getVertexDeclarationProperty();
+    const auto& cnbDeclaration =
+        cnbPart->getVertexBufferProperty()->getVertexDeclarationProperty();
+    EXPECT_EQ(cnbDeclaration.getVertexStrideProperty(),
+              xnbDeclaration.getVertexStrideProperty());
+    EXPECT_EQ(cnbDeclaration.GetVertexElements(), xnbDeclaration.GetVertexElements());
+    std::vector<std::uint8_t> xnbVertices(24u * 24u);
+    std::vector<std::uint8_t> cnbVertices(xnbVertices.size());
+    xnbPart->getVertexBufferProperty()->GetDataRawEXT(
+        0, xnbVertices.data(), 24, 24);
+    cnbPart->getVertexBufferProperty()->GetDataRawEXT(
+        0, cnbVertices.data(), 24, 24);
+    EXPECT_EQ(cnbVertices, xnbVertices);
+    std::vector<std::uint16_t> xnbIndices(36u);
+    std::vector<std::uint16_t> cnbIndices(36u);
+    xnbPart->getIndexBufferProperty()->GetData(xnbIndices.data(), 36);
+    cnbPart->getIndexBufferProperty()->GetData(cnbIndices.data(), 36);
+    EXPECT_EQ(cnbIndices, xnbIndices);
+    const auto* xnbEffect = dynamic_cast<const BasicEffect*>(xnbPart->getEffectProperty());
+    const auto* cnbEffect = dynamic_cast<const BasicEffect*>(cnbPart->getEffectProperty());
+    ASSERT_NE(xnbEffect, nullptr);
+    ASSERT_NE(cnbEffect, nullptr);
+    EXPECT_EQ(cnbEffect->getDiffuseColorProperty(), xnbEffect->getDiffuseColorProperty());
+    EXPECT_EQ(cnbEffect->getEmissiveColorProperty(), xnbEffect->getEmissiveColorProperty());
+    EXPECT_EQ(cnbEffect->getSpecularColorProperty(), xnbEffect->getSpecularColorProperty());
+    EXPECT_EQ(cnbEffect->getSpecularPowerProperty(), xnbEffect->getSpecularPowerProperty());
+    EXPECT_EQ(cnbEffect->getAlphaProperty(), xnbEffect->getAlphaProperty());
+    EXPECT_EQ(cnbEffect->getVertexColorEnabledProperty(),
+              xnbEffect->getVertexColorEnabledProperty());
+}
+
+TEST(XnbContentPipelineTest, ModelSchemaTwoPreservesAllFiveStockEffectRecordsAndTypedXrefs)
+{
+    ScratchDirectory scratch("model_schema2_effects");
+    const std::array<ModelStockEffect, 5> kinds{
+        ModelStockEffect::Basic, ModelStockEffect::AlphaTest,
+        ModelStockEffect::DualTexture, ModelStockEffect::EnvironmentMap,
+        ModelStockEffect::Skinned};
+    const std::array<Cnb::CnbModelV2EffectKind, 5> expectedKinds{
+        Cnb::CnbModelV2EffectKind::BasicEffect,
+        Cnb::CnbModelV2EffectKind::AlphaTestEffect,
+        Cnb::CnbModelV2EffectKind::DualTextureEffect,
+        Cnb::CnbModelV2EffectKind::EnvironmentMapEffect,
+        Cnb::CnbModelV2EffectKind::SkinnedEffect};
+
+    for (std::size_t index = 0u; index < kinds.size(); ++index)
+    {
+        ModelXnbOptions options;
+        options.effect = kinds[index];
+        options.textureReference = "../Textures/primary";
+        options.texture2Reference = "../Textures/secondary";
+        options.cubeTextureReference = "../Textures/environment";
+        if (options.effect == ModelStockEffect::Basic) { options.specularPower = 17.0f; }
+        const std::string source = "effect" + std::to_string(index) + ".xnb";
+        WriteBytes(scratch.Path() / source, MakeModelXnb(options));
+        const Pipeline::ContentBuildResult built =
+            Build(scratch.Path(), source, "Models/effect" + std::to_string(index));
+        EXPECT_EQ(built.output.assetSchemaVersion, Cnb::CnbModelV2SchemaVersion);
+        const Cnb::CnbModelV2Data model = Cnb::DecodeModelV2FromCnb(ParseOutput(built));
+        ASSERT_EQ(model.effects.size(), 1u);
+        const Cnb::CnbModelV2Effect& effect = model.effects[0];
+        EXPECT_EQ(effect.kind, expectedKinds[index]);
+        EXPECT_EQ(effect.primaryTexture, "Textures/primary");
+        if (options.effect == ModelStockEffect::DualTexture)
+        {
+            EXPECT_EQ(effect.secondaryTexture, "Textures/secondary");
+            EXPECT_EQ(effect.diffuse, (std::array<float, 3>{0.3f, 0.5f, 0.7f}));
+            EXPECT_FLOAT_EQ(effect.alpha, 0.8f);
+            EXPECT_TRUE(effect.vertexColorEnabled);
+        }
+        else if (options.effect == ModelStockEffect::EnvironmentMap)
+        {
+            EXPECT_EQ(effect.cubeTexture, "Textures/environment");
+            EXPECT_EQ(effect.specular, (std::array<float, 3>{0.8f, 0.6f, 0.4f}));
+            EXPECT_FLOAT_EQ(effect.environmentMapAmount, 0.35f);
+            EXPECT_FLOAT_EQ(effect.fresnelFactor, 0.55f);
+        }
+        else if (options.effect == ModelStockEffect::AlphaTest)
+        {
+            EXPECT_EQ(effect.alphaFunction, 6u);
+            EXPECT_EQ(effect.referenceAlpha, 117u);
+            EXPECT_TRUE(effect.vertexColorEnabled);
+        }
+        else if (options.effect == ModelStockEffect::Skinned)
+        {
+            EXPECT_EQ(effect.weightsPerVertex, 4u);
+            EXPECT_FLOAT_EQ(effect.specularPower, 23.0f);
+        }
+        else
+        {
+            EXPECT_FLOAT_EQ(effect.specularPower, 17.0f);
+        }
+
+        std::vector<Pipeline::RuntimeContentReference> expectedReferences{
+            {"Textures/primary", Cnb::CnbAssetTypeId::Texture2D}};
+        if (options.effect == ModelStockEffect::DualTexture)
+        {
+            expectedReferences.push_back(
+                {"Textures/secondary", Cnb::CnbAssetTypeId::Texture2D});
+        }
+        if (options.effect == ModelStockEffect::EnvironmentMap)
+        {
+            expectedReferences.push_back(
+                {"Textures/environment", Cnb::CnbAssetTypeId::TextureCube});
+        }
+        std::sort(expectedReferences.begin(), expectedReferences.end());
+        EXPECT_EQ(built.runtimeReferences, expectedReferences);
+    }
+}
+
+TEST(XnbContentPipelineTest, ModelSchemaTwoRuntimeMatchesXnbGraphBuffersWindowsSharingAndEffects)
+{
+    ScratchDirectory scratch("model_schema2_runtime");
+    const std::filesystem::path nativeRoot = scratch.Path() / "native";
+    const std::array<ModelStockEffect, 5> kinds{
+        ModelStockEffect::Basic, ModelStockEffect::AlphaTest,
+        ModelStockEffect::DualTexture, ModelStockEffect::EnvironmentMap,
+        ModelStockEffect::Skinned};
+    for (std::size_t index = 0u; index < kinds.size(); ++index)
+    {
+        ModelXnbOptions options;
+        options.effect = kinds[index];
+        options.duplicatePart = true;
+        if (options.effect == ModelStockEffect::Basic) { options.specularPower = 17.0f; }
+        const std::string name = "effect" + std::to_string(index);
+        WriteBytes(scratch.Path() / (name + ".xnb"), MakeModelXnb(options));
+        const Pipeline::ContentBuildResult built =
+            Build(scratch.Path(), name + ".xnb", name);
+        ASSERT_EQ(built.output.assetSchemaVersion, Cnb::CnbModelV2SchemaVersion);
+        WriteBytes(nativeRoot / (name + ".cnb"), built.output.bytes);
+    }
+
+    GraphicsDevice device;
+    if (!device.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+    {
+        GTEST_SKIP() << "renderer has no 3D pipeline for runtime Model equivalence";
+    }
+    Xnb::RegisterAllBuiltInXnbReaders();
+    ContentManager xnbContent(nullptr, scratch.Path().string());
+    xnbContent.setGraphicsDevice(device);
+    ContentManager cnbContent(nullptr, nativeRoot.string());
+    cnbContent.setGraphicsDevice(device);
+
+    for (std::size_t index = 0u; index < kinds.size(); ++index)
+    {
+        const std::string name = "effect" + std::to_string(index);
+        const Model xnb = xnbContent.Load<Model>(name);
+        const Model cnb = cnbContent.Load<Model>(name);
+        ASSERT_EQ(cnb.getBonesProperty().getCountProperty(),
+                  xnb.getBonesProperty().getCountProperty());
+        EXPECT_EQ(cnb.getRootProperty()->getIndexProperty(),
+                  xnb.getRootProperty()->getIndexProperty());
+        for (int bone = 0; bone < xnb.getBonesProperty().getCountProperty(); ++bone)
+        {
+            EXPECT_EQ(cnb.getBonesProperty()[bone]->getNameProperty(),
+                      xnb.getBonesProperty()[bone]->getNameProperty());
+            EXPECT_EQ(cnb.getBonesProperty()[bone]->getTransformProperty(),
+                      xnb.getBonesProperty()[bone]->getTransformProperty());
+        }
+        ASSERT_EQ(cnb.getMeshesProperty().getCountProperty(), 1);
+        const auto* xnbMesh = xnb.getMeshesProperty()[0];
+        const auto* cnbMesh = cnb.getMeshesProperty()[0];
+        EXPECT_EQ(cnbMesh->getNameProperty(), xnbMesh->getNameProperty());
+        EXPECT_EQ(cnbMesh->getParentBoneProperty()->getIndexProperty(),
+                  xnbMesh->getParentBoneProperty()->getIndexProperty());
+        EXPECT_EQ(cnbMesh->getBoundingSphereProperty(), xnbMesh->getBoundingSphereProperty());
+        ASSERT_EQ(cnbMesh->getMeshPartsProperty().getCountProperty(), 2);
+        ASSERT_EQ(xnbMesh->getMeshPartsProperty().getCountProperty(), 2);
+        const auto* xnbPart = xnbMesh->getMeshPartsProperty()[0];
+        const auto* cnbPart = cnbMesh->getMeshPartsProperty()[0];
+        EXPECT_EQ(cnbPart->getVertexOffsetProperty(), xnbPart->getVertexOffsetProperty());
+        EXPECT_EQ(cnbPart->getNumVerticesProperty(), xnbPart->getNumVerticesProperty());
+        EXPECT_EQ(cnbPart->getStartIndexProperty(), xnbPart->getStartIndexProperty());
+        EXPECT_EQ(cnbPart->getPrimitiveCountProperty(), xnbPart->getPrimitiveCountProperty());
+
+        const auto& xnbDeclaration = xnbPart->getVertexBufferProperty()
+                                         ->getVertexDeclarationProperty();
+        const auto& cnbDeclaration = cnbPart->getVertexBufferProperty()
+                                         ->getVertexDeclarationProperty();
+        EXPECT_EQ(cnbDeclaration.getVertexStrideProperty(),
+                  xnbDeclaration.getVertexStrideProperty());
+        EXPECT_EQ(cnbDeclaration.GetVertexElements(), xnbDeclaration.GetVertexElements());
+        const int vertexCount = xnbPart->getVertexBufferProperty()->getVertexCountProperty();
+        const int stride = xnbDeclaration.getVertexStrideProperty();
+        std::vector<std::uint8_t> xnbVertices(
+            static_cast<std::size_t>(vertexCount * stride));
+        std::vector<std::uint8_t> cnbVertices(xnbVertices.size());
+        xnbPart->getVertexBufferProperty()->GetDataRawEXT(
+            0, xnbVertices.data(), vertexCount, stride);
+        cnbPart->getVertexBufferProperty()->GetDataRawEXT(
+            0, cnbVertices.data(), vertexCount, stride);
+        EXPECT_EQ(cnbVertices, xnbVertices);
+
+        const int indexCount = xnbPart->getIndexBufferProperty()->getIndexCountProperty();
+        std::vector<std::uint16_t> xnbIndices(static_cast<std::size_t>(indexCount));
+        std::vector<std::uint16_t> cnbIndices(static_cast<std::size_t>(indexCount));
+        xnbPart->getIndexBufferProperty()->GetData(xnbIndices.data(), indexCount);
+        cnbPart->getIndexBufferProperty()->GetData(cnbIndices.data(), indexCount);
+        EXPECT_EQ(cnbIndices, xnbIndices);
+
+        EXPECT_EQ(xnbMesh->getMeshPartsProperty()[0]->getVertexBufferProperty(),
+                  xnbMesh->getMeshPartsProperty()[1]->getVertexBufferProperty());
+        EXPECT_EQ(cnbMesh->getMeshPartsProperty()[0]->getVertexBufferProperty(),
+                  cnbMesh->getMeshPartsProperty()[1]->getVertexBufferProperty());
+        EXPECT_EQ(xnbMesh->getMeshPartsProperty()[0]->getIndexBufferProperty(),
+                  xnbMesh->getMeshPartsProperty()[1]->getIndexBufferProperty());
+        EXPECT_EQ(cnbMesh->getMeshPartsProperty()[0]->getIndexBufferProperty(),
+                  cnbMesh->getMeshPartsProperty()[1]->getIndexBufferProperty());
+        EXPECT_EQ(xnbMesh->getMeshPartsProperty()[0]->getEffectProperty(),
+                  xnbMesh->getMeshPartsProperty()[1]->getEffectProperty());
+        EXPECT_EQ(cnbMesh->getMeshPartsProperty()[0]->getEffectProperty(),
+                  cnbMesh->getMeshPartsProperty()[1]->getEffectProperty());
+        EXPECT_EQ(cnbMesh->getEffectsProperty().getCountProperty(), 1);
+
+        if (kinds[index] == ModelStockEffect::Basic)
+        {
+            const auto* a = dynamic_cast<const BasicEffect*>(xnbPart->getEffectProperty());
+            const auto* b = dynamic_cast<const BasicEffect*>(cnbPart->getEffectProperty());
+            ASSERT_NE(a, nullptr);
+            ASSERT_NE(b, nullptr);
+            EXPECT_EQ(b->getDiffuseColorProperty(), a->getDiffuseColorProperty());
+            EXPECT_EQ(b->getEmissiveColorProperty(), a->getEmissiveColorProperty());
+            EXPECT_EQ(b->getSpecularColorProperty(), a->getSpecularColorProperty());
+            EXPECT_EQ(b->getSpecularPowerProperty(), a->getSpecularPowerProperty());
+            EXPECT_EQ(b->getAlphaProperty(), a->getAlphaProperty());
+            EXPECT_EQ(b->getVertexColorEnabledProperty(), a->getVertexColorEnabledProperty());
+        }
+        else if (kinds[index] == ModelStockEffect::AlphaTest)
+        {
+            using Microsoft::Xna::Framework::Graphics::AlphaTestEffect;
+            const auto* a = dynamic_cast<const AlphaTestEffect*>(xnbPart->getEffectProperty());
+            const auto* b = dynamic_cast<const AlphaTestEffect*>(cnbPart->getEffectProperty());
+            ASSERT_NE(a, nullptr);
+            ASSERT_NE(b, nullptr);
+            EXPECT_EQ(b->getDiffuseColorProperty(), a->getDiffuseColorProperty());
+            EXPECT_EQ(b->getAlphaProperty(), a->getAlphaProperty());
+            EXPECT_EQ(b->getVertexColorEnabledProperty(), a->getVertexColorEnabledProperty());
+            EXPECT_EQ(b->getAlphaFunctionProperty(), a->getAlphaFunctionProperty());
+            EXPECT_EQ(b->getReferenceAlphaProperty(), a->getReferenceAlphaProperty());
+        }
+        else if (kinds[index] == ModelStockEffect::DualTexture)
+        {
+            using Microsoft::Xna::Framework::Graphics::DualTextureEffect;
+            const auto* a = dynamic_cast<const DualTextureEffect*>(xnbPart->getEffectProperty());
+            const auto* b = dynamic_cast<const DualTextureEffect*>(cnbPart->getEffectProperty());
+            ASSERT_NE(a, nullptr);
+            ASSERT_NE(b, nullptr);
+            EXPECT_EQ(b->getDiffuseColorProperty(), a->getDiffuseColorProperty());
+            EXPECT_EQ(b->getAlphaProperty(), a->getAlphaProperty());
+            EXPECT_EQ(b->getVertexColorEnabledProperty(), a->getVertexColorEnabledProperty());
+        }
+        else if (kinds[index] == ModelStockEffect::EnvironmentMap)
+        {
+            using Microsoft::Xna::Framework::Graphics::EnvironmentMapEffect;
+            const auto* a = dynamic_cast<const EnvironmentMapEffect*>(
+                xnbPart->getEffectProperty());
+            const auto* b = dynamic_cast<const EnvironmentMapEffect*>(
+                cnbPart->getEffectProperty());
+            ASSERT_NE(a, nullptr);
+            ASSERT_NE(b, nullptr);
+            EXPECT_EQ(b->getDiffuseColorProperty(), a->getDiffuseColorProperty());
+            EXPECT_EQ(b->getEmissiveColorProperty(), a->getEmissiveColorProperty());
+            EXPECT_EQ(b->getAlphaProperty(), a->getAlphaProperty());
+            EXPECT_EQ(b->getEnvironmentMapAmountProperty(),
+                      a->getEnvironmentMapAmountProperty());
+            EXPECT_EQ(b->getEnvironmentMapSpecularProperty(),
+                      a->getEnvironmentMapSpecularProperty());
+            EXPECT_EQ(b->getFresnelFactorProperty(), a->getFresnelFactorProperty());
+        }
+        else
+        {
+            using Microsoft::Xna::Framework::Graphics::SkinnedEffect;
+            const auto* a = dynamic_cast<const SkinnedEffect*>(xnbPart->getEffectProperty());
+            const auto* b = dynamic_cast<const SkinnedEffect*>(cnbPart->getEffectProperty());
+            ASSERT_NE(a, nullptr);
+            ASSERT_NE(b, nullptr);
+            EXPECT_EQ(b->getWeightsPerVertexProperty(), a->getWeightsPerVertexProperty());
+            EXPECT_EQ(b->getDiffuseColorProperty(), a->getDiffuseColorProperty());
+            EXPECT_EQ(b->getEmissiveColorProperty(), a->getEmissiveColorProperty());
+            EXPECT_EQ(b->getSpecularColorProperty(), a->getSpecularColorProperty());
+            EXPECT_EQ(b->getSpecularPowerProperty(), a->getSpecularPowerProperty());
+            EXPECT_EQ(b->getAlphaProperty(), a->getAlphaProperty());
+        }
+        EXPECT_EQ(cnb.getTagProperty(), nullptr);
+    }
+}
+
+TEST(XnbContentPipelineTest, ModelStillRejectsUnsupportedOrMalformedSemanticsPrecisely)
+{
 
     ModelXnbOptions options;
     options.nonNullMeshTag = true;
@@ -1054,33 +1544,13 @@ TEST(XnbContentPipelineTest, ModelRejectsEveryUnrepresentableSemanticPrecisely)
     options.nonNullModelTag = true;
     EXPECT_NE(BuildModelFailure(options).find("Model has a non-null Tag"), std::string::npos);
     options = {};
-    options.unsupportedDeclaration = true;
-    EXPECT_NE(BuildModelFailure(options).find("VertexDeclaration element"), std::string::npos);
-    options = {};
-    options.specularPower = 17.0f;
-    EXPECT_NE(BuildModelFailure(options).find("BasicEffect.SpecularPower = 17"), std::string::npos);
-    options = {};
-    options.vertexOffset = 1;
-    EXPECT_NE(BuildModelFailure(options).find("VertexOffset = 1"), std::string::npos);
-    options = {};
     options.primitiveCount = 2;
-    EXPECT_NE(BuildModelFailure(options).find("triangle count does not consume"),
+    EXPECT_NE(BuildModelFailure(options).find("exceeds its index buffer"),
               std::string::npos);
     options = {};
-    options.boundingSphere[3] = 2.0f;
-    EXPECT_NE(BuildModelFailure(options).find("bounding sphere differs"), std::string::npos);
-    options = {};
-    options.unsupportedEffect = true;
-    EXPECT_NE(BuildModelFailure(options).find("AlphaTestEffectReader"), std::string::npos);
-    options = {};
-    options.extraUnusedSharedResource = true;
-    const std::string unusedFailure = BuildModelFailure(options);
-    EXPECT_NE(unusedFailure.find("shared resource 4 using reader"), std::string::npos)
-        << unusedFailure;
-    EXPECT_NE(unusedFailure.find("is unused"), std::string::npos) << unusedFailure;
-    options = {};
-    options.duplicatePart = true;
-    EXPECT_NE(BuildModelFailure(options).find("is referenced 2 times"), std::string::npos);
+    options.effect = ModelStockEffect::Unsupported;
+    EXPECT_NE(BuildModelFailure(options).find("Game.Content.CustomEffectReader"),
+              std::string::npos);
     options = {};
     options.invalidSharedReference = true;
     EXPECT_NE(BuildModelFailure(options).find("out-of-range shared-resource reference"),
@@ -1088,7 +1558,7 @@ TEST(XnbContentPipelineTest, ModelRejectsEveryUnrepresentableSemanticPrecisely)
     options = {};
     options.childBone = true;
     options.rootBoneReference = 2u;
-    EXPECT_NE(BuildModelFailure(options).find("serialized root bone is not bone 0"),
+    EXPECT_NE(BuildModelFailure(options).find("serialized root bone has a parent"),
               std::string::npos);
     options = {};
     options.textureReference = "../../outside";

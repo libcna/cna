@@ -725,6 +725,9 @@ namespace CNA::Content::Pipeline
 
         /** @brief Canonical runtime type name used in diagnostics. */
         std::string assetTypeName;
+
+        /** @brief Asset schema version emitted in the CNB header. */
+        std::uint32_t assetSchemaVersion = 0u;
     };
 
     /** @brief Primary CNB output and any bounded, explicitly named additional outputs. */
@@ -738,6 +741,9 @@ namespace CNA::Content::Pipeline
 
         /** @brief Primary canonical runtime type name used in diagnostics. */
         std::string assetTypeName;
+
+        /** @brief Primary asset schema version emitted in the CNB header. */
+        std::uint32_t assetSchemaVersion = 0u;
 
         /** @brief Additional outputs whose logical names are distinct from the primary asset. */
         std::vector<ContentAdditionalWriteOutput> additionalOutputs;
@@ -761,10 +767,11 @@ namespace CNA::Content::Pipeline
         /**
          * @brief Declares every stable asset/schema/codec identity this writer can emit.
          *
-         * The result must be nonempty, strictly ordered by asset type ID then canonical type
-         * name, and contain at most one entry for each such pair. The build cache records this
-         * declaration before invoking the writer, so schema or codec evolution invalidates old
-         * output even when the writer component version was accidentally left unchanged.
+         * The result must be nonempty, strictly ordered by asset type ID, canonical type name,
+         * then schema version, and contain at most one entry for each such tuple. The build cache
+         * records this declaration before invoking the writer, so schema or codec evolution
+         * invalidates old output even when the writer component version was accidentally left
+         * unchanged.
          *
          * @return Immutable author-controlled identities independent of C++ RTTI.
          */

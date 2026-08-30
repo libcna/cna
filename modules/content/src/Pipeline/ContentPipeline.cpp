@@ -213,7 +213,11 @@ namespace CNA::Content::Pipeline
             {
                 return left.assetTypeId < right.assetTypeId;
             }
-            return left.assetTypeName < right.assetTypeName;
+            if (left.assetTypeName != right.assetTypeName)
+            {
+                return left.assetTypeName < right.assetTypeName;
+            }
+            return left.assetSchemaVersion < right.assetSchemaVersion;
         }
 
         void ValidateWriterSchemas(const std::vector<ContentWriterSchemaIdentity>& schemas)
@@ -244,7 +248,7 @@ namespace CNA::Content::Pipeline
                 {
                     throw std::logic_error(
                         "writer asset/schema identities must be strictly ordered by asset type "
-                        "id and canonical type name without duplicates.");
+                        "id, canonical type name, and schema version without duplicates.");
                 }
             }
         }
@@ -252,19 +256,22 @@ namespace CNA::Content::Pipeline
         void RequireDeclaredWriterOutput(
             const std::vector<ContentWriterSchemaIdentity>& schemas,
             std::uint32_t assetTypeId, const std::string& assetTypeName,
+            const std::uint32_t assetSchemaVersion,
             const std::string& outputName)
         {
             const auto found = std::find_if(
                 schemas.begin(), schemas.end(), [&](const ContentWriterSchemaIdentity& schema)
             {
                 return schema.assetTypeId == assetTypeId &&
-                       schema.assetTypeName == assetTypeName;
+                       schema.assetTypeName == assetTypeName &&
+                       schema.assetSchemaVersion == assetSchemaVersion;
             });
             if (found == schemas.end())
             {
                 throw std::logic_error(
                     "writer output '" + outputName + "' returned undeclared asset identity " +
-                    std::to_string(assetTypeId) + " ('" + assetTypeName + "').");
+                    std::to_string(assetTypeId) + " ('" + assetTypeName + "') schema " +
+                    std::to_string(assetSchemaVersion) + ".");
             }
         }
 
@@ -1133,8 +1140,13 @@ namespace CNA::Content::Pipeline
             {
                 throw std::logic_error("writer returned invalid asset type id 0.");
             }
+            if (output.assetSchemaVersion == 0u)
+            {
+                throw std::logic_error("writer returned invalid asset schema version 0.");
+            }
             RequireDeclaredWriterOutput(writerSchemas, output.assetTypeId,
-                                        output.assetTypeName, logicalName);
+                                        output.assetTypeName, output.assetSchemaVersion,
+                                        logicalName);
             if (output.additionalOutputs.size() >= MaxContentBuildOutputs)
             {
                 throw std::logic_error(
@@ -1167,8 +1179,15 @@ namespace CNA::Content::Pipeline
                                            "additional output '" +
                                            additional.logicalName + "'.");
                 }
+                if (additional.assetSchemaVersion == 0u)
+                {
+                    throw std::logic_error(
+                        "writer returned invalid asset schema version 0 for additional output '" +
+                        additional.logicalName + "'.");
+                }
                 RequireDeclaredWriterOutput(writerSchemas, additional.assetTypeId,
                                             additional.assetTypeName,
+                                            additional.assetSchemaVersion,
                                             additional.logicalName);
             }
         }

@@ -255,7 +255,8 @@ namespace CNA::Content::Pipeline
         const Cnb::CnbTextureData& texture = input.Get<Cnb::CnbTextureData>();
         return {Cnb::EncodeTexture2DToCnb(texture, logicalName),
                 Cnb::CnbAssetTypeId::Texture2D,
-                "Microsoft.Xna.Framework.Graphics.Texture2D"};
+                "Microsoft.Xna.Framework.Graphics.Texture2D",
+                Cnb::CnbTextureSchemaVersion};
     }
 
     void RegisterTexture2DContentPipeline(ContentPipelineRegistry& registry)

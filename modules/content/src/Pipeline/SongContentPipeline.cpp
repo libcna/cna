@@ -220,7 +220,7 @@ namespace CNA::Content::Pipeline
     {
         const Cnb::CnbSongData& song = input.Get<Cnb::CnbSongData>();
         return {Cnb::EncodeSongToCnb(song, logicalName), Cnb::CnbAssetTypeId::Song,
-                "Microsoft.Xna.Framework.Media.Song"};
+                "Microsoft.Xna.Framework.Media.Song", Cnb::CnbMediaSchemaVersion};
     }
 
     void RegisterSongContentPipeline(ContentPipelineRegistry& registry)

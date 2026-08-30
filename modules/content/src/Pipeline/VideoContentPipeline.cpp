@@ -287,7 +287,7 @@ namespace CNA::Content::Pipeline
     {
         const Cnb::CnbVideoData& video = input.Get<Cnb::CnbVideoData>();
         return {Cnb::EncodeVideoToCnb(video, logicalName), Cnb::CnbAssetTypeId::Video,
-                "Microsoft.Xna.Framework.Media.Video"};
+                "Microsoft.Xna.Framework.Media.Video", Cnb::CnbMediaSchemaVersion};
     }
 
     void RegisterVideoContentPipeline(ContentPipelineRegistry& registry)

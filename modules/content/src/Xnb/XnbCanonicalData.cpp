@@ -876,6 +876,62 @@ namespace CNA::Internal::Xnb
         return result;
     }
 
+    XnbAlphaTestEffectData DecodeAlphaTestEffectXnbData(
+        ContentReader& input, std::string textureReference)
+    {
+        XnbAlphaTestEffectData result;
+        result.textureReference = std::move(textureReference);
+        result.alphaFunction = input.ReadInt32();
+        result.referenceAlpha = input.ReadUInt32();
+        result.diffuseColor = input.ReadVector3();
+        result.alpha = input.ReadSingle();
+        result.vertexColorEnabled = input.ReadBoolean();
+        return result;
+    }
+
+    XnbDualTextureEffectData DecodeDualTextureEffectXnbData(
+        ContentReader& input, std::string textureReference,
+        std::string texture2Reference)
+    {
+        XnbDualTextureEffectData result;
+        result.textureReference = std::move(textureReference);
+        result.texture2Reference = std::move(texture2Reference);
+        result.diffuseColor = input.ReadVector3();
+        result.alpha = input.ReadSingle();
+        result.vertexColorEnabled = input.ReadBoolean();
+        return result;
+    }
+
+    XnbEnvironmentMapEffectData DecodeEnvironmentMapEffectXnbData(
+        ContentReader& input, std::string textureReference,
+        std::string environmentMapReference)
+    {
+        XnbEnvironmentMapEffectData result;
+        result.textureReference = std::move(textureReference);
+        result.environmentMapReference = std::move(environmentMapReference);
+        result.environmentMapAmount = input.ReadSingle();
+        result.environmentMapSpecular = input.ReadVector3();
+        result.fresnelFactor = input.ReadSingle();
+        result.diffuseColor = input.ReadVector3();
+        result.emissiveColor = input.ReadVector3();
+        result.alpha = input.ReadSingle();
+        return result;
+    }
+
+    XnbSkinnedEffectData DecodeSkinnedEffectXnbData(
+        ContentReader& input, std::string textureReference)
+    {
+        XnbSkinnedEffectData result;
+        result.textureReference = std::move(textureReference);
+        result.weightsPerVertex = input.ReadInt32();
+        result.diffuseColor = input.ReadVector3();
+        result.emissiveColor = input.ReadVector3();
+        result.specularColor = input.ReadVector3();
+        result.specularPower = input.ReadSingle();
+        result.alpha = input.ReadSingle();
+        return result;
+    }
+
     CNA::Content::Cnb::CnbModelData ConvertXnbModelToCnb(
         const XnbModelData& source,
         const std::function<std::string(const std::string&)>& resolveTexture)
@@ -1130,6 +1186,358 @@ namespace CNA::Internal::Xnb
         }
         result.hasBoneHierarchy = source.bones.size() > 1u;
         result.appliesGltfLightingPolicy = false;
+        return result;
+    }
+
+    CNA::Content::Cnb::CnbModelV2Data ConvertXnbModelToCnbV2(
+        const XnbModelData& source,
+        const std::function<std::string(const std::string&)>& resolveTexture)
+    {
+        namespace Cnb = CNA::Content::Cnb;
+        namespace Graphics = Microsoft::Xna::Framework::Graphics;
+
+        const auto fail = [](const std::string& detail) -> void
+        {
+            throw ContentLoadException(
+                "XnbImporter: Model cannot be transcoded losslessly: " + detail + ".");
+        };
+        const auto toU32 = [&fail](const std::int32_t value,
+                                   const std::string& what) -> std::uint32_t
+        {
+            if (value < 0) { fail(what + " is negative"); }
+            return static_cast<std::uint32_t>(value);
+        };
+        const auto vector3 = [](const Microsoft::Xna::Framework::Vector3& value)
+        {
+            return std::array<float, 3>{{value.X, value.Y, value.Z}};
+        };
+        const auto texture = [&resolveTexture](const std::string& authored)
+        {
+            return authored.empty() ? std::string{} : resolveTexture(authored);
+        };
+        const auto format = [&fail](const Graphics::VertexElementFormat value)
+        {
+            switch (value)
+            {
+                case Graphics::VertexElementFormat::Single:
+                    return Cnb::CnbModelV2VertexFormat::Single;
+                case Graphics::VertexElementFormat::Vector2:
+                    return Cnb::CnbModelV2VertexFormat::Vector2;
+                case Graphics::VertexElementFormat::Vector3:
+                    return Cnb::CnbModelV2VertexFormat::Vector3;
+                case Graphics::VertexElementFormat::Vector4:
+                    return Cnb::CnbModelV2VertexFormat::Vector4;
+                case Graphics::VertexElementFormat::Color:
+                    return Cnb::CnbModelV2VertexFormat::Color;
+                case Graphics::VertexElementFormat::Byte4:
+                    return Cnb::CnbModelV2VertexFormat::Byte4;
+                case Graphics::VertexElementFormat::Short2:
+                    return Cnb::CnbModelV2VertexFormat::Short2;
+                case Graphics::VertexElementFormat::Short4:
+                    return Cnb::CnbModelV2VertexFormat::Short4;
+                case Graphics::VertexElementFormat::NormalizedShort2:
+                    return Cnb::CnbModelV2VertexFormat::NormalizedShort2;
+                case Graphics::VertexElementFormat::NormalizedShort4:
+                    return Cnb::CnbModelV2VertexFormat::NormalizedShort4;
+                case Graphics::VertexElementFormat::HalfVector2:
+                    return Cnb::CnbModelV2VertexFormat::HalfVector2;
+                case Graphics::VertexElementFormat::HalfVector4:
+                    return Cnb::CnbModelV2VertexFormat::HalfVector4;
+            }
+            fail("a VertexDeclaration uses an unknown VertexElementFormat");
+            return Cnb::CnbModelV2VertexFormat::Single;
+        };
+        const auto usage = [&fail](const Graphics::VertexElementUsage value)
+        {
+            switch (value)
+            {
+                case Graphics::VertexElementUsage::Position:
+                    return Cnb::CnbModelV2VertexUsage::Position;
+                case Graphics::VertexElementUsage::Color:
+                    return Cnb::CnbModelV2VertexUsage::Color;
+                case Graphics::VertexElementUsage::TextureCoordinate:
+                    return Cnb::CnbModelV2VertexUsage::TextureCoordinate;
+                case Graphics::VertexElementUsage::Normal:
+                    return Cnb::CnbModelV2VertexUsage::Normal;
+                case Graphics::VertexElementUsage::Binormal:
+                    return Cnb::CnbModelV2VertexUsage::Binormal;
+                case Graphics::VertexElementUsage::Tangent:
+                    return Cnb::CnbModelV2VertexUsage::Tangent;
+                case Graphics::VertexElementUsage::BlendIndices:
+                    return Cnb::CnbModelV2VertexUsage::BlendIndices;
+                case Graphics::VertexElementUsage::BlendWeight:
+                    return Cnb::CnbModelV2VertexUsage::BlendWeight;
+                case Graphics::VertexElementUsage::Depth:
+                    return Cnb::CnbModelV2VertexUsage::Depth;
+                case Graphics::VertexElementUsage::Fog:
+                    return Cnb::CnbModelV2VertexUsage::Fog;
+                case Graphics::VertexElementUsage::PointSize:
+                    return Cnb::CnbModelV2VertexUsage::PointSize;
+                case Graphics::VertexElementUsage::Sample:
+                    return Cnb::CnbModelV2VertexUsage::Sample;
+                case Graphics::VertexElementUsage::TessellateFactor:
+                    return Cnb::CnbModelV2VertexUsage::TessellateFactor;
+            }
+            fail("a VertexDeclaration uses an unknown VertexElementUsage");
+            return Cnb::CnbModelV2VertexUsage::Position;
+        };
+
+        if (source.bones.empty()) { fail("the Model has no root bone"); }
+        if (source.rootBone < 0 ||
+            static_cast<std::size_t>(source.rootBone) >= source.bones.size())
+        {
+            fail("the serialized root bone is out of range");
+        }
+
+        Cnb::CnbModelV2Data result;
+        result.rootBone = static_cast<std::uint32_t>(source.rootBone);
+        result.bones.reserve(source.bones.size());
+        std::vector<std::vector<std::int32_t>> childrenByParent(source.bones.size());
+        for (std::size_t bone = 0u; bone < source.bones.size(); ++bone)
+        {
+            const XnbModelBoneData& input = source.bones[bone];
+            if (input.parent < -1 ||
+                (input.parent >= 0 && static_cast<std::size_t>(input.parent) >= bone))
+            {
+                fail("bone " + std::to_string(bone) +
+                     " is not ordered after its valid parent");
+            }
+            if (input.parent >= 0)
+            {
+                childrenByParent[static_cast<std::size_t>(input.parent)].push_back(
+                    static_cast<std::int32_t>(bone));
+            }
+            result.bones.push_back({input.name, input.parent, MatrixValues(input.transform)});
+        }
+        if (source.bones[static_cast<std::size_t>(source.rootBone)].parent != -1)
+        {
+            fail("the serialized root bone has a parent");
+        }
+        for (std::size_t bone = 0u; bone < source.bones.size(); ++bone)
+        {
+            if (source.bones[bone].children != childrenByParent[bone])
+            {
+                fail("bone " + std::to_string(bone) +
+                     " has child references that do not match the serialized parent graph");
+            }
+        }
+
+        constexpr std::uint32_t Missing = std::numeric_limits<std::uint32_t>::max();
+        std::vector<std::uint32_t> vertexResource(source.sharedResources.size(), Missing);
+        std::vector<std::uint32_t> indexResource(source.sharedResources.size(), Missing);
+        std::vector<std::uint32_t> effectResource(source.sharedResources.size(), Missing);
+
+        const auto findDeclaration =
+            [&result, &format, &usage, &toU32](
+                const XnbVertexDeclarationData& sourceDeclaration)
+        {
+            for (std::size_t index = 0u; index < result.vertexDeclarations.size(); ++index)
+            {
+                const Cnb::CnbModelV2VertexDeclaration& candidate =
+                    result.vertexDeclarations[index];
+                if (sourceDeclaration.stride < 0 ||
+                    candidate.vertexStride !=
+                        static_cast<std::uint32_t>(sourceDeclaration.stride) ||
+                    candidate.elements.size() != sourceDeclaration.elements.size())
+                {
+                    continue;
+                }
+                bool equal = true;
+                for (std::size_t element = 0u; element < candidate.elements.size(); ++element)
+                {
+                    const Graphics::VertexElement& sourceElement =
+                        sourceDeclaration.elements[element];
+                    const Cnb::CnbModelV2VertexElement& candidateElement =
+                        candidate.elements[element];
+                    if (sourceElement.getOffsetProperty() < 0 ||
+                        sourceElement.getUsageIndexProperty() < 0 ||
+                        candidateElement.offset !=
+                            static_cast<std::uint32_t>(sourceElement.getOffsetProperty()) ||
+                        candidateElement.format != format(
+                            sourceElement.getVertexElementFormatProperty()) ||
+                        candidateElement.usage != usage(
+                            sourceElement.getVertexElementUsageProperty()) ||
+                        candidateElement.usageIndex !=
+                            static_cast<std::uint32_t>(sourceElement.getUsageIndexProperty()))
+                    {
+                        equal = false;
+                        break;
+                    }
+                }
+                if (equal) { return static_cast<std::uint32_t>(index); }
+            }
+
+            Cnb::CnbModelV2VertexDeclaration declaration;
+            declaration.vertexStride = toU32(
+                sourceDeclaration.stride, "a VertexDeclaration stride");
+            declaration.elements.reserve(sourceDeclaration.elements.size());
+            for (const Graphics::VertexElement& element : sourceDeclaration.elements)
+            {
+                declaration.elements.push_back({
+                    toU32(element.getOffsetProperty(), "a VertexDeclaration element offset"),
+                    format(element.getVertexElementFormatProperty()),
+                    usage(element.getVertexElementUsageProperty()),
+                    toU32(element.getUsageIndexProperty(),
+                          "a VertexDeclaration usage index")});
+            }
+            result.vertexDeclarations.push_back(std::move(declaration));
+            return static_cast<std::uint32_t>(result.vertexDeclarations.size() - 1u);
+        };
+
+        for (std::size_t resource = 0u; resource < source.sharedResources.size(); ++resource)
+        {
+            const auto& value = source.sharedResources[resource].value;
+            if (const auto* vertex = std::get_if<XnbVertexBufferData>(&value))
+            {
+                vertexResource[resource] = static_cast<std::uint32_t>(result.vertexBuffers.size());
+                result.vertexBuffers.push_back(
+                    {findDeclaration(vertex->declaration), vertex->vertexCount, vertex->bytes});
+            }
+            else if (const auto* indices = std::get_if<XnbIndexBufferData>(&value))
+            {
+                indexResource[resource] = static_cast<std::uint32_t>(result.indexBuffers.size());
+                if ((indices->indexElementSize != 2u && indices->indexElementSize != 4u) ||
+                    indices->bytes.size() % indices->indexElementSize != 0u)
+                {
+                    fail("shared index resource " + std::to_string(resource + 1u) +
+                         " has an invalid element width or byte count");
+                }
+                result.indexBuffers.push_back({
+                    indices->indexElementSize,
+                    static_cast<std::uint32_t>(
+                        indices->bytes.size() / indices->indexElementSize),
+                    indices->bytes});
+            }
+            else
+            {
+                Cnb::CnbModelV2Effect output;
+                if (const auto* effect = std::get_if<XnbBasicEffectData>(&value))
+                {
+                    output.kind = Cnb::CnbModelV2EffectKind::BasicEffect;
+                    output.primaryTexture = texture(effect->textureReference);
+                    output.diffuse = vector3(effect->diffuseColor);
+                    output.emissive = vector3(effect->emissiveColor);
+                    output.specular = vector3(effect->specularColor);
+                    output.specularPower = effect->specularPower;
+                    output.alpha = effect->alpha;
+                    output.vertexColorEnabled = effect->vertexColorEnabled;
+                }
+                else if (const auto* effect = std::get_if<XnbAlphaTestEffectData>(&value))
+                {
+                    if (effect->alphaFunction < 0 || effect->alphaFunction > 7)
+                    {
+                        fail("shared AlphaTestEffect resource " +
+                             std::to_string(resource + 1u) +
+                             " has an invalid CompareFunction");
+                    }
+                    output.kind = Cnb::CnbModelV2EffectKind::AlphaTestEffect;
+                    output.primaryTexture = texture(effect->textureReference);
+                    output.diffuse = vector3(effect->diffuseColor);
+                    output.alpha = effect->alpha;
+                    output.alphaFunction = static_cast<std::uint32_t>(effect->alphaFunction);
+                    output.referenceAlpha = effect->referenceAlpha;
+                    output.vertexColorEnabled = effect->vertexColorEnabled;
+                }
+                else if (const auto* effect = std::get_if<XnbDualTextureEffectData>(&value))
+                {
+                    output.kind = Cnb::CnbModelV2EffectKind::DualTextureEffect;
+                    output.primaryTexture = texture(effect->textureReference);
+                    output.secondaryTexture = texture(effect->texture2Reference);
+                    output.diffuse = vector3(effect->diffuseColor);
+                    output.alpha = effect->alpha;
+                    output.vertexColorEnabled = effect->vertexColorEnabled;
+                }
+                else if (const auto* effect =
+                             std::get_if<XnbEnvironmentMapEffectData>(&value))
+                {
+                    output.kind = Cnb::CnbModelV2EffectKind::EnvironmentMapEffect;
+                    output.primaryTexture = texture(effect->textureReference);
+                    output.cubeTexture = texture(effect->environmentMapReference);
+                    output.diffuse = vector3(effect->diffuseColor);
+                    output.emissive = vector3(effect->emissiveColor);
+                    output.specular = vector3(effect->environmentMapSpecular);
+                    output.alpha = effect->alpha;
+                    output.environmentMapAmount = effect->environmentMapAmount;
+                    output.fresnelFactor = effect->fresnelFactor;
+                }
+                else if (const auto* effect = std::get_if<XnbSkinnedEffectData>(&value))
+                {
+                    if (effect->weightsPerVertex != 1 && effect->weightsPerVertex != 2 &&
+                        effect->weightsPerVertex != 4)
+                    {
+                        fail("shared SkinnedEffect resource " +
+                             std::to_string(resource + 1u) +
+                             " has unsupported WeightsPerVertex");
+                    }
+                    output.kind = Cnb::CnbModelV2EffectKind::SkinnedEffect;
+                    output.primaryTexture = texture(effect->textureReference);
+                    output.diffuse = vector3(effect->diffuseColor);
+                    output.emissive = vector3(effect->emissiveColor);
+                    output.specular = vector3(effect->specularColor);
+                    output.specularPower = effect->specularPower;
+                    output.alpha = effect->alpha;
+                    output.weightsPerVertex =
+                        static_cast<std::uint32_t>(effect->weightsPerVertex);
+                }
+                else
+                {
+                    fail("shared resource " + std::to_string(resource + 1u) +
+                         " uses an unsupported resource type");
+                }
+                effectResource[resource] = static_cast<std::uint32_t>(result.effects.size());
+                result.effects.push_back(std::move(output));
+            }
+        }
+
+        result.meshes.reserve(source.meshes.size());
+        for (std::size_t meshIndex = 0u; meshIndex < source.meshes.size(); ++meshIndex)
+        {
+            const XnbModelMeshData& mesh = source.meshes[meshIndex];
+            if (mesh.parentBone < 0 ||
+                static_cast<std::size_t>(mesh.parentBone) >= source.bones.size())
+            {
+                fail("mesh " + std::to_string(meshIndex) + " has an invalid parent bone");
+            }
+            Cnb::CnbModelV2Mesh output;
+            output.name = mesh.name;
+            output.parentBone = mesh.parentBone;
+            output.boundingSphere = {{mesh.boundingSphere.Center.X,
+                                      mesh.boundingSphere.Center.Y,
+                                      mesh.boundingSphere.Center.Z,
+                                      mesh.boundingSphere.Radius}};
+            output.parts.reserve(mesh.parts.size());
+            for (std::size_t partIndex = 0u; partIndex < mesh.parts.size(); ++partIndex)
+            {
+                const XnbModelPartData& part = mesh.parts[partIndex];
+                const std::string where = ModelPartContext(mesh, meshIndex, partIndex);
+                const auto resourceIndex = [&fail, &source, &where, Missing](
+                    const std::int32_t reference,
+                    const std::vector<std::uint32_t>& mapping,
+                    const char* kind)
+                {
+                    if (reference < 0 ||
+                        static_cast<std::size_t>(reference) >= source.sharedResources.size())
+                    {
+                        fail(where + " has an invalid shared-resource reference");
+                    }
+                    const std::uint32_t mapped = mapping[static_cast<std::size_t>(reference)];
+                    if (mapped == Missing)
+                    {
+                        fail(where + " does not reference a " + std::string(kind) + " resource");
+                    }
+                    return mapped;
+                };
+                output.parts.push_back({
+                    toU32(part.vertexOffset, where + " VertexOffset"),
+                    toU32(part.vertexCount, where + " NumVertices"),
+                    toU32(part.startIndex, where + " StartIndex"),
+                    toU32(part.primitiveCount, where + " PrimitiveCount"),
+                    resourceIndex(part.vertexBufferResource, vertexResource, "VertexBufferReader"),
+                    resourceIndex(part.indexBufferResource, indexResource, "IndexBufferReader"),
+                    resourceIndex(part.effectResource, effectResource, "stock effect")});
+            }
+            result.meshes.push_back(std::move(output));
+        }
         return result;
     }
 
@@ -1434,14 +1842,40 @@ namespace CNA::Internal::Xnb
                 {
                     decoded.value = DecodeBasicEffectXnbData(reader, reader.ReadString());
                 }
+                else if (resourceReader.normalizedName ==
+                         "Microsoft.Xna.Framework.Content.AlphaTestEffectReader")
+                {
+                    decoded.value = DecodeAlphaTestEffectXnbData(reader, reader.ReadString());
+                }
+                else if (resourceReader.normalizedName ==
+                         "Microsoft.Xna.Framework.Content.DualTextureEffectReader")
+                {
+                    std::string texture = reader.ReadString();
+                    std::string texture2 = reader.ReadString();
+                    decoded.value = DecodeDualTextureEffectXnbData(
+                        reader, std::move(texture), std::move(texture2));
+                }
+                else if (resourceReader.normalizedName ==
+                         "Microsoft.Xna.Framework.Content.EnvironmentMapEffectReader")
+                {
+                    std::string texture = reader.ReadString();
+                    std::string environmentMap = reader.ReadString();
+                    decoded.value = DecodeEnvironmentMapEffectXnbData(
+                        reader, std::move(texture), std::move(environmentMap));
+                }
+                else if (resourceReader.normalizedName ==
+                         "Microsoft.Xna.Framework.Content.SkinnedEffectReader")
+                {
+                    decoded.value = DecodeSkinnedEffectXnbData(reader, reader.ReadString());
+                }
                 else
                 {
                     throw ContentLoadException(
                         "XnbImporter: Model cannot be transcoded losslessly: shared resource " +
                         std::to_string(resource + 1) + " uses reader '" +
                         resourceReader.normalizedName +
-                        "'; the initial Model schema-1 subset supports only VertexBufferReader, "
-                        "IndexBufferReader, and BasicEffectReader.");
+                        "'; Model schema 2 supports only VertexBufferReader, IndexBufferReader, "
+                        "and the five built-in stock-effect readers.");
                 }
                 model.sharedResources.push_back(std::move(decoded));
             }

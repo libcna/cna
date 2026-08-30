@@ -127,9 +127,10 @@ TEST(ModelContentPipelineTest, RunsDistinctHeadlessStagesAndReusesTheFrozenModel
     const Pipeline::ContentBuildResult result = BuildModel(fixture, "asset");
     EXPECT_EQ(result.importer, (Pipeline::ContentComponentIdentity{"CNA.GltfImporter", "2"}));
     EXPECT_EQ(result.processor,
-              (Pipeline::ContentComponentIdentity{"CNA.ModelProcessor", "2"}));
+              (Pipeline::ContentComponentIdentity{"CNA.ModelProcessor", "3"}));
     EXPECT_EQ(result.writer,
-              (Pipeline::ContentComponentIdentity{"CNA.ModelContentWriter", "2"}));
+              (Pipeline::ContentComponentIdentity{"CNA.ModelContentWriter", "3"}));
+    EXPECT_EQ(result.output.assetSchemaVersion, Cnb::CnbModelSchemaVersion);
     EXPECT_EQ(result.output.assetTypeId, Cnb::CnbAssetTypeId::Model);
     EXPECT_EQ(result.output.assetTypeName, "Microsoft.Xna.Framework.Graphics.Model");
     ASSERT_EQ(result.dependencies.size(), 1u);

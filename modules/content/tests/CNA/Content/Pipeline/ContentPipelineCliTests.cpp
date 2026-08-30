@@ -19,6 +19,7 @@
 
 #include "CNA/Content/Cnb/CnbDocument.hpp"
 #include "CNA/Content/Cnb/CnbMediaCodec.hpp"
+#include "CNA/Content/Cnb/CnbModelV2Codec.hpp"
 #include "CNA/Content/Cnb/CnbTextureCodec.hpp"
 #include "CNA/Content/Pipeline/ContentBuildConfiguration.hpp"
 #include "CNA/Content/Pipeline/ContentBuildManifest.hpp"
@@ -522,19 +523,23 @@ TEST(ContentPipelineCliTest, XnbDirectoryBuildIsDeterministicAcrossWorkerCountsA
     EXPECT_NE(changed.find("[SKIP] legacy/sound"), std::string::npos) << changed;
 }
 
-TEST(ContentPipelineCliTest, UnsupportedXnbModelSubsetFailsClearlyWithoutPublishing)
+TEST(ContentPipelineCliTest, BroaderLosslessXnbModelPublishesSchemaTwo)
 {
     const std::filesystem::path model =
         FindXnbFixture("monogame/windows/uncompressed/BlenderDefaultCube.xnb");
     ASSERT_FALSE(model.empty());
-    ScratchDirectory scratch("xnb_unsupported");
+    ScratchDirectory scratch("xnb_model_schema2");
     const std::filesystem::path output = scratch.Path() / "model.cnb";
     std::string log;
-    EXPECT_EQ(RunTool({"build", model.string(), "-o", output.string()}, log), 1) << log;
-    EXPECT_NE(log.find("Model cannot be transcoded losslessly"), std::string::npos) << log;
-    EXPECT_NE(log.find("VertexDeclaration"), std::string::npos) << log;
-    EXPECT_NE(log.find("stride 24 reconstructs 3"), std::string::npos) << log;
-    EXPECT_FALSE(std::filesystem::exists(output));
+    ASSERT_EQ(RunTool({"build", model.string(), "-o", output.string()}, log), 0) << log;
+    ASSERT_TRUE(std::filesystem::is_regular_file(output));
+    const Cnb::CnbDocument document =
+        Cnb::CnbDocument::Parse(ReadBytes(output), "CLI Model schema 2");
+    EXPECT_EQ(document.AssetTypeId(), Cnb::CnbAssetTypeId::Model);
+    EXPECT_EQ(document.AssetSchemaVersion(), Cnb::CnbModelV2SchemaVersion);
+    const Cnb::CnbModelV2Data decoded = Cnb::DecodeModelV2FromCnb(document);
+    EXPECT_EQ(decoded.vertexDeclarations[0].vertexStride, 24u);
+    EXPECT_FLOAT_EQ(decoded.effects[0].specularPower, 9.607843399047852f);
 }
 
 TEST(ContentPipelineCliTest, XnbSongExternalMediaBytesParticipateInIncrementalFingerprint)
@@ -1307,9 +1312,9 @@ TEST(ContentPipelineCliTest, CorruptManifestSafelyRebuildsAndIsReplaced)
         std::string(manifestBytes.begin(), manifestBytes.end())));
 }
 
-TEST(ContentPipelineCliTest, VersionSixManifestRebuildsWithoutAuthorizingOldOutputDeletion)
+TEST(ContentPipelineCliTest, VersionSevenManifestRebuildsWithoutAuthorizingOldOutputDeletion)
 {
-    ScratchDirectory scratch("manifest_v6_transition");
+    ScratchDirectory scratch("manifest_v7_transition");
     const std::filesystem::path source = scratch.Path() / "ContentSource";
     const std::filesystem::path output = scratch.Path() / "Content";
     const std::filesystem::path manifest =
@@ -1323,9 +1328,9 @@ TEST(ContentPipelineCliTest, VersionSixManifestRebuildsWithoutAuthorizingOldOutp
 
     const std::vector<std::uint8_t> oldManifestBytes = ReadBytes(manifest);
     std::string oldManifest(oldManifestBytes.begin(), oldManifestBytes.end());
-    const std::size_t version = oldManifest.find("\"version\":7");
+    const std::size_t version = oldManifest.find("\"version\":8");
     ASSERT_NE(version, std::string::npos);
-    oldManifest.replace(version, std::string("\"version\":7").size(), "\"version\":6");
+    oldManifest.replace(version, std::string("\"version\":8").size(), "\"version\":7");
     WriteText(manifest, oldManifest);
     ASSERT_TRUE(std::filesystem::remove(source / "legacy.png"));
 

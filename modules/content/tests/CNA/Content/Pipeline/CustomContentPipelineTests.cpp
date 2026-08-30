@@ -17,6 +17,7 @@
 #include "CNA/Content/Cnb/CnbDocument.hpp"
 #include "CNA/Content/Cnb/CnbFormat.hpp"
 #include "CNA/Content/Cnb/CnbLoaderRegistry.hpp"
+#include "CNA/Content/Cnb/CnbModelV2Codec.hpp"
 #include "CNA/Content/Cnb/CnbWriter.hpp"
 #include "CNA/Content/Pipeline/CnjContentPipeline.hpp"
 #include "CNA/Content/Pipeline/ContentCompiler.hpp"
@@ -231,7 +232,7 @@ namespace
             const Pipeline::ContentValue& input, const std::string& logicalName) const override
         {
             return {EncodeWorldLevelToCnb(input.Get<CompiledWorldLevel>(), logicalName),
-                    WorldLevelAssetTypeId(), kCanonicalTypeName};
+                    WorldLevelAssetTypeId(), kCanonicalTypeName, 1u};
         }
     };
 
@@ -325,18 +326,23 @@ TEST(CustomContentPipelineTest, BuiltInWritersDeclareStableSchemaAndCodecIdentit
 
     const auto modelSchemas =
         registry.ResolveWriter(Pipeline::ProcessedModelType)->OutputSchemaIdentities();
-    ASSERT_EQ(modelSchemas.size(), 3u);
+    ASSERT_EQ(modelSchemas.size(), 4u);
     EXPECT_EQ(modelSchemas[0].assetTypeId, Cnb::CnbAssetTypeId::Texture2D);
     EXPECT_EQ(modelSchemas[0].codec.name, "CNA.Cnb.EncodeTexture2DToCnb");
     EXPECT_EQ(modelSchemas[1].assetTypeId, Cnb::CnbAssetTypeId::Model);
     EXPECT_EQ(modelSchemas[1].codec.name, "CNA.Cnb.EncodeModelToCnb");
-    EXPECT_EQ(modelSchemas[2].assetTypeId, Cnb::CnbAssetTypeId::AnimationClip);
-    EXPECT_EQ(modelSchemas[2].codec.name, "CNA.Cnb.EncodeAnimationClipToCnb");
+    EXPECT_EQ(modelSchemas[2].assetTypeId, Cnb::CnbAssetTypeId::Model);
+    EXPECT_EQ(modelSchemas[2].assetSchemaVersion, Cnb::CnbModelV2SchemaVersion);
+    EXPECT_EQ(modelSchemas[2].codec.name, "CNA.Cnb.EncodeModelV2ToCnb");
+    EXPECT_EQ(modelSchemas[3].assetTypeId, Cnb::CnbAssetTypeId::AnimationClip);
+    EXPECT_EQ(modelSchemas[3].codec.name, "CNA.Cnb.EncodeAnimationClipToCnb");
     for (const Pipeline::ContentWriterSchemaIdentity& schema : modelSchemas)
     {
-        EXPECT_EQ(schema.assetSchemaVersion, 1u);
         EXPECT_EQ(schema.codec.version, "1");
     }
+    EXPECT_EQ(modelSchemas[0].assetSchemaVersion, 1u);
+    EXPECT_EQ(modelSchemas[1].assetSchemaVersion, 1u);
+    EXPECT_EQ(modelSchemas[3].assetSchemaVersion, 1u);
 }
 
 TEST(CustomContentPipelineTest, CompilerEmbeddingRejectsANullRegistry)

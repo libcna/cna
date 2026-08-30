@@ -14,6 +14,7 @@
 #include "CNA/Content/Cnb/CnbAnimationClipCodec.hpp"
 #include "CNA/Content/Cnb/CnbFormat.hpp"
 #include "CNA/Content/Cnb/CnbModelCodec.hpp"
+#include "CNA/Content/Cnb/CnbModelV2Codec.hpp"
 #include "CNA/Content/Cnb/CnbModelFromCnj.hpp"
 #include "CNA/Content/Cnb/CnbTextureCodec.hpp"
 #include "CNA/Content/Pipeline/Texture2DContentPipeline.hpp"
@@ -188,6 +189,29 @@ namespace CNA::Content::Pipeline
             }
         }
 
+        void AddModelRuntimeReferences(const Cnb::CnbModelV2Data& model,
+                                       ContentProcessorContext& context)
+        {
+            for (const Cnb::CnbModelV2Effect& effect : model.effects)
+            {
+                if (!effect.primaryTexture.empty())
+                {
+                    context.AddRuntimeReference(
+                        effect.primaryTexture, Cnb::CnbAssetTypeId::Texture2D);
+                }
+                if (!effect.secondaryTexture.empty())
+                {
+                    context.AddRuntimeReference(
+                        effect.secondaryTexture, Cnb::CnbAssetTypeId::Texture2D);
+                }
+                if (!effect.cubeTexture.empty())
+                {
+                    context.AddRuntimeReference(
+                        effect.cubeTexture, Cnb::CnbAssetTypeId::TextureCube);
+                }
+            }
+        }
+
         [[nodiscard]] Microsoft::Xna::Framework::Graphics::AnimationClipEXT
         ReadGeneratedAnimation(const ImportedModelDocument& imported,
                                const std::filesystem::path& document)
@@ -304,7 +328,7 @@ namespace CNA::Content::Pipeline
 
     ContentComponentIdentity ModelProcessor::Identity() const
     {
-        return {kModelProcessorName, "2"};
+        return {kModelProcessorName, "3"};
     }
 
     std::string ModelProcessor::InputType() const
@@ -346,8 +370,17 @@ namespace CNA::Content::Pipeline
                     "sources, not canonical XNB Model data.");
             }
             bundle.primary = *imported.canonicalModel;
-            AddModelRuntimeReferences(bundle.primary, context);
-            context.LogInfo("prepared canonical XNB Model data for CNB encoding.");
+            if (const auto* schema1 = std::get_if<Cnb::CnbModelData>(&bundle.primary))
+            {
+                AddModelRuntimeReferences(*schema1, context);
+                context.LogInfo("prepared canonical XNB Model schema-1 data for CNB encoding.");
+            }
+            else
+            {
+                AddModelRuntimeReferences(
+                    std::get<Cnb::CnbModelV2Data>(bundle.primary), context);
+                context.LogInfo("prepared canonical XNB Model schema-2 data for CNB encoding.");
+            }
             return ContentValue::Create(ProcessedModelType, std::move(bundle));
         }
 
@@ -422,7 +455,7 @@ namespace CNA::Content::Pipeline
                 referencedGeneratedTextures.insert(found->first);
                 reference = found->second;
             };
-            VisitTextureReferences(bundle.primary, remap);
+            VisitTextureReferences(std::get<Cnb::CnbModelData>(bundle.primary), remap);
             for (auto& [logicalName, model] : additionalModels)
             {
                 static_cast<void>(logicalName);
@@ -454,7 +487,7 @@ namespace CNA::Content::Pipeline
             }
         }
 
-        AddModelRuntimeReferences(bundle.primary, context,
+        AddModelRuntimeReferences(std::get<Cnb::CnbModelData>(bundle.primary), context,
                                   &generatedTextureLogicalNames);
         std::sort(bundle.children.begin(), bundle.children.end(),
                   [](const ProcessedModelChild& left, const ProcessedModelChild& right)
@@ -482,7 +515,7 @@ namespace CNA::Content::Pipeline
 
     ContentComponentIdentity ModelContentWriter::Identity() const
     {
-        return {kModelWriterName, "2"};
+        return {kModelWriterName, "3"};
     }
 
     std::vector<ContentWriterSchemaIdentity>
@@ -494,6 +527,9 @@ namespace CNA::Content::Pipeline
                 {Cnb::CnbAssetTypeId::Model, Cnb::CnbModelSchemaVersion,
                  "Microsoft.Xna.Framework.Graphics.Model",
                  {"CNA.Cnb.EncodeModelToCnb", "1"}},
+                {Cnb::CnbAssetTypeId::Model, Cnb::CnbModelV2SchemaVersion,
+                 "Microsoft.Xna.Framework.Graphics.Model",
+                 {"CNA.Cnb.EncodeModelV2ToCnb", "1"}},
                 {Cnb::CnbAssetTypeId::AnimationClip,
                  Cnb::CnbAnimationClipSchemaVersion,
                  "Microsoft.Xna.Framework.Graphics.AnimationClipEXT",
@@ -509,10 +545,20 @@ namespace CNA::Content::Pipeline
                                                  const std::string& logicalName) const
     {
         const ProcessedModelBundle& bundle = input.Get<ProcessedModelBundle>();
-        ContentWriteResult result{
-            Cnb::EncodeModelToCnb(bundle.primary, logicalName),
-            Cnb::CnbAssetTypeId::Model,
-            "Microsoft.Xna.Framework.Graphics.Model"};
+        ContentWriteResult result;
+        result.assetTypeId = Cnb::CnbAssetTypeId::Model;
+        result.assetTypeName = "Microsoft.Xna.Framework.Graphics.Model";
+        if (const auto* schema1 = std::get_if<Cnb::CnbModelData>(&bundle.primary))
+        {
+            result.bytes = Cnb::EncodeModelToCnb(*schema1, logicalName);
+            result.assetSchemaVersion = Cnb::CnbModelSchemaVersion;
+        }
+        else
+        {
+            result.bytes = Cnb::EncodeModelV2ToCnb(
+                std::get<Cnb::CnbModelV2Data>(bundle.primary), logicalName);
+            result.assetSchemaVersion = Cnb::CnbModelV2SchemaVersion;
+        }
         result.additionalOutputs.reserve(bundle.children.size());
         for (const ProcessedModelChild& child : bundle.children)
         {
@@ -522,14 +568,16 @@ namespace CNA::Content::Pipeline
                     {child.logicalName,
                      Cnb::EncodeTexture2DToCnb(*texture, child.logicalName),
                      Cnb::CnbAssetTypeId::Texture2D,
-                     "Microsoft.Xna.Framework.Graphics.Texture2D"});
+                     "Microsoft.Xna.Framework.Graphics.Texture2D",
+                     Cnb::CnbTextureSchemaVersion});
             }
             else if (const auto* model = std::get_if<Cnb::CnbModelData>(&child.value))
             {
                 result.additionalOutputs.push_back(
                     {child.logicalName, Cnb::EncodeModelToCnb(*model, child.logicalName),
                      Cnb::CnbAssetTypeId::Model,
-                     "Microsoft.Xna.Framework.Graphics.Model"});
+                     "Microsoft.Xna.Framework.Graphics.Model",
+                     Cnb::CnbModelSchemaVersion});
             }
             else
             {
@@ -540,7 +588,8 @@ namespace CNA::Content::Pipeline
                     {child.logicalName,
                      Cnb::EncodeAnimationClipToCnb(animation, child.logicalName),
                      Cnb::CnbAssetTypeId::AnimationClip,
-                     "Microsoft.Xna.Framework.Graphics.AnimationClipEXT"});
+                     "Microsoft.Xna.Framework.Graphics.AnimationClipEXT",
+                     Cnb::CnbAnimationClipSchemaVersion});
             }
         }
         return result;

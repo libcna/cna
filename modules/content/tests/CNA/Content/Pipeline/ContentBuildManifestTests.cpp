@@ -171,7 +171,7 @@ TEST(ContentBuildManifestTest, RoundTripsEveryStableFieldDeterministically)
     EXPECT_NE(first.find("runtimeReferences"), std::string::npos);
     EXPECT_NE(first.find("Generated/asset-index.cnb"), std::string::npos);
     EXPECT_NE(first.find("Support/table.bin"), std::string::npos);
-    EXPECT_NE(first.find("\"version\":7"), std::string::npos);
+    EXPECT_NE(first.find("\"version\":8"), std::string::npos);
     EXPECT_NE(first.find("fingerprintState"), std::string::npos);
     EXPECT_NE(first.find("contentDependencyFingerprints"), std::string::npos);
     EXPECT_NE(first.find("writerSchemas"), std::string::npos);
@@ -180,7 +180,7 @@ TEST(ContentBuildManifestTest, RoundTripsEveryStableFieldDeterministically)
 
 TEST(ContentBuildManifestTest, EarlierVersionsAreRejectedSoTheCliCanRebuildSafely)
 {
-    for (const std::uint32_t version : {1u, 2u, 3u, 4u, 5u, 6u})
+    for (const std::uint32_t version : {1u, 2u, 3u, 4u, 5u, 6u, 7u})
     {
         EXPECT_THROW((void)Pipeline::ContentBuildManifest::Parse(
                          "{\"format\":\"CNA.ContentPipeline.Manifest\",\"version\":" +

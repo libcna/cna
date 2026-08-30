@@ -288,7 +288,7 @@ Texture2DContentWriter    -> EncodeTexture2DToCnb()
 SoundEffectContentWriter -> EncodeSoundEffectToCnb()
 SongContentWriter        -> EncodeSongToCnb()
 VideoContentWriter       -> EncodeVideoToCnb()
-ModelContentWriter       -> EncodeModelToCnb() plus optional generated-child typed encoders
+ModelContentWriter       -> EncodeModelToCnb() or EncodeModelV2ToCnb(), plus generated-child encoders
 Texture3DContentWriter    -> EncodeTexture3DToCnb()
 TextureCubeContentWriter -> EncodeTextureCubeToCnb()
 SpriteFontContentWriter  -> EncodeSpriteFontToCnb()
@@ -312,10 +312,12 @@ explicit codec name/version. These identities have different jobs:
 - the codec version changes when output semantics or bytes can change within the same schema.
 
 The pipeline refuses empty, duplicate, unordered, zero-valued, or incomplete declarations and any
-writer result whose asset ID/name was not declared. The declaration is an author-controlled codec
-contract—the pipeline does not infer it from RTTI or execute a writer on the skip path. Built-in
-codec round trips and the custom compiler's parsed CNB oracle verify that declared schema versions
-match the bytes their authoritative encoders emit.
+writer result whose asset ID/name/schema tuple was not declared. A writer may declare more than one
+schema for one asset identity when the processed value makes an explicit choice; primary and
+additional write results report that exact schema version. The declaration is an author-controlled
+codec contract—the pipeline does not infer it from RTTI or execute a writer on the skip path.
+Built-in codec round trips and the custom compiler's parsed CNB oracle verify that declared schema
+versions match the bytes their authoritative encoders emit.
 
 ## Runtime reader mapping
 
@@ -337,7 +339,7 @@ canonical type name, and loader through `ContentManager::RegisterCnbLoaderEXT<T>
 | `.wav` | `CNA.WavImporter/1` | `ImportedSound` | `CNA.SoundEffectProcessor/1` | `CNA.SoundEffectContentWriter/1` |
 | `.mp3`, `.ogg`, `.oga`, `.qoa`, `.flac`, `.opus`, `.aac`, `.wma` | `CNA.SongImporter/2` | `ImportedSongSource` | `CNA.SongProcessor/2` | `CNA.SongContentWriter/1` |
 | `.mp4`, `.ogv`, `.webm`, `.mkv`, `.avi`, `.mov` | `CNA.VideoImporter/2` | `ImportedVideoSource` | `CNA.VideoProcessor/2` | `CNA.VideoContentWriter/1` |
-| `.gltf`, `.glb` | `CNA.GltfImporter/2` | `ImportedModelDocument` | `CNA.ModelProcessor/2` | `CNA.ModelContentWriter/2` |
+| `.gltf`, `.glb` | `CNA.GltfImporter/2` | `ImportedModelDocument` | `CNA.ModelProcessor/3` | `CNA.ModelContentWriter/3` |
 | `.cnj` Texture2D | `CNA.CnjImporter/1` | `ImportedImage` | same texture processor | same Texture2D writer |
 | `.cnj` SoundEffect | `CNA.CnjImporter/1` | `ImportedSound` | same sound processor | same SoundEffect writer |
 | `.cnj` Model | `CNA.CnjImporter/1` | `ImportedModelDocument` | same Model processor | same Model writer |
@@ -346,7 +348,7 @@ canonical type name, and loader through `ContentManager::RegisterCnbLoaderEXT<T>
 | `.cnj` TextureCube | `CNA.CnjImporter/1` | `ImportedTextureCube` | `CNA.TextureCubeProcessor/1` | `CNA.TextureCubeContentWriter/1` |
 | `.cnj` Curve | `CNA.CnjImporter/1` | `ImportedCurve` | `CNA.CurveProcessor/1` | `CNA.CurveContentWriter/1` |
 | `.cnj` AnimationClip | `CNA.CnjImporter/1` | `ImportedAnimationClip` | `CNA.AnimationClipProcessor/1` | `CNA.AnimationClipContentWriter/1` |
-| `.xnb` supported built-in root | `CNA.XnbImporter/2` | existing imported type selected by validated root reader | existing type processor (plus metadata/deployment `CNA.XnbVideoProcessor/2`) | existing native built-in writer/codec |
+| `.xnb` supported built-in root | `CNA.XnbImporter/3` | existing imported type selected by validated root reader | existing type processor (plus metadata/deployment `CNA.XnbVideoProcessor/2`) | existing native built-in writer/codec; Model selects schema 1 or 2 exactly |
 
 DDS is currently a contained TextureCube CNJ sidecar, not a direct default route. `.wav` remains
 the unambiguous SoundEffect route; it is not also registered as Song. `.ogg` remains the
@@ -625,21 +627,25 @@ invalidates that asset without treating the entire configuration file as a share
 an unrelated entry change leaves other assets eligible for `SKIP`.
 
 The manifest JSON layout is versioned internal build state, not a hand-edited project format.
-Version 7 gives each entry a stable build-node ID, ordered compiled and deployment ownership lists,
+Version 8 gives each entry a stable build-node ID, ordered compiled and deployment ownership lists,
 explicit writer schema/codec declarations, a direct fingerprint, an effective graph fingerprint,
-and a bounded `fingerprintState` decomposition. The decomposition stores canonical SHA-256 domains
+and a bounded `fingerprintState` decomposition. Writer declarations are exact
+`(assetTypeId, assetTypeName, assetSchemaVersion)` tuples, so one writer can truthfully advertise
+separately versioned schemas for the same runtime asset; each compiled output records the exact
+schema it emitted. The decomposition stores canonical SHA-256 domains
 for primary bytes; source-dependency identities and bytes; content-dependency identities and
 effective fingerprints; typed parameters; writer schema/codec declarations; compiled-output and
 runtime-XREF definitions; and deployment definitions. It stores no prose, timestamp, temporary
 path, RTTI name, or absolute host path. Aliased source/deployment identities persist as separate
 `sourceRoot` and root-relative path fields; physical directory mappings never enter the manifest
-or CNB. Versions 1 through 6 cannot provide the complete current contract, so they are rejected as
-incompatible and cause a safe rebuild; there is no ambiguous
+or CNB. Version 7 introduced the aliased source identities and current reason-state decomposition,
+but cannot represent multiple schemas for one asset identity under its declaration rule. Versions
+1 through 7 are therefore rejected as incompatible and cause a safe rebuild; there is no ambiguous
 in-place migration. An incompatible/corrupt manifest grants no deletion authority, so its existing
 outputs remain unless the new build replaces the same paths. A corrupt or future incompatible
 manifest is handled the same way.
 
-`build ... --explain` compares the current structured decision inputs with this persisted v7
+`build ... --explain` compares the current structured decision inputs with this persisted v8
 state; it never guesses a field-level cause from unequal aggregate hashes. The internal decision
 is a list of reason codes plus optional root-relative detail, and the CLI renders that structure
 only after deterministic scheduling has completed. It classifies:
@@ -657,8 +663,8 @@ only after deterministic scheduling has completed. It classifies:
 The bounded per-domain hashes can identify a changed dependency domain but intentionally do not
 duplicate every dependency digest merely to name one leaf. Aggregate direct/effective mismatch
 fallbacks remain explicit defensive reasons for a future unknown input rather than being reported
-as a fabricated source change. Manifest v6 and earlier produce one broad incompatible-format
-reason on their first rebuild; subsequent v7 builds have the precise persisted domains.
+as a fabricated source change. Manifest v7 and earlier produce one broad incompatible-format
+reason on their first rebuild; subsequent v8 builds have the precise persisted domains.
 
 ## Multi-output nodes and ownership
 
@@ -963,30 +969,38 @@ supported built-in XNB
 | `CurveReader` | Curve | all loop/key/tangent/continuity fields |
 | `SongReader` | Song | path/duration metadata plus contained external media dependency/XREF |
 | `VideoReader` | Video | FNA String/Int32/Single object-reference graph plus contained external media dependency/XREF |
-| `ModelReader` | Model | canonical CNA declarations; unique whole buffers; root-0 hierarchy; null tags; uniquely owned BasicEffect with default SpecularPower; reproducible bounds |
+| `ModelReader` | Model | frozen schema 1 for its original narrow exact subset; schema 2 for exact general declarations, shared resources, part windows, authored bounds/root, and five stock effects; null tags only |
 
-`ModelReader` supports the deliberately narrow subset proved by `CP-040` and implemented by
-`CP-041`: canonical CNA vertex declarations only; triangle-list parts consuming
-unique whole buffers; bone 0 as an identity root; null tags; unique BasicEffect resources with
-default `SpecularPower`; and serialized mesh bounds equal to the bounds deterministically rebuilt
-from retained positions. Colours, alpha, vertex-colour enablement and contained texture references
-fit existing schema-1 fields. Arbitrary declarations, buffer/effect sharing, part windows,
-non-default SpecularPower, other effect types, non-null tags, other root bones or non-reproducible
-bounding spheres do not fit and must fail rather than degrade. The real Blender cube fixture is
-outside the subset because its stride-24 Position+Normal declaration conflicts with CNA's
-stride-24 canonical layout and its SpecularPower is non-default. Every other custom/unknown root
-is rejected with its normalized reader identity.
+`ModelReader` first applies the deliberately narrow schema-1 subset proved by `CP-040`/`CP-041`:
+canonical CNA vertex declarations; triangle-list parts consuming unique whole buffers; bone 0 as
+an identity root; null tags; unique BasicEffect resources with default `SpecularPower`; and a
+serialized sphere equal to the deterministic schema-1 reconstruction. Any Model satisfying those
+rules still goes through the unchanged schema-1 converter and encoder, with byte-identical output.
+
+When an otherwise valid Model cannot fit those rules, schema 2 preserves all twelve XNA vertex
+formats and thirteen usages with exact offsets/stride/usage index; shared or unused supported
+vertex/index/effect resources; exact part windows and serialized spheres; explicit root identity,
+bone hierarchy and every transform; and every serialized field of `BasicEffect`,
+`AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, and `SkinnedEffect`. Texture
+references remain typed logical Texture2D/TextureCube XREFs. The real MonoGame Blender cube now
+uses schema 2 and retains its stride-24 Position+Normal declaration, authored sphere, and
+non-default `SpecularPower` exactly.
+
+Non-null Model/Mesh/MeshPart tags, custom Effect readers/material graphs, unknown shared-resource
+readers, malformed references/graphs/ranges/windows, invalid stock-effect values, and unsafe
+texture names remain explicit failures. CNA does not invent CLR object serialization, Effect
+graphs, XNB reader tables, or an approximation. Every other custom/unknown root is rejected with
+its normalized reader identity.
 
 Model compilation is headless. One shared field-order graph walker feeds either the existing
-runtime ownership/fixup adapter or canonical `XnbModelData`; shared CPU declaration, buffer and
-BasicEffect decoders likewise sit below both paths. The compiler converts only after proving the
-subset, then follows `ImportedModelDocument -> ModelProcessor -> ModelContentWriter ->
-EncodeModelToCnb()`. It does not instantiate a `GraphicsDevice`, GPU buffer or runtime Effect and
-does not preserve XNB bytes. Model schema 1 remains frozen and is still the only XNB output route
-at this point. `CP-058` separately froze Model schema 2 and added its CPU codec plus runtime loader
-for exact declarations, part windows, serialized bounds, explicit root identity, shared buffers
-and five stock effects. The build-time XNB selection/conversion onto that representation belongs
-to `CP-059`; until it lands, the schema-1 compatibility matrix above is unchanged.
+runtime ownership/fixup adapter or canonical `XnbModelData`; shared CPU declaration, buffer and all
+five stock-effect decoders sit below both paths. The compiler attempts the schema-1 converter
+first, then independently validates schema 2 only after a schema-1 fidelity failure. The resulting
+schema-tagged carrier follows `ImportedModelDocument -> ModelProcessor -> ModelContentWriter` to
+the authoritative matching encoder. It does not instantiate a `GraphicsDevice`, GPU buffer or
+runtime Effect and does not preserve XNB bytes. Synthetic and real MonoGame fixtures compare the
+runtime XNB and native-CNB results field-by-field, including declarations, bytes, sharing, windows,
+bounds, roots/transforms and material values—not merely counts.
 
 None, LZX, and MonoGame raw-block LZ4 compression and XNB versions 4/5 are supported through CNA's
 shared container code. The existing 16 platform header
@@ -1140,8 +1154,9 @@ plus clean through a non-ASCII path. Native Windows and MSVC remain untested and
   schema-2 runtime dispatch; schema 1 itself and its existing producer bytes are unchanged;
 - the rule that built-in writers reuse those encoders;
 - byte equivalence with legacy producers for matching implemented semantics;
-- lossless XNB Model transcoding for the documented schema-1-compatible subset, with every
-  unrepresentable declaration, effect/material field, tag, sharing semantic, or reference rejected;
+- lossless XNB Model transcoding with schema 1 retained byte-for-byte for its original subset and
+  schema 2 selected only for the documented exact declaration/resource/window/bounds/root/stock-
+  effect matrix; non-null tags, custom effects, and malformed/unsafe semantics remain rejected;
 - build/runtime separation, deterministic selection, categorized dependencies versus XREFs,
   content-hashed skips, logical path preservation, bounded output ownership, and per-artifact
   atomic publication;
@@ -1156,7 +1171,7 @@ plus clean through a non-ASCII path. Native Windows and MSVC remain untested and
   codec identities used by cache fingerprints;
 - opt-in glTF Model/Texture2D/AnimationClip generated bundles and their naming policy;
 - content-build edges, dependency builds, and bounded parallel scheduling;
-- the manifest-v7 persisted fingerprint-domain decomposition and stable aliased source identities
+- the manifest-v8 persisted fingerprint-domain decomposition and stable aliased source identities
   used by incremental decisions;
 - named, explicit, read-only external source-root capabilities;
 - structured incremental decisions and the human-readable `build --explain` rendering;
@@ -1166,9 +1181,6 @@ plus clean through a non-ASCII path. Native Windows and MSVC remain untested and
 - optional target profiles, if a concrete portable-output policy requires them;
 - independently scheduled glTF generated assets only if a concrete cache-isolation benefit
   justifies a generated-source graph contract;
-- broader XNB Model support through the implemented Model schema 2. `CP-059` must retain schema 1
-  whenever its current subset fits, select schema 2 only for exactly representable additional
-  semantics, and keep non-null tags/custom effects explicitly unsupported;
 - stable machine-readable build-decision output, if an IDE/build integration contract justifies a
   separately versioned format;
 

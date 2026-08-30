@@ -102,7 +102,8 @@ namespace CNA::Content::Pipeline
         const Cnb::CnbSoundEffectData& sound = input.Get<Cnb::CnbSoundEffectData>();
         return {Cnb::EncodeSoundEffectToCnb(sound, logicalName),
                 Cnb::CnbAssetTypeId::SoundEffect,
-                "Microsoft.Xna.Framework.Audio.SoundEffect"};
+                "Microsoft.Xna.Framework.Audio.SoundEffect",
+                Cnb::CnbSoundEffectSchemaVersion};
     }
 
     void RegisterSoundEffectContentPipeline(ContentPipelineRegistry& registry)

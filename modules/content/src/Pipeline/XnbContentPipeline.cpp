@@ -227,7 +227,7 @@ namespace CNA::Content::Pipeline
 
     ContentComponentIdentity XnbImporter::Identity() const
     {
-        return {XnbImporterName, "2"};
+        return {XnbImporterName, "3"};
     }
 
     std::vector<std::string> XnbImporter::SourceExtensions() const
@@ -353,12 +353,26 @@ namespace CNA::Content::Pipeline
         if (asset.rootReader == "Microsoft.Xna.Framework.Content.ModelReader")
         {
             ImportedModelDocument imported;
-            imported.canonicalModel = CNA::Internal::Xnb::ConvertXnbModelToCnb(
-                std::get<XnbModelData>(asset.value),
-                [&context](const std::string& authored)
-                {
-                    return ResolveModelTextureReference(context.LogicalName(), authored);
-                });
+            const XnbModelData& model = std::get<XnbModelData>(asset.value);
+            const auto resolve = [&context](const std::string& authored)
+            {
+                return ResolveModelTextureReference(context.LogicalName(), authored);
+            };
+            try
+            {
+                imported.canonicalModel = CNA::Internal::Xnb::ConvertXnbModelToCnb(
+                    model, resolve);
+                context.LogInfo(
+                    "selected frozen Model schema 1 because every XNB semantic fits exactly.");
+            }
+            catch (const ContentLoadException& schema1Failure)
+            {
+                imported.canonicalModel = CNA::Internal::Xnb::ConvertXnbModelToCnbV2(
+                    model, resolve);
+                context.LogInfo(
+                    "selected Model schema 2 after the schema-1 fidelity check: " +
+                    std::string(schema1Failure.what()));
+            }
             return ContentValue::Create(ImportedModelDocumentType, std::move(imported));
         }
         throw ContentLoadException(
