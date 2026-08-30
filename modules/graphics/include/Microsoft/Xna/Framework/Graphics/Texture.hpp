@@ -88,6 +88,37 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT [[nodiscard]] static bool IsFormatAllowedByProfileEXT(GraphicsProfile profile,
                                                                      SurfaceFormat fmt) noexcept;
 
+        /**
+         * @brief Whether a GraphicsProfile permits this SurfaceFormat for a TextureCube.
+         *
+         * The cube list is the Texture2D list minus the two signed-normalized byte formats, which
+         * XNA refuses for a cube at BOTH profiles -- measured, not derived: HiDef still refuses
+         * them on a device that carries them happily as a Texture2D. See
+         * spikes/xna-pixel-center-spike/ leg LEG-G, and REMED-GFX-245.
+         *
+         * @param profile The profile the device was created with.
+         * @param fmt The SurfaceFormat to test.
+         * @return True when the profile permits the format for a cube.
+         */
+        CNAEXT [[nodiscard]] static bool IsCubeFormatAllowedByProfileEXT(GraphicsProfile profile,
+                                                                         SurfaceFormat fmt) noexcept;
+
+        /**
+         * @brief Whether a GraphicsProfile permits this SurfaceFormat for a render target.
+         *
+         * The render-target list is the Texture2D list minus the three block-compressed formats,
+         * which nothing can render into. Note what this does NOT say: XNA does not REFUSE a render
+         * target whose format the profile excludes, it silently SUBSTITUTES `Color`. Callers that
+         * need to know before committing should ask rather than catch. Measured in
+         * spikes/xna-pixel-center-spike/ leg LEG-H; see REMED-GFX-245.
+         *
+         * @param profile The profile the device was created with.
+         * @param fmt The SurfaceFormat to test.
+         * @return True when the profile permits the format for a render target.
+         */
+        CNAEXT [[nodiscard]] static bool IsRenderTargetFormatAllowedByProfileEXT(
+            GraphicsProfile profile, SurfaceFormat fmt) noexcept;
+
     protected:
         explicit Texture(GraphicsDevice* device = nullptr);
 

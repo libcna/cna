@@ -144,6 +144,34 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
+    bool Texture::IsCubeFormatAllowedByProfileEXT(GraphicsProfile profile,
+                                                  SurfaceFormat fmt) noexcept
+    {
+        (void)profile;
+        // A cube never carries the signed-normalized byte formats, on EITHER profile. Measured
+        // rather than assumed: HiDef refuses them on a device that carries them as a Texture2D
+        // without complaint, so it is the resource kind saying no and not the hardware. Nothing in
+        // CNA has ever wanted such a cube, so enforcing this costs nothing.
+        //
+        // Deliberately NOT the whole cube list. XNA's Reach tier also excludes the eleven
+        // HiDef-only formats for a cube, and enforcing THAT would refuse a float cube on the
+        // default profile -- which MOD-107 exists to guarantee, because an irradiance or
+        // prefiltered-specular cube is rendered face by face into float storage and "a cube that
+        // reported HdrBlendable while holding 8-bit texels would make every IBL product quietly
+        // wrong". That collision is the same one MOD-115 settled for RenderTarget2D, and it is the
+        // owner's to reopen, not this gate's to decide. See REMED-GFX-245.
+        return fmt != SurfaceFormat::NormalizedByte2 && fmt != SurfaceFormat::NormalizedByte4;
+    }
+
+    bool Texture::IsRenderTargetFormatAllowedByProfileEXT(GraphicsProfile profile,
+                                                          SurfaceFormat fmt) noexcept
+    {
+        // Nothing renders into a block-compressed surface, at either profile.
+        if (fmt == SurfaceFormat::Dxt1 || fmt == SurfaceFormat::Dxt3 || fmt == SurfaceFormat::Dxt5)
+            return false;
+        return IsFormatAllowedByProfileEXT(profile, fmt);
+    }
+
     void Texture::ValidateFormat(SurfaceFormat fmt)
     {
         if (fmt == SurfaceFormat::Color)

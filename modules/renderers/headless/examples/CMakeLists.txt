@@ -172,6 +172,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "HEADLESS")
     cna_register_renderer_test(NAME Headless_DescriptorCapacityContract COMMAND cna_test_headless_descriptor_capacity
         TIMEOUT 900 LABELS "Headless")
 
+    # REMED-GFX-239/246: XNA addresses pixel centres at integer window coordinates and covers a 1x1
+    # screen-space triangle -- measured on the real XNA 4.0 runtime, see spikes/xna-pixel-center-spike/.
+    # The convention belongs to XNA rather than to any one renderer, so every renderer that can run
+    # this owes it; one that has not implemented it says so by failing here rather than by never
+    # being asked.
+    cna_headless_test(cna_test_headless_xna_pixel_center
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/xna_pixel_center_contract_test.cpp)
+    cna_register_renderer_test(NAME Headless_XnaPixelCenter COMMAND cna_test_headless_xna_pixel_center
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     cna_headless_test(cna_test_headless_point_sampling
         ${CNA_GRAPHICS_EXAMPLES_DIR}/point_sampling_contract_test.cpp)
     cna_register_renderer_test(NAME Headless_PointSamplingContract COMMAND cna_test_headless_point_sampling
