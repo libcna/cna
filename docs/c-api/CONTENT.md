@@ -3,7 +3,7 @@
 ## Scope
 
 The content surface owns a native `ContentManager` and exposes three approved typed load routes:
-Color `Texture2D`, `TextureCube` and `SoundEffect`. The C API does not attempt to express the C++
+`Texture2D`, `TextureCube` and `SoundEffect`. The C API does not attempt to express the C++
 `Load<T>` template and never accepts a runtime type name, C++ type identifier, service-provider
 pointer, path object or stream object.
 
@@ -40,25 +40,30 @@ the native asset cache.
 ## Texture ownership and cache behavior
 
 `cna_content_manager_load_texture2d` delegates resolution, decoding and caching to the canonical
-native `ContentManager::Load<Texture2D>`. The initial route accepts only a loaded
-`SurfaceFormat::Color` result. Each successful call returns a new owned C Texture2D handle, even
-when the native manager satisfies the load from its strong XNA-style asset cache. Handles for the
-same cached asset share the underlying texture resource while retaining independent C-handle
-lifetime.
+native `ContentManager::Load<Texture2D>`. It preserves the dimensions, mip chain, surface format
+and payload selected by that native reader; the C layer does not convert a non-Color result to
+RGBA8. Each successful call returns a new owned C Texture2D handle, even when the native manager
+satisfies the load from its strong XNA-style asset cache. Handles for the same cached asset share
+the underlying texture resource while retaining independent C-handle lifetime.
 
 The returned C texture is an independently owned game child. It remains valid after
-`cna_content_manager_unload` or `cna_content_manager_destroy` and uses the same query, RGBA8
-readback, SpriteBatch and destroy functions as a directly created C texture. It must be destroyed
-before the parent game. Destroying or unloading the content manager does not implicitly destroy
-issued C resource handles.
+`cna_content_manager_unload` or `cna_content_manager_destroy` and uses the same query, typed
+mip/rectangle transfer, SpriteBatch and destroy functions as a directly created C texture. It must
+be destroyed before the parent game. Destroying or unloading the content manager does not
+implicitly destroy issued C resource handles.
+
+The preserved native result can still be Color when the native content policy deliberately
+decompresses a source format for a backend that cannot use its stored representation. That is a
+native reader/backend decision, not a C-layer conversion.
 
 `cna_content_manager_unload` clears the manager's native asset cache. Destroy performs
 the same native disposal and invalidates only the manager handle.
 
 ## Failures and unavailable types
 
-Missing, unreadable or undecodable assets return `CNA_RESULT_IO` with a per-thread diagnostic.
-Renderer refusal and a successfully decoded non-Color Texture2D return
+Missing, unreadable or undecodable assets return `CNA_RESULT_IO` with a per-thread diagnostic. This
+includes an XNB surface format that CNA's native Texture2D reader does not implement. A native
+profile or renderer capability refusal surfaced as `System::NotSupportedException` returns
 `CNA_RESULT_NOT_SUPPORTED`. Argument, UTF-8, handle and thread failures retain their standard C API
 results. No native exception crosses the ABI.
 

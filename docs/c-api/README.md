@@ -31,7 +31,7 @@ bones/hierarchies, model mesh parts and game-child meshes with retained resource
 live effect/part views, mesh snapshots and top-level models with copied bone transforms, complete
 morph-target descriptors/data, blending, track evaluation and retained mesh-part upload, plus
 point-in-time keyboard, mouse, gamepad and touch snapshots. An
-owned `ContentManager` adds UTF-8 root/path/key and cache control, built-in loader registration, graphics-device get/set, manifest and reader-usage snapshots and typed Color Texture2D, TextureCube and SoundEffect load routes,
+owned `ContentManager` adds UTF-8 root/path/key and cache control, built-in loader registration, graphics-device get/set, manifest and reader-usage snapshots and format-preserving Texture2D, TextureCube and SoundEffect load routes,
 with an owned compiled-asset reader over a storage stream and the process-wide type-reader
 registry alongside it. Networking contributes the session identity enumerations, the
 quality-of-service value, owned session-property lists with enumerators, owned packet read and

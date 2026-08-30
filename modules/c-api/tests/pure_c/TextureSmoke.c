@@ -567,12 +567,26 @@ static CNA_Result on_load(
     for (CNA_SurfaceFormat format = CNA_SURFACE_FORMAT_BGR565;
          format <= CNA_SURFACE_FORMAT_USHORT_EXT;
          ++format) {
-        CNA_Texture2DCreateInfo unsupported = create_info;
-        unsupported.format = format;
-        unsupported.mip_map = CNA_FALSE;
+        CNA_Texture2DCreateInfo candidate = create_info;
+        CNA_RendererFormatUsageFlags known = 0U;
+        CNA_RendererFormatUsageFlags supported = 0U;
+        CNA_Result result = CNA_RESULT_INTERNAL;
+        candidate.format = format;
+        candidate.mip_map = CNA_FALSE;
         CNA_Handle output = UINT64_MAX;
-        if (cna_texture2d_create(device, &unsupported, &output) !=
-                CNA_RESULT_NOT_SUPPORTED || output != CNA_INVALID_HANDLE) {
+        if (cna_graphics_device_get_surface_format_support_ext(
+                device, format, &known, &supported) != CNA_RESULT_SUCCESS) {
+            return CNA_RESULT_INVALID_STATE;
+        }
+        result = cna_texture2d_create(device, &candidate, &output);
+        if (result == CNA_RESULT_SUCCESS) {
+            if (output == CNA_INVALID_HANDLE ||
+                ((known & CNA_RENDERER_FORMAT_USAGE_TEXTURE_STORAGE) != 0U &&
+                 (supported & CNA_RENDERER_FORMAT_USAGE_TEXTURE_STORAGE) == 0U) ||
+                cna_texture2d_destroy(output) != CNA_RESULT_SUCCESS) {
+                return CNA_RESULT_INVALID_STATE;
+            }
+        } else if (result != CNA_RESULT_NOT_SUPPORTED || output != CNA_INVALID_HANDLE) {
             return CNA_RESULT_INVALID_STATE;
         }
     }

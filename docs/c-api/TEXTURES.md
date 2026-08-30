@@ -3,7 +3,7 @@
 ## Scope
 
 `texture.h` completes the C-native mapping of the public `Texture` and `Texture2D` declarations.
-It extends the earlier Color level-zero slice without changing those entry points. Texture objects
+It extends the earlier level-zero slice without changing those entry points. Texture objects
 remain validated, creation-thread-affine handles; no C++ object, renderer pointer, weak pointer or
 Sharp Runtime stream crosses the ABI.
 
@@ -17,8 +17,8 @@ that is its native inheritance relationship.
 
 `cna_texture_get_info` returns the native format and allocated mip-level count. The static helper
 family exposes block area, format-unit byte size, pixel-store alignment, destination element-size
-validation and the base renderer-independent Color format gate for every stable SurfaceFormat
-identity. Outputs are assigned only after argument and handle validation.
+validation and the renderer/profile-aware creation gate for every stable SurfaceFormat identity.
+Outputs are assigned only after argument and handle validation.
 
 Width, height and bounds remain in the existing `cna_texture2d_get_info` snapshot. Exact native
 type text uses count/copy operations without a terminator. `cna_texture2d_get_storage_info` reports
@@ -81,6 +81,9 @@ covers all 27 format helpers/creation gates, dispatch and rejection for all 18 d
 successful Color full/rectangle transfers, HEADLESS mip transfer, SDL's explicit mip limitation,
 every public factory/query/encoding route, PNG/JPEG signatures and file round-trips, both decoded
 resize modes, storage/type text, capacity atomicity and invalid/stale/wrong-kind/wrong-thread
-handles. C17 and C++23 assertions freeze every new public structure and identity endpoint. The
-same focused test passes under ASan+UBSan; LeakSanitizer is disabled only in the ptrace-constrained
-test environment where the leak checker itself cannot attach.
+handles. The same strict-C test now also runs on EasyGL OPENGLES3, where native-supported non-Color
+formats pass the device-aware creation gate. `ContentSmoke.c` independently proves exact two-level
+`NormalizedByte2` format and payload preservation through the XNB content route on that renderer.
+C17 and C++23 assertions freeze every new public structure and identity endpoint. The same focused
+test passes under ASan+UBSan; LeakSanitizer is disabled only in the ptrace-constrained test
+environment where the leak checker itself cannot attach.

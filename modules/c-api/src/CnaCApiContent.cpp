@@ -53,7 +53,6 @@ using Microsoft::Xna::Framework::Content::ContentManifestEntry;
 using Microsoft::Xna::Framework::Content::ContentManifestReaderUsage;
 using Microsoft::Xna::Framework::Content::ResourceContentManager;
 using Microsoft::Xna::Framework::Graphics::SpriteFont;
-using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 using Microsoft::Xna::Framework::Graphics::TextureCube;
 
@@ -412,12 +411,6 @@ CNA_Result cna_content_manager_load_texture2d(
 
         try {
             Texture2D loaded = contentManager->value->Load<Texture2D>(assetNameCopy);
-            if (loaded.getFormatProperty() != SurfaceFormat::Color) {
-                return Fail(
-                    CNA_RESULT_NOT_SUPPORTED,
-                    CNA_ERROR_CATEGORY_NOT_SUPPORTED,
-                    "The initial C content loader supports only Color Texture2D assets.");
-            }
             return CNA::C::Detail::CreateOwnedTexture2D(
                 std::make_shared<Texture2D>(std::move(loaded)),
                 contentManager->parentGame,

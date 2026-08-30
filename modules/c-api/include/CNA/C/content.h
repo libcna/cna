@@ -96,16 +96,17 @@ CNA_C_API CNA_Result cna_content_manager_set_root_directory(
 CNA_C_API CNA_Result cna_content_manager_unload(CNA_Handle content_manager);
 
 /**
- * @brief Loads a Color Texture2D asset through the native content pipeline.
+ * @brief Loads a Texture2D asset through the native content pipeline.
  *
  * @param content_manager Owned content-manager handle.
  * @param asset_name Non-empty UTF-8 logical asset name copied during this call.
  * @param out_texture Receives a new independently owned Texture2D handle on success.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_IO` for a content-load failure,
- * `CNA_RESULT_NOT_SUPPORTED` for a loaded non-Color texture, or another documented
- * argument/encoding/handle/thread/native failure.
+ * `CNA_RESULT_NOT_SUPPORTED` when the active renderer cannot represent the loaded format, or
+ * another documented argument/encoding/handle/thread/native failure.
  *
- * The returned texture uses the normal `cna_texture2d_*` operations, remains valid across
+ * The returned texture preserves the native content reader's dimensions, mip chain and surface
+ * format, uses the normal typed `cna_texture2d_*` transfer operations, remains valid across
  * content-manager unload or destruction and must be destroyed before the parent game.
  */
 CNA_C_API CNA_Result cna_content_manager_load_texture2d(

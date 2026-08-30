@@ -159,8 +159,6 @@ struct TextureCubeResourceView final {
     CNA_Handle handle,
     std::shared_ptr<Texture2DResource>* outTexture);
 
-[[nodiscard]] bool IsTexture2DFormatSupportedByBuild(uint32_t format) noexcept;
-
 [[nodiscard]] CNA_Result GetOwnedTexture(
     CNA_Handle handle,
     TextureResourceView* outTexture);

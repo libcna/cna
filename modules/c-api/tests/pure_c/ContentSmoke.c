@@ -490,6 +490,10 @@ static const char FontDescriptorPath[] = "cna_c_api_content_font.cnj";
 static const char ForeignAssetName[] = "cna_c_api_content_foreign";
 static const char ForeignAssetPath[] = "cna_c_api_content_foreign.xnb";
 static const char ForeignLoadReaderName[] = "CNA.Test.ContentSmoke.ForeignReader";
+static const char NormalizedByte2AssetName[] = "cna_c_api_content_normalized_byte2";
+static const char NormalizedByte2AssetPath[] = "cna_c_api_content_normalized_byte2.xnb";
+static const char UnsupportedTextureAssetName[] = "cna_c_api_content_unsupported_texture";
+static const char UnsupportedTextureAssetPath[] = "cna_c_api_content_unsupported_texture.xnb";
 static const char ReflectiveAssetName[] = "cna_c_api_content_reflective";
 static const char ReflectiveAssetPath[] = "cna_c_api_content_reflective.xnb";
 static const char ReflectiveTypeName[] = "CNA.Test.ContentSmoke.Settings";
@@ -760,6 +764,143 @@ static size_t push_reader_name(uint8_t* const data, size_t offset, const char* c
     memcpy(data + offset, name, length);
     offset += length;
     return push_u32_le(data, offset, UINT32_C(0));   /* reader version 0 */
+}
+
+static int write_normalized_byte2_asset(void)
+{
+    static const uint16_t LevelZero[] = {
+        UINT16_C(0x4081), UINT16_C(0x7fc0), UINT16_C(0x8181), UINT16_C(0x4040)
+    };
+    static const uint16_t LevelOne[] = {UINT16_C(0x007f)};
+    uint8_t asset[192];
+    size_t offset = 10U;
+    size_t index = 0U;
+
+    /* Microsoft's DistortionSample processor converts its displacement map to
+       PixelBitmapContent<NormalizedByte2>. This is that pipeline's canonical Texture2DReader
+       wire shape, including a complete 2x2 mip chain, rather than an RGBA substitute. */
+    offset = push_seven_bit(asset, offset, UINT32_C(1));
+    offset = push_reader_name(
+        asset, offset, "Microsoft.Xna.Framework.Content.Texture2DReader");
+    offset = push_seven_bit(asset, offset, UINT32_C(0));   /* no shared resources */
+    offset = push_seven_bit(asset, offset, UINT32_C(1));   /* root object: reader 1 */
+    offset = push_u32_le(asset, offset, CNA_SURFACE_FORMAT_NORMALIZED_BYTE2);
+    offset = push_u32_le(asset, offset, UINT32_C(2));      /* width */
+    offset = push_u32_le(asset, offset, UINT32_C(2));      /* height */
+    offset = push_u32_le(asset, offset, UINT32_C(2));      /* two mip levels */
+    offset = push_u32_le(asset, offset, (uint32_t)sizeof(LevelZero));
+    for (index = 0U; index < sizeof(LevelZero) / sizeof(LevelZero[0]); ++index) {
+        asset[offset++] = (uint8_t)(LevelZero[index] & UINT16_C(0xff));
+        asset[offset++] = (uint8_t)(LevelZero[index] >> 8U);
+    }
+    offset = push_u32_le(asset, offset, (uint32_t)sizeof(LevelOne));
+    for (index = 0U; index < sizeof(LevelOne) / sizeof(LevelOne[0]); ++index) {
+        asset[offset++] = (uint8_t)(LevelOne[index] & UINT16_C(0xff));
+        asset[offset++] = (uint8_t)(LevelOne[index] >> 8U);
+    }
+
+    asset[0] = (uint8_t)'X';
+    asset[1] = (uint8_t)'N';
+    asset[2] = (uint8_t)'B';
+    asset[3] = (uint8_t)'w';
+    asset[4] = 5U;
+    asset[5] = 0U;
+    (void)push_u32_le(asset, 6U, (uint32_t)offset);
+    return write_binary_file(NormalizedByte2AssetPath, asset, offset);
+}
+
+static int write_unsupported_texture_asset(void)
+{
+    uint8_t asset[160];
+    size_t offset = 10U;
+
+    offset = push_seven_bit(asset, offset, UINT32_C(1));
+    offset = push_reader_name(
+        asset, offset, "Microsoft.Xna.Framework.Content.Texture2DReader");
+    offset = push_seven_bit(asset, offset, UINT32_C(0));
+    offset = push_seven_bit(asset, offset, UINT32_C(1));
+    /* Alpha8 is a real SurfaceFormat, but CNA's XNB Texture2DReader does not implement it. The
+       loader must report that content failure honestly rather than fabricating Color data. */
+    offset = push_u32_le(asset, offset, CNA_SURFACE_FORMAT_ALPHA8);
+    offset = push_u32_le(asset, offset, UINT32_C(1));
+    offset = push_u32_le(asset, offset, UINT32_C(1));
+    offset = push_u32_le(asset, offset, UINT32_C(1));
+    offset = push_u32_le(asset, offset, UINT32_C(1));
+    asset[offset++] = UINT8_C(0x7f);
+
+    asset[0] = (uint8_t)'X';
+    asset[1] = (uint8_t)'N';
+    asset[2] = (uint8_t)'B';
+    asset[3] = (uint8_t)'w';
+    asset[4] = 5U;
+    asset[5] = 0U;
+    (void)push_u32_le(asset, 6U, (uint32_t)offset);
+    return write_binary_file(UnsupportedTextureAssetPath, asset, offset);
+}
+
+static int validate_normalized_byte2_load(const CNA_Handle manager)
+{
+    static const CNA_PackedNormalizedByte2 ExpectedLevelZero[] = {
+        UINT16_C(0x4081), UINT16_C(0x7fc0), UINT16_C(0x8181), UINT16_C(0x4040)
+    };
+    static const CNA_PackedNormalizedByte2 ExpectedLevelOne[] = {UINT16_C(0x007f)};
+    CNA_Handle texture = CNA_INVALID_HANDLE;
+    CNA_Texture2DInfo info = {
+        sizeof(CNA_Texture2DInfo), UINT32_C(1), 0U, 0U, 0U, 0U
+    };
+    CNA_PackedNormalizedByte2 actual[4] = {0U, 0U, 0U, 0U};
+    CNA_Texture2DTransfer transfer = {
+        sizeof(CNA_Texture2DTransfer), UINT32_C(1), 0, CNA_FALSE,
+        {0U, 0U, 0U}, {0, 0, 0, 0}, UINT64_C(0), UINT64_C(4)
+    };
+    uint64_t required = 0U;
+
+    if (cna_content_manager_load_texture2d(
+            manager, view(NormalizedByte2AssetName), &texture) != CNA_RESULT_SUCCESS ||
+        texture == CNA_INVALID_HANDLE ||
+        cna_texture2d_get_info(texture, &info) != CNA_RESULT_SUCCESS ||
+        info.width != 2U || info.height != 2U || info.level_count != 2U ||
+        info.format != CNA_SURFACE_FORMAT_NORMALIZED_BYTE2 ||
+        cna_texture2d_get_data(
+            texture, CNA_TEXTURE_DATA_NORMALIZED_BYTE2, &transfer,
+            actual, UINT64_C(4), &required) != CNA_RESULT_SUCCESS ||
+        required != UINT64_C(4) ||
+        memcmp(actual, ExpectedLevelZero, sizeof(ExpectedLevelZero)) != 0) {
+        if (texture != CNA_INVALID_HANDLE) {
+            (void)cna_texture2d_destroy(texture);
+        }
+        return 0;
+    }
+
+    memset(actual, 0, sizeof(actual));
+    transfer.level = 1;
+    transfer.element_count = UINT64_C(1);
+    required = 0U;
+    if (cna_texture2d_get_data(
+            texture, CNA_TEXTURE_DATA_NORMALIZED_BYTE2, &transfer,
+            actual, UINT64_C(1), &required) != CNA_RESULT_SUCCESS ||
+        required != UINT64_C(1) || actual[0] != ExpectedLevelOne[0]) {
+        (void)cna_texture2d_destroy(texture);
+        return 0;
+    }
+    return cna_texture2d_destroy(texture) == CNA_RESULT_SUCCESS;
+}
+
+static int validate_unsupported_texture_load(const CNA_Handle manager)
+{
+    CNA_Handle texture = UINT64_C(77);
+    CNA_ErrorInfo error = {
+        sizeof(CNA_ErrorInfo), UINT32_C(1), CNA_RESULT_SUCCESS, CNA_ERROR_CATEGORY_NONE, 0U
+    };
+    if (cna_content_manager_load_texture2d(
+            manager, view(UnsupportedTextureAssetName), &texture) != CNA_RESULT_IO ||
+        texture != CNA_INVALID_HANDLE ||
+        cna_error_get_last_info(&error) != CNA_RESULT_SUCCESS ||
+        error.result != CNA_RESULT_IO || error.category != CNA_ERROR_CATEGORY_IO ||
+        error.message_byte_length == 0U) {
+        return 0;
+    }
+    return 1;
 }
 
 static int write_reflective_asset(void)
@@ -2078,6 +2219,8 @@ static CNA_Result on_load(
     if (!validate_paths_and_device(state->content_manager, graphics_device) ||
         !validate_resource_manager(graphics_device) ||
         !validate_font_load(state->content_manager) ||
+        !validate_normalized_byte2_load(state->content_manager) ||
+        !validate_unsupported_texture_load(state->content_manager) ||
         !validate_foreign_load(state->content_manager) ||
         !validate_reflective_reader(state->content_manager) ||
         !validate_object_dictionary(state->content_manager) ||
@@ -2136,6 +2279,8 @@ static int call_unload_on_wrong_thread(void* const context)
 int main(void)
 {
     if (!write_fixture() || !write_font_fixture() || !write_foreign_asset() ||
+        !write_normalized_byte2_asset() ||
+        !write_unsupported_texture_asset() ||
         !write_effect_fixture() || !write_cnj_fixture()) {
         return CNA_TEST_FAIL(1);
     }
@@ -2174,8 +2319,14 @@ int main(void)
     (void)remove(FontAtlasPath);
     (void)remove(FontDescriptorPath);
     (void)remove(ForeignAssetPath);
+    (void)remove(NormalizedByte2AssetPath);
+    (void)remove(UnsupportedTextureAssetPath);
     (void)remove(ReflectiveAssetPath);
     (void)remove(CnbAssetPath);
+    (void)remove(DictionaryAssetPath);
+    (void)remove(TaggedModelPath);
+    (void)remove(ForeignModelPath);
+    (void)remove(ValueModelPath);
     (void)remove(EffectDescriptorPath);
     (void)remove(CnjDescriptorPath);
 

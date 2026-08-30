@@ -35,17 +35,6 @@
 #include <utility>
 #include <vector>
 
-namespace CNA::C::Detail {
-
-bool IsTexture2DFormatSupportedByBuild(const uint32_t format) noexcept
-{
-#if 1
-    return format == CNA_SURFACE_FORMAT_COLOR;
-#endif
-}
-
-} // namespace CNA::C::Detail
-
 namespace {
 
 using CNA::C::Detail::BorrowedGraphicsDevice;

@@ -921,7 +921,7 @@ CNA_C_API CNA_Result cna_graphics_device_get_backbuffer_data_rgba8(
     uint64_t* out_pixels);
 
 /**
- * @brief Creates an owned Color-format two-dimensional texture.
+ * @brief Creates an owned two-dimensional texture in a renderer-supported surface format.
  *
  * @param graphics_device Callback-scoped borrowed graphics-device handle.
  * @param create_info Versioned dimensions, mip and surface-format configuration.

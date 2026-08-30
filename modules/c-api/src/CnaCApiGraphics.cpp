@@ -29,6 +29,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
 #include <cmath>
@@ -72,6 +73,7 @@ using Microsoft::Xna::Framework::Graphics::SpriteBatch;
 using Microsoft::Xna::Framework::Graphics::SpriteEffects;
 using Microsoft::Xna::Framework::Graphics::SpriteSortMode;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+using Microsoft::Xna::Framework::Graphics::Texture;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 
 constexpr uint32_t StructureVersion = UINT32_C(1);
@@ -1060,12 +1062,6 @@ CNA_Result cna_texture2d_create(
                 CNA_ERROR_CATEGORY_ARGUMENT,
                 "The Texture2D surface-format identity is invalid.");
         }
-        if (!CNA::C::Detail::IsTexture2DFormatSupportedByBuild(createInfo->format)) {
-            return Fail(
-                CNA_RESULT_NOT_SUPPORTED,
-                CNA_ERROR_CATEGORY_NOT_SUPPORTED,
-                "The Texture2D surface format is unavailable on the selected renderer.");
-        }
         if (createInfo->width > static_cast<uint32_t>(std::numeric_limits<int>::max()) ||
             createInfo->height > static_cast<uint32_t>(std::numeric_limits<int>::max()) ||
             static_cast<uint64_t>(createInfo->width) * createInfo->height >
@@ -1098,12 +1094,30 @@ CNA_Result cna_texture2d_create(
                 "The Texture2D dimensions exceed the active renderer's maximum.");
         }
 
+        const SurfaceFormat format = static_cast<SurfaceFormat>(createInfo->format);
+        if (!Texture::IsFormatAllowedByProfileEXT(
+                graphicsDevice->value->getGraphicsProfileProperty(), format)) {
+            return Fail(
+                CNA_RESULT_NOT_SUPPORTED,
+                CNA_ERROR_CATEGORY_NOT_SUPPORTED,
+                "The Texture2D surface format is unavailable on the active graphics profile.");
+        }
+        const CNA::RendererFormatSupport formatSupport =
+            graphicsDevice->value->GetRendererSurfaceFormatSupportEXT(format);
+        if (formatSupport.IsKnown(CNA::RendererFormatUsage::TextureStorage) &&
+            !formatSupport.Supports(CNA::RendererFormatUsage::TextureStorage)) {
+            return Fail(
+                CNA_RESULT_NOT_SUPPORTED,
+                CNA_ERROR_CATEGORY_NOT_SUPPORTED,
+                "The Texture2D surface format is unavailable on the selected renderer.");
+        }
+
         const auto texture = std::make_shared<Texture2D>(
             *graphicsDevice->value,
             static_cast<int>(createInfo->width),
             static_cast<int>(createInfo->height),
             createInfo->mip_map == CNA_TRUE,
-            static_cast<SurfaceFormat>(createInfo->format));
+            format);
         return CNA::C::Detail::CreateOwnedTexture2D(
             texture,
             graphicsDevice->parentGame,

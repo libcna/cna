@@ -151,12 +151,24 @@ static CNA_Result on_load(
         {0U, 0U, 0U},
         CNA_SURFACE_FORMAT_BGR565
     };
-    CNA_Handle unsupported_texture = CNA_INVALID_HANDLE;
-    if (cna_texture2d_create(
-            graphics_device,
-            &texture_create_info,
-            &unsupported_texture) != CNA_RESULT_NOT_SUPPORTED ||
-        unsupported_texture != CNA_INVALID_HANDLE) {
+    CNA_Handle packed_texture = CNA_INVALID_HANDLE;
+    const CNA_Result packed_result = cna_texture2d_create(
+        graphics_device,
+        &texture_create_info,
+        &packed_texture);
+    if (packed_result == CNA_RESULT_SUCCESS) {
+        CNA_Texture2DInfo packed_info = {
+            sizeof(CNA_Texture2DInfo), UINT32_C(1), 0U, 0U, 0U, 0U
+        };
+        if (packed_texture == CNA_INVALID_HANDLE ||
+            cna_texture2d_get_info(packed_texture, &packed_info) != CNA_RESULT_SUCCESS ||
+            packed_info.width != 2U || packed_info.height != 2U ||
+            packed_info.format != CNA_SURFACE_FORMAT_BGR565 ||
+            cna_texture2d_destroy(packed_texture) != CNA_RESULT_SUCCESS) {
+            return CNA_RESULT_INVALID_STATE;
+        }
+    } else if (packed_result != CNA_RESULT_NOT_SUPPORTED ||
+               packed_texture != CNA_INVALID_HANDLE) {
         return CNA_RESULT_INVALID_STATE;
     }
     texture_create_info.format = CNA_SURFACE_FORMAT_COLOR;
