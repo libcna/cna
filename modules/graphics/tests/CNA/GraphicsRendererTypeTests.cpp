@@ -14,7 +14,7 @@ static_assert(!getCurrentGraphicsRendererName().empty());
 constexpr GraphicsRendererType kCompileTimeType = getCurrentGraphicsRendererType();
 constexpr std::string_view kCompileTimeName = getCurrentGraphicsRendererName();
 constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::NanoVg) + 1;
-static_assert(kPublicRendererCount == 43,
+static_assert(kPublicRendererCount == 42,
               "GraphicsRendererType must expose all 50 genuine renderer identities");
 
 TEST(GraphicsRendererTypeTest, GetCurrentGraphicsRendererTypeDoesNotThrow)
@@ -66,7 +66,6 @@ namespace
             case GraphicsRendererType::Direct2D:    return "DIRECT2D";
             case GraphicsRendererType::Canvas:      return "CANVAS";
             case GraphicsRendererType::HtmlDom:     return "HTML_DOM";
-            case GraphicsRendererType::Blend2D:     return "BLEND2D";
             case GraphicsRendererType::FreeDirect:  return "FREEDIRECT";
             case GraphicsRendererType::Stub:        return "STUB";
             case GraphicsRendererType::DirectX9:        return "DIRECTX9";

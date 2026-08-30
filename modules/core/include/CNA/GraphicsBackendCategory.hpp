@@ -102,7 +102,6 @@ namespace CNA
                 return GraphicsBackendCategory::TranslationLayer;
 
             case GraphicsRendererType::Software:
-            case GraphicsRendererType::Blend2D:
             case GraphicsRendererType::PortableGL:
             case GraphicsRendererType::TinyGL:
                 return GraphicsBackendCategory::Software;

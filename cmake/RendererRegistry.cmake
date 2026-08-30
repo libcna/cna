@@ -46,7 +46,6 @@ function(_cna_renderer_identity_map out_var)
         CANVAS       Canvas
         HTML_DOM     HtmlDom
         SVG_DOM      SvgDom
-        BLEND2D      Blend2D
         FREEDIRECT   FreeDirect
         DIRECTX9     DirectX9
         DIRECTX1     DirectX1

@@ -65,9 +65,9 @@ jobs:
             display: false
           # A pseudo-TTY test runs a real 2D game, keyboard byte, resize and terminal restore;
           # no X11/Wayland service is involved.
-          - name: Terminal + Blend2D + Null audio
+          - name: Terminal + Software + Null audio
             platform: TERMINAL
-            renderer: BLEND2D
+            renderer: SOFTWARE
             audio: "NULL"
             display: false
     env:
