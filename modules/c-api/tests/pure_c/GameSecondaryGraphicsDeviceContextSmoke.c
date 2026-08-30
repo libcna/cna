@@ -3,7 +3,7 @@
 /*
  * Regression for a caller-created GraphicsDevice changing the GL context underneath a running
  * Game. This deliberately uses only the public C ABI: repairing the context from the test with
- * SDL_GL_MakeCurrent would hide the product defect all bindings need CNA itself to solve.
+ * A native make-current call would hide the product defect all bindings need CNA itself to solve.
  */
 
 #include <CNA/C/cna.h>

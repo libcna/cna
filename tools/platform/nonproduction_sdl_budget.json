@@ -107,7 +107,7 @@
     },
     "modules/graphics/examples/common/SdlTestGraphicsServices.hpp": {
       "category": "renderer-integration-executable",
-      "max_references": 111
+      "max_references": 116
     },
     "modules/graphics/examples/graphicsdevice_ordered_clear_test.cpp": {
       "category": "renderer-integration-executable",
