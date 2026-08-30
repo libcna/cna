@@ -76,14 +76,11 @@ bug. Opening the generated HTML directly from disk is not a valid threaded-Wasm 
   -sNO_DISABLE_EXCEPTION_CATCHING=1`, applied before `sharp-runtime` is added) — Emscripten disables
   exception unwinding by default, but CNA's `System::Exception` hierarchy and every `EXPECT_THROW`
   test in this codebase depend on real unwinding working end-to-end.
-- **`cna_house3d_demo`** (the one real 3D EasyGL/Vulkan demo, gated to `OPENGLES3 OR OPENGL33 OR WEBGL1 OR WEBGL2 OR VULKAN`) pins
-  `-sMIN_WEBGL_VERSION=2`/`-sMAX_WEBGL_VERSION=2` explicitly — the only target in the whole build
-  that does. `cna_demo_2d`/`cna_demo_sound` have Emscripten link options (`.html` output suffix,
-  `-sALLOW_MEMORY_GROWTH=1`, `--preload-file` for their `Content` directories, per-demo memory
-  sizing) but do **not** pin a WebGL version — an inconsistency worth resolving before any real
-  in-browser testing begins, since a 2D-only demo unintentionally negotiating WebGL 1 instead of 2
-  would silently run against a different (and lesser) capability set than `EasyGL`'s desktop-GL
-  code assumes.
+- **Final graphics targets share one renderer-aware WebGL contract.** `cna_demo_2d`,
+  `cna_house3d_demo`, the graphics benchmark and `cna_c_api_wasm` all use the same helper:
+  `WEBGL1` pins `MIN/MAX_WEBGL_VERSION=1/1`, `WEBGL2` pins `2/2`, and non-WebGL renderers receive no
+  irrelevant WebGL requirement. Both C-API variants were clean-built and exercised in Chrome with
+  the expected real context version.
 - **`cna_demo_xact` is excluded on Emscripten** (and Android) — XACT audio is a Windows/Xbox-specific
   content pipeline with no web equivalent, unrelated to the graphics renderer itself.
 
@@ -135,11 +132,10 @@ format, extension, shader path, or context-loss transition:
   set of internal formats and compressed-texture extensions vary significantly by browser/GPU. CNA's
   own `SurfaceFormat::Color`-only constraint (Task 176, already enforced identically on every
   renderer) means this is currently a non-issue in practice for the same reason as above.
-- **A browser that only supports WebGL 1 (not WebGL 2) has no fallback path today.** `-sMIN_WEBGL_VERSION=2
-  -sMAX_WEBGL_VERSION=2` (where set, see above) makes Emscripten refuse to negotiate WebGL 1 at all,
-  rather than degrading — the correct choice for `cna_house3d_demo` given GLES 3.0 is baked into
-  `EasyGL`'s assumptions, but it does mean CNA has zero WebGL-1-class browser support by design, not
-  by oversight.
+- **`WEBGL2` deliberately has no implicit WebGL 1 fallback.** Its exact 2/2 link contract prevents
+  Emscripten from selecting a context that cannot compile its GLSL ES 3.00 shaders. Applications
+  targeting WebGL-1-class browsers must build the distinct `WEBGL1` renderer, whose exact 1/1
+  contract and five-frame C-API browser probe are verified separately.
 
 ## Canvas-as-display model
 

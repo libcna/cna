@@ -236,11 +236,10 @@ target_compile_definitions(cna_build_config INTERFACE
 
 if(EMSCRIPTEN)
     # These are part of CNA's public WebAssembly ABI: consumers and every linked library must use
-    # the same exception model. Emscripten's JS exception lowering is compatible with Asyncify
-    # (native Wasm EH is not), and Asyncify lets Game::Run() suspend and restore its caller while
-    # the browser owns frame scheduling. Together they preserve XNA's blocking lifetime contract
-    # across the browser versions supported by Emscripten without legacy Wasm `try` instructions.
-    target_link_libraries(cna_build_config INTERFACE cna_emscripten_abi)
+    # the same exception model. Asyncify is intentionally separate: final application targets use
+    # it for blocking Game::Run(), while JS-driven library artifacts must remain ordinary
+    # synchronous exports and let the browser schedule RunOneFrame calls.
+    target_link_libraries(cna_build_config INTERFACE cna_emscripten_exception_abi)
     target_link_options(cna_build_config INTERFACE -sSTACK_SIZE=1048576)
     if(CNA_ENABLE_EMSCRIPTEN_THREADS)
         # Parent-project executables are outside this directory's add_compile_options scope.

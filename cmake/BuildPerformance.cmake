@@ -94,17 +94,32 @@ function(cna_configure_linker)
     endif()
 endfunction()
 
+add_library(cna_emscripten_exception_abi INTERFACE)
+add_library(CNA::EmscriptenExceptionAbi ALIAS cna_emscripten_exception_abi)
+add_library(cna_emscripten_asyncify INTERFACE)
+add_library(CNA::EmscriptenAsyncify ALIAS cna_emscripten_asyncify)
+
+# Compatibility composition for the application-style Emscripten contract. New code should name
+# the exception ABI and the blocking-loop facility separately: a JavaScript-entered library needs
+# the former but must not inherit the latter merely because it links CNA.
 add_library(cna_emscripten_abi INTERFACE)
 add_library(CNA::EmscriptenAbi ALIAS cna_emscripten_abi)
+target_link_libraries(cna_emscripten_abi INTERFACE
+    cna_emscripten_exception_abi
+    cna_emscripten_asyncify)
 if(EMSCRIPTEN)
     # Every C++ frame that can propagate a CNA exception must use the same JS-lowered exception
     # ABI. Keep this target-scoped so ordinary native builds never inherit Emscripten flags.
-    target_compile_options(cna_emscripten_abi INTERFACE -fexceptions)
-    target_link_options(cna_emscripten_abi INTERFACE
+    target_compile_options(cna_emscripten_exception_abi INTERFACE -fexceptions)
+    target_link_options(cna_emscripten_exception_abi INTERFACE
         -fexceptions
         -sDISABLE_EXCEPTION_CATCHING=0
-        -sASYNCIFY=1
     )
+
+    # Asyncify is an executable/event-loop policy, not part of the exception ABI. Application
+    # targets that run blocking Game::Run opt in below; JS-driven library artifacts such as the C
+    # API deliberately do not.
+    target_link_options(cna_emscripten_asyncify INTERFACE -sASYNCIFY=1)
 endif()
 
 add_library(cna_instrumentation INTERFACE)
@@ -231,7 +246,7 @@ endfunction()
 
 function(cna_apply_sharp_runtime_build_support)
     set(_cna_runtime_support
-        cna_instrumentation cna_debug_info_options cna_emscripten_abi)
+        cna_instrumentation cna_debug_info_options cna_emscripten_exception_abi)
     if(CNA_SHARP_RUNTIME_IS_MODULAR)
         sharp_runtime_get_enabled_components(_cna_sharp_runtime_components)
         set(_cna_sharp_runtime_targets)
@@ -305,8 +320,15 @@ function(cna_apply_build_support_to_cna_targets)
             cna_project_options
             cna_instrumentation
             cna_debug_info_options
-            cna_emscripten_abi
+            cna_emscripten_exception_abi
             cna_linker_options)
+        if(EMSCRIPTEN AND _cna_target_type STREQUAL "EXECUTABLE")
+            get_target_property(_cna_asyncify_mode
+                "${_cna_target}" CNA_EMSCRIPTEN_ASYNCIFY)
+            if(NOT _cna_asyncify_mode STREQUAL "OFF")
+                cna_link_private_build_support("${_cna_target}" cna_emscripten_asyncify)
+            endif()
+        endif()
         math(EXPR _cna_supported_target_count "${_cna_supported_target_count} + 1")
     endforeach()
     message(STATUS

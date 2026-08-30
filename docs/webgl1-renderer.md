@@ -56,9 +56,9 @@ and needs a real GLSL ES 1.00 shader rewrite, not just a header swap.
   `cna_house3d_demo`'s Emscripten link options hardcoded `-sMIN_WEBGL_VERSION=2
   -sMAX_WEBGL_VERSION=2` unconditionally, which would have forced a WebGL 2 context even under this
   profile, contradicting the GLES 2.0 context `EasyGLRenderer` requests. Fixed to be
-  conditional on `CNA_GRAPHICS_RENDERER` (`cmake/Examples.cmake`); verified via a real `emcc`
-  `VERBOSE=1` build that `WEBGL1` now links with `MIN_WEBGL_VERSION=1`/`MAX_WEBGL_VERSION=1` and
-  `WEBGL2` is unchanged at `2`/`2`.
+  conditional on `CNA_GRAPHICS_RENDERER`; the policy now lives in one renderer-aware helper shared
+  by the examples, benchmark and `cna_c_api_wasm`. Clean C-API builds and real Chrome probes verify
+  `WEBGL1` at `MIN/MAX=1/1` and a WebGL 1.0 context, while `WEBGL2` remains `2/2`.
 - ✅ **No regression to `OPENGLES3`/`OPENGL33`** — both re-verified against a real desktop Mesa GL
   context after the `AdaptGlslEs300ForActiveProfile()` signature change this work required;
   `BasicEffect` and `SkinnedEffect` golden-image tests still `[PASS]` on both.

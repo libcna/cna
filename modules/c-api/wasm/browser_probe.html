@@ -6,6 +6,7 @@
 <link rel="icon" href="data:,">
 <body style="font:14px/1.5 monospace;padding:1rem">
 <h1 style="font-size:1rem">CNA C ABI browser probe</h1>
+<canvas id="canvas" width="160" height="96" style="width:160px;height:96px"></canvas>
 <pre id="out">running…</pre>
 <script type="module">
 // plans/plan_cabi.md CABI-37; fixcnats.md Phase 7: "If toolchain exists, build a real artifact and
@@ -18,10 +19,18 @@
 //
 // Reports in the same shape as every other CNA browser page, so
 // scripts/run_pixijs_browser_tests.mjs runs it unchanged.
-const EXPECTED = 5;
+const requestedFrames = Number(new URLSearchParams(location.search).get('frames') || 5);
+const EXPECTED = 11;
 let passed = 0;
 const out = document.getElementById('out');
+const canvas = document.getElementById('canvas');
 const lines = [];
+const runtimeErrors = [];
+window.addEventListener('error', (event) => runtimeErrors.push(`error: ${event.message}`));
+window.addEventListener('unhandledrejection', (event) => {
+    const reason = event.reason;
+    runtimeErrors.push(`unhandled rejection: ${reason?.message || reason}`);
+});
 const say = (t) => { lines.push(t); out.textContent = lines.join('\n'); console.log(t); };
 const check = (name, ok, detail) => {
     if (ok) { passed += 1; say(`[ok] ${name}${detail ? ': ' + detail : ''}`); }
@@ -30,7 +39,7 @@ const check = (name, ok, detail) => {
 
 try {
     const createCnaCApi = (await import('./cna_c_api.mjs')).default;
-    const cna = await createCnaCApi();
+    const cna = await createCnaCApi({ canvas });
     check('the ES module factory instantiates in a browser', true);
 
     // The route a consumer must call before trusting any other.
@@ -94,8 +103,118 @@ try {
               installed === 0 && fired === 1 && sunkText.length > 0,
               `installed=${installed} fired=${fired} text=${JSON.stringify(sunkText)}`);
     } finally { cna.removeFunction(sink); }
+
+    // The wasm32 offsets below are compile-time-pinned in module_entry.c. This is a real C-owned
+    // Game, not a zero-argument wasm smoke: its callbacks receive uint64 handles as BigInt, issue a
+    // GPU clear, and every frame reaches the renderer's present path.
+    let updates = 0;
+    let draws = 0;
+    let clearFailures = 0;
+    let callbackHandlesAreBigInt = true;
+    const clearColor = cna._malloc(4);
+    cna.HEAPU8.set([24, 48, 96, 255], clearColor);
+    const update = cna.addFunction((game, gameTime, context, outError) => {
+        void gameTime; void context; void outError;
+        callbackHandlesAreBigInt &&= typeof game === 'bigint';
+        updates += 1;
+        return 0;
+    }, 'ijiii');
+    const draw = cna.addFunction((game, gameTime, context, outError) => {
+        void gameTime; void context; void outError;
+        callbackHandlesAreBigInt &&= typeof game === 'bigint';
+        draws += 1;
+        // Struct-by-value C arguments are wasm-lowered to a pointer; this is the real CNA clear,
+        // not a direct JavaScript WebGL call.
+        if (cna._cna_game_clear(game, clearColor) !== 0) clearFailures += 1;
+        return 0;
+    }, 'ijiii');
+    const callbacks = cna._malloc(32);
+    const createInfo = cna._malloc(48);
+    const gameOut = cna._malloc(8);
+    let game = 0n;
+    try {
+        cna.HEAPU8.fill(0, callbacks, callbacks + 32);
+        cna.HEAPU32[callbacks >> 2] = 32;
+        cna.HEAPU32[(callbacks >> 2) + 1] = 1;
+        cna.HEAPU32[(callbacks >> 2) + 3] = update;
+        cna.HEAPU32[(callbacks >> 2) + 4] = draw;
+
+        cna.HEAPU8.fill(0, createInfo, createInfo + 48);
+        cna.HEAPU32[createInfo >> 2] = 48;
+        cna.HEAPU32[(createInfo >> 2) + 1] = 1;
+        // Variable timing gives one Update for each externally requested frame.
+        cna.HEAPU8[createInfo + 8] = 0;
+        cna.setValue(createInfo + 16, 166667n, 'i64');
+        // Empty CNA_StringView at byte 24; callback pointer at byte 40.
+        cna.HEAPU32[(createInfo + 40) >> 2] = callbacks;
+        cna.setValue(gameOut, 0n, 'i64');
+
+        const createResult = cna._cna_game_create(createInfo, gameOut);
+        game = cna.getValue(gameOut, 'i64');
+        check('a C-owned Game is created through the wasm ABI',
+              createResult === 0 && game !== 0n,
+              `result=${createResult} handle=${game}`);
+
+        const frameResults = [];
+        if (createResult === 0) {
+            for (let frame = 0; frame < requestedFrames; frame += 1) {
+                await new Promise((resolve) => requestAnimationFrame(resolve));
+                try {
+                    frameResults.push(cna._cna_game_run_one_frame(game));
+                } catch (error) {
+                    say(`[trace] frame=${frame} updates=${updates} draws=${draws} ` +
+                        `clearFailures=${clearFailures}`);
+                    throw error;
+                }
+            }
+            // Let a queued browser error/rejection become observable before evaluating the run.
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+
+        const rendererOut = cna._malloc(4);
+        let rendererResult = -1;
+        let rendererType = 0;
+        try {
+            rendererResult = cna._cna_graphics_renderer_get_current_type(rendererOut);
+            rendererType = cna.HEAPU32[rendererOut >> 2];
+        } finally { cna._free(rendererOut); }
+        const expectedWebglVersion = rendererType === 5 ? 1 : (rendererType === 6 ? 2 : 0);
+        const gl = expectedWebglVersion === 1
+            ? canvas.getContext('webgl')
+            : canvas.getContext('webgl2');
+        check('the renderer obtains its required WebGL context version',
+              rendererResult === 0 && expectedWebglVersion !== 0 && gl !== null &&
+                  (expectedWebglVersion === 1
+                      ? !(gl instanceof WebGL2RenderingContext)
+                      : gl instanceof WebGL2RenderingContext),
+              gl ? `renderer=${rendererType} ${gl.getParameter(gl.VERSION)}`
+                 : `renderer=${rendererType} no WebGL ${expectedWebglVersion} context`);
+        check('every externally requested frame completes exactly once',
+              frameResults.length === requestedFrames && frameResults.every((value) => value === 0) &&
+                  updates === requestedFrames && draws === requestedFrames && clearFailures === 0,
+              `requested=${requestedFrames} results=${frameResults.length} updates=${updates} ` +
+                  `draws=${draws} clearFailures=${clearFailures}`);
+        check('game callbacks preserve uint64 handles as JavaScript BigInt',
+              callbackHandlesAreBigInt && updates > 0 && draws > 0,
+              `updates=${updates} draws=${draws}`);
+        check('frame driving reports no page errors or unhandled rejections',
+              runtimeErrors.length === 0, runtimeErrors.join('; '));
+
+        const destroyResult = game !== 0n ? cna._cna_game_destroy(game) : -1;
+        if (destroyResult === 0) game = 0n;
+        check('the C-owned Game tears down cleanly', destroyResult === 0,
+              `result=${destroyResult}`);
+    } finally {
+        if (game !== 0n) cna._cna_game_destroy(game);
+        cna._free(gameOut);
+        cna._free(createInfo);
+        cna._free(callbacks);
+        cna._free(clearColor);
+        cna.removeFunction(draw);
+        cna.removeFunction(update);
+    }
 } catch (error) {
-    say(`[FAIL] the probe threw: ${error && error.message ? error.message : error}`);
+    say(`[FAIL] the probe threw: ${error && error.stack ? error.stack : error}`);
 }
 
 say(`=== ${passed}/${EXPECTED} PASS ===`);

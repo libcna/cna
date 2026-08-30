@@ -68,17 +68,7 @@ if(CNA_BUILD_EXAMPLES)
             -sFORCE_FILESYSTEM=1
             "SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/demo_2d/Content@/Content"
         )
-        if(CNA_GRAPHICS_RENDERER STREQUAL "WEBGL1")
-            target_link_options(cna_demo_2d PRIVATE
-                "-sMIN_WEBGL_VERSION=1"
-                "-sMAX_WEBGL_VERSION=1")
-        elseif(CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2")
-            # Emscripten defaults to WebGL 1 unless the final executable requests WebGL 2.
-            # EasyGL's WEBGL2 profile emits GLSL ES 3.00 shaders, which WebGL 1 rejects.
-            target_link_options(cna_demo_2d PRIVATE
-                "-sMIN_WEBGL_VERSION=2"
-                "-sMAX_WEBGL_VERSION=2")
-        endif()
+        cna_apply_emscripten_renderer_link_contract(cna_demo_2d)
     else()
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_demo_2d PRIVATE
@@ -163,27 +153,13 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         # wasm-ld resolves circular static-lib references without linker groups.
         target_link_libraries(cna_house3d_demo PRIVATE
             CNA ${RENDERER_TARGET} SDL3::SDL3-static SHARP_RUNTIME)
-        # plans/plan_glbackends.md GLB-9 (revisited): MIN_WEBGL_VERSION/MAX_WEBGL_VERSION must match
-        # whichever GL profile this target is actually compiled for -- pre-GLB-9 this was
-        # hardcoded to WebGL 2 unconditionally, which would have forced a WebGL 2 context even
-        # under -DCNA_GRAPHICS_RENDERER=WEBGL1 (contradicting EasyGLRenderer's own
-        # SDL_GL_CONTEXT_MAJOR_VERSION=2 request for that profile, GLB-8) -- found while verifying
-        # GLB-36's real emcc WEBGL1 build.
-        if(CNA_GRAPHICS_RENDERER STREQUAL "WEBGL1")
-            set(_cna_house3d_min_webgl_version 1)
-            set(_cna_house3d_max_webgl_version 1)
-        else()
-            set(_cna_house3d_min_webgl_version 2)
-            set(_cna_house3d_max_webgl_version 2)
-        endif()
         target_link_options(cna_house3d_demo PRIVATE
             -sALLOW_MEMORY_GROWTH=1
             -sSTACK_SIZE=1048576
             -sINITIAL_MEMORY=67108864       # 64 MB — enough for a procedural scene
             -sFORCE_FILESYSTEM=1
-            "-sMIN_WEBGL_VERSION=${_cna_house3d_min_webgl_version}"
-            "-sMAX_WEBGL_VERSION=${_cna_house3d_max_webgl_version}"
         )
+        cna_apply_emscripten_renderer_link_contract(cna_house3d_demo)
     else()
         # ---- Native desktop --------------------------------------------------
         # The CNA library and the EasyGL renderer static lib have circular symbol
@@ -231,12 +207,7 @@ if((CNA_BUILD_TESTS OR CNA_BUILD_EXAMPLES) AND NOT ANDROID)
             -sALLOW_MEMORY_GROWTH=1
             -sEXIT_RUNTIME=1
             -sEXPORTED_RUNTIME_METHODS=UTF8ToString)
-        if(CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2")
-            # Emscripten defaults to WebGL1; EasyGL's ES 3.0 shaders require WebGL2.
-            target_link_options(cna_bench_graphics_renderer PRIVATE
-                "-sMIN_WEBGL_VERSION=2"
-                "-sMAX_WEBGL_VERSION=2")
-        endif()
+        cna_apply_emscripten_renderer_link_contract(cna_bench_graphics_renderer)
     elseif(TARGET SDL3::SDL3main)
         target_link_libraries(cna_bench_graphics_renderer PRIVATE SDL3::SDL3main)
     endif()

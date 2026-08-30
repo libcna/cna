@@ -102,7 +102,8 @@ async function runPage(browser, origin, page_name, timeoutMs) {
     }
     await page.close();
 
-    const failed = lines.filter((line) => line.startsWith('[FAIL]'));
+    const failed = lines.filter((line) =>
+        line.startsWith('[FAIL]') || line.startsWith('[pageerror]'));
     const passed = summary ? Number(summary[1]) : 0;
     const expected = summary ? Number(summary[2]) : 0;
     const ok = summary !== null && passed === expected && failed.length === 0;
@@ -133,8 +134,9 @@ async function main() {
     const root = resolve(buildDir);
     const pages = requested.length > 0 ? requested : ['cna_test_pixijs_smoke.html'];
     for (const page_name of pages) {
-        if (!existsSync(join(root, page_name))) {
-            console.error(`missing built page: ${join(root, page_name)}`);
+        const file_name = page_name.split('?', 1)[0];
+        if (!existsSync(join(root, file_name))) {
+            console.error(`missing built page: ${join(root, file_name)}`);
             return 2;
         }
     }

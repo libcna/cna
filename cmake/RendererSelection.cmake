@@ -885,3 +885,27 @@ list(GET CNA_RENDERER_DIRS 0 RENDERER_DIR)
 # default's -- which in a HEADLESS;SOFTWARE;STUB build meant the whole project compiled as though
 # STUB were selected. It names the default renderer, like the two scalars above.
 list(GET CNA_RENDERER_DEFINES 0 CNA_RENDERER_DEFINE)
+
+# Applies the browser-context contract of the selected public renderer to a final Emscripten link.
+# WebGL profiles must be exact: accepting Emscripten's WebGL 1 default for WEBGL2 makes EasyGL emit
+# GLSL ES 3.00 into a WebGL 1 context, while forcing version 2 for WEBGL1 defeats that deliberately
+# separate renderer. Canvas/DOM/WebGPU and other renderer families do not inherit irrelevant GL
+# requirements from this helper.
+function(cna_apply_emscripten_renderer_link_contract target)
+    if(NOT EMSCRIPTEN)
+        return()
+    endif()
+    if(CNA_GRAPHICS_RENDERER STREQUAL "WEBGL1")
+        set(_cna_webgl_version 1)
+    elseif(CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2")
+        set(_cna_webgl_version 2)
+    else()
+        return()
+    endif()
+    target_link_options("${target}" PRIVATE
+        "-sMIN_WEBGL_VERSION=${_cna_webgl_version}"
+        "-sMAX_WEBGL_VERSION=${_cna_webgl_version}")
+    set_target_properties("${target}" PROPERTIES
+        CNA_EMSCRIPTEN_MIN_WEBGL_VERSION "${_cna_webgl_version}"
+        CNA_EMSCRIPTEN_MAX_WEBGL_VERSION "${_cna_webgl_version}")
+endfunction()

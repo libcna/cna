@@ -143,9 +143,17 @@ if(EMSCRIPTEN)
     set_target_properties(cna_c_api_wasm PROPERTIES
         OUTPUT_NAME "cna_c_api"
         SUFFIX ".mjs"
+        # JavaScript owns this library's event loop and calls RunOneFrame from
+        # requestAnimationFrame. Re-entering an exported i64-handle route during an Asyncify rewind
+        # loses its JavaScript arguments, so this target must not inherit application-loop policy.
+        CNA_EMSCRIPTEN_ASYNCIFY OFF
     )
+    cna_apply_emscripten_renderer_link_contract(cna_c_api_wasm)
     target_link_options(cna_c_api_wasm PRIVATE
         "--no-entry"
+        # State the final-artifact contract explicitly. The project-wide support pass sees the
+        # target property above and therefore cannot append a later ASYNCIFY=1 that wins by order.
+        "-sASYNCIFY=0"
         "-sMODULARIZE=1"
         "-sEXPORT_ES6=1"
         "-sEXPORT_NAME=createCnaCApi"
@@ -214,6 +222,12 @@ if(EMSCRIPTEN)
     # link was configured. This instantiates the module and calls into it, which is the first
     # thing a consumer actually depends on.
     if(CNA_BUILD_TESTS AND NODE_JS_EXECUTABLE)
+        add_test(NAME CApi_WasmLinkContract
+            COMMAND ${CMAKE_COMMAND}
+                -DCNA_C_API_WASM_MODULE=$<TARGET_FILE:cna_c_api_wasm>
+                -DCNA_C_API_WASM_RENDERER=${CNA_GRAPHICS_RENDERER}
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CheckWasmLinkContract.cmake)
+
         add_test(NAME CApi_WasmModuleSmoke
             COMMAND "${NODE_JS_EXECUTABLE}"
                     "${CMAKE_CURRENT_SOURCE_DIR}/wasm/module_smoke.mjs"

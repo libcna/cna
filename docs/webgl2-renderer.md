@@ -24,9 +24,9 @@ plan gave it its own public name.
   later the same night**: `cna_house3d_demo`'s own Emscripten *link* options (a separate, per-target
   CMake setting, not SDL3's context creation) did hardcode `-sMIN_WEBGL_VERSION`/
   `-sMAX_WEBGL_VERSION` — happened to already be the correct value (`2`/`2`) for this profile, but
-  was wrong for `WEBGL1` (see `docs/webgl1-renderer.md`'s GLB-9-revisited note and
-  `cmake/Examples.cmake` commit `d44ed617`) and has since been made conditional on
-  `CNA_GRAPHICS_RENDERER` for both profiles.
+  was wrong for `WEBGL1` (see `docs/webgl1-renderer.md`'s GLB-9-revisited note). The policy now
+  lives in one renderer-aware helper shared by the examples, benchmark and `cna_c_api_wasm`:
+  WEBGL2 is exact 2/2, WEBGL1 is exact 1/1, and non-WebGL renderers receive neither flag.
 - ✅ **Real `emcmake`/`emcc` build** — this sandbox has a working Emscripten SDK at `~/emsdk` (not
   on `PATH` by default — source `~/emsdk/emsdk_env.sh` and additionally add
   `~/emsdk/upstream/emscripten` and `~/emsdk/node/*/bin` to `PATH`). `emcmake cmake
@@ -51,10 +51,9 @@ plan gave it its own public name.
 
 ## What's not yet done
 
-- ⬜ **Real browser verification** — never run in an actual browser with a real WebGL 2 context;
-  only verified as far as "compiles, links, and starts executing under Node until it hits a
-  DOM-only API." This is the same honesty bar `CANVAS` and the original `EASYGL`-under-Emscripten
-  claim already used — see `README.md`'s platform matrix.
+- ✅ **Real browser verification for the C-API path** — a clean `cna_c_api_wasm` build obtains a
+  real WebGL 2.0 context in Chrome and completes 5-, 60- and 600-frame externally driven runs with
+  exact Update/Draw counts, CNA clear/present work, BigInt handles, no page errors and clean teardown.
 - ⬜ **`CnaTests` under Emscripten** — attempted and fails with `'SDL3/SDL.h' file not found`
   regardless of GL-family renderer (also reproduces under `CANVAS`). Not a regression from this
   plan: the project's own `web` CMake preset already sets `CNA_BUILD_TESTS=OFF`, so a GTest build

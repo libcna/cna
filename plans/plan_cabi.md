@@ -60,6 +60,26 @@ The per-blocker report `fixcnacs.md` Phase 10 asks for is `docs/c-api/CABI_BLOCK
 | CABI-31 | Video frame generation restarted, defeating its own contract | external review | DONE |
 | CABI-32 | Apply3D docs and tests still described the refused contract | external review | DONE |
 | CABI-33 | Static archive under Ninja; two tests registered on a driver they cannot pass under | follow-up | DONE |
+| CABI-42 | Renderer-exact WebGL contract for `cna_c_api_wasm` | CNA-TS browser audit | DONE |
+| CABI-43 | JS-driven C-API artifact without Asyncify rewind | CNA-TS browser audit | DONE |
+
+### CABI-42/CABI-43 — browser artifact owns its final link contract
+
+Both findings reproduced on live CNA before the change: `cna_c_api_wasm` had no renderer-specific
+MIN/MAX WebGL settings, while the transitive `CNA::EmscriptenAbi` appended `-sASYNCIFY=1` to its
+final link. The binding workaround had to inject WebGL 2 globally and place `ASYNCIFY=0` even later.
+
+The renderer selection now exposes one helper used by the C API, 2D/3D examples and benchmark.
+Clean final link commands prove WEBGL1 is exactly 1/1 and WEBGL2 exactly 2/2. Exception propagation
+and Asyncify are separate interfaces; ordinary CNA executables retain Asyncify, while the
+JS-driven C-API target explicitly opts out and its final link contains `ASYNCIFY=0` with no later
+`ASYNCIFY=1`.
+
+Regression evidence is artifact- and behavior-level: `CApi_WasmLinkContract` inspects generated JS,
+`CApi_WasmModuleSmoke` instantiates it, and `CApi_WasmBrowserProbe` creates a real C-owned Game,
+drives five browser-scheduled frames through BigInt handles, performs CNA clear/present, checks the
+actual context version, observes exact Update/Draw counts and tears down without page errors or
+unhandled rejections. Both WEBGL1 and WEBGL2 pass; WEBGL2 also passes 60- and 600-frame canaries.
 
 ### What external review found, and what it means
 

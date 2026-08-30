@@ -298,7 +298,9 @@ The CMake targets distinguish requirements imposed on a consumer from CNA's priv
 | `CNA::ProjectOptions` | Private to CNA-owned targets | Non-ABI compiler policy, currently deterministic MSVC UTF-8 source decoding. |
 | `CNA::DebugInfoOptions` | Private to CNA-owned targets and Sharp Runtime | Optional Debug-only line-table or split-DWARF policy. |
 | `CNA::Instrumentation` | Private to CNA-owned targets and Sharp Runtime | Sanitizer compile/link options. |
-| `CNA::EmscriptenAbi` | Public where required, private internally | The Emscripten exception/Asyncify ABI shared by CNA, Sharp Runtime, and final applications. |
+| `CNA::EmscriptenExceptionAbi` | Public where required, private internally | The JS-lowered C++ exception ABI shared by CNA, Sharp Runtime, and final artifacts. |
+| `CNA::EmscriptenAsyncify` | Final application executables only | Blocking/sleep support for application-style `Game::Run()` loops. |
+| `CNA::EmscriptenAbi` | Compatibility composition | Both interfaces above for application targets that used the former combined contract. |
 | `CNA::LinkerOptions` | Private to CNA-owned targets | An explicitly selected native fast linker. |
 
 New warning, diagnostic, sanitizer, linker, coverage, or profiling flags belong in the narrowest
