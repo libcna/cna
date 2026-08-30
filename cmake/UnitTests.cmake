@@ -246,14 +246,6 @@ if(CNA_BUILD_TESTS)
     endif()
 
 
-    # plans/plan_magnum.md: the MAGNUM renderer's own GTest suite lives under
-    # modules/renderers/magnum/tests/ and includes the renderer's headers, which resolve only
-    # when the MAGNUM renderer is configured (the Magnum::GL include directories come with the
-    # renderer target). Excluded from every other renderer's corpus by the same convention as the
-    # Wicked directory above; under MAGNUM the corpus keeps it.
-    if(NOT "MAGNUM" IN_LIST CNA_RENDERER_IDENTITIES)
-        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Renderers/Magnum/.*\\.cpp$")
-    endif()
 
     # plans/plan_fna3d.md: the FNA3D renderer's own GTest suites live under
     # modules/renderers/fna3d/tests/ and include the renderer's headers, which resolve only when
@@ -608,13 +600,6 @@ if(CNA_BUILD_TESTS)
         target_link_libraries(cna_test_build_config INTERFACE WebGPU::WebGPU)
     endif()
 
-    # plans/plan_magnum.md MAGNUM-40: the MAGNUM renderer's own tests exercise its XNA-ordinal -> Magnum-enum
-    # mappings and its generated stock GLSL directly, so they include Magnum's GL headers. CNA keeps
-    # Magnum PRIVATE on the renderer target (same discipline as wgpu-native above), so it is exposed
-    # to this test executable only, and only in the Magnum configuration.
-    if("MAGNUM" IN_LIST CNA_RENDERER_IDENTITIES)
-        target_link_libraries(cna_test_build_config INTERFACE Magnum::GL Magnum::Magnum)
-    endif()
 
 
     if(CNA_ENABLE_NET)

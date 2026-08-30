@@ -17,7 +17,7 @@ static_assert(getCurrentGraphicsBackendCategory() == getCurrentGraphicsBackendCa
 static_assert(!toStringView(getCurrentGraphicsBackendCategory()).empty());
 constexpr GraphicsBackendCategory kCompileTimeCategory = getCurrentGraphicsBackendCategory();
 constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::NanoVg) + 1;
-static_assert(kPublicRendererCount == 44,
+static_assert(kPublicRendererCount == 43,
               "GraphicsRendererType must expose all 48 genuine renderer identities");
 
 TEST(GraphicsBackendCategoryTest, GetCurrentGraphicsBackendCategoryDoesNotThrow)
@@ -48,7 +48,6 @@ namespace
             case GraphicsRendererType::OpenGLES3:
             case GraphicsRendererType::OpenGL33:
             case GraphicsRendererType::Vulkan:
-            case GraphicsRendererType::Magnum:
             case GraphicsRendererType::DirectX11:
             case GraphicsRendererType::DirectX12:
             case GraphicsRendererType::Direct2D:

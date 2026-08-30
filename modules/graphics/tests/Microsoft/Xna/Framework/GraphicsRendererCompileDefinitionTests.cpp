@@ -29,9 +29,6 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
 #ifdef CNA_RENDERER_WEBGPU
     ++enabled;
 #endif
-#ifdef CNA_RENDERER_MAGNUM
-    ++enabled;
-#endif
 #ifdef CNA_RENDERER_HEADLESS
     ++enabled;
 #endif

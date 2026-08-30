@@ -202,7 +202,6 @@ constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererTy
         {CNA_GRAPHICS_RENDERER_BGFX, CNA::GraphicsRendererType::Bgfx},
         {CNA_GRAPHICS_RENDERER_VULKAN, CNA::GraphicsRendererType::Vulkan},
         {CNA_GRAPHICS_RENDERER_WEBGPU, CNA::GraphicsRendererType::WebGPU},
-        {CNA_GRAPHICS_RENDERER_MAGNUM, CNA::GraphicsRendererType::Magnum},
         {CNA_GRAPHICS_RENDERER_HEADLESS, CNA::GraphicsRendererType::Headless},
         {CNA_GRAPHICS_RENDERER_SOFTWARE, CNA::GraphicsRendererType::Software},
         {CNA_GRAPHICS_RENDERER_STUB, CNA::GraphicsRendererType::Stub},

@@ -70,7 +70,6 @@ namespace CNA
             case GraphicsRendererType::OpenGLES3:
             case GraphicsRendererType::OpenGL33:
             case GraphicsRendererType::Vulkan:
-            case GraphicsRendererType::Magnum:
             case GraphicsRendererType::DirectX11:
             case GraphicsRendererType::DirectX12:
             case GraphicsRendererType::Direct2D:

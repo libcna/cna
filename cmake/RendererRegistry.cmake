@@ -36,7 +36,6 @@ function(_cna_renderer_identity_map out_var)
         BGFX         Bgfx
         VULKAN       Vulkan
         WEBGPU       WebGPU
-        MAGNUM       Magnum
         HEADLESS     Headless
         SOFTWARE     Software
         STUB         Stub

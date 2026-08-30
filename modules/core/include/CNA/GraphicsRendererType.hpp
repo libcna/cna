@@ -35,9 +35,6 @@ namespace CNA
         /** @brief WebGPU (experimental). */
         WebGPU,
 
-        /** @brief Magnum (mosra/magnum, desktop OpenGL). */
-        Magnum,
-
         /** @brief Headless (no GPU/window). */
         Headless,
 
@@ -185,8 +182,6 @@ namespace CNA
         return GraphicsRendererType::Vulkan;
 #elif defined(CNA_RENDERER_WEBGPU)
         return GraphicsRendererType::WebGPU;
-#elif defined(CNA_RENDERER_MAGNUM)
-        return GraphicsRendererType::Magnum;
 #elif defined(CNA_RENDERER_HEADLESS)
         return GraphicsRendererType::Headless;
 #elif defined(CNA_RENDERER_SOFTWARE)
@@ -288,7 +283,6 @@ namespace CNA
             case GraphicsRendererType::Bgfx:         return "BGFX";
             case GraphicsRendererType::Vulkan:       return "VULKAN";
             case GraphicsRendererType::WebGPU:       return "WEBGPU";
-            case GraphicsRendererType::Magnum:       return "MAGNUM";
             case GraphicsRendererType::Headless:     return "HEADLESS";
             case GraphicsRendererType::Software:     return "SOFTWARE";
             case GraphicsRendererType::Stub:          return "STUB";

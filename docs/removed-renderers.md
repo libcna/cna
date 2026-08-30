@@ -186,3 +186,29 @@ the patch requirement made the pin load-bearing in a way none of the other depen
 were — a different WickedEngine revision would not apply. It also shipped zero examples,
 so nothing demonstrated it end to end.
 
+
+---
+
+## MAGNUM
+
+| | |
+|---|---|
+| Identity | `MAGNUM` (enum `Magnum`, C ABI `CNA_GRAPHICS_RENDERER_MAGNUM` = 10) |
+| Family | `modules/renderers/magnum` |
+| Removed | 2026-08-30, tag `removed/magnum` |
+| Size | 9,472 lines (6,866 production, 1,065 tests, 1,541 examples) |
+| Dependency | `https://github.com/mosra/magnum.git` @ `5a7424643bfd4621fbcff8c361d37795502cf890` and `https://github.com/mosra/corrade.git` @ `783e4e4807536ec52c352986fc9317db986ace96` (MIT) — plus system GL/X11 headers, and `libegl1-mesa-dev` under `-DCNA_MAGNUM_USE_EGL=ON` |
+| Build was | `-DCNA_GRAPHICS_RENDERER=MAGNUM` |
+
+**What it proved.** Where a third-party GL wrapper's own context ownership collides with
+CNA's. Magnum's `Platform::GLContext` takes its entry points from exactly one of Magnum's
+four platform context libraries (GLX/EGL/WGL/CGL), none of which exists for Emscripten —
+there the loader is baked into `EmscriptenApplication`, which owns the window and event
+loop CNA already owns through SDL3. That is why the identity carried a hard configure-time
+gate refusing Emscripten, and it is a reusable finding about adopting any library that
+expects to own the window.
+
+**Why removed.** It reached desktop OpenGL only, which EasyGL already covers on every
+platform CNA targets, so it added nothing. It also pulled two pinned repositories plus
+system GL/X11 (and optionally EGL) development headers, making it one of the more
+expensive dependencies for the least unique coverage.

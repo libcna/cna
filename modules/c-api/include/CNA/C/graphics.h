@@ -32,8 +32,6 @@ typedef uint32_t CNA_GraphicsRendererType;
 #define CNA_GRAPHICS_RENDERER_VULKAN UINT32_C(8)
 /** @brief Identifies the WebGPU backend. */
 #define CNA_GRAPHICS_RENDERER_WEBGPU UINT32_C(9)
-/** @brief Identifies the Magnum backend. */
-#define CNA_GRAPHICS_RENDERER_MAGNUM UINT32_C(10)
 /** @brief Identifies the no-window HEADLESS backend. */
 #define CNA_GRAPHICS_RENDERER_HEADLESS UINT32_C(11)
 /** @brief Identifies the CPU SOFTWARE backend. */
