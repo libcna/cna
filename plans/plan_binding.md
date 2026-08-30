@@ -1,6 +1,7 @@
 # CNA Native C Binding / Stable C ABI — Implementation Plan
 
-> **Status (2026-08-29, after `CBIND-118`): B0–B11 and B13 complete; B12 is an explicit
+> **Status (2026-08-30, after synchronizing the Content Pipeline branch with current `next`):
+> B0–B11 and B13 complete; B12 and B14 are explicit
 > C-ABI backlog, not Content Pipeline v1 work.** Phase B10 bound all 506 rows the sixth merge
 > reopened, the CNB content format included; Phase B11 bound the seventh merge's 15-row tail. The
 > completed experimental C++ Content Pipeline, its post-XNB continuation, CP-055's manifest-v7
@@ -8,11 +9,11 @@
 > contract now add 654 deliberately
 > unbound inventory rows under `CBIND-117`.
 > Coverage:
-> **551 headers / 9,485 symbols — 8,352 implemented, 15 approved partial, 654 planned, 464 not
+> **551 headers / 9,486 symbols — 8,352 implemented, 15 approved partial, 655 planned, 464 not
 > applicable.** Phase B13 then bound `Load<Model>` and the `Tag` a content processor writes,
 > taking the ABI to **`0.19.0`** and **4,048 → 4,051** exports without moving a coverage row. The
 > release gate is consistently
-> **Not ready** on coverage alone until `CBIND-117`; this integration does not invent C routes for
+> **Not ready** on coverage alone until `CBIND-117` and `CBIND-120`; this integration does not invent C routes for
 > a C++ build-time extension API merely because it is public. See *Current status* and Phase B12.
 > This document is
 > the plan for a native C API, implemented inside the main CNA repository. It is intentionally
@@ -160,6 +161,7 @@ task. Do not start a later broad API phase merely because an earlier skeleton co
 | B11 | The seventh merge's tail | `feature/bindings` merged into `next` 2026-08-28; three `next`-only commits reopened the matrix; closed by `CBIND-116` |
 | B12 | The Content Pipeline inventory tail | Completed `content-pipeline` integrated with current `next` 2026-08-29; inventory bookkeeping only, with C ABI design deferred to `CBIND-117` |
 | B13 | Content-loaded models | Owner asked 2026-08-29 for the gap `CBIND-116` recorded: no C route loaded a `Model` |
+| B14 | The eighth merge's graphics inventory tail | Current `next` synchronized into `content-pipeline-final` 2026-08-30; one new public graphics helper recorded without changing the C ABI |
 
 ## Planning baseline
 
@@ -1519,6 +1521,19 @@ Tests: two hand-written `.xnb` models in `ContentSmoke.c` -- one tagged with `Tr
 
 Quoting the `add_test` argument fixes the first hop. The second is a **preloaded cache script**: the launcher has to survive three unquoted expansions to reach `execute_process`, and each one re-splits it, so escaping was tried and abandoned in favour of writing the value once as CMake source that never passes through argument expansion again. Both intermediate states were run: unquoted fails on `-c`, quoted-but-unescaped fails on `-E`, and the preload passes. |
 
+## Phase B14 — the eighth merge's graphics inventory tail
+
+Synchronizing `content-pipeline-final` with current `next` brought in one public CNAEXT declaration,
+`Texture::IsFormatAllowedByProfileEXT`. It is a renderer-independent C++ policy query used by the
+new texture-construction validation. The completed graphics binding slice predates it, and this
+Content Pipeline integration/verification session does not authorize a new C ABI route. The
+canonical inventory therefore records the declaration under a new, explicit backlog owner instead
+of attributing it to a completed task or hiding it.
+
+| # | Task | Rows | Status | Acceptance criteria |
+|---|---|---:|---|---|
+| CBIND-120 | Design or disposition the texture profile-format query | 1 | ⬜ | Decide whether C callers need the renderer-independent profile/format legality query and either add a C-native route with pure-C/runtime/negative evidence or record an owner-approved disposition. Remove its exact `SYMBOL_OWNER_OVERRIDES` entry when the row is resolved. This task is C-ABI backlog only; synchronization adds no export and does not change ABI `0.19.0`. |
+
 ## Mandatory test layers
 
 Every implemented public C entry point must receive all applicable coverage in the same task:
@@ -1579,17 +1594,18 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-**Snapshot (2026-08-30, after CP-059 XNB Model schema selection):** 551 headers / 9,485 symbols —
-**8,352 implemented, 15 approved partial, 654 planned, 464 not applicable.** ABI `0.19.0`, 4,051
+**Snapshot (2026-08-30, after synchronizing current `next` into `content-pipeline-final`):** 551 headers / 9,486 symbols —
+**8,352 implemented, 15 approved partial, 655 planned, 464 not applicable.** ABI `0.19.0`, 4,051
 exported symbols — the same 4,051 with `CNA_CNAEXT` on and off (measured symbol by symbol: zero
 differ), which is the engine layer's ABI promise measured rather than asserted.
 
 The completed C++ Content Pipeline, its continuation, and Model-v2 CPU codec reopened only the
-coverage criterion: all 654 unmapped declarations are assigned to open `CBIND-117`, no C route or
-ABI export was added, and
+coverage criterion: all 654 unmapped Content Pipeline declarations are assigned to open
+`CBIND-117`; the one public texture profile-format query added by current `next` is assigned to
+open `CBIND-120`. No C route or ABI export was added, and
 the four new
 not-applicable rows are explicitly deleted declarations reported by Doxygen. The release gate is
-therefore **Not ready** on that one measured criterion while B12 remains open.
+therefore **Not ready** on that one measured criterion while B12 and B14 remain open.
 Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.
 
 **Phase B10 closed the matrix it was opened to close.** The sixth merge of `next` brought in 506
