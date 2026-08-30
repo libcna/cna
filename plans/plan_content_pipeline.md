@@ -38,6 +38,14 @@
 > local `next` advanced independently by two unrelated `SAMPLE-001` spike commits; they were not
 > merged, rebased, rewritten, or otherwise folded into this work.
 >
+> **Final continuation (2026-08-30):** local `next` was verified at
+> `45515bb0a122d582e87d9b4cb48b170cd9b6249a` and still did not contain CP-040 through CP-050.
+> The clean completed feature head `dd19589f7af0f63f328cfab4c73d81f995894065` was preserved, a
+> new `content-pipeline-final` branch was created from it, and current `next` was merged normally.
+> The resulting combined baseline is `5671ebb54`; neither history was rebased, squashed or reset,
+> and `next` remains untouched. `CP-051` resumes the remaining evidence-backed backlog from that
+> combined history.
+>
 > **Boundary:** this plan owns the build-time CNA Content Pipeline. `plans/plan_cnb.md` remains the
 > engineering record for the frozen CNB compiled format. The pipeline consumes the existing CNB
 > codec APIs; it does not reopen CNB design.
@@ -1194,6 +1202,17 @@ carrying forward task-local results:
 | `CP-048` | **completed** | Added MinGW's Unicode-console startup option only to the stock and custom content compiler executables that define `wmain`. Both link as x86-64 PE console programs; Wine 10 runs each, the stock tool builds through a native non-ASCII path, and the custom tool publishes its two-output fixture. A Windows-target Curve CNB is byte-identical to the Linux build. Linux entry points still build/run normally. Native Windows and MSVC remain untested and unclaimed. |
 | `CP-049` | **completed** | Added `clean <output-directory> [--quiet]` as an empty-next-manifest call through CP-043's exact sorted digest/containment preflight; it removes the valid manifest last and never scans or prunes the tree. Builds and cleans now hold one persistent per-output-root OS lease, so an active operation, unsafe lease, corrupt/symlinked manifest, changed output, or symlinked path fails before destructive work. Compiled, generated and deployment outputs are covered; manual/source files survive. The 53-test CLI suite and focused ASan+UBSan/TSan selections pass, and the MinGW build plus Wine build/clean route succeeds. |
 | `CP-050` | **completed** | Closed the post-XNB continuation with a complete HEADLESS Debug build and a 1,535-case passing boundary (1,527 pass/eight opt-in or fixture skips) after separately reproducing the three known renderer-only HEADLESS TextureCube/Texture3D failures. Independent gates pass for CNB 371/371, CNJ 137 plus two skips, XNB/runtime readers 221 plus four skips, glTF/Model 608 plus three skips, and all 11 frozen golden vectors. Combined ASan+UBSan passes 1,537 plus eight skips (`detect_leaks=0`; no LSan claim), TSan passes 91 plus the large-file skip, the opt-in >2 GiB hash passes, both CMake fixtures and all nine C-API gates pass. Representative workers 1/4 trees remain identical; a 1,024-output ownership-clean benchmark removes about 480 MiB in 7.05 seconds and preserves only the lease. No frozen CNB definition, byte, default glTF output, C ABI, merge, or push changed. |
+| `CP-051` | **completed** | Audited the combined post-CP-050 implementation and converted the remaining documented questions into evidence-gated tasks. Manifest v5 persists route/configuration/topology/output records but collapses authored bytes and effective content dependencies into final hashes; artifact checks and manifest loading also return booleans/empty state that cannot support trustworthy reason identity. Named external source roots require an explicit configuration and containment design. Model schema 1 remains frozen and any schema 2 is gated behind a field/runtime audit. Same-node glTF children, target profiles and MSVC/Windows remain audits rather than assumed features. |
+| `CP-052` | **planned** | Evolve the manifest to v6 with bounded canonical fingerprint domains for primary bytes, source-dependency set/bytes, content-dependency set/effective inputs, parameters, writer schemas, output definitions and deployment definitions. Reject v1-v5 as incompatible, preserve old outputs when ownership is untrusted, and prove deterministic round-trip plus safe migration. |
+| `CP-053` | **planned** | Add structured build decisions and `build ... --explain`, classifying manifest state, stable route/configuration/domain changes and compiled/deployment integrity without guessing from aggregate hashes. Define `--quiet`, cover all reason categories under workers 1 and 4, and measure no-op overhead. |
+| `CP-054` | **planned** | Specify explicit named read-only external source capabilities in strict configuration, including stable alias-relative persisted identities, overlap policy and deployment interaction. Default containment must remain unchanged. |
+| `CP-055` | **planned** | Implement the approved external-root capability model through dependency collection, hashing, staging/deployment and security tests. Prove traversal/symlink/absolute/overlap failures and prove clean, GC and scavenging never gain external-root deletion authority. |
+| `CP-056` | **planned** | Audit actual XNB Model reader semantics, CNA runtime vertex/buffer/effect capabilities, schema-1 wire/runtime behavior and glTF/CNJ carriers. Produce a support matrix and a precise schema-2 design only if the runtime can consume the proposed semantics without arbitrary CLR object serialization. |
+| `CP-057` | **conditional** | Implement and independently golden-test Model schema 2, then broaden lossless XNB Model transcoding, only if CP-056 proves a coherent design. Schema 1, its reader and all existing golden bytes remain immutable; unsupported tags/effects must still fail explicitly. |
+| `CP-058` | **planned** | Measure generated glTF child rebuild behavior and retain same-node scheduling unless independent nodes provide real cache isolation without changing embedded-clip or texture-XREF semantics. |
+| `CP-059` | **planned** | Audit current processors for a concrete output-affecting target policy. Add no profile abstraction unless an existing implementable policy justifies stable fingerprint identity. |
+| `CP-060` | **planned** | Audit available native Windows/MSVC execution and existing CI conventions; add only a meaningful, maintainable gate executable in the available environment. Preserve the honest cooperative mixed-version lock limitation. |
+| `CP-061` | **planned** | Perform final Content Pipeline compatibility, security, performance, sanitizer, portability, CMake and C-API-inventory review; reconcile plans/docs and record remaining evidence-backed backlog. |
 
 Tasks are intentionally vertical/coherent. The ledger is revised when implementation evidence makes
 the ordering wrong; it is not a promise to build speculative abstractions.
@@ -1283,12 +1302,10 @@ the ordering wrong; it is not a promise to build speculative abstractions.
 
 * Whether the experimental layer eventually deserves its own physical/CMake module after its link
   closure and consumer set are measured.
-* Whether a future build dependency may intentionally live outside source root, and what explicit
-  capability grants that access.
-* Whether a future `--explain` mode should persist a stable reason breakdown. Current output says
-  `BUILD` or `SKIP`, and current manifests can distinguish direct, effective-dependency and output
-  integrity changes, but they do not preserve enough field-level prior identity to attribute every
-  direct change precisely without executing components or inventing an unstable heuristic.
+* The exact syntax and overlap rules for CP-054's named external source capabilities; no existing
+  build gains outside-root read access until that design and its negative tests are complete.
+* Whether the CP-056 Model audit can justify a coherent schema 2 that CNA can construct and render;
+  CP-057 remains conditional and schema 1 remains frozen regardless of the answer.
 
 ---
 
@@ -1948,3 +1965,46 @@ Local `next` advanced from the verified starting `ffd32388b220ddd47669bbd90a7941
 to `91be3f7a8f5cb3fe343f78adb9034aad7b0cb6a7` through two unrelated `SAMPLE-001` commits during
 the session; this branch deliberately did not absorb them and nothing was merged into `next` or
 pushed.
+
+---
+
+## 27. Remaining post-CP-050 gap audit (`CP-051`)
+
+The continuation started by inspecting branch topology rather than trusting reported commits.
+`next` was `45515bb0a122d582e87d9b4cb48b170cd9b6249a`; the CP-050 feature head was
+`dd19589f7af0f63f328cfab4c73d81f995894065`; their merge base remained
+`ffd32388b220ddd47669bbd90a794100afa6fd1a`. A new `content-pipeline-final` branch preserved the
+CP history and merged `next` normally at `5671ebb54`. No commit was rewritten and nothing was
+merged back or pushed.
+
+The highest-value gap is precise incremental reasoning. Manifest v5 already persists component
+identities, processor parameters, dependency identities, writer schema/codec declarations,
+logical outputs, deployment definitions and final artifact digests. It does not persist the byte
+contributions of the primary source and file dependencies as separate domains, nor the effective
+fingerprints received from content-build dependencies. Those values are collapsed into
+`directFingerprint` and `fingerprint`. The CLI then reduces route freshness, effective freshness
+and artifact integrity to booleans, while an incompatible/corrupt manifest becomes the same empty
+manifest in memory. A detailed explanation layered over those booleans would be a heuristic.
+CP-052 therefore owns a real v6 reason-state decomposition; CP-053 consumes it through structured
+decision values before formatting human output.
+
+The other gaps remain subordinate and evidence-gated:
+
+* Strict configuration has no external-root concept, and every dependency is normalized beneath
+  `sourceRoot`. CP-054/CP-055 must introduce named read-only roots, stable alias-relative identity
+  and explicit non-overlap/containment rules together; an absolute-path exception is not viable.
+* Frozen Model schema 1 cannot preserve the broader XNB graph listed in section 17. CP-056 first
+  audits real runtime construction/rendering capability, effect carriers, sharing and tags.
+  Schema 2 implementation is conditional rather than presumed.
+* CP-046's generated glTF children intentionally share a node because clips remain embedded and
+  texture identity affects Model XREFs. CP-058 requires measurements before changing ownership or
+  scheduling.
+* Current processors expose no generic platform switch. CP-059 looks for a concrete output policy
+  and rejects a profile API if none exists.
+* This Linux environment preserves the existing MinGW/Wine evidence but does not by itself prove
+  native MSVC execution. CP-060 may improve an existing CI gate only when repository conventions
+  and an executable test boundary justify it.
+
+The audit found no reason to change CNB, add a stable C route, duplicate the scheduler/publisher,
+or weaken the cooperative-lock statement. The frozen schema-1 definitions and eleven golden
+vectors are untouched.
