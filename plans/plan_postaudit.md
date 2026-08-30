@@ -1,7 +1,7 @@
 # CNA Post-Audit Development Plan
 
 **Created:** 2026-08-03, on `feature/audit`, immediately after `REMED-GFX-202` closed.
-**Owns:** `REMED-GFX-203` … `REMED-GFX-240` and any future finding admitted by the rules below.
+**Owns:** `REMED-GFX-203` … `REMED-GFX-242` and any future finding admitted by the rules below.
 **Does not own:** the remediation campaign. `remediation/REMEDIATION_INDEX.md` and
 `remediation/REMEDIATION_PROGRESS.md` remain the authoritative status of record for every ticket,
 including the ones scheduled here.
@@ -2728,3 +2728,72 @@ more pixels.
 **Also corrected while measuring the above:**
 `GltfConformanceL6.ViewAndProjectionReachEveryDrawUnaltered` had been counted among the correction's
 casualties. It is not one. It fails only under `ctest -j` and passes serially every time.
+
+---
+
+## 40. `REMED-GFX-241` — one signed-normalized format was guarded and its twin was not
+
+**Status:** **CLOSED — 2026-08-30** · **Test defect, not a renderer defect**
+
+**Defect.** `EasyGL_SurfaceFormat_Throws` failed its only red check,
+`Texture2D NormalizedByte2 — expected std::runtime_error, no exception thrown`. The fixture required
+`NormalizedByte2` to throw unconditionally while guarding `NormalizedByte4` behind
+`OPENGLES3 || OPENGL33 || WEBGL2`.
+
+The renderer never drew that distinction. `EasyGLRenderer::ClassifyTexture2DFormatEXT` decides both
+in one predicate, and says so in its own comment: *"Both signed-normalized byte formats need the ES 3
+sized-internal-format set."* Supported off the ES 2 API generation, unsupported on it — identically
+for the pair. The asymmetry was the fixture's, not the renderer's.
+
+**XNA agrees with the permissive half, measured rather than assumed.** On the real 4.0 runtime a
+`Texture2D` in either format is accepted at **both** `GraphicsProfile.Reach` and `.HiDef`; neither is
+among the eleven formats Reach refuses. So the demand for a throw was an over-specification of XNA,
+which is what made this case worth closing rather than pinning.
+
+**Fix.** `NormalizedByte2` moves under the same guard `NormalizedByte4` already had, with the
+measurement recorded beside it.
+
+**Evidence.** EasyGL `27/27`. The fixture is shared by `Vulkan_SurfaceFormat_Throws` and
+`Bgfx_SurfaceFormat_Throws`, which define no `CNA_GL_PROFILE_*` and so take the `#else` branch —
+unchanged for them, and Vulkan re-measured at `27/27` to confirm it rather than assume it.
+
+---
+
+## 41. `REMED-GFX-242` — texture-format validation asks the renderer, XNA asks the profile
+
+**Status:** **OPEN — measured 2026-08-30** · **Framework/renderer divergence**
+
+**Defect.** CNA decides whether a `SurfaceFormat` is legal for a `Texture2D` by asking the renderer
+(`CapabilitySurfaceFormats` → `ClassifyTexture2DFormatEXT`). XNA decides by `GraphicsProfile`.
+CNA's profile gate exists but covers **texture size only** —
+`ValidateTextureSizeForProfileEXT` — never format.
+
+Measured on the real runtime, XNA's Texture2D answer is:
+
+| profile | accepted |
+|---|---|
+| `Reach` | Color, Bgr565, Bgra5551, Bgra4444, Dxt1, Dxt3, Dxt5, NormalizedByte2, NormalizedByte4 |
+| `HiDef` | all of the above **plus** Rgba1010102, Rg32, Rgba64, Alpha8, Single, Vector2, Vector4, HalfSingle, HalfVector2, HalfVector4, HdrBlendable |
+
+Reach refuses the other eleven with `NotSupportedException`; HiDef refuses nothing in that set.
+
+Two divergences follow, and the current fixture asserts the first as if it were correct:
+
+1. **`Bgra5551` is refused by CNA and accepted by XNA at both profiles.** `EasyGL_SurfaceFormat_Throws`
+   requires the throw, so the suite is pinning the divergence rather than reporting it. Vulkan and
+   Bgfx refuse it too, so this is a framework-level rule and not one renderer's gap.
+2. **The eleven HiDef-only formats stay refused even on a HiDef device**, because widening never
+   consults the profile. A game that asks for HiDef and a float texture gets a refusal XNA would not
+   give.
+
+**Not in scope of `REMED-GFX-241`,** which only removed a guard the renderer itself did not apply.
+
+**Planned fix.** Make format legality a function of `(profile, renderer capability)` rather than of
+capability alone: refuse when *either* the profile excludes the format or the renderer cannot carry
+it, and let the message say which of the two refused. Then restate the fixture's `Bgra5551` leg on
+XNA's answer. Note that the second half is not free — a renderer that genuinely cannot do
+`HdrBlendable` must still refuse it on a HiDef device, so this widens the *rule*, not every
+renderer's capability.
+
+**Evidence.** `spikes/xna-pixel-center-spike/` leg `LEG-F`, run at both profiles
+(`build-and-run.sh`, and the same binary with `hidef`).

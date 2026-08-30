@@ -112,6 +112,23 @@ pixel and a ~0.49px shift steps every sample over it. The assertion was sound an
 were not. Closed as REMED-GFX-240 by giving that one case a 256-pixel frame against the smallest
 map, where five taps span ~2.5 pixels; nothing in the shadow layer or the renderer changed.
 
+## Third question: which SurfaceFormats XNA accepts
+
+`LEG-F` builds a `Texture2D` in each format and reports the verdict, at both profiles
+(`build-and-run.sh` runs Reach; pass `hidef` to the built binary for the other).
+
+| profile | accepted |
+|---|---|
+| `Reach` | Color, Bgr565, Bgra5551, Bgra4444, Dxt1, Dxt3, Dxt5, NormalizedByte2, NormalizedByte4 |
+| `HiDef` | those **plus** Rgba1010102, Rg32, Rgba64, Alpha8, Single, Vector2, Vector4, HalfSingle, HalfVector2, HalfVector4, HdrBlendable |
+
+Reach refuses the other eleven with `NotSupportedException`; HiDef refuses none of them. Format
+legality in XNA is a **profile** question. CNA makes it a **renderer-capability** question -- its
+profile gate covers texture size only -- which closed `REMED-GFX-241` (a fixture demanded a throw
+for `NormalizedByte2`, which XNA accepts at either profile and the renderer had already stopped
+refusing) and opened `REMED-GFX-242` (`Bgra5551` is refused by CNA and accepted by XNA, and the
+eleven HiDef-only formats stay refused even on a HiDef device).
+
 ## What this settles
 
 `xnaPixelCenterScale_` is **not** a divergence to be removed. It is what makes EasyGL agree with

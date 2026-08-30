@@ -215,14 +215,26 @@ protected:
         expectThrows("Texture2D Bgra5551", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgra5551);
         });
-        expectThrows("Texture2D NormalizedByte2", [&]{
+        // The two signed-normalized byte formats stand or fall together: EasyGL classifies them in
+        // one predicate ("Both signed-normalized byte formats need the ES 3 sized-internal-format
+        // set"), so NormalizedByte2 belongs under the same guard NormalizedByte4 already had.
+        // Splitting them was this file's own bug, not a renderer asymmetry.
+        //
+        // XNA agrees with the permissive half: measured on the real 4.0 runtime, a Texture2D in
+        // NormalizedByte2 or NormalizedByte4 is accepted at BOTH GraphicsProfile.Reach and .HiDef,
+        // and neither is among the eleven formats Reach refuses. Demanding a throw here was an
+        // over-specification of XNA rather than a contract. See spikes/xna-pixel-center-spike/.
+#if defined(CNA_GL_PROFILE_OPENGLES3) || defined(CNA_GL_PROFILE_OPENGL33) || defined(CNA_GL_PROFILE_WEBGL2)
+        expectNoThrow("Texture2D NormalizedByte2", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::NormalizedByte2);
         });
-#if defined(CNA_GL_PROFILE_OPENGLES3) || defined(CNA_GL_PROFILE_OPENGL33) || defined(CNA_GL_PROFILE_WEBGL2)
         expectNoThrow("Texture2D NormalizedByte4", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::NormalizedByte4);
         });
 #else
+        expectThrows("Texture2D NormalizedByte2", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::NormalizedByte2);
+        });
         expectThrows("Texture2D NormalizedByte4", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::NormalizedByte4);
         });
