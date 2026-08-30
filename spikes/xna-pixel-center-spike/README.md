@@ -104,12 +104,30 @@ otherwise keep the old renderer linked in and report the opposite result) gives:
 `GltfConformanceL6.ViewAndProjectionReachEveryDrawUnaltered` was previously counted with these. It
 is not: it fails only under `ctest -j` and passes serially every time.
 
-The shadow test is the one failure the correction actually causes. Its assertion is
-`countPartials(2) > 0` -- a 5x5 PCF kernel must produce at least one partially shadowed pixel -- and
-with the correction on it produces none, while `TheCastersShadowIsVisibleOnTheGround` still passes,
-so the shadow is present and only its softness is gone. XNA cannot arbitrate this one: it has no
-shadow-map API. A half-pixel geometry shift should not flatten a PCF kernel, so this is a real
-interaction defect in the CNAEXT shadow layer, not a wrong expectation.
+The shadow test is the one failure the correction actually causes -- but not, as first written
+here, because it flattens the kernel. Instrumented, the case renders a 64-pixel frame against a
+1024 shadow map, so its five PCF taps span about 0.3 of one frame pixel: with the correction off the
+whole frame carried two intermediate values, and with it on, none. The penumbra is narrower than a
+pixel and a ~0.49px shift steps every sample over it. The assertion was sound and the dimensions
+were not. Closed as REMED-GFX-240 by giving that one case a 256-pixel frame against the smallest
+map, where five taps span ~2.5 pixels; nothing in the shadow layer or the renderer changed.
+
+## Third question: which SurfaceFormats XNA accepts
+
+`LEG-F` builds a `Texture2D` in each format and reports the verdict, at both profiles
+(`build-and-run.sh` runs Reach; pass `hidef` to the built binary for the other).
+
+| profile | accepted |
+|---|---|
+| `Reach` | Color, Bgr565, Bgra5551, Bgra4444, Dxt1, Dxt3, Dxt5, NormalizedByte2, NormalizedByte4 |
+| `HiDef` | those **plus** Rgba1010102, Rg32, Rgba64, Alpha8, Single, Vector2, Vector4, HalfSingle, HalfVector2, HalfVector4, HdrBlendable |
+
+Reach refuses the other eleven with `NotSupportedException`; HiDef refuses none of them. Format
+legality in XNA is a **profile** question. CNA makes it a **renderer-capability** question -- its
+profile gate covers texture size only -- which closed `REMED-GFX-241` (a fixture demanded a throw
+for `NormalizedByte2`, which XNA accepts at either profile and the renderer had already stopped
+refusing) and opened `REMED-GFX-242` (`Bgra5551` is refused by CNA and accepted by XNA, and the
+eleven HiDef-only formats stay refused even on a HiDef device).
 
 ## What this settles
 
@@ -117,6 +135,6 @@ interaction defect in the CNAEXT shadow layer, not a wrong expectation.
 XNA. Leg U2 of the point-sampling contract encodes the OpenGL/Direct3D 10 convention, which XNA
 does not use, and the six renderers that pass it are passing an expectation XNA never held.
 
-Not answered here: why a half-pixel geometry shift removes every intermediate value from a 5x5
-PCF kernel. That is the shadow layer's own defect and needs its own investigation -- the correction
-only exposes it.
+All three tests the correction appeared to break are accounted for: two asserted the wrong
+convention (REMED-GFX-238) and the third asserted a penumbra it could not resolve
+(REMED-GFX-240). None of them was a renderer defect.

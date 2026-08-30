@@ -1,7 +1,7 @@
 # CNA Post-Audit Development Plan
 
 **Created:** 2026-08-03, on `feature/audit`, immediately after `REMED-GFX-202` closed.
-**Owns:** `REMED-GFX-203` … `REMED-GFX-240` and any future finding admitted by the rules below.
+**Owns:** `REMED-GFX-203` … `REMED-GFX-244` and any future finding admitted by the rules below.
 **Does not own:** the remediation campaign. `remediation/REMEDIATION_INDEX.md` and
 `remediation/REMEDIATION_PROGRESS.md` remain the authoritative status of record for every ticket,
 including the ones scheduled here.
@@ -2609,7 +2609,7 @@ buildable in this configuration and were not measured.
 
 ## 38. `REMED-GFX-239` — the XNA pixel-centre convention is guarded on one renderer only
 
-**Status:** **OPEN — measured 2026-08-30** · **Coverage defect**
+**Status:** **CLOSED — 2026-08-30** · **Coverage defect**
 
 **Defect.** `EasyGL_XnaPixelCenter` is registered for **EasyGL alone**. No other renderer is held to
 XNA's pixel-centre convention, and the six others that pass `PointSamplingContract` are passing an
@@ -2629,15 +2629,42 @@ convention then fail visibly and take a recorded capability boundary, rather tha
 being asked. Implementing the convention on the other renderers is **not** in this ticket's scope —
 naming the divergence is.
 
-**Sequencing.** Land `REMED-GFX-238` first. Promoting this fixture while the two contracts still
-assert the opposite convention would put two registered cross-renderer contracts in direct
-contradiction.
+**Sequencing.** `REMED-GFX-238` landed first, as required: promoting this fixture while the two
+contracts still asserted the opposite convention would have put two registered cross-renderer
+contracts in direct contradiction.
+
+**Fix as landed.** The fixture moved from `modules/renderers/easygl/examples/` to
+`modules/graphics/examples/xna_pixel_center_contract_test.cpp`, alongside the other renderer-neutral
+contracts, and its header now cites the runtime measurement rather than asserting XNA's behaviour
+from the sample. `EasyGL_XnaPixelCenter` keeps its name and its meaning; `Vulkan_XnaPixelCenter`
+joins it.
+
+**Evidence.**
+
+    EasyGL  [PASS] XNA 1x1 triangle: 1 covered pixel(s)   [PASS] control: 136
+    Vulkan  [FAIL] XNA 1x1 triangle: 0 covered pixel(s)   [PASS] control: 120
+
+EasyGL's covered count and its control count both match what the real runtime produced (1 and 136).
+Vulkan's control triangle is intact, so its failure is the convention and not a broken effect or
+readback path — which is exactly what the control triangle is there to separate.
+
+**`Vulkan_XnaPixelCenter` is expected to fail, and that is the deliverable.** It is not a regression:
+the case was always false on Vulkan and the suite simply never asked. Implementing the convention on
+Vulkan is separate work and is **not** in this ticket.
+
+**Deliberately left undone.** `PointSamplingContract` is registered for seven renderers; this
+contract is now registered for two. The remaining five — bgfx, headless, llgl, sdl-gpu, webgpu —
+were **not** registered, because no configuration here builds them and registering five cases whose
+outcome has not been observed would be speculation rather than coverage. Extending the registration
+is a mechanical follow-up for whoever can build them, and each will either pass or record the same
+divergence Vulkan just did.
 
 ---
 
 ## 39. `REMED-GFX-240` — the pixel-centre correction flattens the CNAEXT PCF kernel
 
-**Status:** **OPEN — measured 2026-08-30** · **CNAEXT shadow-layer defect**
+**Status:** **CLOSED — 2026-08-30** · **Fragile test, NOT a shadow-layer defect —
+the diagnosis this ticket opened with was wrong**
 
 **Defect.** With `xnaPixelCenterScale_` at its shipped value,
 `ShadowVisibilityTest.TheFilterRadiusChangesHowSoftTheEdgeIs` fails its **second** assertion —
@@ -2659,19 +2686,281 @@ wrong conclusion once already in this investigation.
 | `EasyGL_DescriptorCapacityContract` | pass | FAIL — `REMED-GFX-238` |
 | `ShadowVisibilityTest.TheFilterRadiusChangesHowSoftTheEdgeIs` | pass | **FAIL — this ticket** |
 
-**Why this one is a real defect.** A ~0.49px geometry shift should move where a shadow edge falls;
-it should not remove every intermediate value a 5×5 kernel produces. XNA cannot arbitrate — it has
-no shadow-map API — so the question is not which convention is right but why the kernel degenerates.
-Investigate whether the shadow layer derives its tap offsets from a matrix that now carries the
-clip-space translation, which would scale the offsets rather than translate them.
+**The opening diagnosis was wrong, and measuring it said so.** This ticket was filed as "a
+half-pixel shift should not flatten a PCF kernel, so the shadow layer must be deriving its tap
+offsets from a matrix that now carries the clip-space translation." The kernel is not flattened and
+the offsets are fine.
 
-**Do not "fix" this by removing the correction.** The correction is XNA-correct
-(`REMED-GFX-238`); this ticket is the shadow layer's own interaction with it.
+Two hypotheses were tested and both refuted before the real cause appeared:
 
-**Evidence.** `spikes/xna-pixel-center-spike/README.md`, commits `55b93f910` and `91be3f7a8`.
+1. *The fixed sample point left the shadow, collapsing the `(shadowValue+2, litValue-2)` window.*
+   Refuted: instrumented, the window is wide open — `lit(3,3)=255`, `shadow(centre)=38`.
+2. *The kernel degenerates.* Refuted: the shader's 5×5 loop and both its uniforms are correct, and
+   with the correction **off** the same frame does carry intermediate values.
+
+**Actual cause — the penumbra is narrower than a pixel.** The case renders a `kFrame` = 64 frame
+against a `ShadowQuality::Medium` = **1024** map, so the five taps span about `64/1024 × 5 ≈ 0.3` of
+one frame pixel. Whether any pixel centre falls inside that band is sub-pixel luck. Instrumented,
+the entire 64×64 frame carried **two** intermediate values with the correction off (`distinct=4`,
+counting the lit and shadowed values) and **none** with it on (`distinct=2`). The soft edge was
+always there; a ~0.49px shift simply stepped every sample over it.
+
+So the assertion was sound and the dimensions were not: the fixture demanded that a sub-pixel
+penumbra be sampled.
+
+**Fix.** Give this one case dimensions in which the penumbra is resolvable — a 256-pixel frame
+against the smallest (512) map puts five taps across ≈2.5 pixels, which no sub-pixel shift can step
+over. `Frame` carries its own `size` and `Capture` takes one, defaulting to `kFrame`, so the other
+sixteen cases in the fixture are untouched.
+
+**Evidence.** With the correction **on**: radius 0 gives `distinct=2` (a hard edge, as asserted) and
+radius 2 gives `distinct=7`. All 17 `ShadowVisibilityTest` cases pass. Mutation-checked by forcing
+`uShadowPcfRadius` to 0 in `EasyGLRenderer`, which fails the case on its own message — so the
+widened fixture still defends what it was written for rather than passing because it now samples
+more pixels.
+
+**Nothing in the shadow layer or the renderer changed.** The correction is XNA-correct
+(`REMED-GFX-238`) and stays as it is. See `spikes/xna-pixel-center-spike/README.md`, commits
+`55b93f910` and `91be3f7a8`.
 
 ---
 
 **Also corrected while measuring the above:**
 `GltfConformanceL6.ViewAndProjectionReachEveryDrawUnaltered` had been counted among the correction's
 casualties. It is not one. It fails only under `ctest -j` and passes serially every time.
+
+---
+
+## 40. `REMED-GFX-241` — one signed-normalized format was guarded and its twin was not
+
+**Status:** **CLOSED — 2026-08-30** · **Test defect, not a renderer defect**
+
+**Defect.** `EasyGL_SurfaceFormat_Throws` failed its only red check,
+`Texture2D NormalizedByte2 — expected std::runtime_error, no exception thrown`. The fixture required
+`NormalizedByte2` to throw unconditionally while guarding `NormalizedByte4` behind
+`OPENGLES3 || OPENGL33 || WEBGL2`.
+
+The renderer never drew that distinction. `EasyGLRenderer::ClassifyTexture2DFormatEXT` decides both
+in one predicate, and says so in its own comment: *"Both signed-normalized byte formats need the ES 3
+sized-internal-format set."* Supported off the ES 2 API generation, unsupported on it — identically
+for the pair. The asymmetry was the fixture's, not the renderer's.
+
+**XNA agrees with the permissive half, measured rather than assumed.** On the real 4.0 runtime a
+`Texture2D` in either format is accepted at **both** `GraphicsProfile.Reach` and `.HiDef`; neither is
+among the eleven formats Reach refuses. So the demand for a throw was an over-specification of XNA,
+which is what made this case worth closing rather than pinning.
+
+**Fix.** `NormalizedByte2` moves under the same guard `NormalizedByte4` already had, with the
+measurement recorded beside it.
+
+**Evidence.** EasyGL `27/27`. The fixture is shared by `Vulkan_SurfaceFormat_Throws` and
+`Bgfx_SurfaceFormat_Throws`, which define no `CNA_GL_PROFILE_*` and so take the `#else` branch —
+unchanged for them, and Vulkan re-measured at `27/27` to confirm it rather than assume it.
+
+---
+
+## 41. `REMED-GFX-242` — texture-format validation asks the renderer, XNA asks the profile
+
+**Status:** **CLOSED — 2026-08-30** · **Framework/renderer divergence**
+
+**Defect.** CNA decides whether a `SurfaceFormat` is legal for a `Texture2D` by asking the renderer
+(`CapabilitySurfaceFormats` → `ClassifyTexture2DFormatEXT`). XNA decides by `GraphicsProfile`.
+CNA's profile gate exists but covers **texture size only** —
+`ValidateTextureSizeForProfileEXT` — never format.
+
+Measured on the real runtime, XNA's Texture2D answer is:
+
+| profile | accepted |
+|---|---|
+| `Reach` | Color, Bgr565, Bgra5551, Bgra4444, Dxt1, Dxt3, Dxt5, NormalizedByte2, NormalizedByte4 |
+| `HiDef` | all of the above **plus** Rgba1010102, Rg32, Rgba64, Alpha8, Single, Vector2, Vector4, HalfSingle, HalfVector2, HalfVector4, HdrBlendable |
+
+Reach refuses the other eleven with `NotSupportedException`; HiDef refuses nothing in that set.
+
+Two divergences follow, and the current fixture asserts the first as if it were correct:
+
+1. **`Bgra5551` is refused by CNA and accepted by XNA at both profiles.** `EasyGL_SurfaceFormat_Throws`
+   requires the throw, so the suite is pinning the divergence rather than reporting it. Vulkan and
+   Bgfx refuse it too, so this is a framework-level rule and not one renderer's gap.
+2. **The eleven HiDef-only formats stay refused even on a HiDef device**, because widening never
+   consults the profile. A game that asks for HiDef and a float texture gets a refusal XNA would not
+   give.
+
+**Not in scope of `REMED-GFX-241`,** which only removed a guard the renderer itself did not apply.
+
+**Planned fix.** Make format legality a function of `(profile, renderer capability)` rather than of
+capability alone: refuse when *either* the profile excludes the format or the renderer cannot carry
+it, and let the message say which of the two refused. Then restate the fixture's `Bgra5551` leg on
+XNA's answer. Note that the second half is not free — a renderer that genuinely cannot do
+`HdrBlendable` must still refuse it on a HiDef device, so this widens the *rule*, not every
+renderer's capability.
+
+**Fix as landed.** `Texture::IsFormatAllowedByProfileEXT(profile, format)` carries the measured
+tables, and `ValidateTexture2DFormatEXT` asks it **before** the renderer — a format the profile
+excludes is illegal however capable the hardware is, and it is refused with
+`System::NotSupportedException`, XNA's own type, naming the profile. A format the profile permits
+and the renderer cannot carry keeps the renderer's `std::runtime_error`. Which of the two refused is
+now answerable from the exception alone: the first is fixed by asking for HiDef, the second is not.
+
+Scope is `Texture2D` only. `TextureCube` and `RenderTarget2D` validate through their own paths and
+XNA's profile rules for render targets are not the same list; extending it needs its own measurement.
+
+**One correction to this ticket's own opening.** It named `Bgra5551` as the single format CNA
+refuses and XNA accepts. That was wrong — the earlier reading conflated the fixture's SKIA arm with
+its `#else`. EasyGL accepts only `Color`, `NormalizedByte2` and `NormalizedByte4`, so it refuses
+**six** Reach-legal formats: `Bgr565`, `Bgra5551`, `Bgra4444`, `Dxt1`, `Dxt3`, `Dxt5`. None of them
+is fixed by this ticket — under the new rule they are refused by *capability*, which is a legitimate
+answer, correctly attributed and no longer conflated with a profile decision. The gap itself is
+filed as `REMED-GFX-244`.
+
+**Tests.** `TextureProfileFormatTests.cpp` pins the tables with no device and no renderer, so they
+run in every configuration: the nine Reach accepts, the eleven it refuses, HiDef refusing none, and
+a count assertion (`disagreements == 11`) so the tables cannot be widened or narrowed silently. A
+`*EXT` format is asserted to be outside the profile's business, since XNA has no opinion on CNA's
+own formats.
+
+`UnsupportedFormatConstructionTest`'s device is Reach, so its nine affected cases now expect the
+profile's refusal unconditionally, and the renderer-promotion arms they carried moved to a new
+`HiDefFormatConstructionTest` — which is what keeps SKIA-138 and IGL-71 covered rather than deleted.
+That fixture also asserts the gate is profile-*sensitive* rather than a second capability list: on
+HiDef none of the eleven may be refused on profile grounds, which is checkable on EasyGL even though
+EasyGL cannot carry them.
+
+**Evidence.** `spikes/xna-pixel-center-spike/` leg `LEG-F`, run at both profiles
+(`build-and-run.sh`, and the same binary with `hidef`). EasyGL `313/313` serially and `27/27` on the
+format contract; Vulkan `27/27` on the same shared fixture; the full unit binary green apart from
+`GpuTimerTest` (environment) and one `GltfConformanceL6` case that passes in isolation and is
+unaffected by these fixtures (49/49 when run alongside them).
+
+**Not verified here.** `SKIA` and `IGL` are the two renderers whose promoted formats this change
+actually restricts at Reach, and neither builds in any configuration in this tree. Their moved
+HiDef arms are therefore unrun.
+
+---
+
+## 43. `REMED-GFX-244` — EasyGL refuses six texture formats XNA accepts at Reach
+
+**Status:** **CLOSED — 2026-08-30** · **Renderer capability gap**
+
+**Defect.** `EasyGLRenderer::ClassifySurfaceFormatEXT` reports `Supported` for `Color`,
+`NormalizedByte2` and `NormalizedByte4` and defers everything else, and the framework's deferred rule
+(`Texture::ValidateFormat`) allows `Color` alone. So EasyGL refuses six formats a Reach-profile XNA
+game may legitimately use: **`Bgr565`, `Bgra5551`, `Bgra4444`, `Dxt1`, `Dxt3`, `Dxt5`** — measured
+accepted by the real runtime at both profiles (`REMED-GFX-242`).
+
+After `REMED-GFX-242` these are refused with the renderer's own exception and message rather than
+being conflated with a profile decision, so the gap is now *stated* correctly. It is still a gap.
+
+**Fix as landed — the three packed formats.** `Bgr565`, `Bgra5551` and `Bgra4444` are promoted on
+the ES 3 sized-internal-format set (`GL_RGB565`, `GL_RGB5_A1`, `GL_RGBA4`) and refused on the ES 2
+generation, the same guard the signed-normalized pair already takes — an unsized fallback would let
+the driver choose a layout.
+
+**The channel order is the whole difficulty, and only one of the three matches.** XNA packs
+`Bgr565` as `R:11 G:5 B:0`, which is exactly what `GL_UNSIGNED_SHORT_5_6_5` reads, so it is handed
+over untouched. The two with alpha do not match: XNA packs them `A R G B` with alpha in the **high**
+bits and GL's `5_5_5_1` and `4_4_4_4` put it in the **low** ones. Each texel is therefore rotated
+left by one channel width — 1 bit for `Bgra5551`, 4 for `Bgra4444`. A rotation is a pure bit
+permutation, so no channel is resampled and no precision is lost, unlike widening to RGBA8.
+
+**Verified by a sampled draw, because a readback here cannot see the defect.** `EasyGL_Packed16Format`
+uploads four full-intensity texels through the typed `SetData` overloads, draws them 1:1 through
+`SpriteBatch` under `PointClamp` and compares exactly — 31/31, 63/63 and 15/15 all expand back to
+precisely 255, so no tolerance can hide a swap. Mutation-checked by removing the rotation: `Bgr565`
+stays correct (it needs none) while the other two come back channel-swapped, red reading as
+(255,132,0) and (255,255,0).
+
+**A readback-based test would have passed for a completely wrong upload, and that was measured.**
+With the rotation deliberately removed, `Texture2D::GetData` still round-trips all three formats
+*exactly* while the texture samples with its channels swapped: the typed readback is served from
+this renderer's CPU-side copy and never asks the GPU what it stored. That is why IGL-71's bar is a
+real draw, and the finding is recorded in the fixture's own header so the next person does not reach
+for the cheaper test.
+
+**One self-inflicted gate failure worth recording.** The `PLAT-8` SDL ratchet went red at
+`+1 file, +1 reference` — not from any new SDL call, but because `REMED-GFX-243`'s doc comment in
+`EasyGLRenderer.hpp` *named* `SDL_GL_GetSwapInterval()`. The scanner counts `SDL_*` in comments too,
+which is right: a production header that talks about SDL is one whose contract has leaked. Reworded;
+all four platform gates (`sdl_inventory`, `sdl_classify`, `renderer_sdl_audit`, `hot_path_lint`) are
+green, and the `sdl_inventory` drift seen alongside it was the same reference and cleared with it.
+
+**The three block-compressed formats — extension where there is one, decode where there is not.**
+The owner chose this of three options on 2026-08-30. `Dxt1`, `Dxt3` and `Dxt5` are accepted on
+**every** GL profile, unlike the packed three: storing blocks needs `EXT_texture_compression_s3tc`
+(or the WebGL/ANGLE spellings, all probed once), but decoding them needs nothing at all, and Reach
+promises the game these formats work — a missing extension is not the game's problem. The driver
+therefore decides how they are *stored*, never whether they are *refused*. Decoding reuses
+`CNA::Internal::Graphics::DxtUtil`, which already existed for the content path.
+
+`IsCompressedTransferFormatEXT` is overridden so `SetData` hands the renderer raw 4×4 blocks rather
+than pixels the framework would have to compress again. A partial-rect update still refuses cleanly:
+the framework reads the level back first and throws `NotSupportedException` when the renderer cannot
+return compressed bytes, which this one cannot.
+
+**Both paths were run, which is the only way to know the fallback is real rather than merely
+written.** This Mesa reports `GL_EXT_texture_compression_s3tc`, so the configured run exercises the
+compressed path; forcing the probe to false exercises the decode path. **3/3 either way, with
+identical pixels** — which is the contract.
+
+`EasyGL_DxtFormat` uses two blocks side by side, red beside blue, so a mis-sized block or a stream
+walked in the wrong order shows as a wrong half instead of passing. Mutation-checked by reporting a
+DXT1 block as 16 bytes: `Dxt1` fails on all 32 pixels while `Dxt3` and `Dxt5` stay green, since 16 is
+genuinely their size.
+
+**The S3TC constants went upstream on the owner's instruction.** They were first spelled as local
+constants cast to `metagl::CompressedInternalFormat`, which carried the ES-core ETC2 and ASTC sets
+only; meta-gl is a separate sibling repository and was outside this task's working directories until
+the owner opened it. `metagl::CompressedInternalFormat` now carries `RgbS3tcDxt1`, `RgbaS3tcDxt1`,
+`RgbaS3tcDxt3` and `RgbaS3tcDxt5` (meta-gl `2520173`), following that header's own pattern for
+`GL_EXT_texture_filter_anisotropic` — the extension's `GL_*` macros defined behind `#ifndef`, since
+`<GLES3/gl32.h>` does not provide them. `to_string` gained the four names, and meta-gl's own suite is
+7/7. EasyGL names the enumerators and no longer casts.
+
+**Evidence.** `EasyGL_Packed16Format` 3/3, `EasyGL_DxtFormat` 3/3 on both paths;
+`EasyGL_SurfaceFormat_Throws` 30/30 and the shared fixture 30/30 on Vulkan with a freshly built
+binary — the Dxt legs are guarded to the GL profile macros, since Vulkan and Bgfx link the same file
+and store no compressed content. EasyGL `315/315` serially; all five platform gates green.
+
+---
+
+## 42. `REMED-GFX-243` — the vsync case skipped, and skipping it defended nothing
+
+**Status:** **CLOSED — 2026-08-30** · **Test defect plus a missing renderer observable**
+
+**Defect.** `EasyGL_GraphicsDeviceManager_Vsync` reported `Skipped` on every headless run. Its skip
+is honestly guarded — before skipping it proves the limitation by calling a raw, CNA-uninvolved
+`SDL_GL_SetSwapInterval(1)` and finding that even that cannot move the interval — so the skip itself
+was not the bug. What the skip concealed was.
+
+The case exists to guard one regression: `GraphicsDevice::Reset()` set every other
+`PresentationParameters` field on the renderer but never forwarded `PresentationInterval`, so
+`GraphicsDeviceManager.ApplyChanges()` could not turn vsync on or off. **Deleting that forward and
+re-running left the case reporting `PASS` and `SKIP`, exit 77.** Check A — vsync off must give
+`SDL_GL_GetSwapInterval() == 0` — passes vacuously with the forward gone, because the interval
+simply stays 0, which is what A expects; and Check B, the only one that could tell the difference,
+is the half that skips. Measured, not reasoned.
+
+**Root cause is an asymmetry in the renderer interface.** `IGraphicsRenderer::SetSwapInterval` had
+no counterpart, so nothing could distinguish *CNA never forwarded the request* from *the driver
+declined it*. The first is CNA's own state and is observable anywhere; the second is not.
+`EasyGLRenderer` even had a `swapInterval_` member for it — **dead, never assigned**.
+
+**Fix.** `CNAEXT GetSwapIntervalEXT()` joins the setter on `IGraphicsRenderer`, defaulted to `-1`
+for a renderer that does not record the request — the honest answer for one that ignores the setter
+too. `EasyGLRenderer` records what it is asked for and overrides it, which brings its dead member to
+life. `SkiaRenderer` already had this exact accessor (`skia_present_interval_test.cpp` uses it), so
+the shape is the established one rather than a new invention; adding the base virtual makes Skia's
+an implicit override, which is valid but **was not verified by compilation here** — no Skia
+configuration builds in this tree.
+
+The case now asks the two questions separately. `P1`/`P2` check that vsync off and on are forwarded
+to the renderer and run everywhere; `A`/`B` check that the driver honoured it, and `B` keeps its
+guarded skip. Order matters and is deliberate: `P1` sets the interval to 0 first, so `P2`'s
+transition to 1 is a real change rather than a reading of the renderer's default.
+
+**Exit code 77 is gone.** The forwarding half always runs, so reporting the whole case as skipped
+would hide a check that did execute.
+
+**Evidence.** `3/3 PASS (driver half skipped)`, exit 0, and `ctest` now says `Passed` rather than
+`Skipped`. Mutation-checked: with the `Reset()` forward deleted the case fails on `P1` with exit 1,
+where before this ticket the same deletion produced `PASS` and exit 77.

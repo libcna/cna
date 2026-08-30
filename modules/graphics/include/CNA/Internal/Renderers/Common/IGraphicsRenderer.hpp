@@ -1819,6 +1819,18 @@ namespace CNA::Internal::Renderers
         /// Updates the swap interval at runtime (0=immediate, 1=VSync, 2=half-rate).
         /// Renderers that cannot change VSync at runtime (e.g. Vulkan) silently ignore this.
         virtual void SetSwapInterval(int /*interval*/) {}
+        /**
+         * @brief The swap interval this renderer was last asked for, honoured by the driver or not.
+         *
+         * A setter with no getter is why `EasyGL_GraphicsDeviceManager_Vsync` could not tell "CNA
+         * never forwarded the request" from "the driver declined it", and so skipped wherever vsync
+         * is unavailable while defending nothing (REMED-GFX-243). Reporting the request separates
+         * the two: it is CNA's own state, so it is checkable in a headless context.
+         *
+         * @return The interval last passed to SetSwapInterval, or -1 from a renderer that does not
+         *         record it -- which is the honest answer for one that ignores the setter too.
+         */
+        CNAEXT [[nodiscard]] virtual int GetSwapIntervalEXT() const { return -1; }
         /// Task 902: reconfigures the backbuffer's MSAA sample count in place, called from
         /// GraphicsDevice::Reset() so GraphicsDeviceManager.PreferMultiSampling (and any other
         /// preference-driven MultiSampleCount change) actually reaches the renderer instead of

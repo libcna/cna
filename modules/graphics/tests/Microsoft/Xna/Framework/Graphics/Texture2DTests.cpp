@@ -23,6 +23,10 @@ using namespace CNA::Testing::Renderers;
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -37,6 +41,10 @@ using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
+using Microsoft::Xna::Framework::Graphics::Texture;
+using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
+using Microsoft::Xna::Framework::Graphics::GraphicsAdapter;
+using Microsoft::Xna::Framework::Graphics::PresentationParameters;
 using System::IO::MemoryStream;
 
 namespace
@@ -422,7 +430,8 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
 
 TEST_F(UnsupportedFormatConstructionTest, Bgra5551Throws)
 {
-    if (CNA_RENDERER_IS(Skia))
+    // REMED-GFX-244 promoted the packed 16-bit formats on EasyGL's ES 3 generation too.
+    if (CNA_RENDERER_IS(Skia, OpenGLES3, OpenGL33, WebGL2))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Bgra5551));
     }
@@ -434,113 +443,205 @@ TEST_F(UnsupportedFormatConstructionTest, Bgra5551Throws)
 
 TEST_F(UnsupportedFormatConstructionTest, SingleThrows)
 {
-    // plans/plan_igl.md IGL-71: IGL promotes Single (and Rg32) after verifying the WHOLE public path --
-    // the typed SetData/GetData overloads, sampling in a real draw and render-target use, on both
-    // of its backends (Igl_PublicSurfaceFormat). Storage alone was deliberately not enough.
-    if (CNA_RENDERER_IS(Skia, Igl))
-    {
-        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Single));
-    }
-    else
-    {
-        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Single), std::runtime_error);
-    }
+    // REMED-GFX-242: this fixture's device is GraphicsProfile.Reach, which excludes this
+    // format -- measured on the real XNA 4.0 runtime, where Reach refuses it with
+    // NotSupportedException and HiDef accepts it. The refusal is the PROFILE's and so is
+    // unconditional here; whether a renderer could carry it is asked on HiDef below.
+    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Single),
+                 System::NotSupportedException);
 }
 
 TEST_F(UnsupportedFormatConstructionTest, Vector2Throws)
 {
-    if (CNA_RENDERER_IS(Skia))
-    {
-        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector2));
-    }
-    else
-    {
-        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector2), std::runtime_error);
-    }
+    // REMED-GFX-242: this fixture's device is GraphicsProfile.Reach, which excludes this
+    // format -- measured on the real XNA 4.0 runtime, where Reach refuses it with
+    // NotSupportedException and HiDef accepts it. The refusal is the PROFILE's and so is
+    // unconditional here; whether a renderer could carry it is asked on HiDef below.
+    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector2),
+                 System::NotSupportedException);
 }
 
 TEST_F(UnsupportedFormatConstructionTest, Vector4Throws)
 {
-    if (CNA_RENDERER_IS(Skia))
-    {
-        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector4));
-    }
-    else
-    {
-        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector4), std::runtime_error);
-    }
+    // REMED-GFX-242: this fixture's device is GraphicsProfile.Reach, which excludes this
+    // format -- measured on the real XNA 4.0 runtime, where Reach refuses it with
+    // NotSupportedException and HiDef accepts it. The refusal is the PROFILE's and so is
+    // unconditional here; whether a renderer could carry it is asked on HiDef below.
+    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector4),
+                 System::NotSupportedException);
 }
 
 TEST_F(UnsupportedFormatConstructionTest, HalfSingleThrows)
 {
-    if (CNA_RENDERER_IS(Skia))
-    {
-        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfSingle));
-    }
-    else
-    {
-        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfSingle), std::runtime_error);
-    }
+    // REMED-GFX-242: this fixture's device is GraphicsProfile.Reach, which excludes this
+    // format -- measured on the real XNA 4.0 runtime, where Reach refuses it with
+    // NotSupportedException and HiDef accepts it. The refusal is the PROFILE's and so is
+    // unconditional here; whether a renderer could carry it is asked on HiDef below.
+    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfSingle),
+                 System::NotSupportedException);
 }
 
 TEST_F(UnsupportedFormatConstructionTest, HalfVector2Throws)
 {
-    if (CNA_RENDERER_IS(Skia))
-    {
-        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector2));
-    }
-    else
-    {
-        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector2), std::runtime_error);
-    }
+    // REMED-GFX-242: this fixture's device is GraphicsProfile.Reach, which excludes this
+    // format -- measured on the real XNA 4.0 runtime, where Reach refuses it with
+    // NotSupportedException and HiDef accepts it. The refusal is the PROFILE's and so is
+    // unconditional here; whether a renderer could carry it is asked on HiDef below.
+    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector2),
+                 System::NotSupportedException);
 }
 
 TEST_F(UnsupportedFormatConstructionTest, HalfVector4Throws)
 {
-    if (CNA_RENDERER_IS(Skia))
-    {
-        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector4));
-    }
-    else
-    {
-        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector4), std::runtime_error);
-    }
+    // REMED-GFX-242: this fixture's device is GraphicsProfile.Reach, which excludes this
+    // format -- measured on the real XNA 4.0 runtime, where Reach refuses it with
+    // NotSupportedException and HiDef accepts it. The refusal is the PROFILE's and so is
+    // unconditional here; whether a renderer could carry it is asked on HiDef below.
+    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector4),
+                 System::NotSupportedException);
 }
 
 TEST_F(UnsupportedFormatConstructionTest, HdrBlendableThrows)
 {
-    if (CNA_RENDERER_IS(Skia))
-    {
-        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HdrBlendable));
-    }
-    else
-    {
-        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HdrBlendable), std::runtime_error);
-    }
+    // REMED-GFX-242: this fixture's device is GraphicsProfile.Reach, which excludes this
+    // format -- measured on the real XNA 4.0 runtime, where Reach refuses it with
+    // NotSupportedException and HiDef accepts it. The refusal is the PROFILE's and so is
+    // unconditional here; whether a renderer could carry it is asked on HiDef below.
+    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HdrBlendable),
+                 System::NotSupportedException);
 }
 
 TEST_F(UnsupportedFormatConstructionTest, Rgba1010102Throws)
 {
-    if (CNA_RENDERER_IS(Skia))
-    {
-        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba1010102));
-    }
-    else
-    {
-        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba1010102), std::runtime_error);
-    }
+    // REMED-GFX-242: this fixture's device is GraphicsProfile.Reach, which excludes this
+    // format -- measured on the real XNA 4.0 runtime, where Reach refuses it with
+    // NotSupportedException and HiDef accepts it. The refusal is the PROFILE's and so is
+    // unconditional here; whether a renderer could carry it is asked on HiDef below.
+    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba1010102),
+                 System::NotSupportedException);
 }
 
 TEST_F(UnsupportedFormatConstructionTest, Rgba64Throws)
 {
-    if (CNA_RENDERER_IS(Skia))
+    // REMED-GFX-242: this fixture's device is GraphicsProfile.Reach, which excludes this
+    // format -- measured on the real XNA 4.0 runtime, where Reach refuses it with
+    // NotSupportedException and HiDef accepts it. The refusal is the PROFILE's and so is
+    // unconditional here; whether a renderer could carry it is asked on HiDef below.
+    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba64),
+                 System::NotSupportedException);
+}
+
+
+/// REMED-GFX-242: the same formats on a HiDef device, where the profile no longer refuses them and
+/// the verdict belongs to the renderer alone. This is where a renderer's promoted set is exercised
+/// -- moving it here is what keeps SKIA-138 and IGL-71 covered once Reach refuses these outright.
+class HiDefFormatConstructionTest : public ::testing::Test
+{
+protected:
+    GraphicsDevice gd{GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                      PresentationParameters()};
+};
+
+TEST_F(HiDefFormatConstructionTest, TheProfileItselfRefusesNothing)
+{
+    // The new gate must be profile-sensitive rather than a second capability list: on HiDef every
+    // one of the eleven passes the profile, so any refusal that remains is the renderer's own and
+    // carries the renderer's exception type, not NotSupportedException.
+    for (const SurfaceFormat fmt : {SurfaceFormat::Rgba1010102, SurfaceFormat::Rg32,
+                                    SurfaceFormat::Rgba64,      SurfaceFormat::Alpha8,
+                                    SurfaceFormat::Single,      SurfaceFormat::Vector2,
+                                    SurfaceFormat::Vector4,     SurfaceFormat::HalfSingle,
+                                    SurfaceFormat::HalfVector2, SurfaceFormat::HalfVector4,
+                                    SurfaceFormat::HdrBlendable})
     {
-        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba64));
+        SCOPED_TRACE(static_cast<int>(fmt));
+        EXPECT_TRUE(Texture::IsFormatAllowedByProfileEXT(GraphicsProfile::HiDef, fmt));
+        try
+        {
+            Texture2D texture(gd, 2, 2, false, fmt);
+        }
+        catch (const System::NotSupportedException& e)
+        {
+            ADD_FAILURE() << "HiDef must not refuse on profile grounds: " << e.what();
+        }
+        catch (const std::exception&)
+        {
+            // The renderer cannot carry it. That is a legitimate answer and not this test's
+            // business -- the per-format cases below say which renderers can.
+        }
     }
+}
+
+TEST_F(HiDefFormatConstructionTest, SingleIsTheRenderersCallOnHiDef)
+{
+    if (CNA_RENDERER_IS(Skia, Igl))
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Single));
     else
-    {
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Single), std::runtime_error);
+}
+
+TEST_F(HiDefFormatConstructionTest, Vector2IsTheRenderersCallOnHiDef)
+{
+    if (CNA_RENDERER_IS(Skia))
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector2));
+    else
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector2), std::runtime_error);
+}
+
+TEST_F(HiDefFormatConstructionTest, Vector4IsTheRenderersCallOnHiDef)
+{
+    if (CNA_RENDERER_IS(Skia))
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector4));
+    else
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector4), std::runtime_error);
+}
+
+TEST_F(HiDefFormatConstructionTest, HalfSingleIsTheRenderersCallOnHiDef)
+{
+    if (CNA_RENDERER_IS(Skia))
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfSingle));
+    else
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfSingle), std::runtime_error);
+}
+
+TEST_F(HiDefFormatConstructionTest, HalfVector2IsTheRenderersCallOnHiDef)
+{
+    if (CNA_RENDERER_IS(Skia))
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector2));
+    else
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector2), std::runtime_error);
+}
+
+TEST_F(HiDefFormatConstructionTest, HalfVector4IsTheRenderersCallOnHiDef)
+{
+    if (CNA_RENDERER_IS(Skia))
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector4));
+    else
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector4), std::runtime_error);
+}
+
+TEST_F(HiDefFormatConstructionTest, HdrBlendableIsTheRenderersCallOnHiDef)
+{
+    if (CNA_RENDERER_IS(Skia))
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HdrBlendable));
+    else
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HdrBlendable), std::runtime_error);
+}
+
+TEST_F(HiDefFormatConstructionTest, Rgba1010102IsTheRenderersCallOnHiDef)
+{
+    if (CNA_RENDERER_IS(Skia))
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba1010102));
+    else
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba1010102), std::runtime_error);
+}
+
+TEST_F(HiDefFormatConstructionTest, Rgba64IsTheRenderersCallOnHiDef)
+{
+    if (CNA_RENDERER_IS(Skia))
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba64));
+    else
         EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba64), std::runtime_error);
-    }
 }
 
 // Task 290: exhaustive sweep over every SurfaceFormat value. This stays correct automatically if
@@ -589,9 +690,28 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         const bool igl = CNA_RENDERER_IS(Igl);
         const bool easyGlSignedNormalized =
             CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2);
-        const bool supported = format == SurfaceFormat::Color
+        // REMED-GFX-244: the packed 16-bit formats Reach permits, promoted on the same ES 3
+        // generation the signed-normalized pair needs and verified by a real sampled draw
+        // (EasyGL_Packed16Format) rather than by a readback, which this renderer serves from a CPU
+        // copy and which therefore cannot see a wrong channel order.
+        const bool easyGlPacked16 = CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2);
+        // REMED-GFX-242: this fixture's device is Reach, and a format the profile excludes is
+        // refused however capable the renderer is -- so the profile is a factor of "supported",
+        // not an alternative to it.
+        const bool profileAllows =
+            Texture::IsFormatAllowedByProfileEXT(GraphicsProfile::Reach, format);
+        const bool supported = profileAllows && (format == SurfaceFormat::Color
             || (easyGlSignedNormalized && (format == SurfaceFormat::NormalizedByte4
                                            || format == SurfaceFormat::NormalizedByte2))
+            || (easyGlPacked16 && (format == SurfaceFormat::Bgr565
+                                   || format == SurfaceFormat::Bgra5551
+                                   || format == SurfaceFormat::Bgra4444))
+            // REMED-GFX-244: block-compressed content is accepted on every EasyGL profile, since
+            // the decode fallback needs no extension -- unlike the packed formats one line up,
+            // whose sized storage is ES 3.
+            || (CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2)
+                && (format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3
+                    || format == SurfaceFormat::Dxt5))
             || (igl && (format == SurfaceFormat::Rg32 || format == SurfaceFormat::Single))
             || (skia && (false
             || format == SurfaceFormat::Bgr565
@@ -631,12 +751,22 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
             || format == SurfaceFormat::Dxt5
             || format == SurfaceFormat::Bc7EXT
             || format == SurfaceFormat::Bc7SrgbEXT
-            ))
+            )))
             ;
         if (supported)
         {
             EXPECT_NO_THROW(Texture2D(gd, 4, 4, false, format))
                 << "supported SurfaceFormat ordinal " << static_cast<int>(format);
+        }
+        else if (!profileAllows)
+        {
+            // REMED-GFX-242: which of the two refused is the thing worth asserting. A format the
+            // profile excludes must carry XNA's own exception type, so a caller can tell "not on
+            // this profile" from "not on this renderer" and act on it -- the first is fixed by
+            // asking for HiDef, the second is not.
+            EXPECT_THROW(Texture2D(gd, 4, 4, false, format), System::NotSupportedException)
+                << "SurfaceFormat ordinal " << static_cast<int>(format)
+                << " is excluded by GraphicsProfile.Reach and must say so";
         }
         else
         {

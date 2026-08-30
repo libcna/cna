@@ -1443,6 +1443,34 @@ namespace CNA::Internal::Renderers::EasyGL
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void SetSwapInterval(int interval) override;
+
+        /**
+         * @brief The swap interval this renderer was last asked for, honoured or not.
+         *
+         * A GL context without a real vertical-retrace signal refuses to engage vsync, so
+         * querying the platform's own swap interval cannot distinguish "CNA never forwarded the
+         * request" from "the driver declined it". This reports the first of those on its own.
+         * Mirrors `SkiaRenderer::GetSwapIntervalEXT()`.
+         *
+         * (Naming the platform call here would be a new SDL reference in a production header and
+         * the PLAT-8 ratchet counts those, comments included -- rightly, since a header that talks
+         * about SDL is a header whose contract has leaked.)
+         *
+         * @return The interval last passed to SetSwapInterval, or the renderer's default if none.
+         */
+        CNAEXT [[nodiscard]] int GetSwapIntervalEXT() const override { return swapInterval_; }
+
+        /**
+         * @brief Whether SetData hands this renderer raw block-compressed data for a format.
+         *
+         * True for Dxt1, Dxt3 and Dxt5 on every profile: the blocks arrive as blocks, and this
+         * renderer decides afterwards whether the driver can store them that way or they must be
+         * decoded (REMED-GFX-244).
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return true when the format transfers as compressed blocks rather than pixels.
+         */
+        [[nodiscard]] bool IsCompressedTransferFormatEXT(int surfaceFormat) const override;
         void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         void GetViewportSize(int& width, int& height) override;
         void GetDefaultViewportRect(int& x, int& y, int& width, int& height) override;

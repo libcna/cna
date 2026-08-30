@@ -1,11 +1,21 @@
 // SPDX-License-Identifier: MS-PL
-// SAMPLE-001: verifies the Direct3D 9 pixel-center convention used by XNA 4.0.
+// SAMPLE-001: the Direct3D 9 pixel-centre convention XNA 4.0 uses, as a renderer-neutral contract.
 //
 // The original Microsoft Primitives sample draws each star as the exact screen-space triangle
-// (x,y), (x+1,y), (x,y+1). The real XNA executable covers one pixel for that triangle. OpenGL's
-// different pixel-center and top-left fill conventions used to drop it completely in EasyGL.
-// This regression test retains a larger control triangle so a failure cannot be mistaken for a
-// broken BasicEffect or readback path.
+// (x,y), (x+1,y), (x,y+1). XNA covers one pixel for it. That is measured, not inherited: run
+// against the real XNA 4.0 runtime this fixture reports `covered=1`, and the covered pixel is
+// (16,16) -- the triangle's top-left vertex, which is what Direct3D 9's top-left fill rule
+// predicts. See spikes/xna-pixel-center-spike/. OpenGL and Vulkan address pixel corners instead and
+// drop the triangle entirely.
+//
+// REMED-GFX-239 moved this out of the EasyGL example directory. The convention belongs to XNA, so
+// every renderer owes it, and one that does not implement it should say so by failing here rather
+// than by never being asked -- CNA otherwise gives different pixel coverage depending on the
+// renderer, silently. EasyGL implements it (EasyGLRenderer::xnaPixelCenterScale_); Vulkan does not,
+// and its registration is expected to fail until it does.
+//
+// The larger control triangle stays so a failure cannot be mistaken for a broken BasicEffect or
+// readback path: on a renderer that merely lacks the convention, the control triangle is intact.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
