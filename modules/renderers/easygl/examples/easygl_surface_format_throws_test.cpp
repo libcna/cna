@@ -51,9 +51,16 @@ class SurfaceFormatThrowsTest : public Game
         }
     }
 
-    /// A renderer without real volume-texture storage refuses EVERY Texture3D construction up
-    /// front with System::NotSupportedException (REMED-CONTENT-004's gate), before any format
-    /// validation runs -- the capability-false arms below expect exactly that refusal.
+    /// Two things refuse with System::NotSupportedException. A renderer without real
+    /// volume-texture storage refuses EVERY Texture3D construction up front (REMED-CONTENT-004's
+    /// gate), before any format validation runs. And REMED-GFX-242: a format the device's
+    /// GraphicsProfile excludes is refused by the profile, whatever the renderer could carry --
+    /// XNA's own exception type for its own restriction, measured on the real 4.0 runtime where
+    /// Reach refuses exactly eleven Texture2D formats and HiDef refuses none.
+    ///
+    /// The distinction is the point of the ticket: std::runtime_error below means THIS RENDERER
+    /// cannot carry the format, NotSupportedException means the PROFILE does not allow it. A
+    /// format in the second group would still be refused on hardware that could manage it.
     void expectThrowsNotSupported(const char* label, auto fn)
     {
         try
@@ -239,25 +246,25 @@ protected:
             Texture2D t(dev, 2, 2, false, SurfaceFormat::NormalizedByte4);
         });
 #endif
-        expectThrows("Texture2D Single", [&]{
+        expectThrowsNotSupported("Texture2D Single", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Single);
         });
-        expectThrows("Texture2D Vector2", [&]{
+        expectThrowsNotSupported("Texture2D Vector2", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Vector2);
         });
-        expectThrows("Texture2D Vector4", [&]{
+        expectThrowsNotSupported("Texture2D Vector4", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Vector4);
         });
-        expectThrows("Texture2D HalfSingle", [&]{
+        expectThrowsNotSupported("Texture2D HalfSingle", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::HalfSingle);
         });
-        expectThrows("Texture2D HalfVector2", [&]{
+        expectThrowsNotSupported("Texture2D HalfVector2", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::HalfVector2);
         });
-        expectThrows("Texture2D HalfVector4", [&]{
+        expectThrowsNotSupported("Texture2D HalfVector4", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::HalfVector4);
         });
-        expectThrows("Texture2D HdrBlendable", [&]{
+        expectThrowsNotSupported("Texture2D HdrBlendable", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::HdrBlendable);
         });
 #endif
@@ -310,13 +317,13 @@ protected:
         expectThrows("Texture2D Bgr565", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgr565);
         });
-        expectThrows("Texture2D Alpha8", [&]{
+        expectThrowsNotSupported("Texture2D Alpha8", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Alpha8);
         });
-        expectThrows("Texture2D Rg32", [&]{
+        expectThrowsNotSupported("Texture2D Rg32", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Rg32);
         });
-        expectThrows("Texture2D Rgba64", [&]{
+        expectThrowsNotSupported("Texture2D Rgba64", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Rgba64);
         });
         expectThrows("Texture2D ByteEXT", [&]{

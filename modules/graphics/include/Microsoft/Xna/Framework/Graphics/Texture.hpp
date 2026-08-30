@@ -4,6 +4,7 @@
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsResource.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -66,6 +67,26 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param fmt The SurfaceFormat to validate.
          */
         CNAEXT static void ValidateFormat(SurfaceFormat fmt);
+
+        /**
+         * @brief Whether a GraphicsProfile permits this SurfaceFormat for a Texture2D at all.
+         *
+         * XNA decides texture-format legality by GraphicsProfile; CNA had decided it by renderer
+         * capability alone, so a renderer able to carry a HiDef-only format offered it to a Reach
+         * game too (REMED-GFX-242). This is the profile half of the answer and says nothing about
+         * whether the active renderer can carry the format -- both must agree.
+         *
+         * The tables are measured on the real XNA 4.0 runtime rather than transcribed from
+         * documentation: see spikes/xna-pixel-center-spike/, leg LEG-F, run at both profiles.
+         * Reach accepts nine formats and refuses eleven with NotSupportedException; HiDef refuses
+         * none of them.
+         *
+         * @param profile The profile the device was created with.
+         * @param fmt The SurfaceFormat to test.
+         * @return True when the profile permits the format, false when it refuses it.
+         */
+        CNAEXT [[nodiscard]] static bool IsFormatAllowedByProfileEXT(GraphicsProfile profile,
+                                                                     SurfaceFormat fmt) noexcept;
 
     protected:
         explicit Texture(GraphicsDevice* device = nullptr);

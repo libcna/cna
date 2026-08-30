@@ -1,7 +1,7 @@
 # CNA Post-Audit Development Plan
 
 **Created:** 2026-08-03, on `feature/audit`, immediately after `REMED-GFX-202` closed.
-**Owns:** `REMED-GFX-203` … `REMED-GFX-243` and any future finding admitted by the rules below.
+**Owns:** `REMED-GFX-203` … `REMED-GFX-244` and any future finding admitted by the rules below.
 **Does not own:** the remediation campaign. `remediation/REMEDIATION_INDEX.md` and
 `remediation/REMEDIATION_PROGRESS.md` remain the authoritative status of record for every ticket,
 including the ones scheduled here.
@@ -2761,7 +2761,7 @@ unchanged for them, and Vulkan re-measured at `27/27` to confirm it rather than 
 
 ## 41. `REMED-GFX-242` — texture-format validation asks the renderer, XNA asks the profile
 
-**Status:** **OPEN — measured 2026-08-30** · **Framework/renderer divergence**
+**Status:** **CLOSED — 2026-08-30** · **Framework/renderer divergence**
 
 **Defect.** CNA decides whether a `SurfaceFormat` is legal for a `Texture2D` by asking the renderer
 (`CapabilitySurfaceFormats` → `ClassifyTexture2DFormatEXT`). XNA decides by `GraphicsProfile`.
@@ -2795,8 +2795,68 @@ XNA's answer. Note that the second half is not free — a renderer that genuinel
 `HdrBlendable` must still refuse it on a HiDef device, so this widens the *rule*, not every
 renderer's capability.
 
+**Fix as landed.** `Texture::IsFormatAllowedByProfileEXT(profile, format)` carries the measured
+tables, and `ValidateTexture2DFormatEXT` asks it **before** the renderer — a format the profile
+excludes is illegal however capable the hardware is, and it is refused with
+`System::NotSupportedException`, XNA's own type, naming the profile. A format the profile permits
+and the renderer cannot carry keeps the renderer's `std::runtime_error`. Which of the two refused is
+now answerable from the exception alone: the first is fixed by asking for HiDef, the second is not.
+
+Scope is `Texture2D` only. `TextureCube` and `RenderTarget2D` validate through their own paths and
+XNA's profile rules for render targets are not the same list; extending it needs its own measurement.
+
+**One correction to this ticket's own opening.** It named `Bgra5551` as the single format CNA
+refuses and XNA accepts. That was wrong — the earlier reading conflated the fixture's SKIA arm with
+its `#else`. EasyGL accepts only `Color`, `NormalizedByte2` and `NormalizedByte4`, so it refuses
+**six** Reach-legal formats: `Bgr565`, `Bgra5551`, `Bgra4444`, `Dxt1`, `Dxt3`, `Dxt5`. None of them
+is fixed by this ticket — under the new rule they are refused by *capability*, which is a legitimate
+answer, correctly attributed and no longer conflated with a profile decision. The gap itself is
+filed as `REMED-GFX-244`.
+
+**Tests.** `TextureProfileFormatTests.cpp` pins the tables with no device and no renderer, so they
+run in every configuration: the nine Reach accepts, the eleven it refuses, HiDef refusing none, and
+a count assertion (`disagreements == 11`) so the tables cannot be widened or narrowed silently. A
+`*EXT` format is asserted to be outside the profile's business, since XNA has no opinion on CNA's
+own formats.
+
+`UnsupportedFormatConstructionTest`'s device is Reach, so its nine affected cases now expect the
+profile's refusal unconditionally, and the renderer-promotion arms they carried moved to a new
+`HiDefFormatConstructionTest` — which is what keeps SKIA-138 and IGL-71 covered rather than deleted.
+That fixture also asserts the gate is profile-*sensitive* rather than a second capability list: on
+HiDef none of the eleven may be refused on profile grounds, which is checkable on EasyGL even though
+EasyGL cannot carry them.
+
 **Evidence.** `spikes/xna-pixel-center-spike/` leg `LEG-F`, run at both profiles
-(`build-and-run.sh`, and the same binary with `hidef`).
+(`build-and-run.sh`, and the same binary with `hidef`). EasyGL `313/313` serially and `27/27` on the
+format contract; Vulkan `27/27` on the same shared fixture; the full unit binary green apart from
+`GpuTimerTest` (environment) and one `GltfConformanceL6` case that passes in isolation and is
+unaffected by these fixtures (49/49 when run alongside them).
+
+**Not verified here.** `SKIA` and `IGL` are the two renderers whose promoted formats this change
+actually restricts at Reach, and neither builds in any configuration in this tree. Their moved
+HiDef arms are therefore unrun.
+
+---
+
+## 43. `REMED-GFX-244` — EasyGL refuses six texture formats XNA accepts at Reach
+
+**Status:** **OPEN — measured 2026-08-30** · **Renderer capability gap**
+
+**Defect.** `EasyGLRenderer::ClassifySurfaceFormatEXT` reports `Supported` for `Color`,
+`NormalizedByte2` and `NormalizedByte4` and defers everything else, and the framework's deferred rule
+(`Texture::ValidateFormat`) allows `Color` alone. So EasyGL refuses six formats a Reach-profile XNA
+game may legitimately use: **`Bgr565`, `Bgra5551`, `Bgra4444`, `Dxt1`, `Dxt3`, `Dxt5`** — measured
+accepted by the real runtime at both profiles (`REMED-GFX-242`).
+
+After `REMED-GFX-242` these are refused with the renderer's own exception and message rather than
+being conflated with a profile decision, so the gap is now *stated* correctly. It is still a gap.
+
+**Planned fix.** The three packed formats are inexpensive on the ES 3 sized-internal-format set
+(`GL_RGB565`, `GL_RGB5_A1`, `GL_RGBA4`). The three block-compressed ones need a real decision:
+either an extension gate (`EXT_texture_compression_s3tc`, absent on plenty of ES targets) or the
+CPU decode-to-`Color` path other renderers already take on load. Do not promote a format without
+verifying the whole public path the way IGL-71 did — storage alone was deliberately not enough
+there, and the same bar applies here.
 
 ---
 

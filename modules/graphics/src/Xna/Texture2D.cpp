@@ -94,6 +94,24 @@ namespace Microsoft::Xna::Framework::Graphics
             Texture::ValidateFormat(format);
             return;
         }
+
+        // REMED-GFX-242: legality is (profile AND renderer), not renderer alone. XNA decides by
+        // GraphicsProfile -- measured on the real 4.0 runtime, Reach refuses eleven formats with
+        // NotSupportedException and HiDef refuses none -- while CNA asked only what the renderer
+        // could carry, so a renderer able to carry a HiDef-only format offered it to a Reach game
+        // as well. The profile is asked FIRST and refuses with XNA's own exception type, because a
+        // format the profile excludes is illegal however capable the hardware is.
+        if (!Texture::IsFormatAllowedByProfileEXT(device->getGraphicsProfileProperty(), format))
+        {
+            throw System::NotSupportedException(
+                "Texture2D: SurfaceFormat " + std::to_string(static_cast<int>(format)) +
+                " is not available on GraphicsProfile." +
+                (device->getGraphicsProfileProperty() == GraphicsProfile::HiDef
+                     ? std::string("HiDef")
+                     : std::string("Reach")) +
+                " -- this is the profile's own restriction, not the renderer's capability");
+        }
+
         switch (device->GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(format)))
         {
             case CNA::Internal::Renderers::RendererFormatVerdict::Supported:

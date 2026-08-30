@@ -106,6 +106,44 @@ namespace Microsoft::Xna::Framework::Graphics
                 "invalid size for this resource");
     }
 
+    bool Texture::IsFormatAllowedByProfileEXT(GraphicsProfile profile, SurfaceFormat fmt) noexcept
+    {
+        // HiDef refuses none of the XNA 4.0 SurfaceFormats for a Texture2D, so only Reach needs a
+        // list. Anything outside the enum XNA knows (CNA's own *EXT formats) is not the profile's
+        // business and is left to the renderer to accept or refuse.
+        if (profile != GraphicsProfile::Reach)
+            return true;
+        switch (fmt)
+        {
+        case SurfaceFormat::Color:
+        case SurfaceFormat::Bgr565:
+        case SurfaceFormat::Bgra5551:
+        case SurfaceFormat::Bgra4444:
+        case SurfaceFormat::Dxt1:
+        case SurfaceFormat::Dxt3:
+        case SurfaceFormat::Dxt5:
+        case SurfaceFormat::NormalizedByte2:
+        case SurfaceFormat::NormalizedByte4:
+            return true;
+        // Measured as refused by Reach: Rgba1010102, Rg32, Rgba64, Alpha8, Single, Vector2,
+        // Vector4, HalfSingle, HalfVector2, HalfVector4, HdrBlendable.
+        case SurfaceFormat::Rgba1010102:
+        case SurfaceFormat::Rg32:
+        case SurfaceFormat::Rgba64:
+        case SurfaceFormat::Alpha8:
+        case SurfaceFormat::Single:
+        case SurfaceFormat::Vector2:
+        case SurfaceFormat::Vector4:
+        case SurfaceFormat::HalfSingle:
+        case SurfaceFormat::HalfVector2:
+        case SurfaceFormat::HalfVector4:
+        case SurfaceFormat::HdrBlendable:
+            return false;
+        default:
+            return true;
+        }
+    }
+
     void Texture::ValidateFormat(SurfaceFormat fmt)
     {
         if (fmt == SurfaceFormat::Color)
