@@ -289,6 +289,10 @@ namespace CNA::Content::Pipeline
         Cnb::CnbTextureRepresentation representation;
         representation.format = Cnb::CnbTextureFormat::Rgba8;
         representation.levels.push_back(imported.rgbaPixels);
+        representation.levels.insert(
+            representation.levels.end(), imported.additionalRgbaMipLevels.begin(),
+            imported.additionalRgbaMipLevels.end());
+        texture.mipCount = static_cast<std::uint32_t>(representation.levels.size());
         texture.representations.push_back(std::move(representation));
         context.LogInfo("prepared one canonical Rgba8 Texture3D representation.");
         return ContentValue::Create(ProcessedTexture3DType, std::move(texture));
@@ -299,6 +303,14 @@ namespace CNA::Content::Pipeline
         return {kTexture3DWriterName, "1"};
     }
 
+    std::vector<ContentWriterSchemaIdentity>
+    Texture3DContentWriter::OutputSchemaIdentities() const
+    {
+        return {{Cnb::CnbAssetTypeId::Texture3D, Cnb::CnbTextureSchemaVersion,
+                 "Microsoft.Xna.Framework.Graphics.Texture3D",
+                 {"CNA.Cnb.EncodeTexture3DToCnb", "1"}}};
+    }
+
     std::string Texture3DContentWriter::InputType() const { return ProcessedTexture3DType; }
 
     ContentWriteResult Texture3DContentWriter::Write(const ContentValue& input,
@@ -307,7 +319,8 @@ namespace CNA::Content::Pipeline
         const Cnb::CnbTextureData& texture = input.Get<Cnb::CnbTextureData>();
         return {Cnb::EncodeTexture3DToCnb(texture, logicalName),
                 Cnb::CnbAssetTypeId::Texture3D,
-                "Microsoft.Xna.Framework.Graphics.Texture3D"};
+                "Microsoft.Xna.Framework.Graphics.Texture3D",
+                Cnb::CnbTextureSchemaVersion};
     }
 
     ContentComponentIdentity TextureCubeProcessor::Identity() const
@@ -337,6 +350,14 @@ namespace CNA::Content::Pipeline
         return {kTextureCubeWriterName, "1"};
     }
 
+    std::vector<ContentWriterSchemaIdentity>
+    TextureCubeContentWriter::OutputSchemaIdentities() const
+    {
+        return {{Cnb::CnbAssetTypeId::TextureCube, Cnb::CnbTextureSchemaVersion,
+                 "Microsoft.Xna.Framework.Graphics.TextureCube",
+                 {"CNA.Cnb.EncodeTextureCubeToCnb", "1"}}};
+    }
+
     std::string TextureCubeContentWriter::InputType() const { return ProcessedTextureCubeType; }
 
     ContentWriteResult TextureCubeContentWriter::Write(const ContentValue& input,
@@ -345,7 +366,8 @@ namespace CNA::Content::Pipeline
         const Cnb::CnbTextureData& texture = input.Get<Cnb::CnbTextureData>();
         return {Cnb::EncodeTextureCubeToCnb(texture, logicalName),
                 Cnb::CnbAssetTypeId::TextureCube,
-                "Microsoft.Xna.Framework.Graphics.TextureCube"};
+                "Microsoft.Xna.Framework.Graphics.TextureCube",
+                Cnb::CnbTextureSchemaVersion};
     }
 
     ContentComponentIdentity CurveProcessor::Identity() const
@@ -374,6 +396,14 @@ namespace CNA::Content::Pipeline
         return {kCurveWriterName, "1"};
     }
 
+    std::vector<ContentWriterSchemaIdentity>
+    CurveContentWriter::OutputSchemaIdentities() const
+    {
+        return {{Cnb::CnbAssetTypeId::Curve, Cnb::CnbCurveSchemaVersion,
+                 "Microsoft.Xna.Framework.Curve",
+                 {"CNA.Cnb.EncodeCurveToCnb", "1"}}};
+    }
+
     std::string CurveContentWriter::InputType() const { return ProcessedCurveType; }
 
     ContentWriteResult CurveContentWriter::Write(const ContentValue& input,
@@ -381,7 +411,7 @@ namespace CNA::Content::Pipeline
     {
         const ProcessedCurve& curve = input.Get<ProcessedCurve>();
         return {Cnb::EncodeCurveToCnb(curve.value, logicalName), Cnb::CnbAssetTypeId::Curve,
-                "Microsoft.Xna.Framework.Curve"};
+                "Microsoft.Xna.Framework.Curve", Cnb::CnbCurveSchemaVersion};
     }
 
     ContentComponentIdentity AnimationClipProcessor::Identity() const
@@ -412,6 +442,14 @@ namespace CNA::Content::Pipeline
         return {kAnimationClipWriterName, "1"};
     }
 
+    std::vector<ContentWriterSchemaIdentity>
+    AnimationClipContentWriter::OutputSchemaIdentities() const
+    {
+        return {{Cnb::CnbAssetTypeId::AnimationClip, Cnb::CnbAnimationClipSchemaVersion,
+                 "Microsoft.Xna.Framework.Graphics.AnimationClipEXT",
+                 {"CNA.Cnb.EncodeAnimationClipToCnb", "1"}}};
+    }
+
     std::string AnimationClipContentWriter::InputType() const
     {
         return ProcessedAnimationClipType;
@@ -423,7 +461,8 @@ namespace CNA::Content::Pipeline
         const ProcessedAnimationClip& clip = input.Get<ProcessedAnimationClip>();
         return {Cnb::EncodeAnimationClipToCnb(clip.value, logicalName),
                 Cnb::CnbAssetTypeId::AnimationClip,
-                "Microsoft.Xna.Framework.Graphics.AnimationClipEXT"};
+                "Microsoft.Xna.Framework.Graphics.AnimationClipEXT",
+                Cnb::CnbAnimationClipSchemaVersion};
     }
 
     ContentComponentIdentity SpriteFontProcessor::Identity() const
@@ -455,8 +494,20 @@ namespace CNA::Content::Pipeline
     {
         const ImportedSpriteFont& imported = input.Get<ImportedSpriteFont>();
         Cnb::CnbSpriteFontData font;
-        font.atlas = Cnb::MakeRgba8Texture2DData(
-            imported.atlas.width, imported.atlas.height, imported.atlas.rgbaPixels);
+        font.atlas.width = imported.atlas.width;
+        font.atlas.height = imported.atlas.height;
+        font.atlas.depth = 1u;
+        font.atlas.faceCount = 1u;
+        font.atlas.mipCount = static_cast<std::uint32_t>(
+            1u + imported.atlas.additionalRgbaMipLevels.size());
+        Cnb::CnbTextureRepresentation atlasRepresentation;
+        atlasRepresentation.format = Cnb::CnbTextureFormat::Rgba8;
+        atlasRepresentation.levels.push_back(imported.atlas.rgbaPixels);
+        atlasRepresentation.levels.insert(
+            atlasRepresentation.levels.end(),
+            imported.atlas.additionalRgbaMipLevels.begin(),
+            imported.atlas.additionalRgbaMipLevels.end());
+        font.atlas.representations.push_back(std::move(atlasRepresentation));
         font.lineSpacing = imported.lineSpacing;
         font.spacing = imported.spacing;
         font.defaultCharacter = imported.defaultCharacter;
@@ -480,6 +531,14 @@ namespace CNA::Content::Pipeline
         return {kSpriteFontWriterName, "1"};
     }
 
+    std::vector<ContentWriterSchemaIdentity>
+    SpriteFontContentWriter::OutputSchemaIdentities() const
+    {
+        return {{Cnb::CnbAssetTypeId::SpriteFont, Cnb::CnbSpriteFontSchemaVersion,
+                 "Microsoft.Xna.Framework.Graphics.SpriteFont",
+                 {"CNA.Cnb.EncodeSpriteFontToCnb", "1"}}};
+    }
+
     std::string SpriteFontContentWriter::InputType() const
     {
         return ProcessedSpriteFontType;
@@ -490,7 +549,8 @@ namespace CNA::Content::Pipeline
     {
         const Cnb::CnbSpriteFontData& font = input.Get<Cnb::CnbSpriteFontData>();
         return {Cnb::EncodeSpriteFontToCnb(font, logicalName), Cnb::CnbAssetTypeId::SpriteFont,
-                "Microsoft.Xna.Framework.Graphics.SpriteFont"};
+                "Microsoft.Xna.Framework.Graphics.SpriteFont",
+                Cnb::CnbSpriteFontSchemaVersion};
     }
 
     void RegisterCnjContentPipeline(ContentPipelineRegistry& registry)

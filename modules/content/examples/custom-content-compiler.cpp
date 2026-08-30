@@ -100,7 +100,7 @@ namespace
     public:
         [[nodiscard]] Pipeline::ContentComponentIdentity Identity() const override
         {
-            return {"ExampleGame.GreetingProcessor", "2"};
+            return {"ExampleGame.GreetingProcessor", "3"};
         }
 
         [[nodiscard]] std::string InputType() const override { return kImportedType; }
@@ -112,13 +112,22 @@ namespace
         {
             for (const auto& [name, value] : parameters.Values())
             {
-                if ((name != "prefix" && name != "dependsOn") ||
+                if ((name != "prefix" && name != "dependsOn" &&
+                     name != "deploymentSource" && name != "deploymentOutput") ||
                     !std::holds_alternative<std::string>(value))
                 {
                     throw std::invalid_argument(
-                        "GreetingProcessor accepts only the string parameters 'prefix' and "
-                        "'dependsOn'.");
+                        "GreetingProcessor accepts only the string parameters 'prefix', "
+                        "'dependsOn', 'deploymentSource', and 'deploymentOutput'.");
                 }
+            }
+            const bool hasDeploymentSource = parameters.Find("deploymentSource") != nullptr;
+            const bool hasDeploymentOutput = parameters.Find("deploymentOutput") != nullptr;
+            if (hasDeploymentSource != hasDeploymentOutput)
+            {
+                throw std::invalid_argument(
+                    "GreetingProcessor requires 'deploymentSource' and 'deploymentOutput' "
+                    "together.");
             }
         }
 
@@ -138,6 +147,15 @@ namespace
             {
                 context.AddContentBuildDependency(std::get<std::string>(*dependency));
             }
+            if (const Pipeline::ContentProcessorParameterValue* deploymentSource =
+                    context.Parameters().Find("deploymentSource"))
+            {
+                const std::filesystem::path source = context.ResolveSourceDependency(
+                    std::get<std::string>(*deploymentSource));
+                context.AddDeploymentFile(
+                    source, std::get<std::string>(
+                                *context.Parameters().Find("deploymentOutput")));
+            }
             context.LogInfo("applied the custom greeting policy.");
             return Pipeline::ContentValue::Create(kProcessedType,
                                                   ProcessedGreeting{std::move(text)});
@@ -152,6 +170,13 @@ namespace
             return {"ExampleGame.GreetingWriter", "2"};
         }
 
+        [[nodiscard]] std::vector<Pipeline::ContentWriterSchemaIdentity>
+        OutputSchemaIdentities() const override
+        {
+            return {{GreetingAssetTypeId(), 1u, kAssetTypeName,
+                     {"ExampleGame.EncodeGreetingToCnb", "1"}}};
+        }
+
         [[nodiscard]] std::string InputType() const override { return kProcessedType; }
 
         [[nodiscard]] Pipeline::ContentWriteResult Write(
@@ -160,12 +185,13 @@ namespace
         {
             const ProcessedGreeting& greeting = input.Get<ProcessedGreeting>();
             Pipeline::ContentWriteResult result{
-                EncodeGreetingToCnb(greeting, logicalName), GreetingAssetTypeId(), kAssetTypeName};
+                EncodeGreetingToCnb(greeting, logicalName), GreetingAssetTypeId(),
+                kAssetTypeName, 1u};
             const std::string replyLogicalName = "Generated/" + logicalName + "-reply";
             const ProcessedGreeting reply{"Reply: " + greeting.text};
             result.additionalOutputs.push_back(
                 {replyLogicalName, EncodeGreetingToCnb(reply, replyLogicalName),
-                 GreetingAssetTypeId(), kAssetTypeName});
+                 GreetingAssetTypeId(), kAssetTypeName, 1u});
             return result;
         }
     };

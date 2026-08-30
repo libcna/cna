@@ -74,7 +74,18 @@ namespace CNA::Content::Pipeline
         [[nodiscard]] const std::map<std::string, ContentAssetBuildConfiguration>& Entries()
             const noexcept;
 
+        /**
+         * @brief Returns explicitly configured read-only external source roots.
+         *
+         * Paths retain their authored native spelling until a build resolves them against its
+         * primary source root.
+         *
+         * @return Read-only capabilities in deterministic alias order.
+         */
+        [[nodiscard]] const ContentSourceRootCapabilities& SourceRoots() const noexcept;
+
     private:
         std::map<std::string, ContentAssetBuildConfiguration> entries_;
+        ContentSourceRootCapabilities sourceRoots_;
     };
 } // namespace CNA::Content::Pipeline

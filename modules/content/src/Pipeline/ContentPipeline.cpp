@@ -8,6 +8,7 @@
 #include <exception>
 #include <mutex>
 #include <sstream>
+#include <type_traits>
 
 #include "CNA/Content/Cnb/CnbFormat.hpp"
 #include "CNA/Internal/ContentPath.hpp"
@@ -93,9 +94,17 @@ namespace CNA::Content::Pipeline
             return canonicalPath;
         }
 
-        std::filesystem::path ResolveDependency(const std::filesystem::path& root,
-                                                const std::filesystem::path& source,
-                                                const std::filesystem::path& authored)
+        struct ResolvedSourceDependency
+        {
+            std::filesystem::path path;
+            std::string sourceRoot;
+        };
+
+        ResolvedSourceDependency ResolveDependency(
+            const std::filesystem::path& root,
+            const ContentSourceRootCapabilities& externalSourceRoots,
+            const std::filesystem::path& source,
+            const std::filesystem::path& authored)
         {
             if (authored.empty())
             {
@@ -107,7 +116,72 @@ namespace CNA::Content::Pipeline
                                             CNA::Internal::ContentPathToUtf8(authored) +
                                             "' must be relative to its source asset.");
             }
-            return RequireContained(root, source.parent_path() / authored, "source dependency");
+            const auto& nativeAuthored = authored.native();
+            const auto isSeparator = [](const auto character)
+            {
+                using Character = std::decay_t<decltype(character)>;
+                return character == static_cast<Character>('/') ||
+                       character == static_cast<Character>('\\');
+            };
+            if (std::adjacent_find(nativeAuthored.begin(), nativeAuthored.end(),
+                                   [&](const auto left, const auto right)
+                { return isSeparator(left) && isSeparator(right); }) != nativeAuthored.end())
+            {
+                throw std::invalid_argument(
+                    "source dependency paths must use one normalized separator between "
+                    "components.");
+            }
+            const std::string authoredText = CNA::Internal::ContentPathToUtf8(authored);
+            if (!authoredText.empty() && authoredText.front() == '@')
+            {
+                const std::size_t slash = authoredText.find('/');
+                if (slash == std::string::npos || slash <= 1u || slash + 1u >= authoredText.size())
+                {
+                    throw std::invalid_argument(
+                        "external source dependency '" + authoredText +
+                        "' must use '@alias/root-relative-path'.");
+                }
+                const std::string alias = authoredText.substr(1u, slash - 1u);
+                const std::string problem = ContentSourceRootAliasProblem(alias);
+                if (!problem.empty())
+                {
+                    throw std::invalid_argument("external source dependency alias '" + alias +
+                                                "' is invalid: " + problem + ".");
+                }
+                const std::filesystem::path* externalRoot = externalSourceRoots.Find(alias);
+                if (externalRoot == nullptr)
+                {
+                    throw std::invalid_argument("external source dependency uses unknown root "
+                                                "alias '" + alias + "'.");
+                }
+                const std::string relativeText = authoredText.substr(slash + 1u);
+                const std::filesystem::path relative =
+                    CNA::Internal::ContentPathFromUtf8(relativeText);
+                if (relativeText.find('\\') != std::string::npos || relative.empty() ||
+                    relative.is_absolute() || relative.has_root_name() ||
+                    relative.has_root_directory() ||
+                    CNA::Internal::ContentPathToUtf8(relative.lexically_normal()) != relativeText)
+                {
+                    throw std::invalid_argument(
+                        "external source dependency '" + authoredText +
+                        "' must use a normalized root-relative path with '/'.");
+                }
+                for (const std::filesystem::path& part : relative)
+                {
+                    if (part == "." || part == "..")
+                    {
+                        throw std::invalid_argument(
+                            "external source dependency '" + authoredText +
+                            "' must not contain '.' or '..'.");
+                    }
+                }
+                return {RequireContained(*externalRoot, *externalRoot / relative,
+                                         "external source dependency"),
+                        alias};
+            }
+            return {RequireContained(root, source.parent_path() / authored,
+                                     "source dependency"),
+                    {}};
         }
 
         std::string LowerExtension(const std::filesystem::path& source)
@@ -129,6 +203,75 @@ namespace CNA::Content::Pipeline
             {
                 throw std::invalid_argument(std::string(kind) + " '" + identity.name +
                                             "' version must not be empty.");
+            }
+        }
+
+        bool WriterSchemaLess(const ContentWriterSchemaIdentity& left,
+                              const ContentWriterSchemaIdentity& right)
+        {
+            if (left.assetTypeId != right.assetTypeId)
+            {
+                return left.assetTypeId < right.assetTypeId;
+            }
+            if (left.assetTypeName != right.assetTypeName)
+            {
+                return left.assetTypeName < right.assetTypeName;
+            }
+            return left.assetSchemaVersion < right.assetSchemaVersion;
+        }
+
+        void ValidateWriterSchemas(const std::vector<ContentWriterSchemaIdentity>& schemas)
+        {
+            if (schemas.empty())
+            {
+                throw std::logic_error(
+                    "writer returned no asset/schema/codec identity declarations.");
+            }
+            if (schemas.size() > MaxContentBuildOutputs)
+            {
+                throw std::logic_error(
+                    "writer returned more than the maximum of " +
+                    std::to_string(MaxContentBuildOutputs) +
+                    " asset/schema/codec identity declarations.");
+            }
+            for (std::size_t index = 0u; index < schemas.size(); ++index)
+            {
+                const ContentWriterSchemaIdentity& schema = schemas[index];
+                if (schema.assetTypeId == 0u || schema.assetSchemaVersion == 0u ||
+                    schema.assetTypeName.empty())
+                {
+                    throw std::logic_error(
+                        "writer returned an incomplete asset/schema identity declaration.");
+                }
+                ValidateIdentity(schema.codec, "writer codec");
+                if (index != 0u && !WriterSchemaLess(schemas[index - 1u], schema))
+                {
+                    throw std::logic_error(
+                        "writer asset/schema identities must be strictly ordered by asset type "
+                        "id, canonical type name, and schema version without duplicates.");
+                }
+            }
+        }
+
+        void RequireDeclaredWriterOutput(
+            const std::vector<ContentWriterSchemaIdentity>& schemas,
+            std::uint32_t assetTypeId, const std::string& assetTypeName,
+            const std::uint32_t assetSchemaVersion,
+            const std::string& outputName)
+        {
+            const auto found = std::find_if(
+                schemas.begin(), schemas.end(), [&](const ContentWriterSchemaIdentity& schema)
+            {
+                return schema.assetTypeId == assetTypeId &&
+                       schema.assetTypeName == assetTypeName &&
+                       schema.assetSchemaVersion == assetSchemaVersion;
+            });
+            if (found == schemas.end())
+            {
+                throw std::logic_error(
+                    "writer output '" + outputName + "' returned undeclared asset identity " +
+                    std::to_string(assetTypeId) + " ('" + assetTypeName + "') schema " +
+                    std::to_string(assetSchemaVersion) + ".");
             }
         }
 
@@ -240,9 +383,120 @@ namespace CNA::Content::Pipeline
         return "Unknown";
     }
 
+    std::string ContentSourceRootAliasProblem(const std::string& alias)
+    {
+        if (alias.empty()) { return "must not be empty"; }
+        if (alias.size() > 64u) { return "must contain at most 64 characters"; }
+        if (alias.front() < 'a' || alias.front() > 'z')
+        {
+            return "must begin with a lowercase ASCII letter";
+        }
+        if (std::any_of(alias.begin() + 1, alias.end(), [](const char character)
+            {
+                return !((character >= 'a' && character <= 'z') ||
+                         (character >= '0' && character <= '9') || character == '-');
+            }))
+        {
+            return "must contain only lowercase ASCII letters, digits, or '-'";
+        }
+        return {};
+    }
+
+    void ContentSourceRootCapabilities::Add(std::string alias,
+                                            std::filesystem::path root)
+    {
+        const std::string problem = ContentSourceRootAliasProblem(alias);
+        if (!problem.empty())
+        {
+            throw std::invalid_argument("source-root alias '" + alias + "' " + problem + ".");
+        }
+        if (root.empty())
+        {
+            throw std::invalid_argument("source-root alias '" + alias +
+                                        "' must name a non-empty physical path.");
+        }
+        if (entries_.contains(alias))
+        {
+            throw std::invalid_argument("source-root alias '" + alias + "' is repeated.");
+        }
+        if (entries_.size() >= MaxContentSourceRoots)
+        {
+            throw std::invalid_argument(
+                "content build exceeds the maximum external source-root count of " +
+                std::to_string(MaxContentSourceRoots) + ".");
+        }
+        entries_.emplace(std::move(alias), std::move(root));
+    }
+
+    const std::filesystem::path* ContentSourceRootCapabilities::Find(
+        const std::string& alias) const
+    {
+        const auto found = entries_.find(alias);
+        return found == entries_.end() ? nullptr : &found->second;
+    }
+
+    const std::map<std::string, std::filesystem::path>&
+    ContentSourceRootCapabilities::Entries() const noexcept
+    {
+        return entries_;
+    }
+
+    bool ContentSourceRootCapabilities::Empty() const noexcept
+    {
+        return entries_.empty();
+    }
+
+    ContentSourceRootCapabilities ResolveContentSourceRootCapabilities(
+        const std::filesystem::path& sourceRoot,
+        const ContentSourceRootCapabilities& configured)
+    {
+        const std::filesystem::path canonicalSourceRoot =
+            WeaklyCanonicalOrAbsolute(sourceRoot);
+        if (!std::filesystem::is_directory(canonicalSourceRoot))
+        {
+            throw std::invalid_argument("primary source root '" +
+                                        CNA::Internal::ContentPathToUtf8(sourceRoot) +
+                                        "' is not a directory.");
+        }
+        ContentSourceRootCapabilities resolved;
+        for (const auto& [alias, authoredRoot] : configured.Entries())
+        {
+            const std::filesystem::path candidate = authoredRoot.is_relative()
+                                                        ? canonicalSourceRoot / authoredRoot
+                                                        : authoredRoot;
+            const std::filesystem::path canonicalRoot = WeaklyCanonicalOrAbsolute(candidate);
+            if (!std::filesystem::is_directory(canonicalRoot))
+            {
+                throw std::invalid_argument("external source root '" + alias + "' at '" +
+                                            CNA::Internal::ContentPathToUtf8(candidate) +
+                                            "' is not a directory.");
+            }
+            if (PathIsWithin(canonicalSourceRoot, canonicalRoot) ||
+                PathIsWithin(canonicalRoot, canonicalSourceRoot))
+            {
+                throw std::invalid_argument("external source root '" + alias +
+                                            "' must not equal, contain, or be contained by the "
+                                            "primary source root.");
+            }
+            for (const auto& [otherAlias, otherRoot] : resolved.Entries())
+            {
+                if (PathIsWithin(otherRoot, canonicalRoot) ||
+                    PathIsWithin(canonicalRoot, otherRoot))
+                {
+                    throw std::invalid_argument("external source roots '" + otherAlias +
+                                                "' and '" + alias +
+                                                "' must not equal or contain one another.");
+                }
+            }
+            resolved.Add(alias, canonicalRoot);
+        }
+        return resolved;
+    }
+
     bool ContentDependency::operator<(const ContentDependency& other) const noexcept
     {
         if (kind != other.kind) { return kind < other.kind; }
+        if (sourceRoot != other.sourceRoot) { return sourceRoot < other.sourceRoot; }
         return identity < other.identity;
     }
 
@@ -258,6 +512,16 @@ namespace CNA::Content::Pipeline
         {
             throw std::invalid_argument("content dependency identity must not be empty.");
         }
+        if (!dependency.sourceRoot.empty())
+        {
+            const std::string problem = ContentSourceRootAliasProblem(dependency.sourceRoot);
+            if (dependency.kind != ContentDependencyKind::SourceFile || !problem.empty())
+            {
+                throw std::invalid_argument(
+                    "only a source-file dependency may carry a valid external source-root "
+                    "alias.");
+            }
+        }
         dependencies_.insert(std::move(dependency));
     }
 
@@ -272,6 +536,24 @@ namespace CNA::Content::Pipeline
         runtimeReferences_.insert(std::move(reference));
     }
 
+    void ContentDependencyCollector::AddDeploymentFile(ContentDeploymentFile file)
+    {
+        const auto found = deploymentFiles_.find(file.outputPath);
+        if (found != deploymentFiles_.end() && found->second.source != file.source)
+        {
+            throw std::invalid_argument("deployment output path '" + file.outputPath +
+                                        "' is already mapped to another source file.");
+        }
+        if (found == deploymentFiles_.end() &&
+            deploymentFiles_.size() >= MaxContentDeploymentFiles)
+        {
+            throw std::invalid_argument(
+                "content build exceeds the maximum deployment-file count of " +
+                std::to_string(MaxContentDeploymentFiles) + ".");
+        }
+        deploymentFiles_.insert_or_assign(file.outputPath, std::move(file));
+    }
+
     std::vector<ContentDependency> ContentDependencyCollector::Dependencies() const
     {
         return {dependencies_.begin(), dependencies_.end()};
@@ -280,6 +562,18 @@ namespace CNA::Content::Pipeline
     std::vector<RuntimeContentReference> ContentDependencyCollector::RuntimeReferences() const
     {
         return {runtimeReferences_.begin(), runtimeReferences_.end()};
+    }
+
+    std::vector<ContentDeploymentFile> ContentDependencyCollector::DeploymentFiles() const
+    {
+        std::vector<ContentDeploymentFile> result;
+        result.reserve(deploymentFiles_.size());
+        for (const auto& [outputPath, file] : deploymentFiles_)
+        {
+            static_cast<void>(outputPath);
+            result.push_back(file);
+        }
+        return result;
     }
 
     void ContentProcessorParameters::Set(std::string name,
@@ -328,10 +622,12 @@ namespace CNA::Content::Pipeline
 
     ContentImporterContext::ContentImporterContext(
         std::filesystem::path sourceRoot, std::filesystem::path source, std::string logicalName,
-        std::string component, ContentDependencyCollector& dependencies, ContentBuildLogger& logger)
+        std::string component, const ContentSourceRootCapabilities& externalSourceRoots,
+        ContentDependencyCollector& dependencies, ContentBuildLogger& logger)
         : sourceRoot_(std::move(sourceRoot)), source_(std::move(source)),
           logicalName_(std::move(logicalName)), component_(std::move(component)),
-          dependencies_(&dependencies), logger_(&logger)
+          dependencies_(&dependencies), logger_(&logger),
+          externalSourceRoots_(&externalSourceRoots)
     {
     }
 
@@ -353,12 +649,13 @@ namespace CNA::Content::Pipeline
     std::filesystem::path ContentImporterContext::ResolveSourceDependency(
         const std::filesystem::path& authoredPath)
     {
-        const std::filesystem::path resolved =
-            ResolveDependency(sourceRoot_, source_, authoredPath);
+        const ResolvedSourceDependency resolved =
+            ResolveDependency(sourceRoot_, *externalSourceRoots_, source_, authoredPath);
         dependencies_->Add(
             ContentDependency{ContentDependencyKind::SourceFile,
-                              CNA::Internal::ContentPathToUtf8(resolved)});
-        return resolved;
+                              CNA::Internal::ContentPathToUtf8(resolved.path),
+                              resolved.sourceRoot});
+        return resolved.path;
     }
 
     void ContentImporterContext::LogInfo(std::string text) const
@@ -376,10 +673,12 @@ namespace CNA::Content::Pipeline
     ContentProcessorContext::ContentProcessorContext(
         std::filesystem::path sourceRoot, std::filesystem::path source, std::string logicalName,
         std::string component, const ContentProcessorParameters& parameters,
+        const ContentSourceRootCapabilities& externalSourceRoots,
         ContentDependencyCollector& dependencies, ContentBuildLogger& logger)
         : sourceRoot_(std::move(sourceRoot)), source_(std::move(source)),
           logicalName_(std::move(logicalName)), component_(std::move(component)),
-          parameters_(&parameters), dependencies_(&dependencies), logger_(&logger)
+          parameters_(&parameters), dependencies_(&dependencies), logger_(&logger),
+          externalSourceRoots_(&externalSourceRoots)
     {
     }
 
@@ -396,12 +695,13 @@ namespace CNA::Content::Pipeline
     std::filesystem::path ContentProcessorContext::ResolveSourceDependency(
         const std::filesystem::path& authoredPath)
     {
-        const std::filesystem::path resolved =
-            ResolveDependency(sourceRoot_, source_, authoredPath);
+        const ResolvedSourceDependency resolved =
+            ResolveDependency(sourceRoot_, *externalSourceRoots_, source_, authoredPath);
         dependencies_->Add(
             ContentDependency{ContentDependencyKind::SourceFile,
-                              CNA::Internal::ContentPathToUtf8(resolved)});
-        return resolved;
+                              CNA::Internal::ContentPathToUtf8(resolved.path),
+                              resolved.sourceRoot});
+        return resolved.path;
     }
 
     void ContentProcessorContext::AddContentBuildDependency(std::string logicalName)
@@ -433,6 +733,56 @@ namespace CNA::Content::Pipeline
     {
         dependencies_->AddRuntimeReference(
             RuntimeContentReference{std::move(logicalName), expectedAssetTypeId});
+    }
+
+    void ContentProcessorContext::AddDeploymentFile(
+        const std::filesystem::path& sourcePath, std::string outputPath)
+    {
+        const std::string problem = Cnb::CnbLogicalNameProblem(outputPath);
+        if (!problem.empty())
+        {
+            throw std::invalid_argument("deployment output path '" + outputPath +
+                                        "' is invalid: " + problem + ".");
+        }
+        const std::filesystem::path candidate =
+            sourcePath.is_relative() ? sourceRoot_ / sourcePath : sourcePath;
+        const std::filesystem::path resolved = WeaklyCanonicalOrAbsolute(candidate);
+        std::string resolvedSourceRoot;
+        if (!PathIsWithin(WeaklyCanonicalOrAbsolute(sourceRoot_), resolved))
+        {
+            const std::string identity = CNA::Internal::ContentPathToUtf8(resolved);
+            const std::vector<ContentDependency> dependencies = dependencies_->Dependencies();
+            const auto explicitDependency = std::find_if(
+                dependencies.begin(), dependencies.end(), [&](const ContentDependency& dependency)
+            {
+                return dependency.kind == ContentDependencyKind::SourceFile &&
+                       !dependency.sourceRoot.empty() && dependency.identity == identity;
+            });
+            if (explicitDependency == dependencies.end())
+            {
+                throw std::invalid_argument(
+                    "deployment source '" + CNA::Internal::ContentPathToUtf8(sourcePath) +
+                    "' is outside the primary source root and was not explicitly resolved "
+                    "through a named external source capability.");
+            }
+            resolvedSourceRoot = explicitDependency->sourceRoot;
+        }
+        if (!std::filesystem::is_regular_file(resolved))
+        {
+            throw std::invalid_argument("deployment source '" +
+                                        CNA::Internal::ContentPathToUtf8(sourcePath) +
+                                        "' is not a regular file.");
+        }
+        if (resolved != source_)
+        {
+            dependencies_->Add(
+                ContentDependency{ContentDependencyKind::SourceFile,
+                                  CNA::Internal::ContentPathToUtf8(resolved),
+                                  resolvedSourceRoot});
+        }
+        dependencies_->AddDeploymentFile(
+            ContentDeploymentFile{resolved, std::move(outputPath),
+                                  std::move(resolvedSourceRoot)});
     }
 
     void ContentProcessorContext::LogInfo(std::string text) const
@@ -657,6 +1007,7 @@ namespace CNA::Content::Pipeline
         std::filesystem::path source = request.source;
         std::filesystem::path root = request.sourceRoot;
         const std::string logicalName = request.logicalName;
+        ContentSourceRootCapabilities externalSourceRoots;
         ContentBuildLogger& downstreamLogger =
             request.logger == nullptr ? NullLogger() : *request.logger;
         RecordingContentBuildLogger logger(downstreamLogger);
@@ -665,6 +1016,8 @@ namespace CNA::Content::Pipeline
         {
             if (root.empty()) { throw std::invalid_argument("sourceRoot must not be empty."); }
             root = WeaklyCanonicalOrAbsolute(root);
+            externalSourceRoots =
+                ResolveContentSourceRootCapabilities(root, request.externalSourceRoots);
             if (source.empty()) { throw std::invalid_argument("source must not be empty."); }
             if (source.is_relative()) { source = root / source; }
             source = RequireContained(root, source, "primary source");
@@ -705,7 +1058,7 @@ namespace CNA::Content::Pipeline
         try
         {
             ContentImporterContext context(root, source, logicalName, importerIdentity.name,
-                                           dependencies, logger);
+                                           externalSourceRoots, dependencies, logger);
             imported = importer->Import(context);
             if (imported.Empty())
             {
@@ -741,7 +1094,8 @@ namespace CNA::Content::Pipeline
         {
             processor->ValidateParameters(request.parameters);
             ContentProcessorContext context(root, source, logicalName, processorIdentity.name,
-                                            request.parameters, dependencies, logger);
+                                            request.parameters, externalSourceRoots,
+                                            dependencies, logger);
             processed = processor->Process(imported, context);
             if (processed.Empty())
             {
@@ -771,9 +1125,12 @@ namespace CNA::Content::Pipeline
         }
 
         ContentWriteResult output;
+        std::vector<ContentWriterSchemaIdentity> writerSchemas;
         const ContentComponentIdentity writerIdentity = writer->Identity();
         try
         {
+            writerSchemas = writer->OutputSchemaIdentities();
+            ValidateWriterSchemas(writerSchemas);
             output = writer->Write(processed, logicalName);
             if (output.bytes.empty())
             {
@@ -783,6 +1140,13 @@ namespace CNA::Content::Pipeline
             {
                 throw std::logic_error("writer returned invalid asset type id 0.");
             }
+            if (output.assetSchemaVersion == 0u)
+            {
+                throw std::logic_error("writer returned invalid asset schema version 0.");
+            }
+            RequireDeclaredWriterOutput(writerSchemas, output.assetTypeId,
+                                        output.assetTypeName, output.assetSchemaVersion,
+                                        logicalName);
             if (output.additionalOutputs.size() >= MaxContentBuildOutputs)
             {
                 throw std::logic_error(
@@ -815,6 +1179,16 @@ namespace CNA::Content::Pipeline
                                            "additional output '" +
                                            additional.logicalName + "'.");
                 }
+                if (additional.assetSchemaVersion == 0u)
+                {
+                    throw std::logic_error(
+                        "writer returned invalid asset schema version 0 for additional output '" +
+                        additional.logicalName + "'.");
+                }
+                RequireDeclaredWriterOutput(writerSchemas, additional.assetTypeId,
+                                            additional.assetTypeName,
+                                            additional.assetSchemaVersion,
+                                            additional.logicalName);
             }
         }
         catch (...)
@@ -829,9 +1203,11 @@ namespace CNA::Content::Pipeline
         result.importer = importerIdentity;
         result.processor = processorIdentity;
         result.writer = writerIdentity;
+        result.writerSchemas = std::move(writerSchemas);
         result.parameters = request.parameters;
         result.dependencies = dependencies.Dependencies();
         result.runtimeReferences = dependencies.RuntimeReferences();
+        result.deploymentFiles = dependencies.DeploymentFiles();
         result.messages = logger.TakeMessages();
         result.output = std::move(output);
         return result;

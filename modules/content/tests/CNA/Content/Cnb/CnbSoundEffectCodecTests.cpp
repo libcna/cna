@@ -177,6 +177,7 @@ TEST(CnbSoundEffectCodecTest, ASoundEffectCnbLoadsThroughContentManager)
     auto sound = cm.Load<Microsoft::Xna::Framework::Audio::SoundEffect>("beep");
     // 64 frames at 8 kHz is 8 ms.
     EXPECT_NEAR(sound.getDurationProperty().getTotalMillisecondsProperty(), 8.0, 0.5);
+    EXPECT_EQ(sound.getNameProperty(), "beep");
 }
 
 TEST(CnbSoundEffectCodecTest, ASoundEffectCnbAlsoResolvesWhenNamedWithItsExtension)

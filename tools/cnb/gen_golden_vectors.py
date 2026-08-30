@@ -1,6 +1,7 @@
 # Generates the golden byte vectors for CnbGoldenVectorTests.cpp from the FORMAT SPECIFICATION,
 # independently of the C++ writer -- that independence is the whole point: a golden file produced
 # by the implementation under test proves only that the implementation is self-consistent.
+import hashlib
 import struct
 
 POLY = 0x82F63B78
@@ -154,6 +155,82 @@ model = build(5, 1, [('CMET', 0, 4, cmet3), ('XREF', MANDATORY, 4, xref),
                      ('MMSH', MANDATORY, 4, mmsh), ('MMAT', MANDATORY, 4, mmat),
                      ('MVTX', MANDATORY, 16, mvtx), ('MIDX', MANDATORY, 16, midx)])
 emit('kGoldenModel', model, 'Model schema 1: one boneless BasicEffect part, one external texture.')
+
+# --- Model schema 2: exact declaration, shared resources, windows, explicit root ----------------
+cmet3v2 = u32(0) + cstr('Microsoft.Xna.Framework.Graphics.Model') + cstr('golden/model-v2')
+xref3v2 = u32(1) + u32(0) + u32(1) + cstr('Textures/checker')
+m2hd = (u32(0) +             # flags
+        u32(2) +             # bones
+        u32(1) +             # meshes
+        u32(2) +             # parts
+        u32(1) +             # declarations
+        u32(2) +             # elements
+        u32(1) +             # vertex buffers
+        u32(1) +             # index buffers
+        u32(1) +             # effects
+        u32(1) +             # explicit root bone
+        u32(0) * 6)
+assert len(m2hd) == 64
+m2st = u32(3) + cstr('Detached') + cstr('Root') + cstr('SharedGeometry')
+identity = (f32(1.0) + f32(0.0) * 3 +
+            f32(0.0) + f32(1.0) + f32(0.0) * 2 +
+            f32(0.0) * 2 + f32(1.0) + f32(0.0) +
+            f32(0.0) * 3 + f32(1.0))
+root_transform = identity[:48] + f32(4.0) + identity[52:]
+m2bn = (u32(0) + struct.pack('<i', -1) + identity +
+        u32(1) + struct.pack('<i', -1) + root_transform)
+assert len(m2bn) == 2 * 72
+m2ms = (u32(2) + struct.pack('<i', 1) +
+        f32(1.0) + f32(2.0) + f32(3.0) + f32(4.0) +
+        u32(0) + u32(2))
+assert len(m2ms) == 32
+part0 = u32(1) + u32(4) + u32(0) + u32(1) + u32(0) + u32(0) + u32(0) + u32(0)
+part1 = u32(1) + u32(4) + u32(3) + u32(1) + u32(0) + u32(0) + u32(0) + u32(0)
+m2pt = part0 + part1
+assert len(part0) == 32 and len(part1) == 32 and len(m2pt) == 64
+m2vd = (u32(24) + u32(0) + u32(2) + u32(0) +
+        u32(0) + u32(2) + u32(0) + u32(0) + u32(0) +
+        u32(12) + u32(2) + u32(3) + u32(0) + u32(0))
+assert len(m2vd) == 16 + 2 * 20
+m2vr = u32(0) + u32(5) + u32(0) + u32(0)
+mvtx2 = bytes(range(120))
+m2ir = u32(2) + u32(6) + u32(0) + u32(0)
+midx2 = struct.pack('<HHHHHH', 0, 1, 2, 1, 3, 2)
+assert len(m2vr) == 16 and len(m2ir) == 16 and len(midx2) == 12
+m2fx = (u32(0) + u32(1) + u32(0) + u32(NO_INDEX) + u32(NO_INDEX) +
+        u32(0) + u32(0) + u32(0) +
+        f32(0.25) + f32(0.5) + f32(0.75) +
+        f32(0.1) + f32(0.2) + f32(0.3) +
+        f32(0.8) + f32(0.7) + f32(0.6) +
+        f32(9.5) + f32(0.75) + f32(0.0) + f32(0.0) +
+        u32(0) * 3)
+assert len(m2fx) == 96
+model2 = build(5, 2, [
+    ('CMET', 0, 4, cmet3v2), ('XREF', MANDATORY, 4, xref3v2),
+    ('M2HD', MANDATORY, 4, m2hd), ('M2ST', MANDATORY, 4, m2st),
+    ('M2BN', MANDATORY, 4, m2bn), ('M2MS', MANDATORY, 4, m2ms),
+    ('M2PT', MANDATORY, 4, m2pt), ('M2VD', MANDATORY, 4, m2vd),
+    ('M2VR', MANDATORY, 4, m2vr), ('MVTX', MANDATORY, 16, mvtx2),
+    ('M2IR', MANDATORY, 4, m2ir), ('MIDX', MANDATORY, 16, midx2),
+    ('M2FX', MANDATORY, 4, m2fx)])
+assert len(model2) == 1468
+assert hashlib.sha256(model2).hexdigest() == \
+       '6a9dc3f5363ae82a93ba8e01fee1059802ac1325d5fd76565ccddb09d928ad78'
+model2_layout = []
+for row in range(struct.unpack_from('<I', model2, 20)[0]):
+    toc = 64 + row * 48
+    model2_layout.append((model2[toc:toc + 4].decode('ascii'),
+                          struct.unpack_from('<Q', model2, toc + 8)[0],
+                          struct.unpack_from('<Q', model2, toc + 16)[0],
+                          struct.unpack_from('<I', model2, toc + 40)[0]))
+assert model2_layout == [
+    ('CMET', 688, 65, 4), ('XREF', 756, 32, 4), ('M2HD', 788, 64, 4),
+    ('M2ST', 852, 42, 4), ('M2BN', 896, 144, 4), ('M2MS', 1040, 32, 4),
+    ('M2PT', 1072, 64, 4), ('M2VD', 1136, 56, 4), ('M2VR', 1192, 16, 4),
+    ('MVTX', 1216, 120, 16), ('M2IR', 1336, 16, 4), ('MIDX', 1360, 12, 16),
+    ('M2FX', 1372, 96, 4)]
+emit('kGoldenModelV2', model2,
+     'Model schema 2: explicit root/declaration/bounds, two parts sharing resources with windows.')
 
 # --- TextureCube: 2x2 faces, one mip, one Rgba8 representation --------------------------------
 # A cube rather than a flat 2D texture on purpose. It is the shape that exercises everything the

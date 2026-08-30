@@ -4,6 +4,7 @@
 #include "CNA/Logger.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Content/Cnb/CnbModelCodec.hpp"
+#include "CNA/Content/Cnb/CnbModelV2Codec.hpp"
 #include "CNA/Content/Cnb/CnbMediaCodec.hpp"
 #include "CNA/Content/Cnb/CnbSoundEffectCodec.hpp"
 #include "CNA/Content/Cnb/CnbSpriteFontCodec.hpp"
@@ -56,6 +57,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cctype>
 #include <cstdint>
 #include <cstring>
@@ -2465,6 +2467,35 @@ namespace Microsoft::Xna::Framework::Content
                         dualFx->setTexture2Property(tex2.get());
                         res.textureOwners.push_back(std::move(tex2));
                     }
+                }
+
+                // CP-041: these fields have always been present in frozen Model schema 1, but
+                // the runtime adapter formerly applied them only to PBR effects (and partly in
+                // the glTF-unlit branch). Applying them to the three XNA material effects is the
+                // existing schema's stated meaning, not a wire extension. BasicEffect's
+                // SpecularPower and SkinnedEffect's WeightsPerVertex still have no schema field;
+                // XNB transcoding therefore accepts only their constructor-default values.
+                const Vector3 diffuse(
+                    material.baseColorFactor.X, material.baseColorFactor.Y,
+                    material.baseColorFactor.Z);
+                if (auto* basicFx = dynamic_cast<Graphics::BasicEffect*>(fx.get()))
+                {
+                    basicFx->setDiffuseColorProperty(diffuse);
+                    basicFx->setEmissiveColorProperty(material.emissiveFactor);
+                    basicFx->setSpecularColorProperty(material.specularColorFactorEXT);
+                    basicFx->setAlphaProperty(material.baseColorFactor.W);
+                }
+                else if (auto* skinnedFx = dynamic_cast<Graphics::SkinnedEffect*>(fx.get()))
+                {
+                    skinnedFx->setDiffuseColorProperty(diffuse);
+                    skinnedFx->setEmissiveColorProperty(material.emissiveFactor);
+                    skinnedFx->setSpecularColorProperty(material.specularColorFactorEXT);
+                    skinnedFx->setAlphaProperty(material.baseColorFactor.W);
+                }
+                else if (auto* dualFx = dynamic_cast<Graphics::DualTextureEffect*>(fx.get()))
+                {
+                    dualFx->setDiffuseColorProperty(diffuse);
+                    dualFx->setAlphaProperty(material.baseColorFactor.W);
                 }
 
                 // GLTF-236/237: apply the complete material carrier reconstructed
@@ -5343,6 +5374,326 @@ namespace Microsoft::Xna::Framework::Content
             return model;
         }
 
+        CNAEXT Graphics::Model BuildModelV2FromCnbEXT(
+            const CNA::Content::Cnb::CnbModelV2Data& data,
+            ContentManager& cm, const std::string& assetName)
+        {
+            namespace Cnb = CNA::Content::Cnb;
+            using Graphics::VertexElement;
+            using Graphics::VertexElementFormat;
+            using Graphics::VertexElementUsage;
+
+            Graphics::GraphicsDevice& device = cm.getGraphicsDeviceInternal();
+            auto resources = std::make_shared<ModelResources>();
+
+            const auto format = [&assetName](const Cnb::CnbModelV2VertexFormat value)
+            {
+                switch (value)
+                {
+                    case Cnb::CnbModelV2VertexFormat::Single:
+                        return VertexElementFormat::Single;
+                    case Cnb::CnbModelV2VertexFormat::Vector2:
+                        return VertexElementFormat::Vector2;
+                    case Cnb::CnbModelV2VertexFormat::Vector3:
+                        return VertexElementFormat::Vector3;
+                    case Cnb::CnbModelV2VertexFormat::Vector4:
+                        return VertexElementFormat::Vector4;
+                    case Cnb::CnbModelV2VertexFormat::Color:
+                        return VertexElementFormat::Color;
+                    case Cnb::CnbModelV2VertexFormat::Byte4:
+                        return VertexElementFormat::Byte4;
+                    case Cnb::CnbModelV2VertexFormat::Short2:
+                        return VertexElementFormat::Short2;
+                    case Cnb::CnbModelV2VertexFormat::Short4:
+                        return VertexElementFormat::Short4;
+                    case Cnb::CnbModelV2VertexFormat::NormalizedShort2:
+                        return VertexElementFormat::NormalizedShort2;
+                    case Cnb::CnbModelV2VertexFormat::NormalizedShort4:
+                        return VertexElementFormat::NormalizedShort4;
+                    case Cnb::CnbModelV2VertexFormat::HalfVector2:
+                        return VertexElementFormat::HalfVector2;
+                    case Cnb::CnbModelV2VertexFormat::HalfVector4:
+                        return VertexElementFormat::HalfVector4;
+                }
+                throw ContentLoadException(
+                    "'" + assetName + "': invalid Model-v2 vertex format reached runtime.");
+            };
+            const auto usage = [&assetName](const Cnb::CnbModelV2VertexUsage value)
+            {
+                switch (value)
+                {
+                    case Cnb::CnbModelV2VertexUsage::Position:
+                        return VertexElementUsage::Position;
+                    case Cnb::CnbModelV2VertexUsage::Color:
+                        return VertexElementUsage::Color;
+                    case Cnb::CnbModelV2VertexUsage::TextureCoordinate:
+                        return VertexElementUsage::TextureCoordinate;
+                    case Cnb::CnbModelV2VertexUsage::Normal:
+                        return VertexElementUsage::Normal;
+                    case Cnb::CnbModelV2VertexUsage::Binormal:
+                        return VertexElementUsage::Binormal;
+                    case Cnb::CnbModelV2VertexUsage::Tangent:
+                        return VertexElementUsage::Tangent;
+                    case Cnb::CnbModelV2VertexUsage::BlendIndices:
+                        return VertexElementUsage::BlendIndices;
+                    case Cnb::CnbModelV2VertexUsage::BlendWeight:
+                        return VertexElementUsage::BlendWeight;
+                    case Cnb::CnbModelV2VertexUsage::Depth:
+                        return VertexElementUsage::Depth;
+                    case Cnb::CnbModelV2VertexUsage::Fog:
+                        return VertexElementUsage::Fog;
+                    case Cnb::CnbModelV2VertexUsage::PointSize:
+                        return VertexElementUsage::PointSize;
+                    case Cnb::CnbModelV2VertexUsage::Sample:
+                        return VertexElementUsage::Sample;
+                    case Cnb::CnbModelV2VertexUsage::TessellateFactor:
+                        return VertexElementUsage::TessellateFactor;
+                }
+                throw ContentLoadException(
+                    "'" + assetName + "': invalid Model-v2 vertex usage reached runtime.");
+            };
+
+            std::vector<Graphics::VertexDeclaration> declarations;
+            declarations.reserve(data.vertexDeclarations.size());
+            for (const Cnb::CnbModelV2VertexDeclaration& source : data.vertexDeclarations)
+            {
+                std::vector<VertexElement> elements;
+                elements.reserve(source.elements.size());
+                for (const Cnb::CnbModelV2VertexElement& element : source.elements)
+                {
+                    elements.emplace_back(
+                        static_cast<int>(element.offset), format(element.format),
+                        usage(element.usage), static_cast<int>(element.usageIndex));
+                }
+                declarations.emplace_back(
+                    static_cast<int>(source.vertexStride), std::move(elements));
+            }
+
+            std::vector<Graphics::VertexBuffer*> vertexBuffers;
+            vertexBuffers.reserve(data.vertexBuffers.size());
+            for (const Cnb::CnbModelV2VertexBuffer& source : data.vertexBuffers)
+            {
+                auto buffer = std::make_unique<Graphics::VertexBuffer>(
+                    device, declarations[source.declaration],
+                    static_cast<int>(source.vertexCount), Graphics::BufferUsage::None);
+                buffer->SetDataRaw(
+                    source.bytes.data(), static_cast<int>(source.vertexCount),
+                    declarations[source.declaration].getVertexStrideProperty());
+                vertexBuffers.push_back(buffer.get());
+                resources->vbs.push_back(std::move(buffer));
+            }
+
+            std::vector<Graphics::IndexBuffer*> indexBuffers;
+            indexBuffers.reserve(data.indexBuffers.size());
+            for (const Cnb::CnbModelV2IndexBuffer& source : data.indexBuffers)
+            {
+                auto buffer = std::make_unique<Graphics::IndexBuffer>(
+                    device,
+                    source.indexElementSize == 4u
+                        ? Graphics::IndexElementSize::ThirtyTwoBits
+                        : Graphics::IndexElementSize::SixteenBits,
+                    static_cast<int>(source.indexCount), Graphics::BufferUsage::None);
+                if (source.indexElementSize == 4u)
+                {
+                    const std::vector<std::uint32_t> values =
+                        IndicesFromBytes<std::uint32_t>(source.bytes,
+                                                        static_cast<int>(source.indexCount));
+                    buffer->SetData(values.data(), static_cast<int>(values.size()));
+                }
+                else
+                {
+                    const std::vector<std::uint16_t> values =
+                        IndicesFromBytes<std::uint16_t>(source.bytes,
+                                                        static_cast<int>(source.indexCount));
+                    buffer->SetData(values.data(), static_cast<int>(values.size()));
+                }
+                indexBuffers.push_back(buffer.get());
+                resources->ibs.push_back(std::move(buffer));
+            }
+
+            const auto vector3 = [](const std::array<float, 3>& value)
+            {
+                return Vector3(value[0], value[1], value[2]);
+            };
+            const auto texture2D = [&](const std::string& logical)
+                -> std::shared_ptr<Graphics::Texture2D>
+            {
+                if (logical.empty()) { return {}; }
+                return std::make_shared<Graphics::Texture2D>(
+                    cm.Load<Graphics::Texture2D>(logical));
+            };
+            const auto textureCube = [&](const std::string& logical)
+                -> std::shared_ptr<Graphics::TextureCube>
+            {
+                if (logical.empty()) { return {}; }
+                return std::make_shared<Graphics::TextureCube>(
+                    cm.Load<Graphics::TextureCube>(logical));
+            };
+
+            std::vector<Graphics::Effect*> effects;
+            effects.reserve(data.effects.size());
+            for (const Cnb::CnbModelV2Effect& source : data.effects)
+            {
+                std::shared_ptr<Graphics::Effect> effect;
+                switch (source.kind)
+                {
+                    case Cnb::CnbModelV2EffectKind::BasicEffect:
+                    {
+                        auto value = std::make_shared<Graphics::BasicEffect>(device);
+                        if (auto texture = texture2D(source.primaryTexture))
+                        {
+                            value->SetOwnedTexture(std::move(texture));
+                            value->setTextureEnabledProperty(true);
+                        }
+                        value->setDiffuseColorProperty(vector3(source.diffuse));
+                        value->setEmissiveColorProperty(vector3(source.emissive));
+                        value->setSpecularColorProperty(vector3(source.specular));
+                        value->setSpecularPowerProperty(source.specularPower);
+                        value->setAlphaProperty(source.alpha);
+                        value->setVertexColorEnabledProperty(source.vertexColorEnabled);
+                        effect = std::move(value);
+                        break;
+                    }
+                    case Cnb::CnbModelV2EffectKind::SkinnedEffect:
+                    {
+                        auto value = std::make_shared<Graphics::SkinnedEffect>(device);
+                        if (auto texture = texture2D(source.primaryTexture))
+                        {
+                            value->SetOwnedTexture(std::move(texture));
+                        }
+                        value->setWeightsPerVertexProperty(
+                            static_cast<int>(source.weightsPerVertex));
+                        value->setDiffuseColorProperty(vector3(source.diffuse));
+                        value->setEmissiveColorProperty(vector3(source.emissive));
+                        value->setSpecularColorProperty(vector3(source.specular));
+                        value->setSpecularPowerProperty(source.specularPower);
+                        value->setAlphaProperty(source.alpha);
+                        effect = std::move(value);
+                        break;
+                    }
+                    case Cnb::CnbModelV2EffectKind::DualTextureEffect:
+                    {
+                        auto value = std::make_shared<Graphics::DualTextureEffect>(device);
+                        if (auto texture = texture2D(source.primaryTexture))
+                        {
+                            value->SetOwnedTexture(std::move(texture));
+                        }
+                        if (auto texture = texture2D(source.secondaryTexture))
+                        {
+                            value->SetOwnedTexture2(std::move(texture));
+                        }
+                        value->setDiffuseColorProperty(vector3(source.diffuse));
+                        value->setAlphaProperty(source.alpha);
+                        value->setVertexColorEnabledProperty(source.vertexColorEnabled);
+                        effect = std::move(value);
+                        break;
+                    }
+                    case Cnb::CnbModelV2EffectKind::AlphaTestEffect:
+                    {
+                        auto value = std::make_shared<Graphics::AlphaTestEffect>(device);
+                        if (auto texture = texture2D(source.primaryTexture))
+                        {
+                            value->SetOwnedTexture(std::move(texture));
+                        }
+                        value->setAlphaFunctionProperty(
+                            static_cast<Graphics::CompareFunction>(source.alphaFunction));
+                        value->setReferenceAlphaProperty(
+                            std::bit_cast<std::int32_t>(source.referenceAlpha));
+                        value->setDiffuseColorProperty(vector3(source.diffuse));
+                        value->setAlphaProperty(source.alpha);
+                        value->setVertexColorEnabledProperty(source.vertexColorEnabled);
+                        effect = std::move(value);
+                        break;
+                    }
+                    case Cnb::CnbModelV2EffectKind::EnvironmentMapEffect:
+                    {
+                        auto value = std::make_shared<Graphics::EnvironmentMapEffect>(device);
+                        if (auto texture = texture2D(source.primaryTexture))
+                        {
+                            value->SetOwnedTexture(std::move(texture));
+                        }
+                        if (auto texture = textureCube(source.cubeTexture))
+                        {
+                            value->SetOwnedEnvironmentMap(std::move(texture));
+                        }
+                        value->setEnvironmentMapAmountProperty(source.environmentMapAmount);
+                        value->setEnvironmentMapSpecularProperty(vector3(source.specular));
+                        value->setFresnelFactorProperty(source.fresnelFactor);
+                        value->setDiffuseColorProperty(vector3(source.diffuse));
+                        value->setEmissiveColorProperty(vector3(source.emissive));
+                        value->setAlphaProperty(source.alpha);
+                        effect = std::move(value);
+                        break;
+                    }
+                }
+                effects.push_back(effect.get());
+                resources->effectOwners.push_back(std::move(effect));
+            }
+
+            std::vector<Graphics::ModelBone*> bones;
+            bones.reserve(data.bones.size());
+            for (std::size_t index = 0u; index < data.bones.size(); ++index)
+            {
+                const Cnb::CnbModelV2Bone& source = data.bones[index];
+                auto bone = std::make_unique<Graphics::ModelBone>(
+                    static_cast<int>(index), source.name);
+                bone->setTransformProperty(MatrixFromCnbEXT(source.transform));
+                bones.push_back(bone.get());
+                resources->boneOwners.push_back(std::move(bone));
+            }
+            for (std::size_t index = 0u; index < data.bones.size(); ++index)
+            {
+                if (data.bones[index].parent >= 0)
+                {
+                    bones[static_cast<std::size_t>(data.bones[index].parent)]->AddChild(
+                        bones[index]);
+                }
+            }
+
+            std::vector<Graphics::ModelMesh*> meshes;
+            std::vector<Graphics::ModelBone*> meshParents;
+            meshes.reserve(data.meshes.size());
+            meshParents.reserve(data.meshes.size());
+            for (const Cnb::CnbModelV2Mesh& source : data.meshes)
+            {
+                std::vector<Graphics::ModelMeshPart*> parts;
+                parts.reserve(source.parts.size());
+                std::vector<Graphics::Effect*> partEffects;
+                partEffects.reserve(source.parts.size());
+                for (const Cnb::CnbModelV2Part& sourcePart : source.parts)
+                {
+                    auto part = std::make_unique<Graphics::ModelMeshPart>(
+                        vertexBuffers[sourcePart.vertexBuffer],
+                        indexBuffers[sourcePart.indexBuffer],
+                        static_cast<int>(sourcePart.numVertices),
+                        static_cast<int>(sourcePart.primitiveCount),
+                        static_cast<int>(sourcePart.startIndex),
+                        static_cast<int>(sourcePart.vertexOffset));
+                    parts.push_back(part.get());
+                    partEffects.push_back(effects[sourcePart.effect]);
+                    resources->partOwners.push_back(std::move(part));
+                }
+                auto mesh = std::make_unique<Graphics::ModelMesh>(&device, source.name, parts);
+                mesh->setBoundingSphereProperty(BoundingSphere(
+                    Vector3(source.boundingSphere[0], source.boundingSphere[1],
+                            source.boundingSphere[2]),
+                    source.boundingSphere[3]));
+                for (std::size_t part = 0u; part < parts.size(); ++part)
+                {
+                    parts[part]->setEffectProperty(partEffects[part]);
+                }
+                meshes.push_back(mesh.get());
+                meshParents.push_back(bones[static_cast<std::size_t>(source.parentBone)]);
+                resources->meshOwners.push_back(std::move(mesh));
+            }
+
+            Graphics::Model model(
+                &device, std::move(bones), std::move(meshes), std::move(meshParents),
+                data.rootBone);
+            model.setOwnedResources(resources);
+            return model;
+        }
+
         // ---------------------------------------------------------------------------
         // .skinnedmodel.json descriptor reader
         // CNAEXT — loads a GPU-skinned mesh + skeleton + animation clips for the real-rendering
@@ -5710,20 +6061,26 @@ namespace Microsoft::Xna::Framework::Content
         // ---------------------------------------------------------------------------
 
         std::shared_ptr<Audio::SoundEffect> BuildSoundEffectFromCnbEXT(
-            const CNA::Content::Cnb::CnbSoundEffectData& data, const std::string&)
+            const CNA::Content::Cnb::CnbSoundEffectData& data, const std::string& assetName)
         {
             const auto channels = data.channels == 2u ? Audio::AudioChannels::Stereo
                                                       : Audio::AudioChannels::Mono;
+            std::shared_ptr<Audio::SoundEffect> result;
             if (data.loopLength == 0u)
             {
-                return std::make_shared<Audio::SoundEffect>(
+                result = std::make_shared<Audio::SoundEffect>(
                     data.samples, static_cast<SharpRuntime::intcs>(data.sampleRate), channels);
             }
-            return std::make_shared<Audio::SoundEffect>(
-                data.samples, 0, static_cast<SharpRuntime::intcs>(data.samples.size()),
-                static_cast<SharpRuntime::intcs>(data.sampleRate), channels,
-                static_cast<SharpRuntime::intcs>(data.loopStart),
-                static_cast<SharpRuntime::intcs>(data.loopLength));
+            else
+            {
+                result = std::make_shared<Audio::SoundEffect>(
+                    data.samples, 0, static_cast<SharpRuntime::intcs>(data.samples.size()),
+                    static_cast<SharpRuntime::intcs>(data.sampleRate), channels,
+                    static_cast<SharpRuntime::intcs>(data.loopStart),
+                    static_cast<SharpRuntime::intcs>(data.loopLength));
+            }
+            result->setNameProperty(assetName);
+            return result;
         }
 
         // ---------------------------------------------------------------------------
@@ -5797,6 +6154,13 @@ namespace Microsoft::Xna::Framework::Content
             [](const CNA::Content::Cnb::CnbDocument& document, ContentManager& contentManager,
                const std::string& assetName) -> std::any
             {
+                if (document.AssetSchemaVersion() ==
+                    CNA::Content::Cnb::CnbModelV2SchemaVersion)
+                {
+                    return std::any(BuildModelV2FromCnbEXT(
+                        CNA::Content::Cnb::DecodeModelV2FromCnb(document),
+                        contentManager, assetName));
+                }
                 return std::any(BuildModelFromCnbEXT(
                     CNA::Content::Cnb::DecodeModelFromCnb(document), contentManager, assetName));
             });

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Xnb/StockEffectContentTypeReaders.hpp"
+#include "CNA/Internal/Xnb/XnbCanonicalData.hpp"
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
@@ -36,20 +37,20 @@ namespace CNA::Internal::Xnb
     {
         (void)existingInstance; // never provided: CanDeserializeIntoExistingObject defaults false, matching FNA
 
-        auto effect = std::make_shared<BasicEffect>(RequireGraphicsDevice(input, "BasicEffectReader"));
-
         std::optional<Texture2D> texture = input.ReadExternalReference<Texture2D>();
+        const XnbBasicEffectData decoded = DecodeBasicEffectXnbData(input, {});
+        auto effect = std::make_shared<BasicEffect>(RequireGraphicsDevice(input, "BasicEffectReader"));
         if (texture.has_value())
         {
             effect->SetOwnedTexture(std::make_shared<Texture2D>(std::move(*texture)));
             effect->setTextureEnabledProperty(true);
         }
-        effect->setDiffuseColorProperty(input.ReadVector3());
-        effect->setEmissiveColorProperty(input.ReadVector3());
-        effect->setSpecularColorProperty(input.ReadVector3());
-        effect->setSpecularPowerProperty(input.ReadSingle());
-        effect->setAlphaProperty(input.ReadSingle());
-        effect->VertexColorEnabled = input.ReadBoolean();
+        effect->setDiffuseColorProperty(decoded.diffuseColor);
+        effect->setEmissiveColorProperty(decoded.emissiveColor);
+        effect->setSpecularColorProperty(decoded.specularColor);
+        effect->setSpecularPowerProperty(decoded.specularPower);
+        effect->setAlphaProperty(decoded.alpha);
+        effect->VertexColorEnabled = decoded.vertexColorEnabled;
         return effect;
     }
 
@@ -61,15 +62,18 @@ namespace CNA::Internal::Xnb
         auto effect = std::make_shared<AlphaTestEffect>(RequireGraphicsDevice(input, "AlphaTestEffectReader"));
 
         std::optional<Texture2D> texture = input.ReadExternalReference<Texture2D>();
+        const XnbAlphaTestEffectData decoded = DecodeAlphaTestEffectXnbData(input, {});
         if (texture.has_value())
         {
             effect->SetOwnedTexture(std::make_shared<Texture2D>(std::move(*texture)));
         }
-        effect->setAlphaFunctionProperty(static_cast<Microsoft::Xna::Framework::Graphics::CompareFunction>(input.ReadInt32()));
-        effect->setReferenceAlphaProperty(static_cast<int32_t>(input.ReadUInt32()));
-        effect->setDiffuseColorProperty(input.ReadVector3());
-        effect->setAlphaProperty(input.ReadSingle());
-        effect->setVertexColorEnabledProperty(input.ReadBoolean());
+        effect->setAlphaFunctionProperty(
+            static_cast<Microsoft::Xna::Framework::Graphics::CompareFunction>(
+                decoded.alphaFunction));
+        effect->setReferenceAlphaProperty(static_cast<int32_t>(decoded.referenceAlpha));
+        effect->setDiffuseColorProperty(decoded.diffuseColor);
+        effect->setAlphaProperty(decoded.alpha);
+        effect->setVertexColorEnabledProperty(decoded.vertexColorEnabled);
         return effect;
     }
 
@@ -81,18 +85,19 @@ namespace CNA::Internal::Xnb
         auto effect = std::make_shared<DualTextureEffect>(RequireGraphicsDevice(input, "DualTextureEffectReader"));
 
         std::optional<Texture2D> texture = input.ReadExternalReference<Texture2D>();
+        std::optional<Texture2D> texture2 = input.ReadExternalReference<Texture2D>();
+        const XnbDualTextureEffectData decoded = DecodeDualTextureEffectXnbData(input, {}, {});
         if (texture.has_value())
         {
             effect->SetOwnedTexture(std::make_shared<Texture2D>(std::move(*texture)));
         }
-        std::optional<Texture2D> texture2 = input.ReadExternalReference<Texture2D>();
         if (texture2.has_value())
         {
             effect->SetOwnedTexture2(std::make_shared<Texture2D>(std::move(*texture2)));
         }
-        effect->setDiffuseColorProperty(input.ReadVector3());
-        effect->setAlphaProperty(input.ReadSingle());
-        effect->setVertexColorEnabledProperty(input.ReadBoolean());
+        effect->setDiffuseColorProperty(decoded.diffuseColor);
+        effect->setAlphaProperty(decoded.alpha);
+        effect->setVertexColorEnabledProperty(decoded.vertexColorEnabled);
         return effect;
     }
 
@@ -104,21 +109,23 @@ namespace CNA::Internal::Xnb
         auto effect = std::make_shared<EnvironmentMapEffect>(RequireGraphicsDevice(input, "EnvironmentMapEffectReader"));
 
         std::optional<Texture2D> texture = input.ReadExternalReference<Texture2D>();
+        std::optional<TextureCube> environmentMap = input.ReadExternalReference<TextureCube>();
+        const XnbEnvironmentMapEffectData decoded =
+            DecodeEnvironmentMapEffectXnbData(input, {}, {});
         if (texture.has_value())
         {
             effect->SetOwnedTexture(std::make_shared<Texture2D>(std::move(*texture)));
         }
-        std::optional<TextureCube> environmentMap = input.ReadExternalReference<TextureCube>();
         if (environmentMap.has_value())
         {
             effect->SetOwnedEnvironmentMap(std::make_shared<TextureCube>(std::move(*environmentMap)));
         }
-        effect->setEnvironmentMapAmountProperty(input.ReadSingle());
-        effect->setEnvironmentMapSpecularProperty(input.ReadVector3());
-        effect->setFresnelFactorProperty(input.ReadSingle());
-        effect->setDiffuseColorProperty(input.ReadVector3());
-        effect->setEmissiveColorProperty(input.ReadVector3());
-        effect->setAlphaProperty(input.ReadSingle());
+        effect->setEnvironmentMapAmountProperty(decoded.environmentMapAmount);
+        effect->setEnvironmentMapSpecularProperty(decoded.environmentMapSpecular);
+        effect->setFresnelFactorProperty(decoded.fresnelFactor);
+        effect->setDiffuseColorProperty(decoded.diffuseColor);
+        effect->setEmissiveColorProperty(decoded.emissiveColor);
+        effect->setAlphaProperty(decoded.alpha);
         return effect;
     }
 
@@ -130,16 +137,17 @@ namespace CNA::Internal::Xnb
         auto effect = std::make_shared<SkinnedEffect>(RequireGraphicsDevice(input, "SkinnedEffectReader"));
 
         std::optional<Texture2D> texture = input.ReadExternalReference<Texture2D>();
+        const XnbSkinnedEffectData decoded = DecodeSkinnedEffectXnbData(input, {});
         if (texture.has_value())
         {
             effect->SetOwnedTexture(std::make_shared<Texture2D>(std::move(*texture)));
         }
-        effect->setWeightsPerVertexProperty(input.ReadInt32());
-        effect->setDiffuseColorProperty(input.ReadVector3());
-        effect->setEmissiveColorProperty(input.ReadVector3());
-        effect->setSpecularColorProperty(input.ReadVector3());
-        effect->setSpecularPowerProperty(input.ReadSingle());
-        effect->setAlphaProperty(input.ReadSingle());
+        effect->setWeightsPerVertexProperty(decoded.weightsPerVertex);
+        effect->setDiffuseColorProperty(decoded.diffuseColor);
+        effect->setEmissiveColorProperty(decoded.emissiveColor);
+        effect->setSpecularColorProperty(decoded.specularColor);
+        effect->setSpecularPowerProperty(decoded.specularPower);
+        effect->setAlphaProperty(decoded.alpha);
         return effect;
     }
 

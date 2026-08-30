@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "CNA/Content/Cnb/CnbTextureCodec.hpp"
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
 
 namespace CNA::Content::Pipeline
@@ -34,6 +35,9 @@ namespace CNA::Content::Pipeline
         /** @brief Exact level-zero pixels in R, G, B, A byte order. */
         std::vector<std::uint8_t> rgbaPixels;
 
+        /** @brief Optional additional Rgba8 mip levels in descending dimension order. */
+        std::vector<std::vector<std::uint8_t>> additionalRgbaMipLevels;
+
         /** @brief Source-authored colour-key policy, or absent for ordinary image sources. */
         std::optional<std::array<std::uint8_t, 3>> authoredColorKey;
     };
@@ -45,6 +49,17 @@ namespace CNA::Content::Pipeline
      * @return Validated dimensions and exact Rgba8 pixels.
      */
     [[nodiscard]] ImportedImage DecodeImportedImage(const std::filesystem::path& source);
+
+    /**
+     * @brief Converts validated source-oriented pixels into canonical Texture2D CNB data.
+     *
+     * This is the parameter-free core used by TextureProcessor and generated glTF texture
+     * children after any source-specific policy has already been applied.
+     *
+     * @param image Validated decoded image and optional mip levels.
+     * @return One canonical Rgba8 Texture2D representation.
+     */
+    [[nodiscard]] Cnb::CnbTextureData BuildCnbTexture2DData(ImportedImage image);
 
     /** @brief Headless source image importer backed by CNA's shared image decoder. */
     class ImageImporter final : public ContentImporter
@@ -108,6 +123,13 @@ namespace CNA::Content::Pipeline
     public:
         /** @brief Returns the stable built-in writer identity. */
         [[nodiscard]] ContentComponentIdentity Identity() const override;
+
+        /**
+         * @brief Returns the frozen Texture2D schema and encoder identity.
+         * @return One stable Texture2D asset/schema/codec declaration.
+         */
+        [[nodiscard]] std::vector<ContentWriterSchemaIdentity>
+        OutputSchemaIdentities() const override;
 
         /** @brief Returns ProcessedTexture2DType. */
         [[nodiscard]] std::string InputType() const override;

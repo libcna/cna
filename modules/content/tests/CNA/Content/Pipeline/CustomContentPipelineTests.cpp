@@ -17,9 +17,16 @@
 #include "CNA/Content/Cnb/CnbDocument.hpp"
 #include "CNA/Content/Cnb/CnbFormat.hpp"
 #include "CNA/Content/Cnb/CnbLoaderRegistry.hpp"
+#include "CNA/Content/Cnb/CnbModelV2Codec.hpp"
 #include "CNA/Content/Cnb/CnbWriter.hpp"
+#include "CNA/Content/Pipeline/CnjContentPipeline.hpp"
 #include "CNA/Content/Pipeline/ContentCompiler.hpp"
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
+#include "CNA/Content/Pipeline/ModelContentPipeline.hpp"
+#include "CNA/Content/Pipeline/SongContentPipeline.hpp"
+#include "CNA/Content/Pipeline/SoundEffectContentPipeline.hpp"
+#include "CNA/Content/Pipeline/Texture2DContentPipeline.hpp"
+#include "CNA/Content/Pipeline/VideoContentPipeline.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 
 namespace Pipeline = CNA::Content::Pipeline;
@@ -212,13 +219,20 @@ namespace
             return {"ExampleGame.WorldLevelWriter", "2"};
         }
 
+        [[nodiscard]] std::vector<Pipeline::ContentWriterSchemaIdentity>
+        OutputSchemaIdentities() const override
+        {
+            return {{WorldLevelAssetTypeId(), 1u, kCanonicalTypeName,
+                     {"ExampleGame.EncodeWorldLevelToCnb", "1"}}};
+        }
+
         [[nodiscard]] std::string InputType() const override { return kCompiledType; }
 
         [[nodiscard]] Pipeline::ContentWriteResult Write(
             const Pipeline::ContentValue& input, const std::string& logicalName) const override
         {
             return {EncodeWorldLevelToCnb(input.Get<CompiledWorldLevel>(), logicalName),
-                    WorldLevelAssetTypeId(), kCanonicalTypeName};
+                    WorldLevelAssetTypeId(), kCanonicalTypeName, 1u};
         }
     };
 
@@ -266,6 +280,71 @@ TEST(CustomContentPipelineTest, BuiltInRegistrationIsExplicitAndComplete)
     EXPECT_EQ(registry.ResolveImporter("asset.cnj")->Identity().name, "CNA.CnjImporter");
 }
 
+TEST(CustomContentPipelineTest, BuiltInWritersDeclareStableSchemaAndCodecIdentities)
+{
+    Pipeline::ContentPipelineRegistry registry;
+    Pipeline::RegisterBuiltInContentPipeline(registry);
+    struct Expected
+    {
+        const char* inputType;
+        std::uint32_t assetTypeId;
+        const char* assetTypeName;
+        const char* codecName;
+    };
+    const std::vector<Expected> expected = {
+        {Pipeline::ProcessedTexture2DType, Cnb::CnbAssetTypeId::Texture2D,
+         "Microsoft.Xna.Framework.Graphics.Texture2D", "CNA.Cnb.EncodeTexture2DToCnb"},
+        {Pipeline::ProcessedSoundEffectType, Cnb::CnbAssetTypeId::SoundEffect,
+         "Microsoft.Xna.Framework.Audio.SoundEffect", "CNA.Cnb.EncodeSoundEffectToCnb"},
+        {Pipeline::ProcessedSongType, Cnb::CnbAssetTypeId::Song,
+         "Microsoft.Xna.Framework.Media.Song", "CNA.Cnb.EncodeSongToCnb"},
+        {Pipeline::ProcessedVideoType, Cnb::CnbAssetTypeId::Video,
+         "Microsoft.Xna.Framework.Media.Video", "CNA.Cnb.EncodeVideoToCnb"},
+        {Pipeline::ProcessedTexture3DType, Cnb::CnbAssetTypeId::Texture3D,
+         "Microsoft.Xna.Framework.Graphics.Texture3D", "CNA.Cnb.EncodeTexture3DToCnb"},
+        {Pipeline::ProcessedTextureCubeType, Cnb::CnbAssetTypeId::TextureCube,
+         "Microsoft.Xna.Framework.Graphics.TextureCube", "CNA.Cnb.EncodeTextureCubeToCnb"},
+        {Pipeline::ProcessedCurveType, Cnb::CnbAssetTypeId::Curve,
+         "Microsoft.Xna.Framework.Curve", "CNA.Cnb.EncodeCurveToCnb"},
+        {Pipeline::ProcessedAnimationClipType, Cnb::CnbAssetTypeId::AnimationClip,
+         "Microsoft.Xna.Framework.Graphics.AnimationClipEXT",
+         "CNA.Cnb.EncodeAnimationClipToCnb"},
+        {Pipeline::ProcessedSpriteFontType, Cnb::CnbAssetTypeId::SpriteFont,
+         "Microsoft.Xna.Framework.Graphics.SpriteFont", "CNA.Cnb.EncodeSpriteFontToCnb"},
+    };
+
+    for (const Expected& item : expected)
+    {
+        const auto schemas = registry.ResolveWriter(item.inputType)->OutputSchemaIdentities();
+        ASSERT_EQ(schemas.size(), 1u) << item.inputType;
+        EXPECT_EQ(schemas[0].assetTypeId, item.assetTypeId) << item.inputType;
+        EXPECT_EQ(schemas[0].assetSchemaVersion, 1u) << item.inputType;
+        EXPECT_EQ(schemas[0].assetTypeName, item.assetTypeName) << item.inputType;
+        EXPECT_EQ(schemas[0].codec.name, item.codecName) << item.inputType;
+        EXPECT_EQ(schemas[0].codec.version, "1") << item.inputType;
+    }
+
+    const auto modelSchemas =
+        registry.ResolveWriter(Pipeline::ProcessedModelType)->OutputSchemaIdentities();
+    ASSERT_EQ(modelSchemas.size(), 4u);
+    EXPECT_EQ(modelSchemas[0].assetTypeId, Cnb::CnbAssetTypeId::Texture2D);
+    EXPECT_EQ(modelSchemas[0].codec.name, "CNA.Cnb.EncodeTexture2DToCnb");
+    EXPECT_EQ(modelSchemas[1].assetTypeId, Cnb::CnbAssetTypeId::Model);
+    EXPECT_EQ(modelSchemas[1].codec.name, "CNA.Cnb.EncodeModelToCnb");
+    EXPECT_EQ(modelSchemas[2].assetTypeId, Cnb::CnbAssetTypeId::Model);
+    EXPECT_EQ(modelSchemas[2].assetSchemaVersion, Cnb::CnbModelV2SchemaVersion);
+    EXPECT_EQ(modelSchemas[2].codec.name, "CNA.Cnb.EncodeModelV2ToCnb");
+    EXPECT_EQ(modelSchemas[3].assetTypeId, Cnb::CnbAssetTypeId::AnimationClip);
+    EXPECT_EQ(modelSchemas[3].codec.name, "CNA.Cnb.EncodeAnimationClipToCnb");
+    for (const Pipeline::ContentWriterSchemaIdentity& schema : modelSchemas)
+    {
+        EXPECT_EQ(schema.codec.version, "1");
+    }
+    EXPECT_EQ(modelSchemas[0].assetSchemaVersion, 1u);
+    EXPECT_EQ(modelSchemas[1].assetSchemaVersion, 1u);
+    EXPECT_EQ(modelSchemas[3].assetSchemaVersion, 1u);
+}
+
 TEST(CustomContentPipelineTest, CompilerEmbeddingRejectsANullRegistry)
 {
     EXPECT_THROW(static_cast<void>(Pipeline::RunContentCompiler({}, nullptr)),
@@ -301,6 +380,10 @@ TEST(CustomContentPipelineTest, GameComponentsBuildAndLoadACustomCnbAssetEndToEn
     EXPECT_EQ(built.importer.name, "ExampleGame.WorldLevelImporter");
     EXPECT_EQ(built.processor.name, "ExampleGame.WorldLevelProcessor");
     EXPECT_EQ(built.writer.name, "ExampleGame.WorldLevelWriter");
+    EXPECT_EQ(built.writerSchemas,
+              (std::vector<Pipeline::ContentWriterSchemaIdentity>{
+                  {WorldLevelAssetTypeId(), 1u, kCanonicalTypeName,
+                   {"ExampleGame.EncodeWorldLevelToCnb", "1"}}}));
     ASSERT_EQ(built.dependencies.size(), 2u);
     EXPECT_EQ(built.dependencies[1].kind, Pipeline::ContentDependencyKind::SourceFile);
     ASSERT_EQ(built.runtimeReferences.size(), 1u);

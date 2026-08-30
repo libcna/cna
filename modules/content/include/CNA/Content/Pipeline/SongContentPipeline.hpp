@@ -2,6 +2,8 @@
 #pragma once
 
 #include <cstdint>
+#include <filesystem>
+#include <optional>
 #include <string>
 
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
@@ -27,11 +29,20 @@ namespace CNA::Content::Pipeline
     /** @brief Source-oriented identity of a streaming song file without embedded media bytes. */
     struct ImportedSongSource
     {
+        /** @brief Canonical native source file copied as the streaming deployment artifact. */
+        std::filesystem::path mediaSource;
+
         /** @brief Normalized generic UTF-8 media path relative to the source/content root. */
         std::string streamReference;
 
         /** @brief Source size used only for diagnostics; the primary dependency owns hashing. */
         std::uint64_t byteSize = 0u;
+
+        /** @brief Optional display name authored by a compatibility container. */
+        std::optional<std::string> authoredName;
+
+        /** @brief Optional duration authored by a compatibility container, in milliseconds. */
+        std::optional<std::uint32_t> authoredDurationMs;
 
         /** @brief Compares the complete imported source identity. */
         bool operator==(const ImportedSongSource&) const = default;
@@ -99,6 +110,13 @@ namespace CNA::Content::Pipeline
     public:
         /** @brief Returns the stable built-in writer identity. */
         [[nodiscard]] ContentComponentIdentity Identity() const override;
+
+        /**
+         * @brief Returns the frozen Song schema and encoder identity.
+         * @return One stable Song asset/schema/codec declaration.
+         */
+        [[nodiscard]] std::vector<ContentWriterSchemaIdentity>
+        OutputSchemaIdentities() const override;
 
         /** @brief Returns ProcessedSongType. */
         [[nodiscard]] std::string InputType() const override;

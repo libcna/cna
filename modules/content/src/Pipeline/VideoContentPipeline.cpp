@@ -164,7 +164,7 @@ namespace CNA::Content::Pipeline
 
     ContentComponentIdentity VideoImporter::Identity() const
     {
-        return {kVideoImporterName, "1"};
+        return {kVideoImporterName, "2"};
     }
 
     std::vector<std::string> VideoImporter::SourceExtensions() const
@@ -207,6 +207,7 @@ namespace CNA::Content::Pipeline
                                      (error ? ": " + error.message() : std::string{}) + ".");
         }
         ImportedVideoSource imported;
+        imported.mediaSource = context.SourcePath();
         imported.streamReference = CNA::Internal::ContentPathToUtf8(relative);
         imported.byteSize = static_cast<std::uint64_t>(size);
         if (const std::string problem = Cnb::CnbLogicalNameProblem(imported.streamReference);
@@ -222,7 +223,7 @@ namespace CNA::Content::Pipeline
 
     ContentComponentIdentity VideoProcessor::Identity() const
     {
-        return {kVideoProcessorName, "1"};
+        return {kVideoProcessorName, "2"};
     }
 
     std::string VideoProcessor::InputType() const
@@ -256,14 +257,24 @@ namespace CNA::Content::Pipeline
     {
         const ImportedVideoSource& imported = input.Get<ImportedVideoSource>();
         Cnb::CnbVideoData video = ReadMetadata(&imported, context.Parameters());
+        context.AddDeploymentFile(imported.mediaSource, video.streamReference);
         context.AddRuntimeReference(video.streamReference);
-        context.LogInfo("prepared Video metadata and external media XREF for CNB encoding.");
+        context.LogInfo(
+            "prepared Video metadata, external media XREF and deployment-support file.");
         return ContentValue::Create(ProcessedVideoType, std::move(video));
     }
 
     ContentComponentIdentity VideoContentWriter::Identity() const
     {
         return {kVideoWriterName, "1"};
+    }
+
+    std::vector<ContentWriterSchemaIdentity>
+    VideoContentWriter::OutputSchemaIdentities() const
+    {
+        return {{Cnb::CnbAssetTypeId::Video, Cnb::CnbMediaSchemaVersion,
+                 "Microsoft.Xna.Framework.Media.Video",
+                 {"CNA.Cnb.EncodeVideoToCnb", "1"}}};
     }
 
     std::string VideoContentWriter::InputType() const
@@ -276,7 +287,7 @@ namespace CNA::Content::Pipeline
     {
         const Cnb::CnbVideoData& video = input.Get<Cnb::CnbVideoData>();
         return {Cnb::EncodeVideoToCnb(video, logicalName), Cnb::CnbAssetTypeId::Video,
-                "Microsoft.Xna.Framework.Media.Video"};
+                "Microsoft.Xna.Framework.Media.Video", Cnb::CnbMediaSchemaVersion};
     }
 
     void RegisterVideoContentPipeline(ContentPipelineRegistry& registry)

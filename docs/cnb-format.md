@@ -308,13 +308,13 @@ Precisely, as implemented by `CnbLoaderRegistry::ResolveForDocument`, in this or
 0x80000000-0xFFFFFFFF   game-defined custom types
 ```
 
-| id | type | v1 schema |
+| id | type | supported schemas |
 |---|---|---|
 | 1 | `Texture2D` | **version 1**, §16 |
 | 2 | `Texture3D` | **version 1**, §16 |
 | 3 | `TextureCube` | **version 1**, §16 |
 | 4 | `SpriteFont` | **version 1**, §17 |
-| 5 | `Model` | **version 1**, §11 |
+| 5 | `Model` | **versions 1 and 2**, §11 |
 | 6 | `AnimationClip` | **version 1**, §10 |
 | 7 | `Curve` | **version 1**, §9 |
 | 8 | `SoundEffect` | **version 1**, §18 |
@@ -683,6 +683,246 @@ f32 diffuseColor[3] }`.
   compiling the asset into something quietly less capable than its source.
 * **The glTF import diagnostic report.** It is an authoring-time record, not runtime geometry.
 
+### 11.2 `Model`, schema version 2
+
+Model schema 2 extends asset type 5 without changing container 1.0 or any schema-1 byte. It is the
+exact-resource XNA Model representation: declarations, whole shared buffers, draw windows,
+serialized bounds, explicit root identity, and five complete stock-effect records. Schema 1
+remains readable and is still the default for existing CNJ/glTF and schema-1-compatible XNB
+producer routes. A producer selects schema 2 only when the source semantics require it.
+
+Every chunk below is marked `Mandatory`. Descriptor/table chunks declare alignment 4; raw buffer
+chunks declare alignment 16. All are singleton except `MVTX` and `MIDX`, which occur once per
+corresponding resource row and are addressed by ordinal within their chunk type.
+
+| chunk | count | contents |
+|---|---:|---|
+| `M2HD` | 1 | 64-byte header and table counts |
+| `M2ST` | 1 | first-occurrence string table |
+| `M2BN` | 1 | 72-byte bone rows |
+| `M2MS` | 1 | 32-byte mesh rows |
+| `M2PT` | 1 | 32-byte part rows |
+| `M2VD` | 1 | 16-byte declaration rows followed by 20-byte element rows |
+| `M2VR` | 1 | 16-byte vertex-resource rows |
+| `MVTX` | `vertexBufferCount` | exact interleaved vertex bytes |
+| `M2IR` | 1 | 16-byte index-resource rows |
+| `MIDX` | `indexBufferCount` | exact little-endian index bytes |
+| `M2FX` | 1 | 96-byte discriminated stock-effect rows |
+
+The canonical writer emits these schema chunks in the displayed order after container-owned
+`CMET` and optional `XREF`. Unknown mandatory chunks are rejected. Optional unknown chunks are
+ignored and never interpreted as Model, mesh, or part tags.
+
+**`M2HD` — exactly 64 bytes, sixteen `u32` words.**
+
+```text
+u32 flags                    zero
+u32 boneCount                1..maxArrayElementCount
+u32 meshCount                bounded; zero allowed
+u32 partCount                bounded flattened M2PT count
+u32 declarationCount         zero iff vertexBufferCount is zero
+u32 elementCount             bounded flattened element count
+u32 vertexBufferCount        exact MVTX count
+u32 indexBufferCount         exact MIDX count
+u32 effectCount              bounded M2FX row count
+u32 rootBoneIndex            in range and parentless
+u32 reserved[6]              all zero
+```
+
+Every count is bounded before allocation. Count/stride products and all range ends use checked
+`u64` arithmetic. A renderable part necessarily proves that all three resource tables are
+non-empty through its in-range resource indices.
+
+**`M2ST`.** `u32 stringCount`, followed by that many container `String` values. Names are valid
+UTF-8 and may be empty. The canonical producer interns names by first occurrence while traversing
+bones and then meshes; XREF names are not duplicated here.
+
+**`M2BN` — `boneCount` × 72 bytes, exact.**
+
+```text
+u32 nameStringIndex
+i32 parentBoneIndex          -1 or an earlier row
+f32 transform[16]            finite M11..M44 values
+```
+
+Parent-before-child ordering makes cycles impossible and preserves CNA's ascending absolute-
+transform pass. Multiple parentless bones are legal; `rootBoneIndex` explicitly selects
+`Model.Root`, and every transform including the selected root's transform is applied exactly.
+
+**`M2MS` — `meshCount` × 32 bytes, exact.**
+
+```text
+u32 nameStringIndex
+i32 parentBoneIndex          in M2BN
+f32 sphereCenter[3]          finite
+f32 sphereRadius             finite and nonnegative
+u32 firstPart
+u32 partCount
+```
+
+Mesh ranges form one contiguous partition of `M2PT`: the first begins at zero, each next range
+begins at the previous end, and the final end equals the header's `partCount`. The serialized
+sphere is used directly; a schema-2 reader never recomputes it.
+
+**`M2PT` — `partCount` × 32 bytes, exact.**
+
+```text
+u32 vertexOffset
+u32 numVertices              nonzero
+u32 startIndex
+u32 primitiveCount           nonzero; TriangleList
+u32 vertexBufferResource
+u32 indexBufferResource
+u32 effectResource
+u32 reserved                 zero
+```
+
+Resource indices are in range. Checked ranges require
+`vertexOffset + numVertices <= vertexBuffer.vertexCount` and
+`startIndex + primitiveCount*3 <= indexBuffer.indexCount`. Every selected 16- or 32-bit index is
+less than `numVertices`, so `vertexOffset + index` selects a declared vertex. Bytes outside a
+part's windows stay in the shared resource and may be selected by another part.
+
+Model, mesh, and part tags are always null in schema 2. Arbitrary CLR object graphs, XNB reader
+tables, reflection metadata, process pointers, and assembly-qualified types are not a CNB feature.
+
+### 11.3 Schema-2 declarations and shared buffers
+
+**`M2VD`** begins with `declarationCount` 16-byte rows and then exactly `elementCount` 20-byte rows:
+
+```text
+// declaration
+u32 vertexStride             1..4096
+u32 firstElement
+u32 elementCount             nonzero
+u32 reserved                 zero
+
+// element
+u32 offset
+u32 formatId
+u32 usageId
+u32 usageIndex               0..31
+u32 reserved                 zero
+```
+
+Declaration ranges form a contiguous partition of all element rows. Element order is retained;
+`offset + formatSize` must fit the stride; byte ranges may not overlap; and `(usageId,
+usageIndex)` pairs may not repeat within a declaration. These are CNB-owned numeric IDs:
+
+| format ID | value | bytes | format ID | value | bytes |
+|---:|---|---:|---:|---|---:|
+| 0 | Single | 4 | 6 | Short2 | 4 |
+| 1 | Vector2 | 8 | 7 | Short4 | 8 |
+| 2 | Vector3 | 12 | 8 | NormalizedShort2 | 4 |
+| 3 | Vector4 | 16 | 9 | NormalizedShort4 | 8 |
+| 4 | Color (normalized BGRA bytes) | 4 | 10 | HalfVector2 | 4 |
+| 5 | Byte4 | 4 | 11 | HalfVector4 | 8 |
+
+| usage ID | value | usage ID | value |
+|---:|---|---:|---|
+| 0 | Position | 7 | BlendWeight |
+| 1 | Color | 8 | Depth |
+| 2 | TextureCoordinate | 9 | Fog |
+| 3 | Normal | 10 | PointSize |
+| 4 | Binormal | 11 | Sample |
+| 5 | Tangent | 12 | TessellateFactor |
+| 6 | BlendIndices | | |
+
+**`M2VR` — `vertexBufferCount` × 16 bytes, exact.**
+
+```text
+u32 declarationIndex         in M2VD
+u32 vertexCount              nonzero
+u32 payloadOrdinal           equal to this resource row index
+u32 reserved                 zero
+```
+
+The matching `MVTX` logical length is exactly `vertexStride * vertexCount`. The bytes are neither
+repacked nor inferred.
+
+**`M2IR` — `indexBufferCount` × 16 bytes, exact.**
+
+```text
+u32 indexElementSize         exactly 2 or 4
+u32 indexCount               nonzero
+u32 payloadOrdinal           equal to this resource row index
+u32 reserved                 zero
+```
+
+The matching `MIDX` logical length is exactly `indexElementSize * indexCount`. Resources are
+identified by document-local row number: multiple parts naming one row receive the same runtime
+buffer pointer, while distinct equal-byte rows remain distinct objects. Unreferenced rows remain
+resources and are constructed. No XNB fixup number or process address is serialized.
+
+### 11.4 Schema-2 stock effects
+
+**`M2FX` — `effectCount` × 96 bytes, exact.**
+
+```text
+u32 kind
+u32 flags
+u32 primaryTextureXref
+u32 secondaryTextureXref
+u32 cubeTextureXref
+u32 integer0
+u32 integer1
+u32 reserved0               zero
+f32 vector0[3]
+f32 vector1[3]
+f32 vector2[3]
+f32 scalar0
+f32 scalar1
+f32 scalar2
+f32 scalar3                 positive zero unless defined below (none currently do)
+u32 reserved1[3]            zero
+```
+
+The absent-XREF sentinel is `0xFFFFFFFF`. Primary and secondary texture references require an
+`XREF` row whose expected asset type is `Texture2D`; a cube reference requires `TextureCube`.
+Every float is finite. Inactive XREFs use the sentinel, inactive integer/vector/scalar fields are
+positive zero, reserved words are zero, and flags contain only the selected kind's bit 0.
+
+| kind | exact active fields |
+|---:|---|
+| 0 `BasicEffect` | flag bit 0 `VertexColorEnabled`; primary Texture2D; vector0 diffuse, vector1 emissive, vector2 specular; scalar0 `SpecularPower`; scalar1 alpha |
+| 1 `SkinnedEffect` | primary Texture2D; integer0 weights per vertex (1, 2, or 4); the same three vectors; scalar0 `SpecularPower`; scalar1 alpha |
+| 2 `DualTextureEffect` | flag bit 0; primary and secondary Texture2D; vector0 diffuse; scalar0 alpha |
+| 3 `AlphaTestEffect` | flag bit 0; primary Texture2D; integer0 compare ID 0..7 (`Always`, `Never`, `Less`, `LessEqual`, `Equal`, `GreaterEqual`, `Greater`, `NotEqual`); integer1 exact serialized `u32` reference-alpha bits; vector0 diffuse; scalar0 alpha |
+| 4 `EnvironmentMapEffect` | primary Texture2D and cube TextureCube; vector0 diffuse, vector1 emissive, vector2 environment-map specular; scalar0 amount, scalar1 Fresnel factor, scalar2 alpha |
+
+Effect row identity is observable exactly like buffer identity. The runtime constructs every row
+once, resolves typed textures through `ContentManager`, applies only the listed stock-effect
+properties, and attaches shared pointers to parts. Custom effects and generic Effect graphs are
+unsupported and rejected by producers rather than approximated.
+
+### 11.5 Schema-2 determinism, validation, and compatibility
+
+The encoder preserves bone, mesh, part, declaration-element, and resource order. String and typed
+XREF tables use first semantic occurrence. It never records a physical path, timestamp, RTTI
+spelling, pointer, temporary name, or original XNB shared-resource index. Equal carriers and
+logical content names therefore produce equal bytes.
+
+The decoder requires Model type 5 and schema 2 exactly, validates every mandatory flag and
+declared alignment, rejects unknown mandatory chunks, proves singleton/repeated cardinalities and
+the complete `M2HD` count set, validates exact table sizes, then validates strings, declarations,
+payload products, graph/resource indices, effect discriminants, and draw windows before creating
+any GPU object. A declaration-inference-only renderer may still reject a declaration through its
+existing explicit fidelity guard; the reader never rewrites a declaration to satisfy it.
+
+`DecodeModelFromCnb()` remains the schema-1 decoder and accepts only schema 1. The schema-2 codec
+and CPU carrier are separate. `ContentManager` dispatches by `assetSchemaVersion`, continues to
+load schema 1, and creates the exact schema-2 root, transforms, declarations, shared resources,
+bounds, windows, and stock effects. The independent Model-v2 conformance vector is 1,468 bytes
+with SHA-256 `6a9dc3f5363ae82a93ba8e01fee1059802ac1325d5fd76565ccddb09d928ad78`.
+
+The XNB compatibility producer attempts the unchanged schema-1 representability converter first.
+Success uses `EncodeModelToCnb()` and retains the existing bytes. Only a graph that fails that
+fidelity boundary and then passes the complete schema-2 validator uses `EncodeModelV2ToCnb()`.
+This preserves exact XNA declarations, shared resources, part windows, authored spheres/root, and
+the five stock effects where schema 1 cannot. Non-null tags, custom effects, unknown resource
+readers, unsafe references, and malformed semantics remain explicit failures. CNJ and glTF
+producer policy remains schema 1; adding schema 2 did not change their existing output bytes.
+
 ---
 
 ## 12. Error handling and limits
@@ -902,7 +1142,7 @@ A type can be fully readable at runtime and still have no supported way to *prod
 | `TextureCube` | §16 | yes | `EncodeTextureCubeToCnb` | **yes** — DDS source, and `.cnj` |
 | `Texture3D` | §16 | yes | `EncodeTexture3DToCnb` | **yes** — `.cnj` (raw RGBA sidecar) |
 | `SpriteFont` | §17 | yes | `EncodeSpriteFontToCnb` | **yes** — `.cnj`, atlas absorbed |
-| `Model` | §11 | yes | `EncodeModelToCnb` | **yes** — glTF direct, and `.cnj` |
+| `Model` | §11 | yes | `EncodeModelToCnb`, `EncodeModelV2ToCnb` | **yes** — glTF/`.cnj` schema 1; compatible XNB schema 1 or exact schema 2 |
 | `AnimationClip` | §10 | yes | `EncodeAnimationClipToCnb` | **yes** — `.cnj` |
 | `Curve` | §9 | yes | `EncodeCurveToCnb` | **yes** — `.cnj` |
 | `SoundEffect` | §18 | yes | `EncodeSoundEffectToCnb` | **yes** — WAV source, and `.cnj`. PCM16 and 8-bit unsigned PCM only |

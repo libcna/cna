@@ -30,6 +30,12 @@ namespace Cnb = CNA::Content::Cnb;
 
 namespace
 {
+#if defined(_WIN32)
+    constexpr const char* NullOutputRedirection = " >NUL 2>&1";
+#else
+    constexpr const char* NullOutputRedirection = " >/dev/null 2>&1";
+#endif
+
     class ScratchDirectory
     {
     public:
@@ -276,13 +282,13 @@ TEST(CnjContentPipelineTest, ModelConvergesOnTheExistingModelProcessorAndWriter)
     ScratchDirectory scratch("model");
     const std::string command = std::string(CNA_GLTF_TO_CNJ_TOOL_PATH) + " " +
                                 fixture.string() + " " + scratch.Path().string() +
-                                " asset >/dev/null 2>&1";
+                                " asset" + NullOutputRedirection;
     ASSERT_EQ(std::system(command.c_str()), 0);
 
     const Pipeline::ContentBuildResult result = Build(scratch.Path(), "asset.cnj", "Models/asset");
-    EXPECT_EQ(result.processor, (Pipeline::ContentComponentIdentity{"CNA.ModelProcessor", "1"}));
+    EXPECT_EQ(result.processor, (Pipeline::ContentComponentIdentity{"CNA.ModelProcessor", "3"}));
     EXPECT_EQ(result.writer,
-              (Pipeline::ContentComponentIdentity{"CNA.ModelContentWriter", "1"}));
+              (Pipeline::ContentComponentIdentity{"CNA.ModelContentWriter", "3"}));
     EXPECT_GT(result.dependencies.size(), 2u);
     const Cnb::CnjToCnbResult oracle = Cnb::CompileCnjToCnb(
         (scratch.Path() / "asset.cnj").string(), scratch.Path().string(), "Models/asset");

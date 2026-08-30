@@ -2,11 +2,11 @@
 
 #include <algorithm>
 #include <charconv>
+#include <cmath>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <fstream>
-#include <functional>
 #include <future>
 #include <iostream>
 #include <map>
@@ -28,20 +28,31 @@
 #include "CNA/Content/Pipeline/SoundEffectContentPipeline.hpp"
 #include "CNA/Content/Pipeline/Texture2DContentPipeline.hpp"
 #include "CNA/Content/Pipeline/VideoContentPipeline.hpp"
+#include "CNA/Content/Pipeline/XnbContentPipeline.hpp"
 #include "CNA/Internal/ContentPath.hpp"
+#include "CNA/Internal/Json.hpp"
+#include "CnaContentStaging.hpp"
 #include "CnaToolAtomicWrite.hpp"
 
 namespace Pipeline = CNA::Content::Pipeline;
 
 namespace
 {
+    enum class ContentCommand
+    {
+        Build,
+        Clean,
+    };
+
     struct CommandLine
     {
+        ContentCommand operation = ContentCommand::Build;
         std::filesystem::path source;
         std::filesystem::path output;
         std::filesystem::path configuration;
         std::size_t workers = 1u;
         bool quiet = false;
+        bool explain = false;
     };
 
     constexpr std::size_t MaxContentCompilerWorkers = 64u;
@@ -58,6 +69,136 @@ namespace
         Pipeline::ContentProcessorParameters parameters;
     };
 
+    enum class ContentBuildReasonCode
+    {
+        ManifestUnavailable,
+        ManifestIncompatible,
+        ManifestCorrupt,
+        NewAsset,
+        LogicalIdentityChanged,
+        PrimarySourceBytesChanged,
+        ImporterIdentityChanged,
+        ProcessorIdentityChanged,
+        WriterIdentityChanged,
+        WriterSchemaIdentityChanged,
+        WriterCodecIdentityChanged,
+        ProcessorParametersChanged,
+        SourceDependencySetChanged,
+        SourceDependencyBytesChanged,
+        ContentDependencySetChanged,
+        ContentDependencyFingerprintChanged,
+        OutputDefinitionsChanged,
+        DeploymentDefinitionsChanged,
+        CompiledOutputMissing,
+        CompiledOutputDigestMismatch,
+        DeploymentOutputMissing,
+        DeploymentOutputDigestMismatch,
+        PublishedOutputUnsafe,
+        DirectFingerprintChanged,
+        EffectiveFingerprintChanged,
+        FingerprintUnchanged,
+    };
+
+    struct ContentBuildReason
+    {
+        ContentBuildReasonCode code = ContentBuildReasonCode::NewAsset;
+        std::string detail;
+
+        bool operator==(const ContentBuildReason&) const = default;
+    };
+
+    struct ContentBuildDecision
+    {
+        std::vector<ContentBuildReason> reasons;
+    };
+
+    void NormalizeReasons(ContentBuildDecision& decision)
+    {
+        std::sort(decision.reasons.begin(), decision.reasons.end(),
+                  [](const ContentBuildReason& left, const ContentBuildReason& right)
+        {
+            if (left.code != right.code) { return left.code < right.code; }
+            return left.detail < right.detail;
+        });
+        decision.reasons.erase(
+            std::unique(decision.reasons.begin(), decision.reasons.end()),
+            decision.reasons.end());
+    }
+
+    const char* ContentBuildReasonText(ContentBuildReasonCode code)
+    {
+        switch (code)
+        {
+        case ContentBuildReasonCode::ManifestUnavailable:
+            return "manifest unavailable";
+        case ContentBuildReasonCode::ManifestIncompatible:
+            return "manifest format changed or is incompatible";
+        case ContentBuildReasonCode::ManifestCorrupt:
+            return "manifest corrupt";
+        case ContentBuildReasonCode::NewAsset:
+            return "new asset";
+        case ContentBuildReasonCode::LogicalIdentityChanged:
+            return "logical asset/output identity changed";
+        case ContentBuildReasonCode::PrimarySourceBytesChanged:
+            return "primary source bytes changed";
+        case ContentBuildReasonCode::ImporterIdentityChanged:
+            return "importer identity/version changed";
+        case ContentBuildReasonCode::ProcessorIdentityChanged:
+            return "processor identity/version changed";
+        case ContentBuildReasonCode::WriterIdentityChanged:
+            return "writer identity/version changed";
+        case ContentBuildReasonCode::WriterSchemaIdentityChanged:
+            return "writer asset schema identity changed";
+        case ContentBuildReasonCode::WriterCodecIdentityChanged:
+            return "writer codec identity/version changed";
+        case ContentBuildReasonCode::ProcessorParametersChanged:
+            return "processor parameters changed";
+        case ContentBuildReasonCode::SourceDependencySetChanged:
+            return "source dependency set changed";
+        case ContentBuildReasonCode::SourceDependencyBytesChanged:
+            return "source dependency bytes changed";
+        case ContentBuildReasonCode::ContentDependencySetChanged:
+            return "content-build dependency set changed";
+        case ContentBuildReasonCode::ContentDependencyFingerprintChanged:
+            return "content-build dependency effective fingerprint changed";
+        case ContentBuildReasonCode::OutputDefinitionsChanged:
+            return "compiled output definition set changed";
+        case ContentBuildReasonCode::DeploymentDefinitionsChanged:
+            return "deployment definition set changed";
+        case ContentBuildReasonCode::CompiledOutputMissing:
+            return "compiled output missing";
+        case ContentBuildReasonCode::CompiledOutputDigestMismatch:
+            return "compiled output digest mismatch";
+        case ContentBuildReasonCode::DeploymentOutputMissing:
+            return "deployment output missing";
+        case ContentBuildReasonCode::DeploymentOutputDigestMismatch:
+            return "deployment output digest mismatch";
+        case ContentBuildReasonCode::PublishedOutputUnsafe:
+            return "published output path is unsafe or not a regular file";
+        case ContentBuildReasonCode::DirectFingerprintChanged:
+            return "direct fingerprint changed outside a persisted reason domain";
+        case ContentBuildReasonCode::EffectiveFingerprintChanged:
+            return "effective fingerprint changed outside a persisted reason domain";
+        case ContentBuildReasonCode::FingerprintUnchanged:
+            return "fingerprint and published output digests unchanged";
+        }
+        return "unknown build reason";
+    }
+
+    std::string FormatExplainedStatus(const std::string& status,
+                                      ContentBuildDecision decision)
+    {
+        NormalizeReasons(decision);
+        std::ostringstream output;
+        output << status;
+        for (const ContentBuildReason& reason : decision.reasons)
+        {
+            output << "\n  reason: " << ContentBuildReasonText(reason.code);
+            if (!reason.detail.empty()) { output << ": " << reason.detail; }
+        }
+        return output.str();
+    }
+
     class ContentBuildCycleError final : public Pipeline::ContentPipelineError
     {
     public:
@@ -69,75 +210,19 @@ namespace
         }
     };
 
-    class ContentBuildStagingDirectory final
-    {
-    public:
-        ContentBuildStagingDirectory()
-        {
-            std::error_code error;
-            const std::filesystem::path temporary =
-                std::filesystem::temp_directory_path(error);
-            if (error)
-            {
-                throw std::runtime_error("no content staging directory is available: " +
-                                         error.message() + ".");
-            }
-            for (std::size_t attempt = 0u; attempt < 1024u; ++attempt)
-            {
-                error.clear();
-                const std::filesystem::path candidate =
-                    temporary / ("cna_content_stage_" + CNA::Tools::Detail::ProcessTag() + "_" +
-                                 std::to_string(attempt));
-                if (std::filesystem::create_directory(candidate, error))
-                {
-                    std::filesystem::permissions(
-                        candidate, std::filesystem::perms::owner_all,
-                        std::filesystem::perm_options::replace, error);
-                    if (error)
-                    {
-                        std::error_code ignored;
-                        std::filesystem::remove(candidate, ignored);
-                        throw std::runtime_error(
-                            "cannot secure content staging directory: " + error.message() +
-                            ".");
-                    }
-                    path_ = candidate;
-                    return;
-                }
-                if (error && error != std::errc::file_exists)
-                {
-                    throw std::runtime_error("cannot reserve content staging directory: " +
-                                             error.message() + ".");
-                }
-            }
-            throw std::runtime_error("cannot reserve a unique content staging directory.");
-        }
-
-        ~ContentBuildStagingDirectory()
-        {
-            std::error_code ignored;
-            std::filesystem::remove_all(path_, ignored);
-        }
-
-        ContentBuildStagingDirectory(const ContentBuildStagingDirectory&) = delete;
-        ContentBuildStagingDirectory& operator=(const ContentBuildStagingDirectory&) = delete;
-
-        [[nodiscard]] const std::filesystem::path& Path() const noexcept { return path_; }
-
-    private:
-        std::filesystem::path path_;
-    };
-
     void PrintUsage()
     {
         std::cerr
             << "Usage: cna-content build <source-file-or-directory> -o <output> "
-               "[--config <file>] [--workers <1..64>] [--quiet]\n\n"
+               "[--config <file>] [--workers <1..64>] [--explain] [--quiet]\n"
+            << "       cna-content clean <output-directory> [--quiet]\n\n"
             << "Builds source content through Importer -> Processor -> Content Type Writer -> "
                "CNB.\n"
             << "A source file requires an output .cnb path. A source directory requires an "
                "output\n"
-            << "directory; relative paths and logical content names are preserved.\n";
+            << "directory; relative paths and logical content names are preserved. Clean removes "
+               "only\n"
+            << "unchanged files proven to be pipeline-owned by a valid output manifest.\n";
     }
 
     std::size_t ParseWorkerCount(const std::filesystem::path& argument)
@@ -162,12 +247,47 @@ namespace
 
     CommandLine ParseCommandLine(const std::vector<std::filesystem::path>& arguments)
     {
-        if (arguments.empty() || !IsOption(arguments[0], "build"))
+        if (arguments.empty() ||
+            (!IsOption(arguments[0], "build") && !IsOption(arguments[0], "clean")))
         {
-            throw std::invalid_argument("the first argument must be 'build'.");
+            throw std::invalid_argument("the first argument must be 'build' or 'clean'.");
         }
 
         CommandLine command;
+        if (IsOption(arguments[0], "clean"))
+        {
+            command.operation = ContentCommand::Clean;
+            for (std::size_t index = 1u; index < arguments.size(); ++index)
+            {
+                const std::filesystem::path& argument = arguments[index];
+                if (IsOption(argument, "--quiet"))
+                {
+                    command.quiet = true;
+                }
+                else if (!argument.empty() && argument.native().front() ==
+                                                  std::filesystem::path("-").native().front())
+                {
+                    throw std::invalid_argument("unknown clean option '" +
+                                                CNA::Internal::ContentPathToUtf8(argument) +
+                                                "'.");
+                }
+                else if (command.output.empty())
+                {
+                    command.output = argument;
+                }
+                else
+                {
+                    throw std::invalid_argument(
+                        "more than one clean output directory was provided.");
+                }
+            }
+            if (command.output.empty())
+            {
+                throw std::invalid_argument("clean requires an output directory.");
+            }
+            return command;
+        }
+
         bool workersSpecified = false;
         for (std::size_t index = 1u; index < arguments.size(); ++index)
         {
@@ -187,6 +307,10 @@ namespace
             else if (IsOption(argument, "--quiet"))
             {
                 command.quiet = true;
+            }
+            else if (IsOption(argument, "--explain"))
+            {
+                command.explain = true;
             }
             else if (IsOption(argument, "--config"))
             {
@@ -257,6 +381,64 @@ namespace
             ++pathPart;
         }
         return rootPart == root.end();
+    }
+
+    void AcquireOutputLease(
+        const std::filesystem::path& outputRoot,
+        CNA::Tools::ContentStagingDetail::LeaseHandle& lease)
+    {
+        std::error_code error;
+        std::filesystem::create_directories(outputRoot, error);
+        if (error)
+        {
+            throw std::runtime_error("cannot create the content output root: " +
+                                     error.message() + ".");
+        }
+
+        const std::filesystem::path path =
+            outputRoot / CNA::Tools::ContentOutputLeaseFile;
+        const std::filesystem::file_status status =
+            std::filesystem::symlink_status(path, error);
+        if (error && error != std::errc::no_such_file_or_directory)
+        {
+            throw std::runtime_error("cannot inspect the content output lease: " +
+                                     error.message() + ".");
+        }
+
+        std::string reason;
+        if (!error && status.type() != std::filesystem::file_type::not_found)
+        {
+            const auto result = lease.ClaimExisting(path, reason);
+            if (result ==
+                CNA::Tools::ContentStagingDetail::LeaseHandle::ClaimResult::Claimed)
+            {
+                return;
+            }
+            if (result ==
+                CNA::Tools::ContentStagingDetail::LeaseHandle::ClaimResult::Active)
+            {
+                throw std::runtime_error(
+                    "another content build or clean operation is active for output root '" +
+                    CNA::Internal::ContentPathToUtf8(outputRoot) + "'.");
+            }
+            throw std::runtime_error("the content output lease is unsafe: " + reason + ".");
+        }
+
+        error.clear();
+        if (lease.CreateAndHold(path, reason)) { return; }
+
+        const auto raced = lease.ClaimExisting(path, reason);
+        if (raced == CNA::Tools::ContentStagingDetail::LeaseHandle::ClaimResult::Active)
+        {
+            throw std::runtime_error(
+                "another content build or clean operation is active for output root '" +
+                CNA::Internal::ContentPathToUtf8(outputRoot) + "'.");
+        }
+        if (raced == CNA::Tools::ContentStagingDetail::LeaseHandle::ClaimResult::Claimed)
+        {
+            return;
+        }
+        throw std::runtime_error("cannot establish the content output lease: " + reason + ".");
     }
 
     std::string LogicalName(const std::filesystem::path& relativeSource)
@@ -443,27 +625,312 @@ namespace
         }
     }
 
-    Pipeline::ContentBuildManifest LoadManifest(const std::filesystem::path& path,
-                                                std::string& original,
-                                                bool quiet)
+    void RequireExternalRootsSeparateFromOutput(
+        const std::filesystem::path& outputRoot,
+        const Pipeline::ContentSourceRootCapabilities& externalSourceRoots)
+    {
+        const std::filesystem::path canonicalOutputRoot = WeaklyCanonical(outputRoot);
+        for (const auto& [alias, externalRoot] : externalSourceRoots.Entries())
+        {
+            if (IsWithin(canonicalOutputRoot, externalRoot) ||
+                IsWithin(externalRoot, canonicalOutputRoot))
+            {
+                throw std::runtime_error(
+                    "content output root must not equal, contain, or be contained by external "
+                    "source root '" + alias + "'.");
+            }
+        }
+    }
+
+    enum class ManifestLoadState
+    {
+        Missing,
+        Current,
+        Incompatible,
+        Corrupt,
+    };
+
+    struct LoadedManifest
+    {
+        Pipeline::ContentBuildManifest manifest;
+        std::string original;
+        ManifestLoadState state = ManifestLoadState::Missing;
+    };
+
+    bool HasIncompatibleManifestVersion(const std::string& json)
     {
         try
         {
-            if (!std::filesystem::exists(path)) { return {}; }
-            original = ReadText(path);
-            return Pipeline::ContentBuildManifest::Parse(original);
+            const CNA::Internal::JsonValue root = CNA::Internal::ParseJson(json);
+            if (root.type != CNA::Internal::JsonType::Object) { return false; }
+            const CNA::Internal::JsonValue* version = root.FindMember("version");
+            if (version == nullptr || version->type != CNA::Internal::JsonType::Number ||
+                !std::isfinite(version->numberValue) ||
+                std::floor(version->numberValue) != version->numberValue ||
+                version->numberValue < 0.0)
+            {
+                return false;
+            }
+            return version->numberValue !=
+                   static_cast<double>(Pipeline::ContentBuildManifestVersion);
+        }
+        catch (...)
+        {
+            return false;
+        }
+    }
+
+    LoadedManifest LoadManifest(const std::filesystem::path& path, bool quiet)
+    {
+        LoadedManifest result;
+        try
+        {
+            if (!std::filesystem::exists(path)) { return result; }
+            result.original = ReadText(path);
+            result.manifest = Pipeline::ContentBuildManifest::Parse(result.original);
+            result.state = ManifestLoadState::Current;
+            return result;
         }
         catch (const std::exception& error)
         {
-            original.clear();
+            result.state = HasIncompatibleManifestVersion(result.original)
+                               ? ManifestLoadState::Incompatible
+                               : ManifestLoadState::Corrupt;
+            result.original.clear();
             if (!quiet)
             {
                 std::cout << "[WARN] Ignoring incompatible or corrupt manifest '"
                           << CNA::Internal::ContentPathToUtf8(path) << "': " << error.what()
                           << "\n";
             }
-            return {};
+            return result;
         }
+    }
+
+    std::map<std::string, std::string> OwnedOutputDigests(
+        const Pipeline::ContentBuildManifest& manifest)
+    {
+        std::map<std::string, std::string> result;
+        for (const auto& [nodeId, entry] : manifest.Entries())
+        {
+            for (const Pipeline::ContentBuildManifestOutput& output : entry.outputs)
+            {
+                const auto [found, inserted] = result.emplace(output.path, output.sha256);
+                if (!inserted && found->second != output.sha256)
+                {
+                    throw std::runtime_error(
+                        "content manifest has conflicting ownership records for output '" +
+                        output.path + "'.");
+                }
+            }
+            for (const Pipeline::ContentBuildManifestDeploymentFile& deployment :
+                 entry.deploymentFiles)
+            {
+                const auto [found, inserted] =
+                    result.emplace(deployment.path, deployment.sha256);
+                if (!inserted && found->second != deployment.sha256)
+                {
+                    throw std::runtime_error(
+                        "content manifest has conflicting ownership records for output '" +
+                        deployment.path + "'.");
+                }
+            }
+            static_cast<void>(nodeId);
+        }
+        return result;
+    }
+
+    std::filesystem::file_status SymlinkStatus(const std::filesystem::path& path)
+    {
+        std::error_code error;
+        const std::filesystem::file_status status =
+            std::filesystem::symlink_status(path, error);
+        if (error && error != std::errc::no_such_file_or_directory)
+        {
+            throw std::runtime_error("cannot inspect manifest-owned output '" +
+                                     CNA::Internal::ContentPathToUtf8(path) + "': " +
+                                     error.message() + ".");
+        }
+        return status;
+    }
+
+    void RequireUnlinkedOutputParents(const std::filesystem::path& outputRoot,
+                                      const std::filesystem::path& relative)
+    {
+        std::filesystem::path parent = outputRoot;
+        for (const std::filesystem::path& component : relative.parent_path())
+        {
+            parent /= component;
+            const std::filesystem::file_status status = SymlinkStatus(parent);
+            if (status.type() == std::filesystem::file_type::not_found) { return; }
+            if (std::filesystem::is_symlink(status) || !std::filesystem::is_directory(status))
+            {
+                throw std::runtime_error(
+                    "refusing to collect manifest-owned output '" +
+                    CNA::Internal::ContentPathToUtf8(relative) +
+                    "' because an output-path parent is not a real directory.");
+            }
+        }
+    }
+
+    std::size_t CollectObsoleteOwnedOutputs(
+        const Pipeline::ContentBuildManifest& previousManifest,
+        const Pipeline::ContentBuildManifest& nextManifest,
+        const std::filesystem::path& outputRoot, bool quiet,
+        const char* deletionReason)
+    {
+        const std::map<std::string, std::string> previous =
+            OwnedOutputDigests(previousManifest);
+        const std::map<std::string, std::string> current =
+            OwnedOutputDigests(nextManifest);
+        const std::filesystem::path canonicalRoot = WeaklyCanonical(outputRoot);
+        std::vector<std::pair<std::filesystem::path, std::string>> obsolete;
+        for (const auto& [relativeText, sha256] : previous)
+        {
+            if (current.contains(relativeText)) { continue; }
+
+            const std::filesystem::path relative =
+                CNA::Internal::ContentPathFromUtf8(relativeText);
+            RequireUnlinkedOutputParents(canonicalRoot, relative);
+            const std::filesystem::path candidate = canonicalRoot / relative;
+            const std::filesystem::file_status status = SymlinkStatus(candidate);
+            if (status.type() == std::filesystem::file_type::not_found) { continue; }
+            if (std::filesystem::is_symlink(status) ||
+                !std::filesystem::is_regular_file(status))
+            {
+                throw std::runtime_error(
+                    "refusing to collect manifest-owned output '" + relativeText +
+                    "' because it is not a real regular file.");
+            }
+            const std::filesystem::path canonicalCandidate = WeaklyCanonical(candidate);
+            if (!IsWithin(canonicalRoot, canonicalCandidate))
+            {
+                throw std::runtime_error("refusing to collect manifest-owned output '" +
+                                         relativeText + "' because it escapes the output root.");
+            }
+            if (Pipeline::ContentFileSha256(candidate) != sha256)
+            {
+                throw std::runtime_error(
+                    "refusing to collect manifest-owned output '" + relativeText +
+                    "' because its bytes no longer match the previous manifest.");
+            }
+            obsolete.emplace_back(candidate, relativeText);
+        }
+
+        std::size_t removed = 0u;
+        for (const auto& [path, relative] : obsolete)
+        {
+            std::error_code error;
+            const bool deleted = std::filesystem::remove(path, error);
+            if (error)
+            {
+                throw std::runtime_error("cannot remove manifest-owned output '" + relative +
+                                         "': " + error.message() + ".");
+            }
+            if (deleted)
+            {
+                ++removed;
+                if (!quiet)
+                {
+                    std::cout << "[CLEAN] " << relative << " (" << deletionReason << ")\n";
+                }
+            }
+        }
+        return removed;
+    }
+
+    int RunClean(const CommandLine& command)
+    {
+        std::size_t removed = 0u;
+        std::size_t failed = 0u;
+        try
+        {
+            std::error_code error;
+            const std::filesystem::file_status requestedStatus =
+                std::filesystem::symlink_status(command.output, error);
+            if (error == std::errc::no_such_file_or_directory ||
+                requestedStatus.type() == std::filesystem::file_type::not_found)
+            {
+                if (!command.quiet)
+                {
+                    std::cout << "Cleaned: 0  Failed: 0\n";
+                }
+                return 0;
+            }
+            if (error)
+            {
+                throw std::runtime_error("cannot inspect the clean output directory: " +
+                                         error.message() + ".");
+            }
+            if (std::filesystem::is_symlink(requestedStatus) ||
+                !std::filesystem::is_directory(requestedStatus))
+            {
+                throw std::runtime_error(
+                    "the clean output path must be a real directory, not a symlink or file.");
+            }
+
+            const std::filesystem::path outputRoot = WeaklyCanonical(command.output);
+            CNA::Tools::ContentStagingDetail::LeaseHandle outputLease;
+            AcquireOutputLease(outputRoot, outputLease);
+
+            const std::filesystem::path manifestPath =
+                outputRoot / Pipeline::ContentBuildManifestFileName;
+            error.clear();
+            const std::filesystem::file_status manifestStatus =
+                std::filesystem::symlink_status(manifestPath, error);
+            if (error == std::errc::no_such_file_or_directory ||
+                manifestStatus.type() == std::filesystem::file_type::not_found)
+            {
+                if (!command.quiet)
+                {
+                    std::cout << "Cleaned: 0  Failed: 0\n";
+                }
+                return 0;
+            }
+            if (error || std::filesystem::is_symlink(manifestStatus) ||
+                !std::filesystem::is_regular_file(manifestStatus))
+            {
+                throw std::runtime_error(
+                    "the ownership manifest is unreadable, symlinked, or not a regular file.");
+            }
+
+            const std::string originalManifest = ReadText(manifestPath);
+            const Pipeline::ContentBuildManifest previousManifest =
+                Pipeline::ContentBuildManifest::Parse(originalManifest);
+            removed = CollectObsoleteOwnedOutputs(
+                previousManifest, Pipeline::ContentBuildManifest{}, outputRoot, command.quiet,
+                "manifest-owned output");
+
+            if (ReadText(manifestPath) != originalManifest)
+            {
+                throw std::runtime_error(
+                    "the ownership manifest changed while clean was running; it was retained.");
+            }
+            error.clear();
+            const bool manifestRemoved = std::filesystem::remove(manifestPath, error);
+            if (error || !manifestRemoved)
+            {
+                throw std::runtime_error(
+                    "cannot remove the ownership manifest" +
+                    std::string(error ? ": " + error.message() : "") + ".");
+            }
+            if (!command.quiet)
+            {
+                std::cout << "[CLEAN] " << Pipeline::ContentBuildManifestFileName
+                          << " (ownership manifest)\n";
+            }
+        }
+        catch (const std::exception& error)
+        {
+            ++failed;
+            std::cerr << "content clean failed: " << error.what() << "\n";
+        }
+
+        if (!command.quiet || failed != 0u)
+        {
+            std::cout << "Cleaned: " << removed << "  Failed: " << failed << "\n";
+        }
+        return failed == 0u ? 0 : 1;
     }
 
     std::vector<std::string> ContentBuildDependencies(
@@ -508,7 +975,8 @@ namespace
                             processor->OutputType(),
                             item.writer.empty() ? entry.writer.name : item.writer);
                     if (entry.processor == processor->Identity() &&
-                        entry.writer == writer->Identity())
+                        entry.writer == writer->Identity() &&
+                        entry.writerSchemas == writer->OutputSchemaIdentities())
                     {
                         return true;
                     }
@@ -529,7 +997,9 @@ namespace
                                 const Pipeline::ContentPipelineRegistry& registry,
                                 const BuildItem& item,
                                 const std::filesystem::path& sourceRoot,
-                                const std::filesystem::path& outputRoot)
+                                const std::filesystem::path& outputRoot,
+                                const Pipeline::ContentSourceRootCapabilities&
+                                    externalSourceRoots)
     {
         try
         {
@@ -552,7 +1022,8 @@ namespace
             {
                 return false;
             }
-            return Pipeline::ComputeContentBuildDirectFingerprint(entry, sourceRoot) ==
+            return Pipeline::ComputeContentBuildDirectFingerprint(
+                       entry, sourceRoot, externalSourceRoots) ==
                    entry.directFingerprint;
         }
         catch (...)
@@ -561,36 +1032,287 @@ namespace
         }
     }
 
-    bool CanSkipEffective(
+    std::string ComponentIdentityText(const Pipeline::ContentComponentIdentity& identity)
+    {
+        return identity.name + "/" + identity.version;
+    }
+
+    ContentBuildDecision CompareDirectBuildState(
+        const Pipeline::ContentBuildManifestEntry& previous,
+        const Pipeline::ContentBuildManifestEntry& current)
+    {
+        ContentBuildDecision decision;
+        const auto add = [&](ContentBuildReasonCode code, std::string detail = {})
+        {
+            decision.reasons.push_back({code, std::move(detail)});
+        };
+        if (previous.nodeId != current.nodeId || previous.source != current.source)
+        {
+            add(ContentBuildReasonCode::LogicalIdentityChanged,
+                previous.nodeId + " (" + previous.source + ") -> " + current.nodeId + " (" +
+                    current.source + ")");
+        }
+        if (previous.importer != current.importer)
+        {
+            add(ContentBuildReasonCode::ImporterIdentityChanged,
+                ComponentIdentityText(previous.importer) + " -> " +
+                    ComponentIdentityText(current.importer));
+        }
+        if (previous.processor != current.processor)
+        {
+            add(ContentBuildReasonCode::ProcessorIdentityChanged,
+                ComponentIdentityText(previous.processor) + " -> " +
+                    ComponentIdentityText(current.processor));
+        }
+        if (previous.writer != current.writer)
+        {
+            add(ContentBuildReasonCode::WriterIdentityChanged,
+                ComponentIdentityText(previous.writer) + " -> " +
+                    ComponentIdentityText(current.writer));
+        }
+
+        std::vector<Pipeline::ContentWriterSchemaIdentity> previousSchemas =
+            previous.writerSchemas;
+        std::vector<Pipeline::ContentWriterSchemaIdentity> currentSchemas = current.writerSchemas;
+        const auto schemaOrder = [](const Pipeline::ContentWriterSchemaIdentity& left,
+                                    const Pipeline::ContentWriterSchemaIdentity& right)
+        {
+            if (left.assetTypeId != right.assetTypeId)
+            {
+                return left.assetTypeId < right.assetTypeId;
+            }
+            return left.assetTypeName < right.assetTypeName;
+        };
+        std::sort(previousSchemas.begin(), previousSchemas.end(), schemaOrder);
+        std::sort(currentSchemas.begin(), currentSchemas.end(), schemaOrder);
+        bool schemaIdentityChanged = previousSchemas.size() != currentSchemas.size();
+        bool codecIdentityChanged = false;
+        for (std::size_t index = 0u;
+             index < std::min(previousSchemas.size(), currentSchemas.size()); ++index)
+        {
+            const auto& oldSchema = previousSchemas[index];
+            const auto& newSchema = currentSchemas[index];
+            schemaIdentityChanged =
+                schemaIdentityChanged || oldSchema.assetTypeId != newSchema.assetTypeId ||
+                oldSchema.assetSchemaVersion != newSchema.assetSchemaVersion ||
+                oldSchema.assetTypeName != newSchema.assetTypeName;
+            codecIdentityChanged = codecIdentityChanged || oldSchema.codec != newSchema.codec;
+        }
+        if (schemaIdentityChanged)
+        {
+            add(ContentBuildReasonCode::WriterSchemaIdentityChanged);
+        }
+        if (codecIdentityChanged)
+        {
+            add(ContentBuildReasonCode::WriterCodecIdentityChanged);
+        }
+
+        const Pipeline::ContentBuildFingerprintState& oldState = previous.fingerprintState;
+        const Pipeline::ContentBuildFingerprintState& newState = current.fingerprintState;
+        if (oldState.primarySourceBytes != newState.primarySourceBytes)
+        {
+            add(ContentBuildReasonCode::PrimarySourceBytesChanged, current.source);
+        }
+        if (oldState.processorParameters != newState.processorParameters)
+        {
+            add(ContentBuildReasonCode::ProcessorParametersChanged);
+        }
+        if (oldState.writerSchemas != newState.writerSchemas &&
+            !schemaIdentityChanged && !codecIdentityChanged)
+        {
+            add(ContentBuildReasonCode::WriterSchemaIdentityChanged);
+        }
+        if (oldState.sourceDependencySet != newState.sourceDependencySet)
+        {
+            add(ContentBuildReasonCode::SourceDependencySetChanged);
+        }
+        else if (oldState.sourceDependencyBytes != newState.sourceDependencyBytes)
+        {
+            add(ContentBuildReasonCode::SourceDependencyBytesChanged);
+        }
+        if (oldState.contentDependencySet != newState.contentDependencySet)
+        {
+            add(ContentBuildReasonCode::ContentDependencySetChanged);
+        }
+        if (oldState.outputDefinitions != newState.outputDefinitions)
+        {
+            add(ContentBuildReasonCode::OutputDefinitionsChanged);
+        }
+        if (oldState.deploymentDefinitions != newState.deploymentDefinitions)
+        {
+            add(ContentBuildReasonCode::DeploymentDefinitionsChanged);
+        }
+        if (previous.directFingerprint != current.directFingerprint &&
+            decision.reasons.empty())
+        {
+            add(ContentBuildReasonCode::DirectFingerprintChanged);
+        }
+        NormalizeReasons(decision);
+        return decision;
+    }
+
+    const Pipeline::ContentBuildManifestEntry* FindPreviousEntryForReason(
+        const Pipeline::ContentBuildManifest& manifest, const BuildItem& item)
+    {
+        if (const Pipeline::ContentBuildManifestEntry* exact =
+                manifest.Find(item.logicalName))
+        {
+            return exact;
+        }
+        const Pipeline::ContentBuildManifestEntry* match = nullptr;
+        for (const auto& [nodeId, entry] : manifest.Entries())
+        {
+            static_cast<void>(nodeId);
+            if (entry.source != item.relativeSource) { continue; }
+            if (match != nullptr) { return nullptr; }
+            match = &entry;
+        }
+        return match;
+    }
+
+    ContentBuildDecision InitialBuildDecision(
+        ManifestLoadState manifestState,
+        const Pipeline::ContentBuildManifestEntry* previousForReason,
+        const Pipeline::ContentBuildManifestEntry& current)
+    {
+        if (previousForReason != nullptr)
+        {
+            return CompareDirectBuildState(*previousForReason, current);
+        }
+        ContentBuildDecision decision;
+        switch (manifestState)
+        {
+        case ManifestLoadState::Missing:
+            decision.reasons.push_back(
+                {ContentBuildReasonCode::ManifestUnavailable, {}});
+            decision.reasons.push_back({ContentBuildReasonCode::NewAsset, current.source});
+            break;
+        case ManifestLoadState::Incompatible:
+            decision.reasons.push_back(
+                {ContentBuildReasonCode::ManifestIncompatible, {}});
+            break;
+        case ManifestLoadState::Corrupt:
+            decision.reasons.push_back({ContentBuildReasonCode::ManifestCorrupt, {}});
+            break;
+        case ManifestLoadState::Current:
+            decision.reasons.push_back({ContentBuildReasonCode::NewAsset, current.source});
+            break;
+        }
+        NormalizeReasons(decision);
+        return decision;
+    }
+
+    ContentBuildReason AssessPublishedOutput(
+        const std::filesystem::path& outputRoot, const std::string& relativePath,
+        const std::string& expectedDigest, ContentBuildReasonCode missing,
+        ContentBuildReasonCode mismatch)
+    {
+        try
+        {
+            const std::filesystem::path path =
+                outputRoot / CNA::Internal::ContentPathFromUtf8(relativePath);
+            std::error_code error;
+            const std::filesystem::file_status status =
+                std::filesystem::symlink_status(path, error);
+            if (error == std::errc::no_such_file_or_directory ||
+                status.type() == std::filesystem::file_type::not_found)
+            {
+                return {missing, relativePath};
+            }
+            if (error || std::filesystem::is_symlink(status) ||
+                !std::filesystem::is_regular_file(status))
+            {
+                return {ContentBuildReasonCode::PublishedOutputUnsafe, relativePath};
+            }
+            const std::filesystem::path canonicalPath = WeaklyCanonical(path);
+            if (!IsWithin(WeaklyCanonical(outputRoot), canonicalPath))
+            {
+                return {ContentBuildReasonCode::PublishedOutputUnsafe, relativePath};
+            }
+            if (Pipeline::ContentFileSha256(canonicalPath) != expectedDigest)
+            {
+                return {mismatch, relativePath};
+            }
+            return {};
+        }
+        catch (...)
+        {
+            return {ContentBuildReasonCode::PublishedOutputUnsafe, relativePath};
+        }
+    }
+
+    ContentBuildDecision AssessEffectiveBuildState(
         const Pipeline::ContentBuildManifestEntry& entry,
         const std::filesystem::path& outputRoot,
         const std::map<std::string, std::string>& contentBuildFingerprints)
     {
+        ContentBuildDecision decision;
         try
         {
-            if (Pipeline::ComputeContentBuildEffectiveFingerprint(
-                    entry, contentBuildFingerprints) != entry.fingerprint)
+            Pipeline::ContentBuildManifestEntry current = entry;
+            Pipeline::RefreshContentBuildEffectiveFingerprint(
+                current, contentBuildFingerprints);
+            if (current.fingerprintState.contentDependencyFingerprints !=
+                entry.fingerprintState.contentDependencyFingerprints)
             {
-                return false;
+                decision.reasons.push_back(
+                    {ContentBuildReasonCode::ContentDependencyFingerprintChanged, {}});
+            }
+            if (current.fingerprint != entry.fingerprint && decision.reasons.empty())
+            {
+                decision.reasons.push_back(
+                    {ContentBuildReasonCode::EffectiveFingerprintChanged, {}});
             }
             for (const Pipeline::ContentBuildManifestOutput& output : entry.outputs)
             {
-                const std::filesystem::path path = WeaklyCanonical(
-                    outputRoot / CNA::Internal::ContentPathFromUtf8(output.path));
-                if (!IsWithin(WeaklyCanonical(outputRoot), path) ||
-                    !std::filesystem::is_regular_file(path) ||
-                    Pipeline::ContentFileSha256(path) != output.sha256)
+                ContentBuildReason reason = AssessPublishedOutput(
+                    outputRoot, output.path, output.sha256,
+                    ContentBuildReasonCode::CompiledOutputMissing,
+                    ContentBuildReasonCode::CompiledOutputDigestMismatch);
+                if (!reason.detail.empty())
                 {
-                    return false;
+                    decision.reasons.push_back(std::move(reason));
                 }
             }
-            return true;
+            for (const Pipeline::ContentBuildManifestDeploymentFile& deployment :
+                 entry.deploymentFiles)
+            {
+                ContentBuildReason reason = AssessPublishedOutput(
+                    outputRoot, deployment.path, deployment.sha256,
+                    ContentBuildReasonCode::DeploymentOutputMissing,
+                    ContentBuildReasonCode::DeploymentOutputDigestMismatch);
+                if (!reason.detail.empty())
+                {
+                    decision.reasons.push_back(std::move(reason));
+                }
+            }
         }
         catch (...)
         {
-            return false;
+            decision.reasons.push_back(
+                {ContentBuildReasonCode::EffectiveFingerprintChanged, {}});
         }
+        NormalizeReasons(decision);
+        return decision;
     }
+
+    class OutputReservationConflict final : public std::runtime_error
+    {
+    public:
+        OutputReservationConflict(std::string message, std::string existingOwner)
+            : std::runtime_error(std::move(message)),
+              existingOwner_(std::move(existingOwner))
+        {
+        }
+
+        [[nodiscard]] const std::string& ExistingOwner() const noexcept
+        {
+            return existingOwner_;
+        }
+
+    private:
+        std::string existingOwner_;
+    };
 
     void ReserveOutputs(const Pipeline::ContentBuildManifestEntry& entry,
                         const std::string& owner, const std::filesystem::path& outputRoot,
@@ -611,9 +1333,10 @@ namespace
             const auto logical = logicalOwners.find(output.logicalName);
             if (logical != logicalOwners.end() && logical->second != owner)
             {
-                throw std::runtime_error("content build nodes '" + logical->second +
-                                         "' and '" + owner + "' both own output logical name '" +
-                                         output.logicalName + "'.");
+                throw OutputReservationConflict(
+                    "content build nodes '" + logical->second + "' and '" + owner +
+                        "' both own output logical name '" + output.logicalName + "'.",
+                    logical->second);
             }
 
             const std::filesystem::path path = WeaklyCanonical(
@@ -633,10 +1356,36 @@ namespace
             const auto physical = pathOwners.find(identity);
             if (physical != pathOwners.end() && physical->second != owner)
             {
-                throw std::runtime_error("content build nodes '" + physical->second +
-                                         "' and '" + owner +
-                                         "' resolve outputs to the same path '" + identity +
+                throw OutputReservationConflict(
+                    "content build nodes '" + physical->second + "' and '" + owner +
+                        "' resolve outputs to the same path '" + identity + "'.",
+                    physical->second);
+            }
+        }
+        for (const Pipeline::ContentBuildManifestDeploymentFile& deployment :
+             entry.deploymentFiles)
+        {
+            const std::filesystem::path path = WeaklyCanonical(
+                outputRoot / CNA::Internal::ContentPathFromUtf8(deployment.path));
+            if (!IsWithin(canonicalRoot, path))
+            {
+                throw std::runtime_error("deployment output '" + deployment.path +
+                                         "' escapes the output root.");
+            }
+            const std::string identity = CNA::Internal::ContentPathToUtf8(path);
+            if (!entryPaths.insert(identity).second)
+            {
+                throw std::runtime_error("content build node '" + owner +
+                                         "' resolves multiple outputs to path '" + identity +
                                          "'.");
+            }
+            const auto physical = pathOwners.find(identity);
+            if (physical != pathOwners.end() && physical->second != owner)
+            {
+                throw OutputReservationConflict(
+                    "content build nodes '" + physical->second + "' and '" + owner +
+                        "' resolve outputs to the same path '" + identity + "'.",
+                    physical->second);
             }
         }
         for (const std::string& logicalName : entryLogicalNames)
@@ -681,10 +1430,28 @@ namespace
         return *found;
     }
 
+    const Pipeline::ContentDeploymentFile& DeploymentFile(
+        const Pipeline::ContentBuildResult& result,
+        const Pipeline::ContentBuildManifestDeploymentFile& manifest)
+    {
+        const auto found = std::find_if(
+            result.deploymentFiles.begin(), result.deploymentFiles.end(),
+            [&](const Pipeline::ContentDeploymentFile& deployment)
+        {
+            return deployment.outputPath == manifest.path;
+        });
+        if (found == result.deploymentFiles.end())
+        {
+            throw std::logic_error("manifest deployment output '" + manifest.path +
+                                   "' has no matching build result.");
+        }
+        return *found;
+    }
+
     struct StagedOutput
     {
         std::filesystem::path path;
-        std::size_t byteCount = 0u;
+        std::uintmax_t byteCount = 0u;
     };
 
     struct BuildNodePlan
@@ -692,6 +1459,8 @@ namespace
         const BuildItem* item = nullptr;
         Pipeline::ContentBuildManifestEntry manifest;
         std::map<std::string, StagedOutput> stagedOutputs;
+        std::map<std::string, StagedOutput> stagedDeploymentFiles;
+        ContentBuildDecision decision;
         bool prepared = false;
         bool hasManifest = false;
         std::string failure;
@@ -702,6 +1471,7 @@ namespace
         Pipeline::ContentBuildManifestEntry manifest;
         bool success = false;
         bool skipped = false;
+        ContentBuildDecision decision;
         std::string failure;
         std::string statusLine;
     };
@@ -747,12 +1517,35 @@ namespace
         {
             PublishBytes(manifest, output.logicalName, output.bytes, outputRoot);
         }
+        for (const Pipeline::ContentBuildManifestDeploymentFile& deployment :
+             manifest.deploymentFiles)
+        {
+            const Pipeline::ContentDeploymentFile& source =
+                DeploymentFile(result, deployment);
+            if (Pipeline::ContentFileSha256(source.source) != deployment.sha256)
+            {
+                throw std::runtime_error("deployment source for '" + deployment.path +
+                                         "' changed while the node was building.");
+            }
+            const std::filesystem::path destination =
+                outputRoot / CNA::Internal::ContentPathFromUtf8(deployment.path);
+            if (destination.has_parent_path())
+            {
+                std::filesystem::create_directories(destination.parent_path());
+            }
+            CNA::Tools::CopyFileAtomically(source.source, destination);
+            if (Pipeline::ContentFileSha256(destination) != deployment.sha256)
+            {
+                throw std::runtime_error("deployed support file '" + deployment.path +
+                                         "' failed its content digest check.");
+            }
+        }
     }
 
-    std::size_t PublishStagedResult(const BuildNodePlan& plan,
-                                    const std::filesystem::path& outputRoot)
+    std::uintmax_t PublishStagedResult(const BuildNodePlan& plan,
+                                       const std::filesystem::path& outputRoot)
     {
-        std::size_t byteCount = 0u;
+        std::uintmax_t byteCount = 0u;
         for (const Pipeline::ContentBuildManifestOutput& output : plan.manifest.outputs)
         {
             const auto staged = plan.stagedOutputs.find(output.logicalName);
@@ -771,17 +1564,47 @@ namespace
             PublishBytes(plan.manifest, output.logicalName, bytes, outputRoot);
             byteCount += bytes.size();
         }
+        for (const Pipeline::ContentBuildManifestDeploymentFile& deployment :
+             plan.manifest.deploymentFiles)
+        {
+            const auto staged = plan.stagedDeploymentFiles.find(deployment.path);
+            if (staged == plan.stagedDeploymentFiles.end())
+            {
+                throw std::logic_error("prepared deployment output '" + deployment.path +
+                                       "' has no staged file.");
+            }
+            if (std::filesystem::file_size(staged->second.path) !=
+                    staged->second.byteCount ||
+                Pipeline::ContentFileSha256(staged->second.path) != deployment.sha256)
+            {
+                throw std::runtime_error("staged deployment output '" + deployment.path +
+                                         "' failed its content digest check.");
+            }
+            const std::filesystem::path destination =
+                outputRoot / CNA::Internal::ContentPathFromUtf8(deployment.path);
+            if (destination.has_parent_path())
+            {
+                std::filesystem::create_directories(destination.parent_path());
+            }
+            CNA::Tools::CopyFileAtomically(staged->second.path, destination);
+            byteCount += staged->second.byteCount;
+        }
         return byteCount;
     }
 
     std::string BuildStatusLine(const BuildItem& item,
                                 const Pipeline::ContentBuildManifestEntry& manifest,
-                                std::size_t outputBytes)
+                                std::uintmax_t outputBytes)
     {
         std::ostringstream status;
         status << "[BUILD] " << item.logicalName << " -> "
                << CNA::Internal::ContentPathToUtf8(item.output) << " ("
-               << manifest.outputs.size() << " output(s), " << outputBytes << " bytes; "
+               << manifest.outputs.size() << " output(s)";
+        if (!manifest.deploymentFiles.empty())
+        {
+            status << ", " << manifest.deploymentFiles.size() << " deployment file(s)";
+        }
+        status << ", " << outputBytes << " bytes; "
                << manifest.importer.name << " -> " << manifest.processor.name << " -> "
                << manifest.writer.name << ")";
         return status.str();
@@ -791,7 +1614,9 @@ namespace
         const BuildItem& item, std::size_t index, const Pipeline::ContentPipeline& pipeline,
         const Pipeline::ContentPipelineRegistry& registry,
         const Pipeline::ContentBuildManifest& previousManifest,
+        ManifestLoadState manifestState,
         const std::filesystem::path& sourceRoot, const std::filesystem::path& outputRoot,
+        const Pipeline::ContentSourceRootCapabilities& externalSourceRoots,
         const std::filesystem::path& stagingRoot)
     {
         BuildNodePlan plan;
@@ -800,8 +1625,11 @@ namespace
         {
             const Pipeline::ContentBuildManifestEntry* previous =
                 previousManifest.Find(item.logicalName);
+            const Pipeline::ContentBuildManifestEntry* previousForReason =
+                FindPreviousEntryForReason(previousManifest, item);
             if (previous != nullptr &&
-                IsPreviousGraphCurrent(*previous, registry, item, sourceRoot, outputRoot))
+                IsPreviousGraphCurrent(*previous, registry, item, sourceRoot, outputRoot,
+                                       externalSourceRoots))
             {
                 plan.manifest = *previous;
                 plan.hasManifest = true;
@@ -811,6 +1639,7 @@ namespace
             Pipeline::ContentBuildRequest request;
             request.sourceRoot = sourceRoot;
             request.source = item.source;
+            request.externalSourceRoots = externalSourceRoots;
             request.logicalName = item.logicalName;
             request.importer = item.importer;
             request.processor = item.processor;
@@ -819,9 +1648,11 @@ namespace
             Pipeline::ContentBuildResult result = pipeline.Build(request);
 
             plan.manifest = Pipeline::MakeContentBuildManifestEntry(
-                result, sourceRoot, outputRoot, item.output);
-            plan.manifest.directFingerprint =
-                Pipeline::ComputeContentBuildDirectFingerprint(plan.manifest, sourceRoot);
+                result, sourceRoot, outputRoot, item.output, externalSourceRoots);
+            Pipeline::RefreshContentBuildDirectFingerprint(
+                plan.manifest, sourceRoot, externalSourceRoots);
+            plan.decision =
+                InitialBuildDecision(manifestState, previousForReason, plan.manifest);
             const std::filesystem::path nodeStage = stagingRoot / std::to_string(index);
             try
             {
@@ -837,6 +1668,25 @@ namespace
                     CNA::Tools::WriteFileAtomically(staged, bytes);
                     plan.stagedOutputs.emplace(output.logicalName,
                                                StagedOutput{staged, bytes.size()});
+                }
+                for (std::size_t deploymentIndex = 0u;
+                     deploymentIndex < plan.manifest.deploymentFiles.size(); ++deploymentIndex)
+                {
+                    const Pipeline::ContentBuildManifestDeploymentFile& deployment =
+                        plan.manifest.deploymentFiles[deploymentIndex];
+                    const Pipeline::ContentDeploymentFile& source =
+                        DeploymentFile(result, deployment);
+                    const std::filesystem::path staged =
+                        nodeStage / (std::to_string(deploymentIndex) + ".support");
+                    CNA::Tools::CopyFileAtomically(source.source, staged);
+                    if (Pipeline::ContentFileSha256(staged) != deployment.sha256)
+                    {
+                        throw std::runtime_error("deployment source for '" + deployment.path +
+                                                 "' changed while it was staged.");
+                    }
+                    plan.stagedDeploymentFiles.emplace(
+                        deployment.path,
+                        StagedOutput{staged, std::filesystem::file_size(staged)});
                 }
             }
             catch (const std::exception& error)
@@ -858,21 +1708,27 @@ namespace
     BuildNodeOutcome ExecuteBuildNode(
         const BuildNodePlan& plan, const Pipeline::ContentPipeline& pipeline,
         const std::filesystem::path& sourceRoot, const std::filesystem::path& outputRoot,
+        const Pipeline::ContentSourceRootCapabilities& externalSourceRoots,
         const std::map<std::string, std::string>& effectiveFingerprints)
     {
         BuildNodeOutcome outcome;
         const BuildItem& item = *plan.item;
+        outcome.decision = plan.decision;
         try
         {
             if (plan.prepared)
             {
                 outcome.manifest = plan.manifest;
-                outcome.manifest.fingerprint =
-                    Pipeline::ComputeContentBuildEffectiveFingerprint(
-                        outcome.manifest, effectiveFingerprints);
+                Pipeline::RefreshContentBuildEffectiveFingerprint(
+                    outcome.manifest, effectiveFingerprints);
+                if (outcome.decision.reasons.empty())
+                {
+                    outcome.decision.reasons.push_back(
+                        {ContentBuildReasonCode::DirectFingerprintChanged, {}});
+                }
                 try
                 {
-                    const std::size_t outputBytes = PublishStagedResult(plan, outputRoot);
+                    const std::uintmax_t outputBytes = PublishStagedResult(plan, outputRoot);
                     outcome.statusLine = BuildStatusLine(item, outcome.manifest, outputBytes);
                 }
                 catch (const std::exception& error)
@@ -885,11 +1741,15 @@ namespace
                 return outcome;
             }
 
-            if (CanSkipEffective(plan.manifest, outputRoot, effectiveFingerprints))
+            outcome.decision = AssessEffectiveBuildState(
+                plan.manifest, outputRoot, effectiveFingerprints);
+            if (outcome.decision.reasons.empty())
             {
                 outcome.manifest = plan.manifest;
                 outcome.success = true;
                 outcome.skipped = true;
+                outcome.decision.reasons.push_back(
+                    {ContentBuildReasonCode::FingerprintUnchanged, {}});
                 outcome.statusLine = "[SKIP] " + item.logicalName + " -> " +
                                      CNA::Internal::ContentPathToUtf8(item.output);
                 return outcome;
@@ -898,6 +1758,7 @@ namespace
             Pipeline::ContentBuildRequest request;
             request.sourceRoot = sourceRoot;
             request.source = item.source;
+            request.externalSourceRoots = externalSourceRoots;
             request.logicalName = item.logicalName;
             request.importer = item.importer;
             request.processor = item.processor;
@@ -905,9 +1766,9 @@ namespace
             request.parameters = item.parameters;
             Pipeline::ContentBuildResult result = pipeline.Build(request);
             outcome.manifest = Pipeline::MakeContentBuildManifestEntry(
-                result, sourceRoot, outputRoot, item.output);
-            outcome.manifest.directFingerprint =
-                Pipeline::ComputeContentBuildDirectFingerprint(outcome.manifest, sourceRoot);
+                result, sourceRoot, outputRoot, item.output, externalSourceRoots);
+            Pipeline::RefreshContentBuildDirectFingerprint(
+                outcome.manifest, sourceRoot, externalSourceRoots);
             if (outcome.manifest.directFingerprint != plan.manifest.directFingerprint ||
                 ContentBuildDependencies(outcome.manifest) !=
                     ContentBuildDependencies(plan.manifest))
@@ -918,9 +1779,8 @@ namespace
                     "a component changed the frozen build topology without a changed direct "
                     "fingerprint.");
             }
-            outcome.manifest.fingerprint =
-                Pipeline::ComputeContentBuildEffectiveFingerprint(
-                    outcome.manifest, effectiveFingerprints);
+            Pipeline::RefreshContentBuildEffectiveFingerprint(
+                outcome.manifest, effectiveFingerprints);
             try
             {
                 PublishResult(result, outcome.manifest, outputRoot);
@@ -931,10 +1791,14 @@ namespace
                     item.source, item.logicalName, Pipeline::ContentPipelineStage::Publish,
                     "CNA.AtomicPublisher", error.what());
             }
-            const std::size_t outputBytes = std::accumulate(
+            std::uintmax_t outputBytes = std::accumulate(
                 outcome.manifest.outputs.begin(), outcome.manifest.outputs.end(),
-                std::size_t{0u}, [&](std::size_t total, const auto& output)
+                std::uintmax_t{0u}, [&](std::uintmax_t total, const auto& output)
                 { return total + OutputBytes(result, output).size(); });
+            for (const Pipeline::ContentDeploymentFile& deployment : result.deploymentFiles)
+            {
+                outputBytes += std::filesystem::file_size(deployment.source);
+            }
             outcome.statusLine = BuildStatusLine(item, outcome.manifest, outputBytes);
             outcome.success = true;
         }
@@ -959,9 +1823,11 @@ namespace
             PrintUsage();
             return 2;
         }
+        if (command.operation == ContentCommand::Clean) { return RunClean(command); }
 
         std::filesystem::path sourceRoot;
         std::filesystem::path outputRoot;
+        Pipeline::ContentSourceRootCapabilities externalSourceRoots;
         bool directoryBuild = false;
         std::vector<BuildItem> builds;
         try
@@ -969,6 +1835,9 @@ namespace
             builds = DiscoverBuilds(command, *registry, sourceRoot, outputRoot, directoryBuild);
             const Pipeline::ContentBuildConfiguration configuration =
                 LoadConfiguration(command, sourceRoot);
+            externalSourceRoots = Pipeline::ResolveContentSourceRootCapabilities(
+                sourceRoot, configuration.SourceRoots());
+            RequireExternalRootsSeparateFromOutput(outputRoot, externalSourceRoots);
             ApplyConfiguration(builds, configuration, *registry, sourceRoot, outputRoot,
                                directoryBuild);
             std::sort(builds.begin(), builds.end(), [](const BuildItem& left,
@@ -986,9 +1855,21 @@ namespace
         const Pipeline::ContentPipeline pipeline(registry);
         const std::filesystem::path manifestPath =
             outputRoot / Pipeline::ContentBuildManifestFileName;
-        std::string originalManifest;
-        const Pipeline::ContentBuildManifest previousManifest =
-            LoadManifest(manifestPath, originalManifest, command.quiet);
+        CNA::Tools::ContentStagingDetail::LeaseHandle outputLease;
+        try
+        {
+            AcquireOutputLease(outputRoot, outputLease);
+        }
+        catch (const std::exception& error)
+        {
+            std::cerr << "content output lease failed: " << error.what() << "\n";
+            return 1;
+        }
+        const LoadedManifest loadedManifest = LoadManifest(manifestPath, command.quiet);
+        const Pipeline::ContentBuildManifest& previousManifest = loadedManifest.manifest;
+        const std::string& originalManifest = loadedManifest.original;
+        const bool previousOwnershipTrusted =
+            loadedManifest.state == ManifestLoadState::Current;
         Pipeline::ContentBuildManifest nextManifest = previousManifest;
         if (directoryBuild) { nextManifest.Clear(); }
 
@@ -1000,15 +1881,30 @@ namespace
         std::map<std::string, std::size_t> plansByNode;
         for (const BuildItem& item : builds)
         {
-            logicalOwners.emplace(item.logicalName, item.relativeSource);
+            logicalOwners.emplace(item.logicalName, item.logicalName);
             pathOwners.emplace(CNA::Internal::ContentPathToUtf8(WeaklyCanonical(item.output)),
-                               item.relativeSource);
+                               item.logicalName);
         }
 
-        std::unique_ptr<ContentBuildStagingDirectory> staging;
+        std::unique_ptr<CNA::Tools::ContentBuildStagingDirectory> staging;
         try
         {
-            staging = std::make_unique<ContentBuildStagingDirectory>();
+            staging = std::make_unique<CNA::Tools::ContentBuildStagingDirectory>();
+            if (!command.quiet)
+            {
+                const CNA::Tools::ContentStagingScavengeResult& scavenged =
+                    staging->ScavengeResult();
+                if (scavenged.removedDirectories > 0u)
+                {
+                    std::cerr << "[CLEAN] removed " << scavenged.removedDirectories
+                              << " abandoned content staging director"
+                              << (scavenged.removedDirectories == 1u ? "y" : "ies") << ".\n";
+                }
+                for (const std::string& diagnostic : scavenged.diagnostics)
+                {
+                    std::cerr << "warning: content staging scavenger: " << diagnostic << "\n";
+                }
+            }
         }
         catch (const std::exception& error)
         {
@@ -1025,8 +1921,9 @@ namespace
                 if (command.workers == 1u)
                 {
                     plans[offset] = PrepareBuildNode(
-                        builds[offset], offset, pipeline, *registry, previousManifest, sourceRoot,
-                        outputRoot, staging->Path());
+                        builds[offset], offset, pipeline, *registry, previousManifest,
+                        loadedManifest.state, sourceRoot, outputRoot, externalSourceRoots,
+                        staging->Path());
                     continue;
                 }
 
@@ -1040,7 +1937,8 @@ namespace
                         {
                             return PrepareBuildNode(
                                 builds[index], index, pipeline, *registry, previousManifest,
-                                sourceRoot, outputRoot, staging->Path());
+                                loadedManifest.state, sourceRoot, outputRoot,
+                                externalSourceRoots, staging->Path());
                         }));
                 }
                 for (std::size_t index = offset; index < end; ++index)
@@ -1058,11 +1956,31 @@ namespace
         for (std::size_t index = 0u; index < plans.size(); ++index)
         {
             plansByNode.emplace(plans[index].item->logicalName, index);
+        }
+        for (std::size_t index = 0u; index < plans.size(); ++index)
+        {
             if (!plans[index].failure.empty() || !plans[index].hasManifest) { continue; }
             try
             {
-                ReserveOutputs(plans[index].manifest, plans[index].item->relativeSource,
+                ReserveOutputs(plans[index].manifest, plans[index].item->logicalName,
                                outputRoot, logicalOwners, pathOwners);
+            }
+            catch (const OutputReservationConflict& error)
+            {
+                plans[index].failure = Pipeline::ContentPipelineError(
+                    plans[index].item->source, plans[index].item->logicalName,
+                    Pipeline::ContentPipelineStage::Graph, "CNA.ContentBuildGraph",
+                    error.what()).what();
+                const auto existing = plansByNode.find(error.ExistingOwner());
+                if (existing != plansByNode.end() &&
+                    plans[existing->second].failure.empty())
+                {
+                    BuildNodePlan& conflicting = plans[existing->second];
+                    conflicting.failure = Pipeline::ContentPipelineError(
+                        conflicting.item->source, conflicting.item->logicalName,
+                        Pipeline::ContentPipelineStage::Graph, "CNA.ContentBuildGraph",
+                        error.what()).what();
+                }
             }
             catch (const std::exception& error)
             {
@@ -1098,49 +2016,68 @@ namespace
         };
         std::map<std::string, VisitState> visitStates;
         std::vector<std::string> activeNodes;
+        std::map<std::string, std::size_t> activePositions;
         std::map<std::string, std::string> cycleFailures;
-        std::function<void(const std::string&)> visit;
-        visit = [&](const std::string& nodeId)
+        struct VisitFrame
         {
-            BuildNodePlan& plan = plans[plansByNode.at(nodeId)];
-            if (!plan.failure.empty() || !plan.hasManifest) { return; }
-            VisitState& state = visitStates[nodeId];
-            if (state == VisitState::Done) { return; }
-            state = VisitState::Visiting;
+            std::string nodeId;
+            std::vector<std::string> dependencies;
+            std::size_t nextDependency = 0u;
+        };
+        std::vector<VisitFrame> visitStack;
+        const auto pushVisit = [&](const std::string& nodeId)
+        {
+            visitStates[nodeId] = VisitState::Visiting;
+            activePositions.emplace(nodeId, activeNodes.size());
             activeNodes.push_back(nodeId);
-            for (const std::string& dependency : ContentBuildDependencies(plan.manifest))
+            visitStack.push_back(
+                {nodeId, ContentBuildDependencies(plans[plansByNode.at(nodeId)].manifest)});
+        };
+        for (const BuildNodePlan& rootPlan : plans)
+        {
+            const std::string& rootId = rootPlan.item->logicalName;
+            if (visitStates[rootId] != VisitState::Unvisited || !rootPlan.failure.empty() ||
+                !rootPlan.hasManifest)
             {
+                continue;
+            }
+            pushVisit(rootId);
+            while (!visitStack.empty())
+            {
+                VisitFrame& frame = visitStack.back();
+                if (frame.nextDependency == frame.dependencies.size())
+                {
+                    activePositions.erase(frame.nodeId);
+                    activeNodes.pop_back();
+                    visitStates[frame.nodeId] = VisitState::Done;
+                    visitStack.pop_back();
+                    continue;
+                }
+
+                const std::string dependency =
+                    frame.dependencies[frame.nextDependency++];
                 BuildNodePlan& dependencyPlan = plans[plansByNode.at(dependency)];
                 if (!dependencyPlan.failure.empty() || !dependencyPlan.hasManifest) { continue; }
                 if (visitStates[dependency] == VisitState::Visiting)
                 {
-                    const auto cycleStart =
-                        std::find(activeNodes.begin(), activeNodes.end(), dependency);
+                    const std::size_t cycleStart = activePositions.at(dependency);
                     std::ostringstream reason;
                     reason << "content-build dependency cycle:";
-                    for (auto node = cycleStart; node != activeNodes.end(); ++node)
+                    for (std::size_t node = cycleStart; node < activeNodes.size(); ++node)
                     {
-                        reason << "\n  " << (node == cycleStart ? "" : "-> ") << *node;
+                        reason << "\n  " << (node == cycleStart ? "" : "-> ")
+                               << activeNodes[node];
                     }
                     reason << "\n  -> " << dependency;
                     const std::string message =
                         ContentBuildCycleError(*dependencyPlan.item, reason.str()).what();
-                    for (auto node = cycleStart; node != activeNodes.end(); ++node)
+                    for (std::size_t node = cycleStart; node < activeNodes.size(); ++node)
                     {
-                        cycleFailures.try_emplace(*node, message);
+                        cycleFailures.try_emplace(activeNodes[node], message);
                     }
                     continue;
                 }
-                if (visitStates[dependency] == VisitState::Unvisited) { visit(dependency); }
-            }
-            activeNodes.pop_back();
-            state = VisitState::Done;
-        };
-        for (const BuildNodePlan& plan : plans)
-        {
-            if (visitStates[plan.item->logicalName] == VisitState::Unvisited)
-            {
-                visit(plan.item->logicalName);
+                if (visitStates[dependency] == VisitState::Unvisited) { pushVisit(dependency); }
             }
         }
         for (const auto& [nodeId, message] : cycleFailures)
@@ -1251,7 +2188,7 @@ namespace
             {
                 outcomes.push_back(ExecuteBuildNode(
                     plans[ready.front()], pipeline, sourceRoot, outputRoot,
-                    effectiveFingerprints));
+                    externalSourceRoots, effectiveFingerprints));
             }
             else
             {
@@ -1267,7 +2204,7 @@ namespace
                             {
                                 return ExecuteBuildNode(
                                     plans[index], pipeline, sourceRoot, outputRoot,
-                                    effectiveFingerprints);
+                                    externalSourceRoots, effectiveFingerprints);
                             }));
                     }
                     for (std::future<BuildNodeOutcome>& future : futures)
@@ -1307,6 +2244,11 @@ namespace
                     effectiveFingerprints.insert_or_assign(nodeId,
                                                            outcome.manifest.fingerprint);
                     nextManifest.Set(std::move(outcome.manifest));
+                    if (command.explain)
+                    {
+                        outcome.statusLine = FormatExplainedStatus(
+                            outcome.statusLine, std::move(outcome.decision));
+                    }
                     events.push_back({false, std::move(outcome.statusLine)});
                     if (outcome.skipped) { ++skipped; }
                     else { ++built; }
@@ -1328,6 +2270,25 @@ namespace
             else if (!command.quiet)
             {
                 std::cout << event.text << "\n";
+            }
+        }
+
+        if (failed == 0u)
+        {
+            if (previousOwnershipTrusted)
+            {
+                try
+                {
+                    static_cast<void>(CollectObsoleteOwnedOutputs(
+                        previousManifest, nextManifest, outputRoot, command.quiet,
+                        "obsolete manifest-owned output"));
+                }
+                catch (const std::exception& error)
+                {
+                    ++failed;
+                    std::cerr << "obsolete owned-output collection failed: " << error.what()
+                              << "\n";
+                }
             }
         }
 
@@ -1370,6 +2331,7 @@ namespace CNA::Content::Pipeline
         RegisterVideoContentPipeline(registry);
         RegisterModelContentPipeline(registry);
         RegisterCnjContentPipeline(registry);
+        RegisterXnbContentPipeline(registry);
     }
 
     int RunContentCompiler(const std::vector<std::filesystem::path>& arguments,

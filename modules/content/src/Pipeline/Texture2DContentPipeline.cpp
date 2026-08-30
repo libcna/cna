@@ -5,6 +5,7 @@
 #include <array>
 #include <charconv>
 #include <fstream>
+#include <iterator>
 #include <limits>
 #include <optional>
 #include <stdexcept>
@@ -146,6 +147,28 @@ namespace CNA::Content::Pipeline
         return imported;
     }
 
+    Cnb::CnbTextureData BuildCnbTexture2DData(ImportedImage image)
+    {
+        std::vector<std::vector<std::uint8_t>> levels;
+        levels.reserve(1u + image.additionalRgbaMipLevels.size());
+        levels.push_back(std::move(image.rgbaPixels));
+        levels.insert(levels.end(),
+                      std::make_move_iterator(image.additionalRgbaMipLevels.begin()),
+                      std::make_move_iterator(image.additionalRgbaMipLevels.end()));
+
+        Cnb::CnbTextureData texture;
+        texture.width = image.width;
+        texture.height = image.height;
+        texture.depth = 1u;
+        texture.faceCount = 1u;
+        texture.mipCount = static_cast<std::uint32_t>(levels.size());
+        Cnb::CnbTextureRepresentation representation;
+        representation.format = Cnb::CnbTextureFormat::Rgba8;
+        representation.levels = std::move(levels);
+        texture.representations.push_back(std::move(representation));
+        return texture;
+    }
+
     ContentComponentIdentity TextureProcessor::Identity() const
     {
         return {kTextureProcessorName, "1"};
@@ -179,32 +202,46 @@ namespace CNA::Content::Pipeline
     ContentValue TextureProcessor::Process(const ContentValue& input,
                                            ContentProcessorContext& context) const
     {
-        const ImportedImage& image = input.Get<ImportedImage>();
-        std::vector<std::uint8_t> pixels = image.rgbaPixels;
+        ImportedImage image = input.Get<ImportedImage>();
         std::optional<std::array<std::uint8_t, 3>> colorKey =
             ReadColorKey(context.Parameters());
         if (!colorKey.has_value()) { colorKey = image.authoredColorKey; }
         if (colorKey.has_value())
         {
-            for (std::size_t index = 0u; index + 3u < pixels.size(); index += 4u)
+            const auto applyColorKey = [&](std::vector<std::uint8_t>& pixels)
             {
-                if (pixels[index] == (*colorKey)[0] && pixels[index + 1u] == (*colorKey)[1] &&
-                    pixels[index + 2u] == (*colorKey)[2])
+                for (std::size_t index = 0u; index + 3u < pixels.size(); index += 4u)
                 {
-                    pixels[index + 3u] = 0u;
+                    if (pixels[index] == (*colorKey)[0] &&
+                        pixels[index + 1u] == (*colorKey)[1] &&
+                        pixels[index + 2u] == (*colorKey)[2])
+                    {
+                        pixels[index + 3u] = 0u;
+                    }
                 }
+            };
+            applyColorKey(image.rgbaPixels);
+            for (std::vector<std::uint8_t>& pixels : image.additionalRgbaMipLevels)
+            {
+                applyColorKey(pixels);
             }
         }
-
-        Cnb::CnbTextureData texture =
-            Cnb::MakeRgba8Texture2DData(image.width, image.height, std::move(pixels));
-        context.LogInfo("prepared Texture2D Rgba8 level 0 for CNB encoding.");
-        return ContentValue::Create(ProcessedTexture2DType, std::move(texture));
+        context.LogInfo("prepared Texture2D Rgba8 mip data for CNB encoding.");
+        return ContentValue::Create(ProcessedTexture2DType,
+                                    BuildCnbTexture2DData(std::move(image)));
     }
 
     ContentComponentIdentity Texture2DContentWriter::Identity() const
     {
         return {kTextureWriterName, "1"};
+    }
+
+    std::vector<ContentWriterSchemaIdentity>
+    Texture2DContentWriter::OutputSchemaIdentities() const
+    {
+        return {{Cnb::CnbAssetTypeId::Texture2D, Cnb::CnbTextureSchemaVersion,
+                 "Microsoft.Xna.Framework.Graphics.Texture2D",
+                 {"CNA.Cnb.EncodeTexture2DToCnb", "1"}}};
     }
 
     std::string Texture2DContentWriter::InputType() const
@@ -218,7 +255,8 @@ namespace CNA::Content::Pipeline
         const Cnb::CnbTextureData& texture = input.Get<Cnb::CnbTextureData>();
         return {Cnb::EncodeTexture2DToCnb(texture, logicalName),
                 Cnb::CnbAssetTypeId::Texture2D,
-                "Microsoft.Xna.Framework.Graphics.Texture2D"};
+                "Microsoft.Xna.Framework.Graphics.Texture2D",
+                Cnb::CnbTextureSchemaVersion};
     }
 
     void RegisterTexture2DContentPipeline(ContentPipelineRegistry& registry)

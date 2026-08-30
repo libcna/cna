@@ -201,6 +201,21 @@ TEST_F(ContentManagerTexture2DXnbTest, LoadRealLzxCompressedFixtureEndToEnd)
     EXPECT_TRUE(sawNonUniform);
 }
 
+TEST_F(ContentManagerTexture2DXnbTest, LoadMonoGameLz4CompressedFixtureEndToEnd)
+{
+    ContentManager cm(nullptr, "tests/assets/xnb/monogame/windows/lz4");
+    cm.setGraphicsDevice(gd);
+
+    Texture2D texture = cm.Load<Texture2D>("white-1");
+
+    EXPECT_EQ(texture.getWidthProperty(), 1);
+    EXPECT_EQ(texture.getHeightProperty(), 1);
+    EXPECT_EQ(texture.getFormatProperty(), SurfaceFormat::Color);
+    Color pixel(0, 0, 0, 0);
+    texture.GetData(&pixel, 1);
+    EXPECT_EQ(pixel, Color(0xFF, 0xFF, 0xFF, 0xFF));
+}
+
 TEST_F(ContentManagerTexture2DXnbTest, LoadCachesTheXnbTextureLikeAnyOtherTexture)
 {
     ScratchContentRoot root;

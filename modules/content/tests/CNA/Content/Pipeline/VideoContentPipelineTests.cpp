@@ -136,7 +136,7 @@ TEST(VideoContentPipelineTest, ComponentsDeclareStableUnambiguousRoutes)
 {
     const Pipeline::VideoImporter importer;
     EXPECT_EQ(importer.Identity(),
-              (Pipeline::ContentComponentIdentity{"CNA.VideoImporter", "1"}));
+              (Pipeline::ContentComponentIdentity{"CNA.VideoImporter", "2"}));
     EXPECT_EQ(importer.OutputTypes(),
               std::vector<std::string>{Pipeline::ImportedVideoSourceType});
     const std::vector<std::string> extensions = importer.SourceExtensions();
@@ -145,7 +145,7 @@ TEST(VideoContentPipelineTest, ComponentsDeclareStableUnambiguousRoutes)
 
     const Pipeline::VideoProcessor processor;
     EXPECT_EQ(processor.Identity(),
-              (Pipeline::ContentComponentIdentity{"CNA.VideoProcessor", "1"}));
+              (Pipeline::ContentComponentIdentity{"CNA.VideoProcessor", "2"}));
     EXPECT_EQ(processor.InputType(), Pipeline::ImportedVideoSourceType);
     EXPECT_EQ(processor.OutputType(), Pipeline::ProcessedVideoType);
 
@@ -165,9 +165,9 @@ TEST(VideoContentPipelineTest, IsDeterministicAndByteIdenticalToExistingProducer
     const Pipeline::ContentBuildResult second = BuildVideo(scratch.Path());
     EXPECT_EQ(first.output.bytes, second.output.bytes);
     EXPECT_EQ(first.importer,
-              (Pipeline::ContentComponentIdentity{"CNA.VideoImporter", "1"}));
+              (Pipeline::ContentComponentIdentity{"CNA.VideoImporter", "2"}));
     EXPECT_EQ(first.processor,
-              (Pipeline::ContentComponentIdentity{"CNA.VideoProcessor", "1"}));
+              (Pipeline::ContentComponentIdentity{"CNA.VideoProcessor", "2"}));
     EXPECT_EQ(first.writer,
               (Pipeline::ContentComponentIdentity{"CNA.VideoContentWriter", "1"}));
     EXPECT_EQ(first.output.assetTypeId, Cnb::CnbAssetTypeId::Video);
@@ -177,6 +177,10 @@ TEST(VideoContentPipelineTest, IsDeterministicAndByteIdenticalToExistingProducer
     ASSERT_EQ(first.runtimeReferences.size(), 1u);
     EXPECT_EQ(first.runtimeReferences.front().logicalName, "Movies/intro.mp4");
     EXPECT_EQ(first.runtimeReferences.front().expectedAssetTypeId, 0u);
+    ASSERT_EQ(first.deploymentFiles.size(), 1u);
+    EXPECT_EQ(first.deploymentFiles.front().source,
+              std::filesystem::weakly_canonical(media));
+    EXPECT_EQ(first.deploymentFiles.front().outputPath, "Movies/intro.mp4");
 
     Cnb::CnbVideoData expected;
     expected.streamReference = "Movies/intro.mp4";

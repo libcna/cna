@@ -66,6 +66,10 @@ namespace
         entry.importer = {"test.Importer", "1"};
         entry.processor = {"test.Processor", "2"};
         entry.writer = {"test.Writer", "3"};
+        entry.writerSchemas = {
+            {42u, 1u, "Test.Asset", {"test.AssetCodec", "7"}},
+            {43u, 2u, "Test.AssetIndex", {"test.AssetIndexCodec", "8"}},
+        };
         entry.parameters.Set("bool", true);
         entry.parameters.Set("f64", 1.25);
         entry.parameters.Set("i64", std::int64_t{-7});
@@ -77,13 +81,18 @@ namespace
         };
         entry.runtimeReferences = {{"Textures/reference", 1u}};
         entry.outputs = {
-            {"Data/asset", "Data/asset.cnb", 42u, Pipeline::ContentSha256({7u, 8u, 9u})},
-            {"Generated/asset-index", "Generated/asset-index.cnb", 43u,
+            {"Data/asset", "Data/asset.cnb", 42u, 1u, "Test.Asset",
+             Pipeline::ContentSha256({7u, 8u, 9u})},
+            {"Generated/asset-index", "Generated/asset-index.cnb", 43u, 2u,
+             "Test.AssetIndex",
              Pipeline::ContentSha256({10u, 11u})},
         };
-        entry.directFingerprint =
-            Pipeline::ComputeContentBuildDirectFingerprint(entry, sourceRoot);
-        entry.fingerprint = Pipeline::ComputeContentBuildEffectiveFingerprint(entry);
+        entry.deploymentFiles = {
+            {{}, "shared/table.bin", "Support/table.bin",
+             Pipeline::ContentFileSha256(sourceRoot / "shared" / "table.bin")},
+        };
+        Pipeline::RefreshContentBuildDirectFingerprint(entry, sourceRoot);
+        Pipeline::RefreshContentBuildEffectiveFingerprint(entry);
         return entry;
     }
 } // namespace
@@ -161,18 +170,70 @@ TEST(ContentBuildManifestTest, RoundTripsEveryStableFieldDeterministically)
     EXPECT_NE(first.find("source-file"), std::string::npos);
     EXPECT_NE(first.find("runtimeReferences"), std::string::npos);
     EXPECT_NE(first.find("Generated/asset-index.cnb"), std::string::npos);
-    EXPECT_NE(first.find("\"version\":3"), std::string::npos);
+    EXPECT_NE(first.find("Support/table.bin"), std::string::npos);
+    EXPECT_NE(first.find("\"version\":8"), std::string::npos);
+    EXPECT_NE(first.find("fingerprintState"), std::string::npos);
+    EXPECT_NE(first.find("contentDependencyFingerprints"), std::string::npos);
+    EXPECT_NE(first.find("writerSchemas"), std::string::npos);
+    EXPECT_NE(first.find("test.AssetCodec"), std::string::npos);
 }
 
 TEST(ContentBuildManifestTest, EarlierVersionsAreRejectedSoTheCliCanRebuildSafely)
 {
-    for (const std::uint32_t version : {1u, 2u})
+    for (const std::uint32_t version : {1u, 2u, 3u, 4u, 5u, 6u, 7u})
     {
         EXPECT_THROW((void)Pipeline::ContentBuildManifest::Parse(
                          "{\"format\":\"CNA.ContentPipeline.Manifest\",\"version\":" +
                          std::to_string(version) + ",\"assets\":[]}"),
                      std::runtime_error);
     }
+}
+
+TEST(ContentBuildManifestTest, ExternalRootsPersistAliasRelativeIdentityWithoutPhysicalPaths)
+{
+    ScratchDirectory scratch("external_root_identity");
+    const std::filesystem::path sourceRoot = scratch.Path() / "Source";
+    const std::filesystem::path sharedRoot = scratch.Path() / "Shared";
+    std::filesystem::create_directories(sourceRoot);
+    WriteBytes(sharedRoot / "data" / "external.bin", {9u, 8u, 7u});
+    Pipeline::ContentBuildManifestEntry entry = MakeEntry(sourceRoot);
+    entry.dependencies.push_back(
+        {Pipeline::ContentDependencyKind::SourceFile, "data/external.bin", "shared"});
+    entry.deploymentFiles.push_back(
+        {"shared", "data/external.bin", "Support/external.bin",
+         Pipeline::ContentFileSha256(sharedRoot / "data" / "external.bin")});
+
+    Pipeline::ContentSourceRootCapabilities configured;
+    configured.Add("shared", sharedRoot);
+    const Pipeline::ContentSourceRootCapabilities roots =
+        Pipeline::ResolveContentSourceRootCapabilities(sourceRoot, configured);
+    Pipeline::RefreshContentBuildDirectFingerprint(entry, sourceRoot, roots);
+    Pipeline::RefreshContentBuildEffectiveFingerprint(entry);
+    Pipeline::ContentBuildManifest manifest;
+    manifest.Set(entry);
+    entry = *manifest.Find("Data/asset");
+    const std::string json = manifest.Serialize();
+    EXPECT_NE(json.find("\"sourceRoot\":\"shared\""), std::string::npos);
+    EXPECT_EQ(json.find(CNA::Internal::ContentPathToUtf8(sharedRoot)), std::string::npos)
+        << "physical external root leaked into manifest";
+
+    const Pipeline::ContentBuildManifest parsed =
+        Pipeline::ContentBuildManifest::Parse(json);
+    ASSERT_NE(parsed.Find("Data/asset"), nullptr);
+    EXPECT_EQ(*parsed.Find("Data/asset"), entry);
+
+    Pipeline::ContentSourceRootCapabilities unavailable;
+    EXPECT_THROW((void)Pipeline::ComputeContentBuildDirectFingerprint(
+                     entry, sourceRoot, unavailable),
+                 std::runtime_error);
+
+    Pipeline::ContentBuildManifestEntry malformed = entry;
+    malformed.dependencies.back().sourceRoot = "Bad";
+    EXPECT_THROW(manifest.Set(malformed), std::invalid_argument);
+
+    malformed = entry;
+    malformed.deploymentFiles.back().sourceRoot = "other";
+    EXPECT_THROW(manifest.Set(malformed), std::invalid_argument);
 }
 
 TEST(ContentBuildManifestTest, FingerprintUsesBytesNotModificationTimes)
@@ -219,6 +280,21 @@ TEST(ContentBuildManifestTest, FingerprintInvalidatesEveryDeclaredBuildIdentity)
               original.fingerprint);
 
     changed = original;
+    changed.writerSchemas.front().assetSchemaVersion = 2u;
+    EXPECT_NE(Pipeline::ComputeContentBuildFingerprint(changed, scratch.Path()),
+              original.fingerprint);
+
+    changed = original;
+    changed.writerSchemas.front().codec.version = "8";
+    EXPECT_NE(Pipeline::ComputeContentBuildFingerprint(changed, scratch.Path()),
+              original.fingerprint);
+
+    changed = original;
+    changed.writerSchemas.front().assetTypeName = "Test.RenamedAsset";
+    EXPECT_NE(Pipeline::ComputeContentBuildFingerprint(changed, scratch.Path()),
+              original.fingerprint);
+
+    changed = original;
     changed.parameters.Set("u64", std::uint64_t{10u});
     EXPECT_NE(Pipeline::ComputeContentBuildFingerprint(changed, scratch.Path()),
               original.fingerprint);
@@ -229,9 +305,113 @@ TEST(ContentBuildManifestTest, FingerprintInvalidatesEveryDeclaredBuildIdentity)
               original.fingerprint);
 
     changed = original;
+    changed.outputs.front().assetSchemaVersion = 2u;
+    EXPECT_NE(Pipeline::ComputeContentBuildFingerprint(changed, scratch.Path()),
+              original.fingerprint);
+
+    changed = original;
+    changed.outputs.front().assetTypeName = "Test.RenamedAsset";
+    EXPECT_NE(Pipeline::ComputeContentBuildFingerprint(changed, scratch.Path()),
+              original.fingerprint);
+
+    changed = original;
     changed.outputs.back().logicalName = "Generated/renamed-index";
     EXPECT_NE(Pipeline::ComputeContentBuildFingerprint(changed, scratch.Path()),
               original.fingerprint);
+
+    changed = original;
+    changed.deploymentFiles.front().path = "Support/renamed.bin";
+    EXPECT_NE(Pipeline::ComputeContentBuildFingerprint(changed, scratch.Path()),
+              original.fingerprint);
+
+    changed = original;
+    changed.deploymentFiles.front().source = "asset.bin";
+    EXPECT_NE(Pipeline::ComputeContentBuildFingerprint(changed, scratch.Path()),
+              original.fingerprint);
+}
+
+TEST(ContentBuildManifestTest, FingerprintStateSeparatesStableRebuildReasonDomains)
+{
+    ScratchDirectory scratch("reason_domains");
+    const Pipeline::ContentBuildManifestEntry original = MakeEntry(scratch.Path());
+
+    Pipeline::ContentBuildManifestEntry changed = original;
+    WriteBytes(scratch.Path() / "asset.bin", {1u, 2u, 4u});
+    Pipeline::RefreshContentBuildDirectFingerprint(changed, scratch.Path());
+    EXPECT_NE(changed.fingerprintState.primarySourceBytes,
+              original.fingerprintState.primarySourceBytes);
+    EXPECT_EQ(changed.fingerprintState.sourceDependencySet,
+              original.fingerprintState.sourceDependencySet);
+    EXPECT_EQ(changed.fingerprintState.sourceDependencyBytes,
+              original.fingerprintState.sourceDependencyBytes);
+
+    WriteBytes(scratch.Path() / "asset.bin", {1u, 2u, 3u});
+    changed = original;
+    WriteBytes(scratch.Path() / "shared" / "table.bin", {4u, 5u, 7u});
+    Pipeline::RefreshContentBuildDirectFingerprint(changed, scratch.Path());
+    EXPECT_EQ(changed.fingerprintState.sourceDependencySet,
+              original.fingerprintState.sourceDependencySet);
+    EXPECT_NE(changed.fingerprintState.sourceDependencyBytes,
+              original.fingerprintState.sourceDependencyBytes);
+
+    WriteBytes(scratch.Path() / "shared" / "table.bin", {4u, 5u, 6u});
+    WriteBytes(scratch.Path() / "generated.bin", {8u});
+    changed = original;
+    changed.dependencies.push_back(
+        {Pipeline::ContentDependencyKind::Generated, "generated.bin"});
+    Pipeline::RefreshContentBuildDirectFingerprint(changed, scratch.Path());
+    EXPECT_NE(changed.fingerprintState.sourceDependencySet,
+              original.fingerprintState.sourceDependencySet);
+    EXPECT_NE(changed.fingerprintState.sourceDependencyBytes,
+              original.fingerprintState.sourceDependencyBytes);
+
+    changed = original;
+    changed.parameters.Set("u64", std::uint64_t{10u});
+    Pipeline::RefreshContentBuildDirectFingerprint(changed, scratch.Path());
+    EXPECT_NE(changed.fingerprintState.processorParameters,
+              original.fingerprintState.processorParameters);
+
+    changed = original;
+    changed.writerSchemas.front().codec.version = "9";
+    Pipeline::RefreshContentBuildDirectFingerprint(changed, scratch.Path());
+    EXPECT_NE(changed.fingerprintState.writerSchemas,
+              original.fingerprintState.writerSchemas);
+
+    changed = original;
+    changed.outputs.back().path = "Generated/renamed-index.cnb";
+    Pipeline::RefreshContentBuildDirectFingerprint(changed, scratch.Path());
+    EXPECT_NE(changed.fingerprintState.outputDefinitions,
+              original.fingerprintState.outputDefinitions);
+
+    changed = original;
+    changed.runtimeReferences.push_back({"Textures/second", 1u});
+    Pipeline::RefreshContentBuildDirectFingerprint(changed, scratch.Path());
+    EXPECT_NE(changed.fingerprintState.outputDefinitions,
+              original.fingerprintState.outputDefinitions);
+
+    changed = original;
+    changed.deploymentFiles.front().path = "Support/renamed.bin";
+    Pipeline::RefreshContentBuildDirectFingerprint(changed, scratch.Path());
+    EXPECT_NE(changed.fingerprintState.deploymentDefinitions,
+              original.fingerprintState.deploymentDefinitions);
+
+    changed = original;
+    changed.dependencies.push_back(
+        {Pipeline::ContentDependencyKind::ContentBuild, "Shared/material"});
+    Pipeline::RefreshContentBuildDirectFingerprint(changed, scratch.Path());
+    EXPECT_NE(changed.fingerprintState.contentDependencySet,
+              original.fingerprintState.contentDependencySet);
+    const std::string direct = changed.directFingerprint;
+    Pipeline::RefreshContentBuildEffectiveFingerprint(
+        changed, {{"Shared/material", std::string(64u, '1')}});
+    const std::string firstDomain =
+        changed.fingerprintState.contentDependencyFingerprints;
+    const std::string firstEffective = changed.fingerprint;
+    Pipeline::RefreshContentBuildEffectiveFingerprint(
+        changed, {{"Shared/material", std::string(64u, '2')}});
+    EXPECT_EQ(changed.directFingerprint, direct);
+    EXPECT_NE(changed.fingerprintState.contentDependencyFingerprints, firstDomain);
+    EXPECT_NE(changed.fingerprint, firstEffective);
 }
 
 TEST(ContentBuildManifestTest, ContentBuildDependencyRequiresAndUsesAnEffectiveFingerprint)
@@ -240,8 +420,7 @@ TEST(ContentBuildManifestTest, ContentBuildDependencyRequiresAndUsesAnEffectiveF
     Pipeline::ContentBuildManifestEntry entry = MakeEntry(scratch.Path());
     entry.dependencies.push_back(
         {Pipeline::ContentDependencyKind::ContentBuild, "Shared/material"});
-    entry.directFingerprint =
-        Pipeline::ComputeContentBuildDirectFingerprint(entry, scratch.Path());
+    Pipeline::RefreshContentBuildDirectFingerprint(entry, scratch.Path());
 
     EXPECT_THROW((void)Pipeline::ComputeContentBuildEffectiveFingerprint(entry),
                  std::runtime_error);
@@ -287,6 +466,22 @@ TEST(ContentBuildManifestTest, RejectsMissingDuplicateAndEscapingOutputOwnership
     EXPECT_THROW(manifest.Set(entry), std::invalid_argument);
 
     entry = MakeEntry(scratch.Path());
+    entry.writerSchemas.clear();
+    EXPECT_THROW(manifest.Set(entry), std::invalid_argument);
+
+    entry = MakeEntry(scratch.Path());
+    entry.writerSchemas.push_back(entry.writerSchemas.front());
+    EXPECT_THROW(manifest.Set(entry), std::invalid_argument);
+
+    entry = MakeEntry(scratch.Path());
+    entry.outputs.front().assetSchemaVersion = 3u;
+    EXPECT_THROW(manifest.Set(entry), std::invalid_argument);
+
+    entry = MakeEntry(scratch.Path());
+    entry.outputs.front().assetTypeName = "Test.Undeclared";
+    EXPECT_THROW(manifest.Set(entry), std::invalid_argument);
+
+    entry = MakeEntry(scratch.Path());
     entry.outputs.back().logicalName = entry.outputs.front().logicalName;
     EXPECT_THROW(manifest.Set(entry), std::invalid_argument);
 
@@ -300,5 +495,30 @@ TEST(ContentBuildManifestTest, RejectsMissingDuplicateAndEscapingOutputOwnership
 
     entry = MakeEntry(scratch.Path());
     entry.outputs.resize(Pipeline::MaxContentBuildOutputs + 1u, entry.outputs.front());
+    EXPECT_THROW(manifest.Set(entry), std::invalid_argument);
+
+    entry = MakeEntry(scratch.Path());
+    entry.deploymentFiles.front().path = entry.outputs.front().path;
+    EXPECT_THROW(manifest.Set(entry), std::invalid_argument);
+
+    entry = MakeEntry(scratch.Path());
+    entry.deploymentFiles.front().path = "../escape.bin";
+    EXPECT_THROW(manifest.Set(entry), std::invalid_argument);
+
+    entry = MakeEntry(scratch.Path());
+    entry.deploymentFiles.front().source = "../escape.bin";
+    EXPECT_THROW(manifest.Set(entry), std::invalid_argument);
+
+    entry = MakeEntry(scratch.Path());
+    entry.deploymentFiles.front().sha256 = "bad";
+    EXPECT_THROW(manifest.Set(entry), std::invalid_argument);
+
+    entry = MakeEntry(scratch.Path());
+    entry.deploymentFiles.front().source = "untracked.bin";
+    EXPECT_THROW(manifest.Set(entry), std::invalid_argument);
+
+    entry = MakeEntry(scratch.Path());
+    entry.deploymentFiles.resize(Pipeline::MaxContentDeploymentFiles + 1u,
+                                 entry.deploymentFiles.front());
     EXPECT_THROW(manifest.Set(entry), std::invalid_argument);
 }

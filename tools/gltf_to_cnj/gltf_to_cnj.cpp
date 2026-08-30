@@ -47,6 +47,7 @@
 #include <iostream>
 #include <optional>
 #include <limits>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -940,6 +941,7 @@ namespace
 
         struct ClipEntry { std::string name, cnjFile; };
         std::vector<ClipEntry> clipEntries;
+        std::set<std::string> clipFiles;
 
         // One writer for both clip kinds (plans/plan_gltf.md GLTF-294). The joint-palette and scene-node
         // paths differ only in which index space the tracks are in, and that difference is a field
@@ -975,6 +977,12 @@ namespace
             json << "  ]\n}\n";
 
             const std::string cnjFile = outName + "_" + SanitizeForFilename(clip.name) + ".cnj";
+            if (!clipFiles.insert(cnjFile).second)
+            {
+                throw std::runtime_error(
+                    "Animation names in glTF Model group '" + outName +
+                    "' collide after filename sanitization on '" + cnjFile + "'.");
+            }
             WriteTextFile(Utf8Child(outputDir, cnjFile), json.str());
             documents.push_back(Utf8Child(outputDir, cnjFile));
             return cnjFile;
@@ -1435,6 +1443,7 @@ namespace
         std::unordered_map<const cgltf_image*, std::string> writtenTextures;
         std::unordered_map<const cgltf_image*, std::string> remappedOcclusionTextures;
 
+        std::set<std::string> groupOutputNames;
         for (std::size_t g = 0; g < groups.size(); ++g)
         {
             std::string outName = opts.baseName;
@@ -1447,6 +1456,12 @@ namespace
                                                              : ("skin" + std::to_string(g)));
                 }
             }
+            if (!groupOutputNames.insert(outName).second)
+            {
+                throw std::runtime_error(
+                    "glTF mesh groups collide after skin-name filename sanitization on Model '" +
+                    outName + "'. Rename the colliding skins.");
+            }
             ConvertGroup(data, sceneGraph, groups[g], outName, gltfDir, opts.outputDir, writtenTextures,
                          remappedOcclusionTextures, opts.unitScale, validationWarnings, warnings,
                          converted.documents, opts.emitMessages);
@@ -1455,6 +1470,20 @@ namespace
         converted.documents.erase(
             std::unique(converted.documents.begin(), converted.documents.end()),
             converted.documents.end());
+        for (const auto& [image, file] : writtenTextures)
+        {
+            static_cast<void>(image);
+            converted.generatedTextures.push_back(Utf8Child(opts.outputDir, file));
+        }
+        for (const auto& [image, file] : remappedOcclusionTextures)
+        {
+            static_cast<void>(image);
+            converted.generatedTextures.push_back(Utf8Child(opts.outputDir, file));
+        }
+        std::sort(converted.generatedTextures.begin(), converted.generatedTextures.end());
+        converted.generatedTextures.erase(
+            std::unique(converted.generatedTextures.begin(), converted.generatedTextures.end()),
+            converted.generatedTextures.end());
 
         if (opts.emitMessages && groups.size() > 1)
         {

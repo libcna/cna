@@ -11,10 +11,16 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "CNA/Internal/Xnb/XnbReadLimits.hpp"
+#include "CNA/Internal/Xnb/XnbTypeReaderTable.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
 #include "System/IDisposable.hpp"
 #include "System/IO/BinaryReader.hpp"
+
+namespace CNA::Internal::Xnb
+{
+    class XnbCanonicalReaderAccess;
+}
 
 namespace Microsoft::Xna::Framework
 {
@@ -375,6 +381,21 @@ namespace Microsoft::Xna::Framework::Content
         CNAEXT [[nodiscard]] std::vector<uint8_t> ReadBytesExactOrThrow(int32_t count, const std::string& readerName);
 
     private:
+        /** @cond */
+        friend class CNA::Internal::Xnb::XnbCanonicalReaderAccess;
+        /** @endcond */
+
+        void InitializeCanonicalTypeReadersEXT();
+        [[nodiscard]] const CNA::Internal::Xnb::XnbTypeReaderTableEntry*
+            ReadOptionalCanonicalTypeReaderReferenceEXT();
+        [[nodiscard]] const CNA::Internal::Xnb::XnbTypeReaderTableEntry&
+            ReadCanonicalTypeReaderReferenceEXT();
+        [[nodiscard]] std::size_t getCanonicalTypeReaderCountEXT() const;
+        [[nodiscard]] int32_t getSharedResourceCountEXT() const noexcept
+        {
+            return sharedResourceCount_;
+        }
+
         /**
          * @brief Type-erased counterpart of InnerReadObject<T>(), used only by
          *        ReadSharedResources() to read each shared resource without knowing its static
@@ -495,6 +516,7 @@ namespace Microsoft::Xna::Framework::Content
         CNA::Internal::Xnb::XnbReadLimits limits_;
 
         std::vector<std::unique_ptr<ContentTypeReaderBase>> typeReaders_;
+        std::vector<CNA::Internal::Xnb::XnbTypeReaderTableEntry> typeReaderTable_;
         int32_t sharedResourceCount_ = 0;
         std::vector<std::any> sharedResources_;
         std::vector<std::vector<std::function<void(const std::any&)>>> sharedResourceFixups_;

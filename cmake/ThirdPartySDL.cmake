@@ -440,6 +440,7 @@ function(_cna_build_sdl_dep)
     message(STATUS "CNA: Building ${_A_NAME} (one-time step)...")
     execute_process(
         COMMAND ${CMAKE_COMMAND} --build "${_A_BUILDDIR}"
+            --config Release
             --parallel "${CNA_MAX_VENDORED_BUILD_JOBS}"
         RESULT_VARIABLE _rc
     )
@@ -449,7 +450,7 @@ function(_cna_build_sdl_dep)
 
     message(STATUS "CNA: Installing ${_A_NAME}...")
     execute_process(
-        COMMAND ${CMAKE_COMMAND} --install "${_A_BUILDDIR}"
+        COMMAND ${CMAKE_COMMAND} --install "${_A_BUILDDIR}" --config Release
         RESULT_VARIABLE _rc
     )
     if(_rc)

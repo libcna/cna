@@ -128,7 +128,7 @@ TEST(SongContentPipelineTest, ComponentsDeclareStableUnambiguousRoutes)
 {
     const Pipeline::SongImporter importer;
     EXPECT_EQ(importer.Identity(),
-              (Pipeline::ContentComponentIdentity{"CNA.SongImporter", "1"}));
+              (Pipeline::ContentComponentIdentity{"CNA.SongImporter", "2"}));
     EXPECT_EQ(importer.OutputTypes(),
               std::vector<std::string>{Pipeline::ImportedSongSourceType});
     const std::vector<std::string> extensions = importer.SourceExtensions();
@@ -137,7 +137,7 @@ TEST(SongContentPipelineTest, ComponentsDeclareStableUnambiguousRoutes)
 
     const Pipeline::SongProcessor processor;
     EXPECT_EQ(processor.Identity(),
-              (Pipeline::ContentComponentIdentity{"CNA.SongProcessor", "1"}));
+              (Pipeline::ContentComponentIdentity{"CNA.SongProcessor", "2"}));
     EXPECT_EQ(processor.InputType(), Pipeline::ImportedSongSourceType);
     EXPECT_EQ(processor.OutputType(), Pipeline::ProcessedSongType);
 
@@ -157,9 +157,9 @@ TEST(SongContentPipelineTest, IsDeterministicAndByteIdenticalToExistingProducers
     const Pipeline::ContentBuildResult second = BuildSong(scratch.Path());
     EXPECT_EQ(first.output.bytes, second.output.bytes);
     EXPECT_EQ(first.importer,
-              (Pipeline::ContentComponentIdentity{"CNA.SongImporter", "1"}));
+              (Pipeline::ContentComponentIdentity{"CNA.SongImporter", "2"}));
     EXPECT_EQ(first.processor,
-              (Pipeline::ContentComponentIdentity{"CNA.SongProcessor", "1"}));
+              (Pipeline::ContentComponentIdentity{"CNA.SongProcessor", "2"}));
     EXPECT_EQ(first.writer,
               (Pipeline::ContentComponentIdentity{"CNA.SongContentWriter", "1"}));
     EXPECT_EQ(first.output.assetTypeId, Cnb::CnbAssetTypeId::Song);
@@ -169,6 +169,10 @@ TEST(SongContentPipelineTest, IsDeterministicAndByteIdenticalToExistingProducers
     ASSERT_EQ(first.runtimeReferences.size(), 1u);
     EXPECT_EQ(first.runtimeReferences.front().logicalName, "Music/theme.ogg");
     EXPECT_EQ(first.runtimeReferences.front().expectedAssetTypeId, 0u);
+    ASSERT_EQ(first.deploymentFiles.size(), 1u);
+    EXPECT_EQ(first.deploymentFiles.front().source,
+              std::filesystem::weakly_canonical(media));
+    EXPECT_EQ(first.deploymentFiles.front().outputPath, "Music/theme.ogg");
 
     Cnb::CnbSongData expected;
     expected.streamReference = "Music/theme.ogg";

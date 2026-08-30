@@ -212,12 +212,11 @@ TEST_F(ContentManagerXnbTest, MalformedXnbHeaderThrowsContentLoadException)
     EXPECT_THROW(cm.Load<TestValue>("fixture"), ContentLoadException);
 }
 
-TEST_F(ContentManagerXnbTest, Lz4CompressedXnbThrowsContentLoadException)
+TEST_F(ContentManagerXnbTest, TruncatedLz4ContainerThrowsContentLoadException)
 {
-    // plans/plan_xnb.md XNB-27/XNB-30C: CNA recognizes MonoGame's Lz4 compression flag but has no Lz4
-    // decoder yet -- must fail with a clear, specific error, not silently misdecode via LZX.
     ScratchContentRoot root;
-    WriteBytes(root.path() / "fixture.xnb", {'X', 'N', 'B', 'w', 5, 0x40, 0, 0, 0, 0});
+    WriteBytes(root.path() / "fixture.xnb",
+               {'X', 'N', 'B', 'w', 5, 0x40, 10, 0, 0, 0});
 
     ContentManager cm(nullptr, root.path().string());
 

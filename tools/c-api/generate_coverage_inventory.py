@@ -682,6 +682,16 @@ SYMBOL_OWNER_OVERRIDES: dict[str, str] = {
     # The two CBIND-088B skybox entries that stood here expired when CBIND-091B bound Skybox and
     # the pipeline pair that carries it, and the four CBIND-087C image-based-light entries expired
     # when CBIND-091A bound ImageBasedLightEXT.
+    # CBIND-120, 2026-08-30. The current `next` merges added these public CNAEXT queries after the
+    # graphics binding slice had closed. Recording them as new binding work does not authorize
+    # growing the C ABI during Content Pipeline integration.
+    "Microsoft::Xna::Framework::Graphics::Texture::IsFormatAllowedByProfileEXT": "CBIND-120",
+    "Microsoft::Xna::Framework::Graphics::Texture::IsCubeFormatAllowedByProfileEXT": "CBIND-120",
+    "Microsoft::Xna::Framework::Graphics::Texture::IsRenderTargetFormatAllowedByProfileEXT": "CBIND-120",
+    # CBIND-121, 2026-08-30. SAMPLE-052 added this reflective shared-resource declaration after
+    # the reflective reader binding slice had closed. Integration records the one-row C-ABI
+    # design decision without inventing a C route or folding it into a completed task.
+    "Microsoft::Xna::Framework::Content::ReflectiveTypeReaderBuilder::SharedResourceField": "CBIND-121",
 }
 
 
@@ -776,6 +786,11 @@ B11_SLICE_OWNERS: dict[str, str] = {
 # task instead of handing them back to the completed CBIND-036/CBIND-111 slices.
 B12_SLICE_OWNERS: dict[str, str] = {
     "content/CnbSourceImport": "CBIND-117",
+    # CP-058's separately versioned Model schema-2 CPU carrier and codec are public experimental
+    # C++ content-format surfaces. Adding them to the stable C ABI is not implied by freezing their
+    # wire format; any C-native representation belongs to the still-open pipeline/CNB boundary.
+    "content/CnbModelV2Data": "CBIND-117",
+    "content/CnbModelV2Codec": "CBIND-117",
     # CP-021 adds a native-filesystem overload for the C++ build pipeline. The existing narrow
     # overload remains mapped by CBIND-109; designing any distinct C path representation belongs
     # to the still-open experimental pipeline boundary task rather than reopening that closed

@@ -13,6 +13,9 @@ namespace CNA::Tools::Gltf
         /** @brief CNJ documents produced in deterministic order. */
         std::vector<std::filesystem::path> documents;
 
+        /** @brief Extracted or derived texture images produced in deterministic order. */
+        std::vector<std::filesystem::path> generatedTextures;
+
         /** @brief External buffer and image files read from the source glTF. */
         std::vector<std::filesystem::path> sourceDependencies;
 
@@ -35,7 +38,7 @@ namespace CNA::Tools::Gltf
      * @param baseName   Stem for the produced files.
      * @param unitScale  Uniform multiplier applied to positions and bone translations.
      * @param emitMessages Whether to write legacy progress/warning lines to standard output.
-     * @return Produced documents, source dependencies and warnings.
+     * @return Produced documents, generated textures, source dependencies and warnings.
      * @throws std::exception on any conversion failure; the message is caller-facing.
      */
     GltfToCnjResult ConvertGltfToCnj(const std::filesystem::path& inputPath,

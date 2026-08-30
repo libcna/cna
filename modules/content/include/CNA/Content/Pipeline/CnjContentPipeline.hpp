@@ -66,6 +66,9 @@ namespace CNA::Content::Pipeline
 
         /** @brief One tightly packed Rgba8 mip level. */
         std::vector<std::uint8_t> rgbaPixels;
+
+        /** @brief Optional additional tightly packed Rgba8 mip levels. */
+        std::vector<std::vector<std::uint8_t>> additionalRgbaMipLevels;
     };
 
     /** @brief DDS cube-map source decoded by CNA's existing shared DDS importer. */
@@ -217,6 +220,12 @@ namespace CNA::Content::Pipeline
          */
         [[nodiscard]] ContentComponentIdentity Identity() const override;
         /**
+         * @brief Returns the frozen Texture3D schema and encoder identity.
+         * @return One stable Texture3D asset/schema/codec declaration.
+         */
+        [[nodiscard]] std::vector<ContentWriterSchemaIdentity>
+        OutputSchemaIdentities() const override;
+        /**
          * @brief Returns the accepted processed type.
          * @return ProcessedTexture3DType.
          */
@@ -274,6 +283,12 @@ namespace CNA::Content::Pipeline
          * @return `CNA.TextureCubeContentWriter/1`.
          */
         [[nodiscard]] ContentComponentIdentity Identity() const override;
+        /**
+         * @brief Returns the frozen TextureCube schema and encoder identity.
+         * @return One stable TextureCube asset/schema/codec declaration.
+         */
+        [[nodiscard]] std::vector<ContentWriterSchemaIdentity>
+        OutputSchemaIdentities() const override;
         /**
          * @brief Returns the accepted processed type.
          * @return ProcessedTextureCubeType.
@@ -333,6 +348,12 @@ namespace CNA::Content::Pipeline
          */
         [[nodiscard]] ContentComponentIdentity Identity() const override;
         /**
+         * @brief Returns the frozen Curve schema and encoder identity.
+         * @return One stable Curve asset/schema/codec declaration.
+         */
+        [[nodiscard]] std::vector<ContentWriterSchemaIdentity>
+        OutputSchemaIdentities() const override;
+        /**
          * @brief Returns the accepted processed type.
          * @return ProcessedCurveType.
          */
@@ -390,6 +411,12 @@ namespace CNA::Content::Pipeline
          * @return `CNA.AnimationClipContentWriter/1`.
          */
         [[nodiscard]] ContentComponentIdentity Identity() const override;
+        /**
+         * @brief Returns the frozen AnimationClip schema and encoder identity.
+         * @return One stable AnimationClip asset/schema/codec declaration.
+         */
+        [[nodiscard]] std::vector<ContentWriterSchemaIdentity>
+        OutputSchemaIdentities() const override;
         /**
          * @brief Returns the accepted processed type.
          * @return ProcessedAnimationClipType.
@@ -454,6 +481,13 @@ namespace CNA::Content::Pipeline
          * @return `CNA.SpriteFontContentWriter/1`.
          */
         [[nodiscard]] ContentComponentIdentity Identity() const override;
+
+        /**
+         * @brief Returns the frozen SpriteFont schema and encoder identity.
+         * @return One stable SpriteFont asset/schema/codec declaration.
+         */
+        [[nodiscard]] std::vector<ContentWriterSchemaIdentity>
+        OutputSchemaIdentities() const override;
 
         /**
          * @brief Returns the accepted processed type.

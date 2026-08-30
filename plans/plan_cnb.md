@@ -1112,7 +1112,25 @@ Two things it does not do:
 
 Deliberately out of `Model` schema 1, and correctly so: material variants and the glTF import
 report. The report is authoring/debug information a runtime asset does not need. Variants belong
-in a future **`Model` schema 2**, never in a container change.
+in a separately justified future **Model schema revision**, never in a container change; the
+now-frozen schema 2 described below intentionally does not add them.
+
+> **2026-08-30 schema-2 completion (`CP-058`):** the bounded second Model schema is now a frozen
+> CNB definition. `docs/cnb-format.md` §11.2–11.5 is normative. It uses separate declaration,
+> buffer and stock-effect resource tables, exact part windows/bounds/root identity, null-only tags
+> and typed XREFs. The production CPU codec, schema-version runtime dispatch, rebuilt-checksum
+> malformed corpus, and independent 1,468-byte Python vector all pass; the vector SHA-256 is
+> `6a9dc3f5363ae82a93ba8e01fee1059802ac1325d5fd76565ccddb09d928ad78`.
+> Model schema 1, its codec, existing routes, and every previous golden byte remain unchanged.
+>
+> **2026-08-30 XNB producer completion (`CP-059`):** the headless XNB Model route now attempts the
+> unchanged schema-1 converter first and selects schema 2 only when the source fails that exact
+> fidelity boundary and passes the complete schema-2 validator. The new path preserves all XNA
+> declaration formats/usages, shared/unused supported resources, windows, authored bounds/root,
+> all five stock effects, and typed texture references. Runtime XNB versus native-CNB fixtures
+> compare the meaningful graph, bytes, sharing, window, bound, transform, and material semantics.
+> Null tags remain the only policy; custom effects and malformed/unsafe graphs are rejected.
+> Existing schema-1-compatible XNB, CNJ, and glTF producer bytes remain unchanged.
 
 ### 15.4 The order to build in, and why it differs from `misc/cnb.md`
 

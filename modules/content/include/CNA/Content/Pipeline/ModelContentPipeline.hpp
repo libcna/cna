@@ -3,22 +3,36 @@
 
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
+#include <variant>
 #include <vector>
 
+#include "CNA/Content/Cnb/CnbModelData.hpp"
+#include "CNA/Content/Cnb/CnbModelV2Data.hpp"
+#include "CNA/Content/Cnb/CnbTextureCodec.hpp"
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
 
 namespace CNA::Content::Pipeline
 {
+    /** @brief Canonical Model carrier selected between frozen schemas 1 and 2. */
+    using CanonicalModelValue =
+        std::variant<CNA::Content::Cnb::CnbModelData,
+                     CNA::Content::Cnb::CnbModelV2Data>;
+
     /** @brief Stable in-memory type identity for an imported glTF model document. */
     inline constexpr const char* ImportedModelDocumentType =
         "CNA.Content.Pipeline.ImportedModelDocument";
 
-    /** @brief Stable in-memory type identity for processed Model CNB data. */
-    inline constexpr const char* ProcessedModelType = "CNA.Content.Cnb.ModelData";
+    /** @brief Stable in-memory type identity for a processed Model and optional child bundle. */
+    inline constexpr const char* ProcessedModelType =
+        "CNA.Content.Pipeline.ProcessedModelBundle";
+
+    /** @brief Boolean ModelProcessor option enabling generated glTF child CNB outputs. */
+    inline constexpr const char* ModelGenerateChildAssetsParameter = "generateChildAssets";
 
     /**
-     * @brief Source-oriented glTF import represented by the existing canonical CNJ staging form.
+     * @brief Source-oriented Model import represented by canonical CPU data or CNJ staging.
      *
      * This is an explicit migration seam over CNA's equivalence-hardened glTF interpretation,
      * not a second glTF representation. The opaque owner keeps the temporary document and all
@@ -27,8 +41,20 @@ namespace CNA::Content::Pipeline
      */
     struct ImportedModelDocument
     {
-        /** @brief Generated canonical Model CNJ document. */
+        /** @brief Primary canonical Model CNJ document. */
         std::filesystem::path document;
+
+        /** @brief Additional generated canonical Model CNJ documents in deterministic order. */
+        std::vector<std::filesystem::path> additionalModelDocuments;
+
+        /** @brief Generated standalone AnimationClip CNJ documents in deterministic order. */
+        std::vector<std::filesystem::path> animationDocuments;
+
+        /** @brief Extracted or derived texture images in deterministic order. */
+        std::vector<std::filesystem::path> generatedTextureFiles;
+
+        /** @brief Source stem prefix used to derive safe generated logical child names. */
+        std::string generatedBaseName;
 
         /** @brief Contained root for the generated CNJ sidecars. */
         std::filesystem::path intermediateRoot;
@@ -38,6 +64,35 @@ namespace CNA::Content::Pipeline
 
         /** @brief Whether processor-read authored sidecars must be recorded as source inputs. */
         bool recordAuthoredSidecars = false;
+
+        /** @brief Canonical CPU Model supplied directly by XNB import, bypassing CNJ staging. */
+        std::optional<CanonicalModelValue> canonicalModel;
+    };
+
+    /** @brief Canonical value carried by one generated glTF child output. */
+    using ProcessedModelChildValue =
+        std::variant<CNA::Content::Cnb::CnbTextureData,
+                     CNA::Content::Cnb::CnbModelData,
+                     Microsoft::Xna::Framework::Graphics::AnimationClipEXT>;
+
+    /** @brief One explicitly named generated glTF child in runtime-oriented form. */
+    struct ProcessedModelChild
+    {
+        /** @brief Complete logical ContentManager name for the child CNB. */
+        std::string logicalName;
+
+        /** @brief Canonical Texture2D, Model, or AnimationClip value for an existing encoder. */
+        ProcessedModelChildValue value;
+    };
+
+    /** @brief Primary Model plus optional deterministic generated child assets. */
+    struct ProcessedModelBundle
+    {
+        /** @brief Primary canonical Model value with its selected schema carrier. */
+        CanonicalModelValue primary;
+
+        /** @brief Generated child values sorted by logical name. */
+        std::vector<ProcessedModelChild> children;
     };
 
     /** @brief Headless glTF importer backed by CNA's single shared glTF interpretation. */
@@ -65,7 +120,7 @@ namespace CNA::Content::Pipeline
         [[nodiscard]] ContentValue Import(ContentImporterContext& context) const override;
     };
 
-    /** @brief Converts an imported canonical model document into CnbModelData. */
+    /** @brief Converts canonical Model documents into a primary Model and optional child bundle. */
     class ModelProcessor final : public ContentProcessor
     {
     public:
@@ -79,7 +134,7 @@ namespace CNA::Content::Pipeline
         [[nodiscard]] std::string OutputType() const override;
 
         /**
-         * @brief Rejects every parameter because the initial glTF policy preserves legacy defaults.
+         * @brief Validates the optional boolean generated-child policy.
          *
          * @param parameters Parameters to validate.
          */
@@ -90,28 +145,35 @@ namespace CNA::Content::Pipeline
          *
          * @param input ImportedModelDocument value.
          * @param context Call-scoped processor context.
-         * @return Canonical CnbModelData boxed as ProcessedModelType.
+         * @return Canonical ProcessedModelBundle boxed as ProcessedModelType.
          */
         [[nodiscard]] ContentValue Process(const ContentValue& input,
                                            ContentProcessorContext& context) const override;
     };
 
-    /** @brief Pipeline writer adapter over the authoritative Model CNB codec. */
+    /** @brief Writer adapter over authoritative Model and optional child CNB codecs. */
     class ModelContentWriter final : public ContentTypeWriter
     {
     public:
         /** @brief Returns the stable built-in writer identity. */
         [[nodiscard]] ContentComponentIdentity Identity() const override;
 
+        /**
+         * @brief Returns every frozen schema/encoder identity this bundle writer can emit.
+         * @return Sorted Texture2D, Model, and AnimationClip declarations.
+         */
+        [[nodiscard]] std::vector<ContentWriterSchemaIdentity>
+        OutputSchemaIdentities() const override;
+
         /** @brief Returns ProcessedModelType. */
         [[nodiscard]] std::string InputType() const override;
 
         /**
-         * @brief Calls the existing EncodeModelToCnb() implementation.
+         * @brief Calls the existing typed encoders for the primary Model and each child.
          *
          * @param input Canonical CnbModelData value.
          * @param logicalName Logical asset name written to CNB metadata.
-         * @return Complete CNB bytes and the frozen Model asset identity.
+         * @return Complete primary Model bytes and any explicitly named generated children.
          */
         [[nodiscard]] ContentWriteResult Write(const ContentValue& input,
                                                const std::string& logicalName) const override;

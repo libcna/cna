@@ -2,11 +2,12 @@
 #include "CNA/Content/ObjectDictionaryEXT.hpp"
 
 #include <any>
+#include <cstring>
 #include <map>
 
 #include "CNA/Internal/Xnb/ModelContentTypeReaders.hpp"
-
-#include <limits>
+#include "CNA/Internal/Xnb/XnbCanonicalData.hpp"
+#include "XnbModelGraphReader.hpp"
 
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
@@ -31,9 +32,6 @@ namespace CNA::Internal::Xnb
     using Microsoft::Xna::Framework::Graphics::ModelBone;
     using Microsoft::Xna::Framework::Graphics::ModelMesh;
     using Microsoft::Xna::Framework::Graphics::ModelMeshPart;
-    using Microsoft::Xna::Framework::Graphics::VertexElement;
-    using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
-    using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
     namespace
     {
@@ -46,19 +44,6 @@ namespace CNA::Internal::Xnb
                     ": no GraphicsDevice available (ContentManager was not set on this ContentReader).");
             }
             return input.getContentManagerProperty()->getGraphicsDeviceInternal();
-        }
-
-        // FNA's ModelReader.ReadBoneReference: the bone ID is encoded as an 8-bit value when the
-        // model has fewer than 255 bones, else a full 32-bit value; 0 means "no bone", so a real
-        // reference is stored 1-based.
-        int32_t ReadBoneReference(ContentReader& input, uint32_t boneCount)
-        {
-            const uint32_t boneId = boneCount < 255 ? input.ReadByte() : input.ReadUInt32();
-            if (boneId != 0)
-            {
-                return static_cast<int32_t>(boneId - 1);
-            }
-            return -1;
         }
 
         ModelBone* RequireBone(const std::vector<ModelBone*>& bones, int32_t index, const char* context)
@@ -85,7 +70,7 @@ namespace CNA::Internal::Xnb
             std::vector<std::shared_ptr<System::Object>> tagOwners;
         };
 
-        System::Object* ReadTag(
+        System::Object* ReadRuntimeTag(
             ContentReader& input, const char* fieldContext, ModelReaderOwnedResources& resources)
         {
             std::any value = input.ReadObject();
@@ -124,79 +109,198 @@ namespace CNA::Internal::Xnb
             resources.tagOwners.push_back(std::move(owner));
             return tag;
         }
+
+        class RuntimeModelSink
+        {
+        public:
+            RuntimeModelSink(GraphicsDevice& device,
+                             std::shared_ptr<ModelReaderOwnedResources> resources)
+                : device_(device), resources_(std::move(resources)) {}
+
+            [[nodiscard]] std::string ReadString(ContentReader& input) const
+            {
+                return input.ReadObject<std::string>();
+            }
+
+            void BeginBones(const std::uint32_t count)
+            {
+                boneRawPtrs_.reserve(count);
+            }
+
+            void AddBone(const std::uint32_t index, std::string name, const Matrix& transform)
+            {
+                auto bone = std::make_unique<ModelBone>(static_cast<int>(index), std::move(name));
+                bone->setTransformProperty(transform);
+                boneRawPtrs_.push_back(bone.get());
+                resources_->boneOwners.push_back(std::move(bone));
+            }
+
+            void BeginBoneLinks(const std::uint32_t /*bone*/, const std::int32_t /*parent*/,
+                                const std::uint32_t /*childCount*/) {}
+
+            void AddBoneChild(const std::uint32_t bone, const std::int32_t child)
+            {
+                if (child != -1)
+                {
+                    boneRawPtrs_.at(bone)->AddChild(
+                        RequireBone(boneRawPtrs_, child, "child"));
+                }
+            }
+
+            void EndBoneLinks(const std::uint32_t /*bone*/) {}
+
+            void BeginMeshes(const std::uint32_t count)
+            {
+                meshRawPtrs_.reserve(count);
+                meshParentBones_.reserve(count);
+            }
+
+            void BeginMesh(const std::uint32_t /*index*/, std::string name,
+                           const std::int32_t parentBone, const BoundingSphere& bounds)
+            {
+                currentMeshName_ = std::move(name);
+                currentMeshParent_ = parentBone;
+                currentMeshBounds_ = bounds;
+                currentMeshTag_ = nullptr;
+                currentPartPtrs_.clear();
+            }
+
+            void ReadTag(ContentReader& input, const XnbModelTagKind kind)
+            {
+                System::Object* tag = ReadRuntimeTag(
+                    input, kind == XnbModelTagKind::Mesh
+                               ? "mesh"
+                               : kind == XnbModelTagKind::MeshPart ? "mesh part" : "model",
+                    *resources_);
+                if (kind == XnbModelTagKind::Mesh) { currentMeshTag_ = tag; }
+                else if (kind == XnbModelTagKind::MeshPart) { currentPart_->setTagProperty(tag); }
+                else { modelTag_ = tag; }
+            }
+
+            void BeginMeshParts(const std::uint32_t count)
+            {
+                currentPartPtrs_.reserve(count);
+            }
+
+            void BeginMeshPart(const std::uint32_t /*index*/, const std::int32_t vertexOffset,
+                               const std::int32_t vertexCount, const std::int32_t startIndex,
+                               const std::int32_t primitiveCount)
+            {
+                auto part = std::make_unique<ModelMeshPart>();
+                currentPart_ = part.get();
+                currentPart_->SetVertexOffset(vertexOffset);
+                currentPart_->SetNumVertices(vertexCount);
+                currentPart_->SetStartIndex(startIndex);
+                currentPart_->SetPrimitiveCount(primitiveCount);
+                currentPartPtrs_.push_back(currentPart_);
+                resources_->partOwners.push_back(std::move(part));
+            }
+
+            void ReadSharedReference(ContentReader& input, const XnbModelSharedKind kind)
+            {
+                ModelMeshPart* const part = currentPart_;
+                const auto resources = resources_;
+                if (kind == XnbModelSharedKind::VertexBuffer)
+                {
+                    input.ReadSharedResource<std::shared_ptr<VertexBuffer>>(
+                        [resources, part](std::shared_ptr<VertexBuffer> value)
+                        {
+                            part->SetVertexBuffer(value.get());
+                            resources->vertexBufferOwners.push_back(std::move(value));
+                        });
+                }
+                else if (kind == XnbModelSharedKind::IndexBuffer)
+                {
+                    input.ReadSharedResource<std::shared_ptr<IndexBuffer>>(
+                        [resources, part](std::shared_ptr<IndexBuffer> value)
+                        {
+                            part->SetIndexBuffer(value.get());
+                            resources->indexBufferOwners.push_back(std::move(value));
+                        });
+                }
+                else
+                {
+                    input.ReadSharedResource<std::shared_ptr<Effect>>(
+                        [resources, part](std::shared_ptr<Effect> value)
+                        {
+                            part->setEffectProperty(value.get());
+                            resources->effectOwners.push_back(std::move(value));
+                        });
+                }
+            }
+
+            void EndMeshPart() { currentPart_ = nullptr; }
+
+            void EndMesh()
+            {
+                auto mesh = std::make_unique<ModelMesh>(
+                    &device_, std::move(currentMeshName_), std::move(currentPartPtrs_));
+                mesh->setBoundingSphereProperty(currentMeshBounds_);
+                mesh->setTagProperty(currentMeshTag_);
+                meshRawPtrs_.push_back(mesh.get());
+                meshParentBones_.push_back(
+                    currentMeshParent_ != -1
+                        ? RequireBone(boneRawPtrs_, currentMeshParent_, "mesh parent")
+                        : nullptr);
+                resources_->meshOwners.push_back(std::move(mesh));
+            }
+
+            [[nodiscard]] Model Finish(const std::int32_t root)
+            {
+                if (root != -1) { RequireBone(boneRawPtrs_, root, "root"); }
+                const std::size_t rootIndex =
+                    root != -1 ? static_cast<std::size_t>(root) : 0u;
+                Model model(
+                    &device_, boneRawPtrs_, meshRawPtrs_, meshParentBones_, rootIndex);
+                model.setTagProperty(modelTag_);
+                model.setOwnedResources(resources_);
+                return model;
+            }
+
+        private:
+            GraphicsDevice& device_;
+            std::shared_ptr<ModelReaderOwnedResources> resources_;
+            std::vector<ModelBone*> boneRawPtrs_;
+            std::vector<ModelMesh*> meshRawPtrs_;
+            std::vector<ModelBone*> meshParentBones_;
+            std::string currentMeshName_;
+            std::int32_t currentMeshParent_ = -1;
+            BoundingSphere currentMeshBounds_;
+            System::Object* currentMeshTag_ = nullptr;
+            std::vector<ModelMeshPart*> currentPartPtrs_;
+            ModelMeshPart* currentPart_ = nullptr;
+            System::Object* modelTag_ = nullptr;
+        };
     }
 
     VertexDeclaration VertexDeclarationReader::Read(
         ContentReader& input, std::optional<VertexDeclaration> /*existingInstance*/)
     {
-        const int32_t vertexStride = input.ReadInt32();
-        const int32_t elementCount = input.ReadInt32();
-        if (elementCount < 0 || elementCount > 1024)
-        {
-            throw ContentLoadException(
-                "VertexDeclarationReader: invalid element count (" + std::to_string(elementCount) + ").");
-        }
-
-        std::vector<VertexElement> elements;
-        elements.reserve(static_cast<std::size_t>(elementCount));
-        for (int32_t i = 0; i < elementCount; ++i)
-        {
-            const int32_t offset = input.ReadInt32();
-            const auto format = static_cast<VertexElementFormat>(input.ReadInt32());
-            const auto usage = static_cast<VertexElementUsage>(input.ReadInt32());
-            const int32_t usageIndex = input.ReadInt32();
-            elements.emplace_back(offset, format, usage, usageIndex);
-        }
-
-        return VertexDeclaration(vertexStride, std::move(elements));
+        XnbVertexDeclarationData decoded = DecodeVertexDeclarationXnbData(input);
+        return VertexDeclaration(decoded.stride, std::move(decoded.elements));
     }
 
     std::shared_ptr<VertexBuffer> VertexBufferReader::Read(
         ContentReader& input, std::optional<std::shared_ptr<VertexBuffer>> /*existingInstance*/)
     {
-        auto declReader = ContentTypeReaderManager::CreateReader(
-            "Microsoft.Xna.Framework.Content.VertexDeclarationReader");
-        if (!declReader)
-        {
-            throw ContentLoadException(
-                "VertexBufferReader: VertexDeclarationReader is not registered.");
-        }
-        VertexDeclaration declaration = input.ReadRawObject<VertexDeclaration>(*declReader);
-
-        const int32_t vertexCount = static_cast<int32_t>(input.ReadUInt32());
-        if (vertexCount < 0)
-        {
-            throw ContentLoadException("VertexBufferReader: invalid vertex count.");
-        }
-        const int32_t stride = declaration.getVertexStrideProperty();
-        // Widen to int64_t before multiplying: vertexCount can be as large as INT32_MAX (from an
-        // adversarial file), and vertexCount * stride overflowing a 32-bit int would silently
-        // wrap to a small/negative byte count, defeating ReadBytesExactOrThrow()'s own mismatch
-        // check below and letting SetDataRaw() read past the (much shorter) actual buffer.
-        const int64_t byteCount64 = static_cast<int64_t>(vertexCount) * static_cast<int64_t>(stride);
-        if (stride < 0 || byteCount64 < 0 || byteCount64 > std::numeric_limits<int32_t>::max())
-        {
-            throw ContentLoadException("VertexBufferReader: vertex count/stride overflow the byte count.");
-        }
-        std::vector<uint8_t> data =
-            input.ReadBytesExactOrThrow(static_cast<int32_t>(byteCount64), "VertexBufferReader");
+        XnbVertexBufferData decoded = DecodeVertexBufferXnbData(input);
+        VertexDeclaration declaration(
+            decoded.declaration.stride, std::move(decoded.declaration.elements));
+        const int32_t vertexCount = static_cast<int32_t>(decoded.vertexCount);
 
         GraphicsDevice& device = RequireGraphicsDevice(input, "VertexBufferReader");
         auto buffer = std::make_shared<VertexBuffer>(device, declaration, vertexCount, BufferUsage::None);
-        buffer->SetDataRaw(data.data(), vertexCount, stride);
+        buffer->SetDataRaw(decoded.bytes.data(), vertexCount, decoded.declaration.stride);
         return buffer;
     }
 
     std::shared_ptr<IndexBuffer> IndexBufferReader::Read(
         ContentReader& input, std::optional<std::shared_ptr<IndexBuffer>> existingInstance)
     {
-        const bool sixteenBits = input.ReadBoolean();
-        const int32_t dataSize = input.ReadInt32();
-        if (dataSize < 0)
-        {
-            throw ContentLoadException("IndexBufferReader: invalid data size.");
-        }
-        std::vector<uint8_t> data = input.ReadBytesExactOrThrow(dataSize, "IndexBufferReader");
+        const XnbIndexBufferData decoded = DecodeIndexBufferXnbData(input);
+        const bool sixteenBits = decoded.indexElementSize == 2u;
+        const int32_t elementCount = static_cast<int32_t>(
+            decoded.bytes.size() / decoded.indexElementSize);
 
         std::shared_ptr<IndexBuffer> indexBuffer = existingInstance.value_or(nullptr);
         if (!indexBuffer)
@@ -205,17 +309,21 @@ namespace CNA::Internal::Xnb
             indexBuffer = std::make_shared<IndexBuffer>(
                 device,
                 sixteenBits ? IndexElementSize::SixteenBits : IndexElementSize::ThirtyTwoBits,
-                sixteenBits ? dataSize / 2 : dataSize / 4,
+                elementCount,
                 BufferUsage::None);
         }
 
         if (sixteenBits)
         {
-            indexBuffer->SetData(reinterpret_cast<const uint16_t*>(data.data()), dataSize / 2);
+            std::vector<std::uint16_t> indices(static_cast<std::size_t>(elementCount));
+            std::memcpy(indices.data(), decoded.bytes.data(), decoded.bytes.size());
+            indexBuffer->SetData(indices.data(), elementCount);
         }
         else
         {
-            indexBuffer->SetData(reinterpret_cast<const uint32_t*>(data.data()), dataSize / 4);
+            std::vector<std::uint32_t> indices(static_cast<std::size_t>(elementCount));
+            std::memcpy(indices.data(), decoded.bytes.data(), decoded.bytes.size());
+            indexBuffer->SetData(indices.data(), elementCount);
         }
         return indexBuffer;
     }
@@ -234,130 +342,8 @@ namespace CNA::Internal::Xnb
         }
 
         GraphicsDevice& device = RequireGraphicsDevice(input, "ModelReader");
-        auto res = std::make_shared<ModelReaderOwnedResources>();
-
-        // --- Bone names, transforms, and hierarchy (plans/plan_xnb.md XNB-37) ---
-        const uint32_t boneCount = input.ReadUInt32();
-        if (boneCount > 100000)
-        {
-            throw ContentLoadException("ModelReader: implausible bone count (" + std::to_string(boneCount) + ").");
-        }
-        std::vector<ModelBone*> boneRawPtrs;
-        boneRawPtrs.reserve(boneCount);
-        for (uint32_t i = 0; i < boneCount; ++i)
-        {
-            std::string name = input.ReadObject<std::string>();
-            const Matrix matrix = input.ReadMatrix();
-            auto bone = std::make_unique<ModelBone>(static_cast<int>(i), std::move(name));
-            bone->setTransformProperty(matrix);
-            boneRawPtrs.push_back(bone.get());
-            res->boneOwners.push_back(std::move(bone));
-        }
-
-        for (uint32_t i = 0; i < boneCount; ++i)
-        {
-            // The scalar parent-bone reference is read here only for correct stream positioning --
-            // ModelBone::AddChild() (called below from each bone's own child list) already sets
-            // the child's Parent when its true parent processes its children, so this value is
-            // deliberately not used to mutate state (matches FNA's own redundant parent+child-list
-            // encoding; CNA's ModelBone exposes AddChild() but no separate SetParent()).
-            ReadBoneReference(input, boneCount);
-
-            const uint32_t childCount = input.ReadUInt32();
-            for (uint32_t j = 0; j < childCount; ++j)
-            {
-                const int32_t childIndex = ReadBoneReference(input, boneCount);
-                if (childIndex != -1)
-                {
-                    boneRawPtrs[i]->AddChild(RequireBone(boneRawPtrs, childIndex, "child"));
-                }
-            }
-        }
-
-        // --- Meshes, mesh parts, and shared resources (plans/plan_xnb.md XNB-38/39/40) ---
-        const int32_t meshCount = input.ReadInt32();
-        if (meshCount < 0 || meshCount > 100000)
-        {
-            throw ContentLoadException("ModelReader: invalid mesh count (" + std::to_string(meshCount) + ").");
-        }
-        std::vector<ModelMesh*> meshRawPtrs;
-        std::vector<ModelBone*> meshParentBones;
-        meshRawPtrs.reserve(static_cast<std::size_t>(meshCount));
-        meshParentBones.reserve(static_cast<std::size_t>(meshCount));
-
-        for (int32_t i = 0; i < meshCount; ++i)
-        {
-            std::string meshName = input.ReadObject<std::string>();
-            const int32_t parentBoneIndex = ReadBoneReference(input, boneCount);
-            const BoundingSphere boundingSphere = input.ReadBoundingSphere();
-            System::Object* meshTag = ReadTag(input, "mesh", *res);
-
-            const int32_t partCount = input.ReadInt32();
-            if (partCount < 0 || partCount > 100000)
-            {
-                throw ContentLoadException("ModelReader: invalid mesh part count (" + std::to_string(partCount) + ").");
-            }
-
-            std::vector<ModelMeshPart*> partRawPtrs;
-            partRawPtrs.reserve(static_cast<std::size_t>(partCount));
-
-            for (int32_t j = 0; j < partCount; ++j)
-            {
-                auto part = std::make_unique<ModelMeshPart>();
-                ModelMeshPart* partPtr = part.get();
-
-                partPtr->SetVertexOffset(input.ReadInt32());
-                partPtr->SetNumVertices(input.ReadInt32());
-                partPtr->SetStartIndex(input.ReadInt32());
-                partPtr->SetPrimitiveCount(input.ReadInt32());
-                partPtr->setTagProperty(ReadTag(input, "mesh part", *res));
-
-                partRawPtrs.push_back(partPtr);
-                res->partOwners.push_back(std::move(part));
-
-                input.ReadSharedResource<std::shared_ptr<VertexBuffer>>(
-                    [res, partPtr](std::shared_ptr<VertexBuffer> vb)
-                    {
-                        partPtr->SetVertexBuffer(vb.get());
-                        res->vertexBufferOwners.push_back(std::move(vb));
-                    });
-                input.ReadSharedResource<std::shared_ptr<IndexBuffer>>(
-                    [res, partPtr](std::shared_ptr<IndexBuffer> ib)
-                    {
-                        partPtr->SetIndexBuffer(ib.get());
-                        res->indexBufferOwners.push_back(std::move(ib));
-                    });
-                input.ReadSharedResource<std::shared_ptr<Effect>>(
-                    [res, partPtr](std::shared_ptr<Effect> fx)
-                    {
-                        // setEffectProperty() itself maintains the owning ModelMesh's
-                        // ModelEffectCollection (Add/Remove), so nothing else is needed here.
-                        partPtr->setEffectProperty(fx.get());
-                        res->effectOwners.push_back(std::move(fx));
-                    });
-            }
-
-            auto mesh = std::make_unique<ModelMesh>(&device, std::move(meshName), std::move(partRawPtrs));
-            mesh->setBoundingSphereProperty(boundingSphere);
-            mesh->setTagProperty(meshTag);
-            meshRawPtrs.push_back(mesh.get());
-            meshParentBones.push_back(
-                parentBoneIndex != -1 ? RequireBone(boneRawPtrs, parentBoneIndex, "mesh parent") : nullptr);
-            res->meshOwners.push_back(std::move(mesh));
-        }
-
-        const int32_t rootBoneIndex = ReadBoneReference(input, boneCount);
-        if (rootBoneIndex != -1)
-        {
-            RequireBone(boneRawPtrs, rootBoneIndex, "root"); // validates range only
-        }
-        const std::size_t rootIndex = rootBoneIndex != -1 ? static_cast<std::size_t>(rootBoneIndex) : 0;
-
-        Model model(&device, boneRawPtrs, meshRawPtrs, meshParentBones, rootIndex);
-        model.setTagProperty(ReadTag(input, "model", *res));
-
-        model.setOwnedResources(res);
-        return model;
+        RuntimeModelSink sink(device, std::make_shared<ModelReaderOwnedResources>());
+        return ReadXnbModelGraph(input, sink);
     }
 
     void RegisterModelXnbReaders()

@@ -159,6 +159,22 @@ if(NOT EXISTS "${CNA_SHARP_RUNTIME_ROOT}/CMakeLists.txt")
 endif()
 add_subdirectory("${CNA_SHARP_RUNTIME_ROOT}" SHARP_RUNTIME)
 
+# The pinned sharp-runtime's invariant date/time parser intentionally uses a second `run` local
+# inside its zone-token arm. MSVC reports that harmless inner scope as C4456 at /W4, and the
+# sibling correctly promotes every other warning with /WX. Keep that warning policy intact while
+# limiting the compatibility exception to the five translation units that include this parser;
+# CNA cannot alter a separately versioned sibling checkout from this repository.
+if(MSVC AND TARGET sharp_runtime_core_base)
+    set_source_files_properties(
+        "${CNA_SHARP_RUNTIME_ROOT}/modules/core/src/System/DateOnly.cpp"
+        "${CNA_SHARP_RUNTIME_ROOT}/modules/core/src/System/DateTime.cpp"
+        "${CNA_SHARP_RUNTIME_ROOT}/modules/core/src/System/DateTimeOffset.cpp"
+        "${CNA_SHARP_RUNTIME_ROOT}/modules/core/src/System/TimeOnly.cpp"
+        "${CNA_SHARP_RUNTIME_ROOT}/modules/core/src/System/TimeSpan.cpp"
+        TARGET_DIRECTORY sharp_runtime_core_base
+        PROPERTIES COMPILE_OPTIONS "/wd4456")
+endif()
+
 # Detect which sharp-runtime shape this build consumes (monolithic archive vs modular
 # components) and provide cna_link_sharp_runtime() for the CNA module targets.
 cna_detect_sharp_runtime_shape()

@@ -17,6 +17,11 @@ add_executable(cna_content_tool
 set_target_properties(cna_content_tool PROPERTIES OUTPUT_NAME "cna-content")
 target_link_libraries(cna_content_tool PRIVATE cna_content_compiler)
 cna_link_sharp_runtime(cna_content_tool PRIVATE)
+if(MINGW)
+    # MinGW's default console CRT calls main/WinMain. Select its Unicode console CRT so the
+    # native-path entry point in content_main.cpp is resolved as wmain instead.
+    target_link_options(cna_content_tool PRIVATE -municode)
+endif()
 
 if(CNA_BUILD_EXAMPLES OR CNA_BUILD_TESTS)
     # CP-022: a real user-owned compiler executable, deliberately source/toolchain linked rather
@@ -26,6 +31,9 @@ if(CNA_BUILD_EXAMPLES OR CNA_BUILD_TESTS)
     )
     target_link_libraries(cna_custom_content_compiler_example PRIVATE cna_content_compiler)
     cna_link_sharp_runtime(cna_custom_content_compiler_example PRIVATE)
+    if(MINGW)
+        target_link_options(cna_custom_content_compiler_example PRIVATE -municode)
+    endif()
 endif()
 
 # Adds a build target that delegates content compilation to the same cna-content executable users

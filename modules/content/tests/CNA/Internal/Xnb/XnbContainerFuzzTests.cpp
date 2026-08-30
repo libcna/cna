@@ -2,7 +2,7 @@
 //
 // plans/plan_xnb.md XNB-43 (Phase G): deterministic, whole-container fuzz test -- unlike XNB-30A's
 // LzxDecoderFuzzTests.cpp (which only exercised the LZX decompressor in isolation), this mutates
-// a real, externally-produced, uncompressed .xnb file's ENTIRE byte stream (10-byte header, the
+// real `.xnb` files' ENTIRE byte streams (10-byte header, optional compressed payload, the
 // type-reader table, the shared-resource region, and the root object body) and loads it through
 // the exact same path a real game uses -- ContentManager::Load<T>() -- exercising header parsing,
 // type-reader-table parsing, root-object dispatch, shared-resource fixups, and every reader
@@ -229,6 +229,14 @@ TEST_F(XnbContainerFuzzTest, MutatedRealTexture2DFixtureNeverCrashesAndOnlyFails
     RunContainerFuzz<Texture2D>(
         "tests/assets/xnb/monogame/windows/uncompressed/white-1.xnb", "fixture",
         0x54455832ULL, // "TEX2" in hex-ish
+        1500, gd);
+}
+
+TEST_F(XnbContainerFuzzTest, MutatedLz4TextureFixtureNeverCrashesAndOnlyFailsCleanly)
+{
+    RunContainerFuzz<Texture2D>(
+        "tests/assets/xnb/monogame/windows/lz4/white-1.xnb", "fixture",
+        0x4C5A34ULL, // "LZ4" in hex
         1500, gd);
 }
 

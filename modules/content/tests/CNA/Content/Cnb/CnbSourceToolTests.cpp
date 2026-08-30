@@ -701,3 +701,29 @@ TEST(CnbSourceToolTest, WriteFileAtomicallyReplacesWhatIsThereAndWritesAnEmptyFi
     EXPECT_EQ(std::filesystem::file_size(destination), 0u);
     EXPECT_EQ(EntryNames(dir.path()), (std::vector<std::string>{"asset.bin"}));
 }
+
+TEST(CnbSourceToolTest, CopyFileAtomicallyStreamsAndPreservesOldOutputOnSourceFailure)
+{
+    ScratchDir dir("atomic_copy");
+    const std::filesystem::path source = dir.path() / "media.bin";
+    const std::filesystem::path destination = dir.path() / "deployed.bin";
+    std::vector<std::uint8_t> media(2u * 1024u * 1024u + 17u);
+    for (std::size_t index = 0u; index < media.size(); ++index)
+    {
+        media[index] = static_cast<std::uint8_t>((index * 29u + 7u) & 0xFFu);
+    }
+    WriteBytes(source, media);
+    WriteBytes(destination, {'o', 'l', 'd'});
+
+    ASSERT_NO_THROW(CNA::Tools::CopyFileAtomically(source, destination));
+    EXPECT_EQ(ReadBytes(destination), media);
+    EXPECT_EQ(EntryNames(dir.path()),
+              (std::vector<std::string>{"deployed.bin", "media.bin"}));
+
+    const std::vector<std::uint8_t> deployed = ReadBytes(destination);
+    EXPECT_THROW(CNA::Tools::CopyFileAtomically(dir.path() / "missing.bin", destination),
+                 std::runtime_error);
+    EXPECT_EQ(ReadBytes(destination), deployed);
+    EXPECT_EQ(EntryNames(dir.path()),
+              (std::vector<std::string>{"deployed.bin", "media.bin"}));
+}
