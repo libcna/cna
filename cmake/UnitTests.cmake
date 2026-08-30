@@ -284,7 +284,10 @@ if(CNA_BUILD_TESTS)
     # exercise the aggregate. This makes a clean CnaMathTests/CnaCoreTests build genuinely focused,
     # rather than merely omitting unrelated test sources while still building every CNA module.
     set(CNA_TEST_GROUP_DEPENDENCY_audio cna_audio cna_input cna_media)
-    set(CNA_TEST_GROUP_DEPENDENCY_content cna_content)
+    # The content group includes GltfMaterialToPbrMaterialTests, whose contract deliberately
+    # crosses into the engine-layer material bridge implemented by cna_graphics_ext. Compile-only
+    # include visibility is insufficient: the focused executable must link that implementation.
+    set(CNA_TEST_GROUP_DEPENDENCY_content cna_content cna_graphics_ext)
     set(CNA_TEST_GROUP_DEPENDENCY_core cna_core)
     set(CNA_TEST_GROUP_DEPENDENCY_devices cna_devices)
     set(CNA_TEST_GROUP_DEPENDENCY_devices_ext cna_devices_ext)
