@@ -2524,8 +2524,7 @@ ASan/UBSan focused harness compiled with the sanitizers proven active and select
 
 ## 37. `REMED-GFX-238` — two contracts assert a pixel-centre convention XNA does not use
 
-**Status:** **OPEN — measured on the real XNA 4.0 runtime, 2026-08-30** ·
-**Test defect, not a renderer defect**
+**Status:** **CLOSED — 2026-08-30** · **Test defect, not a renderer defect**
 
 **Defect.** `EasyGLRenderer`'s `xnaPixelCenterScale_` (see `REMED-GFX-235`) reproduces XNA's
 Direct3D 9 **integer** pixel-centre addressing. Two contracts assert the OpenGL/Direct3D 10
@@ -2568,7 +2567,43 @@ a blend from the mag-linear ones rather than treating it as a dropped draw. Do n
 to tolerate either answer — that would blind them to the defect they were written for.
 
 **Not to be confused with a renderer change.** EasyGL is already correct here. Nothing in
-`EasyGLRenderer` is in scope for this ticket.
+`EasyGLRenderer` was touched.
+
+**XNA uses both conventions, chosen by path — which is why only the 3D legs moved.** Asked the same
+magnification through `SpriteBatch`, the runtime answers **half-integer 100/100** and integer 81/100,
+the exact mirror of its 3D answer: `SpriteEffect` applies its own `-0.5` offset. CNA reproduces both
+already (no correction on the sprite path, `xnaPixelCenterScale_` on the 3D one), so legs A–I are
+right as they stand and were left alone.
+
+**Fix as landed.**
+- `Exact3DLeg` samples at `x/rtW`, with the measurement and a "do not simplify this back" note in
+  place, and the leg inventory marks U as the one entry on integer centres.
+- The tie guard became a parameter. Under integer centres an *integer* magnification is
+  structurally tied — `x/rtW · texw` is a whole number for every other `x` — so U1, V1 and V2 now
+  **assert `ties > 0`** rather than zero. That is deliberate: it is the reversion guard. Flipping
+  the formula back takes all three to `ties == 0` and fails them. U2, the non-integer leg, keeps
+  the strict `ties == 0` and stays the discriminating one.
+- `descriptor_capacity` legs B1/C1 judge the five magnifying-linear filters on coverage **and a
+  visible blend** — a state collapsed onto a cached point descriptor would reproduce the identity
+  exactly and pass a mere coverage check — and the other four on the byte-exact identity. Both legs
+  assert the split (15 of 27, 142 of 256) so a filter added to `kFilters` cannot land in the wrong
+  half unnoticed.
+
+**Two arithmetic errors found by running it, not by reading it.** The rotation in C1 yields **143**
+magnifying-linear draws, not the `256·5/9 ≈ 142` shortcut: `256 = 28·9 + 4`, and three of the
+four-element tail are magnifying. And identity **0** encodes four identical texels, so interpolating
+it is a no-op and it reads back clean; it is judged on the identity like a point draw, which brings
+the count back to 142 and explains why the old leg reported 142 wrong rather than 143.
+
+**Evidence.** EasyGL `146/146` and `29/29`, both with the correction on. Mutation-checked both
+files: restoring `(x + 0.5)` fails U2 on 19 mismatches and all three tie guards; declaring every
+filter magnification-point fails B1 and C1.
+
+**The consequence REMED-GFX-239 predicted is now visible.** Rebuilt and run against Vulkan, the
+same legs fail with the same counts EasyGL used to produce — U2 by 19, B1 by 15, C1 by 142. The
+roles have swapped, which is the honest state: EasyGL matches XNA, Vulkan does not, and the suite
+now says so instead of the reverse. The other five renderers registered for these contracts are not
+buildable in this configuration and were not measured.
 
 ---
 

@@ -67,6 +67,28 @@ magnifying filters that do not interpolate.
 So this fixture encodes the same OpenGL convention leg U2 does, and EasyGL fails it for the same
 reason: it is right and the expectation is not.
 
+## XNA uses BOTH conventions, chosen by path
+
+The 3D answer above does not generalise to sprites. Asking the same magnification through
+`SpriteBatch`:
+
+    LEG-S SpriteBatch 3x3 -> 10x10: HALF-INTEGER 100/100   INTEGER  81/100
+            row0 selected i: 0001111222
+
+| path | half-integer | integer |
+|---|---|---|
+| 3D textured quad, 3x3 -> 10x10 | 81/100 | **100/100** |
+| SpriteBatch, 3x3 -> 10x10 | **100/100** | 81/100 |
+
+XNA's `SpriteEffect` applies its own `-0.5, -0.5` pixel offset, which lands sprite sampling back on
+half-integers. CNA reproduces both: its sprite path carries no correction and its 3D path carries
+`xnaPixelCenterScale_`. So legs A..I of the point-sampling contract are right as they stand, and
+only the U and V legs -- the 3D ones -- were asserting the wrong convention.
+
+One observation this spike does not explain: at `8x4 -> 21x13` XNA's SpriteBatch matches
+half-integer only 256/273, while CNA matches it 273/273 (leg D2, green). Some second effect appears
+at that magnification. It is not what REMED-GFX-238 is about and was left alone.
+
 ## The one real defect
 
 Disabling the correction and rebuilding **every** dependent binary (a stale test executable will

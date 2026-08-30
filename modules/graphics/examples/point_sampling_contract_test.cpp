@@ -83,7 +83,9 @@
 //   R  two textures, two sizes, one batch       per-draw texture dimensions, one sampler
 //   S  RenderTarget2D as the SOURCE             classified separately from ordinary Texture2D
 //   T  alpha and blend                          alpha 0/128/255 texels, Opaque and AlphaBlend
-//   U  3D textured primitive                    the device SamplerStates[0] path, not SpriteBatch
+//   U  3D textured primitive                    the device SamplerStates[0] path, not SpriteBatch,
+//                                              and the one leg on INTEGER pixel centres -- XNA
+//                                              uses a different convention here than for sprites
 //   V  3D wrap                                  UVs beyond [0,1] on the 3D path
 //   W  custom viewport                          point selection is unaffected by viewport placement
 //   X  the device default sampler                XNA's SamplerStateCollection defaults every slot to
@@ -661,9 +663,15 @@ class PointSamplingContractTest : public Game
 
     /// Exactness for the 3D quad: the quad fills the viewport, so destination pixel x reads texel
     /// coordinate (x + 0.5) / rtW * uMax * texW.
+    /// @param tieFree Whether this leg's magnification keeps every pixel centre off a texel
+    ///                boundary. Only a NON-INTEGER magnification can, once the sample point is
+    ///                XNA's integer pixel centre: at an exact 2x, `x/rtW * texw` is a whole number
+    ///                for every other x, so the boundary is where the centres land by construction.
+    ///                A tie-free leg measures the contract; a tied one measures that the tie is
+    ///                resolved to one of the two admissible texels, which is still a real check.
     void Exact3DLeg(GraphicsDevice& dev, const std::string& label, const Pattern& pat,
                     Texture2D& tex, int rtW, int rtH, float uMax, float vMax,
-                    TextureAddressMode addrU, TextureAddressMode addrV)
+                    TextureAddressMode addrU, TextureAddressMode addrV, bool tieFree)
     {
         RenderTarget2D rt(dev, rtW, rtH, false, SurfaceFormat::Color, DepthFormat::None, 0,
                           RenderTargetUsage::DiscardContents);
@@ -678,8 +686,19 @@ class PointSamplingContractTest : public Game
         {
             for (int x = 0; x < rtW; ++x)
             {
-                const double sx = (static_cast<double>(x) + 0.5) / rtW * uMax * pat.w;
-                const double sy = (static_cast<double>(y) + 0.5) / rtH * vMax * pat.h;
+                // The 3D path addresses pixel centres at INTEGER window coordinates, which is
+                // Direct3D 9's convention and so XNA's. The SpriteBatch legs above land on
+                // half-integers instead, because XNA's SpriteEffect offsets by half a pixel and
+                // CNA's sprite path reproduces that. Both were measured on the real XNA 4.0
+                // runtime at this exact magnification: the 3D quad agrees with integer centres
+                // 100/100 and with half-integer 81/100, and SpriteBatch agrees the other way
+                // round, also 100/100. See spikes/xna-pixel-center-spike/ and REMED-GFX-238.
+                //
+                // Do not "simplify" this back to (x + 0.5): that is the OpenGL/Direct3D 10
+                // convention, it is what this leg used to assert, and asserting it here marks
+                // XNA-correct output wrong on exactly the pixels where the two disagree.
+                const double sx = static_cast<double>(x) / rtW * uMax * pat.w;
+                const double sy = static_cast<double>(y) / rtH * vMax * pat.h;
                 const Admissible ax = AdmissibleTexels(sx, pat.w, addrU);
                 const Admissible ay = AdmissibleTexels(sy, pat.h, addrV);
                 if (ax.count > 1 || ay.count > 1) ++ties;
@@ -702,7 +721,21 @@ class PointSamplingContractTest : public Game
                 }
             }
         }
-        check(ties == 0, label + ": TIE GUARD (ties=" + std::to_string(ties) + ")");
+        if (tieFree)
+        {
+            check(ties == 0, label + ": TIE GUARD -- no pixel centre lands on a texel boundary, so "
+                             "the leg measures the contract rather than the tie rule (ties=" +
+                                 std::to_string(ties) + ")");
+        }
+        else
+        {
+            // Asserted rather than merely reported: if the sample point is ever moved back to the
+            // half-integer (OpenGL) convention this drops to zero, so the leg notices the reversion
+            // instead of quietly continuing to pass. REMED-GFX-238.
+            check(ties > 0, label + ": TIE GUARD -- an integer magnification is structurally tied "
+                            "under XNA's integer pixel centres, and this leg checks the tie resolves "
+                            "to an admissible texel (ties=" + std::to_string(ties) + ")");
+        }
         check(bad == 0, label + ": every one of the " + std::to_string(rtW * rtH) +
                         " destination pixels equals the point-selected texel (mismatches=" +
                         std::to_string(bad) + ")");
@@ -1414,9 +1447,9 @@ private:
         // GFX-150's root cause discarded the filter here too, so this is a second public entry
         // point into the same defect rather than a variation of the first.
         Exact3DLeg(dev, "U1 3D textured quad, 8x4 magnified onto 16x8", p8x4_, t8x4_, 16, 8,
-                   1.0f, 1.0f, TextureAddressMode::Clamp, TextureAddressMode::Clamp);
+                   1.0f, 1.0f, TextureAddressMode::Clamp, TextureAddressMode::Clamp, false);
         Exact3DLeg(dev, "U2 3D textured quad, 3x3 magnified onto 10x10 (non-integer)", p3x3_, t3x3_,
-                   10, 10, 1.0f, 1.0f, TextureAddressMode::Clamp, TextureAddressMode::Clamp);
+                   10, 10, 1.0f, 1.0f, TextureAddressMode::Clamp, TextureAddressMode::Clamp, true);
 
         RenderTarget2D rt(dev, 16, 8, false, SurfaceFormat::Color, DepthFormat::None, 0,
                           RenderTargetUsage::DiscardContents);
@@ -1430,9 +1463,9 @@ private:
     void RunV_3DWrap(GraphicsDevice& dev)
     {
         Exact3DLeg(dev, "V1 3D quad with UVs to 2.0 under PointWrap", p4x4_, t4x4_, 16, 16,
-                   2.0f, 2.0f, TextureAddressMode::Wrap, TextureAddressMode::Wrap);
+                   2.0f, 2.0f, TextureAddressMode::Wrap, TextureAddressMode::Wrap, false);
         Exact3DLeg(dev, "V2 3D quad with UVs to 2.0 under PointClamp", p4x4_, t4x4_, 16, 16,
-                   2.0f, 2.0f, TextureAddressMode::Clamp, TextureAddressMode::Clamp);
+                   2.0f, 2.0f, TextureAddressMode::Clamp, TextureAddressMode::Clamp, false);
     }
 
     // W -----------------------------------------------------------------------------------------

@@ -401,12 +401,71 @@ class DescriptorCapacityContractTest : public Game
         d.SetVertexBuffer(nullptr);
     }
 
+    /// Whether a filter MAGNIFIES with interpolation. It decides what these legs may demand of a
+    /// 2x2-onto-2x2 draw: XNA addresses pixel centres at integer window coordinates, so the second
+    /// pixel's centre falls on texture coordinate 1.0 -- exactly halfway between the texel centres
+    /// at 0.5 and 1.5. A magnifying filter that interpolates therefore BLENDS and cannot reproduce
+    /// the identity encoding, and the real XNA 4.0 runtime blends three of the four pixels at
+    /// exactly 128. Measured in spikes/xna-pixel-center-spike/; see REMED-GFX-238.
+    bool MagnifiesLinearly(TextureFilter f)
+    {
+        return f == TextureFilter::Linear || f == TextureFilter::Anisotropic ||
+               f == TextureFilter::LinearMipPoint ||
+               f == TextureFilter::MinPointMagLinearMipLinear ||
+               f == TextureFilter::MinPointMagLinearMipPoint;
+    }
+
+    /// A magnifying-linear draw is judged on two things instead of the identity: that it covered
+    /// the target at all (no sentinel survived, so the draw was not dropped), and that at least one
+    /// channel really was interpolated. The second half is the stronger claim -- a sampler state
+    /// collapsed onto a cached POINT descriptor would reproduce the identity exactly and pass a
+    /// mere coverage check.
+    /// Whether an identity encodes the same colour into all four texels, which makes interpolating
+    /// it a no-op. Only identity 0 does, among the ones these legs use, and a magnifying-linear
+    /// draw of it legitimately reads back clean -- so demanding a blend there would fail a correct
+    /// renderer.
+    bool IdentityIsUniform(int id)
+    {
+        const std::array<Color, 4> t = EncodeIdentity(id);
+        for (std::size_t i = 1; i < t.size(); ++i)
+            if (t[i].getRProperty() != t[0].getRProperty() ||
+                t[i].getGProperty() != t[0].getGProperty() ||
+                t[i].getBProperty() != t[0].getBProperty())
+                return false;
+        return true;
+    }
+
+    bool BlendedAndCovered(const std::vector<Color>& pix)
+    {
+        if (pix.size() != 4) return false;
+        bool blended = false;
+        for (const Color& c : pix)
+        {
+            if (c.getRProperty() == kSentinel.getRProperty() &&
+                c.getGProperty() == kSentinel.getGProperty() &&
+                c.getBProperty() == kSentinel.getBProperty())
+                return false;
+            const std::array<int, 3> ch{{c.getRProperty(), c.getGProperty(), c.getBProperty()}};
+            for (int k = 0; k < 3; ++k)
+                if (ch[static_cast<std::size_t>(k)] != 0 && ch[static_cast<std::size_t>(k)] != 255)
+                    blended = true;
+        }
+        return blended;
+    }
+
     int DrawAndDecode(GraphicsDevice& dev, RenderTarget2D& rt, Texture2D& tex,
                       const SamplerState& sampler, Path path = Path::NonIndexed)
     {
         return DecodeIdentity(RenderInto(dev, rt, [&](GraphicsDevice& d) {
             DrawBasic(d, tex, sampler, path);
         }));
+    }
+
+    /// The raw 2x2 readback, for the legs that must judge a blend rather than an identity.
+    std::vector<Color> DrawAndRead(GraphicsDevice& dev, RenderTarget2D& rt, Texture2D& tex,
+                                   const SamplerState& sampler, Path path = Path::NonIndexed)
+    {
+        return RenderInto(dev, rt, [&](GraphicsDevice& d) { DrawBasic(d, tex, sampler, path); });
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -458,6 +517,7 @@ class DescriptorCapacityContractTest : public Game
 
         int wrong = 0;
         int combos = 0;
+        int blending = 0;
         for (TextureFilter f : kFilters)
         {
             for (TextureAddressMode u : kAddressModes)
@@ -467,13 +527,28 @@ class DescriptorCapacityContractTest : public Game
                 const TextureAddressMode v = kAddressModes[static_cast<std::size_t>(
                     (static_cast<int>(combos) + 1) % static_cast<int>(kAddressModes.size()))];
                 ++combos;
-                if (DrawAndDecode(dev, *rt, *tex, MakeSampler(f, u, v)) != 1365) ++wrong;
+                if (MagnifiesLinearly(f))
+                {
+                    ++blending;
+                    if (!BlendedAndCovered(DrawAndRead(dev, *rt, *tex, MakeSampler(f, u, v))))
+                        ++wrong;   // 1365 has four distinct texels, so a blend must be visible
+                }
+                else if (DrawAndDecode(dev, *rt, *tex, MakeSampler(f, u, v)) != 1365)
+                {
+                    ++wrong;
+                }
             }
         }
-        check(combos == 27 && wrong == 0,
+        // Five of the nine filters magnify with interpolation, so fifteen of the twenty-seven
+        // states are judged on the blend and twelve on the byte-exact identity. Asserting the
+        // split keeps the leg honest if kFilters is ever extended: a new filter silently landing
+        // in the wrong half would change this count.
+        check(combos == 27 && blending == 15 && wrong == 0,
               "B1: " + std::to_string(combos) +
-                  " distinct sampler states all sample the same texture correctly (wrong=" +
-                  std::to_string(wrong) + ")");
+                  " distinct sampler states all sample the same texture correctly -- " +
+                  std::to_string(combos - blending) + " reproducing the identity exactly and " +
+                  std::to_string(blending) + " interpolating it (wrong=" + std::to_string(wrong) +
+                  ")");
 
         // The states must be genuinely DISTINCT, not collapsed onto one cached descriptor: at a 4x
         // magnification Point reproduces exactly two source colours per row while Linear does not.
@@ -517,19 +592,34 @@ class DescriptorCapacityContractTest : public Game
         for (int i = 0; i < kMaxN; ++i) textures.push_back(MakeIdentityTexture(dev, i));
 
         int wrong = 0;
+        int blending = 0;
         for (int i = 0; i < kMaxN; ++i)
         {
             const TextureFilter f = kFilters[static_cast<std::size_t>(i % kFilters.size())];
             const TextureAddressMode u = kAddressModes[static_cast<std::size_t>(i % kAddressModes.size())];
             const TextureAddressMode v =
                 kAddressModes[static_cast<std::size_t>((i / 4) % kAddressModes.size())];
-            if (DrawAndDecode(dev, *rt, *textures[static_cast<std::size_t>(i)], MakeSampler(f, u, v)) != i)
+            Texture2D& tex = *textures[static_cast<std::size_t>(i)];
+            if (MagnifiesLinearly(f) && !IdentityIsUniform(i))
+            {
+                ++blending;
+                if (!BlendedAndCovered(DrawAndRead(dev, *rt, tex, MakeSampler(f, u, v)))) ++wrong;
+            }
+            else if (DrawAndDecode(dev, *rt, tex, MakeSampler(f, u, v)) != i)
+            {
                 ++wrong;
+            }
         }
-        check(wrong == 0,
+        // The rotation steps the filter by one each iteration and 256 = 28*9 + 4, so the five
+        // magnifying-linear filters take 28 turns each plus three more from the {0,1,2,3} tail:
+        // 143. One of those, identity 0, encodes four identical texels and so is judged on the
+        // identity like a point draw, leaving 142. See MagnifiesLinearly and REMED-GFX-238.
+        check(wrong == 0 && blending == 142,
               "C1: " + std::to_string(kMaxN) +
-                  " live textures each paired with a rotating sampler state (wrong=" +
-                  std::to_string(wrong) + ")");
+                  " live textures each paired with a rotating sampler state -- " +
+                  std::to_string(kMaxN - blending) + " reproducing their identity exactly and " +
+                  std::to_string(blending) + " interpolating it (wrong=" + std::to_string(wrong) +
+                  ")");
     }
 
     // ---------------------------------------------------------------------------------------------

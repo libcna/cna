@@ -65,7 +65,9 @@ public class Probe : Game
         done = true;
         try { LegPixelCenter(); Leg3D("U1 8x4 -> 16x8", 8, 4, 16, 8); Leg3D("U2 3x3 -> 10x10", 3, 3, 10, 10);
               Leg2x2("LEG-C 2x2 -> 2x2 POINT ", TextureFilter.Point);
-              Leg2x2("LEG-C 2x2 -> 2x2 LINEAR", TextureFilter.Linear); }
+              Leg2x2("LEG-C 2x2 -> 2x2 LINEAR", TextureFilter.Linear);
+              LegSprite("LEG-S SpriteBatch 3x3 -> 10x10", 3, 3, 10, 10);
+              LegSprite("LEG-S SpriteBatch 8x4 -> 21x13", 8, 4, 21, 13); }
         catch (Exception e) { Say("EXCEPTION: " + e); }
         File.WriteAllText("probe-output.txt", log.ToString());
         Exit();
@@ -256,6 +258,57 @@ public class Probe : Game
     }
 
     static bool Clean(int v) { return v == 0 || v == 255; }
+
+    // The same magnification as U2, but through SpriteBatch. XNA's SpriteEffect applies its own
+    // -0.5 pixel offset, so the sprite path may well answer differently from the 3D path -- and
+    // legs A..I of CNA's point-sampling contract depend on which.
+    void LegSprite(string label, int tw, int th, int rtW, int rtH)
+    {
+        var dev = GraphicsDevice;
+        var tex = new Texture2D(dev, tw, th);
+        tex.SetData(Pat.Make(tw, th));
+
+        var rt = new RenderTarget2D(dev, rtW, rtH, false, SurfaceFormat.Color, DepthFormat.None,
+                                    0, RenderTargetUsage.DiscardContents);
+        dev.SetRenderTarget(rt);
+        dev.Clear(new Color(13, 17, 19, 255));
+
+        var sb = new SpriteBatch(dev);
+        sb.Begin(SpriteSortMode.Immediate, BlendState.Opaque, SamplerState.PointClamp,
+                 DepthStencilState.None, RasterizerState.CullNone);
+        sb.Draw(tex, new Rectangle(0, 0, rtW, rtH), Color.White);
+        sb.End();
+        dev.SetRenderTarget(null);
+
+        var px = new Color[rtW * rtH];
+        rt.GetData(px);
+
+        int agreeHalf = 0, agreeInt = 0, undecoded = 0;
+        for (int y = 0; y < rtH; ++y)
+            for (int x = 0; x < rtW; ++x)
+            {
+                int gi, gj;
+                if (!Pat.Decode(px[y * rtW + x], tw, th, out gi, out gj)) { ++undecoded; continue; }
+                int hx = Math.Min((int)Math.Floor((x + 0.5) / rtW * tw), tw - 1);
+                int hy = Math.Min((int)Math.Floor((y + 0.5) / rtH * th), th - 1);
+                int ix = Math.Min((int)Math.Floor((double)x / rtW * tw), tw - 1);
+                int iy = Math.Min((int)Math.Floor((double)y / rtH * th), th - 1);
+                if (gi == hx && gj == hy) ++agreeHalf;
+                if (gi == ix && gj == iy) ++agreeInt;
+            }
+        int total = rtW * rtH;
+        Say(label + ": pixels=" + total + " undecoded=" + undecoded);
+        Say("        matches HALF-INTEGER centres (what legs A..I assert): " + agreeHalf + "/" + total);
+        Say("        matches INTEGER centres      (the 3D path's answer):  " + agreeInt + "/" + total);
+        string r0 = "        row0 selected i: ";
+        for (int x = 0; x < rtW; ++x)
+        {
+            int gi, gj;
+            r0 += Pat.Decode(px[x], tw, th, out gi, out gj) ? gi.ToString() : "?";
+        }
+        Say(r0);
+    }
+
 
     static void Main() { using (var g = new Probe()) g.Run(); }
 }
