@@ -18,6 +18,74 @@
 
 namespace CNA::Content::Pipeline
 {
+    /** @brief Maximum number of named read-only external source roots in one build request. */
+    inline constexpr std::size_t MaxContentSourceRoots = 32u;
+
+    /**
+     * @brief Returns why a source-root capability alias is invalid.
+     *
+     * Valid aliases contain 1-64 lowercase ASCII letters, digits, or hyphens, and begin with a
+     * letter.
+     *
+     * @param alias Alias to validate.
+     * @return Empty text when valid, otherwise a stable diagnostic fragment.
+     */
+    [[nodiscard]] std::string ContentSourceRootAliasProblem(const std::string& alias);
+
+    /** @brief Explicit read-only external source-root capabilities keyed by stable alias. */
+    class ContentSourceRootCapabilities
+    {
+    public:
+        /**
+         * @brief Adds one uniquely named native source root.
+         *
+         * @param alias Stable logical root alias.
+         * @param root Native physical directory, canonicalized when a build starts.
+         * @throws std::invalid_argument for an invalid/duplicate alias, empty path, or excess
+         *         root count.
+         */
+        void Add(std::string alias, std::filesystem::path root);
+
+        /**
+         * @brief Finds one configured physical root.
+         *
+         * @param alias Stable root alias.
+         * @return Pointer valid for this object's lifetime, or null when absent.
+         */
+        [[nodiscard]] const std::filesystem::path* Find(const std::string& alias) const;
+
+        /**
+         * @brief Returns all roots in deterministic alias order.
+         *
+         * @return Read-only ordered alias-to-native-path map.
+         */
+        [[nodiscard]] const std::map<std::string, std::filesystem::path>& Entries() const noexcept;
+
+        /** @brief Returns true when no external source capability is configured. */
+        [[nodiscard]] bool Empty() const noexcept;
+
+        /** @brief Compares every alias and native mapping. */
+        bool operator==(const ContentSourceRootCapabilities&) const = default;
+
+    private:
+        std::map<std::string, std::filesystem::path> entries_;
+    };
+
+    /**
+     * @brief Canonicalizes and validates a request's read-only external source roots.
+     *
+     * Relative external roots are resolved against @p sourceRoot. Every root must exist as a
+     * directory, and no source/external root may equal or contain another.
+     *
+     * @param sourceRoot Primary content source root.
+     * @param configured Request-local physical capability mappings.
+     * @return Canonical primary-independent capability mappings.
+     * @throws std::invalid_argument for missing/file roots, duplicate physical roots, or overlap.
+     */
+    [[nodiscard]] ContentSourceRootCapabilities ResolveContentSourceRootCapabilities(
+        const std::filesystem::path& sourceRoot,
+        const ContentSourceRootCapabilities& configured);
+
     /** @brief Stability marker for the initial custom C++ pipeline component API. */
     inline constexpr bool ContentPipelineExtensionApiIsExperimental = true;
 
@@ -159,10 +227,13 @@ namespace CNA::Content::Pipeline
         /** @brief Canonical generic UTF-8 path, or logical name for a ContentBuild dependency. */
         std::string identity;
 
-        /** @brief Orders records deterministically by category and identity. */
+        /** @brief External source-root alias, or empty for the primary source root/non-file edge. */
+        std::string sourceRoot;
+
+        /** @brief Orders records deterministically by category, source root, and identity. */
         bool operator<(const ContentDependency& other) const noexcept;
 
-        /** @brief Compares dependency category and identity. */
+        /** @brief Compares dependency category, source root, and identity. */
         bool operator==(const ContentDependency&) const = default;
     };
 
@@ -190,6 +261,9 @@ namespace CNA::Content::Pipeline
 
         /** @brief Generic UTF-8 destination path relative to the content output root. */
         std::string outputPath;
+
+        /** @brief External source-root alias, or empty for a primary-root source. */
+        std::string sourceRoot;
 
         /** @brief Compares the source and destination identities. */
         bool operator==(const ContentDeploymentFile&) const = default;
@@ -378,11 +452,13 @@ namespace CNA::Content::Pipeline
          * @param source Canonical primary source path within @p sourceRoot.
          * @param logicalName Logical ContentManager asset name.
          * @param component Stable importer name for logs.
+         * @param externalSourceRoots Canonical request-local read capabilities.
          * @param dependencies Per-build dependency collector.
          * @param logger Scoped logger.
          */
         ContentImporterContext(std::filesystem::path sourceRoot, std::filesystem::path source,
                                std::string logicalName, std::string component,
+                               const ContentSourceRootCapabilities& externalSourceRoots,
                                ContentDependencyCollector& dependencies,
                                ContentBuildLogger& logger);
 
@@ -404,9 +480,12 @@ namespace CNA::Content::Pipeline
         /**
          * @brief Resolves and records a file dependency relative to the primary source.
          *
+         * `@alias/root-relative-path` explicitly selects one configured external source root;
+         * unqualified paths remain relative to the primary source asset.
+         *
          * @param authoredPath Relative path read from source content.
          * @return Canonical contained native path.
-         * @throws std::invalid_argument for absolute paths or source-root escapes.
+         * @throws std::invalid_argument for absolute paths, unknown aliases, or root escapes.
          */
         [[nodiscard]] std::filesystem::path ResolveSourceDependency(
             const std::filesystem::path& authoredPath);
@@ -432,6 +511,7 @@ namespace CNA::Content::Pipeline
         std::string component_;
         ContentDependencyCollector* dependencies_ = nullptr;
         ContentBuildLogger* logger_ = nullptr;
+        const ContentSourceRootCapabilities* externalSourceRoots_ = nullptr;
     };
 
     /** @brief Focused, call-scoped services available to a Content Processor. */
@@ -446,12 +526,14 @@ namespace CNA::Content::Pipeline
          * @param logicalName Logical ContentManager asset name.
          * @param component Stable processor name for logs.
          * @param parameters Ordered processor parameters.
+         * @param externalSourceRoots Canonical request-local read capabilities.
          * @param dependencies Per-build dependency collector.
          * @param logger Scoped logger.
          */
         ContentProcessorContext(std::filesystem::path sourceRoot, std::filesystem::path source,
                                 std::string logicalName, std::string component,
                                 const ContentProcessorParameters& parameters,
+                                const ContentSourceRootCapabilities& externalSourceRoots,
                                 ContentDependencyCollector& dependencies,
                                 ContentBuildLogger& logger);
 
@@ -470,9 +552,12 @@ namespace CNA::Content::Pipeline
         /**
          * @brief Resolves and records a processor-read source dependency.
          *
+         * `@alias/root-relative-path` explicitly selects one configured external source root;
+         * unqualified paths remain relative to the primary source asset.
+         *
          * @param authoredPath Relative path resolved from the primary source's directory.
          * @return Canonical contained native path.
-         * @throws std::invalid_argument for absolute paths or source-root escapes.
+         * @throws std::invalid_argument for absolute paths, unknown aliases, or root escapes.
          */
         [[nodiscard]] std::filesystem::path ResolveSourceDependency(
             const std::filesystem::path& authoredPath);
@@ -506,7 +591,8 @@ namespace CNA::Content::Pipeline
          * @brief Registers a contained source file for atomic deployment below the output root.
          *
          * The source is also recorded as a byte-hashed source dependency unless it is the primary
-         * source itself.
+         * source itself. An external source is accepted only after this build explicitly resolved
+         * that exact alias-qualified dependency.
          *
          * @param sourcePath Native absolute path, or a path relative to the source root.
          * @param outputPath Safe generic UTF-8 path relative to the content output root.
@@ -538,6 +624,7 @@ namespace CNA::Content::Pipeline
         const ContentProcessorParameters* parameters_ = nullptr;
         ContentDependencyCollector* dependencies_ = nullptr;
         ContentBuildLogger* logger_ = nullptr;
+        const ContentSourceRootCapabilities* externalSourceRoots_ = nullptr;
     };
 
     /**
@@ -817,6 +904,9 @@ namespace CNA::Content::Pipeline
 
         /** @brief Primary source, absolute or relative to sourceRoot. */
         std::filesystem::path source;
+
+        /** @brief Explicit request-local read-only external source-root capabilities. */
+        ContentSourceRootCapabilities externalSourceRoots;
 
         /** @brief Logical ContentManager asset name written into CNB metadata. */
         std::string logicalName;

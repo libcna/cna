@@ -100,7 +100,7 @@ namespace
     public:
         [[nodiscard]] Pipeline::ContentComponentIdentity Identity() const override
         {
-            return {"ExampleGame.GreetingProcessor", "2"};
+            return {"ExampleGame.GreetingProcessor", "3"};
         }
 
         [[nodiscard]] std::string InputType() const override { return kImportedType; }
@@ -112,13 +112,22 @@ namespace
         {
             for (const auto& [name, value] : parameters.Values())
             {
-                if ((name != "prefix" && name != "dependsOn") ||
+                if ((name != "prefix" && name != "dependsOn" &&
+                     name != "deploymentSource" && name != "deploymentOutput") ||
                     !std::holds_alternative<std::string>(value))
                 {
                     throw std::invalid_argument(
-                        "GreetingProcessor accepts only the string parameters 'prefix' and "
-                        "'dependsOn'.");
+                        "GreetingProcessor accepts only the string parameters 'prefix', "
+                        "'dependsOn', 'deploymentSource', and 'deploymentOutput'.");
                 }
+            }
+            const bool hasDeploymentSource = parameters.Find("deploymentSource") != nullptr;
+            const bool hasDeploymentOutput = parameters.Find("deploymentOutput") != nullptr;
+            if (hasDeploymentSource != hasDeploymentOutput)
+            {
+                throw std::invalid_argument(
+                    "GreetingProcessor requires 'deploymentSource' and 'deploymentOutput' "
+                    "together.");
             }
         }
 
@@ -137,6 +146,15 @@ namespace
                     context.Parameters().Find("dependsOn"))
             {
                 context.AddContentBuildDependency(std::get<std::string>(*dependency));
+            }
+            if (const Pipeline::ContentProcessorParameterValue* deploymentSource =
+                    context.Parameters().Find("deploymentSource"))
+            {
+                const std::filesystem::path source = context.ResolveSourceDependency(
+                    std::get<std::string>(*deploymentSource));
+                context.AddDeploymentFile(
+                    source, std::get<std::string>(
+                                *context.Parameters().Find("deploymentOutput")));
             }
             context.LogInfo("applied the custom greeting policy.");
             return Pipeline::ContentValue::Create(kProcessedType,

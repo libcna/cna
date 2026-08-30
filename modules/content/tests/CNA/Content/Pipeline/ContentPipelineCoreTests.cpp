@@ -12,6 +12,7 @@
 
 #include <gtest/gtest.h>
 
+#include "CNA/Content/Pipeline/ContentBuildManifest.hpp"
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
 #include "CNA/Internal/ContentPath.hpp"
 
@@ -323,6 +324,38 @@ namespace
         std::vector<std::pair<std::filesystem::path, std::string>> files_;
     };
 
+    class ExternalDeploymentProcessor final : public Pipeline::ContentProcessor
+    {
+    public:
+        ExternalDeploymentProcessor(std::filesystem::path authored, std::string output)
+            : authored_(std::move(authored)), output_(std::move(output)) {}
+
+        [[nodiscard]] Pipeline::ContentComponentIdentity Identity() const override
+        {
+            return {"test.ExternalDeploymentProcessor", "1"};
+        }
+
+        [[nodiscard]] std::string InputType() const override { return kImportedType; }
+        [[nodiscard]] std::string OutputType() const override { return kProcessedType; }
+
+        void ValidateParameters(const Pipeline::ContentProcessorParameters&) const override {}
+
+        [[nodiscard]] Pipeline::ContentValue Process(
+            const Pipeline::ContentValue& input,
+            Pipeline::ContentProcessorContext& context) const override
+        {
+            const std::filesystem::path source =
+                context.ResolveSourceDependency(authored_);
+            context.AddDeploymentFile(source, output_);
+            return Pipeline::ContentValue::Create(
+                kProcessedType, ProcessedNumber{input.Get<ImportedNumber>().value});
+        }
+
+    private:
+        std::filesystem::path authored_;
+        std::string output_;
+    };
+
     std::shared_ptr<Pipeline::ContentPipelineRegistry> MakeRegistry()
     {
         auto registry = std::make_shared<Pipeline::ContentPipelineRegistry>();
@@ -360,6 +393,55 @@ TEST(ContentPipelineCoreTest, RegistryRejectsDuplicateStableComponentNames)
         malformed.RegisterImporter(std::make_shared<NumberImporter>(
             "test.DuplicateOutputs", ".dup", kImportedType, std::filesystem::path{},
             std::vector<std::string>{kImportedType, kImportedType})),
+        std::invalid_argument);
+}
+
+TEST(ContentPipelineCoreTest, SourceRootCapabilitiesValidateAliasesAndCanonicalOverlap)
+{
+    EXPECT_TRUE(Pipeline::ContentSourceRootAliasProblem("shared-textures").empty());
+    EXPECT_FALSE(Pipeline::ContentSourceRootAliasProblem("").empty());
+    EXPECT_FALSE(Pipeline::ContentSourceRootAliasProblem("Shared").empty());
+    EXPECT_FALSE(Pipeline::ContentSourceRootAliasProblem("1shared").empty());
+    EXPECT_FALSE(Pipeline::ContentSourceRootAliasProblem("shared_root").empty());
+
+    Pipeline::ContentSourceRootCapabilities roots;
+    EXPECT_TRUE(roots.Empty());
+    roots.Add("shared", "../Shared");
+    EXPECT_FALSE(roots.Empty());
+    EXPECT_EQ(roots.Entries().size(), 1u);
+    ASSERT_NE(roots.Find("shared"), nullptr);
+    EXPECT_THROW(roots.Add("shared", "../Other"), std::invalid_argument);
+    EXPECT_THROW(roots.Add("Bad", "../Other"), std::invalid_argument);
+    EXPECT_THROW(roots.Add("other", {}), std::invalid_argument);
+
+    ScratchDirectory scratch("external_root_validation");
+    const std::filesystem::path source = scratch.Path() / "Source";
+    const std::filesystem::path shared = scratch.Path() / "Shared";
+    std::filesystem::create_directories(source);
+    std::filesystem::create_directories(shared);
+    const Pipeline::ContentSourceRootCapabilities resolved =
+        Pipeline::ResolveContentSourceRootCapabilities(source, roots);
+    EXPECT_EQ(*resolved.Find("shared"), std::filesystem::weakly_canonical(shared));
+
+    Pipeline::ContentSourceRootCapabilities overlap;
+    overlap.Add("nested", source / "nested");
+    std::filesystem::create_directories(source / "nested");
+    EXPECT_THROW(
+        (void)Pipeline::ResolveContentSourceRootCapabilities(source, overlap),
+        std::invalid_argument);
+
+    WriteText(scratch.Path() / "not-a-root", "file");
+    Pipeline::ContentSourceRootCapabilities fileRoot;
+    fileRoot.Add("file", scratch.Path() / "not-a-root");
+    EXPECT_THROW(
+        (void)Pipeline::ResolveContentSourceRootCapabilities(source, fileRoot),
+        std::invalid_argument);
+
+    Pipeline::ContentSourceRootCapabilities duplicatePhysical;
+    duplicatePhysical.Add("one", shared);
+    duplicatePhysical.Add("two", shared);
+    EXPECT_THROW(
+        (void)Pipeline::ResolveContentSourceRootCapabilities(source, duplicatePhysical),
         std::invalid_argument);
 }
 
@@ -598,6 +680,122 @@ TEST(ContentPipelineCoreTest, ProcessorDeploymentFilesRejectConflictsAndPathEsca
             EXPECT_EQ(error.Stage(), Pipeline::ContentPipelineStage::Process);
             EXPECT_EQ(error.Component(), "test.DeploymentProcessor");
         }
+    }
+}
+
+TEST(ContentPipelineCoreTest, ExplicitExternalDependencyCanBeHashedAndDeployedByStableAlias)
+{
+    ScratchDirectory scratch("external_dependency_deployment");
+    const std::filesystem::path sourceRoot = scratch.Path() / "Source";
+    const std::filesystem::path sharedA = scratch.Path() / "SharedA";
+    const std::filesystem::path sharedB = scratch.Path() / "SharedB";
+    const std::filesystem::path outputRoot = scratch.Path() / "Content";
+    WriteText(sourceRoot / "asset.num", "7");
+    WriteText(sharedA / "data" / "support.bin", "shared bytes");
+    WriteText(sharedB / "data" / "support.bin", "shared bytes");
+    std::filesystem::create_directories(outputRoot);
+
+    Pipeline::ContentBuildRequest request;
+    request.sourceRoot = sourceRoot;
+    request.source = "asset.num";
+    request.logicalName = "Numbers/asset";
+    request.externalSourceRoots.Add("shared", sharedA);
+
+    auto bypassRegistry = std::make_shared<Pipeline::ContentPipelineRegistry>();
+    bypassRegistry->RegisterImporter(std::make_shared<NumberImporter>());
+    bypassRegistry->RegisterProcessor(std::make_shared<DeploymentProcessor>(
+        std::vector<std::pair<std::filesystem::path, std::string>>{
+            {sharedA / "data" / "support.bin", "Support/support.bin"}}));
+    bypassRegistry->RegisterWriter(std::make_shared<NumberWriter>());
+    EXPECT_THROW((void)Pipeline::ContentPipeline(bypassRegistry).Build(request),
+                 Pipeline::ContentPipelineError)
+        << "configured containment alone granted deployment without explicit resolution";
+
+    auto registry = std::make_shared<Pipeline::ContentPipelineRegistry>();
+    registry->RegisterImporter(std::make_shared<NumberImporter>());
+    registry->RegisterProcessor(std::make_shared<ExternalDeploymentProcessor>(
+        "@shared/data/support.bin", "Support/support.bin"));
+    registry->RegisterWriter(std::make_shared<NumberWriter>());
+    const Pipeline::ContentBuildResult result =
+        Pipeline::ContentPipeline(registry).Build(request);
+
+    ASSERT_EQ(result.dependencies.size(), 2u);
+    EXPECT_EQ(result.dependencies[1].kind, Pipeline::ContentDependencyKind::SourceFile);
+    EXPECT_EQ(result.dependencies[1].sourceRoot, "shared");
+    EXPECT_EQ(CNA::Internal::ContentPathFromUtf8(result.dependencies[1].identity),
+              std::filesystem::weakly_canonical(sharedA / "data" / "support.bin"));
+    ASSERT_EQ(result.deploymentFiles.size(), 1u);
+    EXPECT_EQ(result.deploymentFiles[0].sourceRoot, "shared");
+
+    const Pipeline::ContentSourceRootCapabilities resolvedA =
+        Pipeline::ResolveContentSourceRootCapabilities(sourceRoot,
+                                                       request.externalSourceRoots);
+    Pipeline::ContentBuildManifestEntry entry =
+        Pipeline::MakeContentBuildManifestEntry(
+            result, sourceRoot, outputRoot, outputRoot / "Numbers" / "asset.cnb", resolvedA);
+    ASSERT_EQ(entry.dependencies.size(), 2u);
+    EXPECT_EQ(entry.dependencies[1].sourceRoot, "shared");
+    EXPECT_EQ(entry.dependencies[1].identity, "data/support.bin");
+    ASSERT_EQ(entry.deploymentFiles.size(), 1u);
+    EXPECT_EQ(entry.deploymentFiles[0].sourceRoot, "shared");
+    EXPECT_EQ(entry.deploymentFiles[0].source, "data/support.bin");
+    Pipeline::RefreshContentBuildDirectFingerprint(entry, sourceRoot, resolvedA);
+    const std::string fingerprintA = entry.directFingerprint;
+
+    Pipeline::ContentSourceRootCapabilities remapped;
+    remapped.Add("shared", sharedB);
+    const Pipeline::ContentSourceRootCapabilities resolvedB =
+        Pipeline::ResolveContentSourceRootCapabilities(sourceRoot, remapped);
+    EXPECT_EQ(Pipeline::ComputeContentBuildDirectFingerprint(
+                  entry, sourceRoot, resolvedB),
+              fingerprintA)
+        << "physical root path leaked into semantic cache identity";
+
+    WriteText(sharedB / "data" / "support.bin", "changed bytes");
+    EXPECT_NE(Pipeline::ComputeContentBuildDirectFingerprint(
+                  entry, sourceRoot, resolvedB),
+              fingerprintA);
+}
+
+TEST(ContentPipelineCoreTest, ExternalReferencesRejectUnknownTraversalAbsoluteAndSymlinkEscape)
+{
+    ScratchDirectory scratch("external_dependency_rejection");
+    const std::filesystem::path sourceRoot = scratch.Path() / "Source";
+    const std::filesystem::path shared = scratch.Path() / "Shared";
+    const std::filesystem::path outside = scratch.Path() / "Outside";
+    WriteText(sourceRoot / "asset.num", "7");
+    WriteText(shared / "safe.bin", "safe");
+    WriteText(outside / "secret.bin", "secret");
+
+    const auto build = [&](const std::string& dependency)
+    {
+        auto registry = std::make_shared<Pipeline::ContentPipelineRegistry>();
+        registry->RegisterImporter(std::make_shared<NumberImporter>(
+            "test.ExternalImporter", ".num", kImportedType, dependency));
+        registry->RegisterProcessor(std::make_shared<NumberProcessor>());
+        registry->RegisterWriter(std::make_shared<NumberWriter>());
+        Pipeline::ContentBuildRequest request;
+        request.sourceRoot = sourceRoot;
+        request.source = "asset.num";
+        request.logicalName = "asset";
+        request.externalSourceRoots.Add("shared", shared);
+        return Pipeline::ContentPipeline(registry).Build(request);
+    };
+
+    for (const std::string& dependency : {
+             "@unknown/safe.bin", "@shared/../Outside/secret.bin",
+             "@shared//absolute.bin", "@shared/folder\\escape.bin",
+             "/absolute/bypass.bin"})
+    {
+        EXPECT_THROW((void)build(dependency), Pipeline::ContentPipelineError)
+            << dependency;
+    }
+
+    std::error_code error;
+    std::filesystem::create_symlink(outside / "secret.bin", shared / "escape.bin", error);
+    if (!error)
+    {
+        EXPECT_THROW((void)build("@shared/escape.bin"), Pipeline::ContentPipelineError);
     }
 }
 

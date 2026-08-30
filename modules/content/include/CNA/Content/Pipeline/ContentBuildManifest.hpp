@@ -12,7 +12,7 @@
 namespace CNA::Content::Pipeline
 {
     /** @brief Current on-disk CNA Content Pipeline manifest format version. */
-    inline constexpr std::uint32_t ContentBuildManifestVersion = 6u;
+    inline constexpr std::uint32_t ContentBuildManifestVersion = 7u;
 
     /** @brief File name used for the inspectable manifest below a content output
      * root. */
@@ -46,6 +46,9 @@ namespace CNA::Content::Pipeline
     /** @brief One non-CNB deployment file owned by a build node. */
     struct ContentBuildManifestDeploymentFile
     {
+        /** @brief External source-root alias, or empty for the primary source root. */
+        std::string sourceRoot;
+
         /** @brief Source path relative to the source root, using `/`. */
         std::string source;
 
@@ -214,18 +217,20 @@ namespace CNA::Content::Pipeline
     /**
      * @brief Computes the direct-input and graph-topology fingerprint for one node.
      *
-     * Primary/source/generated dependency files are resolved below @p sourceRoot and hashed by
-     * bytes. Content-build dependency identities participate, but their effective fingerprints do
-     * not. This allows a previous edge set to be reused only while every input that could have
-     * changed dependency discovery is unchanged.
+     * Primary/generated files are resolved below @p sourceRoot. Source-file dependencies may
+     * instead select one alias in @p externalSourceRoots. Content-build dependency identities
+     * participate, but their effective fingerprints do not. This allows a previous edge set to be
+     * reused only while every input that could have changed dependency discovery is unchanged.
      *
      * @param entry Record containing current components, parameters and dependencies.
      * @param sourceRoot Root under which every file dependency must resolve.
+     * @param externalSourceRoots Explicit alias-to-native-root mappings.
      * @return Lowercase SHA-256 of canonical length-prefixed fields.
      * @throws std::runtime_error for missing, unreadable or escaping file dependencies.
      */
     [[nodiscard]] std::string ComputeContentBuildDirectFingerprint(
-        const ContentBuildManifestEntry& entry, const std::filesystem::path& sourceRoot);
+        const ContentBuildManifestEntry& entry, const std::filesystem::path& sourceRoot,
+        const ContentSourceRootCapabilities& externalSourceRoots = {});
 
     /**
      * @brief Refreshes the persisted direct-input domains and aggregate direct fingerprint.
@@ -235,10 +240,12 @@ namespace CNA::Content::Pipeline
      *
      * @param entry Record to update in place.
      * @param sourceRoot Root under which every file dependency must resolve.
+     * @param externalSourceRoots Explicit alias-to-native-root mappings.
      * @throws std::runtime_error for missing, unreadable or escaping file dependencies.
      */
     void RefreshContentBuildDirectFingerprint(
-        ContentBuildManifestEntry& entry, const std::filesystem::path& sourceRoot);
+        ContentBuildManifestEntry& entry, const std::filesystem::path& sourceRoot,
+        const ContentSourceRootCapabilities& externalSourceRoots = {});
 
     /**
      * @brief Combines a node's current direct fingerprint with effective dependency results.
@@ -278,12 +285,14 @@ namespace CNA::Content::Pipeline
      * @param sourceRoot Root under which every file dependency must resolve.
      * @param contentBuildFingerprints Effective fingerprints keyed by logical asset
      * name.
+     * @param externalSourceRoots Explicit alias-to-native-root mappings.
      * @return Lowercase SHA-256 of canonical length-prefixed fields.
      * @throws std::runtime_error for missing, unreadable or escaping dependencies.
      */
     [[nodiscard]] std::string ComputeContentBuildFingerprint(
         const ContentBuildManifestEntry& entry, const std::filesystem::path& sourceRoot,
-        const std::map<std::string, std::string>& contentBuildFingerprints = {});
+        const std::map<std::string, std::string>& contentBuildFingerprints = {},
+        const ContentSourceRootCapabilities& externalSourceRoots = {});
 
     /**
      * @brief Converts a successful in-memory result into a root-relative manifest
@@ -293,6 +302,7 @@ namespace CNA::Content::Pipeline
      * @param sourceRoot Canonical source root.
      * @param outputRoot Canonical output root.
      * @param outputPath Published artifact path.
+     * @param externalSourceRoots Explicit alias-to-native-root mappings.
      * Additional outputs use their logical names below @p outputRoot with a `.cnb` suffix. The
      * primary output keeps the caller-selected path, which matters for single-file builds.
      *
@@ -301,5 +311,6 @@ namespace CNA::Content::Pipeline
      */
     [[nodiscard]] ContentBuildManifestEntry MakeContentBuildManifestEntry(
         const ContentBuildResult& result, const std::filesystem::path& sourceRoot,
-        const std::filesystem::path& outputRoot, const std::filesystem::path& outputPath);
+        const std::filesystem::path& outputRoot, const std::filesystem::path& outputPath,
+        const ContentSourceRootCapabilities& externalSourceRoots = {});
 } // namespace CNA::Content::Pipeline

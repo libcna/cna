@@ -62,6 +62,51 @@ TEST(ContentBuildConfigurationTest, EmptyAssetMapIsValidForConventionOnlyBuilds)
         Pipeline::ContentBuildConfiguration::Parse(
             R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{}})json");
     EXPECT_TRUE(configuration.Entries().empty());
+    EXPECT_TRUE(configuration.SourceRoots().Empty());
+}
+
+TEST(ContentBuildConfigurationTest, ParsesBoundedNamedExternalSourceRoots)
+{
+    const Pipeline::ContentBuildConfiguration configuration =
+        Pipeline::ContentBuildConfiguration::Parse(
+            R"json({"format":"CNA.ContentPipeline.Config","version":1,"sourceRoots":{"shared-audio":"../SharedAudio","shared-textures":"/project/SharedTextures"},"assets":{}})json");
+    ASSERT_EQ(configuration.SourceRoots().Entries().size(), 2u);
+    ASSERT_NE(configuration.SourceRoots().Find("shared-audio"), nullptr);
+    EXPECT_EQ(*configuration.SourceRoots().Find("shared-audio"),
+              std::filesystem::path("../SharedAudio"));
+    ASSERT_NE(configuration.SourceRoots().Find("shared-textures"), nullptr);
+    EXPECT_EQ(*configuration.SourceRoots().Find("shared-textures"),
+              std::filesystem::path("/project/SharedTextures"));
+    EXPECT_EQ(configuration.SourceRoots().Find("missing"), nullptr);
+}
+
+TEST(ContentBuildConfigurationTest, RejectsInvalidDuplicateAndUnboundedSourceRoots)
+{
+    const auto parseRoots = [](const std::string& roots)
+    {
+        return Pipeline::ContentBuildConfiguration::Parse(
+            "{\"format\":\"CNA.ContentPipeline.Config\",\"version\":1,"
+            "\"sourceRoots\":" + roots + ",\"assets\":{}}",
+            "bad-roots.json");
+    };
+    for (const std::string& roots : {
+             "[]", "{\"Shared\":\"../one\"}", "{\"1shared\":\"../one\"}",
+             "{\"shared_root\":\"../one\"}", "{\"shared\":\"\"}",
+             "{\"shared\":7}",
+             "{\"shared\":\"../one\",\"shared\":\"../two\"}"})
+    {
+        EXPECT_THROW((void)parseRoots(roots), std::runtime_error) << roots;
+    }
+
+    std::string tooMany = "{";
+    for (std::size_t index = 0u; index <= Pipeline::MaxContentSourceRoots; ++index)
+    {
+        if (index != 0u) { tooMany += ','; }
+        tooMany += "\"root" + std::to_string(index) + "\":\"../root" +
+                   std::to_string(index) + "\"";
+    }
+    tooMany += '}';
+    EXPECT_THROW((void)parseRoots(tooMany), std::runtime_error);
 }
 
 TEST(ContentBuildConfigurationTest, RejectsUnknownAndRepeatedFieldsWithAssetContext)

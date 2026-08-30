@@ -88,7 +88,7 @@ namespace
              Pipeline::ContentSha256({10u, 11u})},
         };
         entry.deploymentFiles = {
-            {"shared/table.bin", "Support/table.bin",
+            {{}, "shared/table.bin", "Support/table.bin",
              Pipeline::ContentFileSha256(sourceRoot / "shared" / "table.bin")},
         };
         Pipeline::RefreshContentBuildDirectFingerprint(entry, sourceRoot);
@@ -171,7 +171,7 @@ TEST(ContentBuildManifestTest, RoundTripsEveryStableFieldDeterministically)
     EXPECT_NE(first.find("runtimeReferences"), std::string::npos);
     EXPECT_NE(first.find("Generated/asset-index.cnb"), std::string::npos);
     EXPECT_NE(first.find("Support/table.bin"), std::string::npos);
-    EXPECT_NE(first.find("\"version\":6"), std::string::npos);
+    EXPECT_NE(first.find("\"version\":7"), std::string::npos);
     EXPECT_NE(first.find("fingerprintState"), std::string::npos);
     EXPECT_NE(first.find("contentDependencyFingerprints"), std::string::npos);
     EXPECT_NE(first.find("writerSchemas"), std::string::npos);
@@ -180,13 +180,60 @@ TEST(ContentBuildManifestTest, RoundTripsEveryStableFieldDeterministically)
 
 TEST(ContentBuildManifestTest, EarlierVersionsAreRejectedSoTheCliCanRebuildSafely)
 {
-    for (const std::uint32_t version : {1u, 2u, 3u, 4u, 5u})
+    for (const std::uint32_t version : {1u, 2u, 3u, 4u, 5u, 6u})
     {
         EXPECT_THROW((void)Pipeline::ContentBuildManifest::Parse(
                          "{\"format\":\"CNA.ContentPipeline.Manifest\",\"version\":" +
                          std::to_string(version) + ",\"assets\":[]}"),
                      std::runtime_error);
     }
+}
+
+TEST(ContentBuildManifestTest, ExternalRootsPersistAliasRelativeIdentityWithoutPhysicalPaths)
+{
+    ScratchDirectory scratch("external_root_identity");
+    const std::filesystem::path sourceRoot = scratch.Path() / "Source";
+    const std::filesystem::path sharedRoot = scratch.Path() / "Shared";
+    std::filesystem::create_directories(sourceRoot);
+    WriteBytes(sharedRoot / "data" / "external.bin", {9u, 8u, 7u});
+    Pipeline::ContentBuildManifestEntry entry = MakeEntry(sourceRoot);
+    entry.dependencies.push_back(
+        {Pipeline::ContentDependencyKind::SourceFile, "data/external.bin", "shared"});
+    entry.deploymentFiles.push_back(
+        {"shared", "data/external.bin", "Support/external.bin",
+         Pipeline::ContentFileSha256(sharedRoot / "data" / "external.bin")});
+
+    Pipeline::ContentSourceRootCapabilities configured;
+    configured.Add("shared", sharedRoot);
+    const Pipeline::ContentSourceRootCapabilities roots =
+        Pipeline::ResolveContentSourceRootCapabilities(sourceRoot, configured);
+    Pipeline::RefreshContentBuildDirectFingerprint(entry, sourceRoot, roots);
+    Pipeline::RefreshContentBuildEffectiveFingerprint(entry);
+    Pipeline::ContentBuildManifest manifest;
+    manifest.Set(entry);
+    entry = *manifest.Find("Data/asset");
+    const std::string json = manifest.Serialize();
+    EXPECT_NE(json.find("\"sourceRoot\":\"shared\""), std::string::npos);
+    EXPECT_EQ(json.find(CNA::Internal::ContentPathToUtf8(sharedRoot)), std::string::npos)
+        << "physical external root leaked into manifest";
+
+    const Pipeline::ContentBuildManifest parsed =
+        Pipeline::ContentBuildManifest::Parse(json);
+    ASSERT_NE(parsed.Find("Data/asset"), nullptr);
+    EXPECT_EQ(*parsed.Find("Data/asset"), entry);
+
+    Pipeline::ContentSourceRootCapabilities unavailable;
+    EXPECT_THROW((void)Pipeline::ComputeContentBuildDirectFingerprint(
+                     entry, sourceRoot, unavailable),
+                 std::runtime_error);
+
+    Pipeline::ContentBuildManifestEntry malformed = entry;
+    malformed.dependencies.back().sourceRoot = "Bad";
+    EXPECT_THROW(manifest.Set(malformed), std::invalid_argument);
+
+    malformed = entry;
+    malformed.deploymentFiles.back().sourceRoot = "other";
+    EXPECT_THROW(manifest.Set(malformed), std::invalid_argument);
 }
 
 TEST(ContentBuildManifestTest, FingerprintUsesBytesNotModificationTimes)

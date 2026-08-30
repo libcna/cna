@@ -360,6 +360,37 @@ namespace CNA::Content::Pipeline
             return resolved;
         }
 
+        const std::filesystem::path& SelectSourceRoot(
+            const std::filesystem::path& sourceRoot,
+            const ContentSourceRootCapabilities& externalSourceRoots,
+            const std::string& alias, const char* description)
+        {
+            if (alias.empty()) { return sourceRoot; }
+            const std::string problem = ContentSourceRootAliasProblem(alias);
+            if (!problem.empty())
+            {
+                throw std::runtime_error(std::string(description) + " uses invalid source-root "
+                                         "alias '" + alias + "': " + problem + ".");
+            }
+            const std::filesystem::path* root = externalSourceRoots.Find(alias);
+            if (root == nullptr)
+            {
+                throw std::runtime_error(std::string(description) +
+                                         " uses unavailable source-root alias '" + alias + "'.");
+            }
+            return *root;
+        }
+
+        std::filesystem::path ResolveSourceIdentity(
+            const std::filesystem::path& sourceRoot,
+            const ContentSourceRootCapabilities& externalSourceRoots,
+            const std::string& alias, const std::string& identity, const char* description)
+        {
+            return ResolveContained(
+                SelectSourceRoot(sourceRoot, externalSourceRoots, alias, description),
+                identity, description);
+        }
+
         // SharpRuntime deliberately omits ComputeHash(Stream), but its protected hash core is
         // incremental. This adapter keeps one SHA-256 implementation while feeding bounded chunks.
         class StreamingSha256 final : public System::Security::Cryptography::SHA256
@@ -464,7 +495,8 @@ namespace CNA::Content::Pipeline
         }
 
         ContentBuildFingerprintState ComputeDirectFingerprintState(
-            const ContentBuildManifestEntry& entry, const std::filesystem::path& sourceRoot)
+            const ContentBuildManifestEntry& entry, const std::filesystem::path& sourceRoot,
+            const ContentSourceRootCapabilities& externalSourceRoots)
         {
             ContentBuildFingerprintState state;
             const std::string primarySourceDigest =
@@ -498,11 +530,15 @@ namespace CNA::Content::Pipeline
             for (const ContentDependency& dependency : sourceDependencies)
             {
                 sourceSet.AddU64(static_cast<std::uint64_t>(dependency.kind));
+                sourceSet.AddString(dependency.sourceRoot);
                 sourceSet.AddString(dependency.identity);
                 sourceBytes.AddU64(static_cast<std::uint64_t>(dependency.kind));
+                sourceBytes.AddString(dependency.sourceRoot);
                 sourceBytes.AddString(dependency.identity);
                 sourceBytes.AddString(ContentFileSha256(
-                    ResolveContained(sourceRoot, dependency.identity, "dependency")));
+                    ResolveSourceIdentity(sourceRoot, externalSourceRoots,
+                                          dependency.sourceRoot, dependency.identity,
+                                          "dependency")));
             }
             state.sourceDependencySet = sourceSet.Finish();
             state.sourceDependencyBytes = sourceBytes.Finish();
@@ -596,6 +632,7 @@ namespace CNA::Content::Pipeline
             deploymentDefinitions.AddU64(deploymentFiles.size());
             for (const ContentBuildManifestDeploymentFile& deployment : deploymentFiles)
             {
+                deploymentDefinitions.AddString(deployment.sourceRoot);
                 deploymentDefinitions.AddString(deployment.source);
                 deploymentDefinitions.AddString(deployment.path);
             }
@@ -755,7 +792,8 @@ namespace CNA::Content::Pipeline
                         "content manifest deployment file must be an object.");
                 }
                 entry.deploymentFiles.push_back(
-                    {RequireString(deployment, "source"),
+                    {RequireString(deployment, "sourceRoot"),
+                     RequireString(deployment, "source"),
                      RequireString(deployment, "path"),
                      RequireString(deployment, "sha256")});
             }
@@ -786,7 +824,8 @@ namespace CNA::Content::Pipeline
                 }
                 entry.dependencies.push_back(
                     {ParseDependencyKind(RequireString(dependency, "kind")),
-                     RequireString(dependency, "identity")});
+                     RequireString(dependency, "identity"),
+                     RequireString(dependency, "sourceRoot")});
             }
             std::sort(entry.dependencies.begin(), entry.dependencies.end());
 
@@ -862,6 +901,7 @@ namespace CNA::Content::Pipeline
                  entry.deploymentFiles)
             {
                 JsonValue item = JsonValue::MakeObject();
+                item.Set("sourceRoot", StringValue(deployment.sourceRoot));
                 item.Set("source", StringValue(deployment.source));
                 item.Set("path", StringValue(deployment.path));
                 item.Set("sha256", StringValue(deployment.sha256));
@@ -886,6 +926,7 @@ namespace CNA::Content::Pipeline
                 JsonValue item = JsonValue::MakeObject();
                 item.Set("kind", StringValue(DependencyKindName(dependency.kind)));
                 item.Set("identity", StringValue(dependency.identity));
+                item.Set("sourceRoot", StringValue(dependency.sourceRoot));
                 dependencies.arrayValue.push_back(std::move(item));
             }
             value.Set("dependencies", std::move(dependencies));
@@ -1061,6 +1102,17 @@ namespace CNA::Content::Pipeline
         }
         for (const ContentBuildManifestDeploymentFile& deployment : entry.deploymentFiles)
         {
+            if (!deployment.sourceRoot.empty())
+            {
+                const std::string problem =
+                    ContentSourceRootAliasProblem(deployment.sourceRoot);
+                if (!problem.empty())
+                {
+                    throw std::invalid_argument(
+                        "content manifest deployment source-root alias '" +
+                        deployment.sourceRoot + "' is invalid: " + problem + ".");
+                }
+            }
             RequireSafeRelativePath(deployment.source, "deployment source");
             RequireSafeRelativePath(deployment.path, "deployment output path");
             if (!outputPaths.insert(deployment.path).second)
@@ -1077,6 +1129,17 @@ namespace CNA::Content::Pipeline
         }
         for (const ContentDependency& dependency : entry.dependencies)
         {
+            if (!dependency.sourceRoot.empty())
+            {
+                const std::string problem =
+                    ContentSourceRootAliasProblem(dependency.sourceRoot);
+                if (dependency.kind != ContentDependencyKind::SourceFile || !problem.empty())
+                {
+                    throw std::invalid_argument(
+                        "content manifest only permits a valid external source-root alias on a "
+                        "source-file dependency.");
+                }
+            }
             if (dependency.kind == ContentDependencyKind::ContentBuild)
             {
                 const std::string problem = Cnb::CnbLogicalNameProblem(dependency.identity);
@@ -1107,6 +1170,7 @@ namespace CNA::Content::Pipeline
                 [&](const ContentDependency& dependency)
                 {
                     return dependency.kind != ContentDependencyKind::ContentBuild &&
+                           dependency.sourceRoot == deployment.sourceRoot &&
                            dependency.identity == deployment.source;
                 });
             if (!fingerprinted)
@@ -1174,17 +1238,20 @@ namespace CNA::Content::Pipeline
     }
 
     std::string ComputeContentBuildDirectFingerprint(
-        const ContentBuildManifestEntry& entry, const std::filesystem::path& sourceRoot)
+        const ContentBuildManifestEntry& entry, const std::filesystem::path& sourceRoot,
+        const ContentSourceRootCapabilities& externalSourceRoots)
     {
         const ContentBuildFingerprintState state =
-            ComputeDirectFingerprintState(entry, sourceRoot);
+            ComputeDirectFingerprintState(entry, sourceRoot, externalSourceRoots);
         return ComputeDirectFingerprintFromState(entry, state);
     }
 
     void RefreshContentBuildDirectFingerprint(
-        ContentBuildManifestEntry& entry, const std::filesystem::path& sourceRoot)
+        ContentBuildManifestEntry& entry, const std::filesystem::path& sourceRoot,
+        const ContentSourceRootCapabilities& externalSourceRoots)
     {
-        entry.fingerprintState = ComputeDirectFingerprintState(entry, sourceRoot);
+        entry.fingerprintState =
+            ComputeDirectFingerprintState(entry, sourceRoot, externalSourceRoots);
         entry.directFingerprint =
             ComputeDirectFingerprintFromState(entry, entry.fingerprintState);
     }
@@ -1209,10 +1276,11 @@ namespace CNA::Content::Pipeline
 
     std::string ComputeContentBuildFingerprint(
         const ContentBuildManifestEntry& entry, const std::filesystem::path& sourceRoot,
-        const std::map<std::string, std::string>& contentBuildFingerprints)
+        const std::map<std::string, std::string>& contentBuildFingerprints,
+        const ContentSourceRootCapabilities& externalSourceRoots)
     {
         ContentBuildManifestEntry current = entry;
-        RefreshContentBuildDirectFingerprint(current, sourceRoot);
+        RefreshContentBuildDirectFingerprint(current, sourceRoot, externalSourceRoots);
         RefreshContentBuildEffectiveFingerprint(current, contentBuildFingerprints);
         return current.fingerprint;
     }
@@ -1220,7 +1288,9 @@ namespace CNA::Content::Pipeline
     ContentBuildManifestEntry MakeContentBuildManifestEntry(const ContentBuildResult& result,
                                                             const std::filesystem::path& sourceRoot,
                                                             const std::filesystem::path& outputRoot,
-                                                            const std::filesystem::path& outputPath)
+                                                            const std::filesystem::path& outputPath,
+                                                            const ContentSourceRootCapabilities&
+                                                                externalSourceRoots)
     {
         ContentBuildManifestEntry entry;
         entry.nodeId = result.logicalName;
@@ -1271,19 +1341,31 @@ namespace CNA::Content::Pipeline
         entry.deploymentFiles.reserve(result.deploymentFiles.size());
         for (const ContentDeploymentFile& deployment : result.deploymentFiles)
         {
-            const std::string source =
-                RelativeContained(sourceRoot, deployment.source, "deployment source");
+            const std::filesystem::path& deploymentRoot = SelectSourceRoot(
+                sourceRoot, externalSourceRoots, deployment.sourceRoot, "deployment source");
+            const std::string source = RelativeContained(
+                deploymentRoot, deployment.source, "deployment source");
             const std::filesystem::path destination =
                 outputRoot / CNA::Internal::ContentPathFromUtf8(deployment.outputPath);
             const std::string path =
                 RelativeContained(outputRoot, destination, "deployment output");
-            const std::filesystem::path canonicalSource =
-                ResolveContained(sourceRoot, source, "deployment source");
+            const std::filesystem::path canonicalSource = ResolveContained(
+                deploymentRoot, source, "deployment source");
             const std::filesystem::path canonicalDestination =
                 ResolveContained(outputRoot, path, "deployment output");
-            if (IsWithin(WeaklyCanonical(sourceRoot), canonicalDestination))
+            bool destinationInsideAuthoredRoot =
+                IsWithin(WeaklyCanonical(sourceRoot), canonicalDestination);
+            for (const auto& [alias, externalRoot] : externalSourceRoots.Entries())
             {
-                if (canonicalSource == canonicalDestination)
+                static_cast<void>(alias);
+                destinationInsideAuthoredRoot =
+                    destinationInsideAuthoredRoot ||
+                    IsWithin(WeaklyCanonical(externalRoot), canonicalDestination);
+            }
+            if (destinationInsideAuthoredRoot)
+            {
+                if (deployment.sourceRoot.empty() &&
+                    canonicalSource == canonicalDestination)
                 {
                     continue;
                 }
@@ -1293,7 +1375,8 @@ namespace CNA::Content::Pipeline
                     "separate output root.");
             }
             entry.deploymentFiles.push_back(
-                {source, path, ContentFileSha256(deployment.source)});
+                {deployment.sourceRoot, source, path,
+                 ContentFileSha256(deployment.source)});
         }
         entry.dependencies.reserve(result.dependencies.size());
         for (const ContentDependency& dependency : result.dependencies)
@@ -1301,8 +1384,11 @@ namespace CNA::Content::Pipeline
             ContentDependency normalized = dependency;
             if (dependency.kind != ContentDependencyKind::ContentBuild)
             {
+                const std::filesystem::path& dependencyRoot = SelectSourceRoot(
+                    sourceRoot, externalSourceRoots, dependency.sourceRoot, "dependency");
                 normalized.identity = RelativeContained(
-                    sourceRoot, CNA::Internal::ContentPathFromUtf8(dependency.identity),
+                    dependencyRoot,
+                    CNA::Internal::ContentPathFromUtf8(dependency.identity),
                     "dependency");
             }
             entry.dependencies.push_back(std::move(normalized));

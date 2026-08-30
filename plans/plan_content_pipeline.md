@@ -1206,7 +1206,7 @@ carrying forward task-local results:
 | `CP-052` | **completed** | Evolved the manifest to v6 with nine bounded canonical SHA-256 domains: primary bytes; source-dependency set/bytes; content-dependency set/effective fingerprints; parameters; writer schemas/codecs; compiled-output/XREF definitions; and deployment definitions. Direct/effective aggregate hashes now derive from the same domains. Versions 1-5 rebuild as incompatible without granting orphan-deletion authority; deterministic round-trip/domain-isolation/migration tests and the complete 66-case manifest/configuration/CLI/custom/CMake boundary pass. No CNB definition or byte changed. |
 | `CP-053` | **completed** | Added private structured build decisions and `build ... --explain`. Reasons compare inspectable route/schema/codec fields plus the persisted v6 domains, effective graph inputs and per-artifact digests; they distinguish manifest state, source/dependency/configuration/component/output/deployment changes and missing versus tampered artifacts without guessing from aggregate hashes. Root-relative sorted explanations are byte-identical under workers 1/2/4; `--quiet` suppresses successful explanations and `clean` rejects the option. The complete 71-case manifest/CLI ASan+UBSan boundary and an 11-case TSan selection pass. On the 128-node no-op fixture the median was 0.291 s with explanations versus 0.276 s normally (5.6%, about 15 ms). |
 | `CP-054` | **completed** | Audited configuration, context resolution, manifest hashing, deployment and destructive paths and specified the bounded capability model in section 30. Strict configuration gains at most 32 lowercase aliases under `sourceRoots`; authored references use explicit `@alias/root-relative-path` syntax. The native mapping is request-local and never persisted. Manifest v7 stores alias and relative path as separate fields, hashes both, and resolves without root search. Existing source-relative resolution remains the default. Canonical source/external/output roots may not equal or nest; deployment from an external root is accepted only after the same explicitly aliased source dependency was recorded, while publication/clean/GC remain output-root-only. |
-| `CP-055` | **planned** | Implement the approved external-root capability model through dependency collection, hashing, staging/deployment and security tests. Prove traversal/symlink/absolute/overlap failures and prove clean, GC and scavenging never gain external-root deletion authority. |
+| `CP-055` | **completed** | Implemented bounded named external source roots end to end. Strict config maps aliases under `sourceRoots`; unqualified dependencies retain source-root containment while `@alias/path` resolves directly through a canonical request-local read capability. Manifest v7 persists alias plus relative identity, hashes both, and never stores physical roots. Same-byte physical remapping skips; alias/identity/set/byte changes invalidate. External deployment requires the exact aliased dependency first and still publishes only below the output root. Normal 101-test, ASan+UBSan 101-test and focused TSan 10-test gates prove workers 1/4 identity, migration, traversal/absolute/backslash/symlink/unknown/duplicate/missing/file/overlap rejection, and external sentinel survival through deployment contraction, GC and clean. |
 | `CP-056` | **planned** | Audit actual XNB Model reader semantics, CNA runtime vertex/buffer/effect capabilities, schema-1 wire/runtime behavior and glTF/CNJ carriers. Produce a support matrix and a precise schema-2 design only if the runtime can consume the proposed semantics without arbitrary CLR object serialization. |
 | `CP-057` | **conditional** | Implement and independently golden-test Model schema 2, then broaden lossless XNB Model transcoding, only if CP-056 proves a coherent design. Schema 1, its reader and all existing golden bytes remain immutable; unsupported tags/effects must still fail explicitly. |
 | `CP-058` | **planned** | Measure generated glTF child rebuild behavior and retain same-node scheduling unless independent nodes provide real cache isolation without changing embedded-clip or texture-XREF semantics. |
@@ -2184,3 +2184,57 @@ default rejection, unknown/duplicate/colliding aliases and roots, traversal/abso
 symlink escape, missing/file roots, every source/external/output overlap direction, and external
 sentinel survival through build failure, orphan collection, clean and scavenging. No C binding or
 CNB schema change follows from this experimental build-time capability.
+
+---
+
+## 31. Named external source capabilities (`CP-055`)
+
+CP-055 implements section 30's design without adding a second resolver, hasher, publisher, or
+cleaner. The configuration parser accepts only the bounded alias map described above. The central
+capability resolver canonicalizes all roots before discovery and is shared by the embedding
+`Build()` path and the CLI. Importer and processor contexts select aliased roots explicitly;
+deployment checks the exact already-recorded physical dependency rather than searching the
+capabilities. Manifest v7 normalizes the transient native source into `sourceRoot` plus relative
+`source`, and its source-dependency set/bytes and deployment-definition domains hash those stable
+fields. A v6 manifest is incompatible cache state and cannot authorize deletion; a rebuilt v7
+manifest retains the CP-052 reason domains and CP-053 explanations.
+
+The implementation tests configuration parsing, deterministic manifest round trips with no
+physical-path leak, same-byte remapping to a second checkout, external byte invalidation and
+root-qualified CNJ source references. Negative coverage includes the default outside-root refusal,
+unknown and duplicate aliases, duplicate or nested physical roots, missing/file roots, traversal,
+absolute paths, repeated separators, backslashes, canonical symlink escape, and every source/
+external/output equality or nesting direction. The custom compiler proves explicitly resolved
+external deployment, workers 1/4 byte-identical trees/manifests, same-byte root remapping, source
+invalidation, deployment contraction through manifest-owned GC, and clean. Sentinel files in each
+external root survive every build, contraction and clean; the only destructive paths remain the
+existing output publisher, manifest-proven orphan collector and private staging scavenger.
+
+The normal configuration/manifest/core/CLI selection ran 101 cases: 100 passed and the explicit
+>2 GiB hashing case remained skipped without its opt-in. The same 101-case boundary passed under
+combined ASan+UBSan with `detect_leaks=0` (the runner still prevents an LSan claim); ten focused
+capability, security, deployment and worker cases passed TSan. A 40-run alternating one-asset no-op
+benchmark measured ordinary contained hashing at 0.028613 seconds median and named external hashing
+at 0.028311 seconds on this host, a -0.303 ms difference within noise rather than measurable
+overhead. The broad dummy-audio HEADLESS content binary ran 1,554 tests: 1,543 passed, eight
+opt-in/external-fixture cases skipped, and exactly the three CP-050-documented renderer-only
+TextureCube/Texture3D cases failed; the default host PulseAudio backend itself is unavailable in
+this sandbox. MinGW-w64 also compiles and links the updated stock and custom Unicode-entry-point
+compiler executables. The generated C-API inventory moves from 9,346 to 9,360 declarations and assigns all 14
+new experimental C++ rows to existing future `CBIND-117`; no C route, export, ABI version, CNB
+definition, schema, encoder, or frozen byte changes.
+
+The durable invariants are:
+
+* a missing `sourceRoots` object preserves the original source-root-only policy;
+* every outside read explicitly selects exactly one bounded alias;
+* the request-local canonical directory grants reads only, while alias plus relative path is the
+  persisted and fingerprinted semantic identity;
+* all source, external, and output roots are pairwise non-overlapping;
+* an external deployment source must first be the exact explicitly resolved dependency; and
+* publication, atomicity, ownership, orphan collection, clean and staging recovery remain confined
+  to the output/private-staging namespaces they already owned.
+
+glTF remains intentionally outside this claim because its shared converter opens authored URIs
+before the pipeline context observes them. Extending it would require a separately reviewed
+resolver callback, not a containment exception.

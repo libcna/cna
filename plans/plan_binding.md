@@ -3,9 +3,10 @@
 > **Status (2026-08-29, after `CBIND-118`): B0–B11 and B13 complete; B12 is an explicit
 > C-ABI backlog, not Content Pipeline v1 work.** Phase B10 bound all 506 rows the sixth merge
 > reopened, the CNB content format included; Phase B11 bound the seventh merge's 15-row tail. The
-> completed experimental C++ Content Pipeline, its post-XNB continuation and CP-052's manifest-v6
-> reason domains now add 515 deliberately unbound inventory rows under `CBIND-117`. Coverage:
-> **549 headers / 9,346 symbols — 8,352 implemented, 15 approved partial, 515 planned, 464 not
+> completed experimental C++ Content Pipeline, its post-XNB continuation and CP-055's manifest-v7
+> named-source-root capability now add 529 deliberately unbound inventory rows under `CBIND-117`.
+> Coverage:
+> **549 headers / 9,360 symbols — 8,352 implemented, 15 approved partial, 529 planned, 464 not
 > applicable.** Phase B13 then bound `Load<Model>` and the `Tag` a content processor writes,
 > taking the ABI to **`0.19.0`** and **4,048 → 4,051** exports without moving a coverage row. The
 > release gate is consistently
@@ -1477,13 +1478,13 @@ Tests: a hand-written five-entry `.xnb` in `ContentSmoke.c`, every route and eve
 The Content Pipeline is a public, experimental C++ build-time component system, so the binding
 inventory's complete-public-API policy records it even though the C ABI remains a runtime-facing
 adapter and this integration task does not authorize new C routes. The continued source now adds
-501 unmapped declarations across the public Content Pipeline/import surface. They remain honest
+529 unmapped declarations across the public Content Pipeline/import surface. They remain honest
 `planned` rows rather than being hidden by an exclusion,
 mislabelled not-applicable, or attributed to already completed binding phases.
 
 | # | Task | Rows | Status | Acceptance criteria |
 |---|---|---:|---|---|
-| CBIND-117 | Design or disposition the experimental Content Pipeline C boundary | 515 | ⬜ | Decide whether C consumers need a build-time pipeline API and, if so, design C-native orchestration and extension contracts without exposing C++ RTTI, templates, `std::filesystem`, exceptions or component objects. Bind or owner-approve a documented disposition for every row, add C-only evidence for any route, update ABI/version artifacts when required, and return the generated coverage and release-gate documents to a measured closed state. This is separate future C-ABI work; no route is added by Content Pipeline integration. |
+| CBIND-117 | Design or disposition the experimental Content Pipeline C boundary | 529 | ⬜ | Decide whether C consumers need a build-time pipeline API and, if so, design C-native orchestration and extension contracts without exposing C++ RTTI, templates, `std::filesystem`, exceptions or component objects. Bind or owner-approve a documented disposition for every row, add C-only evidence for any route, update ABI/version artifacts when required, and return the generated coverage and release-gate documents to a measured closed state. This is separate future C-ABI work; no route is added by Content Pipeline integration. |
 
 ## Phase B13 — the model an XNA game actually loads
 
@@ -1575,13 +1576,13 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-**Snapshot (2026-08-30, after CP-052 manifest-v6 reason domains):** 549 headers / 9,346 symbols —
-**8,352 implemented, 15 approved partial, 515 planned, 464 not applicable.** ABI `0.19.0`, 4,051
+**Snapshot (2026-08-30, after CP-055 manifest-v7 named source roots):** 549 headers / 9,360 symbols —
+**8,352 implemented, 15 approved partial, 529 planned, 464 not applicable.** ABI `0.19.0`, 4,051
 exported symbols — the same 4,051 with `CNA_CNAEXT` on and off (measured symbol by symbol: zero
 differ), which is the engine layer's ABI promise measured rather than asserted.
 
 The completed C++ Content Pipeline and its continuation reopened only the coverage criterion: all
-501 unmapped declarations are assigned to open `CBIND-117`, no C route or ABI export was added, and
+529 unmapped declarations are assigned to open `CBIND-117`, no C route or ABI export was added, and
 the four new
 not-applicable rows are explicitly deleted declarations reported by Doxygen. The release gate is
 therefore **Not ready** on that one measured criterion while B12 remains open.

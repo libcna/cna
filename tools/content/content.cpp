@@ -625,6 +625,23 @@ namespace
         }
     }
 
+    void RequireExternalRootsSeparateFromOutput(
+        const std::filesystem::path& outputRoot,
+        const Pipeline::ContentSourceRootCapabilities& externalSourceRoots)
+    {
+        const std::filesystem::path canonicalOutputRoot = WeaklyCanonical(outputRoot);
+        for (const auto& [alias, externalRoot] : externalSourceRoots.Entries())
+        {
+            if (IsWithin(canonicalOutputRoot, externalRoot) ||
+                IsWithin(externalRoot, canonicalOutputRoot))
+            {
+                throw std::runtime_error(
+                    "content output root must not equal, contain, or be contained by external "
+                    "source root '" + alias + "'.");
+            }
+        }
+    }
+
     enum class ManifestLoadState
     {
         Missing,
@@ -980,7 +997,9 @@ namespace
                                 const Pipeline::ContentPipelineRegistry& registry,
                                 const BuildItem& item,
                                 const std::filesystem::path& sourceRoot,
-                                const std::filesystem::path& outputRoot)
+                                const std::filesystem::path& outputRoot,
+                                const Pipeline::ContentSourceRootCapabilities&
+                                    externalSourceRoots)
     {
         try
         {
@@ -1003,7 +1022,8 @@ namespace
             {
                 return false;
             }
-            return Pipeline::ComputeContentBuildDirectFingerprint(entry, sourceRoot) ==
+            return Pipeline::ComputeContentBuildDirectFingerprint(
+                       entry, sourceRoot, externalSourceRoots) ==
                    entry.directFingerprint;
         }
         catch (...)
@@ -1596,6 +1616,7 @@ namespace
         const Pipeline::ContentBuildManifest& previousManifest,
         ManifestLoadState manifestState,
         const std::filesystem::path& sourceRoot, const std::filesystem::path& outputRoot,
+        const Pipeline::ContentSourceRootCapabilities& externalSourceRoots,
         const std::filesystem::path& stagingRoot)
     {
         BuildNodePlan plan;
@@ -1607,7 +1628,8 @@ namespace
             const Pipeline::ContentBuildManifestEntry* previousForReason =
                 FindPreviousEntryForReason(previousManifest, item);
             if (previous != nullptr &&
-                IsPreviousGraphCurrent(*previous, registry, item, sourceRoot, outputRoot))
+                IsPreviousGraphCurrent(*previous, registry, item, sourceRoot, outputRoot,
+                                       externalSourceRoots))
             {
                 plan.manifest = *previous;
                 plan.hasManifest = true;
@@ -1617,6 +1639,7 @@ namespace
             Pipeline::ContentBuildRequest request;
             request.sourceRoot = sourceRoot;
             request.source = item.source;
+            request.externalSourceRoots = externalSourceRoots;
             request.logicalName = item.logicalName;
             request.importer = item.importer;
             request.processor = item.processor;
@@ -1625,8 +1648,9 @@ namespace
             Pipeline::ContentBuildResult result = pipeline.Build(request);
 
             plan.manifest = Pipeline::MakeContentBuildManifestEntry(
-                result, sourceRoot, outputRoot, item.output);
-            Pipeline::RefreshContentBuildDirectFingerprint(plan.manifest, sourceRoot);
+                result, sourceRoot, outputRoot, item.output, externalSourceRoots);
+            Pipeline::RefreshContentBuildDirectFingerprint(
+                plan.manifest, sourceRoot, externalSourceRoots);
             plan.decision =
                 InitialBuildDecision(manifestState, previousForReason, plan.manifest);
             const std::filesystem::path nodeStage = stagingRoot / std::to_string(index);
@@ -1684,6 +1708,7 @@ namespace
     BuildNodeOutcome ExecuteBuildNode(
         const BuildNodePlan& plan, const Pipeline::ContentPipeline& pipeline,
         const std::filesystem::path& sourceRoot, const std::filesystem::path& outputRoot,
+        const Pipeline::ContentSourceRootCapabilities& externalSourceRoots,
         const std::map<std::string, std::string>& effectiveFingerprints)
     {
         BuildNodeOutcome outcome;
@@ -1733,6 +1758,7 @@ namespace
             Pipeline::ContentBuildRequest request;
             request.sourceRoot = sourceRoot;
             request.source = item.source;
+            request.externalSourceRoots = externalSourceRoots;
             request.logicalName = item.logicalName;
             request.importer = item.importer;
             request.processor = item.processor;
@@ -1740,8 +1766,9 @@ namespace
             request.parameters = item.parameters;
             Pipeline::ContentBuildResult result = pipeline.Build(request);
             outcome.manifest = Pipeline::MakeContentBuildManifestEntry(
-                result, sourceRoot, outputRoot, item.output);
-            Pipeline::RefreshContentBuildDirectFingerprint(outcome.manifest, sourceRoot);
+                result, sourceRoot, outputRoot, item.output, externalSourceRoots);
+            Pipeline::RefreshContentBuildDirectFingerprint(
+                outcome.manifest, sourceRoot, externalSourceRoots);
             if (outcome.manifest.directFingerprint != plan.manifest.directFingerprint ||
                 ContentBuildDependencies(outcome.manifest) !=
                     ContentBuildDependencies(plan.manifest))
@@ -1800,6 +1827,7 @@ namespace
 
         std::filesystem::path sourceRoot;
         std::filesystem::path outputRoot;
+        Pipeline::ContentSourceRootCapabilities externalSourceRoots;
         bool directoryBuild = false;
         std::vector<BuildItem> builds;
         try
@@ -1807,6 +1835,9 @@ namespace
             builds = DiscoverBuilds(command, *registry, sourceRoot, outputRoot, directoryBuild);
             const Pipeline::ContentBuildConfiguration configuration =
                 LoadConfiguration(command, sourceRoot);
+            externalSourceRoots = Pipeline::ResolveContentSourceRootCapabilities(
+                sourceRoot, configuration.SourceRoots());
+            RequireExternalRootsSeparateFromOutput(outputRoot, externalSourceRoots);
             ApplyConfiguration(builds, configuration, *registry, sourceRoot, outputRoot,
                                directoryBuild);
             std::sort(builds.begin(), builds.end(), [](const BuildItem& left,
@@ -1891,7 +1922,8 @@ namespace
                 {
                     plans[offset] = PrepareBuildNode(
                         builds[offset], offset, pipeline, *registry, previousManifest,
-                        loadedManifest.state, sourceRoot, outputRoot, staging->Path());
+                        loadedManifest.state, sourceRoot, outputRoot, externalSourceRoots,
+                        staging->Path());
                     continue;
                 }
 
@@ -1905,7 +1937,8 @@ namespace
                         {
                             return PrepareBuildNode(
                                 builds[index], index, pipeline, *registry, previousManifest,
-                                loadedManifest.state, sourceRoot, outputRoot, staging->Path());
+                                loadedManifest.state, sourceRoot, outputRoot,
+                                externalSourceRoots, staging->Path());
                         }));
                 }
                 for (std::size_t index = offset; index < end; ++index)
@@ -2155,7 +2188,7 @@ namespace
             {
                 outcomes.push_back(ExecuteBuildNode(
                     plans[ready.front()], pipeline, sourceRoot, outputRoot,
-                    effectiveFingerprints));
+                    externalSourceRoots, effectiveFingerprints));
             }
             else
             {
@@ -2171,7 +2204,7 @@ namespace
                             {
                                 return ExecuteBuildNode(
                                     plans[index], pipeline, sourceRoot, outputRoot,
-                                    effectiveFingerprints);
+                                    externalSourceRoots, effectiveFingerprints);
                             }));
                     }
                     for (std::future<BuildNodeOutcome>& future : futures)

@@ -71,7 +71,8 @@ cna-content build ContentSource/Legacy/texture.xnb -o Content/Legacy/texture.cnb
 
 Configuration remains optional. A directory or single-file build automatically reads
 `.cna-content.json` from its source root when present; `--config <path>` selects another file
-inside that root.
+inside that root. The same strict configuration can explicitly map named, read-only authored
+source roots when a project intentionally shares input files between content trees.
 
 Build execution is serial by default. Independent graph nodes can be compiled concurrently with a
 strict bounded worker count:
@@ -203,8 +204,10 @@ priority and it is not unrestricted dynamic typing.
 
 The importer context owns no data beyond one call. It provides the canonical source root, canonical
 primary source path, logical asset name, safe source-dependency resolution, and scoped info/warning
-logging. `ResolveSourceDependency()` rejects absolute authored paths and paths that escape the
-source root, including canonical symlink escapes, and records the resolved file as a build input.
+logging. An unqualified `ResolveSourceDependency()` reference remains relative to the primary
+source and rejects paths outside the source root. An explicit `@alias/path` reference selects one
+configured read-only source root. Both forms reject absolute authored paths, traversal and
+canonical symlink escapes and record the resolved file as a build input.
 
 Components must not retain references or pointers to a context after `Import()` returns. Component
 objects are registry-owned and reusable; they must keep no unsynchronized per-build mutable state
@@ -474,6 +477,9 @@ build system:
 {
   "format": "CNA.ContentPipeline.Config",
   "version": 1,
+  "sourceRoots": {
+    "shared-textures": "../SharedTextures"
+  },
   "assets": {
     "Textures/wall.png": {
       "logicalName": "Environment/stone",
@@ -487,6 +493,23 @@ build system:
   }
 }
 ```
+
+`sourceRoots` is optional and maps at most 32 stable aliases to machine-local directories. An
+alias is 1-64 lowercase ASCII characters matching `[a-z][a-z0-9-]*`. Relative directory values
+are resolved against the primary source root; absolute values are valid only in this explicit
+configuration map. Every configured directory must exist and canonicalize to a unique location.
+The primary source root, all external source roots, and the output root must be pairwise disjoint:
+none may equal or contain another. These conservative rules keep reads, publication, clean, orphan
+collection, and staging recovery in unambiguous namespaces.
+
+An importer or processor opts into a named root with `@shared-textures/vehicles/truck.png` when it
+calls the ordinary dependency resolver. The alias is selected directly; roots are never searched.
+Unknown aliases, absolute/rooted remainders, backslashes, repeated separators, `.`/`..`, and
+symlink escapes fail. Changing a physical mapping to another checkout with identical relative
+bytes preserves cache identity; changing the alias, relative identity, dependency set, or bytes
+invalidates the node. Current CNJ and custom components can use this seam. glTF URI loading still
+occurs inside its shared converter before the pipeline context receives dependencies, so glTF does
+not claim named-root support yet.
 
 Asset keys are normalized generic UTF-8 paths relative to the source root. Backslashes, absolute
 paths, `..`, missing files, symlink escapes, and unsupported source extensions are rejected. A
@@ -530,15 +553,20 @@ robot.cnb runtime reference:
 
 Build dependency categories are primary source, source file, content-build dependency, and
 generated dependency. Runtime references carry a logical name and optional expected CNB asset type
-ID. Deployment files pair one contained, byte-hashed source with one contained output-relative
-path. All three collections are separately sorted in `ContentBuildResult` and in the manifest.
+ID. A source-file dependency records either the implicit primary root or an explicit stable root
+alias plus root-relative identity; the machine-local physical mapping is not semantic identity.
+Deployment files pair one byte-hashed source with one contained output-relative path. All three
+collections are separately sorted in `ContentBuildResult` and in the manifest.
 
 Reading a source file does not automatically create an XREF. Registering an XREF does not claim
 that the referenced runtime asset is enough to reproduce the build. For a custom type,
 `AddRuntimeReference()` makes the reference observable to build tooling; the custom processed data
 and authoritative codec must also encode the corresponding XREF. Built-in Model handling does both
 through the existing canonical Model DTO and encoder. `AddDeploymentFile()` is an explicit copy
-request, not an inference from an XREF; it also makes a non-primary source a source-file dependency.
+request, not an inference from an XREF. An external source may be deployed only after that exact
+file was recorded through an explicit aliased dependency resolution. Publication still targets
+only the output root; clean, orphan GC, and staging scavenging never treat a source identity as a
+deletion target.
 
 ## Build result, logging, and errors
 
@@ -577,8 +605,9 @@ It does not use mtimes to decide correctness. A fingerprint includes:
 - every owned compiled-output logical identity/type and deployment source/destination identity.
 
 Each compiled output's path, type ID, type name, schema version, and SHA-256 are stored separately.
-Each deployment-support file stores its contained source path, output path, and SHA-256. A missing or tampered primary,
-child `.cnb`, or deployment file; corrupt/incompatible manifest; changed output set; changed
+Each deployment-support file stores its source-root alias, root-relative source, output path, and
+SHA-256. A missing or tampered primary, child `.cnb`, or deployment file; corrupt/incompatible
+manifest; changed output set; changed
 component version; changed parameter; or changed dependency forces the owning node to rebuild.
 Identical effective inputs and intact outputs produce `SKIP`. Runtime XREF records are outputs
 rather than independent inputs; the source/dependency/component inputs that produced them are
@@ -596,19 +625,21 @@ invalidates that asset without treating the entire configuration file as a share
 an unrelated entry change leaves other assets eligible for `SKIP`.
 
 The manifest JSON layout is versioned internal build state, not a hand-edited project format.
-Version 6 gives each entry a stable build-node ID, ordered compiled and deployment ownership lists,
+Version 7 gives each entry a stable build-node ID, ordered compiled and deployment ownership lists,
 explicit writer schema/codec declarations, a direct fingerprint, an effective graph fingerprint,
 and a bounded `fingerprintState` decomposition. The decomposition stores canonical SHA-256 domains
 for primary bytes; source-dependency identities and bytes; content-dependency identities and
 effective fingerprints; typed parameters; writer schema/codec declarations; compiled-output and
 runtime-XREF definitions; and deployment definitions. It stores no prose, timestamp, temporary
-path, RTTI name, or absolute host path. Versions 1 through 5 cannot provide the complete current
-contract, so they are rejected as incompatible and cause a safe rebuild; there is no ambiguous
+path, RTTI name, or absolute host path. Aliased source/deployment identities persist as separate
+`sourceRoot` and root-relative path fields; physical directory mappings never enter the manifest
+or CNB. Versions 1 through 6 cannot provide the complete current contract, so they are rejected as
+incompatible and cause a safe rebuild; there is no ambiguous
 in-place migration. An incompatible/corrupt manifest grants no deletion authority, so its existing
 outputs remain unless the new build replaces the same paths. A corrupt or future incompatible
 manifest is handled the same way.
 
-`build ... --explain` compares the current structured decision inputs with this persisted v6
+`build ... --explain` compares the current structured decision inputs with this persisted v7
 state; it never guesses a field-level cause from unequal aggregate hashes. The internal decision
 is a list of reason codes plus optional root-relative detail, and the CLI renders that structure
 only after deterministic scheduling has completed. It classifies:
@@ -626,8 +657,8 @@ only after deterministic scheduling has completed. It classifies:
 The bounded per-domain hashes can identify a changed dependency domain but intentionally do not
 duplicate every dependency digest merely to name one leaf. Aggregate direct/effective mismatch
 fallbacks remain explicit defensive reasons for a future unknown input rather than being reported
-as a fabricated source change. Manifest v5 and earlier produce one broad incompatible-format
-reason on their first rebuild; subsequent v6 builds have the precise persisted domains.
+as a fabricated source change. Manifest v6 and earlier produce one broad incompatible-format
+reason on their first rebuild; subsequent v7 builds have the precise persisted domains.
 
 ## Multi-output nodes and ownership
 
@@ -794,6 +825,9 @@ that was not committed.
 Every build has an explicit source root. Primary sources, sidecars, generated dependencies, glTF
 external buffers/images, and CNJ references are containment checked. Absolute authored references,
 `..` escapes, and canonical symlink escapes are rejected. There is no implicit outside-root opt-in.
+The only outside-root read capability is a named `sourceRoots` mapping plus an authored
+`@alias/path` dependency resolution. Canonical source/external/output roots cannot overlap, and an
+external root grants no write, publication, clean, GC, or staging-scavenger authority.
 
 On Windows, `cna-content` uses `wmain(int, wchar_t**)` and constructs native
 `std::filesystem::path` values directly. On POSIX, argv bytes are passed to `std::filesystem`.
@@ -868,8 +902,9 @@ target_link_libraries(my_content_compiler PRIVATE CNA::ContentCompiler)
 
 [`modules/content/examples/custom-content-compiler.cpp`](../modules/content/examples/custom-content-compiler.cpp)
 is a complete executable: it registers all built-ins plus an `ExampleGame.Greeting` `.greeting`
-route, uses a typed `prefix` configuration parameter, and adapts its writer to the custom type's
-single `EncodeGreetingToCnb()` codec. The writer exercises the real multi-output path by emitting a
+route, uses typed `prefix`, `dependsOn`, and optional external-deployment configuration parameters,
+and adapts its writer to the custom type's single `EncodeGreetingToCnb()` codec. The writer
+exercises the real multi-output path by emitting a
 primary greeting and a generated reply CNB through that same codec. A subprocess test compiles a
 mixed custom/PNG directory, checks both custom CNBs and the built-in Texture2D output, verifies
 manifest ownership and component/parameter/schema/codec identity, proves a byte-preserving no-op,
@@ -1117,7 +1152,9 @@ plus clean through a non-ASCII path. Native Windows and MSVC remain untested and
   codec identities used by cache fingerprints;
 - opt-in glTF Model/Texture2D/AnimationClip generated bundles and their naming policy;
 - content-build edges, dependency builds, and bounded parallel scheduling;
-- the manifest-v6 persisted fingerprint-domain decomposition used by incremental decisions;
+- the manifest-v7 persisted fingerprint-domain decomposition and stable aliased source identities
+  used by incremental decisions;
+- named, explicit, read-only external source-root capabilities;
 - structured incremental decisions and the human-readable `build --explain` rendering;
 
 **Future:**

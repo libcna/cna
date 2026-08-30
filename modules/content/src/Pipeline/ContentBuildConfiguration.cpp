@@ -202,7 +202,8 @@ namespace CNA::Content::Pipeline
             Fail(sourceName, "JSON", error.what());
         }
 
-        RequireKnownUniqueMembers(root, {"format", "version", "assets"}, sourceName, "root");
+        RequireKnownUniqueMembers(root, {"format", "version", "sourceRoots", "assets"},
+                                  sourceName, "root");
         if (RequireMember(root, "format", JsonType::String, sourceName, "root").stringValue !=
             kConfigurationKind)
         {
@@ -215,9 +216,47 @@ namespace CNA::Content::Pipeline
             Fail(sourceName, "root field 'version'", "is not supported.");
         }
 
+        ContentBuildConfiguration configuration;
+        if (const JsonValue* sourceRoots = root.FindMember("sourceRoots"))
+        {
+            if (sourceRoots->type != JsonType::Object)
+            {
+                Fail(sourceName, "root field 'sourceRoots'", "must be a JSON object.");
+            }
+            std::set<std::string> aliases;
+            for (const auto& [alias, value] : sourceRoots->objectValue)
+            {
+                if (!aliases.insert(alias).second)
+                {
+                    Fail(sourceName, "root field 'sourceRoots'",
+                         "repeats alias '" + alias + "'.");
+                }
+                const std::string problem = ContentSourceRootAliasProblem(alias);
+                if (!problem.empty())
+                {
+                    Fail(sourceName, "root field 'sourceRoots' alias '" + alias + "'",
+                         problem + ".");
+                }
+                if (value.type != JsonType::String || value.stringValue.empty())
+                {
+                    Fail(sourceName, "root field 'sourceRoots' alias '" + alias + "'",
+                         "physical root must be a non-empty string.");
+                }
+                try
+                {
+                    configuration.sourceRoots_.Add(
+                        alias, CNA::Internal::ContentPathFromUtf8(value.stringValue));
+                }
+                catch (const std::invalid_argument& error)
+                {
+                    Fail(sourceName, "root field 'sourceRoots' alias '" + alias + "'",
+                         error.what());
+                }
+            }
+        }
+
         const JsonValue& assets =
             RequireMember(root, "assets", JsonType::Object, sourceName, "root");
-        ContentBuildConfiguration configuration;
         for (const auto& [source, value] : assets.objectValue)
         {
             RequireSafeSource(source, sourceName);
@@ -283,5 +322,11 @@ namespace CNA::Content::Pipeline
     ContentBuildConfiguration::Entries() const noexcept
     {
         return entries_;
+    }
+
+    const ContentSourceRootCapabilities&
+    ContentBuildConfiguration::SourceRoots() const noexcept
+    {
+        return sourceRoots_;
     }
 } // namespace CNA::Content::Pipeline

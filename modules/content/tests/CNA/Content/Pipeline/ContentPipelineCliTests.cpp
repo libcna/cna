@@ -863,6 +863,144 @@ TEST(ContentPipelineCliTest, DirectoryBuildCompilesSpriteFontCnjAndItsAtlas)
     EXPECT_NE(second.find("[SKIP] Fonts/ui"), std::string::npos) << second;
 }
 
+TEST(ContentPipelineCliTest, NamedExternalRootBuildsCnjAndRemapsByStableAlias)
+{
+    ScratchDirectory scratch("external_cnj");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path sharedA = scratch.Path() / "SharedA";
+    const std::filesystem::path sharedB = scratch.Path() / "SharedB";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    const std::string document =
+        R"({"cnjVersion":1,"type":"Texture2D","sourceFile":"@shared/Textures/wall.png"})";
+    WriteText(source / "Textures" / "wall.cnj", document);
+    const std::vector<std::uint8_t> image = MakePng(4, 3);
+    WriteBytes(sharedA / "Textures" / "wall.png", image);
+    WriteBytes(sharedB / "Textures" / "wall.png", image);
+    const auto configure = [&](const std::filesystem::path& root)
+    {
+        WriteText(source / Pipeline::ContentBuildConfigurationFileName,
+                  std::string(R"({"format":"CNA.ContentPipeline.Config","version":1,"sourceRoots":{"shared":")") +
+                      CNA::Internal::ContentPathToUtf8(root) + R"("},"assets":{}})");
+    };
+    configure(sharedA);
+
+    std::string log;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(),
+                       "--workers", "1", "--explain"}, log), 0)
+        << log;
+    EXPECT_NE(log.find("[BUILD] Textures/wall"), std::string::npos) << log;
+    const std::vector<std::uint8_t> firstOutput =
+        ReadBytes(output / "Textures" / "wall.cnb");
+    const std::vector<std::uint8_t> firstManifest =
+        ReadBytes(output / Pipeline::ContentBuildManifestFileName);
+    const Pipeline::ContentBuildManifest manifest = Pipeline::ContentBuildManifest::Parse(
+        std::string(firstManifest.begin(), firstManifest.end()));
+    const Pipeline::ContentBuildManifestEntry* entry = manifest.Find("Textures/wall");
+    ASSERT_NE(entry, nullptr);
+    const auto external = std::find_if(
+        entry->dependencies.begin(), entry->dependencies.end(),
+        [](const Pipeline::ContentDependency& dependency)
+        { return dependency.sourceRoot == "shared"; });
+    ASSERT_NE(external, entry->dependencies.end());
+    EXPECT_EQ(external->identity, "Textures/wall.png");
+    EXPECT_EQ(std::string(firstManifest.begin(), firstManifest.end()).find(
+                  CNA::Internal::ContentPathToUtf8(sharedA)),
+              std::string::npos);
+
+    configure(sharedB);
+    log.clear();
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(),
+                       "--workers", "4", "--explain"}, log), 0)
+        << log;
+    EXPECT_NE(log.find("[SKIP] Textures/wall"), std::string::npos) << log;
+    EXPECT_EQ(ReadBytes(output / Pipeline::ContentBuildManifestFileName), firstManifest);
+    EXPECT_EQ(ReadBytes(output / "Textures" / "wall.cnb"), firstOutput);
+
+    WriteBytes(sharedB / "Textures" / "wall.png", MakePng(5, 2));
+    log.clear();
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(),
+                       "--workers", "4", "--explain"}, log), 0)
+        << log;
+    EXPECT_NE(log.find("reason: source dependency bytes changed"), std::string::npos) << log;
+    EXPECT_NE(ReadBytes(output / "Textures" / "wall.cnb"), firstOutput);
+}
+
+TEST(ContentPipelineCliTest, ExternalRootConfigurationRejectsEveryBypassAndOverlap)
+{
+    ScratchDirectory scratch("external_security");
+    const std::filesystem::path source = scratch.Path() / "Project" / "ContentSource";
+    const std::filesystem::path shared = scratch.Path() / "Project" / "Shared";
+    const std::filesystem::path other = scratch.Path() / "Project" / "Other";
+    WriteBytes(shared / "safe.png", MakePng(2, 2));
+    WriteBytes(other / "secret.png", MakePng(3, 2));
+    WriteText(shared / "sentinel.keep", "external sentinel\n");
+    WriteText(scratch.Path() / "root-is-file", "not a directory\n");
+    std::filesystem::create_directories(shared / "Nested");
+    std::filesystem::create_directories(source / "NestedExternal");
+
+    std::error_code symlinkError;
+    std::filesystem::create_symlink(other / "secret.png", shared / "escape.png",
+                                    symlinkError);
+
+    std::size_t index = 0u;
+    const auto fail = [&](const std::string& reference,
+                          const std::string& sourceRoots,
+                          const std::filesystem::path& output = {})
+    {
+        WriteText(source / "wall.cnj",
+                  std::string(R"({"cnjVersion":1,"type":"Texture2D","sourceFile":")") +
+                      reference + R"("})");
+        const std::filesystem::path configuration =
+            source / Pipeline::ContentBuildConfigurationFileName;
+        if (sourceRoots.empty())
+        {
+            std::error_code error;
+            std::filesystem::remove(configuration, error);
+        }
+        else
+        {
+            WriteText(configuration,
+                      std::string(R"({"format":"CNA.ContentPipeline.Config","version":1,"sourceRoots":{)") +
+                          sourceRoots + R"(},"assets":{}})");
+        }
+        const std::filesystem::path selectedOutput = output.empty()
+            ? scratch.Path() / ("Rejected" + std::to_string(index++))
+            : output;
+        std::string log;
+        EXPECT_EQ(RunTool({"build", source.string(), "-o", selectedOutput.string()}, log), 1)
+            << reference << "\n" << sourceRoots << "\n" << log;
+    };
+    const std::string sharedEntry =
+        std::string("\"shared\":\"") + CNA::Internal::ContentPathToUtf8(shared) + "\"";
+
+    fail("../../Shared/safe.png", {});
+    fail("@unknown/safe.png", sharedEntry);
+    fail("@shared/../Other/secret.png", sharedEntry);
+    fail(CNA::Internal::ContentPathToUtf8(other / "secret.png"), sharedEntry);
+    fail("@shared/safe.png", sharedEntry + "," + sharedEntry);
+    fail("@shared/safe.png",
+         sharedEntry + ",\"same\":\"" +
+             CNA::Internal::ContentPathToUtf8(shared) + "\"");
+    fail("@shared/safe.png", "\"shared\":\"" +
+         CNA::Internal::ContentPathToUtf8(scratch.Path() / "root-is-file") + "\"");
+    fail("@shared/safe.png", "\"shared\":\"" +
+         CNA::Internal::ContentPathToUtf8(scratch.Path() / "missing-root") + "\"");
+    fail("@shared/safe.png", "\"shared\":\"" +
+         CNA::Internal::ContentPathToUtf8(source / "NestedExternal") + "\"");
+    fail("@shared/safe.png", "\"shared\":\"" +
+         CNA::Internal::ContentPathToUtf8(source.parent_path()) + "\"");
+    fail("@shared/safe.png",
+         sharedEntry + ",\"nested\":\"" +
+             CNA::Internal::ContentPathToUtf8(shared / "Nested") + "\"");
+    fail("@shared/safe.png", sharedEntry, shared);
+    fail("@shared/safe.png", sharedEntry, shared / "Output");
+    fail("@shared/safe.png", sharedEntry, shared.parent_path());
+    if (!symlinkError) { fail("@shared/escape.png", sharedEntry); }
+
+    EXPECT_EQ(ReadBytes(shared / "sentinel.keep"),
+              (std::vector<std::uint8_t>{'e','x','t','e','r','n','a','l',' ','s','e','n','t','i','n','e','l','\n'}));
+}
+
 TEST(ContentPipelineCliTest, GltfImageDependencyInvalidatesOnlyItsRelevantAssets)
 {
     const std::filesystem::path fixture = FindGltfFixture("gltf-external-image.gltf");
@@ -1169,9 +1307,9 @@ TEST(ContentPipelineCliTest, CorruptManifestSafelyRebuildsAndIsReplaced)
         std::string(manifestBytes.begin(), manifestBytes.end())));
 }
 
-TEST(ContentPipelineCliTest, VersionFiveManifestRebuildsWithoutAuthorizingOldOutputDeletion)
+TEST(ContentPipelineCliTest, VersionSixManifestRebuildsWithoutAuthorizingOldOutputDeletion)
 {
-    ScratchDirectory scratch("manifest_v5_transition");
+    ScratchDirectory scratch("manifest_v6_transition");
     const std::filesystem::path source = scratch.Path() / "ContentSource";
     const std::filesystem::path output = scratch.Path() / "Content";
     const std::filesystem::path manifest =
@@ -1185,9 +1323,9 @@ TEST(ContentPipelineCliTest, VersionFiveManifestRebuildsWithoutAuthorizingOldOut
 
     const std::vector<std::uint8_t> oldManifestBytes = ReadBytes(manifest);
     std::string oldManifest(oldManifestBytes.begin(), oldManifestBytes.end());
-    const std::size_t version = oldManifest.find("\"version\":6");
+    const std::size_t version = oldManifest.find("\"version\":7");
     ASSERT_NE(version, std::string::npos);
-    oldManifest.replace(version, std::string("\"version\":6").size(), "\"version\":5");
+    oldManifest.replace(version, std::string("\"version\":7").size(), "\"version\":6");
     WriteText(manifest, oldManifest);
     ASSERT_TRUE(std::filesystem::remove(source / "legacy.png"));
 
@@ -2216,6 +2354,95 @@ TEST(ContentPipelineCliTest, UserBuiltCompilerCombinesCustomAndBuiltInRoutesEndT
     EXPECT_FALSE(std::filesystem::exists(manifestPath));
     EXPECT_EQ(ReadBytes(output / "manual.cnb"),
               (std::vector<std::uint8_t>{'k', 'e', 'e', 'p'}));
+}
+
+TEST(ContentPipelineCliTest, ExternalDeploymentIsExplicitStableAndNeverOwnsItsSourceRoot)
+{
+    ScratchDirectory scratch("external_deployment");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path sharedA = scratch.Path() / "SharedA";
+    const std::filesystem::path sharedB = scratch.Path() / "SharedB";
+    const std::filesystem::path outputOne = scratch.Path() / "Content1";
+    const std::filesystem::path outputFour = scratch.Path() / "Content4";
+    WriteText(source / "welcome.greeting", "CNA\n");
+    WriteText(sharedA / "Support" / "message.txt", "shared support\n");
+    WriteText(sharedB / "Support" / "message.txt", "shared support\n");
+    WriteText(sharedA / "sentinel.keep", "never owned\n");
+    WriteText(sharedB / "sentinel.keep", "never owned\n");
+
+    const auto configure = [&](const std::filesystem::path& root, bool deploy)
+    {
+        const std::string parameters = deploy
+            ? R"("parameters":{"deploymentSource":{"type":"string","value":"@shared/Support/message.txt"},"deploymentOutput":{"type":"string","value":"Support/message.txt"}})"
+            : std::string{};
+        WriteText(source / Pipeline::ContentBuildConfigurationFileName,
+                  std::string(R"({"format":"CNA.ContentPipeline.Config","version":1,"sourceRoots":{"shared":")") +
+                      CNA::Internal::ContentPathToUtf8(root) +
+                      R"("},"assets":{"welcome.greeting":{)" + parameters + "}}}");
+    };
+    configure(sharedA, true);
+
+    std::string log;
+    ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
+                            {"build", source.string(), "-o", outputOne.string(),
+                             "--workers", "1", "--explain"}, log), 0)
+        << log;
+    ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
+                            {"build", source.string(), "-o", outputFour.string(),
+                             "--workers", "4", "--explain"}, log), 0)
+        << log;
+    EXPECT_EQ(SnapshotFileTree(outputOne), SnapshotFileTree(outputFour));
+    EXPECT_EQ(ReadBytes(outputOne / "Support" / "message.txt"),
+              ReadBytes(sharedA / "Support" / "message.txt"));
+
+    const std::filesystem::path manifestPath =
+        outputOne / Pipeline::ContentBuildManifestFileName;
+    const std::vector<std::uint8_t> firstManifest = ReadBytes(manifestPath);
+    const Pipeline::ContentBuildManifest manifest = Pipeline::ContentBuildManifest::Parse(
+        std::string(firstManifest.begin(), firstManifest.end()));
+    const Pipeline::ContentBuildManifestEntry* entry = manifest.Find("welcome");
+    ASSERT_NE(entry, nullptr);
+    ASSERT_EQ(entry->deploymentFiles.size(), 1u);
+    EXPECT_EQ(entry->deploymentFiles[0].sourceRoot, "shared");
+    EXPECT_EQ(entry->deploymentFiles[0].source, "Support/message.txt");
+    EXPECT_EQ(entry->deploymentFiles[0].path, "Support/message.txt");
+
+    configure(sharedB, true);
+    log.clear();
+    ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
+                            {"build", source.string(), "-o", outputOne.string(),
+                             "--workers", "4", "--explain"}, log), 0)
+        << log;
+    EXPECT_NE(log.find("[SKIP] welcome"), std::string::npos) << log;
+    EXPECT_EQ(ReadBytes(manifestPath), firstManifest);
+
+    WriteText(sharedB / "Support" / "message.txt", "changed support\n");
+    log.clear();
+    ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
+                            {"build", source.string(), "-o", outputOne.string(),
+                             "--workers", "4", "--explain"}, log), 0)
+        << log;
+    EXPECT_NE(log.find("reason: source dependency bytes changed"), std::string::npos) << log;
+    EXPECT_EQ(ReadBytes(outputOne / "Support" / "message.txt"),
+              ReadBytes(sharedB / "Support" / "message.txt"));
+
+    configure(sharedB, false);
+    log.clear();
+    ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
+                            {"build", source.string(), "-o", outputOne.string()}, log), 0)
+        << log;
+    EXPECT_FALSE(std::filesystem::exists(outputOne / "Support" / "message.txt"));
+    EXPECT_TRUE(std::filesystem::is_regular_file(sharedB / "Support" / "message.txt"));
+
+    log.clear();
+    ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
+                            {"clean", outputFour.string()}, log), 0)
+        << log;
+    EXPECT_TRUE(std::filesystem::is_regular_file(sharedA / "Support" / "message.txt"));
+    EXPECT_EQ(ReadBytes(sharedA / "sentinel.keep"),
+              (std::vector<std::uint8_t>{'n','e','v','e','r',' ','o','w','n','e','d','\n'}));
+    EXPECT_EQ(ReadBytes(sharedB / "sentinel.keep"),
+              (std::vector<std::uint8_t>{'n','e','v','e','r',' ','o','w','n','e','d','\n'}));
 }
 
 TEST(ContentPipelineCliTest, CustomWriterSchemaAndCodecEvolutionCannotSkipStaleOutput)
