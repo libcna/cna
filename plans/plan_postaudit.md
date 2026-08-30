@@ -2663,7 +2663,8 @@ divergence Vulkan just did.
 
 ## 39. `REMED-GFX-240` — the pixel-centre correction flattens the CNAEXT PCF kernel
 
-**Status:** **OPEN — measured 2026-08-30** · **CNAEXT shadow-layer defect**
+**Status:** **CLOSED — 2026-08-30** · **Fragile test, NOT a shadow-layer defect —
+the diagnosis this ticket opened with was wrong**
 
 **Defect.** With `xnaPixelCenterScale_` at its shipped value,
 `ShadowVisibilityTest.TheFilterRadiusChangesHowSoftTheEdgeIs` fails its **second** assertion —
@@ -2685,16 +2686,42 @@ wrong conclusion once already in this investigation.
 | `EasyGL_DescriptorCapacityContract` | pass | FAIL — `REMED-GFX-238` |
 | `ShadowVisibilityTest.TheFilterRadiusChangesHowSoftTheEdgeIs` | pass | **FAIL — this ticket** |
 
-**Why this one is a real defect.** A ~0.49px geometry shift should move where a shadow edge falls;
-it should not remove every intermediate value a 5×5 kernel produces. XNA cannot arbitrate — it has
-no shadow-map API — so the question is not which convention is right but why the kernel degenerates.
-Investigate whether the shadow layer derives its tap offsets from a matrix that now carries the
-clip-space translation, which would scale the offsets rather than translate them.
+**The opening diagnosis was wrong, and measuring it said so.** This ticket was filed as "a
+half-pixel shift should not flatten a PCF kernel, so the shadow layer must be deriving its tap
+offsets from a matrix that now carries the clip-space translation." The kernel is not flattened and
+the offsets are fine.
 
-**Do not "fix" this by removing the correction.** The correction is XNA-correct
-(`REMED-GFX-238`); this ticket is the shadow layer's own interaction with it.
+Two hypotheses were tested and both refuted before the real cause appeared:
 
-**Evidence.** `spikes/xna-pixel-center-spike/README.md`, commits `55b93f910` and `91be3f7a8`.
+1. *The fixed sample point left the shadow, collapsing the `(shadowValue+2, litValue-2)` window.*
+   Refuted: instrumented, the window is wide open — `lit(3,3)=255`, `shadow(centre)=38`.
+2. *The kernel degenerates.* Refuted: the shader's 5×5 loop and both its uniforms are correct, and
+   with the correction **off** the same frame does carry intermediate values.
+
+**Actual cause — the penumbra is narrower than a pixel.** The case renders a `kFrame` = 64 frame
+against a `ShadowQuality::Medium` = **1024** map, so the five taps span about `64/1024 × 5 ≈ 0.3` of
+one frame pixel. Whether any pixel centre falls inside that band is sub-pixel luck. Instrumented,
+the entire 64×64 frame carried **two** intermediate values with the correction off (`distinct=4`,
+counting the lit and shadowed values) and **none** with it on (`distinct=2`). The soft edge was
+always there; a ~0.49px shift simply stepped every sample over it.
+
+So the assertion was sound and the dimensions were not: the fixture demanded that a sub-pixel
+penumbra be sampled.
+
+**Fix.** Give this one case dimensions in which the penumbra is resolvable — a 256-pixel frame
+against the smallest (512) map puts five taps across ≈2.5 pixels, which no sub-pixel shift can step
+over. `Frame` carries its own `size` and `Capture` takes one, defaulting to `kFrame`, so the other
+sixteen cases in the fixture are untouched.
+
+**Evidence.** With the correction **on**: radius 0 gives `distinct=2` (a hard edge, as asserted) and
+radius 2 gives `distinct=7`. All 17 `ShadowVisibilityTest` cases pass. Mutation-checked by forcing
+`uShadowPcfRadius` to 0 in `EasyGLRenderer`, which fails the case on its own message — so the
+widened fixture still defends what it was written for rather than passing because it now samples
+more pixels.
+
+**Nothing in the shadow layer or the renderer changed.** The correction is XNA-correct
+(`REMED-GFX-238`) and stays as it is. See `spikes/xna-pixel-center-spike/README.md`, commits
+`55b93f910` and `91be3f7a8`.
 
 ---
 

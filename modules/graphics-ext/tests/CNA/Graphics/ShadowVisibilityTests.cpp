@@ -142,10 +142,14 @@ Matrix FitToGround()
 struct Frame
 {
     std::vector<Color> pixels;
+    /// Frames are square, and all but one case here uses kFrame. The penumbra case needs its own
+    /// size, so the stride travels with the frame rather than being assumed.
+    int size = kFrame;
 
     [[nodiscard]] Color At(int x, int y) const
     {
-        return pixels[static_cast<std::size_t>(y) * kFrame + static_cast<std::size_t>(x)];
+        return pixels[static_cast<std::size_t>(y) * static_cast<std::size_t>(size) +
+                      static_cast<std::size_t>(x)];
     }
 
     /// Perceived brightness is not needed here -- the light is white and the surface is grey, so
@@ -153,11 +157,13 @@ struct Frame
     [[nodiscard]] int BrightnessAt(int x, int y) const { return At(x, y).getRProperty(); }
 };
 
-Frame Capture(RenderTarget2D& target)
+Frame Capture(RenderTarget2D& target, int size = kFrame)
 {
     Frame frame;
-    frame.pixels.assign(static_cast<std::size_t>(kFrame) * kFrame, Color::Transparent);
-    const Rectangle region(0, 0, kFrame, kFrame);
+    frame.size = size;
+    frame.pixels.assign(static_cast<std::size_t>(size) * static_cast<std::size_t>(size),
+                        Color::Transparent);
+    const Rectangle region(0, 0, size, size);
     target.GetData(0, &region, frame.pixels.data(), 0, static_cast<int>(frame.pixels.size()));
     return frame;
 }
@@ -620,8 +626,16 @@ TEST_F(ShadowVisibilityTest, TheFilterRadiusChangesHowSoftTheEdgeIs)
     // fully lit or fully shadowed. A wider kernel produces intermediate values, and counting them
     // is a more honest test than comparing two images, which would also differ if the shadow had
     // merely moved.
-    ShadowMap shadowMap(device, ShadowQuality::Medium);
-    RenderTarget2D target(device, kFrame, kFrame, false, SurfaceFormat::Color,
+    // A penumbra has to be WIDER THAN A PIXEL before a frame can show it. At kFrame against a
+    // Medium (1024) map, five taps span roughly 64/1024 * 5 = 0.3 of one frame pixel, so whether a
+    // pixel centre lands inside the soft band is sub-pixel luck -- and when it did, the whole 64x64
+    // frame carried just two intermediate values. That is what made this case fail the moment
+    // EasyGL's XNA pixel-centre correction moved sampling by ~0.49px: the band was still there and
+    // nothing sampled it. A larger frame against the smallest map puts five taps across ~2.5
+    // pixels, which no sub-pixel shift can step over. REMED-GFX-240.
+    constexpr int kPenumbraFrame = 256;
+    ShadowMap shadowMap(device, ShadowQuality::Low);
+    RenderTarget2D target(device, kPenumbraFrame, kPenumbraFrame, false, SurfaceFormat::Color,
                           DepthFormat::Depth24);
 
     BasicEffect effect(device);
@@ -635,12 +649,12 @@ TEST_F(ShadowVisibilityTest, TheFilterRadiusChangesHowSoftTheEdgeIs)
         effect.setLightViewProjectionEXT(shadowMap.getLightViewProjection());
         RenderScene(device, shadowMap, effect, target);
 
-        const Frame frame = Capture(target);
+        const Frame frame = Capture(target, kPenumbraFrame);
         const int litValue = frame.BrightnessAt(3, 3);
-        const int shadowValue = frame.BrightnessAt(kFrame / 2, kFrame / 2);
+        const int shadowValue = frame.BrightnessAt(kPenumbraFrame / 2, kPenumbraFrame / 2);
         int partial = 0;
-        for (int y = 0; y < kFrame; ++y)
-            for (int x = 0; x < kFrame; ++x)
+        for (int y = 0; y < kPenumbraFrame; ++y)
+            for (int x = 0; x < kPenumbraFrame; ++x)
             {
                 const int value = frame.BrightnessAt(x, y);
                 if (value > shadowValue + 2 && value < litValue - 2)

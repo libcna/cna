@@ -104,12 +104,13 @@ otherwise keep the old renderer linked in and report the opposite result) gives:
 `GltfConformanceL6.ViewAndProjectionReachEveryDrawUnaltered` was previously counted with these. It
 is not: it fails only under `ctest -j` and passes serially every time.
 
-The shadow test is the one failure the correction actually causes. Its assertion is
-`countPartials(2) > 0` -- a 5x5 PCF kernel must produce at least one partially shadowed pixel -- and
-with the correction on it produces none, while `TheCastersShadowIsVisibleOnTheGround` still passes,
-so the shadow is present and only its softness is gone. XNA cannot arbitrate this one: it has no
-shadow-map API. A half-pixel geometry shift should not flatten a PCF kernel, so this is a real
-interaction defect in the CNAEXT shadow layer, not a wrong expectation.
+The shadow test is the one failure the correction actually causes -- but not, as first written
+here, because it flattens the kernel. Instrumented, the case renders a 64-pixel frame against a
+1024 shadow map, so its five PCF taps span about 0.3 of one frame pixel: with the correction off the
+whole frame carried two intermediate values, and with it on, none. The penumbra is narrower than a
+pixel and a ~0.49px shift steps every sample over it. The assertion was sound and the dimensions
+were not. Closed as REMED-GFX-240 by giving that one case a 256-pixel frame against the smallest
+map, where five taps span ~2.5 pixels; nothing in the shadow layer or the renderer changed.
 
 ## What this settles
 
@@ -117,6 +118,6 @@ interaction defect in the CNAEXT shadow layer, not a wrong expectation.
 XNA. Leg U2 of the point-sampling contract encodes the OpenGL/Direct3D 10 convention, which XNA
 does not use, and the six renderers that pass it are passing an expectation XNA never held.
 
-Not answered here: why a half-pixel geometry shift removes every intermediate value from a 5x5
-PCF kernel. That is the shadow layer's own defect and needs its own investigation -- the correction
-only exposes it.
+All three tests the correction appeared to break are accounted for: two asserted the wrong
+convention (REMED-GFX-238) and the third asserted a penumbra it could not resolve
+(REMED-GFX-240). None of them was a renderer defect.
