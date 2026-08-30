@@ -83,3 +83,28 @@ reproducible across machines or across time.
 commit does not identify the Skia revision it was written against. Reconstructing that
 from `docs/skia-ganesh-artifact.md` and the commit dates is the first task.
 
+
+---
+
+## SOKOL
+
+| | |
+|---|---|
+| Identity | `SOKOL` (enum `Sokol`, C ABI `CNA_GRAPHICS_RENDERER_SOKOL` = 37) |
+| Family | `modules/renderers/sokol` |
+| Removed | 2026-08-30, tag `removed/sokol` |
+| Size | 24,597 lines (21,850 production, **0 tests**, 2,747 examples) |
+| Dependency | `https://github.com/floooh/sokol.git` @ `27b49604b19be8cee0dcc6b2bbfe803dd9517585` (zlib/libpng) |
+| Build was | `-DCNA_GRAPHICS_RENDERER=SOKOL`, native API chosen by `CNA_SOKOL_API` |
+
+**What it proved.** That `sokol_gfx`'s single-header, API-agnostic model maps onto
+`IGraphicsRenderer` at all, with the native API (GL / D3D11 / Metal / WebGPU) picked at
+configure time rather than by CNA.
+
+**Why removed.** Same reason as LLGL: CNA is already the portable abstraction, and
+stacking `sokol_gfx` under it adds a translation layer without adding a platform. The one
+real argument for keeping it was Metal coverage without writing Metal — worth recording,
+because it is the argument to revisit if Apple ever becomes a target. It did not survive
+today's balance: CNA targets no Apple platform, 21,850 production lines carried zero tests
+of their own, and `CNA_SOKOL_API` meant the identity `SOKOL` never named one behaviour.
+

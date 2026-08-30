@@ -125,9 +125,6 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
 #ifdef CNA_RENDERER_WICKED
     ++enabled;
 #endif
-#ifdef CNA_RENDERER_SOKOL
-    ++enabled;
-#endif
 #ifdef CNA_RENDERER_DILIGENT
     ++enabled;
 #endif
@@ -221,16 +218,6 @@ TEST(GraphicsRendererCompileDefinitionsTest, CompileTimeIdentityIsTheBuildDefaul
         CNA::getCurrentGraphicsRendererType()));
 }
 
-#ifdef CNA_RENDERER_SOKOL
-TEST(GraphicsRendererCompileDefinitionsTest, SokolRendererIsReportedByName)
-{
-    // The compile-time renderer identity has to agree with the CNA_RENDERER_SOKOL define
-    // cmake/RendererSelection.cmake set; a new renderer that forgets its GraphicsRendererType.hpp
-    // entry would otherwise still link and silently report another renderer's name.
-    EXPECT_EQ(CNA::getCurrentGraphicsRendererType(), CNA::GraphicsRendererType::Sokol);
-    EXPECT_EQ(CNA::getCurrentGraphicsRendererName(), "SOKOL");
-}
-#endif
 
 
 #ifdef CNA_RENDERER_OPENVG

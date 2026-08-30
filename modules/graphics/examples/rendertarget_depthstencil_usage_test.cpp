@@ -338,41 +338,6 @@ namespace
     constexpr Contract kContract{"DIRECTX12", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true,
                                  true, true, true, true, true, true, false, false};
-#elif defined(CNA_RENDERER_SOKOL)
-    // plans/plan_sokol.md SOKOL-25/26/38: RenderTarget2D AND RenderTargetCube can both be created and
-    // bound, and both now have a working single-sample GetData (SokolRenderTargetRenderer/
-    // SokolRenderTargetCubeRenderer read back their real colour content via a throwaway GL FBO
-    // around the raw GL texture sg_gl_query_image_info() exposes), so `readback`/`cubeReadback`
-    // are Exact and every readback-driven check in this file (U1-U4 in particular) measures real
-    // pixels. `msaaReadback` stays false, conservatively unclaimed: a multisampled RenderTarget2D's
-    // own multisample colour image has a DONTCARE store action at every pass end (SOKOL-26's own
-    // resolve-then-discard design, matching sokol_gfx.h's documented MSAA workflow), so whether its
-    // content survives an unbind/rebind PreserveContents cycle the way D8 requires is genuinely
-    // unverified here, not just untested -- D8 stays skipped rather than asserting an unmeasured
-    // claim either way. `stencilInRT` and `stencilPreserves` true (plans/plan_sokol.md SOKOL-23): ApplyDepthStencilState now wires the
-    // real stencil state into Pipeline3DKey/Get3DPipeline (front/back ops, compare, masks and
-    // reference are baked into the sokol_gfx pipeline itself, since sg_stencil_state.ref is
-    // pipeline state there, not dynamic). Depth and stencil share the one real depth-stencil image
-    // CreateRenderTarget2D/CreateRenderTargetCube always allocate (docs/sokol-renderer.md: every
-    // non-None DepthFormat gets the combined SG_PIXELFORMAT_DEPTH_STENCIL, never a depth-only
-    // format -- and for a cube, ONE 2D depth-stencil image shared by all six faces, exactly what
-    // U2 measures), and BeginPassIfNeeded's LOAD action applies to both attachments identically,
-    // so stencil persists across a bind cycle exactly like depth already does
-    // (Sokol_RenderTarget2D_Depth's own proof). `orderedClearInCycle` true: QueueClear ends the
-    // active pass so a mid-cycle Clear cannot be reordered against an earlier draw -- the same
-    // "GraphicsDevice itself clears a DiscardContents target" convention EasyGL documents.
-    // `msaaDepthRT2D` true: a multisampled, depth-backed RenderTarget2D is real as of SOKOL-26 (a
-    // genuine multisample colour + matching-sample-count depth image, not a silent clamp) and can
-    // be created and bound. `msaaDepthCube` true for the opposite reason: CreateRenderTargetCube
-    // still silently clamps `multiSampleCount` to 1 (RenderTargetCube MSAA is a permanent sokol_gfx
-    // boundary -- SG_IMAGETYPE_CUBE rejects sample_count > 1 outright), so it too can always be
-    // created and bound, just never genuinely multisampled; either way the D8/U-series checks that
-    // would measure MSAA depth content stay skipped via `msaaReadback` above -- and so does
-    // `msaaCubeReadback`, a field this file gained after this lane was branched, which is false
-    // because a multisampled cube can never exist here at all.
-    constexpr Contract kContract{"SOKOL", Support::Exact, true, Support::Exact,
-                                 true, true, true, true, true,
-                                 true, true, false, false, true, true, false, false};
 #else
 #error "REMED-GFX-142: this renderer has no declared render-target depth/stencil contract."
 #endif

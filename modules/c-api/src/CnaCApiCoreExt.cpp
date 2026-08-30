@@ -228,7 +228,6 @@ constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererTy
         {CNA_GRAPHICS_RENDERER_OPENGL1, CNA::GraphicsRendererType::OpenGL1},
         {CNA_GRAPHICS_RENDERER_OPENGL2, CNA::GraphicsRendererType::OpenGL2},
         {CNA_GRAPHICS_RENDERER_WICKED, CNA::GraphicsRendererType::Wicked},
-        {CNA_GRAPHICS_RENDERER_SOKOL, CNA::GraphicsRendererType::Sokol},
         {CNA_GRAPHICS_RENDERER_DILIGENT, CNA::GraphicsRendererType::Diligent},
         {CNA_GRAPHICS_RENDERER_GLIDE, CNA::GraphicsRendererType::Glide},
         {CNA_GRAPHICS_RENDERER_GDI, CNA::GraphicsRendererType::Gdi},
