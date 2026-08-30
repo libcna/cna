@@ -1203,7 +1203,7 @@ carrying forward task-local results:
 | `CP-049` | **completed** | Added `clean <output-directory> [--quiet]` as an empty-next-manifest call through CP-043's exact sorted digest/containment preflight; it removes the valid manifest last and never scans or prunes the tree. Builds and cleans now hold one persistent per-output-root OS lease, so an active operation, unsafe lease, corrupt/symlinked manifest, changed output, or symlinked path fails before destructive work. Compiled, generated and deployment outputs are covered; manual/source files survive. The 53-test CLI suite and focused ASan+UBSan/TSan selections pass, and the MinGW build plus Wine build/clean route succeeds. |
 | `CP-050` | **completed** | Closed the post-XNB continuation with a complete HEADLESS Debug build and a 1,535-case passing boundary (1,527 pass/eight opt-in or fixture skips) after separately reproducing the three known renderer-only HEADLESS TextureCube/Texture3D failures. Independent gates pass for CNB 371/371, CNJ 137 plus two skips, XNB/runtime readers 221 plus four skips, glTF/Model 608 plus three skips, and all 11 frozen golden vectors. Combined ASan+UBSan passes 1,537 plus eight skips (`detect_leaks=0`; no LSan claim), TSan passes 91 plus the large-file skip, the opt-in >2 GiB hash passes, both CMake fixtures and all nine C-API gates pass. Representative workers 1/4 trees remain identical; a 1,024-output ownership-clean benchmark removes about 480 MiB in 7.05 seconds and preserves only the lease. No frozen CNB definition, byte, default glTF output, C ABI, merge, or push changed. |
 | `CP-051` | **completed** | Audited the combined post-CP-050 implementation and converted the remaining documented questions into evidence-gated tasks. Manifest v5 persists route/configuration/topology/output records but collapses authored bytes and effective content dependencies into final hashes; artifact checks and manifest loading also return booleans/empty state that cannot support trustworthy reason identity. Named external source roots require an explicit configuration and containment design. Model schema 1 remains frozen and any schema 2 is gated behind a field/runtime audit. Same-node glTF children, target profiles and MSVC/Windows remain audits rather than assumed features. |
-| `CP-052` | **planned** | Evolve the manifest to v6 with bounded canonical fingerprint domains for primary bytes, source-dependency set/bytes, content-dependency set/effective inputs, parameters, writer schemas, output definitions and deployment definitions. Reject v1-v5 as incompatible, preserve old outputs when ownership is untrusted, and prove deterministic round-trip plus safe migration. |
+| `CP-052` | **completed** | Evolved the manifest to v6 with nine bounded canonical SHA-256 domains: primary bytes; source-dependency set/bytes; content-dependency set/effective fingerprints; parameters; writer schemas/codecs; compiled-output/XREF definitions; and deployment definitions. Direct/effective aggregate hashes now derive from the same domains. Versions 1-5 rebuild as incompatible without granting orphan-deletion authority; deterministic round-trip/domain-isolation/migration tests and the complete 66-case manifest/configuration/CLI/custom/CMake boundary pass. No CNB definition or byte changed. |
 | `CP-053` | **planned** | Add structured build decisions and `build ... --explain`, classifying manifest state, stable route/configuration/domain changes and compiled/deployment integrity without guessing from aggregate hashes. Define `--quiet`, cover all reason categories under workers 1 and 4, and measure no-op overhead. |
 | `CP-054` | **planned** | Specify explicit named read-only external source capabilities in strict configuration, including stable alias-relative persisted identities, overlap policy and deployment interaction. Default containment must remain unchanged. |
 | `CP-055` | **planned** | Implement the approved external-root capability model through dependency collection, hashing, staging/deployment and security tests. Prove traversal/symlink/absolute/overlap failures and prove clean, GC and scavenging never gain external-root deletion authority. |
@@ -2008,3 +2008,55 @@ The other gaps remain subordinate and evidence-gated:
 The audit found no reason to change CNB, add a stable C route, duplicate the scheduler/publisher,
 or weaken the cooperative-lock statement. The frozen schema-1 definitions and eleven golden
 vectors are untouched.
+
+---
+
+## 28. Persisted rebuild-reason state (`CP-052`)
+
+Manifest version 6 adds one `fingerprintState` object per build node. It contains nine lowercase
+SHA-256 values, each computed from canonical length-prefixed fields with an explicit domain tag
+and manifest-version identity:
+
+| Domain | Exact semantic input |
+|---|---|
+| `primarySourceBytes` | bytes of the one contained primary source |
+| `sourceDependencySet` | sorted non-primary source/generated dependency kind and root-relative identity |
+| `sourceDependencyBytes` | the same sorted identities plus each streamed file digest |
+| `contentDependencySet` | sorted content-build node IDs |
+| `contentDependencyFingerprints` | those node IDs plus their resolved effective fingerprints |
+| `processorParameters` | sorted name, stable value type and canonical value text |
+| `writerSchemas` | sorted asset ID/schema/type plus codec name/version declarations |
+| `outputDefinitions` | sorted logical/path/type/schema output definitions plus runtime XREF definitions |
+| `deploymentDefinitions` | sorted contained source and output-root-relative deployment paths |
+
+The component identities and logical node/source identities remain directly inspectable fields and
+are compared as such; duplicating them as additional hashes would add no information. Published
+compiled/deployment byte digests also remain their existing per-artifact records so a later
+decision can name the affected root-relative path. Human prose, timestamps, native absolute paths,
+RTTI identities and temporary paths are absent.
+
+`directFingerprint` now combines the direct domains with logical identity, stable importer/
+processor/writer identities and the CNB container version. `fingerprint` combines that direct hash
+with `contentDependencyFingerprints`. The preparation and scheduler paths refresh the persisted
+domains at the same point they compute their aggregate hashes; there is no second explanation-only
+hashing pass and no second cache contract.
+
+The parser accepts exactly version 6. Versions 1 through 5, malformed documents and future versions
+return no trusted ownership to the build coordinator. A first v6 build therefore rebuilds safely
+and replaces the manifest atomically, but an old-only output whose source disappeared is retained:
+an incompatible manifest cannot authorize CP-043 collection. A dedicated transition test rewrites
+a valid two-node manifest to version 5, removes one source, and proves the old output survives while
+the remaining node rebuilds into a valid v6 manifest.
+
+The focused manifest/migration selection passed 14 tests plus the expected disabled large-file
+case. The complete configuration, CMake integration, CLI and custom-component boundary then passed
+66/66, including workers 1/2/4 tree/manifest identity, graph/cycle behavior, atomic recovery,
+deployment ownership, clean and GC. The implementation changes no CNB encoder/decoder, schema,
+container definition, asset/chunk ID or existing golden file. The canonical C API inventory now
+records 9,346 symbols; all 515 experimental pipeline rows remain planned under the existing
+`CBIND-117`, with no C route, export or ABI-version change. The 15-case affected ASan+UBSan
+selection passed 14 plus the disabled large-file test with halt-on-error and `detect_leaks=0`
+(the runner's existing ptrace limitation prevents an LSan claim). The same focused concurrency
+boundary passed under TSan. An accidentally broad TSan selection reached the known PulseAudio
+runtime boundary and reported a libpulse race; it is outside the pipeline and the corrected
+manifest/scheduler selection remained green.

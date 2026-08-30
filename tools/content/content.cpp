@@ -1226,8 +1226,7 @@ namespace
 
             plan.manifest = Pipeline::MakeContentBuildManifestEntry(
                 result, sourceRoot, outputRoot, item.output);
-            plan.manifest.directFingerprint =
-                Pipeline::ComputeContentBuildDirectFingerprint(plan.manifest, sourceRoot);
+            Pipeline::RefreshContentBuildDirectFingerprint(plan.manifest, sourceRoot);
             const std::filesystem::path nodeStage = stagingRoot / std::to_string(index);
             try
             {
@@ -1292,9 +1291,8 @@ namespace
             if (plan.prepared)
             {
                 outcome.manifest = plan.manifest;
-                outcome.manifest.fingerprint =
-                    Pipeline::ComputeContentBuildEffectiveFingerprint(
-                        outcome.manifest, effectiveFingerprints);
+                Pipeline::RefreshContentBuildEffectiveFingerprint(
+                    outcome.manifest, effectiveFingerprints);
                 try
                 {
                     const std::uintmax_t outputBytes = PublishStagedResult(plan, outputRoot);
@@ -1331,8 +1329,7 @@ namespace
             Pipeline::ContentBuildResult result = pipeline.Build(request);
             outcome.manifest = Pipeline::MakeContentBuildManifestEntry(
                 result, sourceRoot, outputRoot, item.output);
-            outcome.manifest.directFingerprint =
-                Pipeline::ComputeContentBuildDirectFingerprint(outcome.manifest, sourceRoot);
+            Pipeline::RefreshContentBuildDirectFingerprint(outcome.manifest, sourceRoot);
             if (outcome.manifest.directFingerprint != plan.manifest.directFingerprint ||
                 ContentBuildDependencies(outcome.manifest) !=
                     ContentBuildDependencies(plan.manifest))
@@ -1343,9 +1340,8 @@ namespace
                     "a component changed the frozen build topology without a changed direct "
                     "fingerprint.");
             }
-            outcome.manifest.fingerprint =
-                Pipeline::ComputeContentBuildEffectiveFingerprint(
-                    outcome.manifest, effectiveFingerprints);
+            Pipeline::RefreshContentBuildEffectiveFingerprint(
+                outcome.manifest, effectiveFingerprints);
             try
             {
                 PublishResult(result, outcome.manifest, outputRoot);

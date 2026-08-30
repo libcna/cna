@@ -586,11 +586,17 @@ invalidates that asset without treating the entire configuration file as a share
 an unrelated entry change leaves other assets eligible for `SKIP`.
 
 The manifest JSON layout is versioned internal build state, not a hand-edited project format.
-Version 5 gives each entry a stable build-node ID, ordered compiled and deployment ownership lists,
-explicit writer schema/codec declarations, a direct fingerprint, and an effective graph
-fingerprint. Versions 1 through 4 cannot represent all of those relationships, so they are rejected
-as incompatible and cause a safe rebuild; there is no ambiguous in-place migration. A corrupt or
-future incompatible manifest is handled the same way.
+Version 6 gives each entry a stable build-node ID, ordered compiled and deployment ownership lists,
+explicit writer schema/codec declarations, a direct fingerprint, an effective graph fingerprint,
+and a bounded `fingerprintState` decomposition. The decomposition stores canonical SHA-256 domains
+for primary bytes; source-dependency identities and bytes; content-dependency identities and
+effective fingerprints; typed parameters; writer schema/codec declarations; compiled-output and
+runtime-XREF definitions; and deployment definitions. It stores no prose, timestamp, temporary
+path, RTTI name, or absolute host path. Versions 1 through 5 cannot provide the complete current
+contract, so they are rejected as incompatible and cause a safe rebuild; there is no ambiguous
+in-place migration. An incompatible/corrupt manifest grants no deletion authority, so its existing
+outputs remain unless the new build replaces the same paths. A corrupt or future incompatible
+manifest is handled the same way.
 
 ## Multi-output nodes and ownership
 
@@ -1080,6 +1086,7 @@ plus clean through a non-ASCII path. Native Windows and MSVC remain untested and
   codec identities used by cache fingerprints;
 - opt-in glTF Model/Texture2D/AnimationClip generated bundles and their naming policy;
 - content-build edges, dependency builds, and bounded parallel scheduling.
+- the manifest-v6 persisted fingerprint-domain decomposition used by incremental decisions;
 
 **Future:**
 
@@ -1089,9 +1096,7 @@ plus clean through a non-ASCII path. Native Windows and MSVC remain untested and
 - broader XNB Model support only through a separately reviewed Model schema revision that can
   preserve the unsupported vertex, effect/material, tag, shared-resource, and external-reference
   semantics;
-- a detailed `--explain` mode only with a stable persisted reason breakdown. The current manifest
-  can distinguish broad direct, effective-dependency and output-integrity changes, but cannot
-  attribute every direct field change precisely without executing components or guessing.
+- human and machine-readable detailed build explanations over the persisted v6 reason domains;
 
 **Not provided:**
 

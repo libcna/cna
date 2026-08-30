@@ -12,7 +12,7 @@
 namespace CNA::Content::Pipeline
 {
     /** @brief Current on-disk CNA Content Pipeline manifest format version. */
-    inline constexpr std::uint32_t ContentBuildManifestVersion = 5u;
+    inline constexpr std::uint32_t ContentBuildManifestVersion = 6u;
 
     /** @brief File name used for the inspectable manifest below a content output
      * root. */
@@ -59,6 +59,40 @@ namespace CNA::Content::Pipeline
         bool operator==(const ContentBuildManifestDeploymentFile&) const = default;
     };
 
+    /** @brief Canonical persisted fingerprint domains used to explain incremental decisions. */
+    struct ContentBuildFingerprintState
+    {
+        /** @brief SHA-256 of the primary source bytes. */
+        std::string primarySourceBytes;
+
+        /** @brief Canonical fingerprint of non-primary file-dependency identities. */
+        std::string sourceDependencySet;
+
+        /** @brief Canonical fingerprint of non-primary file-dependency identities and bytes. */
+        std::string sourceDependencyBytes;
+
+        /** @brief Canonical fingerprint of content-build dependency identities. */
+        std::string contentDependencySet;
+
+        /** @brief Canonical fingerprint of content-build identities and effective fingerprints. */
+        std::string contentDependencyFingerprints;
+
+        /** @brief Canonical fingerprint of typed processor parameters. */
+        std::string processorParameters;
+
+        /** @brief Canonical fingerprint of writer asset/schema/codec declarations. */
+        std::string writerSchemas;
+
+        /** @brief Canonical fingerprint of compiled output and runtime-XREF definitions. */
+        std::string outputDefinitions;
+
+        /** @brief Canonical fingerprint of deployment source/output definitions. */
+        std::string deploymentDefinitions;
+
+        /** @brief Compares every persisted fingerprint domain. */
+        bool operator==(const ContentBuildFingerprintState&) const = default;
+    };
+
     /** @brief One deterministic, root-relative build-node record in a manifest. */
     struct ContentBuildManifestEntry
     {
@@ -95,6 +129,9 @@ namespace CNA::Content::Pipeline
 
         /** @brief Non-CNB support files atomically deployed and owned by this node. */
         std::vector<ContentBuildManifestDeploymentFile> deploymentFiles;
+
+        /** @brief Stable decomposition of the inputs collapsed into the aggregate fingerprints. */
+        ContentBuildFingerprintState fingerprintState;
 
         /** @brief SHA-256 of direct inputs and dependency-edge identities. */
         std::string directFingerprint;
@@ -191,6 +228,19 @@ namespace CNA::Content::Pipeline
         const ContentBuildManifestEntry& entry, const std::filesystem::path& sourceRoot);
 
     /**
+     * @brief Refreshes the persisted direct-input domains and aggregate direct fingerprint.
+     *
+     * The effective content-build dependency domain remains unresolved until
+     * @ref RefreshContentBuildEffectiveFingerprint is called.
+     *
+     * @param entry Record to update in place.
+     * @param sourceRoot Root under which every file dependency must resolve.
+     * @throws std::runtime_error for missing, unreadable or escaping file dependencies.
+     */
+    void RefreshContentBuildDirectFingerprint(
+        ContentBuildManifestEntry& entry, const std::filesystem::path& sourceRoot);
+
+    /**
      * @brief Combines a node's current direct fingerprint with effective dependency results.
      *
      * @param entry Record whose @ref ContentBuildManifestEntry::directFingerprint is current.
@@ -201,6 +251,17 @@ namespace CNA::Content::Pipeline
      */
     [[nodiscard]] std::string ComputeContentBuildEffectiveFingerprint(
         const ContentBuildManifestEntry& entry,
+        const std::map<std::string, std::string>& contentBuildFingerprints = {});
+
+    /**
+     * @brief Refreshes the effective content-dependency domain and aggregate fingerprint.
+     *
+     * @param entry Record whose direct state and fingerprint are current.
+     * @param contentBuildFingerprints Effective fingerprints keyed by dependency node ID.
+     * @throws std::runtime_error when a direct or dependency fingerprint is absent.
+     */
+    void RefreshContentBuildEffectiveFingerprint(
+        ContentBuildManifestEntry& entry,
         const std::map<std::string, std::string>& contentBuildFingerprints = {});
 
     /**

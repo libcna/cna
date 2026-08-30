@@ -1056,6 +1056,40 @@ TEST(ContentPipelineCliTest, CorruptManifestSafelyRebuildsAndIsReplaced)
         std::string(manifestBytes.begin(), manifestBytes.end())));
 }
 
+TEST(ContentPipelineCliTest, VersionFiveManifestRebuildsWithoutAuthorizingOldOutputDeletion)
+{
+    ScratchDirectory scratch("manifest_v5_transition");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    const std::filesystem::path manifest =
+        output / Pipeline::ContentBuildManifestFileName;
+    WriteBytes(source / "current.png", MakePng(2, 2));
+    WriteBytes(source / "legacy.png", MakePng(3, 2));
+    std::string log;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    const std::vector<std::uint8_t> legacyOutput = ReadBytes(output / "legacy.cnb");
+
+    const std::vector<std::uint8_t> oldManifestBytes = ReadBytes(manifest);
+    std::string oldManifest(oldManifestBytes.begin(), oldManifestBytes.end());
+    const std::size_t version = oldManifest.find("\"version\":6");
+    ASSERT_NE(version, std::string::npos);
+    oldManifest.replace(version, std::string("\"version\":6").size(), "\"version\":5");
+    WriteText(manifest, oldManifest);
+    ASSERT_TRUE(std::filesystem::remove(source / "legacy.png"));
+
+    log.clear();
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    EXPECT_NE(log.find("[WARN] Ignoring incompatible or corrupt manifest"), std::string::npos)
+        << log;
+    EXPECT_NE(log.find("[BUILD] current"), std::string::npos) << log;
+    EXPECT_EQ(ReadBytes(output / "legacy.cnb"), legacyOutput);
+    const std::vector<std::uint8_t> currentManifestBytes = ReadBytes(manifest);
+    const Pipeline::ContentBuildManifest current = Pipeline::ContentBuildManifest::Parse(
+        std::string(currentManifestBytes.begin(), currentManifestBytes.end()));
+    EXPECT_NE(current.Find("current"), nullptr);
+    EXPECT_EQ(current.Find("legacy"), nullptr);
+}
+
 TEST(ContentPipelineCliTest, FailedRebuildPreservesTheOldValidOutputAndLeavesNoTemporary)
 {
     ScratchDirectory scratch("preserve");
@@ -2062,9 +2096,8 @@ TEST(ContentPipelineCliTest, CustomWriterSchemaAndCodecEvolutionCannotSkipStaleO
         {
             entry.writerSchemas[0].codec.version = "2";
         }
-        entry.directFingerprint =
-            Pipeline::ComputeContentBuildDirectFingerprint(entry, source);
-        entry.fingerprint = Pipeline::ComputeContentBuildEffectiveFingerprint(entry);
+        Pipeline::RefreshContentBuildDirectFingerprint(entry, source);
+        Pipeline::RefreshContentBuildEffectiveFingerprint(entry);
         stale.Set(std::move(entry));
         WriteText(manifestPath, stale.Serialize());
 

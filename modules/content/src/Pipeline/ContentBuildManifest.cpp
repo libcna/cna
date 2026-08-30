@@ -3,6 +3,7 @@
 #include "CNA/Content/Pipeline/ContentBuildManifest.hpp"
 
 #include <algorithm>
+#include <array>
 #include <bit>
 #include <charconv>
 #include <cmath>
@@ -78,6 +79,38 @@ namespace CNA::Content::Pipeline
         {
             const JsonValue& value = RequireMember(object, name, JsonType::Object);
             return {RequireString(value, "name"), RequireString(value, "version")};
+        }
+
+        JsonValue FingerprintStateValue(const ContentBuildFingerprintState& state)
+        {
+            JsonValue value = JsonValue::MakeObject();
+            value.Set("primarySourceBytes", StringValue(state.primarySourceBytes));
+            value.Set("sourceDependencySet", StringValue(state.sourceDependencySet));
+            value.Set("sourceDependencyBytes", StringValue(state.sourceDependencyBytes));
+            value.Set("contentDependencySet", StringValue(state.contentDependencySet));
+            value.Set("contentDependencyFingerprints",
+                      StringValue(state.contentDependencyFingerprints));
+            value.Set("processorParameters", StringValue(state.processorParameters));
+            value.Set("writerSchemas", StringValue(state.writerSchemas));
+            value.Set("outputDefinitions", StringValue(state.outputDefinitions));
+            value.Set("deploymentDefinitions", StringValue(state.deploymentDefinitions));
+            return value;
+        }
+
+        ContentBuildFingerprintState ParseFingerprintState(const JsonValue& object)
+        {
+            const JsonValue& value = RequireMember(object, "fingerprintState", JsonType::Object);
+            return {
+                RequireString(value, "primarySourceBytes"),
+                RequireString(value, "sourceDependencySet"),
+                RequireString(value, "sourceDependencyBytes"),
+                RequireString(value, "contentDependencySet"),
+                RequireString(value, "contentDependencyFingerprints"),
+                RequireString(value, "processorParameters"),
+                RequireString(value, "writerSchemas"),
+                RequireString(value, "outputDefinitions"),
+                RequireString(value, "deploymentDefinitions"),
+            };
         }
 
         const char* DependencyKindName(ContentDependencyKind kind)
@@ -429,6 +462,225 @@ namespace CNA::Content::Pipeline
             fingerprint.AddString(identity.name);
             fingerprint.AddString(identity.version);
         }
+
+        ContentBuildFingerprintState ComputeDirectFingerprintState(
+            const ContentBuildManifestEntry& entry, const std::filesystem::path& sourceRoot)
+        {
+            ContentBuildFingerprintState state;
+            const std::string primarySourceDigest =
+                ContentFileSha256(ResolveContained(sourceRoot, entry.source, "primary source"));
+            state.primarySourceBytes = primarySourceDigest;
+
+            std::vector<ContentDependency> sourceDependencies;
+            std::vector<ContentDependency> contentDependencies;
+            for (const ContentDependency& dependency : entry.dependencies)
+            {
+                if (dependency.kind == ContentDependencyKind::ContentBuild)
+                {
+                    contentDependencies.push_back(dependency);
+                }
+                else if (dependency.kind != ContentDependencyKind::PrimarySource)
+                {
+                    sourceDependencies.push_back(dependency);
+                }
+            }
+            std::sort(sourceDependencies.begin(), sourceDependencies.end());
+            std::sort(contentDependencies.begin(), contentDependencies.end());
+
+            CanonicalFingerprint sourceSet;
+            sourceSet.AddString("CNA.ContentPipeline.SourceDependencySet");
+            sourceSet.AddU64(ContentBuildManifestVersion);
+            sourceSet.AddU64(sourceDependencies.size());
+            CanonicalFingerprint sourceBytes;
+            sourceBytes.AddString("CNA.ContentPipeline.SourceDependencyBytes");
+            sourceBytes.AddU64(ContentBuildManifestVersion);
+            sourceBytes.AddU64(sourceDependencies.size());
+            for (const ContentDependency& dependency : sourceDependencies)
+            {
+                sourceSet.AddU64(static_cast<std::uint64_t>(dependency.kind));
+                sourceSet.AddString(dependency.identity);
+                sourceBytes.AddU64(static_cast<std::uint64_t>(dependency.kind));
+                sourceBytes.AddString(dependency.identity);
+                sourceBytes.AddString(ContentFileSha256(
+                    ResolveContained(sourceRoot, dependency.identity, "dependency")));
+            }
+            state.sourceDependencySet = sourceSet.Finish();
+            state.sourceDependencyBytes = sourceBytes.Finish();
+
+            CanonicalFingerprint contentSet;
+            contentSet.AddString("CNA.ContentPipeline.ContentDependencySet");
+            contentSet.AddU64(ContentBuildManifestVersion);
+            contentSet.AddU64(contentDependencies.size());
+            for (const ContentDependency& dependency : contentDependencies)
+            {
+                contentSet.AddString(dependency.identity);
+            }
+            state.contentDependencySet = contentSet.Finish();
+
+            CanonicalFingerprint parameters;
+            parameters.AddString("CNA.ContentPipeline.ProcessorParameters");
+            parameters.AddU64(ContentBuildManifestVersion);
+            parameters.AddU64(entry.parameters.Values().size());
+            for (const auto& [name, value] : entry.parameters.Values())
+            {
+                parameters.AddString(name);
+                parameters.AddString(ParameterTypeName(value));
+                parameters.AddString(ParameterText(value));
+            }
+            state.processorParameters = parameters.Finish();
+
+            std::vector<ContentWriterSchemaIdentity> writerSchemas = entry.writerSchemas;
+            std::sort(writerSchemas.begin(), writerSchemas.end(),
+                      [](const ContentWriterSchemaIdentity& left,
+                         const ContentWriterSchemaIdentity& right)
+            {
+                if (left.assetTypeId != right.assetTypeId)
+                {
+                    return left.assetTypeId < right.assetTypeId;
+                }
+                return left.assetTypeName < right.assetTypeName;
+            });
+            CanonicalFingerprint schemas;
+            schemas.AddString("CNA.ContentPipeline.WriterSchemas");
+            schemas.AddU64(ContentBuildManifestVersion);
+            schemas.AddU64(writerSchemas.size());
+            for (const ContentWriterSchemaIdentity& schema : writerSchemas)
+            {
+                schemas.AddU64(schema.assetTypeId);
+                schemas.AddU64(schema.assetSchemaVersion);
+                schemas.AddString(schema.assetTypeName);
+                AddIdentity(schemas, schema.codec);
+            }
+            state.writerSchemas = schemas.Finish();
+
+            std::vector<ContentBuildManifestOutput> outputs = entry.outputs;
+            std::sort(outputs.begin(), outputs.end(),
+                      [](const ContentBuildManifestOutput& left,
+                         const ContentBuildManifestOutput& right)
+            {
+                return left.logicalName < right.logicalName;
+            });
+            std::vector<RuntimeContentReference> runtimeReferences = entry.runtimeReferences;
+            std::sort(runtimeReferences.begin(), runtimeReferences.end());
+            CanonicalFingerprint outputDefinitions;
+            outputDefinitions.AddString("CNA.ContentPipeline.OutputDefinitions");
+            outputDefinitions.AddU64(ContentBuildManifestVersion);
+            outputDefinitions.AddU64(outputs.size());
+            for (const ContentBuildManifestOutput& output : outputs)
+            {
+                outputDefinitions.AddString(output.logicalName);
+                outputDefinitions.AddString(output.path);
+                outputDefinitions.AddU64(output.assetTypeId);
+                outputDefinitions.AddU64(output.assetSchemaVersion);
+                outputDefinitions.AddString(output.assetTypeName);
+            }
+            outputDefinitions.AddU64(runtimeReferences.size());
+            for (const RuntimeContentReference& reference : runtimeReferences)
+            {
+                outputDefinitions.AddString(reference.logicalName);
+                outputDefinitions.AddU64(reference.expectedAssetTypeId);
+            }
+            state.outputDefinitions = outputDefinitions.Finish();
+
+            std::vector<ContentBuildManifestDeploymentFile> deploymentFiles =
+                entry.deploymentFiles;
+            std::sort(deploymentFiles.begin(), deploymentFiles.end(),
+                      [](const ContentBuildManifestDeploymentFile& left,
+                         const ContentBuildManifestDeploymentFile& right)
+            {
+                return left.path < right.path;
+            });
+            CanonicalFingerprint deploymentDefinitions;
+            deploymentDefinitions.AddString("CNA.ContentPipeline.DeploymentDefinitions");
+            deploymentDefinitions.AddU64(ContentBuildManifestVersion);
+            deploymentDefinitions.AddU64(deploymentFiles.size());
+            for (const ContentBuildManifestDeploymentFile& deployment : deploymentFiles)
+            {
+                deploymentDefinitions.AddString(deployment.source);
+                deploymentDefinitions.AddString(deployment.path);
+            }
+            state.deploymentDefinitions = deploymentDefinitions.Finish();
+            return state;
+        }
+
+        std::string ComputeDirectFingerprintFromState(
+            const ContentBuildManifestEntry& entry,
+            const ContentBuildFingerprintState& state)
+        {
+            CanonicalFingerprint fingerprint;
+            fingerprint.AddString("CNA.ContentPipeline.DirectFingerprint");
+            fingerprint.AddU64(ContentBuildManifestVersion);
+            fingerprint.AddU64(Cnb::Format::ContainerMajor);
+            fingerprint.AddU64(Cnb::Format::ContainerMinor);
+            fingerprint.AddString(entry.nodeId);
+            fingerprint.AddString(entry.source);
+            AddIdentity(fingerprint, entry.importer);
+            AddIdentity(fingerprint, entry.processor);
+            AddIdentity(fingerprint, entry.writer);
+            fingerprint.AddString(state.primarySourceBytes);
+            fingerprint.AddString(state.sourceDependencySet);
+            fingerprint.AddString(state.sourceDependencyBytes);
+            fingerprint.AddString(state.contentDependencySet);
+            fingerprint.AddString(state.processorParameters);
+            fingerprint.AddString(state.writerSchemas);
+            fingerprint.AddString(state.outputDefinitions);
+            fingerprint.AddString(state.deploymentDefinitions);
+            return fingerprint.Finish();
+        }
+
+        std::string ComputeContentDependencyFingerprint(
+            const ContentBuildManifestEntry& entry,
+            const std::map<std::string, std::string>& contentBuildFingerprints)
+        {
+            std::vector<ContentDependency> dependencies;
+            std::copy_if(entry.dependencies.begin(), entry.dependencies.end(),
+                         std::back_inserter(dependencies),
+                         [](const ContentDependency& dependency)
+            {
+                return dependency.kind == ContentDependencyKind::ContentBuild;
+            });
+            std::sort(dependencies.begin(), dependencies.end());
+
+            CanonicalFingerprint fingerprint;
+            fingerprint.AddString("CNA.ContentPipeline.ContentDependencyFingerprints");
+            fingerprint.AddU64(ContentBuildManifestVersion);
+            fingerprint.AddU64(dependencies.size());
+            for (const ContentDependency& dependency : dependencies)
+            {
+                const auto found = contentBuildFingerprints.find(dependency.identity);
+                if (found == contentBuildFingerprints.end() || !IsLowerHexDigest(found->second))
+                {
+                    throw std::runtime_error(
+                        "content-build dependency '" + dependency.identity +
+                        "' has no current effective fingerprint.");
+                }
+                fingerprint.AddString(dependency.identity);
+                fingerprint.AddString(found->second);
+            }
+            return fingerprint.Finish();
+        }
+
+        std::string ComputeEffectiveFingerprintFromState(
+            const ContentBuildManifestEntry& entry,
+            const std::string& contentDependencyFingerprint)
+        {
+            if (!IsLowerHexDigest(entry.directFingerprint))
+            {
+                throw std::runtime_error("content build node '" + entry.nodeId +
+                                         "' has no current direct fingerprint.");
+            }
+            if (!IsLowerHexDigest(contentDependencyFingerprint))
+            {
+                throw std::runtime_error("content build node '" + entry.nodeId +
+                                         "' has no current content-dependency fingerprint.");
+            }
+            CanonicalFingerprint fingerprint;
+            fingerprint.AddString("CNA.ContentPipeline.EffectiveFingerprint");
+            fingerprint.AddU64(ContentBuildManifestVersion);
+            fingerprint.AddString(entry.directFingerprint);
+            fingerprint.AddString(contentDependencyFingerprint);
+            return fingerprint.Finish();
+        }
     } // namespace
 
     ContentBuildManifest ContentBuildManifest::Parse(const std::string& json)
@@ -477,6 +729,7 @@ namespace CNA::Content::Pipeline
             }
             entry.directFingerprint = RequireString(value, "directFingerprint");
             entry.fingerprint = RequireString(value, "fingerprint");
+            entry.fingerprintState = ParseFingerprintState(value);
 
             for (const JsonValue& output :
                  RequireMember(value, "outputs", JsonType::Array).arrayValue)
@@ -647,6 +900,7 @@ namespace CNA::Content::Pipeline
                 references.arrayValue.push_back(std::move(item));
             }
             value.Set("runtimeReferences", std::move(references));
+            value.Set("fingerprintState", FingerprintStateValue(entry.fingerprintState));
             value.Set("directFingerprint", StringValue(entry.directFingerprint));
             value.Set("fingerprint", StringValue(entry.fingerprint));
             assets.arrayValue.push_back(std::move(value));
@@ -727,6 +981,26 @@ namespace CNA::Content::Pipeline
         {
             throw std::invalid_argument("content manifest direct and effective fingerprints must "
                                         "be lowercase SHA-256 values.");
+        }
+        const std::array<const std::string*, 9u> fingerprintDomains = {
+            &entry.fingerprintState.primarySourceBytes,
+            &entry.fingerprintState.sourceDependencySet,
+            &entry.fingerprintState.sourceDependencyBytes,
+            &entry.fingerprintState.contentDependencySet,
+            &entry.fingerprintState.contentDependencyFingerprints,
+            &entry.fingerprintState.processorParameters,
+            &entry.fingerprintState.writerSchemas,
+            &entry.fingerprintState.outputDefinitions,
+            &entry.fingerprintState.deploymentDefinitions,
+        };
+        if (std::any_of(fingerprintDomains.begin(), fingerprintDomains.end(),
+                        [](const std::string* digest)
+                        {
+                            return !IsLowerHexDigest(*digest);
+                        }))
+        {
+            throw std::invalid_argument(
+                "content manifest fingerprint-state domains must be lowercase SHA-256 values.");
         }
         std::set<std::string> outputNames;
         std::set<std::string> outputPaths;
@@ -902,124 +1176,35 @@ namespace CNA::Content::Pipeline
     std::string ComputeContentBuildDirectFingerprint(
         const ContentBuildManifestEntry& entry, const std::filesystem::path& sourceRoot)
     {
-        CanonicalFingerprint fingerprint;
-        fingerprint.AddString("CNA.ContentPipeline.DirectFingerprint");
-        fingerprint.AddU64(ContentBuildManifestVersion);
-        fingerprint.AddU64(Cnb::Format::ContainerMajor);
-        fingerprint.AddU64(Cnb::Format::ContainerMinor);
-        fingerprint.AddString(entry.nodeId);
-        fingerprint.AddString(entry.source);
-        AddIdentity(fingerprint, entry.importer);
-        AddIdentity(fingerprint, entry.processor);
-        AddIdentity(fingerprint, entry.writer);
-        fingerprint.AddU64(entry.writerSchemas.size());
-        for (const ContentWriterSchemaIdentity& schema : entry.writerSchemas)
-        {
-            fingerprint.AddU64(schema.assetTypeId);
-            fingerprint.AddU64(schema.assetSchemaVersion);
-            fingerprint.AddString(schema.assetTypeName);
-            AddIdentity(fingerprint, schema.codec);
-        }
-        std::vector<ContentBuildManifestOutput> outputs = entry.outputs;
-        std::sort(outputs.begin(), outputs.end(),
-                  [](const ContentBuildManifestOutput& left,
-                     const ContentBuildManifestOutput& right)
-        {
-            return left.logicalName < right.logicalName;
-        });
-        fingerprint.AddU64(outputs.size());
-        for (const ContentBuildManifestOutput& output : outputs)
-        {
-            fingerprint.AddString(output.logicalName);
-            fingerprint.AddU64(output.assetTypeId);
-            fingerprint.AddU64(output.assetSchemaVersion);
-            fingerprint.AddString(output.assetTypeName);
-        }
-        std::vector<ContentBuildManifestDeploymentFile> deploymentFiles =
-            entry.deploymentFiles;
-        std::sort(deploymentFiles.begin(), deploymentFiles.end(),
-                  [](const ContentBuildManifestDeploymentFile& left,
-                     const ContentBuildManifestDeploymentFile& right)
-        {
-            return left.path < right.path;
-        });
-        fingerprint.AddU64(deploymentFiles.size());
-        for (const ContentBuildManifestDeploymentFile& deployment : deploymentFiles)
-        {
-            fingerprint.AddString(deployment.source);
-            fingerprint.AddString(deployment.path);
-        }
-        const std::string primarySourceDigest =
-            ContentFileSha256(ResolveContained(sourceRoot, entry.source, "primary source"));
-        fingerprint.AddString(primarySourceDigest);
+        const ContentBuildFingerprintState state =
+            ComputeDirectFingerprintState(entry, sourceRoot);
+        return ComputeDirectFingerprintFromState(entry, state);
+    }
 
-        fingerprint.AddU64(entry.parameters.Values().size());
-        for (const auto& [name, value] : entry.parameters.Values())
-        {
-            fingerprint.AddString(name);
-            fingerprint.AddString(ParameterTypeName(value));
-            fingerprint.AddString(ParameterText(value));
-        }
-
-        std::vector<ContentDependency> dependencies = entry.dependencies;
-        std::sort(dependencies.begin(), dependencies.end());
-        fingerprint.AddU64(dependencies.size());
-        for (const ContentDependency& dependency : dependencies)
-        {
-            fingerprint.AddU64(static_cast<std::uint64_t>(dependency.kind));
-            fingerprint.AddString(dependency.identity);
-            if (dependency.kind != ContentDependencyKind::ContentBuild)
-            {
-                if (dependency.kind == ContentDependencyKind::PrimarySource &&
-                    dependency.identity == entry.source)
-                {
-                    fingerprint.AddString(primarySourceDigest);
-                }
-                else
-                {
-                    const std::filesystem::path path =
-                        ResolveContained(sourceRoot, dependency.identity, "dependency");
-                    fingerprint.AddString(ContentFileSha256(path));
-                }
-            }
-        }
-        return fingerprint.Finish();
+    void RefreshContentBuildDirectFingerprint(
+        ContentBuildManifestEntry& entry, const std::filesystem::path& sourceRoot)
+    {
+        entry.fingerprintState = ComputeDirectFingerprintState(entry, sourceRoot);
+        entry.directFingerprint =
+            ComputeDirectFingerprintFromState(entry, entry.fingerprintState);
     }
 
     std::string ComputeContentBuildEffectiveFingerprint(
         const ContentBuildManifestEntry& entry,
         const std::map<std::string, std::string>& contentBuildFingerprints)
     {
-        if (!IsLowerHexDigest(entry.directFingerprint))
-        {
-            throw std::runtime_error("content build node '" + entry.nodeId +
-                                     "' has no current direct fingerprint.");
-        }
-        CanonicalFingerprint fingerprint;
-        fingerprint.AddString("CNA.ContentPipeline.EffectiveFingerprint");
-        fingerprint.AddU64(ContentBuildManifestVersion);
-        fingerprint.AddString(entry.directFingerprint);
+        return ComputeEffectiveFingerprintFromState(
+            entry, ComputeContentDependencyFingerprint(entry, contentBuildFingerprints));
+    }
 
-        std::vector<ContentDependency> dependencies;
-        std::copy_if(entry.dependencies.begin(), entry.dependencies.end(),
-                     std::back_inserter(dependencies), [](const ContentDependency& dependency)
-        {
-            return dependency.kind == ContentDependencyKind::ContentBuild;
-        });
-        std::sort(dependencies.begin(), dependencies.end());
-        fingerprint.AddU64(dependencies.size());
-        for (const ContentDependency& dependency : dependencies)
-        {
-            const auto found = contentBuildFingerprints.find(dependency.identity);
-            if (found == contentBuildFingerprints.end() || !IsLowerHexDigest(found->second))
-            {
-                throw std::runtime_error("content-build dependency '" + dependency.identity +
-                                         "' has no current effective fingerprint.");
-            }
-            fingerprint.AddString(dependency.identity);
-            fingerprint.AddString(found->second);
-        }
-        return fingerprint.Finish();
+    void RefreshContentBuildEffectiveFingerprint(
+        ContentBuildManifestEntry& entry,
+        const std::map<std::string, std::string>& contentBuildFingerprints)
+    {
+        entry.fingerprintState.contentDependencyFingerprints =
+            ComputeContentDependencyFingerprint(entry, contentBuildFingerprints);
+        entry.fingerprint = ComputeEffectiveFingerprintFromState(
+            entry, entry.fingerprintState.contentDependencyFingerprints);
     }
 
     std::string ComputeContentBuildFingerprint(
@@ -1027,8 +1212,9 @@ namespace CNA::Content::Pipeline
         const std::map<std::string, std::string>& contentBuildFingerprints)
     {
         ContentBuildManifestEntry current = entry;
-        current.directFingerprint = ComputeContentBuildDirectFingerprint(current, sourceRoot);
-        return ComputeContentBuildEffectiveFingerprint(current, contentBuildFingerprints);
+        RefreshContentBuildDirectFingerprint(current, sourceRoot);
+        RefreshContentBuildEffectiveFingerprint(current, contentBuildFingerprints);
+        return current.fingerprint;
     }
 
     ContentBuildManifestEntry MakeContentBuildManifestEntry(const ContentBuildResult& result,
