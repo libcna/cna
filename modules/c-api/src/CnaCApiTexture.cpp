@@ -39,39 +39,7 @@ namespace CNA::C::Detail {
 
 bool IsTexture2DFormatSupportedByBuild(const uint32_t format) noexcept
 {
-#ifdef CNA_RENDERER_SKIA
-    switch (format) {
-        case CNA_SURFACE_FORMAT_COLOR:
-        case CNA_SURFACE_FORMAT_BGR565:
-        case CNA_SURFACE_FORMAT_BGRA5551:
-        case CNA_SURFACE_FORMAT_BGRA4444:
-        case CNA_SURFACE_FORMAT_DXT1:
-        case CNA_SURFACE_FORMAT_DXT3:
-        case CNA_SURFACE_FORMAT_DXT5:
-        case CNA_SURFACE_FORMAT_NORMALIZED_BYTE2:
-        case CNA_SURFACE_FORMAT_NORMALIZED_BYTE4:
-        case CNA_SURFACE_FORMAT_RGBA1010102:
-        case CNA_SURFACE_FORMAT_RG32:
-        case CNA_SURFACE_FORMAT_RGBA64:
-        case CNA_SURFACE_FORMAT_ALPHA8:
-        case CNA_SURFACE_FORMAT_SINGLE:
-        case CNA_SURFACE_FORMAT_VECTOR2:
-        case CNA_SURFACE_FORMAT_VECTOR4:
-        case CNA_SURFACE_FORMAT_HALF_SINGLE:
-        case CNA_SURFACE_FORMAT_HALF_VECTOR2:
-        case CNA_SURFACE_FORMAT_HALF_VECTOR4:
-        case CNA_SURFACE_FORMAT_HDR_BLENDABLE:
-        case CNA_SURFACE_FORMAT_COLOR_BGRA_EXT:
-        case CNA_SURFACE_FORMAT_COLOR_SRGB_EXT:
-        case CNA_SURFACE_FORMAT_BC7_EXT:
-        case CNA_SURFACE_FORMAT_BC7_SRGB_EXT:
-        case CNA_SURFACE_FORMAT_BYTE_EXT:
-        case CNA_SURFACE_FORMAT_USHORT_EXT:
-            return true;
-        default:
-            return false;
-    }
-#else
+#if 1
     return format == CNA_SURFACE_FORMAT_COLOR;
 #endif
 }
@@ -141,19 +109,14 @@ struct TransferView final {
 {
     switch (dataType) {
         case CNA_TEXTURE_DATA_COLOR:
-#ifdef CNA_RENDERER_SKIA
-            return format == SurfaceFormat::Color || format == SurfaceFormat::ColorBgraEXT ||
-                format == SurfaceFormat::ColorSrgbEXT;
-#else
+#if 1
             return Texture::GetFormatSizeEXT(format) % 4 == 0;
 #endif
         case CNA_TEXTURE_DATA_BGR565: return format == SurfaceFormat::Bgr565;
         case CNA_TEXTURE_DATA_BGRA5551: return format == SurfaceFormat::Bgra5551;
         case CNA_TEXTURE_DATA_BGRA4444: return format == SurfaceFormat::Bgra4444;
         case CNA_TEXTURE_DATA_BYTE:
-#ifdef CNA_RENDERER_SKIA
-            return format == SurfaceFormat::ByteEXT || IsCompressedFormat(format);
-#else
+#if 1
             return format == SurfaceFormat::ByteEXT;
 #endif
         case CNA_TEXTURE_DATA_NORMALIZED_BYTE2:

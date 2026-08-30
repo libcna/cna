@@ -185,11 +185,6 @@ namespace
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr Contract kContract{"EASYGL", true, Support::Exact, true, Support::Exact,
                                  true, true, false, true, true, true, true, false};
-#elif defined(CNA_RENDERER_SKIA)
-    // Raster Skia gives every public bind cycle an immediate canvas boundary. Both target shapes
-    // have exact level-zero readback; real MSAA remains a declared refusal and is not fabricated.
-    constexpr Contract kContract{"SKIA", true, Support::Exact, true, Support::Exact,
-                                 true, true, false, true, true, true, false, false};
 #elif defined(CNA_RENDERER_BGFX)
     // `msaaTargetReadback` was false while a multisampled RenderTarget2D reported a successful
     // readback over untouched memory; REMED-GFX-154 fixed that, so K1/K2 measure pass boundaries on

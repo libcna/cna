@@ -47,9 +47,6 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
 #ifdef CNA_RENDERER_HTML_DOM
     ++enabled;
 #endif
-#ifdef CNA_RENDERER_SKIA
-    ++enabled;
-#endif
 #ifdef CNA_RENDERER_DIRECTX11
     ++enabled;
 #endif
@@ -235,13 +232,6 @@ TEST(GraphicsRendererCompileDefinitionsTest, SokolRendererIsReportedByName)
 }
 #endif
 
-#ifdef CNA_RENDERER_SKIA
-TEST(GraphicsRendererCompileDefinitionsTest, SkiaMacroMatchesPublicRendererIdentity)
-{
-    EXPECT_EQ(CNA::getCurrentGraphicsRendererType(), CNA::GraphicsRendererType::Skia);
-    EXPECT_EQ(CNA::getCurrentGraphicsRendererName(), "SKIA");
-}
-#endif
 
 #ifdef CNA_RENDERER_OPENVG
 TEST(GraphicsRendererCompileDefinitionsTest, OpenVgMacroMatchesPublicRendererIdentity)

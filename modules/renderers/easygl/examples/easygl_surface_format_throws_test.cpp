@@ -131,25 +131,12 @@ protected:
 
         // ── sRGB / EXT formats follow renderer-specific promotion gates ──────
 
-#if defined(CNA_RENDERER_SKIA)
-        expectNoThrow("Texture2D ColorSrgbEXT", [&]{
-            Texture2D t(dev, 2, 2, false, SurfaceFormat::ColorSrgbEXT);
-        });
-#else
+#if 1
         expectThrows("Texture2D ColorSrgbEXT", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::ColorSrgbEXT);
         });
 #endif
-#if defined(CNA_RENDERER_SKIA)
-        // SKIA-141 promotes Bc7EXT/Bc7SrgbEXT with a native BC7 decoder (no third-party decoder
-        // dependency). Dxt5SrgbEXT below remains refused pending a task that scopes it.
-        expectNoThrow("Texture2D Bc7EXT", [&]{
-            Texture2D t(dev, 4, 4, false, SurfaceFormat::Bc7EXT);
-        });
-        expectNoThrow("Texture2D Bc7SrgbEXT", [&]{
-            Texture2D t(dev, 4, 4, false, SurfaceFormat::Bc7SrgbEXT);
-        });
-#else
+#if 1
         expectThrows("Texture2D Bc7EXT", [&]{
             Texture2D t(dev, 4, 4, false, SurfaceFormat::Bc7EXT);
         });
@@ -160,11 +147,7 @@ protected:
         expectThrows("Texture2D Dxt5SrgbEXT", [&]{
             Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt5SrgbEXT);
         });
-#if defined(CNA_RENDERER_SKIA)
-        expectNoThrow("Texture2D ColorBgraEXT", [&]{
-            Texture2D t(dev, 2, 2, false, SurfaceFormat::ColorBgraEXT);
-        });
-#else
+#if 1
         expectThrows("Texture2D ColorBgraEXT", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::ColorBgraEXT);
         });
@@ -187,38 +170,7 @@ protected:
 
         // ── Other unsupported formats must throw ─────────────────────────────
 
-#if defined(CNA_RENDERER_SKIA)
-        expectNoThrow("Texture2D Bgra5551", [&]{
-            Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgra5551);
-        });
-        expectNoThrow("Texture2D NormalizedByte2", [&]{
-            Texture2D t(dev, 2, 2, false, SurfaceFormat::NormalizedByte2);
-        });
-        expectNoThrow("Texture2D NormalizedByte4", [&]{
-            Texture2D t(dev, 2, 2, false, SurfaceFormat::NormalizedByte4);
-        });
-        expectNoThrow("Texture2D Single", [&]{
-            Texture2D t(dev, 2, 2, false, SurfaceFormat::Single);
-        });
-        expectNoThrow("Texture2D Vector2", [&]{
-            Texture2D t(dev, 2, 2, false, SurfaceFormat::Vector2);
-        });
-        expectNoThrow("Texture2D Vector4", [&]{
-            Texture2D t(dev, 2, 2, false, SurfaceFormat::Vector4);
-        });
-        expectNoThrow("Texture2D HalfSingle", [&]{
-            Texture2D t(dev, 2, 2, false, SurfaceFormat::HalfSingle);
-        });
-        expectNoThrow("Texture2D HalfVector2", [&]{
-            Texture2D t(dev, 2, 2, false, SurfaceFormat::HalfVector2);
-        });
-        expectNoThrow("Texture2D HalfVector4", [&]{
-            Texture2D t(dev, 2, 2, false, SurfaceFormat::HalfVector4);
-        });
-        expectNoThrow("Texture2D HdrBlendable", [&]{
-            Texture2D t(dev, 2, 2, false, SurfaceFormat::HdrBlendable);
-        });
-#else
+#if 1
         // REMED-GFX-244: the packed 16-bit formats are ES 3 sized-internal-format storage, so they
         // take the same guard the signed-normalized pair does -- promoted off the ES 2 generation,
         // refused on it rather than falling back to an unsized layout the driver picks.
@@ -277,19 +229,7 @@ protected:
             Texture2D t(dev, 2, 2, false, SurfaceFormat::HdrBlendable);
         });
 #endif
-#if defined(CNA_RENDERER_SKIA)
-        // SKIA-140 promotes Dxt1/Dxt3/Dxt5 with preserved compressed CPU blocks; Dxt5SrgbEXT
-        // above remains refused pending a task that scopes it.
-        expectNoThrow("Texture2D Dxt1", [&]{
-            Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt1);
-        });
-        expectNoThrow("Texture2D Dxt3", [&]{
-            Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt3);
-        });
-        expectNoThrow("Texture2D Dxt5", [&]{
-            Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt5);
-        });
-#else
+#if 1
         // REMED-GFX-244: block-compressed content is accepted on EVERY GL profile, unlike the
         // packed formats above. Storing the blocks needs the S3TC extension, but decoding them
         // needs nothing, and GraphicsProfile.Reach promises the game these formats work -- so the
@@ -321,35 +261,7 @@ protected:
         });
 #endif
 #endif
-#if defined(CNA_RENDERER_SKIA)
-        // SKIA-135–139 promote these exact transfer/sampling formats for Texture2D only.
-        // The SKIA-136 colour, SKIA-138 float and SKIA-139 shadow formats were handled above;
-        // render targets remain independently gated and other renderers retain Color-only.
-        expectNoThrow("Texture2D Bgr565", [&]{
-            Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgr565);
-        });
-        expectNoThrow("Texture2D Bgra4444", [&]{
-            Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgra4444);
-        });
-        expectNoThrow("Texture2D Rgba1010102", [&]{
-            Texture2D t(dev, 2, 2, false, SurfaceFormat::Rgba1010102);
-        });
-        expectNoThrow("Texture2D Rg32", [&]{
-            Texture2D t(dev, 2, 2, false, SurfaceFormat::Rg32);
-        });
-        expectNoThrow("Texture2D Rgba64", [&]{
-            Texture2D t(dev, 2, 2, false, SurfaceFormat::Rgba64);
-        });
-        expectNoThrow("Texture2D Alpha8", [&]{
-            Texture2D t(dev, 2, 2, false, SurfaceFormat::Alpha8);
-        });
-        expectNoThrow("Texture2D ByteEXT", [&]{
-            Texture2D t(dev, 2, 2, false, SurfaceFormat::ByteEXT);
-        });
-        expectNoThrow("Texture2D UShortEXT", [&]{
-            Texture2D t(dev, 2, 2, false, SurfaceFormat::UShortEXT);
-        });
-#else
+#if 1
         // REMED-GFX-244, same guard as Bgra5551 above. Bgra4444 had no non-Skia leg at all before
         // this ticket, so its behaviour on every GL profile was simply unstated.
 #if defined(CNA_GL_PROFILE_OPENGLES3) || defined(CNA_GL_PROFILE_OPENGL33) || defined(CNA_GL_PROFILE_WEBGL2)

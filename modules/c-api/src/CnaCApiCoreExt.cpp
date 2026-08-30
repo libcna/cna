@@ -211,7 +211,6 @@ constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererTy
         {CNA_GRAPHICS_RENDERER_DIRECT2D, CNA::GraphicsRendererType::Direct2D},
         {CNA_GRAPHICS_RENDERER_CANVAS, CNA::GraphicsRendererType::Canvas},
         {CNA_GRAPHICS_RENDERER_HTML_DOM, CNA::GraphicsRendererType::HtmlDom},
-        {CNA_GRAPHICS_RENDERER_SKIA, CNA::GraphicsRendererType::Skia},
         {CNA_GRAPHICS_RENDERER_BLEND2D, CNA::GraphicsRendererType::Blend2D},
         {CNA_GRAPHICS_RENDERER_FREEDIRECT, CNA::GraphicsRendererType::FreeDirect},
         {CNA_GRAPHICS_RENDERER_DIRECTX9, CNA::GraphicsRendererType::DirectX9},

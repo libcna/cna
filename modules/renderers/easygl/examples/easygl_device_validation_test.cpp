@@ -69,20 +69,7 @@ protected:
 
         // 3. Sixteen LIVE bindings are valid on a 3D renderer. Raster-only Skia instead proves
         // its already-declared resource boundary; the count/null validation above remains shared.
-#if defined(CNA_RENDERER_SKIA)
-        {
-            bool refused = false;
-            try { VertexBuffer value(device, 1); }
-            catch (const std::runtime_error& error)
-            {
-                refused = std::string(error.what()) ==
-                    "Skia (raster 2D) does not support 3D: CreateVertexBuffer";
-            }
-            catch (...) {}
-            check(refused, "Skia refuses the live-binding resource through its stable 3D boundary");
-            device.SetVertexBuffers({});
-        }
-#else
+#if 1
         {
             VertexBuffer buffer(device, 1);
             std::vector<VertexBufferBinding> maxOk;

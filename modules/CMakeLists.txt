@@ -363,7 +363,7 @@ set(_cna_renderer_modules
     bgfx blend2d canvas diligent direct2d directx1 directx2 directx3 directx5 directx6
     directx7 directx8 directx9 directx10 directx11 directx12
     easygl fna3d freedirect gdi glide headless html-dom igl  magnum metal nanovg opengl1
-    opengl2 opengl4 opengles1 openvg pixijs portablegl sdl-gpu sdl-renderer skia software sokol
+    opengl2 opengl4 opengles1 openvg pixijs portablegl sdl-gpu sdl-renderer  software sokol
     stub svg-dom tinygl vulkan
     webgpu wicked common/d3d common/mojoshader)
 string(JOIN "|" _cna_framework_module_pattern ${_cna_framework_modules})

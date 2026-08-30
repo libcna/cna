@@ -123,7 +123,6 @@ struct CapabilityExpectation
         // final pixels cannot distinguish positive from zero coverage so no samples-passed query is
         // definable at all, and the accepted custom-effect route is the narrow opt-in
         // CNA_SKIA_SKSL_V1 ABI rather than the arbitrary-Effect support a true would promise.
-        case GraphicsRendererType::Skia:
             return {false, false, false};
 
         // Blend2D, same shape as Skia: BLContext produces exactly one colour result (no MRT
@@ -475,17 +474,6 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
     EXPECT_FALSE(reported)
         << "DIRECTX1 claims WireFrame support -- this renderer has no 3D pipeline at all, so a true "
            "report cannot be backed by any rendering path";
-#elif defined(CNA_RENDERER_SKIA)
-    // Skia's selected artifact is a CPU raster 2D surface: SkCanvas has no polygon fill mode, and
-    // there is no vertex/primitive route for one to apply to. The refusal half of REMED-GFX-209 is
-    // satisfied more strongly than it asks -- Ensure3DSupported() rejects every 3D draw before any
-    // vertex input is inspected, so no polygon topology can reach a raster queue to be silently
-    // filled solid. Same truthful-false shape as DIRECTX1 and Stub, and like Stub it has no pixel route
-    // to measure, which is why WireFrameTriangleOracle.hpp keeps this renderer out of
-    // HasPixelOracle() here.
-    EXPECT_FALSE(reported)
-        << "Skia claims WireFrame support -- this raster renderer has no polygon fill mode and no "
-           "3D draw route, so a true report cannot be backed by any rendering path";
 #elif defined(CNA_RENDERER_BLEND2D)
     // Same truthful-false shape as Skia immediately above: Blend2D's BLContext has no polygon fill
     // mode and no vertex/primitive route at all -- SupportsCapability(ThreeD) is already false, and

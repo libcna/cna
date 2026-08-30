@@ -164,12 +164,6 @@ namespace
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr Contract kContract{"EASYGL", true, Support::Exact, Support::Exact,
                                  true, true, Support::Exact, MipTargets::Real, true, true, true, true, false};
-#elif defined(CNA_RENDERER_SKIA)
-    // Skia's 2D emulation owns six independent CPU raster surfaces at every requested mip level.
-    // Rendering and uploads are byte-exact; leaving a rendered face regenerates its mip chain.
-    // It deliberately clamps MSAA to zero because these SkSurface targets are single-sample.
-    constexpr Contract kContract{"SKIA", true, Support::Exact, Support::Exact,
-                                 true, false, Support::Exact, MipTargets::Real, true, true, true, false, false};
 #elif defined(CNA_RENDERER_BGFX)
     // REMED-GFX-138: GFX-154's ordered completion now exposes both bgfx's resolved cube level 0
     // and every auto-generated mip before the readback blit. The combined MSAA+mip path is exact

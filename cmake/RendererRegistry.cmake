@@ -47,7 +47,6 @@ function(_cna_renderer_identity_map out_var)
         CANVAS       Canvas
         HTML_DOM     HtmlDom
         SVG_DOM      SvgDom
-        SKIA         Skia
         BLEND2D      Blend2D
         FREEDIRECT   FreeDirect
         DIRECTX9     DirectX9

@@ -166,12 +166,6 @@ namespace
     constexpr Contract kContract{"SDL_GPU", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact,
                                  Support::Unsupported, false};
-#elif defined(CNA_RENDERER_SKIA)
-    // Bounded CPU storage implements plain cube/volume transfers exactly. SKIA-85/86 additionally
-    // gives RenderTargetCube exact six-surface upload/readback; shader sampling remains unsupported.
-    constexpr Contract kContract{"SKIA", true, Support::Exact, Support::Exact,
-                                 true, Support::Exact, Support::Exact,
-                                 Support::Exact, false};
 #elif defined(CNA_RENDERER_SDL_RENDERER)
     // 2D-only by design: CreateTextureCube()/CreateTexture3D()/CreateRenderTargetCube() all keep
     // IGraphicsRenderer's own nullptr-returning defaults, so no cube/volume storage exists at all

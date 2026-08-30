@@ -158,12 +158,6 @@ namespace
     // examples/rendertargetcube_msaa_face_test.cpp is the fuller oracle for it.
     constexpr Contract kContract{"EASYGL", true, Support::Exact, true, true,
                                  true, Support::Exact, true, true, false};
-#elif defined(CNA_RENDERER_SKIA)
-    // Skia emulates a cube target as six single-sample CPU raster surfaces. Preserve/Discard are
-    // enforced through the same shared SetRenderTargets path as RenderTarget2D, and mip targets
-    // are real. A nonzero MSAA request is accepted but truthfully clamped and reported as zero.
-    constexpr Contract kContract{"SKIA", true, Support::Exact, true, true,
-                                 false, Support::Exact, false, true, false};
 #elif defined(CNA_RENDERER_BGFX)
     // REMED-GFX-138: GFX-154's ordered frame completion resolves the cube attachment before the
     // readback blit, so MSAA readback is exact. REMED-GFX-195 then made every cube face's

@@ -51,3 +51,35 @@ rather than the GPU. LLGL drove OpenGL and Vulkan, both of which CNA reaches nat
 (EasyGL, `VULKAN`), so it added no platform. The defect list above is what that
 impedance mismatch cost in practice.
 
+
+---
+
+## SKIA
+
+| | |
+|---|---|
+| Identity | `SKIA` (enum `Skia`, C ABI `CNA_GRAPHICS_RENDERER_SKIA` = 19) |
+| Family | `modules/renderers/skia` |
+| Removed | 2026-08-30, tag `removed/skia` |
+| Size | 32,563 lines (9,684 production, **0 tests**, 22,879 examples) — plus 34 `docs/skia-*.md`, `plans/plan_skia.md`, `NEXT_skia.md` and 6 `scripts/validate_skia_*.py` |
+| Dependency | `https://skia.googlesource.com/skia.git` — **not pinned**; the developer build cloned it at whatever HEAD was, and CMake required `-DCNA_SKIA_ROOT=<checkout>` rather than fetching it |
+| Build was | `-DCNA_GRAPHICS_RENDERER=SKIA -DCNA_SKIA_ROOT=<skia checkout>` |
+
+**What it proved.** That an external CPU rasterizer can be driven as a CNA renderer, and —
+more usefully — exactly where that stops. The 3D refusal was reasoned out rather than
+assumed (`docs/skia-3d-refusal.md`, `docs/skia-3d-emulation-adr.md`), and the GLSL→SkSL
+translator contract, the CPU depth/stencil/geometry spikes and the surface-format matrix
+are all real findings about the cost of emulating a GPU pipeline on a 2D canvas API.
+
+**Why removed.** It is 2D-only by construction, so it can never satisfy `IGraphicsRenderer`:
+CNA's contract has 102 pure-virtual methods covering depth, render targets, MSAA, MRT and
+stock 3D effects, and Skia never advertised any of them. That is a category error rather
+than unfinished work — no amount of further effort finishes it. Meanwhile EasyGL already
+renders CNA's 2D on every platform CNA targets, on the GPU. Skia was also the heaviest
+dependency in the tree, and the only one with no pinned revision — the build was not
+reproducible across machines or across time.
+
+**Note for anyone restoring it.** Because the dependency was never pinned, this removal
+commit does not identify the Skia revision it was written against. Reconstructing that
+from `docs/skia-ganesh-artifact.md` and the commit dates is the first task.
+

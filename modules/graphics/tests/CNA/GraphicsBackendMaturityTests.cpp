@@ -17,7 +17,7 @@ static_assert(getCurrentGraphicsBackendMaturity() == getCurrentGraphicsBackendMa
 static_assert(!toStringView(getCurrentGraphicsBackendMaturity()).empty());
 constexpr GraphicsBackendMaturity kCompileTimeMaturity = getCurrentGraphicsBackendMaturity();
 constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::NanoVg) + 1;
-static_assert(kPublicRendererCount == 49,
+static_assert(kPublicRendererCount == 48,
               "GraphicsRendererType must expose all 48 genuine renderer identities");
 
 TEST(GraphicsBackendMaturityTest, GetCurrentGraphicsBackendMaturityDoesNotThrow)
@@ -75,7 +75,6 @@ namespace
 
             case GraphicsRendererType::WebGPU:
             case GraphicsRendererType::Software:
-            case GraphicsRendererType::Skia:
             case GraphicsRendererType::Blend2D:
             case GraphicsRendererType::FreeDirect:
             case GraphicsRendererType::Wicked:

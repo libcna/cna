@@ -62,9 +62,6 @@ namespace CNA
         /** @brief HTML DOM elements composited by CSS (Emscripten). */
         HtmlDom,
 
-        /** @brief Skia 2D raster renderer. */
-        Skia,
-
         /** @brief Blend2D 2D vector raster renderer. */
         Blend2D,
         /** @brief FreeDirect (DirectDraw via the ../free-direct sibling reimplementation; formerly DIRECTX3). */
@@ -216,8 +213,6 @@ namespace CNA
         return GraphicsRendererType::Canvas;
 #elif defined(CNA_RENDERER_HTML_DOM)
         return GraphicsRendererType::HtmlDom;
-#elif defined(CNA_RENDERER_SKIA)
-        return GraphicsRendererType::Skia;
 #elif defined(CNA_RENDERER_BLEND2D)
         return GraphicsRendererType::Blend2D;
 #elif defined(CNA_RENDERER_FREEDIRECT)
@@ -320,7 +315,6 @@ namespace CNA
             case GraphicsRendererType::Direct2D:     return "DIRECT2D";
             case GraphicsRendererType::Canvas:       return "CANVAS";
             case GraphicsRendererType::HtmlDom:      return "HTML_DOM";
-            case GraphicsRendererType::Skia:         return "SKIA";
             case GraphicsRendererType::Blend2D:      return "BLEND2D";
             case GraphicsRendererType::FreeDirect:           return "FREEDIRECT";
             case GraphicsRendererType::DirectX9:          return "DIRECTX9";
