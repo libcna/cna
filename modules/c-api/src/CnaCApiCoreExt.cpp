@@ -233,7 +233,6 @@ constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererTy
         {CNA_GRAPHICS_RENDERER_DILIGENT, CNA::GraphicsRendererType::Diligent},
         {CNA_GRAPHICS_RENDERER_GLIDE, CNA::GraphicsRendererType::Glide},
         {CNA_GRAPHICS_RENDERER_GDI, CNA::GraphicsRendererType::Gdi},
-        {CNA_GRAPHICS_RENDERER_LLGL, CNA::GraphicsRendererType::Llgl},
         {CNA_GRAPHICS_RENDERER_METAL, CNA::GraphicsRendererType::Metal},
         {CNA_GRAPHICS_RENDERER_FNA3D, CNA::GraphicsRendererType::Fna3d},
         {CNA_GRAPHICS_RENDERER_SVG_DOM, CNA::GraphicsRendererType::SvgDom},

@@ -167,9 +167,6 @@ namespace
     // (docs/sokol-renderer.md), so `kRasterizes = true` is accurate for this file's contract too.
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "SOKOL";
-#elif defined(CNA_RENDERER_LLGL)
-    constexpr bool kRasterizes = true;
-    constexpr const char* kRendererName = "LLGL";
 #else
 #error "REMED-GFX-151: this renderer has no declared render-target producer/consumer contract."
 #endif

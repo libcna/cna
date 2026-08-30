@@ -9,10 +9,6 @@
 #include "CNA/Internal/Renderers/Bgfx/BgfxRenderer.hpp"
 #endif
 
-#ifdef CNA_RENDERER_LLGL
-#include "CNA/Internal/Renderers/Llgl/LlglRendererSelection.hpp"
-#include <stdexcept>
-#endif
 
 TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelected)
 {
@@ -144,9 +140,6 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
 #ifdef CNA_RENDERER_GDI
     ++enabled;
 #endif
-#ifdef CNA_RENDERER_LLGL
-    ++enabled;
-#endif
 
     // plans/plan_metal.md METAL-232: the identical class of gap the D3D9 comment above documents --
     // no commit in this file's own history ever added a Metal entry here, and this file has never
@@ -266,71 +259,6 @@ TEST(GraphicsRendererCompileDefinitionsTest, NanoVgMacroMatchesPublicRendererIde
 }
 #endif
 
-#ifdef CNA_RENDERER_LLGL
-TEST(GraphicsRendererCompileDefinitionsTest, LlglDefaultRendererPreferenceIsRealAndDrawing)
-{
-    namespace Detail = CNA::Internal::Renderers::Llgl::Detail;
-
-    const auto preference = Detail::GetDefaultRendererPreference();
-    ASSERT_EQ(preference.size(), 1u);
-    EXPECT_EQ(preference[0], Detail::RendererModule::OpenGL);
-
-    // The Null module renders nothing, so it must never be reachable without being asked for by
-    // name: an automatic fallback onto it would turn "no usable GPU" into a silent black screen.
-    for (const auto module : preference)
-    {
-        EXPECT_NE(module, Detail::RendererModule::Null);
-        EXPECT_TRUE(Detail::IsRendererModuleCompiledIn(module));
-    }
-}
-
-TEST(GraphicsRendererCompileDefinitionsTest, LlglRendererOverrideParsingWorks)
-{
-    namespace Detail = CNA::Internal::Renderers::Llgl::Detail;
-
-    EXPECT_EQ(Detail::ParseRendererModuleOverride("auto"), Detail::GetDefaultRendererPreference());
-    EXPECT_EQ(Detail::ParseRendererModuleOverride(nullptr), Detail::GetDefaultRendererPreference());
-    EXPECT_EQ(Detail::ParseRendererModuleOverride(""), Detail::GetDefaultRendererPreference());
-
-    if (Detail::IsRendererModuleCompiledIn(Detail::RendererModule::OpenGL))
-    {
-        const auto parsed = Detail::ParseRendererModuleOverride("OpenGL");
-        ASSERT_EQ(parsed.size(), 1u);
-        EXPECT_EQ(parsed[0], Detail::RendererModule::OpenGL);
-        EXPECT_EQ(Detail::ParseRendererModuleOverride("gl"), parsed);
-    }
-
-    if (Detail::IsRendererModuleCompiledIn(Detail::RendererModule::Vulkan))
-    {
-        EXPECT_THROW((void)Detail::ParseRendererModuleOverride("vulkan"), std::runtime_error);
-    }
-}
-
-TEST(GraphicsRendererCompileDefinitionsTest, LlglRendererOverrideRejectsInvalidValue)
-{
-    namespace Detail = CNA::Internal::Renderers::Llgl::Detail;
-
-    EXPECT_THROW((void)Detail::ParseRendererModuleOverride("invalid-renderer"), std::runtime_error);
-}
-
-TEST(GraphicsRendererCompileDefinitionsTest, LlglModuleNamesMatchLlglsOwnModuleNames)
-{
-    namespace Detail = CNA::Internal::Renderers::Llgl::Detail;
-
-    EXPECT_STREQ(Detail::GetRendererModuleName(Detail::RendererModule::OpenGL), "OpenGL");
-    EXPECT_STREQ(Detail::GetRendererModuleName(Detail::RendererModule::Vulkan), "Vulkan");
-    EXPECT_STREQ(Detail::GetRendererModuleName(Detail::RendererModule::Null), "Null");
-}
-
-TEST(GraphicsRendererCompileDefinitionsTest, LlglOnlyOpenGLNeedsAnOpenGLWindow)
-{
-    namespace Detail = CNA::Internal::Renderers::Llgl::Detail;
-
-    EXPECT_TRUE(Detail::RendererModuleNeedsOpenGLWindow(Detail::RendererModule::OpenGL));
-    EXPECT_FALSE(Detail::RendererModuleNeedsOpenGLWindow(Detail::RendererModule::Vulkan));
-    EXPECT_FALSE(Detail::RendererModuleNeedsOpenGLWindow(Detail::RendererModule::Null));
-}
-#endif
 
 #ifdef CNA_TEST_BGFX_AVAILABLE
 TEST(GraphicsRendererCompileDefinitionsTest, BgfxApiIsLinkedForBgfxRenderer)

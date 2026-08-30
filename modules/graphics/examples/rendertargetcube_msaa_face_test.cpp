@@ -203,12 +203,6 @@ namespace
     // all (nothing to read back).
     constexpr Contract kContract{"SOKOL", true, Support::Exact, false,
                                  Support::Unsupported, false, false};
-#elif defined(CNA_RENDERER_LLGL)
-    // LLGL allocates one anonymous multisampled colour attachment per face and resolves every
-    // attachment into the corresponding layer of the shared cube texture. GetData reads that
-    // resolved layer, so both single-sample and multisampled face contents are exact.
-    constexpr Contract kContract{"LLGL", true, Support::Exact, true,
-                                 Support::Exact, false, false};
 #else
 #error "REMED-GFX-141: this renderer has no declared multisampled RenderTargetCube contract."
 #endif

@@ -133,9 +133,6 @@ namespace
 #elif defined(CNA_RENDERER_SKIA)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kRendererName = "SKIA";
-#elif defined(CNA_RENDERER_LLGL)
-    constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kRendererName = "LLGL";
 #else
 #error "REMED-GFX-127: this renderer has no declared Texture2D::GetData render-target contract."
 #endif

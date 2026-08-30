@@ -193,10 +193,6 @@ namespace
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kRendererName = "SKIA";
     constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
-#elif defined(CNA_RENDERER_LLGL)
-    constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kRendererName = "LLGL";
-    constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
 #else
 #error "REMED-GFX-149: this renderer has no declared Texture2D::GetData render-target contract."
 #endif

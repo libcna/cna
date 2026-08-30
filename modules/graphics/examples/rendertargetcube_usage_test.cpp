@@ -214,32 +214,6 @@ namespace
 #elif defined(CNA_RENDERER_DIRECTX12)
     constexpr Contract kContract{"DIRECTX12", true, Support::Exact, true, true,
                                  true, Support::Exact, true, true, false};
-#elif defined(CNA_RENDERER_LLGL)
-    // `preserves`/`msaaPreserves` true, but not for the usual reason: this renderer's own
-    // CreateRenderTargetCube never reads its preserveContents argument at all (`bool
-    // /*preserveContents*/`), so it never explicitly implements LOAD semantics for a preserving
-    // bind. What actually delivers preservation here is this renderer's "one render pass per
-    // distinct target, not per bind" replay architecture (LLGL's public Vulkan API has no way to
-    // re-enter a render pass with Load semantics -- see docs/llgl-renderer.md's own "Two
-    // implementation choices" paragraph): every command naming the SAME target within one frame is
-    // grouped into ONE render pass at replay time, in first-appearance order, regardless of how
-    // many times XNA code binds/unbinds it -- so a "second bind" of the same target never becomes a
-    // literal second, freshly-cleared render pass unless a Clear() was actually queued. A
-    // PreserveContents rebind queues no Clear() (GraphicsDevice::SetRenderTargets' own shared-layer
-    // clear is DiscardContents-only), so its content simply keeps accumulating across binds -- a
-    // genuine, measured, if incidental, form of preservation WITHIN one frame (this file's own
-    // testing pattern -- its own producer and marker draws are never separated by a GetData()/flush
-    // -- not a general cross-frame guarantee). Contrast with
-    // examples/rendertargetcube_getdata_contract_test.cpp's own LLGL branch
-    // (`preservesOnRebind=false`): that file's own U1/U2 checks call GetData() BETWEEN the producer
-    // and marker draws, which flushes the queued frame and starts a genuinely NEW, unpreserved
-    // render pass for the second bind -- the two claims are not a contradiction, they measure the
-    // same architecture two different, both faithfully reproduced, ways. `discardClearsToBlack`
-    // true: the shared-layer clear is explicit and applies uniformly regardless of renderer.
-    // `msaaCubeTargets` true (LLGL-34), `mipMapCubeTargets` true (LLGL-35): both real, already
-    // pixel-verified by their own dedicated tests.
-    constexpr Contract kContract{"LLGL", true, Support::Exact, true, true,
-                                 true, Support::Exact, true, true, false};
 #else
 #error "REMED-GFX-136: this renderer has no declared RenderTargetCube usage contract."
 #endif

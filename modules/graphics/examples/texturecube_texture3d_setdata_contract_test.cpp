@@ -206,12 +206,6 @@ namespace
     constexpr Contract kContract{"DIRECTX12", true, Support::Exact, Support::Unsupported,
                                  true, Support::Exact, Support::Exact,
                                  Support::Unsupported, false};
-#elif defined(CNA_RENDERER_LLGL)
-    // The pinned OpenGL render system cannot sample cubes, so LLGL keeps exact transfer-only CPU
-    // face storage; Texture3D remains a native LLGL texture with exact mip transfers.
-    constexpr Contract kContract{"LLGL", true, Support::Exact, Support::Exact,
-                                 true, Support::Exact, Support::Exact,
-                                 Support::Unsupported, false};
 #else
 #error "REMED-GFX-135: this renderer has no declared TextureCube/Texture3D SetData contract."
 #endif

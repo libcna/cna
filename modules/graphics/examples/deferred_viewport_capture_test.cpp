@@ -168,11 +168,6 @@ namespace
     constexpr Contract kContract{"DIRECTX11", Support::Exact, Support::Exact, true, true, true, false};
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr Contract kContract{"DIRECTX9", Support::Exact, Support::Exact, true, true, true, true};
-#elif defined(CNA_RENDERER_LLGL)
-    // LLGL-53 forwards each deferred command's captured MinDepth/MaxDepth to LLGL::Viewport. The
-    // OpenGL module applies the range exactly; keep these checks on the honoured outcome so a
-    // future regression cannot silently collapse every draw back to [0,1].
-    constexpr Contract kContract{"LLGL", Support::Exact, Support::Exact, true, true, true, false};
 #else
 #error "REMED-GFX-116: this renderer has no declared deferred-viewport contract."
 #endif

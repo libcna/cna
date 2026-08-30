@@ -220,24 +220,6 @@ class SoftwareDepthBiasTest : public Game
         done_ = true;
         auto& dev = getGraphicsDeviceProperty();
 
-#if defined(CNA_RENDERER_LLGL)
-        bool rejected = false;
-        try
-        {
-            SetRaster(dev, FillMode::Solid, kBias, 0.0f);
-        }
-        catch (const System::NotSupportedException&)
-        {
-            rejected = true;
-        }
-        check(rejected,
-              "LLGL: non-zero RasterizerState.DepthBias is rejected deterministically on the "
-              "validated OpenGL path");
-        std::printf("=== %d/%d PASS ===\n", passCount_, totalCount_);
-        result_ = (passCount_ == totalCount_) ? 0 : 1;
-        Exit();
-        return;
-#endif
 
         const Color red(255, 0, 0, 255);
         const Color green(0, 255, 0, 255);

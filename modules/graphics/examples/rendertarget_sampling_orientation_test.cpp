@@ -174,9 +174,6 @@ namespace
     // file measures -- and, as of this task, every one of its 53 checks passes for real.
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "SOKOL";
-#elif defined(CNA_RENDERER_LLGL)
-    constexpr bool kRasterizes = true;
-    constexpr const char* kRendererName = "LLGL";
 #else
 #error "REMED-GFX-147: this renderer has no declared render-target orientation contract."
 #endif

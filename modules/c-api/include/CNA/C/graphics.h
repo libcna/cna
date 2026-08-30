@@ -94,8 +94,6 @@ typedef uint32_t CNA_GraphicsRendererType;
 #define CNA_GRAPHICS_RENDERER_GLIDE UINT32_C(39)
 /** @brief Identifies the Win32 GDI backend. */
 #define CNA_GRAPHICS_RENDERER_GDI UINT32_C(40)
-/** @brief Identifies the LLGL backend. */
-#define CNA_GRAPHICS_RENDERER_LLGL UINT32_C(41)
 /** @brief Identifies the Apple Metal backend. */
 #define CNA_GRAPHICS_RENDERER_METAL UINT32_C(42)
 /** @brief Identifies the FNA3D backend. */
