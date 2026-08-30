@@ -172,6 +172,18 @@ namespace CNA::Examples
                 throw CNA::Platform::PlatformException("SdlTestGlContext::MakeCurrent", SDL_GetError());
         }
 
+        [[nodiscard]] CNA::Platform::GlContextBinding GetCurrentBinding() const override
+        {
+            const SDL_GLContext context = SDL_GL_GetCurrentContext();
+            if (context == nullptr) return {};
+            SDL_Window* const window = SDL_GL_GetCurrentWindow();
+            return {
+                window != nullptr
+                    ? static_cast<CNA::Platform::WindowId>(SDL_GetWindowID(window)) : 0,
+                static_cast<CNA::Platform::GlContextHandle>(context)
+            };
+        }
+
         void SwapBuffers(const CNA::Platform::WindowId window) override
         {
             if (window_ == nullptr || window != SDL_GetWindowID(window_) || !SDL_GL_SwapWindow(window_))

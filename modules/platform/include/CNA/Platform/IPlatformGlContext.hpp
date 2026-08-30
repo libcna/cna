@@ -52,6 +52,21 @@ namespace CNA::Platform {
     /** @brief An opaque handle to a created OpenGL context. Null means "no context". */
     using GlContextHandle = void*;
 
+    /**
+     * @brief The OpenGL context binding active on the calling thread.
+     *
+     * OpenGL context ownership is thread-affine. This snapshot lets framework code temporarily
+     * bind another device and then restore the caller's original binding without naming the
+     * native window toolkit.
+     */
+    struct GlContextBinding
+    {
+        /** @brief The stable id of the window associated with the context, or zero when unbound. */
+        WindowId window = 0;
+        /** @brief The current context, or null when the calling thread has no current context. */
+        GlContextHandle context = nullptr;
+    };
+
     /** @brief C-compatible OpenGL entry-point loader accepted by GL helper libraries. */
     using GlProcAddressLoader = void* (*)(const char* name);
 
@@ -100,6 +115,13 @@ namespace CNA::Platform {
          * @throws PlatformException If the context could not be made current.
          */
         virtual void MakeCurrent(WindowId window, GlContextHandle context) = 0;
+
+        /**
+         * @brief Gets the OpenGL context binding active on the calling thread.
+         *
+         * @return The current window/context pair, or an empty binding when no context is current.
+         */
+        [[nodiscard]] virtual GlContextBinding GetCurrentBinding() const = 0;
 
         /**
          * @brief Presents the back buffer of a window's current context.

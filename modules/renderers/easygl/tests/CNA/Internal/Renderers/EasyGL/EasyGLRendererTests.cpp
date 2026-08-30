@@ -66,6 +66,11 @@ public:
         current = context;
     }
 
+    [[nodiscard]] GlContextBinding GetCurrentBinding() const override
+    {
+        return {current != nullptr ? currentFor : 0, current};
+    }
+
     void SwapBuffers(WindowId) override { ++swapCalls; }
     bool SetSwapInterval(int) override { return true; }
     [[nodiscard]] void* GetProcAddress(const std::string&) const override { return nullptr; }
@@ -145,8 +150,9 @@ TEST(EasyGLRendererConstructor, LaterInitializationFailureDestroysCreatedContext
         std::exception);
 
     EXPECT_EQ(context.createCalls, 1);
-    EXPECT_EQ(context.makeCurrentCalls, 1);
+    EXPECT_EQ(context.makeCurrentCalls, 2);
     EXPECT_EQ(context.destroyCalls, 1);
+    EXPECT_EQ(context.current, nullptr);
     EXPECT_EQ(IGraphicsRenderer::GetForWindow(43), nullptr);
 }
 

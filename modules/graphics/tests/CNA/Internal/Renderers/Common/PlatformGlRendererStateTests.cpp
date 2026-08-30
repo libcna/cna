@@ -32,10 +32,17 @@ namespace
             if (context != nullptr) trace.emplace_back("destroy");
         }
 
-        void MakeCurrent(WindowId, GlContextHandle context) override
+        void MakeCurrent(const WindowId window, GlContextHandle context) override
         {
             trace.emplace_back(context != nullptr ? "bind" : "unbind");
             if (failBind && context != nullptr) throw PlatformException("Fake::MakeCurrent");
+            currentWindow = context != nullptr ? window : 0;
+            currentContext = context;
+        }
+
+        [[nodiscard]] GlContextBinding GetCurrentBinding() const override
+        {
+            return {currentWindow, currentContext};
         }
 
         void SwapBuffers(WindowId) override { trace.emplace_back("swap"); }
@@ -55,6 +62,8 @@ namespace
         std::uintptr_t nextHandle = 0x100;
         int appliedInterval = -99;
         WindowId createdFor = 0;
+        WindowId currentWindow = 0;
+        GlContextHandle currentContext = nullptr;
         GlContextDescription requested;
         GlContextDescription granted;
         std::vector<std::string> trace;
@@ -129,6 +138,22 @@ namespace
         EXPECT_THROW((PlatformGlContextOwner(service, 9, {})), PlatformException);
         const std::vector<std::string> expected{"create", "bind", "destroy"};
         EXPECT_EQ(service.trace, expected);
+    }
+
+    TEST(PlatformGlContextOwnerTests, DestructionDoesNotUnbindAnotherDevicesContext)
+    {
+        FakeGlContext service;
+        const auto otherContext = reinterpret_cast<GlContextHandle>(0x999);
+        {
+            PlatformGlContextOwner owner(service, 77, {});
+            service.MakeCurrent(88, otherContext);
+            service.trace.clear();
+        }
+
+        const std::vector<std::string> expected{"destroy"};
+        EXPECT_EQ(service.trace, expected);
+        EXPECT_EQ(service.GetCurrentBinding().window, 88u);
+        EXPECT_EQ(service.GetCurrentBinding().context, otherContext);
     }
 
     TEST(PlatformGlSurfaceStateTests, SeparatesDrawablePixelsFromLogicalWindowUnits)

@@ -505,6 +505,10 @@ namespace CNA::Internal::Renderers::EasyGL
 
         ~EasyGLPlatformContext()
         {
+            if (service_.GetCurrentBinding().context == context_)
+            {
+                service_.MakeCurrent(window_, nullptr);
+            }
             service_.DestroyContext(context_);
         }
 
@@ -536,6 +540,21 @@ namespace CNA::Internal::Renderers::EasyGL
         void SwapBuffers() { service_.SwapBuffers(window_); }
         void MakeCurrent() { service_.MakeCurrent(window_, context_); }
         void ClearCurrent() { service_.MakeCurrent(window_, nullptr); }
+        [[nodiscard]] CNA::Platform::GlContextBinding GetCurrentBinding() const
+        {
+            return service_.GetCurrentBinding();
+        }
+        void RestoreBinding(const CNA::Platform::GlContextBinding& binding)
+        {
+            if (binding.context != nullptr)
+            {
+                service_.MakeCurrent(binding.window, binding.context);
+            }
+            else
+            {
+                ClearCurrent();
+            }
+        }
         bool SetSwapInterval(const int interval) { return service_.SetSwapInterval(interval); }
         [[nodiscard]] CNA::Platform::GlProcAddressLoader GetLoader() const
         {
@@ -568,10 +587,18 @@ namespace CNA::Internal::Renderers::EasyGL
             std::function<void()> release_;
         };
 
-        std::unordered_map<const EasyGLRenderer*, std::size_t>& ThreadContextLeaseDepths()
+        struct EasyGLThreadContextLeaseState
         {
-            static thread_local std::unordered_map<const EasyGLRenderer*, std::size_t> depths;
-            return depths;
+            std::size_t depth = 0;
+            CNA::Platform::GlContextBinding previousBinding;
+        };
+
+        std::unordered_map<const EasyGLRenderer*, EasyGLThreadContextLeaseState>&
+        ThreadContextLeaseStates()
+        {
+            static thread_local std::unordered_map<const EasyGLRenderer*,
+                                                   EasyGLThreadContextLeaseState> states;
+            return states;
         }
     }
 
@@ -5007,15 +5034,17 @@ if (!ProfileIsEs2ApiGeneration())
         threadContextMutex_.lock();
         try
         {
-            auto& depth = ThreadContextLeaseDepths()[this];
-            if (depth == 0)
+            auto& state = ThreadContextLeaseStates()[this];
+            if (state.depth == 0)
             {
+                state.previousBinding = platformContext_->GetCurrentBinding();
                 EnsureCallingThreadContext();
             }
-            ++depth;
+            ++state.depth;
         }
         catch (...)
         {
+            ThreadContextLeaseStates().erase(this);
             threadContextMutex_.unlock();
             throw;
         }
@@ -5036,9 +5065,9 @@ if (!ProfileIsEs2ApiGeneration())
     void EasyGLRenderer::ReleaseCallingThreadContextLease() noexcept
     {
 #if !defined(__EMSCRIPTEN__)
-        auto& depths = ThreadContextLeaseDepths();
-        const auto it = depths.find(this);
-        if (it == depths.end() || it->second == 0)
+        auto& states = ThreadContextLeaseStates();
+        const auto it = states.find(this);
+        if (it == states.end() || it->second.depth == 0)
         {
             CNA::Logger::Error(
                 "EasyGL renderer context lease released without matching acquisition",
@@ -5046,12 +5075,12 @@ if (!ProfileIsEs2ApiGeneration())
             return;
         }
 
-        --it->second;
-        if (it->second == 0)
+        --it->second.depth;
+        if (it->second.depth == 0)
         {
             try
             {
-                platformContext_->ClearCurrent();
+                platformContext_->RestoreBinding(it->second.previousBinding);
             }
             catch (const std::exception& error)
             {
@@ -5059,7 +5088,7 @@ if (!ProfileIsEs2ApiGeneration())
                     std::string("Failed to release EasyGL context ownership: ") + error.what(),
                     CNA::LogCategory::RENDER);
             }
-            depths.erase(it);
+            states.erase(it);
         }
         threadContextMutex_.unlock();
 #endif

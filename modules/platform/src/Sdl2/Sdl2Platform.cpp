@@ -509,6 +509,16 @@ namespace CNA::Platform::Sdl2 {
         RequireSdlSuccess(SDL_GL_MakeCurrent(RequireWindow(window, "GlContext::MakeCurrent"), context),
                           "GlContext::MakeCurrent");
     }
+    GlContextBinding Sdl2Platform::GlContext::GetCurrentBinding() const
+    {
+        const SDL_GLContext context = SDL_GL_GetCurrentContext();
+        if (context == nullptr) { return {}; }
+        SDL_Window* const window = SDL_GL_GetCurrentWindow();
+        return {
+            window != nullptr ? static_cast<WindowId>(SDL_GetWindowID(window)) : 0,
+            static_cast<GlContextHandle>(context)
+        };
+    }
     void Sdl2Platform::GlContext::SwapBuffers(const WindowId window)
     {
         SDL_GL_SwapWindow(RequireWindow(window, "GlContext::SwapBuffers"));

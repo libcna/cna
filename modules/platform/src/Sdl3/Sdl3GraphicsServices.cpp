@@ -189,6 +189,21 @@ namespace CNA::Platform::Sdl3 {
         }
     }
 
+    GlContextBinding Sdl3GlContext::GetCurrentBinding() const
+    {
+        const SDL_GLContext context = SDL_GL_GetCurrentContext();
+        if (context == nullptr)
+        {
+            return {};
+        }
+
+        SDL_Window* const window = SDL_GL_GetCurrentWindow();
+        return {
+            window != nullptr ? static_cast<WindowId>(SDL_GetWindowID(window)) : 0,
+            static_cast<GlContextHandle>(context)
+        };
+    }
+
     void Sdl3GlContext::SwapBuffers(const WindowId window)
     {
         if (!SDL_GL_SwapWindow(RequireSdl3Window(window, "GlContext::SwapBuffers")))

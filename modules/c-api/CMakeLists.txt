@@ -663,6 +663,21 @@ if(CNA_BUILD_TESTS)
     set_tests_properties(CApi_OwnedGraphicsDeviceSmoke PROPERTIES
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    add_executable(cna_c_api_game_secondary_graphics_context_smoke
+        tests/pure_c/GameSecondaryGraphicsDeviceContextSmoke.c
+    )
+    set_target_properties(cna_c_api_game_secondary_graphics_context_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_game_secondary_graphics_context_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_game_secondary_graphics_context_smoke)
+    add_test(NAME CApi_GameSecondaryGraphicsDeviceContext
+        COMMAND cna_c_api_game_secondary_graphics_context_smoke)
+    set_tests_properties(CApi_GameSecondaryGraphicsDeviceContext PROPERTIES
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     add_executable(cna_c_api_render_target_lifetime_smoke
         tests/pure_c/RenderTargetLifetimeSmoke.c
     )

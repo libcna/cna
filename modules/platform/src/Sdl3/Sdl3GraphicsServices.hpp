@@ -32,6 +32,8 @@ namespace CNA::Platform::Sdl3 {
          * @param context The context, or null to unbind.
          */
         void MakeCurrent(WindowId window, GlContextHandle context) override;
+        /** @brief Gets the calling thread's current GL binding. @return The current binding. */
+        [[nodiscard]] GlContextBinding GetCurrentBinding() const override;
         /** @brief Presents the back buffer. @param window The stable id of the window to swap. */
         void SwapBuffers(WindowId window) override;
         /**

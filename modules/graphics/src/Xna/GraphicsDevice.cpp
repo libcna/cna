@@ -288,6 +288,25 @@ namespace Microsoft::Xna::Framework::Graphics
           textures_(this),
           vertexTextures_(this)
     {
+        CNA::Platform::IPlatformGlContext* const glContext = platform_->GetGlContext();
+        const CNA::Platform::GlContextBinding callerGlBinding =
+            glContext != nullptr ? glContext->GetCurrentBinding()
+                                 : CNA::Platform::GlContextBinding{};
+        const auto restoreCallerGlBinding = [&]()
+        {
+            if (glContext == nullptr || callerGlBinding.context == nullptr)
+            {
+                return;
+            }
+
+            const CNA::Platform::GlContextBinding current = glContext->GetCurrentBinding();
+            if (current.window != callerGlBinding.window
+                || current.context != callerGlBinding.context)
+            {
+                glContext->MakeCurrent(callerGlBinding.window, callerGlBinding.context);
+            }
+        };
+
         // The Touch Panel needs this for normalized-to-pixel touch coordinate scaling.
         Microsoft::Xna::Framework::Input::Touch::TouchPanel::setDisplayWidthProperty(virtualWidth_);
         Microsoft::Xna::Framework::Input::Touch::TouchPanel::setDisplayHeightProperty(virtualHeight_);
@@ -318,12 +337,15 @@ namespace Microsoft::Xna::Framework::Graphics
             if (renderer_->SupportsDepthStencil())
                 setDepthStencilStateProperty(depthStencilState_);
             setRasterizerStateProperty(rasterizerState_);
+            restoreCallerGlBinding();
         }
         catch (...)
         {
+            const std::exception_ptr failure = std::current_exception();
             destroyNativeResources();
             setVideoSubsystemAcquired(false);
-            throw;
+            restoreCallerGlBinding();
+            std::rethrow_exception(failure);
         }
     }
 
@@ -410,6 +432,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (renderer_ != nullptr)
         {
+            auto contextLease = AcquireRendererThreadContextLease();
             renderer_->Clear(r, g, b, a);
         }
     }
@@ -420,6 +443,8 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             return;
         }
+
+        auto contextLease = AcquireRendererThreadContextLease();
 
         if (hasClearFlag(options, ClearOptions::DepthBuffer))
         {
@@ -539,6 +564,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (renderer_ != nullptr)
         {
+            auto contextLease = AcquireRendererThreadContextLease();
             renderer_->Present();
             UpdateViewportFromWindow();
         }

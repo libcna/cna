@@ -83,6 +83,7 @@ namespace CNA::Platform::Sdl2 {
                 WindowId window, const GlContextDescription& description) override;
             void DestroyContext(GlContextHandle context) override;
             void MakeCurrent(WindowId window, GlContextHandle context) override;
+            [[nodiscard]] GlContextBinding GetCurrentBinding() const override;
             void SwapBuffers(WindowId window) override;
             bool SetSwapInterval(int interval) override;
             [[nodiscard]] void* GetProcAddress(const std::string& name) const override;
