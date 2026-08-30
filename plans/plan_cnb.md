@@ -1112,15 +1112,16 @@ Two things it does not do:
 
 Deliberately out of `Model` schema 1, and correctly so: material variants and the glTF import
 report. The report is authoring/debug information a runtime asset does not need. Variants belong
-in a future **`Model` schema 2**, never in a container change.
+in a separately justified future **Model schema revision**, never in a container change; the
+now-frozen schema 2 described below intentionally does not add them.
 
-> **2026-08-30 schema-2 review:** Content Pipeline task `CP-056` proved a bounded second Model
-> schema is feasible for real XNB semantics, and `CP-057` specifies its candidate wire format in
-> `plans/plan_content_pipeline.md` section 33. It uses separate declaration, buffer and stock-effect
-> resource tables, exact part windows/bounds/root identity, null-only tags and typed XREFs. This is
-> deliberately not yet a frozen CNB definition: schema 2 becomes normative here and in
-> `docs/cnb-format.md` only after an independent Python golden vector, production codec and runtime
-> conformance pass. Model schema 1, its codec, and all existing bytes remain frozen throughout.
+> **2026-08-30 schema-2 completion (`CP-058`):** the bounded second Model schema is now a frozen
+> CNB definition. `docs/cnb-format.md` §11.2–11.5 is normative. It uses separate declaration,
+> buffer and stock-effect resource tables, exact part windows/bounds/root identity, null-only tags
+> and typed XREFs. The production CPU codec, schema-version runtime dispatch, rebuilt-checksum
+> malformed corpus, and independent 1,468-byte Python vector all pass; the vector SHA-256 is
+> `6a9dc3f5363ae82a93ba8e01fee1059802ac1325d5fd76565ccddb09d928ad78`.
+> Model schema 1, its codec, existing routes, and every previous golden byte remain unchanged.
 
 ### 15.4 The order to build in, and why it differs from `misc/cnb.md`
 

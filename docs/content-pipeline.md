@@ -982,9 +982,11 @@ runtime ownership/fixup adapter or canonical `XnbModelData`; shared CPU declarat
 BasicEffect decoders likewise sit below both paths. The compiler converts only after proving the
 subset, then follows `ImportedModelDocument -> ModelProcessor -> ModelContentWriter ->
 EncodeModelToCnb()`. It does not instantiate a `GraphicsDevice`, GPU buffer or runtime Effect and
-does not preserve XNB bytes. The frozen Model schema remains version 1. General Model support would
-require a separately reviewed future schema carrying explicit declarations, part windows, bounds,
-root semantics, sharing identity, stable tags and complete stock/custom effect state.
+does not preserve XNB bytes. Model schema 1 remains frozen and is still the only XNB output route
+at this point. `CP-058` separately froze Model schema 2 and added its CPU codec plus runtime loader
+for exact declarations, part windows, serialized bounds, explicit root identity, shared buffers
+and five stock effects. The build-time XNB selection/conversion onto that representation belongs
+to `CP-059`; until it lands, the schema-1 compatibility matrix above is unchanged.
 
 None, LZX, and MonoGame raw-block LZ4 compression and XNB versions 4/5 are supported through CNA's
 shared container code. The existing 16 platform header
@@ -1134,6 +1136,8 @@ plus clean through a non-ASCII path. Native Windows and MSVC remain untested and
 
 - CNB container 1.0, built-in schema-1 bytes, asset IDs, chunk IDs, CRC behavior, and existing
   typed encoders/decoders;
+- Model schema 2's separately versioned wire contract, independent golden vector, and schema-1/
+  schema-2 runtime dispatch; schema 1 itself and its existing producer bytes are unchanged;
 - the rule that built-in writers reuse those encoders;
 - byte equivalence with legacy producers for matching implemented semantics;
 - lossless XNB Model transcoding for the documented schema-1-compatible subset, with every
@@ -1162,12 +1166,9 @@ plus clean through a non-ASCII path. Native Windows and MSVC remain untested and
 - optional target profiles, if a concrete portable-output policy requires them;
 - independently scheduled glTF generated assets only if a concrete cache-isolation benefit
   justifies a generated-source graph contract;
-- Model schema 2 and broader XNB Model support remain future implementation. The completed CP-056
-  audit permits a separate resource-table design for exact declarations, shared buffers/effects,
-  part windows, authored bounds, explicit root identity, and complete built-in stock-effect
-  records. It deliberately keeps tags null-only and custom effects unsupported; schema 1 and all
-  existing producer routes stay frozen until an independent schema-2 specification and golden
-  vector are proved;
+- broader XNB Model support through the implemented Model schema 2. `CP-059` must retain schema 1
+  whenever its current subset fits, select schema 2 only for exactly representable additional
+  semantics, and keep non-null tags/custom effects explicitly unsupported;
 - stable machine-readable build-decision output, if an IDE/build integration contract justifies a
   separately versioned format;
 

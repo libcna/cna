@@ -44,8 +44,9 @@
 > new `content-pipeline-final` branch was created from it, and current `next` was merged normally.
 > The resulting combined baseline is `5671ebb54`; neither history was rebased, squashed or reset,
 > and `next` remains untouched. `CP-051` resumes the remaining evidence-backed backlog from that
-> combined history. `CP-051` through `CP-056` are complete: the manifest/explain and named-source-
-> root work is implemented, and the Model-v2 audit has found a coherent bounded native design.
+> combined history. `CP-051` through `CP-058` are complete: the manifest/explain and named-source-
+> root work is implemented, and the bounded Model schema-2 codec, runtime loader, malformed corpus,
+> and independent golden proof are complete without changing schema 1.
 >
 > **Boundary:** this plan owns the build-time CNA Content Pipeline. `plans/plan_cnb.md` remains the
 > engineering record for the frozen CNB compiled format. The pipeline consumes the existing CNB
@@ -1209,8 +1210,8 @@ carrying forward task-local results:
 | `CP-054` | **completed** | Audited configuration, context resolution, manifest hashing, deployment and destructive paths and specified the bounded capability model in section 30. Strict configuration gains at most 32 lowercase aliases under `sourceRoots`; authored references use explicit `@alias/root-relative-path` syntax. The native mapping is request-local and never persisted. Manifest v7 stores alias and relative path as separate fields, hashes both, and resolves without root search. Existing source-relative resolution remains the default. Canonical source/external/output roots may not equal or nest; deployment from an external root is accepted only after the same explicitly aliased source dependency was recorded, while publication/clean/GC remain output-root-only. |
 | `CP-055` | **completed** | Implemented bounded named external source roots end to end. Strict config maps aliases under `sourceRoots`; unqualified dependencies retain source-root containment while `@alias/path` resolves directly through a canonical request-local read capability. Manifest v7 persists alias plus relative identity, hashes both, and never stores physical roots. Same-byte physical remapping skips; alias/identity/set/byte changes invalidate. External deployment requires the exact aliased dependency first and still publishes only below the output root. Normal 101-test, ASan+UBSan 101-test and focused TSan 10-test gates prove workers 1/4 identity, migration, traversal/absolute/backslash/symlink/unknown/duplicate/missing/file/overlap rejection, and external sentinel survival through deployment contraction, GC and clean. |
 | `CP-056` | **completed** | Audited FNA's complete Model/vertex/index/stock-effect readers against CNA's canonical XNB graph, frozen schema-1 carrier, runtime Model/buffer/effect APIs, CNB adapter and renderer declaration boundary. Section 32 records the field matrix and a demonstrated real use case: MonoGame's Blender cube needs an explicit Position+Normal declaration, serialized sphere and non-default BasicEffect SpecularPower, all of which CNA already constructs and exposes. A separate resource-table schema is coherent without CLR object graphs; null tags remain the only supported tag policy, custom effects remain rejected, and declaration-limited renderers retain their existing explicit fidelity rejection. No CNB definition or byte changed in this audit. |
-| `CP-057` | **completed** | Specified the byte-exact candidate in section 33: ten schema chunks plus typed container XREFs; fixed header/bone/mesh/part/declaration/resource/effect rows; complete stable vertex/effect ID tables; resource identity, null-tag and canonical ordering rules; overflow/count/index/window validation; schema selection; runtime construction; and an independent conformance vector. The design remains a candidate rather than a frozen format until CP-058 implements it and proves every rule without changing schema 1. |
-| `CP-058` | **conditional** | Implement and independently golden-test Model schema 2 only after CP-057 closes every wire and validation rule. Schema 1, its decoder, its producer routes and all existing golden bytes remain immutable. |
+| `CP-057` | **completed** | Specified the byte-exact candidate in section 33: eleven schema chunk types plus typed container XREFs; fixed header/bone/mesh/part/declaration/resource/effect rows; complete stable vertex/effect ID tables; resource identity, null-tag and canonical ordering rules; overflow/count/index/window validation; schema selection; runtime construction; and an independent conformance vector. CP-058 subsequently proved and froze that candidate without changing schema 1. |
+| `CP-058` | **completed** | Added a separate CPU carrier/codec for Model asset type 5/schema 2 and runtime dispatch by schema version. Exact declarations, shared vertex/index/effect resources, part windows, authored spheres, explicit root identity/transforms, typed XREFs, null-only tags, and all five stock effects round-trip and construct exactly. The decoder validates mandatory topology/alignment, every count/table/product/range/reserved value, graph/resource identity, typed references, and inactive fields before GPU construction. A manually specified Python vector pins all 1,468 bytes, fixed offsets, and SHA-256 `6a9dc3f5363ae82a93ba8e01fee1059802ac1325d5fd76565ccddb09d928ad78`; production encode and CPU/runtime decode match it. Schema 1 and every prior golden remain byte-identical. |
 | `CP-059` | **conditional** | Broaden lossless XNB Model transcoding onto schema 2 for the exact support matrix CP-057/058 prove. Schema-1-compatible XNB Models continue to emit schema 1; unsupported tags/custom effects fail explicitly. |
 | `CP-060` | **planned** | Measure generated glTF child rebuild behavior and retain same-node scheduling unless independent nodes provide real cache isolation without changing embedded-clip or texture-XREF semantics. |
 | `CP-061` | **planned** | Audit current processors for a concrete output-affecting target policy. Add no profile abstraction unless an existing implementable policy justifies stable fingerprint identity. |
@@ -1309,8 +1310,8 @@ the ordering wrong; it is not a promise to build speculative abstractions.
   need explicit external-root reference syntax. In particular, glTF's shared converter validates
   and opens URIs before the pipeline context observes them, so it must not claim capability support
   without a separately reviewed resolver callback.
-* Whether the CP-057 wire specification and independent proof can close the bounded schema-2
-  implementation authorized by CP-056. Schema 1 remains frozen regardless of the answer.
+* Which additional lossless XNB Model semantics can select the now-frozen schema 2 while retaining
+  schema-1 bytes for every source that already fits; CP-059 owns that exact support matrix.
 
 ---
 
@@ -2002,12 +2003,12 @@ The other gaps remain subordinate and evidence-gated:
   audits real runtime construction/rendering capability, effect carriers, sharing and tags.
   Schema 2 implementation is conditional rather than presumed.
 * CP-046's generated glTF children intentionally share a node because clips remain embedded and
-  texture identity affects Model XREFs. CP-058 requires measurements before changing ownership or
+  texture identity affects Model XREFs. CP-060 requires measurements before changing ownership or
   scheduling.
-* Current processors expose no generic platform switch. CP-059 looks for a concrete output policy
+* Current processors expose no generic platform switch. CP-061 looks for a concrete output policy
   and rejects a profile API if none exists.
 * This Linux environment preserves the existing MinGW/Wine evidence but does not by itself prove
-  native MSVC execution. CP-060 may improve an existing CI gate only when repository conventions
+  native MSVC execution. CP-062 may improve an existing CI gate only when repository conventions
   and an executable test boundary justify it.
 
 The audit found no reason to change CNB, add a stable C route, duplicate the scheduler/publisher,
@@ -2337,9 +2338,10 @@ producer or runtime reader lands; CP-059 then broadens XNB support only to the p
 
 ---
 
-## 33. Model schema-2 candidate specification (`CP-057`)
+## 33. Model schema-2 specification (`CP-057`, frozen by `CP-058`)
 
-This section is the implementation contract for CP-058, not yet a frozen public wire definition.
+This section was the implementation contract for CP-058 and is now the engineering record for the
+frozen public wire definition specified normatively in `docs/cnb-format.md` §11.2–11.5.
 The file remains CNB container 1.0, built-in asset type `Model` (`5`), asset schema version `2`.
 Every integer and IEEE-754 float uses the container's little-endian primitive encoding. Every
 schema chunk below is mandatory, singleton except repeated `MVTX`/`MIDX`, and emitted in the exact
@@ -2606,19 +2608,52 @@ a schema-1 representability condition but passes every schema-2 condition is box
 schema-2 imported type. A malformed graph, unsafe texture name, non-null tag or unsupported effect
 fails rather than upgrades. CNJ/glTF/default generated Models never select the new route.
 
-### 33.5 Independent conformance requirement
+### 33.5 Independent conformance result
 
-CP-058 must add one manually specified Python Model-v2 vector without calling the production C++
+CP-058 added one manually specified Python Model-v2 vector without calling the production C++
 encoder. It contains two bones with an explicitly selected, non-implicit root and non-identity root
 transform; one exact authored sphere; a Position+Normal declaration; one vertex and one index
 buffer; two parts sharing both buffers and one BasicEffect while selecting different index windows;
 a nonzero vertex offset; and a typed texture XREF plus non-default `SpecularPower`. Python asserts
-the complete byte image SHA-256 and every fixed row/chunk offset. C++ must decode those bytes to
-the expected carrier/runtime semantics, and its encoder must reproduce them exactly.
+the complete byte image SHA-256 and every fixed row/chunk offset. C++ decodes those bytes to the
+expected carrier/runtime semantics and its encoder reproduces them exactly. The 1,468-byte vector
+has SHA-256 `6a9dc3f5363ae82a93ba8e01fee1059802ac1325d5fd76565ccddb09d928ad78`.
 
 Separate malformed tests mutate every count/table size, reserved word, enum, string/XREF/resource
 index, declaration range/overlap, payload cardinality, byte product, graph parent/root/mesh range,
 part partition/window/index value and effect discriminant/inactive field. Schema-1's independent
-golden bytes are compared to their retained hashes before and after the new codec lands. Until all
-of those gates pass, this section remains a candidate design and `docs/cnb-format.md` continues to
-describe Model schema 1 as the only frozen Model schema.
+golden bytes retain their prior values. All gates pass; schema 2 is frozen independently of schema
+1, and existing source routes do not select it merely because it exists.
+
+### 33.6 Implementation and verification (`CP-058`)
+
+The implementation is deliberately separate from schema 1:
+
+* `CnbModelV2Data` is a CPU-only carrier and `CnbModelV2Codec` is the only schema-2 encoder/
+  decoder. `CnbModelData`, `EncodeModelToCnb()`, and `DecodeModelFromCnb()` are unchanged.
+* `ContentManager` dispatches Model by `assetSchemaVersion`, validates the complete CPU graph
+  before GPU construction, and creates declarations and resource rows once. Tests observe exact
+  root identity/transform, bounds, windows, vertex bytes, buffer/effect pointer sharing, null tags,
+  and every field on all five stock-effect runtime classes.
+* Rebuilt-checksum negative documents cover schema-chunk presence/cardinality/mandatory flags/
+  alignment; every header count; table sizes and partitions; reserved words; strings, enums and
+  typed XREFs; resource ordinals/products; graph parents/root; bounds; declaration overlap;
+  part windows/selected indices; and inactive effect fields.
+
+The normal Model/CNB/CNJ/XNB/glTF gate passes **105/105 tests across 13 suites**. The same selection
+passes **105/105** in the combined ASan+UBSan O0 build with both sanitizers set to halt on the first
+finding. LeakSanitizer is not claimed: its subprocess fixture terminates on the runner's explicit
+`does not work under ptrace` guard, so the successful sanitizer run used `detect_leaks=0`. No
+concurrent scheduler or shared-state code changed, so CP-058 does not add a new TSan obligation.
+The MinGW-w64 HEADLESS build compiles and archives the complete affected `cna_content` target;
+native MSVC/Windows execution remains CP-062 rather than being inferred from cross-compilation.
+
+A non-CI host measurement repeated each independent golden encode and parse/decode case 20,000
+times in one process. Schema 1 versus schema 2 took 4.16 s versus 4.66 s to encode (about +12%) and
+3.51 s versus 3.91 s to parse/decode (about +11%). The schema-2 vector is larger and semantically
+richer (1,468 versus 1,094 bytes), so these values are a sanity measurement, not a performance
+threshold.
+
+The public C++ carrier/codec adds 122 inventory rows. They are assigned to open `CBIND-117`, taking
+the generated inventory to 551 headers / 9,482 symbols with 651 planned rows. No C header, export,
+ABI version, or C route changed; wire-format stability does not silently authorize a C ABI design.

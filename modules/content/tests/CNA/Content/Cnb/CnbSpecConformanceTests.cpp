@@ -28,6 +28,7 @@
 #include "CNA/Content/Cnb/CnbFormat.hpp"
 #include "CNA/Content/Cnb/CnbModelCodec.hpp"
 #include "CNA/Content/Cnb/CnbModelData.hpp"
+#include "CNA/Content/Cnb/CnbModelV2Codec.hpp"
 #include "CNA/Content/Cnb/CnbReadLimits.hpp"
 #include "CNA/Content/Cnb/CnbMediaCodec.hpp"
 #include "CNA/Content/Cnb/CnbChunkCompression.hpp"
@@ -151,7 +152,7 @@ TEST(CnbSpecConformanceTest, TheDocumentedAssetTypeIdentifiersMatchTheImplementa
     ExpectSpecContains(spec, "| `compression` naming a codec this build implements | **accept**");
     ExpectSpecContains(spec,
                        "That does not make a compressed file inspectable without the codec.");
-    ExpectSpecContains(spec, "| 5 | `Model` | **version 1**");
+    ExpectSpecContains(spec, "| 5 | `Model` | **versions 1 and 2**");
     ExpectSpecContains(spec, "| 8 | `SoundEffect` | **version 1**");
     ExpectSpecContains(spec, "| 9 | `Song` | **version 1**");
     ExpectSpecContains(spec, "| 10 | `Video` | **version 1**");
@@ -172,6 +173,48 @@ TEST(CnbSpecConformanceTest, TheDocumentedSchemaStridesMatchTheImplementation)
     EXPECT_EQ(CNA::Content::Cnb::CnbModelMeshStride, 16u);
     EXPECT_EQ(CNA::Content::Cnb::CnbModelPartStride, 56u);
     EXPECT_EQ(CNA::Content::Cnb::CnbModelMaterialStride, 368u);
+    EXPECT_EQ(CNA::Content::Cnb::CnbModelV2HeaderStride, 64u);
+    EXPECT_EQ(CNA::Content::Cnb::CnbModelV2BoneStride, 72u);
+    EXPECT_EQ(CNA::Content::Cnb::CnbModelV2MeshStride, 32u);
+    EXPECT_EQ(CNA::Content::Cnb::CnbModelV2PartStride, 32u);
+    EXPECT_EQ(CNA::Content::Cnb::CnbModelV2DeclarationStride, 16u);
+    EXPECT_EQ(CNA::Content::Cnb::CnbModelV2ElementStride, 20u);
+    EXPECT_EQ(CNA::Content::Cnb::CnbModelV2ResourceStride, 16u);
+    EXPECT_EQ(CNA::Content::Cnb::CnbModelV2EffectStride, 96u);
+    EXPECT_EQ(CNA::Content::Cnb::CnbModelV2NoIndex, 0xFFFFFFFFu);
+    using V2Format = CNA::Content::Cnb::CnbModelV2VertexFormat;
+    EXPECT_EQ(static_cast<std::uint32_t>(V2Format::Single), 0u);
+    EXPECT_EQ(static_cast<std::uint32_t>(V2Format::Vector2), 1u);
+    EXPECT_EQ(static_cast<std::uint32_t>(V2Format::Vector3), 2u);
+    EXPECT_EQ(static_cast<std::uint32_t>(V2Format::Vector4), 3u);
+    EXPECT_EQ(static_cast<std::uint32_t>(V2Format::Color), 4u);
+    EXPECT_EQ(static_cast<std::uint32_t>(V2Format::Byte4), 5u);
+    EXPECT_EQ(static_cast<std::uint32_t>(V2Format::Short2), 6u);
+    EXPECT_EQ(static_cast<std::uint32_t>(V2Format::Short4), 7u);
+    EXPECT_EQ(static_cast<std::uint32_t>(V2Format::NormalizedShort2), 8u);
+    EXPECT_EQ(static_cast<std::uint32_t>(V2Format::NormalizedShort4), 9u);
+    EXPECT_EQ(static_cast<std::uint32_t>(V2Format::HalfVector2), 10u);
+    EXPECT_EQ(static_cast<std::uint32_t>(V2Format::HalfVector4), 11u);
+    using V2Usage = CNA::Content::Cnb::CnbModelV2VertexUsage;
+    EXPECT_EQ(static_cast<std::uint32_t>(V2Usage::Position), 0u);
+    EXPECT_EQ(static_cast<std::uint32_t>(V2Usage::Color), 1u);
+    EXPECT_EQ(static_cast<std::uint32_t>(V2Usage::TextureCoordinate), 2u);
+    EXPECT_EQ(static_cast<std::uint32_t>(V2Usage::Normal), 3u);
+    EXPECT_EQ(static_cast<std::uint32_t>(V2Usage::Binormal), 4u);
+    EXPECT_EQ(static_cast<std::uint32_t>(V2Usage::Tangent), 5u);
+    EXPECT_EQ(static_cast<std::uint32_t>(V2Usage::BlendIndices), 6u);
+    EXPECT_EQ(static_cast<std::uint32_t>(V2Usage::BlendWeight), 7u);
+    EXPECT_EQ(static_cast<std::uint32_t>(V2Usage::Depth), 8u);
+    EXPECT_EQ(static_cast<std::uint32_t>(V2Usage::Fog), 9u);
+    EXPECT_EQ(static_cast<std::uint32_t>(V2Usage::PointSize), 10u);
+    EXPECT_EQ(static_cast<std::uint32_t>(V2Usage::Sample), 11u);
+    EXPECT_EQ(static_cast<std::uint32_t>(V2Usage::TessellateFactor), 12u);
+    using V2Effect = CNA::Content::Cnb::CnbModelV2EffectKind;
+    EXPECT_EQ(static_cast<std::uint32_t>(V2Effect::BasicEffect), 0u);
+    EXPECT_EQ(static_cast<std::uint32_t>(V2Effect::SkinnedEffect), 1u);
+    EXPECT_EQ(static_cast<std::uint32_t>(V2Effect::DualTextureEffect), 2u);
+    EXPECT_EQ(static_cast<std::uint32_t>(V2Effect::AlphaTestEffect), 3u);
+    EXPECT_EQ(static_cast<std::uint32_t>(V2Effect::EnvironmentMapEffect), 4u);
     EXPECT_EQ(CNA::Content::Cnb::CnbTextureHeaderStride, 24u);
     EXPECT_EQ(CNA::Content::Cnb::CnbTextureRepresentationStride, 24u);
     EXPECT_EQ(CNA::Content::Cnb::CnbTextureCubeFaceCount, 6u);
@@ -201,6 +244,9 @@ TEST(CnbSpecConformanceTest, TheDocumentedSchemaStridesMatchTheImplementation)
     ExpectSpecContains(spec, "16 bytes each");
     ExpectSpecContains(spec, "56 bytes each");
     ExpectSpecContains(spec, "`count` × 368 bytes");
+    ExpectSpecContains(spec, "**`M2HD` — exactly 64 bytes");
+    ExpectSpecContains(spec, "`declarationCount` 16-byte rows");
+    ExpectSpecContains(spec, "`effectCount` × 96 bytes");
     ExpectSpecContains(spec, "`representationCount` × 24-byte descriptors");
     ExpectSpecContains(spec, "`glyphCount` × 16 bytes: source rectangles");
     ExpectSpecContains(spec, "`glyphCount` × 12 bytes: bearings");
@@ -242,9 +288,21 @@ TEST(CnbSpecConformanceTest, TheDocumentedChunkIdentifiersMatchTheImplementation
     EXPECT_EQ(render(CNA::Content::Cnb::CnbModelChunk::Skeleton), "MSKL");
     EXPECT_EQ(render(CNA::Content::Cnb::CnbModelChunk::Animations), "MANM");
     EXPECT_EQ(render(CNA::Content::Cnb::CnbModelChunk::Lights), "MLIT");
+    EXPECT_EQ(render(CNA::Content::Cnb::CnbModelV2Chunk::Header), "M2HD");
+    EXPECT_EQ(render(CNA::Content::Cnb::CnbModelV2Chunk::Strings), "M2ST");
+    EXPECT_EQ(render(CNA::Content::Cnb::CnbModelV2Chunk::Bones), "M2BN");
+    EXPECT_EQ(render(CNA::Content::Cnb::CnbModelV2Chunk::Meshes), "M2MS");
+    EXPECT_EQ(render(CNA::Content::Cnb::CnbModelV2Chunk::Parts), "M2PT");
+    EXPECT_EQ(render(CNA::Content::Cnb::CnbModelV2Chunk::VertexDeclarations), "M2VD");
+    EXPECT_EQ(render(CNA::Content::Cnb::CnbModelV2Chunk::VertexResources), "M2VR");
+    EXPECT_EQ(render(CNA::Content::Cnb::CnbModelV2Chunk::VertexData), "MVTX");
+    EXPECT_EQ(render(CNA::Content::Cnb::CnbModelV2Chunk::IndexResources), "M2IR");
+    EXPECT_EQ(render(CNA::Content::Cnb::CnbModelV2Chunk::IndexData), "MIDX");
+    EXPECT_EQ(render(CNA::Content::Cnb::CnbModelV2Chunk::Effects), "M2FX");
 
     for (const char* id : {"CMET", "XREF", "CRVH", "CRVK", "ACLH", "ACLT", "ACLK", "MDLH", "MSTR",
-                           "MBON", "MMSH", "MMAT", "MVTX", "MIDX", "MMRP", "MSKL", "MANM", "MLIT"})
+                           "MBON", "MMSH", "MMAT", "MVTX", "MIDX", "MMRP", "MSKL", "MANM", "MLIT",
+                           "M2HD", "M2ST", "M2BN", "M2MS", "M2PT", "M2VD", "M2VR", "M2IR", "M2FX"})
     {
         ExpectSpecContains(spec, std::string("`") + id + "`");
     }

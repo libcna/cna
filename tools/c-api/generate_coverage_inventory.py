@@ -776,6 +776,11 @@ B11_SLICE_OWNERS: dict[str, str] = {
 # task instead of handing them back to the completed CBIND-036/CBIND-111 slices.
 B12_SLICE_OWNERS: dict[str, str] = {
     "content/CnbSourceImport": "CBIND-117",
+    # CP-058's separately versioned Model schema-2 CPU carrier and codec are public experimental
+    # C++ content-format surfaces. Adding them to the stable C ABI is not implied by freezing their
+    # wire format; any C-native representation belongs to the still-open pipeline/CNB boundary.
+    "content/CnbModelV2Data": "CBIND-117",
+    "content/CnbModelV2Codec": "CBIND-117",
     # CP-021 adds a native-filesystem overload for the C++ build pipeline. The existing narrow
     # overload remains mapped by CBIND-109; designing any distinct C path representation belongs
     # to the still-open experimental pipeline boundary task rather than reopening that closed
