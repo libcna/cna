@@ -1166,6 +1166,29 @@ The equivalent fresh Linux HEADLESS/SDL3 configuration builds both workflow targ
 CLI lifecycle. This validates the workflow's test boundary and commands, not the unexecuted MSVC
 compiler/runtime result.
 
+### Final continuation verification
+
+The CP-063 closeout rebuilt the complete normal HEADLESS configuration and both real CMake content
+fixtures. Its broad content/CNB/CNJ/XNB/glTF boundary passed 1,430 tests and skipped eight
+opt-in/external-fixture cases after excluding exactly three independently reproduced, previously
+documented HEADLESS renderer storage-adapter failures (two TextureCube loads and one Texture3D
+load). The 14 schema-1 and Model-schema-2 golden/conformance tests pass, as does the opt-in
+streaming-hash test over a sparse file larger than 2 GiB.
+
+A freshly rebuilt combined ASan+UBSan selection passes 187 tests with the large-file test skipped
+and no sanitizer report. Leak detection is disabled because this runner explicitly rejects LSan
+under `ptrace`, so this is not LeakSanitizer evidence. The rebuilt TSan configuration passes 108
+tests with the same opt-in skip and no race report. All nine C-API gates pass; the generated
+inventory remains 551 headers and 9,485 declarations, including 654 experimental Content Pipeline
+declarations still planned under `CBIND-117`. No C route, export, or ABI version changes.
+
+Final inspection found no new staging residue, output-tree scanning, deletion authority outside a
+valid compatible manifest, physical external-root identity in build state, second publisher, CNB
+schema-1 change, or existing golden-byte change. Workers 1/2/4 determinism, explanation ordering,
+graph/cycle diagnostics, atomic recovery, deployment ownership, orphan GC, and clean are covered by
+the passing normal and sanitizer CLI boundaries. The remaining portability action is the actual
+manual native-MSVC workflow run after an authorized push; its existence alone is not verification.
+
 ## Stability summary
 
 **Stable/frozen:**

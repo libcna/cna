@@ -44,12 +44,16 @@
 > new `content-pipeline-final` branch was created from it, and current `next` was merged normally.
 > The resulting combined baseline is `5671ebb54`; neither history was rebased, squashed or reset,
 > and `next` remains untouched. `CP-051` resumes the remaining evidence-backed backlog from that
-> combined history. `CP-051` through `CP-062` are complete: the manifest/explain and named-source-
+> combined history. `CP-051` through `CP-063` are complete: the manifest/explain and named-source-
 > root work is implemented, the bounded Model schema-2 codec/runtime proof is complete, and the XNB
 > route now selects it only for exactly representable semantics that do not fit frozen schema 1.
 > Measured generated-child scheduling and target-profile audits retained the current same-node and
 > portable-output policies rather than adding unproven graph or configuration abstractions. A
 > manual native-MSVC CI gate now exists, but has not been executed from this unpushed branch.
+> During CP-063 verification, `next` independently advanced from the session-start
+> `45515bb0a122d582e87d9b4cb48b170cd9b6249a` through eight renderer-remediation commits to
+> `905be872ee5f098f90cfcee7f484dca8136cd33e`. Those commits were not merged or rewritten; the
+> established combined baseline remains the topology under review here.
 >
 > **Boundary:** this plan owns the build-time CNA Content Pipeline. `plans/plan_cnb.md` remains the
 > engineering record for the frozen CNB compiled format. The pipeline consumes the existing CNB
@@ -1219,7 +1223,7 @@ carrying forward task-local results:
 | `CP-060` | **completed** | Measured generated glTF child rebuild behavior and retained same-node scheduling. An external image pixel-only edit changed the Texture2D child while leaving Model bytes identical, but a representative full glTF node took about 1.47 ms warm and both full-node and texture-only CLI rebuilds rounded to 0.03 s. Animation names/values remain embedded in schema-1 Model; renaming one clip changed the Model and child set while another child stayed byte-identical. Every proposed split still requires the shared glTF parse/scene/material conversion, and embedded/data-URI images have no independent authored input. That bounded cache opportunity does not justify a generated-source graph, ownership, or partial-publication contract. |
 | `CP-061` | **completed** | Audited every built-in importer/processor/writer and found no target-dependent output policy. Images and font/volume atlases use portable Rgba8; WAV uses Pcm16; authored DDS/XNB representations are preserved or losslessly normalized; Model schemas encode source semantics; Curve/Animation are canonical pass-through; Song/Video copy their exact media and emit portable metadata; and no Effect/shader compiler exists. Container compression is an explicit codec concern, not a platform profile, and renderer selection belongs to runtime. No profile ID, API, CLI/config key, fingerprint field, CMake forwarding, CNB field, or C ABI was added. Existing per-asset typed parameters already cover real policies such as color key and deployment metadata. |
 | `CP-062` | **completed** | Confirmed this host has MinGW and Wine but no `cl`, `clang-cl`, PowerShell, native Windows host, or way to execute GitHub Actions locally. Added a single manual `windows-latest` workflow matching the repository's existing native-MSVC convention: pinned sharp-runtime, HEADLESS platform/renderer, SDL3's in-memory audio conversion path, two focused targets, bounded parallelism, CPU manifest/codec/pipeline/XNB tests, and a real Unicode CLI build/no-op/explain/workers/clean/deterministic-rebuild probe. A fresh equivalent configuration builds both targets, passes 177 of 178 selected tests with the opt-in sparse-file gate skipped, and passes the complete Unicode CLI probe. The YAML parses locally, but the workflow is deliberately unclaimed until manually dispatched after publication. Documentation now states that neither a manifest generation nor modern diagnostic can force pre-CP-049 binaries to honor `.cna-content.lock`; mixed-generation overlap remains unsupported. |
-| `CP-063` | **planned** | Perform final Content Pipeline compatibility, security, performance, sanitizer, portability, CMake and C-API-inventory review; reconcile plans/docs and record remaining evidence-backed backlog. |
+| `CP-063` | **completed** | Closed the final branch with a clean complete HEADLESS build and an attributable 1,438-case content/CNB/CNJ/XNB/glTF boundary: 1,430 passed and eight opt-in/external-fixture cases skipped after excluding exactly the three previously documented HEADLESS TextureCube/Texture3D storage-adapter failures. All 14 schema-1/schema-2 golden tests and the real >2 GiB streaming hash pass. A fresh ASan+UBSan selection passes 187 plus the large-file skip with leak detection disabled only for the runner's known `ptrace` limitation; a rebuilt TSan boundary passes 108 plus that skip with no report. Both real CMake fixtures and all nine C-API gates pass; the inventory remains 551 headers/9,485 declarations with 654 experimental content declarations planned under `CBIND-117` and no C ABI change. Final review found no new security, determinism, atomicity, schema-1-byte, or publisher regression. Native MSVC execution, stable machine-readable decision output, arbitrary XNB object graphs/custom effects, and evidence-gated future profile/child scheduling remain honestly outside the completed scope. |
 
 Tasks are intentionally vertical/coherent. The ledger is revised when implementation evidence makes
 the ordering wrong; it is not a promise to build speculative abstractions.
@@ -2859,3 +2863,69 @@ opens or observes that file. No newer manifest version, minimum-generation field
 scan or diagnostic can retroactively force that concurrently running legacy process to cooperate.
 Mixed-generation overlap on one output root is unsupported; serialize those invocations externally
 or use different output roots. No false backward-compatible locking mechanism is added.
+
+---
+
+## 38. Final compatibility, security and performance review (`CP-063`)
+
+The final review rebuilt the complete configured HEADLESS Debug tree, including both real
+`cna_add_content()` fixtures. A broad CPU/content boundary then exercised configuration, manifest,
+registry, custom components, the CLI, every built-in pipeline route, CNB codecs, CNJ, XNB/LZX/LZ4,
+Model schemas 1 and 2, runtime-reader equivalence, and the glTF conformance families. The first run
+executed 1,441 tests: 1,430 passed, eight opt-in/external-fixture cases skipped, and exactly the
+three CP-050-documented HEADLESS storage-adapter tests failed (two TextureCube loads and one
+Texture3D load). The identical selection excluding only those three renderer-only cases passed all
+1,430 remaining tests with the same eight skips. This is a reproduced pre-existing limitation, not
+a Content Pipeline regression or a changed oracle.
+
+Independent final gates add the following evidence:
+
+| Boundary | Result |
+|---|---|
+| workflow-equivalent HEADLESS/SDL3 configuration | both targets build; 177 pass, one opt-in sparse-file skip; Unicode CLI lifecycle passes |
+| frozen/schema-2 golden vectors | 14/14 pass: 11 schema-1 tests plus three independent Model-v2 conformance tests |
+| streaming hash above 2 GiB | 1/1 opt-in sparse-file test passes in 33.3 seconds |
+| ASan+UBSan affected boundary | 187 pass, one opt-in skip; both sanitizers halt on first finding; no report |
+| TSan scheduler/manifest/CLI/custom boundary | 108 pass, one opt-in skip; no report |
+| CMake integration | stock and custom generated content fixtures build in normal and sanitizer trees |
+| C API | all nine inventory/compatibility/header/release/ABI gates pass |
+
+LeakSanitizer remains an environment limitation rather than a hidden success: with its default
+setting the build-time compiler subprocess aborts because LSan does not work under this runner's
+`ptrace`; the successful ASan+UBSan run therefore used `detect_leaks=0`. The C-API inventory remains
+551 headers and 9,485 declarations: 8,352 implemented, 15 partial, 654 planned and 464 not
+applicable. The 654 planned content declarations remain under the existing `CBIND-117`; no pipeline
+symbol was exported and no ABI version changed.
+
+The architecture audit rechecked the destructive and compatibility boundaries rather than merely
+counting tests. Explanation reasons derive from the persisted nine-domain state plus inspectable
+component/schema/artifact records; workers 1/2/4 ordering remains coordinator-sorted. Manifest
+versions 1 through 7 cannot grant deletion authority to v8. Named roots are selected by alias,
+canonicalized without search, kept request-local physically, and grant no publication/clean/GC/
+scavenging authority. Deployment from one requires the exact recorded external dependency. Clean
+and orphan collection still use the one manifest-proven digest preflight, staging still uses its
+single private publisher, and no staging residue was found. Model schema 1 and all existing golden
+bytes remain unchanged; schema 2 uses the same asset ID with separate version dispatch and refuses
+unknown effects, non-null tags, malformed sharing/windows/ranges and arbitrary object graphs.
+
+The retained performance evidence remains adequate and deliberately non-normative: explain added
+about 15 ms/5.6% to the 128-node no-op median; an aliased external dependency was within 0.3 ms of
+an ordinary contained dependency; Model-v2's richer 1,468-byte vector encoded/decoded about
+12%/11% slower than the 1,094-byte schema-1 vector; and a representative complete glTF build cost
+about 1.47 ms in-process, with no measurable CLI advantage for a separately rebuilt texture child.
+No CI threshold is inferred from those host-specific measurements.
+
+The remaining backlog is bounded rather than another pipeline rewrite:
+
+* run the new manual workflow after an authorized push and record real native MSVC evidence;
+* consider a separately versioned machine-readable decision stream only when an IDE/build consumer
+  exists, potentially supporting validation or dry-run without making English output a contract;
+* revisit manifest scaling only with a measured large-project bottleneck;
+* extend XNB Model beyond the schema-2 support matrix only through an independently reviewed native
+  representation—never generic CLR serialization;
+* revisit target profiles or independent glTF child nodes only when a real output policy or
+  materially larger measured cache-isolation benefit satisfies CP-060/CP-061's gates.
+
+Current and legacy compiler processes must still be serialized externally when they share an
+output root. The new binary cannot make an old one acquire a lock it never implemented. No task in
+this continuation merged into `next` or pushed a branch.
