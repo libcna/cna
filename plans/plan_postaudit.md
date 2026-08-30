@@ -2609,7 +2609,7 @@ buildable in this configuration and were not measured.
 
 ## 38. `REMED-GFX-239` — the XNA pixel-centre convention is guarded on one renderer only
 
-**Status:** **OPEN — measured 2026-08-30** · **Coverage defect**
+**Status:** **CLOSED — 2026-08-30** · **Coverage defect**
 
 **Defect.** `EasyGL_XnaPixelCenter` is registered for **EasyGL alone**. No other renderer is held to
 XNA's pixel-centre convention, and the six others that pass `PointSamplingContract` are passing an
@@ -2629,9 +2629,35 @@ convention then fail visibly and take a recorded capability boundary, rather tha
 being asked. Implementing the convention on the other renderers is **not** in this ticket's scope —
 naming the divergence is.
 
-**Sequencing.** Land `REMED-GFX-238` first. Promoting this fixture while the two contracts still
-assert the opposite convention would put two registered cross-renderer contracts in direct
-contradiction.
+**Sequencing.** `REMED-GFX-238` landed first, as required: promoting this fixture while the two
+contracts still asserted the opposite convention would have put two registered cross-renderer
+contracts in direct contradiction.
+
+**Fix as landed.** The fixture moved from `modules/renderers/easygl/examples/` to
+`modules/graphics/examples/xna_pixel_center_contract_test.cpp`, alongside the other renderer-neutral
+contracts, and its header now cites the runtime measurement rather than asserting XNA's behaviour
+from the sample. `EasyGL_XnaPixelCenter` keeps its name and its meaning; `Vulkan_XnaPixelCenter`
+joins it.
+
+**Evidence.**
+
+    EasyGL  [PASS] XNA 1x1 triangle: 1 covered pixel(s)   [PASS] control: 136
+    Vulkan  [FAIL] XNA 1x1 triangle: 0 covered pixel(s)   [PASS] control: 120
+
+EasyGL's covered count and its control count both match what the real runtime produced (1 and 136).
+Vulkan's control triangle is intact, so its failure is the convention and not a broken effect or
+readback path — which is exactly what the control triangle is there to separate.
+
+**`Vulkan_XnaPixelCenter` is expected to fail, and that is the deliverable.** It is not a regression:
+the case was always false on Vulkan and the suite simply never asked. Implementing the convention on
+Vulkan is separate work and is **not** in this ticket.
+
+**Deliberately left undone.** `PointSamplingContract` is registered for seven renderers; this
+contract is now registered for two. The remaining five — bgfx, headless, llgl, sdl-gpu, webgpu —
+were **not** registered, because no configuration here builds them and registering five cases whose
+outcome has not been observed would be speculation rather than coverage. Extending the registration
+is a mechanical follow-up for whoever can build them, and each will either pass or record the same
+divergence Vulkan just did.
 
 ---
 

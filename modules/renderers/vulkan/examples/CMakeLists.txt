@@ -1345,6 +1345,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_DescriptorCapacityContract COMMAND cna_test_vulkan_descriptor_capacity
             TIMEOUT 900 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-239: XNA addresses pixel centres at integer window coordinates and covers a
+        # 1x1 screen-space triangle; measured on the real XNA 4.0 runtime in
+        # spikes/xna-pixel-center-spike/. Vulkan does not implement the convention today, so this
+        # case is expected to fail here -- that visibility is the point of registering it.
+        cna_vulkan_test(cna_test_vulkan_xna_pixel_center
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/xna_pixel_center_contract_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_XnaPixelCenter COMMAND cna_test_vulkan_xna_pixel_center
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         cna_vulkan_test(cna_test_vulkan_point_sampling
             ${CNA_GRAPHICS_EXAMPLES_DIR}/point_sampling_contract_test.cpp)
         cna_register_renderer_test(NAME Vulkan_PointSamplingContract COMMAND cna_test_vulkan_point_sampling

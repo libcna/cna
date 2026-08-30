@@ -1756,9 +1756,12 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # SAMPLE-001: XNA/D3D9 considers integer screen coordinates pixel centers. The original
-        # Primitives sample relies on that convention for every one-pixel star.
+        # Primitives sample relies on that convention for every one-pixel star. REMED-GFX-239 moved
+        # the fixture to the shared contract directory: the convention is XNA's, not EasyGL's, so
+        # every renderer owes it and a renderer that does not implement it must say so by failing
+        # rather than by never being asked.
         cna_easygl_test(cna_test_easygl_xna_pixel_center
-                        easygl_xna_pixel_center_test.cpp)
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/xna_pixel_center_contract_test.cpp)
         cna_register_renderer_test(NAME EasyGL_XnaPixelCenter COMMAND cna_test_easygl_xna_pixel_center
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
