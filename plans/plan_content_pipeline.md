@@ -1209,7 +1209,7 @@ carrying forward task-local results:
 | `CP-054` | **completed** | Audited configuration, context resolution, manifest hashing, deployment and destructive paths and specified the bounded capability model in section 30. Strict configuration gains at most 32 lowercase aliases under `sourceRoots`; authored references use explicit `@alias/root-relative-path` syntax. The native mapping is request-local and never persisted. Manifest v7 stores alias and relative path as separate fields, hashes both, and resolves without root search. Existing source-relative resolution remains the default. Canonical source/external/output roots may not equal or nest; deployment from an external root is accepted only after the same explicitly aliased source dependency was recorded, while publication/clean/GC remain output-root-only. |
 | `CP-055` | **completed** | Implemented bounded named external source roots end to end. Strict config maps aliases under `sourceRoots`; unqualified dependencies retain source-root containment while `@alias/path` resolves directly through a canonical request-local read capability. Manifest v7 persists alias plus relative identity, hashes both, and never stores physical roots. Same-byte physical remapping skips; alias/identity/set/byte changes invalidate. External deployment requires the exact aliased dependency first and still publishes only below the output root. Normal 101-test, ASan+UBSan 101-test and focused TSan 10-test gates prove workers 1/4 identity, migration, traversal/absolute/backslash/symlink/unknown/duplicate/missing/file/overlap rejection, and external sentinel survival through deployment contraction, GC and clean. |
 | `CP-056` | **completed** | Audited FNA's complete Model/vertex/index/stock-effect readers against CNA's canonical XNB graph, frozen schema-1 carrier, runtime Model/buffer/effect APIs, CNB adapter and renderer declaration boundary. Section 32 records the field matrix and a demonstrated real use case: MonoGame's Blender cube needs an explicit Position+Normal declaration, serialized sphere and non-default BasicEffect SpecularPower, all of which CNA already constructs and exposes. A separate resource-table schema is coherent without CLR object graphs; null tags remain the only supported tag policy, custom effects remain rejected, and declaration-limited renderers retain their existing explicit fidelity rejection. No CNB definition or byte changed in this audit. |
-| `CP-057` | **planned** | Specify Model schema 2 precisely: separate CPU carrier/codec, stable declaration/effect IDs, scoped buffer/effect resource tables, exact part windows/bounds/root identity, null-only tags, count/range validation and schema-1/default-route compatibility. The specification is not normative until an independent implementation and golden vector prove it. |
+| `CP-057` | **completed** | Specified the byte-exact candidate in section 33: ten schema chunks plus typed container XREFs; fixed header/bone/mesh/part/declaration/resource/effect rows; complete stable vertex/effect ID tables; resource identity, null-tag and canonical ordering rules; overflow/count/index/window validation; schema selection; runtime construction; and an independent conformance vector. The design remains a candidate rather than a frozen format until CP-058 implements it and proves every rule without changing schema 1. |
 | `CP-058` | **conditional** | Implement and independently golden-test Model schema 2 only after CP-057 closes every wire and validation rule. Schema 1, its decoder, its producer routes and all existing golden bytes remain immutable. |
 | `CP-059` | **conditional** | Broaden lossless XNB Model transcoding onto schema 2 for the exact support matrix CP-057/058 prove. Schema-1-compatible XNB Models continue to emit schema 1; unsupported tags/custom effects fail explicitly. |
 | `CP-060` | **planned** | Measure generated glTF child rebuild behavior and retain same-node scheduling unless independent nodes provide real cache isolation without changing embedded-clip or texture-XREF semantics. |
@@ -2334,3 +2334,291 @@ This proves a bounded schema 2 is architecturally justified. It does not authori
 from prose alone: CP-057 owns the byte-exact table/chunk specification and malformed-input rules;
 CP-058 requires an independent Python golden vector plus frozen-schema-1 byte regression before a
 producer or runtime reader lands; CP-059 then broadens XNB support only to the proven matrix.
+
+---
+
+## 33. Model schema-2 candidate specification (`CP-057`)
+
+This section is the implementation contract for CP-058, not yet a frozen public wire definition.
+The file remains CNB container 1.0, built-in asset type `Model` (`5`), asset schema version `2`.
+Every integer and IEEE-754 float uses the container's little-endian primitive encoding. Every
+schema chunk below is mandatory, singleton except repeated `MVTX`/`MIDX`, and emitted in the exact
+order shown. Table chunks have alignment 4; raw buffer chunks have alignment 16.
+
+```text
+container CMET, optional XREF (container-owned canonical positions)
+M2HD  header and counts
+M2ST  string table
+M2BN  bone table
+M2MS  mesh table
+M2PT  part table
+M2VD  vertex-declaration and vertex-element tables
+M2VR  vertex-buffer resource table
+MVTX  one raw chunk per M2VR row, in row order
+M2IR  index-buffer resource table
+MIDX  one raw chunk per M2IR row, in row order
+M2FX  stock-effect resource table
+```
+
+Schema-1 chunk IDs and meanings are not changed. Reusing `MVTX`/`MIDX` under schema 2 is safe
+because the asset schema version selects the interpretation before any schema chunk is opened;
+all descriptor-table IDs are new and cannot be mistaken for schema-1 rows.
+
+### 33.1 Header and graph tables
+
+`M2HD` is exactly 64 bytes, sixteen `u32` values:
+
+| Byte | Field | Rule |
+|---:|---|---|
+| 0 | flags | zero; no feature bit is defined |
+| 4 | boneCount | at least one, within `maxArrayElementCount` |
+| 8 | meshCount | bounded count; zero is allowed |
+| 12 | partCount | bounded count; may be zero only when every mesh is empty |
+| 16 | declarationCount | bounded; zero iff `vertexBufferCount` is zero |
+| 20 | elementCount | bounded total across declarations |
+| 24 | vertexBufferCount | bounded, exact number of `MVTX` chunks |
+| 28 | indexBufferCount | bounded, exact number of `MIDX` chunks |
+| 32 | effectCount | bounded stock-effect resource count |
+| 36 | rootBoneIndex | less than `boneCount`, and that bone has parent `-1` |
+| 40..63 | reserved[6] | all zero |
+
+The reader rejects a part when any of the three resource-table counts is zero, so an empty Model
+may have zero buffers/effects while a renderable Model cannot.
+
+`M2ST` is `u32 stringCount`, followed by that many container strings (`u32 byteLength` then exact
+UTF-8 bytes, no terminator). Names are valid UTF-8 and may be empty because XNA permits unnamed
+bones/meshes. The producer interns names by first occurrence while traversing bones then meshes;
+duplicate string bytes have one row. No XREF name is duplicated into this table.
+
+`M2BN` contains `boneCount` 72-byte rows:
+
+```text
+u32 nameStringIndex
+i32 parentBoneIndex                 // -1 or an earlier row
+f32 transform[16]                   // M11..M44
+```
+
+Every string index is in range and every matrix component is finite. Parent-before-child is
+required because XNA/FNA and CNA both calculate absolute transforms in one ascending pass. More
+than one parentless bone is representable; `rootBoneIndex` states which one is `Model.Root`.
+Children are reconstructed in ascending row order from parents. The XNB converter accepts only a
+source whose explicit child arrays equal that reconstruction, so no accepted public relationship
+changes.
+
+`M2MS` contains `meshCount` 32-byte rows:
+
+```text
+u32 nameStringIndex
+i32 parentBoneIndex
+f32 boundingSphereCenter[3]
+f32 boundingSphereRadius
+u32 firstPart
+u32 partCount
+```
+
+The parent is in range. Sphere values are finite and radius is nonnegative. Mesh part ranges form
+one canonical contiguous partition of `M2PT`: row 0 starts at part 0, each later row starts where
+the preceding row ended, and the final end equals the header's `partCount`. This matches the XNA
+object shape—one `ModelMeshPart` has one owning `ModelMesh`—without a redundant slot table.
+
+`M2PT` contains `partCount` 32-byte rows:
+
+```text
+u32 vertexOffset
+u32 numVertices
+u32 startIndex
+u32 primitiveCount
+u32 vertexBufferResource
+u32 indexBufferResource
+u32 effectResource
+u32 reserved                         // zero
+```
+
+All three resource indices are in range. `numVertices` and `primitiveCount` are nonzero. Checked
+addition requires `vertexOffset + numVertices <= vertexBuffer.vertexCount`; checked multiplication
+and addition require `startIndex + primitiveCount * 3 <= indexBuffer.indexCount`. ModelReader
+parts are always TriangleList. Every 16/32-bit value in that selected index window must be less
+than `numVertices`; `vertexOffset + index` is therefore inside the declared vertex buffer. Bytes
+and resources outside a part's selected windows remain intact and may be selected by another part.
+
+Model, mesh and part tags have no row or flag. Their only schema-2 value is null. An XNB source
+with a non-null tag fails before encoding; an unknown chunk cannot be used to smuggle tag data
+because the container already rejects unknown mandatory chunks and the schema ignores optional
+unknown chunks rather than attaching them to runtime objects.
+
+### 33.2 Vertex declarations and buffer resources
+
+`M2VD` consists first of `declarationCount` 16-byte declaration rows, then exactly `elementCount`
+20-byte element rows:
+
+```text
+// declaration row
+u32 vertexStride                    // 1..4096
+u32 firstElement
+u32 elementCount                    // at least one
+u32 reserved                        // zero
+
+// element row
+u32 offset
+u32 formatId
+u32 usageId
+u32 usageIndex                      // 0..31
+u32 reserved                        // zero
+```
+
+Declaration element ranges form a contiguous partition of the element rows. Element order is
+preserved. `offset + FormatSize(formatId)` is checked and no greater than `vertexStride`; byte
+ranges in one declaration may not overlap; and `(usageId, usageIndex)` pairs may not repeat.
+Equal declarations may be interned by first vertex-buffer occurrence because declarations are
+value objects, not shared mutable resources.
+
+The following IDs are CNB-owned wire values, even though their initial numbers deliberately match
+XNA for reviewability:
+
+| `formatId` | Meaning | Bytes |
+|---:|---|---:|
+| 0 | Single | 4 |
+| 1 | Vector2 | 8 |
+| 2 | Vector3 | 12 |
+| 3 | Vector4 | 16 |
+| 4 | Color (normalized packed BGRA bytes) | 4 |
+| 5 | Byte4 | 4 |
+| 6 | Short2 | 4 |
+| 7 | Short4 | 8 |
+| 8 | NormalizedShort2 | 4 |
+| 9 | NormalizedShort4 | 8 |
+| 10 | HalfVector2 | 4 |
+| 11 | HalfVector4 | 8 |
+
+| `usageId` | Meaning | `usageId` | Meaning |
+|---:|---|---:|---|
+| 0 | Position | 7 | BlendWeight |
+| 1 | Color | 8 | Depth |
+| 2 | TextureCoordinate | 9 | Fog |
+| 3 | Normal | 10 | PointSize |
+| 4 | Binormal | 11 | Sample |
+| 5 | Tangent | 12 | TessellateFactor |
+| 6 | BlendIndices |  |  |
+
+`M2VR` contains `vertexBufferCount` 16-byte rows:
+
+```text
+u32 declarationIndex
+u32 vertexCount
+u32 payloadOrdinal                  // must equal this row index
+u32 reserved                        // zero
+```
+
+The declaration index is in range and `vertexCount` is nonzero. The corresponding `MVTX` logical
+size must equal checked `vertexStride * vertexCount`; the codec neither repacks nor infers fields.
+
+`M2IR` contains `indexBufferCount` 16-byte rows:
+
+```text
+u32 indexElementSize                // exactly 2 or 4
+u32 indexCount
+u32 payloadOrdinal                  // must equal this row index
+u32 reserved                        // zero
+```
+
+`indexCount` is nonzero and the corresponding `MIDX` logical size is checked
+`indexElementSize * indexCount`. Indices are little-endian unsigned values. Separate table rows
+remain separate GPU resources even if their bytes match; multiple parts naming one row receive
+the same runtime pointer. Unreferenced resources remain rows and are constructed, preserving the
+native document's resource table rather than treating byte equality as identity.
+
+### 33.3 Stock-effect resource table
+
+`M2FX` contains `effectCount` fixed 96-byte rows. A fixed discriminated row makes every inactive
+field provably canonical and prevents an implementation from retaining hidden per-reader data:
+
+```text
+u32 kind
+u32 flags
+u32 primaryTextureXref
+u32 secondaryTextureXref
+u32 cubeTextureXref
+u32 integer0
+u32 integer1
+u32 reserved0
+f32 vector0[3]
+f32 vector1[3]
+f32 vector2[3]
+f32 scalar0
+f32 scalar1
+f32 scalar2
+f32 scalar3
+u32 reserved1[3]
+```
+
+An absent XREF is `0xFFFFFFFF`. Primary/secondary texture rows require XREF expected asset type
+`Texture2D`; cube rows require `TextureCube`. Every referenced XREF index is in range. All floats
+are finite, every reserved/inactive integer is zero, every inactive XREF is absent, every inactive
+vector/scalar is positive zero, and flags contain only bits the selected kind defines. Active
+interpretation is:
+
+| kind | Record meaning |
+|---:|---|
+| 0 BasicEffect | flag bit 0 `VertexColorEnabled`; primary Texture2D; vector0 diffuse, vector1 emissive, vector2 specular; scalar0 `SpecularPower`, scalar1 alpha |
+| 1 SkinnedEffect | no flags; primary Texture2D; integer0 weights per vertex (1, 2 or 4); vectors as Basic; scalar0 `SpecularPower`, scalar1 alpha |
+| 2 DualTextureEffect | flag bit 0; primary and secondary Texture2D; vector0 diffuse; scalar0 alpha |
+| 3 AlphaTestEffect | flag bit 0; primary Texture2D; integer0 compare ID 0..7 (`Always`, `Never`, `Less`, `LessEqual`, `Equal`, `GreaterEqual`, `Greater`, `NotEqual`); integer1 exact serialized `u32` reference-alpha bits; vector0 diffuse; scalar0 alpha |
+| 4 EnvironmentMapEffect | no flags; primary Texture2D and cube TextureCube; vector0 diffuse, vector1 emissive, vector2 environment-map specular; scalar0 amount, scalar1 Fresnel factor, scalar2 alpha |
+
+Effect table identity is observable: parts sharing a row get the same `Effect*`, distinct equal
+rows stay distinct. The runtime constructs all effect rows once, loads each typed XREF through the
+existing `ContentManager` cache, applies exactly the fields above, then attaches pointers to parts.
+It creates no generic Effect, shader graph or reader table. Any reader identity outside these five
+stock types is unsupported.
+
+### 33.4 Determinism, dispatch and validation order
+
+The encoder preserves source bone, mesh, part, resource and declaration-element order. It interns
+strings and typed XREFs by first semantic occurrence; it never sorts graph objects or deduplicates
+buffer/effect resources by bytes. The same CPU carrier and logical content name therefore produce
+identical bytes. No native pointer, RTTI spelling, original XNB fixup number, physical path,
+temporary path or timestamp enters the carrier.
+
+The decoder first requires Model asset type 5 and schema version 2, rejects every unknown mandatory
+chunk, proves singleton/repeated chunk cardinalities and `M2HD`, then validates table byte sizes
+from checked count/stride products before resizing a vector. It validates strings, tables,
+resource byte products, graph/resource indices and draw windows in that order. It does not create
+GPU resources until the entire CPU document is valid. Aggregate counts and byte sizes remain under
+the caller's `CnbReadLimits`; all additions/multiplications are checked in `u64` before conversion
+to native sizes. Encoder and decoder apply the same semantic validator.
+
+Runtime Model construction is separate from the schema-1 adapter: it creates all exact
+`VertexDeclaration` values, then one vertex/index/effect object per resource row, then parts,
+meshes and bones; applies every bone transform including the root; sets exact spheres; derives
+children from parents; and calls the explicit-root Model constructor. A declaration-inference-only
+renderer may subsequently reject a declaration through its existing capability guard. The loader
+must not rewrite, infer or silently substitute a declaration to make that renderer accept it.
+
+`DecodeModelFromCnb()` remains the exact schema-1 function. A new schema-2 decoder and CPU carrier
+are selected by ContentManager from `document.AssetSchemaVersion()`; neither function accepts the
+other version. The schema-1 writer constant remains 1. A distinct schema-2 pipeline writer declares
+asset type 5/schema 2 and its own codec version, so the manifest never labels schema-1 bytes as
+schema 2.
+
+The XNB route validates and attempts the existing schema-1 conversion first. Success retains the
+existing stable type, processor, writer, codec and output bytes. Only a canonical graph that fails
+a schema-1 representability condition but passes every schema-2 condition is boxed as the distinct
+schema-2 imported type. A malformed graph, unsafe texture name, non-null tag or unsupported effect
+fails rather than upgrades. CNJ/glTF/default generated Models never select the new route.
+
+### 33.5 Independent conformance requirement
+
+CP-058 must add one manually specified Python Model-v2 vector without calling the production C++
+encoder. It contains two bones with an explicitly selected, non-implicit root and non-identity root
+transform; one exact authored sphere; a Position+Normal declaration; one vertex and one index
+buffer; two parts sharing both buffers and one BasicEffect while selecting different index windows;
+a nonzero vertex offset; and a typed texture XREF plus non-default `SpecularPower`. Python asserts
+the complete byte image SHA-256 and every fixed row/chunk offset. C++ must decode those bytes to
+the expected carrier/runtime semantics, and its encoder must reproduce them exactly.
+
+Separate malformed tests mutate every count/table size, reserved word, enum, string/XREF/resource
+index, declaration range/overlap, payload cardinality, byte product, graph parent/root/mesh range,
+part partition/window/index value and effect discriminant/inactive field. Schema-1's independent
+golden bytes are compared to their retained hashes before and after the new codec lands. Until all
+of those gates pass, this section remains a candidate design and `docs/cnb-format.md` continues to
+describe Model schema 1 as the only frozen Model schema.

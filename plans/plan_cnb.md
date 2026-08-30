@@ -1114,6 +1114,14 @@ Deliberately out of `Model` schema 1, and correctly so: material variants and th
 report. The report is authoring/debug information a runtime asset does not need. Variants belong
 in a future **`Model` schema 2**, never in a container change.
 
+> **2026-08-30 schema-2 review:** Content Pipeline task `CP-056` proved a bounded second Model
+> schema is feasible for real XNB semantics, and `CP-057` specifies its candidate wire format in
+> `plans/plan_content_pipeline.md` section 33. It uses separate declaration, buffer and stock-effect
+> resource tables, exact part windows/bounds/root identity, null-only tags and typed XREFs. This is
+> deliberately not yet a frozen CNB definition: schema 2 becomes normative here and in
+> `docs/cnb-format.md` only after an independent Python golden vector, production codec and runtime
+> conformance pass. Model schema 1, its codec, and all existing bytes remain frozen throughout.
+
 ### 15.4 The order to build in, and why it differs from `misc/cnb.md`
 
 `misc/cnb.md` put `SpriteFont` early. That was written before the architecture was real. With the
