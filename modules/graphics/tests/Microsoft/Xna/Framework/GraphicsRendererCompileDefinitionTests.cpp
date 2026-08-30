@@ -137,9 +137,6 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
 #ifdef CNA_RENDERER_FNA3D
     ++enabled;
 #endif
-#ifdef CNA_RENDERER_OPENVG
-    ++enabled;
-#endif
 
     // The PORTABLEGL identity, registered here at the same time it was registered everywhere
     // else -- the omission this whole comment block records is exactly what a new renderer keeps
@@ -195,13 +192,6 @@ TEST(GraphicsRendererCompileDefinitionsTest, CompileTimeIdentityIsTheBuildDefaul
 
 
 
-#ifdef CNA_RENDERER_OPENVG
-TEST(GraphicsRendererCompileDefinitionsTest, OpenVgMacroMatchesPublicRendererIdentity)
-{
-    EXPECT_EQ(CNA::getCurrentGraphicsRendererType(), CNA::GraphicsRendererType::OpenVg);
-    EXPECT_EQ(CNA::getCurrentGraphicsRendererName(), "OPENVG");
-}
-#endif
 
 
 

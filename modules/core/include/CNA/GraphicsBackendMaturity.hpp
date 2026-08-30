@@ -97,7 +97,6 @@ namespace CNA
             case GraphicsRendererType::FreeDirect:
             case GraphicsRendererType::Fna3d:
             case GraphicsRendererType::SvgDom:
-            case GraphicsRendererType::OpenVg:
             case GraphicsRendererType::PortableGL:
             case GraphicsRendererType::TinyGL:
             case GraphicsRendererType::PixiJs:

@@ -88,8 +88,6 @@ typedef uint32_t CNA_GraphicsRendererType;
 #define CNA_GRAPHICS_RENDERER_FNA3D UINT32_C(43)
 /** @brief Identifies the SVG DOM backend. */
 #define CNA_GRAPHICS_RENDERER_SVG_DOM UINT32_C(44)
-/** @brief Identifies the OpenVG backend. */
-#define CNA_GRAPHICS_RENDERER_OPENVG UINT32_C(45)
 /** @brief Identifies the PortableGL backend. */
 #define CNA_GRAPHICS_RENDERER_PORTABLEGL UINT32_C(46)
 /** @brief Identifies the TinyGL backend. */

@@ -87,7 +87,7 @@ namespace CNA::Testing
  * The runtime form of `#if defined(CNA_RENDERER_A) || defined(CNA_RENDERER_B)`. Written as a macro
  * taking bare identity names so a converted guard reads almost exactly like the one it replaces:
  *
- *     #if defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_OPENVG)   ->   CNA_RENDERER_IS(Stub, OpenVg)
+ *     #if defined(CNA_RENDERER_STUB)   ->   CNA_RENDERER_IS(Stub)
  *
  * Worth doing beyond tidiness: these guards select the EXPECTED OUTCOME of a test, not whether it
  * compiles. A compile-time guard bakes in the build default's expectation, so in a multi-renderer

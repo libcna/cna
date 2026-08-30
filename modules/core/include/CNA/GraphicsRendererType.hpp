@@ -121,9 +121,6 @@ namespace CNA
         /** @brief SVG DOM (Emscripten only, 2D-only): SpriteBatch output as real SVG elements. */
         SvgDom,
 
-        /** @brief OpenVG 1.1 vector graphics (2D-only), implemented by ShivaVG on top of desktop OpenGL. */
-        OpenVg,
-
         /** @brief PortableGL (rswinkle/PortableGL, CPU software OpenGL 3.x). */
         PortableGL,
 
@@ -231,8 +228,6 @@ namespace CNA
         return GraphicsRendererType::Fna3d;
 #elif defined(CNA_RENDERER_SVG_DOM)
         return GraphicsRendererType::SvgDom;
-#elif defined(CNA_RENDERER_OPENVG)
-        return GraphicsRendererType::OpenVg;
 #elif defined(CNA_RENDERER_PORTABLEGL)
         return GraphicsRendererType::PortableGL;
 #elif defined(CNA_RENDERER_TINYGL)
@@ -300,7 +295,6 @@ namespace CNA
             case GraphicsRendererType::Metal:          return "METAL";
             case GraphicsRendererType::Fna3d:         return "FNA3D";
             case GraphicsRendererType::SvgDom:         return "SVG_DOM";
-            case GraphicsRendererType::OpenVg:         return "OPENVG";
             case GraphicsRendererType::PortableGL:    return "PORTABLEGL";
             case GraphicsRendererType::TinyGL:        return "TINYGL";
             case GraphicsRendererType::PixiJs:        return "PIXIJS";
