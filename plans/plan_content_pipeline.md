@@ -49,7 +49,11 @@
 > route now selects it only for exactly representable semantics that do not fit frozen schema 1.
 > Measured generated-child scheduling and target-profile audits retained the current same-node and
 > portable-output policies rather than adding unproven graph or configuration abstractions. A
-> manual native-MSVC CI gate now exists, but has not been executed from this unpushed branch.
+> focused native-MSVC CI gate now exists. During the later integration session, native run
+> `33309632114` passed on feature commit `83807bef64990541e7d41274c11b9562e49112cc`
+> with the `windows-2025-vs2026` image, Visual Studio environment 18.9.1 and MSVC tools
+> 14.51.36231: both targets built, 177 tests passed with the opt-in sparse-file test skipped, and
+> the complete Unicode CLI/explain/workers/clean/deterministic-rebuild probe passed.
 > During CP-063 verification, `next` independently advanced from the session-start
 > `45515bb0a122d582e87d9b4cb48b170cd9b6249a` through eight renderer-remediation commits to
 > `905be872ee5f098f90cfcee7f484dca8136cd33e`. Those commits were not merged or rewritten; the
@@ -1222,7 +1226,7 @@ carrying forward task-local results:
 | `CP-059` | **completed** | Broadened lossless XNB Model transcoding onto schema 2 without changing the schema-1 route or bytes. The headless canonical graph now preserves all five stock effects and shared resources; the converter maps every XNA declaration format/usage, exact buffers/windows/bounds/root hierarchy, stock material fields and typed texture references. Selection attempts the proved schema-1 converter first and uses schema 2 only after complete independent validation. Null tags remain the only policy; custom effects and malformed graphs fail. The writer now declares both Model schema tuples and every output reports its actual schema, requiring manifest v8; v7 rebuilds safely without deletion authority. Synthetic and real MonoGame tests compare runtime XNB against runtime schema-2 CNB field-by-field and prove schema-1-compatible XNB bytes remain exactly equal to the unchanged encoder. |
 | `CP-060` | **completed** | Measured generated glTF child rebuild behavior and retained same-node scheduling. An external image pixel-only edit changed the Texture2D child while leaving Model bytes identical, but a representative full glTF node took about 1.47 ms warm and both full-node and texture-only CLI rebuilds rounded to 0.03 s. Animation names/values remain embedded in schema-1 Model; renaming one clip changed the Model and child set while another child stayed byte-identical. Every proposed split still requires the shared glTF parse/scene/material conversion, and embedded/data-URI images have no independent authored input. That bounded cache opportunity does not justify a generated-source graph, ownership, or partial-publication contract. |
 | `CP-061` | **completed** | Audited every built-in importer/processor/writer and found no target-dependent output policy. Images and font/volume atlases use portable Rgba8; WAV uses Pcm16; authored DDS/XNB representations are preserved or losslessly normalized; Model schemas encode source semantics; Curve/Animation are canonical pass-through; Song/Video copy their exact media and emit portable metadata; and no Effect/shader compiler exists. Container compression is an explicit codec concern, not a platform profile, and renderer selection belongs to runtime. No profile ID, API, CLI/config key, fingerprint field, CMake forwarding, CNB field, or C ABI was added. Existing per-asset typed parameters already cover real policies such as color key and deployment metadata. |
-| `CP-062` | **completed** | Confirmed this host has MinGW and Wine but no `cl`, `clang-cl`, PowerShell, native Windows host, or way to execute GitHub Actions locally. Added a single manual `windows-latest` workflow matching the repository's existing native-MSVC convention: pinned sharp-runtime, HEADLESS platform/renderer, SDL3's in-memory audio conversion path, two focused targets, bounded parallelism, CPU manifest/codec/pipeline/XNB tests, and a real Unicode CLI build/no-op/explain/workers/clean/deterministic-rebuild probe. A fresh equivalent configuration builds both targets, passes 177 of 178 selected tests with the opt-in sparse-file gate skipped, and passes the complete Unicode CLI probe. The YAML parses locally, but the workflow is deliberately unclaimed until manually dispatched after publication. Documentation now states that neither a manifest generation nor modern diagnostic can force pre-CP-049 binaries to honor `.cna-content.lock`; mixed-generation overlap remains unsupported. |
+| `CP-062` | **completed** | Confirmed this host has MinGW and Wine but no `cl`, `clang-cl`, PowerShell, native Windows host, or way to execute GitHub Actions locally. Added a focused `windows-latest` workflow matching the repository's native-MSVC convention: pinned sharp-runtime, HEADLESS platform/renderer, SDL3's in-memory audio conversion path, two focused targets, bounded parallelism, CPU manifest/codec/pipeline/XNB tests, and a real Unicode CLI build/no-op/explain/workers/clean/deterministic-rebuild probe. A fresh equivalent Linux configuration passed 177 of 178 selected tests with the opt-in sparse-file gate skipped. Subsequent authorized native run `33309632114` passed the same 177/1 selection and complete Unicode CLI probe on `windows-2025-vs2026`, Visual Studio 18.9.1 and MSVC tools 14.51.36231. Documentation also states that neither a manifest generation nor modern diagnostic can force pre-CP-049 binaries to honor `.cna-content.lock`; mixed-generation overlap remains unsupported. |
 | `CP-063` | **completed** | Closed the final branch with a clean complete HEADLESS build and an attributable 1,438-case content/CNB/CNJ/XNB/glTF boundary: 1,430 passed and eight opt-in/external-fixture cases skipped after excluding exactly the three previously documented HEADLESS TextureCube/Texture3D storage-adapter failures. All 14 schema-1/schema-2 golden tests and the real >2 GiB streaming hash pass. A fresh ASan+UBSan selection passes 187 plus the large-file skip with leak detection disabled only for the runner's known `ptrace` limitation; a rebuilt TSan boundary passes 108 plus that skip with no report. Both real CMake fixtures and all nine C-API gates pass; the inventory remains 551 headers/9,485 declarations with 654 experimental content declarations planned under `CBIND-117` and no C ABI change. Final review found no new security, determinism, atomicity, schema-1-byte, or publisher regression. Native MSVC execution, stable machine-readable decision output, arbitrary XNB object graphs/custom effects, and evidence-gated future profile/child scheduling remain honestly outside the completed scope. |
 
 Tasks are intentionally vertical/coherent. The ledger is revised when implementation evidence makes
@@ -2832,13 +2836,14 @@ The working host is Linux and exposes `x86_64-w64-mingw32-g++` plus Wine 10, but
 MinGW compile/link and Wine Unicode/schema-2 executions remain valid cross-toolchain evidence; they
 cannot be relabeled as MSVC or native Windows verification.
 
-The repository already uses bounded manual `windows-latest` workflows for D3D, GDI and the Windows
+The repository already uses bounded `windows-latest` workflows for D3D, GDI and the Windows
 leg of focused cross-platform renderer tests. CP-062 follows that convention with
-`.github/workflows/content-pipeline-windows-ci.yml`: one `workflow_dispatch` job, a pinned
-sharp-runtime sibling, MSVC x64 plus Ninja, `HEADLESS` platform/renderer, SDL3 audio for the
-compiler's existing device-free in-memory XNB conversion, video/net/Draco disabled, two explicit
-build targets, two-way parallelism and a 45-minute timeout. It neither adds an automatic branch
-trigger nor builds unrelated renderer/example targets beyond dependencies of the focused tests.
+`.github/workflows/content-pipeline-windows-ci.yml`: one job available through
+`workflow_dispatch` plus a scoped `content-pipeline-final` push trigger for pre-integration proof,
+a pinned sharp-runtime sibling, MSVC x64 plus Ninja, `HEADLESS` platform/renderer, SDL3 audio for
+the compiler's existing device-free in-memory XNB conversion, video/net/Draco disabled, two
+explicit build targets, two-way parallelism and a 45-minute timeout. It does not build unrelated
+renderer/example targets beyond dependencies of the focused tests.
 
 The native job builds `cna_content_tool` and `CnaContentTests`. Its focused unit selection covers
 strict configuration, manifest v8/migration/reason domains, component/registry contracts, built-in
@@ -2849,13 +2854,21 @@ persisted explanation output, workers 1 no-op, manifest-owned clean with the lea
 workers 1 rebuild, byte-identical SHA-256 and manifest version 8. Failure logs are uploaded without
 requiring credentials beyond read-only checkout access.
 
-The workflow YAML parses locally. A fresh equivalent HEADLESS/SDL3 configuration builds both
-targets, passes 177 of 178 selected tests (the opt-in sparse-file gate is skipped), and passes the
-complete Unicode CLI probe including byte-identical rebuild output. The branch is intentionally
-neither pushed nor dispatched. Native MSVC execution therefore remains an open verification
-result, not a completed claim. The exact next portability action is to publish the branch only when
-authorized, manually dispatch this workflow, and record its run URL/result; code changes should
-follow only an observed compiler/runtime failure.
+The workflow first exposed three native-Windows integration defects rather than being weakened to
+hide them: vendored SDL's multi-config build/install configuration disagreed, the pinned
+sharp-runtime date parser raised MSVC C4456 under its own `/WX`, and six focused tests assumed
+POSIX null-device/path spelling. The fixes install the exact SDL configuration that was built,
+suppress C4456 only for the five pinned-runtime translation units that consume that parser, use
+Windows `NUL` in the three subprocess oracles, and compare canonical deployment source paths.
+
+Native run `33309632114` (`https://github.com/openeggbert/cna/actions/runs/33309632114`) then passed
+on commit `83807bef64990541e7d41274c11b9562e49112cc`. GitHub runner 2.336.0 used image
+`windows-2025-vs2026` version 20260824.214.3, Visual Studio environment 18.9.1, MSVC tools
+14.51.36231, Windows SDK 10.0.26100.0 and x64 Ninja Debug. Both focused targets built; 177 of 178
+tests passed in 18 suites with only the opt-in sparse >2 GiB hash gate skipped; the non-ASCII
+build/explain/workers-4/no-op/workers-1/clean/rebuild probe passed with manifest v8 and identical
+SHA-256 output. This is real native Windows/MSVC evidence, independently of the retained
+MinGW/Wine evidence.
 
 The output-root lease boundary remains honest. Modern build and clean processes take the same
 `.cna-content.lock` OS lock for their complete lifetimes. A pre-CP-049 executable has no code that
@@ -2917,7 +2930,6 @@ No CI threshold is inferred from those host-specific measurements.
 
 The remaining backlog is bounded rather than another pipeline rewrite:
 
-* run the new manual workflow after an authorized push and record real native MSVC evidence;
 * consider a separately versioned machine-readable decision stream only when an IDE/build consumer
   exists, potentially supporting validation or dry-run without making English output a contract;
 * revisit manifest scaling only with a measured large-project bottleneck;

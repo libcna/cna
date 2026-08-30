@@ -1133,10 +1133,9 @@ compatibility boundary on the finished implementation:
   every transitive shared library is absent from a monolithic link.
 
 LeakSanitizer cannot run the subprocess-heavy selection in the current `ptrace` environment, so
-the successful ASan+UBSan run used `detect_leaks=0` and is not leak evidence. Native Windows/MSVC
-execution is still required to close the last platform-verification gap. CP-062 adds a narrow,
-manual `windows-latest` workflow for that evidence, but it has not run from this unpushed branch and
-is not counted as verification. Cycle preflight now uses an explicit visit stack: a 4,096-node
+the successful ASan+UBSan run used `detect_leaks=0` and is not leak evidence. CP-062's narrow
+`windows-latest` workflow subsequently passed on a real native Windows/MSVC runner; the exact
+evidence is recorded below. Cycle preflight now uses an explicit visit stack: a 4,096-node
 acyclic chain builds with four workers and the same graph closed into a 4,096-node cycle retains
 deterministic diagnostics without replacing the prior manifest.
 
@@ -1155,16 +1154,21 @@ The representative scheduler benchmark again proved complete-tree equality betwe
 preflighted and removed about 480 MiB of manifest-owned compiled data in 7.05 seconds while leaving
 the persistent lease marker. These are host-specific measurements, not compatibility thresholds.
 MinGW links both Unicode-entry-point compiler executables, and Wine 10 exercises stock/custom build
-plus clean through a non-ASCII path. The manual native-MSVC workflow builds `cna-content` and
+plus clean through a non-ASCII path. The native-MSVC workflow builds `cna-content` and
 `CnaContentTests` in a HEADLESS configuration, runs CPU pipeline/codec/manifest/XNB coverage,
 and directly probes Unicode paths, explanations, workers 1/4, clean, manifest v8 and deterministic
-rebuild bytes. Its definition is checked locally; native Windows and MSVC remain untested and
-unclaimed until that workflow actually succeeds.
+rebuild bytes.
 
-The equivalent fresh Linux HEADLESS/SDL3 configuration builds both workflow targets, passes 177 of
-178 selected tests (only the opt-in sparse-file gate is skipped), and passes the complete Unicode
-CLI lifecycle. This validates the workflow's test boundary and commands, not the unexecuted MSVC
-compiler/runtime result.
+Native run `33309632114` passed on commit
+`83807bef64990541e7d41274c11b9562e49112cc`. GitHub runner 2.336.0 used the
+`windows-2025-vs2026` image, Visual Studio environment 18.9.1, MSVC tools 14.51.36231 and Windows
+SDK 10.0.26100.0 in x64 Debug. Both targets built; 177 of 178 tests in 18 suites passed with only
+the opt-in sparse >2 GiB hash gate skipped; the complete Unicode CLI lifecycle passed with
+manifest v8 and byte-identical rebuild output. Earlier failed runs identified and led to narrow
+fixes for multi-config SDL installation, a C4456 warning in the pinned sharp-runtime parser's five
+consumers, Windows null-device spelling, and equivalent short/long deployment paths. This native
+MSVC result complements rather than replaces the separate MinGW compile/link and Wine execution
+evidence.
 
 ### Final continuation verification
 
@@ -1186,8 +1190,8 @@ Final inspection found no new staging residue, output-tree scanning, deletion au
 valid compatible manifest, physical external-root identity in build state, second publisher, CNB
 schema-1 change, or existing golden-byte change. Workers 1/2/4 determinism, explanation ordering,
 graph/cycle diagnostics, atomic recovery, deployment ownership, orphan GC, and clean are covered by
-the passing normal and sanitizer CLI boundaries. The remaining portability action is the actual
-manual native-MSVC workflow run after an authorized push; its existence alone is not verification.
+the passing normal and sanitizer CLI boundaries. The native MSVC workflow result above closes the
+previously open Windows compiler/runtime verification action.
 
 ## Stability summary
 
