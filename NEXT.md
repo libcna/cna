@@ -1,6 +1,18 @@
 # NEXT.md
 
-## C ABI — the sixth merge reopened the matrix by 506 rows, and Phase B10 owns them (`CBIND-102`, 2026-08-28)
+## Current handoff — generated-report growth is closed (`CBIND-123`, 2026-08-30)
+
+The tracked C API coverage file is now a compact summary and hash; its complete per-symbol matrix
+is generated into ignored `build/c-api/COVERAGE_FULL.md`. The limitations and release gates build
+the canonical inventory directly, so no validation was weakened to obtain the size reduction.
+`remediation/REMEDIATION_PROGRESS.md` is frozen as the historical archive its completed campaign
+requires. Existing history was not rewritten.
+
+The current C ABI backlog is measured at **663 planned rows** under open `CBIND-117`, `CBIND-120`,
+`CBIND-121`, and `CBIND-122`; the latter owns five untyped XNB loading seams exposed by this fresh
+regeneration. See `plans/plan_binding.md` for the authoritative current status.
+
+## Historical handoff — the sixth merge reopened the matrix by 506 rows (`CBIND-102`, 2026-08-28)
 
 `origin/next` merged into `feature/bindings` on 2026-08-28: 150 commits carrying the CNB content
 format, the WebGPU renderer's fog/MRT/stencil work, the official-XNA sample fidelity fixes and a

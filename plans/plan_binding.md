@@ -9,11 +9,11 @@
 > contract now add 654 deliberately
 > unbound inventory rows under `CBIND-117`.
 > Coverage:
-> **551 headers / 9,489 symbols — 8,352 implemented, 15 approved partial, 658 planned, 464 not
+> **551 headers / 9,483 symbols — 8,341 implemented, 15 approved partial, 663 planned, 464 not
 > applicable.** Phase B13 then bound `Load<Model>` and the `Tag` a content processor writes,
 > taking the ABI to **`0.19.0`** and **4,048 → 4,051** exports without moving a coverage row. The
 > release gate is consistently
-> **Not ready** on coverage alone until `CBIND-117`, `CBIND-120` and `CBIND-121`; this integration does not invent C routes for
+> **Not ready** on coverage alone until `CBIND-117`, `CBIND-120`, `CBIND-121` and `CBIND-122`; this integration does not invent C routes for
 > a C++ build-time extension API merely because it is public. See *Current status* and Phase B12.
 > This document is
 > the plan for a native C API, implemented inside the main CNA repository. It is intentionally
@@ -1548,6 +1548,29 @@ completed `CBIND-114` or hide it as not applicable.
 |---|---|---:|---|---|
 | CBIND-121 | Design or disposition reflective shared-resource field declarations | 1 | ⬜ | Decide whether the existing C reflective-reader builder needs a C-native shared-resource field declaration and either add the route with full deferred-fixup, lifetime and malformed-index evidence or record an owner-approved disposition. Remove the exact `SYMBOL_OWNER_OVERRIDES` entry when resolved. This is C-ABI backlog only; synchronization adds no export and does not change ABI `0.19.0`. |
 
+## Phase B16 — the untyped XNB loading tail
+
+Regenerating the inventory after current `next` exposed five untyped external/root XNB dispatch
+declarations that had fallen back to completed `CBIND-036`/`CBIND-105`. They are internal loading
+seams declared from public headers, not evidence that the old tasks are unfinished. The inventory
+keeps them visible under one open design/disposition task; this report-maintenance pass does not
+silently bless them as implemented or invent new C routes.
+
+| # | Task | Rows | Status | Acceptance criteria |
+|---|---|---:|---|---|
+| CBIND-122 | Design or disposition untyped XNB loading seams | 5 | ⬜ | Decide whether the C content API needs type-erased external-reference/root-asset dispatch and the `ContentManager` friendship/loading helpers, or record owner-approved not-applicable dispositions for internal-only seams. If bound, add strict-C runtime, type-identity, malformed-reader and lifetime evidence. Remove the five exact `SYMBOL_OWNER_OVERRIDES` entries when resolved. This is C-ABI backlog only and adds no export in this task. |
+
+## Phase B17 — keep derived reports out of repository history
+
+The complete coverage matrix is valuable build evidence but a poor tracked artifact: each public
+declaration change previously committed another roughly 10 MB version. The remediation progress
+ledger had a different cause—it has no generator, but its own instructions still called it live
+after the campaign had formally exited.
+
+| # | Task | Status | Acceptance criteria |
+|---|---|---|---|
+| CBIND-123 | Stop recurring full-file report commits | ✅ | **Done 2026-08-30.** `docs/c-api/COVERAGE.md` is now a compact generated summary carrying the full inventory's SHA-256; `--write` emits the complete matrix to ignored `build/c-api/COVERAGE_FULL.md`, while `--check`, the release gate, the limitations generator, CTest and all three CI workflows still rebuild and validate the canonical inventory. `remediation/REMEDIATION_PROGRESS.md` and its README now freeze that manually maintained file as a historical archive and direct new work to active plans. Existing Git history is intentionally unchanged; rewriting shared history is a separate destructive repository-owner decision. |
+
 ## Mandatory test layers
 
 Every implemented public C entry point must receive all applicable coverage in the same task:
@@ -1608,8 +1631,8 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-**Snapshot (2026-08-30, after synchronizing current `next` into `content-pipeline-final`):** 551 headers / 9,489 symbols —
-**8,352 implemented, 15 approved partial, 658 planned, 464 not applicable.** ABI `0.19.0`, 4,051
+**Snapshot (2026-08-30, after regenerating the current `next` inventory):** 551 headers / 9,483 symbols —
+**8,341 implemented, 15 approved partial, 663 planned, 464 not applicable.** ABI `0.19.0`, 4,051
 exported symbols — the same 4,051 with `CNA_CNAEXT` on and off (measured symbol by symbol: zero
 differ), which is the engine layer's ABI promise measured rather than asserted.
 
@@ -1617,10 +1640,10 @@ The completed C++ Content Pipeline, its continuation, and Model-v2 CPU codec reo
 coverage criterion: all 654 unmapped Content Pipeline declarations are assigned to open
 `CBIND-117`; the three public texture profile-format queries added by current `next` are assigned
 to open `CBIND-120`; the reflective shared-resource builder declaration from the final local
-`next` synchronization is assigned to open `CBIND-121`. No C route or ABI export was added, and
-the four new
+`next` synchronization is assigned to open `CBIND-121`; five untyped XNB loading declarations are
+assigned to open `CBIND-122`. No C route or ABI export was added, and the four new
 not-applicable rows are explicitly deleted declarations reported by Doxygen. The release gate is
-therefore **Not ready** on that one measured criterion while B12, B14 and B15 remain open.
+therefore **Not ready** on that one measured criterion while B12, B14, B15 and B16 remain open.
 Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.
 
 **Phase B10 closed the matrix it was opened to close.** The sixth merge of `next` brought in 506

@@ -50,6 +50,17 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Clone sharp-runtime parser dependency
+        run: |
+          git clone --depth 1 --branch develop \
+            https://github.com/openeggbert/sharp-runtime.git \
+            "${GITHUB_WORKSPACE}/../sharp-runtime"
+
+      - name: Install Doxygen inventory dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends doxygen
+
       - name: Check the record against the measurement
         run: python3 tools/c-api/check_release_gate.py --check
 

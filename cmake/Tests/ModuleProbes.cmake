@@ -175,12 +175,11 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
 
         # plans/plan_binding.md CBIND-043: the C API coverage matrix is a GATE, not a report.
         #
-        # docs/c-api/COVERAGE.md is generated from every public Microsoft/** and CNA/** header, so
-        # a new public C++ symbol that arrives without its C API row makes the checked-in inventory
-        # stale. Verified to catch exactly that: adding one declaration to CNAHelper.hpp turns this
-        # from pass to "Coverage inventory is stale", naming the command that fixes it.
+        # The complete inventory is generated from every public Microsoft/** and CNA/** header.
+        # Its compact tracked summary carries counts and a hash, so a new public C++ symbol without
+        # a mapping makes the gate stale without committing the multi-megabyte per-symbol report.
         #
-        # Deliberately NOT inside if(CNA_BUILD_C_API): the check reads headers and the matrix and
+        # Deliberately NOT inside if(CNA_BUILD_C_API): the check reads headers and mappings and
         # builds nothing, and the rule it enforces is about the C++ surface. Gating it on the C API
         # being built would mean the ordinary build -- the one most changes are made in -- never
         # notices that a new public symbol went unmapped.

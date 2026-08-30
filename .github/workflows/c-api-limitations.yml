@@ -19,8 +19,11 @@ on:
     paths:
       - 'docs/c-api/COVERAGE.md'
       - 'docs/c-api/LIMITATIONS.md'
+      - 'modules/**/include/Microsoft/**'
+      - 'modules/**/include/CNA/**'
       - 'tools/c-api/limitations.json'
       - 'tools/c-api/coverage_mappings.json'
+      - 'tools/c-api/generate_coverage_inventory.py'
       - 'tools/c-api/generate_limitations.py'
       - 'plans/plan_binding.md'
       - '.github/workflows/c-api-limitations.yml'
@@ -29,8 +32,11 @@ on:
     paths:
       - 'docs/c-api/COVERAGE.md'
       - 'docs/c-api/LIMITATIONS.md'
+      - 'modules/**/include/Microsoft/**'
+      - 'modules/**/include/CNA/**'
       - 'tools/c-api/limitations.json'
       - 'tools/c-api/coverage_mappings.json'
+      - 'tools/c-api/generate_coverage_inventory.py'
       - 'tools/c-api/generate_limitations.py'
       - 'plans/plan_binding.md'
   workflow_dispatch:
@@ -53,33 +59,42 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Clone sharp-runtime parser dependency
+        run: |
+          git clone --depth 1 --branch develop \
+            https://github.com/openeggbert/sharp-runtime.git \
+            "${GITHUB_WORKSPACE}/../sharp-runtime"
+
+      - name: Install Doxygen inventory dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends doxygen
+
       - name: Check the published matrix
         run: python3 tools/c-api/generate_limitations.py --check
 
-      # A gate that cannot fail is not a gate. This reinstates the exact defect the first run of
-      # this tool found -- a deferral to a task that has since closed -- and requires the check to
-      # reject it.
+      # A gate that cannot fail is not a gate. This perturbs one approved partial mapping with a
+      # deferral to a closed task and requires the generated inventory analysis to reject it.
       - name: Prove the gate rejects a deferral to a closed task
         run: |
           set -euo pipefail
-          cp docs/c-api/COVERAGE.md /tmp/COVERAGE.md.orig
+          cp tools/c-api/coverage_mappings.json /tmp/coverage_mappings.json.orig
           python3 - <<'PY'
+          import json
           from pathlib import Path
-          path = Path("docs/c-api/COVERAGE.md")
-          lines = path.read_text(encoding="utf-8").splitlines()
-          for index, line in enumerate(lines):
-              if line.startswith("| `CPP-") and "partial" in line.rsplit(" | ", 1)[-1]:
-                  cells = line.split(" | ")
-                  cells[4] += " Deferred to CBIND-035."
-                  lines[index] = " | ".join(cells)
+          path = Path("tools/c-api/coverage_mappings.json")
+          document = json.loads(path.read_text(encoding="utf-8"))
+          for rule in document["rules"]:
+              if rule.get("status") == "partial":
+                  rule["mapping"] += " Deferred to CBIND-035."
                   break
           else:
-              raise SystemExit("the partial inventory row this check perturbs no longer exists")
-          path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+              raise SystemExit("the partial mapping this check perturbs no longer exists")
+          path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
           PY
           status=0
           python3 tools/c-api/generate_limitations.py --check || status=$?
-          cp /tmp/COVERAGE.md.orig docs/c-api/COVERAGE.md
+          cp /tmp/coverage_mappings.json.orig tools/c-api/coverage_mappings.json
           if [ "$status" -eq 0 ]; then
             echo "::error::the limitations check accepted a deferral to a finished task" >&2
             exit 1
@@ -87,7 +102,7 @@ jobs:
           echo "the gate rejected the stale deferral, as it must"
 
       - name: Confirm the tree was restored
-        run: git diff --exit-code -- docs/c-api/COVERAGE.md
+        run: git diff --exit-code -- tools/c-api/coverage_mappings.json
 
       # Regenerating must be a no-op on a correct tree, for the same reason the coverage matrix's
       # must: a generator that churns makes the document unreviewable.

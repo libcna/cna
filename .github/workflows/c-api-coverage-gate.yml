@@ -1,13 +1,12 @@
 # plan_binding.md CBIND-043: the C API coverage matrix as a gate.
 #
-# docs/c-api/COVERAGE.md is generated from every public Microsoft/** and CNA/** header in the
-# repository. Its value is entirely in being CURRENT: a matrix that lags the headers reports
-# coverage the C API does not have, which is worse than no matrix at all, because it is read as
-# evidence.
+# The coverage inventory is generated from every public Microsoft/** and CNA/** header in the
+# repository. Its value is entirely in being CURRENT. Only its compact summary and full-inventory
+# hash are tracked; the multi-megabyte per-symbol Markdown is a CI/local build artifact.
 #
 # So the rule this job enforces is the one CBIND-043 states: new public C++ API cannot land without
-# its C API row. A change that adds a public symbol and not its row makes the checked-in inventory
-# stale, and this fails.
+# its C API row. A change that adds a public symbol and not its mapping makes this fail before any
+# report is written.
 #
 # Deliberately build-free. The check reads headers and Doxygen's XML inventory and compiles nothing,
 # so it needs no renderer, no display or C API build -- which is what lets it run on every relevant
@@ -22,7 +21,9 @@ on:
       - 'modules/**/include/Microsoft/**'
       - 'modules/**/include/CNA/**'
       - 'docs/c-api/COVERAGE.md'
+      - 'tools/c-api/coverage_mappings.json'
       - 'tools/c-api/generate_coverage_inventory.py'
+      - 'plans/plan_binding.md'
       - '.github/workflows/c-api-coverage-gate.yml'
   pull_request:
     branches: [next, develop, main]
@@ -30,7 +31,9 @@ on:
       - 'modules/**/include/Microsoft/**'
       - 'modules/**/include/CNA/**'
       - 'docs/c-api/COVERAGE.md'
+      - 'tools/c-api/coverage_mappings.json'
       - 'tools/c-api/generate_coverage_inventory.py'
+      - 'plans/plan_binding.md'
   workflow_dispatch:
 
 concurrency:
@@ -39,7 +42,7 @@ concurrency:
 
 jobs:
   coverage-matrix:
-    name: docs/c-api/COVERAGE.md matches the public headers
+    name: C API mappings cover the public headers
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -65,15 +68,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends doxygen
 
-      # The failure message the tool prints already names the command that fixes it
-      # ("run tools/c-api/generate_coverage_inventory.py --write"), so this step needs no
-      # interpretation of its own.
+      # This rebuilds and validates the complete inventory in memory, then checks only the compact
+      # tracked summary and the hash of that full matrix.
       - name: Check the coverage inventory is current
         run: python3 tools/c-api/generate_coverage_inventory.py --check
 
-      # Regenerating must be a no-op on a correct tree. If --write produces a diff after --check
-      # passed, the generator is not deterministic, and a non-deterministic generator makes the
-      # matrix unreviewable: every unrelated change would show as coverage churn.
+      # Regenerating must leave the tracked summary unchanged and emit the full ignored artifact.
       - name: Verify regeneration is deterministic
         run: |
           set -euo pipefail
@@ -83,4 +83,6 @@ jobs:
             git --no-pager diff --stat -- docs/c-api/COVERAGE.md
             exit 1
           fi
-          echo "regeneration is a no-op, as it must be"
+          test -s build/c-api/COVERAGE_FULL.md
+          sha256sum build/c-api/COVERAGE_FULL.md
+          echo "tracked summary is unchanged; full inventory was generated outside Git"

@@ -77,10 +77,13 @@ inheritance, so coverage uses a documented C-native equivalent:
 | Exception | `CNA_Result` and structured per-thread error information. |
 | Stream/task | CNA-neutral callback or operation handle. |
 
-[`COVERAGE.md`](COVERAGE.md) is the required source-to-C mapping record. A public CNA symbol with
-no row is incomplete, even if a similar operation happens to work indirectly.
+[`COVERAGE.md`](COVERAGE.md) is the compact, hashed status record. The reviewed mappings live in
+`tools/c-api/coverage_mappings.json`; a public CNA symbol with no generated mapping is incomplete,
+even if a similar operation happens to work indirectly.
 
-The matrix is generated with Doxygen's C++ parser, not maintained by hand:
+The matrix is generated with Doxygen's C++ parser, not maintained by hand. `--write` refreshes the
+small tracked summary and writes the complete per-symbol matrix to the ignored
+`build/c-api/COVERAGE_FULL.md` artifact:
 
 ```bash
 python3 tools/c-api/generate_coverage_inventory.py --write
@@ -173,7 +176,8 @@ component callback model, the game's component collection and the limits of the 
 are in [`GAME_COMPONENTS.md`](GAME_COMPONENTS.md); the gamer-services identities and the
 no-signed-in-gamer contract are in [`GAMER_SERVICES.md`](GAMER_SERVICES.md). The
 [initial feature matrix](FEATURE_MATRIX.md) is the concise consumer view;
-[`COVERAGE.md`](COVERAGE.md) is the source-to-C implementation record; the compilers, language
+[`COVERAGE.md`](COVERAGE.md) is the source-to-C status summary and tells maintainers how to produce
+the full implementation record; the compilers, language
 modes and build configurations the ABI is actually put through — and the ones it is not — are in
 [`COMPATIBILITY.md`](COMPATIBILITY.md); how the surfaces that read caller-supplied bytes are
 covered, and what makes their oracle worth trusting, is in [`FUZZING.md`](FUZZING.md). If you are

@@ -74,6 +74,9 @@ def check_abi_baseline_current() -> tuple[str, str]:
 
 
 def check_coverage_has_no_planned_rows() -> tuple[str, str]:
+    current, message = run_tool("generate_coverage_inventory.py", "--check")
+    if not current:
+        return NOT_MET, message or "the generated coverage inventory is not current"
     coverage = DOC_DIR / "COVERAGE.md"
     if not coverage.exists():
         return NOT_MET, "the inventory has not been generated"

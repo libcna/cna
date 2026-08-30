@@ -297,5 +297,6 @@ The following families are planned work, not implicitly supported and not perman
 - SpriteBatch matrices, effects and text drawing;
 - advanced and renderer-specific CNA extensions not listed in the implemented table.
 
-Until the generated inventory and completion gates in `plans/plan_binding.md` are finished, any public
-CNA symbol not explicitly represented in [`COVERAGE.md`](COVERAGE.md) is unimplemented.
+Until the generated inventory and completion gates in `plans/plan_binding.md` are finished, any
+public CNA symbol without a generated mapping is unimplemented. [`COVERAGE.md`](COVERAGE.md)
+records the current counts and hash and explains how to generate the full per-symbol matrix.

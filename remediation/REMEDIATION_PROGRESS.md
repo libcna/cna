@@ -1,8 +1,10 @@
-# REMEDIATION_PROGRESS.md — Live Status Tracker
+# REMEDIATION_PROGRESS.md — Frozen Historical Record
 
-**This is the only file in `remediation/` expected to change during implementation.**
-`MASTER_REMEDIATION_PLAN.md`, `REMEDIATION_INDEX.md`, `REMEDIATION_DEPENDENCIES.md`, and
-`REMEDIATION_TRACEABILITY.md` are the frozen plan; this file records what actually happened.
+**Frozen after the post-audit remediation campaign exited. Do not regenerate or append to this
+file.** Repository inspection on 2026-08-30 found no generator or workflow for it: its historical
+growth came from manual full-file edits. New work belongs in the relevant active `plans/plan_*.md`;
+the final campaign disposition is in `REMEDIATION_EXIT.md`. The remaining text is the unchanged
+implementation record and its instructions are historical.
 
 ## Status vocabulary
 

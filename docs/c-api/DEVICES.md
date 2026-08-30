@@ -7,8 +7,8 @@ records only what a consumer cannot read off the headers; the general contracts 
 [`STRINGS_AND_BUFFERS.md`](STRINGS_AND_BUFFERS.md), [`ERRORS.md`](ERRORS.md) and
 [`CALLBACKS_AND_THREADING.md`](CALLBACKS_AND_THREADING.md).
 
-The family is being mapped in slices; [`COVERAGE.md`](COVERAGE.md) is authoritative about which rows
-exist today.
+The family is being mapped in slices; [`COVERAGE.md`](COVERAGE.md) reports the current counts and
+explains how to generate the authoritative per-symbol matrix.
 
 ## Timestamps
 

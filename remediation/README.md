@@ -1,6 +1,8 @@
 # remediation/ — CNA Post-Audit Remediation Plan
 
-**Status: PLANNING COMPLETE. No production code has been modified.**
+**Status: CLOSED HISTORICAL ARCHIVE.** The remediation campaign has exited; see
+`REMEDIATION_EXIT.md`. New implementation work is tracked in the relevant active file under
+`plans/`, not by editing this directory.
 
 This directory turns the completed, frozen repository-wide audit (`audit/`, 2297 per-file reports plus
 6 synthesis documents) into a single, deduplicated, implementation-ready remediation plan.
@@ -22,19 +24,19 @@ cause gets exactly one task, one owner, and one coordinated fix — even when it
 | `MASTER_REMEDIATION_PLAN.md` | The authoritative task list. Every task, fully specified. |
 | `REMEDIATION_INDEX.md` | Fast lookup: by ID, severity, priority, owner, backend, audit source. |
 | `REMEDIATION_DEPENDENCIES.md` | Dependency graph, critical path, parallelization lanes, merge order. |
-| `REMEDIATION_PROGRESS.md` | Live status tracker. The only file expected to change during implementation. |
+| `REMEDIATION_PROGRESS.md` | Frozen implementation log. It is not generated and must not receive new progress entries. |
 | `REMEDIATION_TRACEABILITY.md` | Audit-finding → task mapping. Proves nothing was dropped. |
 
 ## Reading order
 
 1. **`REMEDIATION_DEPENDENCIES.md` § Wave 1** — what to do first, and why order matters more than severity here.
 2. **`MASTER_REMEDIATION_PLAN.md`** — the task you have been assigned, in full.
-3. **`REMEDIATION_PROGRESS.md`** — update as you go.
+3. **`REMEDIATION_PROGRESS.md`** — read the historical execution record; do not update it.
 
 ## Ground rules for implementers
 
-1. **The audit is frozen.** `audit/**` is the evidence baseline. Do not edit it to reflect fixes;
-   record progress in `REMEDIATION_PROGRESS.md` instead.
+1. **The audit and remediation archive are frozen.** Do not edit `audit/**` or
+   `REMEDIATION_PROGRESS.md` to reflect new fixes; record them in their active `plans/plan_*.md`.
 2. **One root cause, one owner, one branch.** If your task says `PARALLEL_SAFE: NO`, it shares files
    with another task — coordinate before starting. Never fix the same root cause in two branches.
 3. **Some tests assert the bug.** Three test files bake confirmed defects in as expected behavior

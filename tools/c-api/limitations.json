@@ -156,7 +156,7 @@
         "real limitation rather than an oversight",
         "finding rather than a decision"
       ],
-      "note": "A small number of canonical operations are unsafe or meaningless when reached through a C handle. Binding them would hand a caller a way to corrupt memory or to observe an event that can never fire; each is recorded individually in COVERAGE.md."
+      "note": "A small number of canonical operations are unsafe or meaningless when reached through a C handle. Binding them would hand a caller a way to corrupt memory or to observe an event that can never fire; each is recorded individually in the generated full coverage matrix."
     },
     {
       "id": "internal-entry-points-in-public-headers",
