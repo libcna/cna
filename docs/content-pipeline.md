@@ -390,9 +390,15 @@ file can overwrite another. Cross-node/primary collisions are rejected by the ex
 reservation pass. The whole bundle remains one graph node: its children share one fingerprint,
 staging transaction, manifest owner, rebuild decision, and garbage-collection lifetime. This mode
 improves deployability and reuse by `ContentManager`; it does not claim cache isolation between a
-Model and its extracted texture/clip children. Making those independent graph nodes would require
-a new generated-source scheduling contract and would not reduce Model rebuilds while schema 1
-still embeds clips and material XREF choices.
+Model and its extracted texture/clip children. CP-060 measured the proposed split and retained this
+policy. A valid external PNG pixel edit changed only the generated Texture2D bytes, but the
+representative full glTF-node rebuild and a direct texture-only rebuild both took 0.03 seconds at
+CLI resolution; the full warm glTF path averaged about 1.47 ms. The importer must still parse
+buffers and construct the shared scene/material graph to derive any child. Embedded and data-URI
+images do not have separate authored inputs, while schema-1 Model embeds every animation clip and
+material XREF choice. Independent nodes would therefore add a generated-source/ownership/partial-
+publication contract for a small, uneven cache opportunity rather than eliminating the common
+conversion work.
 
 ### Streaming Song and Video sources
 
@@ -1179,8 +1185,8 @@ plus clean through a non-ASCII path. Native Windows and MSVC remain untested and
 **Future:**
 
 - optional target profiles, if a concrete portable-output policy requires them;
-- independently scheduled glTF generated assets only if a concrete cache-isolation benefit
-  justifies a generated-source graph contract;
+- reconsider independently scheduled glTF children only if a materially larger measured workload
+  justifies a generated-source graph contract and supplies stable per-child dependency partitions;
 - stable machine-readable build-decision output, if an IDE/build integration contract justifies a
   separately versioned format;
 

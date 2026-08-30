@@ -44,9 +44,10 @@
 > new `content-pipeline-final` branch was created from it, and current `next` was merged normally.
 > The resulting combined baseline is `5671ebb54`; neither history was rebased, squashed or reset,
 > and `next` remains untouched. `CP-051` resumes the remaining evidence-backed backlog from that
-> combined history. `CP-051` through `CP-059` are complete: the manifest/explain and named-source-
+> combined history. `CP-051` through `CP-060` are complete: the manifest/explain and named-source-
 > root work is implemented, the bounded Model schema-2 codec/runtime proof is complete, and the XNB
 > route now selects it only for exactly representable semantics that do not fit frozen schema 1.
+> A measured generated-child scheduling audit retained the existing atomic same-node policy.
 >
 > **Boundary:** this plan owns the build-time CNA Content Pipeline. `plans/plan_cnb.md` remains the
 > engineering record for the frozen CNB compiled format. The pipeline consumes the existing CNB
@@ -1213,7 +1214,7 @@ carrying forward task-local results:
 | `CP-057` | **completed** | Specified the byte-exact candidate in section 33: eleven schema chunk types plus typed container XREFs; fixed header/bone/mesh/part/declaration/resource/effect rows; complete stable vertex/effect ID tables; resource identity, null-tag and canonical ordering rules; overflow/count/index/window validation; schema selection; runtime construction; and an independent conformance vector. CP-058 subsequently proved and froze that candidate without changing schema 1. |
 | `CP-058` | **completed** | Added a separate CPU carrier/codec for Model asset type 5/schema 2 and runtime dispatch by schema version. Exact declarations, shared vertex/index/effect resources, part windows, authored spheres, explicit root identity/transforms, typed XREFs, null-only tags, and all five stock effects round-trip and construct exactly. The decoder validates mandatory topology/alignment, every count/table/product/range/reserved value, graph/resource identity, typed references, and inactive fields before GPU construction. A manually specified Python vector pins all 1,468 bytes, fixed offsets, and SHA-256 `6a9dc3f5363ae82a93ba8e01fee1059802ac1325d5fd76565ccddb09d928ad78`; production encode and CPU/runtime decode match it. Schema 1 and every prior golden remain byte-identical. |
 | `CP-059` | **completed** | Broadened lossless XNB Model transcoding onto schema 2 without changing the schema-1 route or bytes. The headless canonical graph now preserves all five stock effects and shared resources; the converter maps every XNA declaration format/usage, exact buffers/windows/bounds/root hierarchy, stock material fields and typed texture references. Selection attempts the proved schema-1 converter first and uses schema 2 only after complete independent validation. Null tags remain the only policy; custom effects and malformed graphs fail. The writer now declares both Model schema tuples and every output reports its actual schema, requiring manifest v8; v7 rebuilds safely without deletion authority. Synthetic and real MonoGame tests compare runtime XNB against runtime schema-2 CNB field-by-field and prove schema-1-compatible XNB bytes remain exactly equal to the unchanged encoder. |
-| `CP-060` | **planned** | Measure generated glTF child rebuild behavior and retain same-node scheduling unless independent nodes provide real cache isolation without changing embedded-clip or texture-XREF semantics. |
+| `CP-060` | **completed** | Measured generated glTF child rebuild behavior and retained same-node scheduling. An external image pixel-only edit changed the Texture2D child while leaving Model bytes identical, but a representative full glTF node took about 1.47 ms warm and both full-node and texture-only CLI rebuilds rounded to 0.03 s. Animation names/values remain embedded in schema-1 Model; renaming one clip changed the Model and child set while another child stayed byte-identical. Every proposed split still requires the shared glTF parse/scene/material conversion, and embedded/data-URI images have no independent authored input. That bounded cache opportunity does not justify a generated-source graph, ownership, or partial-publication contract. |
 | `CP-061` | **planned** | Audit current processors for a concrete output-affecting target policy. Add no profile abstraction unless an existing implementable policy justifies stable fingerprint identity. |
 | `CP-062` | **planned** | Audit available native Windows/MSVC execution and existing CI conventions; add only a meaningful, maintainable gate executable in the available environment. Preserve the honest cooperative mixed-version lock limitation. |
 | `CP-063` | **planned** | Perform final Content Pipeline compatibility, security, performance, sanitizer, portability, CMake and C-API-inventory review; reconcile plans/docs and record remaining evidence-backed backlog. |
@@ -2745,3 +2746,38 @@ not native MSVC/Windows evidence.
 The generated C-API inventory records the two emitted-schema fields and `CanonicalModelValue`
 alias under open `CBIND-117`: 551 headers / 9,485 symbols, 654 planned rows. No C header, export,
 ABI version, or C route changed.
+
+---
+
+## 35. Generated glTF child scheduling audit (`CP-060`)
+
+CP-060 audits the existing optional generated-child bundle rather than assuming that the general
+content-build graph should expose its children as nodes. `GltfImporter` performs one complete
+`ConvertGltfToCnj()` pass: it parses the document and every referenced buffer, validates the shared
+scene, derives mesh/skin groups and material references, and extracts images. `ModelProcessor`
+then encodes the primary and additional Models, embedded and standalone clips, and Texture2D
+children from those shared results. There is no per-child importer input or dependency partition
+that the scheduler can currently discover before doing that common work.
+
+The audit found one real but bounded cache-isolation case. In the representative external-image
+fixture, replacing a valid 16-by-16 PNG changed the generated Texture2D child while the Model CNB
+remained byte-identical. A 1,000-iteration in-process run of the complete external/data-URI image
+case averaged about 1.47 ms per glTF build. A real one-process compiler rebuild took 0.03 seconds;
+the comparable direct texture-only rebuild also took 0.03 seconds at the host timer's 10 ms
+resolution. Startup, discovery, hashing and publication dominate this small input, so the saved
+Model encode does not establish a material end-to-end benefit.
+
+Animation isolation is weaker. Renaming `Walk` to `Run` in the two-clip fixture changed the primary
+Model bytes and generated child set, because schema-1 Model embeds clip names and values. The
+unrelated `Clip1` child remained byte-identical, but identifying that fact still required the full
+glTF parse and animation conversion; edits to its values necessarily also change Model. Buffer-view,
+data-URI and GLB images are bytes inside the primary source rather than independent authored files.
+Multi-group Models likewise share one source, buffer set and constructed scene graph.
+
+Independent scheduling is therefore not implemented. It would require a new generated-source
+identity and discovery phase, stable per-child dependency fingerprints, cross-node XREF ownership,
+and a partial publication/GC contract while retaining the same common conversion. That complexity
+is not supported by the measured saving, and it would weaken the existing all-or-nothing staging
+guarantee without changing Model rebuild behavior for animations. The compatible bounded same-node
+policy remains authoritative. A future revisit requires a materially larger real workload and a
+proven dependency partition; the current graph capability alone is not sufficient evidence.
