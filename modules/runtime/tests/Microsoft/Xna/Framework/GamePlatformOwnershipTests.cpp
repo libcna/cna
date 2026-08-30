@@ -33,9 +33,7 @@ namespace
     // such a renderer there is no behaviour to assert rather than a behaviour that is wrong.
     // The sequential cases (construct, destroy, construct again) are unaffected and still run,
     // which is what keeps the install/uninstall contract covered on every renderer.
-#if defined(CNA_RENDERER_TINYGL)
-    constexpr bool kSupportsConcurrentGames = false;
-#else
+#if 1
     constexpr bool kSupportsConcurrentGames = true;
 #endif
 

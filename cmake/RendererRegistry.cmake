@@ -65,7 +65,6 @@ function(_cna_renderer_identity_map out_var)
         GDI          Gdi
         METAL        Metal
         FNA3D        Fna3d
-        TINYGL       TinyGL
         PIXIJS       PixiJs
         )
 

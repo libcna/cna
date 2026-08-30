@@ -179,7 +179,6 @@ _Static_assert(sizeof(CNA_RendererInfo) == 32U,
                "CNA_RendererInfo layout must remain stable");
 _Static_assert(CNA_GRAPHICS_RENDERER_SDL_RENDERER == UINT32_C(1) &&
                    CNA_GRAPHICS_RENDERER_PORTABLEGL == UINT32_C(46) &&
-                   CNA_GRAPHICS_RENDERER_TINYGL == UINT32_C(47) &&
                    CNA_GRAPHICS_RENDERER_PIXIJS == UINT32_C(49) &&
                    CNA_GRAPHICS_RENDERER_MAXIMUM == CNA_GRAPHICS_RENDERER_PIXIJS,
                "CNA renderer identities must remain stable");

@@ -124,9 +124,6 @@ namespace CNA
         /** @brief PortableGL (rswinkle/PortableGL, CPU software OpenGL 3.x). */
         PortableGL,
 
-        /** @brief TinyGL (C-Chads/tinygl, CPU fixed-function OpenGL 1.x subset). */
-        TinyGL,
-
         /** @brief IGL (facebook/igl, Intermediate Graphics Library); like Llgl it names a portable
          * abstraction rather than one native API and drives OpenGL or Vulkan, chosen for the
          * process rather than compiled in. */
@@ -230,8 +227,6 @@ namespace CNA
         return GraphicsRendererType::SvgDom;
 #elif defined(CNA_RENDERER_PORTABLEGL)
         return GraphicsRendererType::PortableGL;
-#elif defined(CNA_RENDERER_TINYGL)
-        return GraphicsRendererType::TinyGL;
 #elif defined(CNA_RENDERER_PIXIJS)
         return GraphicsRendererType::PixiJs;
 #else
@@ -296,7 +291,6 @@ namespace CNA
             case GraphicsRendererType::Fna3d:         return "FNA3D";
             case GraphicsRendererType::SvgDom:         return "SVG_DOM";
             case GraphicsRendererType::PortableGL:    return "PORTABLEGL";
-            case GraphicsRendererType::TinyGL:        return "TINYGL";
             case GraphicsRendererType::PixiJs:        return "PIXIJS";
         }
         return "UNKNOWN";

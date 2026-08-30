@@ -17,7 +17,7 @@ static_assert(getCurrentGraphicsBackendCategory() == getCurrentGraphicsBackendCa
 static_assert(!toStringView(getCurrentGraphicsBackendCategory()).empty());
 constexpr GraphicsBackendCategory kCompileTimeCategory = getCurrentGraphicsBackendCategory();
 constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::PixiJs) + 1;
-static_assert(kPublicRendererCount == 40,
+static_assert(kPublicRendererCount == 39,
               "GraphicsRendererType must expose all 48 genuine renderer identities");
 
 TEST(GraphicsBackendCategoryTest, GetCurrentGraphicsBackendCategoryDoesNotThrow)
@@ -79,7 +79,6 @@ namespace
 
             case GraphicsRendererType::Software:
             case GraphicsRendererType::PortableGL:
-            case GraphicsRendererType::TinyGL:
                 return GraphicsBackendCategory::Software;
 
             case GraphicsRendererType::WebGL1:

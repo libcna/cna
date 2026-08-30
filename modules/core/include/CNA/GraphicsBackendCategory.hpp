@@ -101,7 +101,6 @@ namespace CNA
 
             case GraphicsRendererType::Software:
             case GraphicsRendererType::PortableGL:
-            case GraphicsRendererType::TinyGL:
                 return GraphicsBackendCategory::Software;
 
             case GraphicsRendererType::WebGL1:

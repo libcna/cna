@@ -235,11 +235,7 @@ TEST_F(LevelCountTest, MipMapFalseIsAlwaysOneRegardlessOfSize)
 TEST_F(LevelCountTest, MipMapTrueSquarePowerOfTwo)
 {
     EXPECT_EQ(Texture2D(gd, 1, 1, true, SurfaceFormat::Color).getLevelCountProperty(), 1);
-#if defined(CNA_RENDERER_TINYGL)
-    EXPECT_THROW(Texture2D(gd, 2, 2, true, SurfaceFormat::Color), System::NotSupportedException);
-    EXPECT_THROW(Texture2D(gd, 4, 4, true, SurfaceFormat::Color), System::NotSupportedException);
-    EXPECT_THROW(Texture2D(gd, 16, 16, true, SurfaceFormat::Color), System::NotSupportedException);
-#else
+#if 1
     EXPECT_EQ(Texture2D(gd, 2, 2, true, SurfaceFormat::Color).getLevelCountProperty(), 2);
     EXPECT_EQ(Texture2D(gd, 4, 4, true, SurfaceFormat::Color).getLevelCountProperty(), 3);
     EXPECT_EQ(Texture2D(gd, 16, 16, true, SurfaceFormat::Color).getLevelCountProperty(), 5);
@@ -248,10 +244,7 @@ TEST_F(LevelCountTest, MipMapTrueSquarePowerOfTwo)
 
 TEST_F(LevelCountTest, MipMapTrueNonSquarePowerOfTwo)
 {
-#if defined(CNA_RENDERER_TINYGL)
-    EXPECT_THROW(Texture2D(gd, 8, 4, true, SurfaceFormat::Color), System::NotSupportedException);
-    EXPECT_THROW(Texture2D(gd, 1, 8, true, SurfaceFormat::Color), System::NotSupportedException);
-#else
+#if 1
     EXPECT_EQ(Texture2D(gd, 8, 4, true, SurfaceFormat::Color).getLevelCountProperty(), 4);
     EXPECT_EQ(Texture2D(gd, 1, 8, true, SurfaceFormat::Color).getLevelCountProperty(), 4);
 #endif
@@ -259,10 +252,7 @@ TEST_F(LevelCountTest, MipMapTrueNonSquarePowerOfTwo)
 
 TEST_F(LevelCountTest, MipMapTrueNonPowerOfTwo)
 {
-#if defined(CNA_RENDERER_TINYGL)
-    EXPECT_THROW(Texture2D(gd, 3, 5, true, SurfaceFormat::Color), System::NotSupportedException);
-    EXPECT_THROW(Texture2D(gd, 7, 11, true, SurfaceFormat::Color), System::NotSupportedException);
-#else
+#if 1
     EXPECT_EQ(Texture2D(gd, 3, 5, true, SurfaceFormat::Color).getLevelCountProperty(), 3);
     EXPECT_EQ(Texture2D(gd, 7, 11, true, SurfaceFormat::Color).getLevelCountProperty(), 4);
 #endif
@@ -280,14 +270,7 @@ TEST(Texture2DMipLevelValidationTest, EveryValidMipKeepsItsDimensionsContentsAnd
     constexpr int kWidth = 13;
     constexpr int kHeight = 7;
     GraphicsDevice gd;
-#if defined(CNA_RENDERER_TINYGL)
-    // These renderers own level 0 only, so the mipmapped texture this test needs cannot be
-    // constructed at all -- the refusal itself is the contract worth asserting here (see
-    // LevelCountTest above).
-    EXPECT_THROW(Texture2D(gd, kWidth, kHeight, true, SurfaceFormat::Color),
-                 System::NotSupportedException);
-    GTEST_SKIP() << "this renderer stores level 0 only -- no mip chain exists to walk";
-#else
+#if 1
     constexpr int kLevelCount = 4;
     Texture2D texture(gd, kWidth, kHeight, true, SurfaceFormat::Color);
     ASSERT_EQ(texture.getLevelCountProperty(), kLevelCount);

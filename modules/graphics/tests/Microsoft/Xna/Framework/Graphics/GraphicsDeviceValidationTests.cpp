@@ -250,7 +250,7 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
     // SetRenderTargets() refuses a non-empty set as well, so neither layer can accept one silently.
     EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
     }
-    else if (CNA_RENDERER_IS(TinyGL))
+    else if (CNA_RENDERER_IS())
     {
         // From `next`: TinyGL keeps IGraphicsRenderer's nullptr CreateRenderTarget2D()/
         // CreateRenderTargetCube() defaults -- it renders into exactly one ZBuffer and has no
@@ -300,7 +300,7 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_OneTarget_DoesNotThrow)
     GraphicsDevice gd;
     RenderTarget2D rt(gd, 4, 4);
     std::vector<RenderTargetBinding> bindings{ RenderTargetBinding(&rt) };
-    if (CNA_RENDERER_IS(Stub, TinyGL))
+    if (CNA_RENDERER_IS(Stub))
     {
     // Same Stub/OpenVG contract as the four-target case above: no render-target support of any
     // kind, so even a single binding is refused deterministically rather than silently accepted.
@@ -329,7 +329,7 @@ TEST(GraphicsDeviceValidationTest, SetRenderTarget_SingleOverload_MatchesArrayOv
     // this pins for both public entry points.
     GraphicsDevice gd;
     RenderTarget2D target(gd, 4, 4);
-    if (CNA_RENDERER_IS(Stub, PortableGL, TinyGL))
+    if (CNA_RENDERER_IS(Stub, PortableGL))
     {
     EXPECT_THROW(gd.SetRenderTarget(&target), System::NotSupportedException);
     // No partial state: GraphicsDevice must not report the rejected target as bound...
