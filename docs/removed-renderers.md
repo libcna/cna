@@ -239,3 +239,30 @@ environment.
 **Note.** `.github/workflows/platform-ci.yml` used `BLEND2D` for its "TERMINAL platform +
 NULL audio" matrix leg. That leg now uses `SOFTWARE`, which has the same shape (CPU raster,
 no display) and is maintained.
+
+---
+
+## NANOVG
+
+| | |
+|---|---|
+| Identity | `NANOVG` (enum `NanoVg`, C ABI `CNA_GRAPHICS_RENDERER_NANOVG` = 50) |
+| Family | `modules/renderers/nanovg` |
+| Removed | 2026-08-30, tag `removed/nanovg` |
+| Size | 5,455 lines (2,245 production, 135 tests, 3,075 examples) |
+| Dependency | `https://github.com/memononen/nanovg.git` @ `ce3bf745eb2d2dbc14a50bf2446783f691ac4353` (zlib) |
+| Build was | `-DCNA_GRAPHICS_RENDERER=NANOVG`; had its own `.github/workflows/nanovg-ci.yml` |
+
+**What it proved.** That `SpriteBatch` output can be routed through a vector-graphics
+pipeline's own compiled GLSL (NanoVG's GL2 backend) on a desktop OpenGL context the
+renderer creates for itself — the "real GL context, no EasyGL" shape shared with `OPENGL1`,
+`OPENGL2` and `OPENVG`.
+
+**Why removed.** 2D-only, so it can never satisfy `IGraphicsRenderer`, and it stores and
+samples level 0 only — no mip chain. EasyGL already renders CNA's 2D on the GPU on every
+platform CNA targets.
+
+**Note — it was the highest identity.** `NANOVG` was both the last enumerator and the
+value `CNA_GRAPHICS_RENDERER_MAXIMUM` named. `MAXIMUM` now names `PIXIJS` (49), so that one
+C ABI constant genuinely changes value: 50 is retired, and any binding that compared
+against `MAXIMUM` sees the new ceiling. Every other identity keeps its number.

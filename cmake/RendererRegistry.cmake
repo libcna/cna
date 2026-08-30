@@ -68,7 +68,7 @@ function(_cna_renderer_identity_map out_var)
         OPENVG       OpenVg
         TINYGL       TinyGL
         PIXIJS       PixiJs
-        NANOVG       NanoVg)
+        )
 
     set(${out_var} "${_map}" PARENT_SCOPE)
 endfunction()

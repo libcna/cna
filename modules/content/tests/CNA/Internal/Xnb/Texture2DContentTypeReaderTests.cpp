@@ -101,7 +101,7 @@ TEST_F(Texture2DContentTypeReaderTest, UnsupportedSurfaceFormatThrowsContentLoad
 TEST_F(Texture2DContentTypeReaderTest, NormalizedByte2ReadsTwoBytesPerTexel)
 {
     using namespace CNA::Testing::Renderers;
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, Skia);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2);
 
     ContentManager cm;
     cm.setGraphicsDevice(gd);
@@ -154,7 +154,7 @@ TEST_F(Texture2DContentTypeReaderTest, NormalizedByte2RejectsAFourBytePerTexelLe
     // NormalizedByte2 texture at all (e.g. WebGPU) construction throws a runtime_error first and the
     // expected ContentLoadException is never reached. The malformed-level rejection this test pins
     // is renderer-independent in intent, but only observable where the format is supported.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, Skia);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2);
 
     ContentManager cm;
     cm.setGraphicsDevice(gd);
@@ -182,7 +182,7 @@ TEST_F(Texture2DContentTypeReaderTest, NormalizedByte2RejectsAFourBytePerTexelLe
 TEST_F(Texture2DContentTypeReaderTest, NormalizedByte4PreservesSignedPackedTexels)
 {
     using namespace CNA::Testing::Renderers;
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, Skia);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2);
 
     ContentManager cm;
     cm.setGraphicsDevice(gd);

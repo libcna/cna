@@ -63,7 +63,7 @@ using Microsoft::Xna::Framework::Graphics::TextureCube;
 [[nodiscard]] inline bool CubeStorageSupported()
 {
     return !CNA_RENDERER_IS(SdlRenderer, Canvas, HtmlDom, FreeDirect, Headless, Gdi, OpenVg,
-                            PortableGL, TinyGL, PixiJs, NanoVg);
+                            PortableGL, TinyGL, PixiJs);
 }
 
 [[nodiscard]] inline bool CubeLevel0ReadbackSupported() { return CubeStorageSupported(); }
@@ -85,7 +85,7 @@ using Microsoft::Xna::Framework::Graphics::TextureCube;
 /// refuses rather than fabricating voxels, and the shared layer raises NotSupportedException.
 [[nodiscard]] inline bool VolumeReadbackSupported()
 {
-    return !CNA_RENDERER_IS(Igl);
+    return !CNA_RENDERER_IS();
 }
 
 namespace

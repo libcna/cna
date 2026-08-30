@@ -375,7 +375,6 @@ static_assert(
         case CNA::GraphicsRendererType::PortableGL: return CNA_GRAPHICS_RENDERER_PORTABLEGL;
         case CNA::GraphicsRendererType::TinyGL: return CNA_GRAPHICS_RENDERER_TINYGL;
         case CNA::GraphicsRendererType::PixiJs: return CNA_GRAPHICS_RENDERER_PIXIJS;
-        case CNA::GraphicsRendererType::NanoVg: return CNA_GRAPHICS_RENDERER_NANOVG;
     }
     return CNA_GRAPHICS_RENDERER_UNKNOWN;
 }

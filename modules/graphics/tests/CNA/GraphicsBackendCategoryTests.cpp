@@ -16,8 +16,8 @@ using CNA::toStringView;
 static_assert(getCurrentGraphicsBackendCategory() == getCurrentGraphicsBackendCategory());
 static_assert(!toStringView(getCurrentGraphicsBackendCategory()).empty());
 constexpr GraphicsBackendCategory kCompileTimeCategory = getCurrentGraphicsBackendCategory();
-constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::NanoVg) + 1;
-static_assert(kPublicRendererCount == 42,
+constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::PixiJs) + 1;
+static_assert(kPublicRendererCount == 41,
               "GraphicsRendererType must expose all 48 genuine renderer identities");
 
 TEST(GraphicsBackendCategoryTest, GetCurrentGraphicsBackendCategoryDoesNotThrow)
@@ -76,7 +76,6 @@ namespace
             case GraphicsRendererType::SdlGpu:
             case GraphicsRendererType::Fna3d:
             case GraphicsRendererType::OpenVg:
-            case GraphicsRendererType::NanoVg:
                 return GraphicsBackendCategory::TranslationLayer;
 
             case GraphicsRendererType::Software:

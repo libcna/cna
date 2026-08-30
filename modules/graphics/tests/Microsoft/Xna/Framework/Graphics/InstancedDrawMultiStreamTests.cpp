@@ -154,7 +154,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 [[nodiscard]] inline bool MultiStreamOracle()
 {
     return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan,
-                           DirectX9, DirectX11, DirectX12, Magnum);
+                           DirectX9, DirectX11, DirectX12);
 }
 
 // The renderers whose instanced path was corrected to consume VertexBufferBinding.VertexOffset AND
@@ -173,7 +173,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// plans/plan_runtimerenderer.md RTR-P9-5: the same set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool BindingOffsetOracle()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX11, DirectX12, Vulkan, Bgfx, WebGPU, Magnum);
+    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX11, DirectX12, Vulkan, Bgfx, WebGPU);
 }
 
 namespace
@@ -2532,7 +2532,7 @@ TEST_F(InstancedDrawMultiStreamTest, UnsupportedRendererRejectsMixedStreamInstan
                    "different failure";
         }
     }
-    else if (CNA_RENDERER_IS(Igl))
+    else if (CNA_RENDERER_IS())
     {
         // A SIXTH measured outcome (plans/plan_igl.md IGL-30/IGL-31): this renderer claims
         // MultiStreamVertexInput natively (igl::VertexAttribute::bufferIndex expresses it) and
@@ -2554,7 +2554,7 @@ TEST_F(InstancedDrawMultiStreamTest, UnsupportedRendererRejectsMixedStreamInstan
             << "this renderer claims MultiStreamVertexInput and implements DrawInstancedPrimitivesEx, "
                "so a mixed-frequency multi-stream instanced draw must be accepted rather than refused";
     }
-    else if (CNA_RENDERER_IS(Wicked))
+    else if (CNA_RENDERER_IS())
     {
         // A FOURTH measured outcome (plans/plan_wicked.md WICKED-58 / REMED-GFX-202): this renderer claims
         // MultiStreamVertexInput because several PER-VERTEX streams genuinely re-slot, and it

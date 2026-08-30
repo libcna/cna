@@ -126,7 +126,7 @@ TEST_F(CnjTexture3DTest, LoadsRealCnjFixture)
     // IGL owns real volume pixels but cannot fetch them back: IGL v1.1.1 has no way to attach a 3D
     // texture to a framebuffer, its only readback route (plans/plan_igl.md IGL-17). Everything this test
     // asserts about the CNJ reader itself is checked above; only the round trip needs readback.
-    if (CNA_RENDERER_IS(Igl))
+    if (CNA_RENDERER_IS())
     {
         EXPECT_THROW((void)texture->GetData(pixels.data(), 8), System::NotSupportedException);
         return;
