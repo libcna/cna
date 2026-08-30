@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -228,6 +229,30 @@ namespace
         std::vector<std::int32_t> Parents;
     };
 
+    class SharedPayload : public System::Object
+    {
+    public:
+        std::int32_t Value = 0;
+
+        [[nodiscard]] const std::string& GetTypeName() const override
+        {
+            static const std::string name = "Bestiary.SharedPayload";
+            return name;
+        }
+    };
+
+    class SharedOwner : public System::Object
+    {
+    public:
+        std::shared_ptr<SharedPayload> Payload;
+
+        [[nodiscard]] const std::string& GetTypeName() const override
+        {
+            static const std::string name = "Bestiary.SharedOwner";
+            return name;
+        }
+    };
+
     // The three collection shapes a custom model processor writes on a Model.Tag: a list of its
     // own class, a list of Matrix (a bind pose) and a list of int (a skeleton hierarchy).
     std::vector<std::uint8_t> BuildHerdXnb()
@@ -308,6 +333,49 @@ namespace
         return std::vector<std::uint8_t>(fileBytes.begin(), fileBytes.end());
     }
 
+    // A root reference object whose only member is [ContentSerializer(SharedResource = true)].
+    // The member stores shared-resource index 1; the payload itself follows the entire root.
+    std::vector<std::uint8_t> BuildSharedOwnerXnb()
+    {
+        System::IO::MemoryStream body;
+        System::IO::BinaryWriter w(&body, true);
+
+        w.Write7BitEncodedInt(3);
+        w.Write(std::string("Microsoft.Xna.Framework.Content.ReflectiveReader`1"
+                            "[[Bestiary.SharedOwner, Bestiary, Version=1.0.0.0, Culture=neutral, "
+                            "PublicKeyToken=null]]"));
+        w.Write(static_cast<std::int32_t>(0));
+        w.Write(std::string("Microsoft.Xna.Framework.Content.ReflectiveReader`1"
+                            "[[Bestiary.SharedPayload, Bestiary, Version=1.0.0.0, Culture=neutral, "
+                            "PublicKeyToken=null]]"));
+        w.Write(static_cast<std::int32_t>(0));
+        w.Write(std::string("Microsoft.Xna.Framework.Content.Int32Reader"));
+        w.Write(static_cast<std::int32_t>(0));
+
+        w.Write7BitEncodedInt(1);                 // one shared resource
+        w.Write7BitEncodedInt(1);                 // root -> SharedOwner reader
+        w.Write7BitEncodedInt(1);                 // Payload -> shared resource 1
+        w.Write7BitEncodedInt(2);                 // shared resource -> SharedPayload reader
+        w.Write(static_cast<std::int32_t>(42));
+        w.Flush();
+        const auto bodyBytes = body.ToArray();
+
+        System::IO::MemoryStream file;
+        System::IO::BinaryWriter fw(&file, true);
+        fw.Write(static_cast<std::uint8_t>('X'));
+        fw.Write(static_cast<std::uint8_t>('N'));
+        fw.Write(static_cast<std::uint8_t>('B'));
+        fw.Write(static_cast<std::uint8_t>('w'));
+        fw.Write(static_cast<std::uint8_t>(5));
+        fw.Write(static_cast<std::uint8_t>(0));
+        fw.Write(static_cast<std::int32_t>(10 + static_cast<std::int32_t>(bodyBytes.size())));
+        fw.Write(bodyBytes.data(), 0, static_cast<std::int32_t>(bodyBytes.size()));
+        fw.Flush();
+
+        const auto fileBytes = file.ToArray();
+        return std::vector<std::uint8_t>(fileBytes.begin(), fileBytes.end());
+    }
+
     class ReflectiveSharedTypeReaderTest : public ::testing::Test
     {
     protected:
@@ -345,6 +413,11 @@ namespace
                 ReflectiveTypeReader<Creature>::CanonicalReaderName("Bestiary.Creature"));
             ContentTypeReaderManager::RemoveTypeCreatorEXT(
                 "Microsoft.Xna.Framework.Content.ListReader`1[[Bestiary.Creature]]");
+            ContentTypeReaderManager::RemoveTypeCreatorEXT(
+                ReflectiveTypeReader<SharedOwner>::CanonicalReaderName("Bestiary.SharedOwner"));
+            ContentTypeReaderManager::RemoveTypeCreatorEXT(
+                ReflectiveTypeReader<SharedPayload>::CanonicalReaderName(
+                    "Bestiary.SharedPayload"));
         }
     };
 
@@ -366,6 +439,37 @@ namespace
         EXPECT_EQ("Crane", loaded.Members[1]->Name)
             << "each element consumed its own reader index; a value-shaped registration would "
                "have read the index as data and desynchronised everything after it";
+    }
+
+    TEST_F(ReflectiveSharedTypeReaderTest, SharedResourceFieldAppliesItsDeferredFixup)
+    {
+        ReflectiveTypeReaderBuilder<SharedPayload>("Bestiary.SharedPayload")
+            .Field(&SharedPayload::Value)
+            .RegisterShared();
+        ReflectiveTypeReaderBuilder<SharedOwner>("Bestiary.SharedOwner")
+            .SharedResourceField(&SharedOwner::Payload)
+            .RegisterShared();
+
+        ScratchContentRoot root;
+        WriteBytes(root.path() / "shared-owner.xnb", BuildSharedOwnerXnb());
+
+        ContentManager content;
+        content.setRootDirectoryProperty(root.path().string());
+        const auto loaded = content.Load<std::shared_ptr<SharedOwner>>("shared-owner");
+
+        ASSERT_NE(nullptr, loaded);
+        ASSERT_NE(nullptr, loaded->Payload)
+            << "the fixup runs only after the shared payload following the root has been read";
+        EXPECT_EQ(42, loaded->Payload->Value);
+    }
+
+    TEST_F(ReflectiveSharedTypeReaderTest, SharedResourceFieldRejectsAValueRegistration)
+    {
+        EXPECT_THROW(
+            ReflectiveTypeReaderBuilder<SharedOwner>("Bestiary.SharedOwner")
+                .SharedResourceField(&SharedOwner::Payload)
+                .Register(),
+            std::logic_error);
     }
 
     // The two closed generics a custom model processor's Tag needs, neither of which had an
