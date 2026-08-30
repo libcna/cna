@@ -2349,20 +2349,6 @@ else
 
 namespace
 {
-    /// REMED-GFX-244: the four S3TC internal formats, spelled here because meta-gl's
-    /// CompressedInternalFormat carries ETC2 and ASTC only -- the ES-core sets -- and S3TC is an
-    /// extension. Adding them upstream is the tidier home; meta-gl is a separate sibling repository
-    /// and outside this task, so they are cast locally instead. The cast is well defined: the enum
-    /// has GLenum as its fixed underlying type.
-    constexpr ::metagl::CompressedInternalFormat kDxt1Rgb =
-        static_cast<::metagl::CompressedInternalFormat>(0x83F0);   // COMPRESSED_RGB_S3TC_DXT1_EXT
-    constexpr ::metagl::CompressedInternalFormat kDxt1Rgba =
-        static_cast<::metagl::CompressedInternalFormat>(0x83F1);   // COMPRESSED_RGBA_S3TC_DXT1_EXT
-    constexpr ::metagl::CompressedInternalFormat kDxt3 =
-        static_cast<::metagl::CompressedInternalFormat>(0x83F2);   // COMPRESSED_RGBA_S3TC_DXT3_EXT
-    constexpr ::metagl::CompressedInternalFormat kDxt5 =
-        static_cast<::metagl::CompressedInternalFormat>(0x83F3);   // COMPRESSED_RGBA_S3TC_DXT5_EXT
-
     /// Whether this context can store S3TC blocks natively. Probed once: an XNA Reach game may use
     /// Dxt1/3/5 whatever the driver offers, so this decides between keeping the blocks compressed
     /// and decoding them, never between working and refusing.
@@ -2411,8 +2397,10 @@ namespace
                 ::metagl::glCompressedTexImage2D(
                     ::metagl::TextureTarget::Texture2D, level,
                     uploadFormat == SurfaceFormat::Dxt1
-                        ? kDxt1Rgba
-                        : (uploadFormat == SurfaceFormat::Dxt3 ? kDxt3 : kDxt5),
+                        ? ::metagl::CompressedInternalFormat::RgbaS3tcDxt1
+                        : (uploadFormat == SurfaceFormat::Dxt3
+                               ? ::metagl::CompressedInternalFormat::RgbaS3tcDxt3
+                               : ::metagl::CompressedInternalFormat::RgbaS3tcDxt5),
                     levelWidth, levelHeight, 0,
                     static_cast<GLsizei>(imageBytes), pixels);
             }

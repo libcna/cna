@@ -2907,11 +2907,14 @@ walked in the wrong order shows as a wrong half instead of passing. Mutation-che
 DXT1 block as 16 bytes: `Dxt1` fails on all 32 pixels while `Dxt3` and `Dxt5` stay green, since 16 is
 genuinely their size.
 
-**One thing deliberately not done.** The four S3TC internal formats are spelled as local constants
-cast to `metagl::CompressedInternalFormat`, which carries the ES-core ETC2 and ASTC sets only. Their
-tidier home is meta-gl itself, but that is a separate sibling repository and not among this task's
-working directories, so they were not added there. The cast is well defined — the enum has `GLenum`
-as its fixed underlying type — and the constants are commented with their GL names.
+**The S3TC constants went upstream on the owner's instruction.** They were first spelled as local
+constants cast to `metagl::CompressedInternalFormat`, which carried the ES-core ETC2 and ASTC sets
+only; meta-gl is a separate sibling repository and was outside this task's working directories until
+the owner opened it. `metagl::CompressedInternalFormat` now carries `RgbS3tcDxt1`, `RgbaS3tcDxt1`,
+`RgbaS3tcDxt3` and `RgbaS3tcDxt5` (meta-gl `2520173`), following that header's own pattern for
+`GL_EXT_texture_filter_anisotropic` — the extension's `GL_*` macros defined behind `#ifndef`, since
+`<GLES3/gl32.h>` does not provide them. `to_string` gained the four names, and meta-gl's own suite is
+7/7. EasyGL names the enumerators and no longer casts.
 
 **Evidence.** `EasyGL_Packed16Format` 3/3, `EasyGL_DxtFormat` 3/3 on both paths;
 `EasyGL_SurfaceFormat_Throws` 30/30 and the shared fixture 30/30 on Vulkan with a freshly built
