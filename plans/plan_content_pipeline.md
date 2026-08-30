@@ -44,10 +44,11 @@
 > new `content-pipeline-final` branch was created from it, and current `next` was merged normally.
 > The resulting combined baseline is `5671ebb54`; neither history was rebased, squashed or reset,
 > and `next` remains untouched. `CP-051` resumes the remaining evidence-backed backlog from that
-> combined history. `CP-051` through `CP-060` are complete: the manifest/explain and named-source-
+> combined history. `CP-051` through `CP-061` are complete: the manifest/explain and named-source-
 > root work is implemented, the bounded Model schema-2 codec/runtime proof is complete, and the XNB
 > route now selects it only for exactly representable semantics that do not fit frozen schema 1.
-> A measured generated-child scheduling audit retained the existing atomic same-node policy.
+> Measured generated-child scheduling and target-profile audits retained the current same-node and
+> portable-output policies rather than adding unproven graph or configuration abstractions.
 >
 > **Boundary:** this plan owns the build-time CNA Content Pipeline. `plans/plan_cnb.md` remains the
 > engineering record for the frozen CNB compiled format. The pipeline consumes the existing CNB
@@ -1215,7 +1216,7 @@ carrying forward task-local results:
 | `CP-058` | **completed** | Added a separate CPU carrier/codec for Model asset type 5/schema 2 and runtime dispatch by schema version. Exact declarations, shared vertex/index/effect resources, part windows, authored spheres, explicit root identity/transforms, typed XREFs, null-only tags, and all five stock effects round-trip and construct exactly. The decoder validates mandatory topology/alignment, every count/table/product/range/reserved value, graph/resource identity, typed references, and inactive fields before GPU construction. A manually specified Python vector pins all 1,468 bytes, fixed offsets, and SHA-256 `6a9dc3f5363ae82a93ba8e01fee1059802ac1325d5fd76565ccddb09d928ad78`; production encode and CPU/runtime decode match it. Schema 1 and every prior golden remain byte-identical. |
 | `CP-059` | **completed** | Broadened lossless XNB Model transcoding onto schema 2 without changing the schema-1 route or bytes. The headless canonical graph now preserves all five stock effects and shared resources; the converter maps every XNA declaration format/usage, exact buffers/windows/bounds/root hierarchy, stock material fields and typed texture references. Selection attempts the proved schema-1 converter first and uses schema 2 only after complete independent validation. Null tags remain the only policy; custom effects and malformed graphs fail. The writer now declares both Model schema tuples and every output reports its actual schema, requiring manifest v8; v7 rebuilds safely without deletion authority. Synthetic and real MonoGame tests compare runtime XNB against runtime schema-2 CNB field-by-field and prove schema-1-compatible XNB bytes remain exactly equal to the unchanged encoder. |
 | `CP-060` | **completed** | Measured generated glTF child rebuild behavior and retained same-node scheduling. An external image pixel-only edit changed the Texture2D child while leaving Model bytes identical, but a representative full glTF node took about 1.47 ms warm and both full-node and texture-only CLI rebuilds rounded to 0.03 s. Animation names/values remain embedded in schema-1 Model; renaming one clip changed the Model and child set while another child stayed byte-identical. Every proposed split still requires the shared glTF parse/scene/material conversion, and embedded/data-URI images have no independent authored input. That bounded cache opportunity does not justify a generated-source graph, ownership, or partial-publication contract. |
-| `CP-061` | **planned** | Audit current processors for a concrete output-affecting target policy. Add no profile abstraction unless an existing implementable policy justifies stable fingerprint identity. |
+| `CP-061` | **completed** | Audited every built-in importer/processor/writer and found no target-dependent output policy. Images and font/volume atlases use portable Rgba8; WAV uses Pcm16; authored DDS/XNB representations are preserved or losslessly normalized; Model schemas encode source semantics; Curve/Animation are canonical pass-through; Song/Video copy their exact media and emit portable metadata; and no Effect/shader compiler exists. Container compression is an explicit codec concern, not a platform profile, and renderer selection belongs to runtime. No profile ID, API, CLI/config key, fingerprint field, CMake forwarding, CNB field, or C ABI was added. Existing per-asset typed parameters already cover real policies such as color key and deployment metadata. |
 | `CP-062` | **planned** | Audit available native Windows/MSVC execution and existing CI conventions; add only a meaningful, maintainable gate executable in the available environment. Preserve the honest cooperative mixed-version lock limitation. |
 | `CP-063` | **planned** | Perform final Content Pipeline compatibility, security, performance, sanitizer, portability, CMake and C-API-inventory review; reconcile plans/docs and record remaining evidence-backed backlog. |
 
@@ -2781,3 +2782,38 @@ is not supported by the measured saving, and it would weaken the existing all-or
 guarantee without changing Model rebuild behavior for animations. The compatible bounded same-node
 policy remains authoritative. A future revisit requires a materially larger real workload and a
 proven dependency partition; the current graph capability alone is not sufficient evidence.
+
+---
+
+## 36. Target-profile policy audit (`CP-061`)
+
+CP-061 traced every built-in route from imported carrier through processor to the native writer.
+None consults a target platform, graphics renderer, host OS or architecture, and none has a latent
+choice that becomes meaningful merely by naming a profile:
+
+| Route | Current output policy | Target-dependent alternative available now |
+|---|---|---|
+| PNG/JPEG/ordinary Texture2D | canonical Rgba8 plus authored mip levels; optional color key | none; no texture compressor/transcoder |
+| Texture3D and SpriteFont | canonical Rgba8 volume/atlas | none |
+| DDS TextureCube and supported XNB textures | preserve or losslessly normalize validated source representations | none; source semantics, not target selection |
+| WAV SoundEffect | exact supported input decoded to portable Pcm16 | none; no target audio encoder |
+| Model schema 1/2 | select only by representability of source semantics | none; renderer capability does not rewrite assets |
+| Curve and AnimationClip | validated canonical semantic data | none |
+| Song and Video | portable metadata plus byte-exact deployment-support copy | none; no media re-encode policy |
+| Effect/shader | no compiler route | no policy exists to select |
+
+CNB can carry multiple texture representations and supports opt-in per-chunk compression at the
+codec layer, but the pipeline has no target-driven generator for either. Choosing a subset of an
+authored texture would reduce portability rather than establish a platform contract. Container
+compression changes storage/runtime compatibility independently of desktop/mobile/OS labels and
+would be better expressed as a deliberate codec policy if it is ever exposed. Compile-time renderer
+selection remains a runtime/build configuration and must not make the host `cna-content` executable
+emit machine-specific bytes accidentally.
+
+No target-profile abstraction is implemented. There is no CLI flag, top-level configuration key,
+global build option, manifest/fingerprint domain, CMake forwarding argument, CNB platform field,
+processor API, or C ABI change. Existing strictly typed per-asset processor parameters already
+participate in the canonical parameter fingerprint and are the smallest correct home for a future
+single-route policy. A shared profile identity becomes justified only when an implemented policy
+must coordinate multiple processors and has defined output consequences; names such as desktop,
+mobile, Windows, Linux or Xbox without such consequences are explicitly insufficient.

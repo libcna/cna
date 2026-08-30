@@ -1029,9 +1029,15 @@ The initial command still works without a project file. The optional strict per-
 described above supplies only proven selection/parameter/logical-name needs; it is not a
 `.cnaproj`, `.contentproj`, profile system, or second build graph.
 
-There is no platform ID or target profile in CNB v1 processing. Current schemas use their existing
-portable representations. A future profile can be added only when a demonstrated policy needs it;
-it must participate in fingerprints.
+There is no platform ID or target profile in CNB processing. CP-061 audited every built-in route:
+images and embedded atlases use portable Rgba8, WAV uses Pcm16, authored DDS/XNB representations
+are preserved or losslessly normalized, Model/Curve/Animation encode source semantics, and Song/
+Video copy their exact media with portable metadata. There is no shader compiler or target-specific
+texture/audio transcode. CNB chunk compression is a codec choice, not a platform identity, while
+renderer selection is a runtime concern. A profile would therefore carry no implemented policy and
+is not exposed in configuration, fingerprints, CMake, CNB, or the API. If a future processor gains
+a real output policy, its explicit parameter can use the existing typed fingerprint contract first;
+a cross-cutting profile is justified only after more than a label is shared.
 
 Build-graph scheduling is serial and deterministic unless `--workers` opts into bounded concurrent
 execution. Registries are configured explicitly and frozen before discovery. Built-in components
@@ -1184,7 +1190,8 @@ plus clean through a non-ASCII path. Native Windows and MSVC remain untested and
 
 **Future:**
 
-- optional target profiles, if a concrete portable-output policy requires them;
+- reconsider target profiles only after an implemented output policy cannot be represented clearly
+  by the existing per-asset typed parameters;
 - reconsider independently scheduled glTF children only if a materially larger measured workload
   justifies a generated-source graph contract and supplies stable per-child dependency partitions;
 - stable machine-readable build-decision output, if an IDE/build integration contract justifies a
