@@ -216,7 +216,7 @@ namespace
         // which is what this test forbids. Without the entry an IGL build asserted a refusal the
         // renderer deliberately does not make.
         return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
-                               Magnum, OpenGL4, Wicked, Igl);
+                               OpenGL4);
     }
 }
 

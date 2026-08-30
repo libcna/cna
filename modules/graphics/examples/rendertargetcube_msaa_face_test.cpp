@@ -193,22 +193,6 @@ namespace
     // D3D12_RTV_DIMENSION_TEXTURE2DMSARRAY view per face.
     constexpr Contract kContract{"DIRECTX12", true, Support::Exact, true,
                                  Support::Exact, false, false};
-#elif defined(CNA_RENDERER_SOKOL)
-    // `msaaEngages` false: sokol_gfx's own validation layer hard-rejects a CUBE image with
-    // sample_count > 1 (VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_CUBE_IMAGE) -- a permanent API boundary
-    // this renderer cannot cross, unlike RenderTarget2D's real MSAA support. `readback` Exact as of
-    // plans/plan_sokol.md SOKOL-38: SokolRenderTargetCubeRenderer::GetData now round-trips a single-sample
-    // face's content via a throwaway GL FBO around the raw GL texture sg_gl_query_image_info()
-    // exposes; `msaaReadback` stays Unsupported since a multisampled cube can never exist here at
-    // all (nothing to read back).
-    constexpr Contract kContract{"SOKOL", true, Support::Exact, false,
-                                 Support::Unsupported, false, false};
-#elif defined(CNA_RENDERER_LLGL)
-    // LLGL allocates one anonymous multisampled colour attachment per face and resolves every
-    // attachment into the corresponding layer of the shared cube texture. GetData reads that
-    // resolved layer, so both single-sample and multisampled face contents are exact.
-    constexpr Contract kContract{"LLGL", true, Support::Exact, true,
-                                 Support::Exact, false, false};
 #else
 #error "REMED-GFX-141: this renderer has no declared multisampled RenderTargetCube contract."
 #endif

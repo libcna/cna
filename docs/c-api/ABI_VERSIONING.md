@@ -2,7 +2,20 @@
 
 ## ABI identity
 
-The ABI is `0.19.0`. It adds **`Load<Model>`** and the **`Tag` its processor wrote**, from
+The ABI is `0.20.0`. It **removes eleven public renderer identities** -- `LLGL`, `SKIA`,
+`SOKOL`, `DILIGENT`, `IGL`, `WICKED`, `MAGNUM`, `BLEND2D`, `NANOVG`, `OPENVG` and `TINYGL` --
+together with the eleven `CNA_GRAPHICS_RENDERER_*` constants that named them, and it moves
+`CNA_GRAPHICS_RENDERER_MAXIMUM` from `50` to `49`. That is an incompatible change, which under
+the `0.x` rule below requires exactly this minor-version increment, these release notes and a
+regenerated baseline.
+
+The retired numbers are **not reused**: every surviving identity keeps the value it had, so a
+binding that passes `CNA_GRAPHICS_RENDERER_VULKAN` still passes the same integer. What breaks is
+a binding that names one of the eleven removed constants (it no longer compiles) or that compares
+against `CNA_GRAPHICS_RENDERER_MAXIMUM` (the ceiling moved). `docs/removed-renderers.md` records
+each identity, its retired number, what it proved and the pinned dependency it wrapped.
+
+`0.19.0` added **`Load<Model>`** and the **`Tag` its processor wrote**, from
 `plans/plan_binding.md` `CBIND-118`: three routes and no new structures or handle kinds. This is the
 version that makes every other model route reachable for content -- before it a C game could build a
 model but never open one -- and with it `TrianglePickingSample`'s shape works end to end: load the

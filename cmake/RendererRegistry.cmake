@@ -36,7 +36,6 @@ function(_cna_renderer_identity_map out_var)
         BGFX         Bgfx
         VULKAN       Vulkan
         WEBGPU       WebGPU
-        MAGNUM       Magnum
         HEADLESS     Headless
         SOFTWARE     Software
         STUB         Stub
@@ -47,8 +46,6 @@ function(_cna_renderer_identity_map out_var)
         CANVAS       Canvas
         HTML_DOM     HtmlDom
         SVG_DOM      SvgDom
-        SKIA         Skia
-        BLEND2D      Blend2D
         FREEDIRECT   FreeDirect
         DIRECTX9     DirectX9
         DIRECTX1     DirectX1
@@ -64,19 +61,12 @@ function(_cna_renderer_identity_map out_var)
         OPENGL4      OpenGL4
         OPENGL1      OpenGL1
         OPENGL2      OpenGL2
-        WICKED       Wicked
-        SOKOL        Sokol
-        DILIGENT     Diligent
         GLIDE        Glide
         GDI          Gdi
-        LLGL         Llgl
         METAL        Metal
         FNA3D        Fna3d
-        OPENVG       OpenVg
-        TINYGL       TinyGL
-        IGL          Igl
         PIXIJS       PixiJs
-        NANOVG       NanoVg)
+        )
 
     set(${out_var} "${_map}" PARENT_SCOPE)
 endfunction()

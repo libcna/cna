@@ -138,11 +138,6 @@ namespace
 #elif defined(CNA_RENDERER_SDL_GPU)
     constexpr Contract kContract{"SDL_GPU", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, false};
-#elif defined(CNA_RENDERER_SKIA)
-    // Skia emulates transfer/readback in bounded CPU RGBA8 storage. This does not advertise cube
-    // or volume shader sampling, custom effects, or the 3D pipeline.
-    constexpr Contract kContract{"SKIA", true, Support::Exact, Support::Exact,
-                                 true, Support::Exact, Support::Exact, false};
 #elif defined(CNA_RENDERER_SDL_RENDERER)
     // 2D-only by design: CreateTextureCube()/CreateTexture3D() keep IGraphicsRenderer's own
     // nullptr-returning defaults, so a TextureCube here has no storage at all and Texture3D is
@@ -165,9 +160,6 @@ namespace
                                  true, Support::Exact, Support::Exact, false};
 #elif defined(CNA_RENDERER_DIRECTX12)
     constexpr Contract kContract{"DIRECTX12", true, Support::Exact, Support::Exact,
-                                 true, Support::Exact, Support::Exact, false};
-#elif defined(CNA_RENDERER_LLGL)
-    constexpr Contract kContract{"LLGL", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, false};
 #else
 #error "REMED-GFX-130: this renderer has no declared TextureCube/Texture3D GetData contract."

@@ -67,8 +67,19 @@ def matrix_rows(root: Path) -> dict[str, str]:
 def main() -> int:
     root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(".")
     names = identities(root)
-    if len(names) < 40:
-        print(f"matrix error: only {len(names)} identities parsed from {ENUM}; the parser is wrong")
+    # Tripwire against a silently-matching-nothing parser. It used to be a magic floor
+    # ("< 40"), which is a number that goes stale the moment the registry shrinks -- it
+    # tripped when eleven identities were removed on 2026-08-30, reporting a correct parse
+    # as a broken parser. Held against the registry gate's canonical table instead, so it
+    # measures agreement rather than size, and stays true whichever way the count moves.
+    canonical = re.findall(
+        r'\(\s*"[A-Z0-9_]+"\s*,\s*"(\w+)"\s*\)',
+        (root / "scripts/check_renderer_identities.py").read_text(encoding="utf-8"))
+    if sorted(names) != sorted(canonical):
+        missing, extra = set(canonical) - set(names), set(names) - set(canonical)
+        print(f"matrix error: {ENUM} parsed {len(names)} identities, the canonical table in "
+              f"scripts/check_renderer_identities.py has {len(canonical)}; "
+              f"missing={sorted(missing)} unexpected={sorted(extra)}")
         return 1
 
     rows = matrix_rows(root)

@@ -222,12 +222,6 @@ namespace
     constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
     constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
     constexpr const char* kRendererName = "CANVAS";
-#elif defined(CNA_RENDERER_LLGL)
-    constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr bool kCubeSupported = false;
-    constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
-    constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
-    constexpr const char* kRendererName = "LLGL";
 #else
 #error "REMED-GFX-131: this renderer has no declared mid-tone colour contract."
 #endif

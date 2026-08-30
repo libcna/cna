@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Renderer-identity registry gate (plans/MODULARIZATION_PLAN.md §2.3).
 
-CNA has exactly 49 public renderer identities. This check mechanically compares
+CNA has exactly 39 public renderer identities. This check mechanically compares
 the authoritative registries -- the public GraphicsRendererType enum, the
 CNA_GRAPHICS_RENDERER cmake selection list, and the runtime renderer registry --
 against the canonical identity table below. Any addition, removal or rename of a
@@ -66,7 +66,7 @@ COUNTED_DOCUMENTS = {
     "CHECKLIST.md": False,
 }
 
-# "49 public renderer identities", "45 families / 49 public identities", "45 implementation
+# "39 public renderer identities", "45 families / 39 public identities", "45 implementation
 # families". Deliberately anchored on the words that mean the WHOLE registry: a legitimate
 # sub-count ("the five GL identities of the easygl family") does not match, because it never
 # says "public".
@@ -103,7 +103,6 @@ IDENTITIES = [
     ("BGFX", "Bgfx"),
     ("VULKAN", "Vulkan"),
     ("WEBGPU", "WebGPU"),
-    ("MAGNUM", "Magnum"),
     ("HEADLESS", "Headless"),
     ("SOFTWARE", "Software"),
     ("STUB", "Stub"),
@@ -112,8 +111,6 @@ IDENTITIES = [
     ("DIRECT2D", "Direct2D"),
     ("CANVAS", "Canvas"),
     ("HTML_DOM", "HtmlDom"),
-    ("SKIA", "Skia"),
-    ("BLEND2D", "Blend2D"),
     ("FREEDIRECT", "FreeDirect"),
     ("DIRECTX9", "DirectX9"),
     ("DIRECTX1", "DirectX1"),
@@ -129,21 +126,13 @@ IDENTITIES = [
     ("OPENGL4", "OpenGL4"),
     ("OPENGL1", "OpenGL1"),
     ("OPENGL2", "OpenGL2"),
-    ("WICKED", "Wicked"),
-    ("SOKOL", "Sokol"),
-    ("DILIGENT", "Diligent"),
     ("GLIDE", "Glide"),
     ("GDI", "Gdi"),
-    ("LLGL", "Llgl"),
     ("METAL", "Metal"),
     ("FNA3D", "Fna3d"),
     ("SVG_DOM", "SvgDom"),
-    ("OPENVG", "OpenVg"),
     ("PORTABLEGL", "PortableGL"),
-    ("TINYGL", "TinyGL"),
-    ("IGL", "Igl"),
     ("PIXIJS", "PixiJs"),
-    ("NANOVG", "NanoVg"),
 ]
 
 

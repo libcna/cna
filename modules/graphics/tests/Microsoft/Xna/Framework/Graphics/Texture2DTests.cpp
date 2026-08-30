@@ -235,11 +235,7 @@ TEST_F(LevelCountTest, MipMapFalseIsAlwaysOneRegardlessOfSize)
 TEST_F(LevelCountTest, MipMapTrueSquarePowerOfTwo)
 {
     EXPECT_EQ(Texture2D(gd, 1, 1, true, SurfaceFormat::Color).getLevelCountProperty(), 1);
-#if defined(CNA_RENDERER_TINYGL) || defined(CNA_RENDERER_NANOVG)
-    EXPECT_THROW(Texture2D(gd, 2, 2, true, SurfaceFormat::Color), System::NotSupportedException);
-    EXPECT_THROW(Texture2D(gd, 4, 4, true, SurfaceFormat::Color), System::NotSupportedException);
-    EXPECT_THROW(Texture2D(gd, 16, 16, true, SurfaceFormat::Color), System::NotSupportedException);
-#else
+#if 1
     EXPECT_EQ(Texture2D(gd, 2, 2, true, SurfaceFormat::Color).getLevelCountProperty(), 2);
     EXPECT_EQ(Texture2D(gd, 4, 4, true, SurfaceFormat::Color).getLevelCountProperty(), 3);
     EXPECT_EQ(Texture2D(gd, 16, 16, true, SurfaceFormat::Color).getLevelCountProperty(), 5);
@@ -248,10 +244,7 @@ TEST_F(LevelCountTest, MipMapTrueSquarePowerOfTwo)
 
 TEST_F(LevelCountTest, MipMapTrueNonSquarePowerOfTwo)
 {
-#if defined(CNA_RENDERER_TINYGL) || defined(CNA_RENDERER_NANOVG)
-    EXPECT_THROW(Texture2D(gd, 8, 4, true, SurfaceFormat::Color), System::NotSupportedException);
-    EXPECT_THROW(Texture2D(gd, 1, 8, true, SurfaceFormat::Color), System::NotSupportedException);
-#else
+#if 1
     EXPECT_EQ(Texture2D(gd, 8, 4, true, SurfaceFormat::Color).getLevelCountProperty(), 4);
     EXPECT_EQ(Texture2D(gd, 1, 8, true, SurfaceFormat::Color).getLevelCountProperty(), 4);
 #endif
@@ -259,10 +252,7 @@ TEST_F(LevelCountTest, MipMapTrueNonSquarePowerOfTwo)
 
 TEST_F(LevelCountTest, MipMapTrueNonPowerOfTwo)
 {
-#if defined(CNA_RENDERER_TINYGL) || defined(CNA_RENDERER_NANOVG)
-    EXPECT_THROW(Texture2D(gd, 3, 5, true, SurfaceFormat::Color), System::NotSupportedException);
-    EXPECT_THROW(Texture2D(gd, 7, 11, true, SurfaceFormat::Color), System::NotSupportedException);
-#else
+#if 1
     EXPECT_EQ(Texture2D(gd, 3, 5, true, SurfaceFormat::Color).getLevelCountProperty(), 3);
     EXPECT_EQ(Texture2D(gd, 7, 11, true, SurfaceFormat::Color).getLevelCountProperty(), 4);
 #endif
@@ -280,14 +270,7 @@ TEST(Texture2DMipLevelValidationTest, EveryValidMipKeepsItsDimensionsContentsAnd
     constexpr int kWidth = 13;
     constexpr int kHeight = 7;
     GraphicsDevice gd;
-#if defined(CNA_RENDERER_TINYGL) || defined(CNA_RENDERER_NANOVG)
-    // These renderers own level 0 only, so the mipmapped texture this test needs cannot be
-    // constructed at all -- the refusal itself is the contract worth asserting here (see
-    // LevelCountTest above).
-    EXPECT_THROW(Texture2D(gd, kWidth, kHeight, true, SurfaceFormat::Color),
-                 System::NotSupportedException);
-    GTEST_SKIP() << "this renderer stores level 0 only -- no mip chain exists to walk";
-#else
+#if 1
     constexpr int kLevelCount = 4;
     Texture2D texture(gd, kWidth, kHeight, true, SurfaceFormat::Color);
     ASSERT_EQ(texture.getLevelCountProperty(), kLevelCount);
@@ -406,7 +389,7 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
     // them through one branch -- NormalizedByte2 as RG8_SNORM beside NormalizedByte4's
     // RGBA8_SNORM. Both need the ES 3 class of context that has SNORM at all, so this list
     // is deliberately the same one NormalizedByte4Throws uses.
-    if (CNA_RENDERER_IS(Skia, OpenGLES3, OpenGL33, WebGL2))
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte2));
     }
@@ -418,7 +401,7 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
 
 TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
 {
-    if (CNA_RENDERER_IS(Skia, OpenGLES3, OpenGL33, WebGL2))
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte4));
     }
@@ -431,7 +414,7 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
 TEST_F(UnsupportedFormatConstructionTest, Bgra5551Throws)
 {
     // REMED-GFX-244 promoted the packed 16-bit formats on EasyGL's ES 3 generation too.
-    if (CNA_RENDERER_IS(Skia, OpenGLES3, OpenGL33, WebGL2))
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Bgra5551));
     }
@@ -574,73 +557,46 @@ TEST_F(HiDefFormatConstructionTest, TheProfileItselfRefusesNothing)
 
 TEST_F(HiDefFormatConstructionTest, SingleIsTheRenderersCallOnHiDef)
 {
-    if (CNA_RENDERER_IS(Skia, Igl))
-        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Single));
-    else
         EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Single), std::runtime_error);
 }
 
 TEST_F(HiDefFormatConstructionTest, Vector2IsTheRenderersCallOnHiDef)
 {
-    if (CNA_RENDERER_IS(Skia))
-        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector2));
-    else
         EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector2), std::runtime_error);
 }
 
 TEST_F(HiDefFormatConstructionTest, Vector4IsTheRenderersCallOnHiDef)
 {
-    if (CNA_RENDERER_IS(Skia))
-        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector4));
-    else
         EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector4), std::runtime_error);
 }
 
 TEST_F(HiDefFormatConstructionTest, HalfSingleIsTheRenderersCallOnHiDef)
 {
-    if (CNA_RENDERER_IS(Skia))
-        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfSingle));
-    else
         EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfSingle), std::runtime_error);
 }
 
 TEST_F(HiDefFormatConstructionTest, HalfVector2IsTheRenderersCallOnHiDef)
 {
-    if (CNA_RENDERER_IS(Skia))
-        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector2));
-    else
         EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector2), std::runtime_error);
 }
 
 TEST_F(HiDefFormatConstructionTest, HalfVector4IsTheRenderersCallOnHiDef)
 {
-    if (CNA_RENDERER_IS(Skia))
-        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector4));
-    else
         EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector4), std::runtime_error);
 }
 
 TEST_F(HiDefFormatConstructionTest, HdrBlendableIsTheRenderersCallOnHiDef)
 {
-    if (CNA_RENDERER_IS(Skia))
-        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HdrBlendable));
-    else
         EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HdrBlendable), std::runtime_error);
 }
 
 TEST_F(HiDefFormatConstructionTest, Rgba1010102IsTheRenderersCallOnHiDef)
 {
-    if (CNA_RENDERER_IS(Skia))
-        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba1010102));
-    else
         EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba1010102), std::runtime_error);
 }
 
 TEST_F(HiDefFormatConstructionTest, Rgba64IsTheRenderersCallOnHiDef)
 {
-    if (CNA_RENDERER_IS(Skia))
-        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba64));
-    else
         EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba64), std::runtime_error);
 }
 
@@ -682,12 +638,12 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
     {
         // plans/plan_runtimerenderer.md RTR-P9-4: the Skia-promoted format list, evaluated at runtime so
         // this assertion describes the ACTIVE renderer rather than the build default.
-        const bool skia = CNA_RENDERER_IS(Skia);
+        const bool skia = false;
         // plans/plan_igl.md IGL-71: IGL's promoted set is deliberately two formats wide, not a mirror of
         // everything it can store. A format is here only once the whole public path is verified end
         // to end on both its backends, and only if its texel is a multiple of four bytes -- the
         // framework's own transfer rule, which ByteEXT, UShortEXT and HalfSingle would break.
-        const bool igl = CNA_RENDERER_IS(Igl);
+        const bool igl = false;
         const bool easyGlSignedNormalized =
             CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2);
         // REMED-GFX-244: the packed 16-bit formats Reach permits, promoted on the same ES 3

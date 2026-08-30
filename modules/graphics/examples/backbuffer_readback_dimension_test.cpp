@@ -86,9 +86,6 @@ namespace
 #elif defined(CNA_RENDERER_SDL_RENDERER)
     constexpr const char* kRendererName = "SDL_RENDERER";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_RENDERER_SKIA)
-    constexpr const char* kRendererName = "SKIA";
-    constexpr bool kRasterizes = true;
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr const char* kRendererName = "DIRECTX9";
     constexpr bool kRasterizes = true;
@@ -97,9 +94,6 @@ namespace
     constexpr bool kRasterizes = true;
 #elif defined(CNA_RENDERER_DIRECTX12)
     constexpr const char* kRendererName = "DIRECTX12";
-    constexpr bool kRasterizes = true;
-#elif defined(CNA_RENDERER_LLGL)
-    constexpr const char* kRendererName = "LLGL";
     constexpr bool kRasterizes = true;
 #else
 #error "REMED-GFX-165: this renderer has no declared backbuffer-readback contract."

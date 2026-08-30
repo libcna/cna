@@ -66,7 +66,7 @@ namespace
 /// asserts a readback the renderer honestly cannot perform, in four tests at once.
 [[nodiscard]] bool VolumeReadbackSupported()
 {
-    return !CNA_RENDERER_IS(Igl);
+    return true;
 }
 }
 

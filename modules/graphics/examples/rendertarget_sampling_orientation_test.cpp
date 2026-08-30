@@ -158,25 +158,6 @@ namespace
 #elif defined(CNA_RENDERER_CANVAS)
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "CANVAS";
-#elif defined(CNA_RENDERER_SOKOL)
-    // plans/plan_sokol.md SOKOL-38: real geometry is genuinely rasterized, and RenderTarget2D sampling
-    // orientation is now correct -- REMED-GFX-147 found (via this very file, once GetData() below
-    // could finally observe a real comparison instead of always throwing) that it was NOT correct
-    // before this task: a render target's colour image is written by GPU rasterization, whose
-    // framebuffer-origin convention stores CNA's logical row 0 at OpenGL's HIGH y, the opposite of
-    // a plain SokolTextureRenderer's un-flipped CPU upload -- sampling both the same way silently
-    // mirrored every render-target source vertically. Fixed with a per-draw `rtFlipV` shader
-    // uniform (sprite_fs_params/textured3d_fs_params/lit3d_fs_params), the same per-slot-uniform
-    // shape EasyGL's own uRtFlipV and bgfx's u_rtFlipV use for this identical finding.
-    // `RequireReadable`'s direct RenderTarget2D::GetData now round-trips real content too
-    // (SokolRenderTargetRenderer::GetData reads back via a throwaway GL FBO around the raw GL
-    // texture sg_gl_query_image_info() exposes), so `kRasterizes = true` is accurate for what this
-    // file measures -- and, as of this task, every one of its 53 checks passes for real.
-    constexpr bool kRasterizes = true;
-    constexpr const char* kRendererName = "SOKOL";
-#elif defined(CNA_RENDERER_LLGL)
-    constexpr bool kRasterizes = true;
-    constexpr const char* kRendererName = "LLGL";
 #else
 #error "REMED-GFX-147: this renderer has no declared render-target orientation contract."
 #endif

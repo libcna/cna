@@ -164,12 +164,6 @@ namespace
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr Contract kContract{"EASYGL", true, Support::Exact, Support::Exact,
                                  true, true, Support::Exact, MipTargets::Real, true, true, true, true, false};
-#elif defined(CNA_RENDERER_SKIA)
-    // Skia's 2D emulation owns six independent CPU raster surfaces at every requested mip level.
-    // Rendering and uploads are byte-exact; leaving a rendered face regenerates its mip chain.
-    // It deliberately clamps MSAA to zero because these SkSurface targets are single-sample.
-    constexpr Contract kContract{"SKIA", true, Support::Exact, Support::Exact,
-                                 true, false, Support::Exact, MipTargets::Real, true, true, true, false, false};
 #elif defined(CNA_RENDERER_BGFX)
     // REMED-GFX-138: GFX-154's ordered completion now exposes both bgfx's resolved cube level 0
     // and every auto-generated mip before the readback blit. The combined MSAA+mip path is exact
@@ -225,32 +219,6 @@ namespace
 #elif defined(CNA_RENDERER_DIRECTX12)
     constexpr Contract kContract{"DIRECTX12", true, Support::Exact, Support::Exact,
                                  true, true, Support::Exact, MipTargets::Real, true, true, false, false, false};
-#elif defined(CNA_RENDERER_LLGL)
-    // `msaaCubeTargets` true (LLGL-34): unlike Vulkan's own renderer-wide sampleCount_ piggyback,
-    // this renderer reads multiSampleCount at each RenderTargetCube's own construction, so a cube
-    // target multisamples independently of the back buffer -- already pixel-verified by
-    // examples/llgl_msaa_rendertargetcube_test.cpp.
-    // `mipMapCubeTargets` Real / `mipLevel` Exact (LLGL-35): a real mip chain on the shared cube
-    // colour texture, byte-exact readback at every level -- already pixel-verified by
-    // examples/llgl_mip_rendertargetcube_test.cpp.
-    // `preservesOnRebind` false, specifically for THIS file's own U1/U2 exercise, which calls
-    // GetData() BETWEEN the producer draw and the second (marker) draw. This renderer's own
-    // CreateRenderTargetCube never reads its preserveContents argument at all (`bool
-    // /*preserveContents*/`); what it relies on instead is that every command naming the SAME
-    // target within one UNFLUSHED frame is grouped into ONE render pass at replay time (its "one
-    // render pass per distinct target, not per bind" architecture -- see docs/llgl-renderer.md's own
-    // "Two implementation choices" paragraph). GetData() calls FlushPendingFrameEXT(), which submits
-    // and clears the queued frame -- so the SECOND bind here starts a genuinely NEW render pass with
-    // undefined/discard-style load semantics, and the untouched region is really lost. Contrast with
-    // examples/rendertargetcube_usage_test.cpp/rendertargetcube_msaa_face_test.cpp's own LLGL
-    // branches (`preserves`/`msaaEngages` = true): both of THOSE files' own producer/marker draws are
-    // issued with no GetData()/flush in between (their own header comments say so explicitly), so
-    // content genuinely survives there -- this is not a contradiction between the three files, it is
-    // the same underlying architecture measured two different, both faithfully reproduced, ways.
-    // `rtCubeSetData` false: LlglRenderTargetCubeRenderer declares no SetData override of its own,
-    // so it inherits ITextureCubeRenderer::SetData's own default refusal.
-    constexpr Contract kContract{"LLGL", true, Support::Exact, Support::Exact,
-                                 true, true, Support::Exact, MipTargets::Real, false, true, false, false, false};
 #else
 #error "REMED-GFX-134: this renderer has no declared RenderTargetCube GetData contract."
 #endif

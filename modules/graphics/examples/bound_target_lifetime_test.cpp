@@ -174,8 +174,6 @@ namespace
     constexpr const char* kRendererName = "DIRECTX11";
 #elif defined(CNA_RENDERER_DIRECTX12)
     constexpr const char* kRendererName = "DIRECTX12";
-#elif defined(CNA_RENDERER_LLGL)
-    constexpr const char* kRendererName = "LLGL";
 #else
 #error "REMED-GFX-168: this renderer has no declared bound-target lifetime contract."
 #endif
@@ -226,7 +224,7 @@ namespace
      * wraps real Vulkan and shares the same MRT/mip-regeneration path.
      */
     constexpr bool kMrtSlotMipReadable =
-#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_VULKAN) || defined(CNA_RENDERER_LLGL)
+#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_VULKAN)
         false;
 #else
         true;

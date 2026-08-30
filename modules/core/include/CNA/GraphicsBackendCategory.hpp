@@ -70,7 +70,6 @@ namespace CNA
             case GraphicsRendererType::OpenGLES3:
             case GraphicsRendererType::OpenGL33:
             case GraphicsRendererType::Vulkan:
-            case GraphicsRendererType::Magnum:
             case GraphicsRendererType::DirectX11:
             case GraphicsRendererType::DirectX12:
             case GraphicsRendererType::Direct2D:
@@ -97,21 +96,11 @@ namespace CNA
             case GraphicsRendererType::WebGPU:
             case GraphicsRendererType::FreeDirect:
             case GraphicsRendererType::SdlGpu:
-            case GraphicsRendererType::Wicked:
-            case GraphicsRendererType::Sokol:
-            case GraphicsRendererType::Diligent:
-            case GraphicsRendererType::Llgl:
-            case GraphicsRendererType::Igl:
             case GraphicsRendererType::Fna3d:
-            case GraphicsRendererType::OpenVg:
-            case GraphicsRendererType::NanoVg:
                 return GraphicsBackendCategory::TranslationLayer;
 
             case GraphicsRendererType::Software:
-            case GraphicsRendererType::Skia:
-            case GraphicsRendererType::Blend2D:
             case GraphicsRendererType::PortableGL:
-            case GraphicsRendererType::TinyGL:
                 return GraphicsBackendCategory::Software;
 
             case GraphicsRendererType::WebGL1:

@@ -123,14 +123,6 @@ TEST_F(CnjTexture3DTest, LoadsRealCnjFixture)
     EXPECT_EQ(texture->getDepthProperty(), 2);
 
     std::vector<Color> pixels(8, Color(0, 0, 0, 0));
-    // IGL owns real volume pixels but cannot fetch them back: IGL v1.1.1 has no way to attach a 3D
-    // texture to a framebuffer, its only readback route (plans/plan_igl.md IGL-17). Everything this test
-    // asserts about the CNJ reader itself is checked above; only the round trip needs readback.
-    if (CNA_RENDERER_IS(Igl))
-    {
-        EXPECT_THROW((void)texture->GetData(pixels.data(), 8), System::NotSupportedException);
-        return;
-    }
     texture->GetData(pixels.data(), 8);
     for (int i = 0; i < 8; ++i)
     {

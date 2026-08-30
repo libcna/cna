@@ -113,8 +113,6 @@ namespace
         return "HEADLESS";
 #elif defined(CNA_RENDERER_SDL_RENDERER)
         return "SDL_RENDERER";
-#elif defined(CNA_RENDERER_SKIA)
-        return "SKIA";
 #elif defined(CNA_RENDERER_GDI)
         return "GDI";
 #else

@@ -80,7 +80,6 @@ namespace CNA
 
             case GraphicsRendererType::WebGL1:
             case GraphicsRendererType::WebGL2:
-            case GraphicsRendererType::Magnum:
             case GraphicsRendererType::Headless:
             case GraphicsRendererType::Stub:
             case GraphicsRendererType::Direct2D:
@@ -95,21 +94,11 @@ namespace CNA
 
             case GraphicsRendererType::WebGPU:
             case GraphicsRendererType::Software:
-            case GraphicsRendererType::Skia:
-            case GraphicsRendererType::Blend2D:
             case GraphicsRendererType::FreeDirect:
-            case GraphicsRendererType::Wicked:
-            case GraphicsRendererType::Sokol:
-            case GraphicsRendererType::Diligent:
-            case GraphicsRendererType::Llgl:
-            case GraphicsRendererType::Igl:
             case GraphicsRendererType::Fna3d:
             case GraphicsRendererType::SvgDom:
-            case GraphicsRendererType::OpenVg:
             case GraphicsRendererType::PortableGL:
-            case GraphicsRendererType::TinyGL:
             case GraphicsRendererType::PixiJs:
-            case GraphicsRendererType::NanoVg:
                 return GraphicsBackendMaturity::Experimental;
 
             case GraphicsRendererType::DirectX1:

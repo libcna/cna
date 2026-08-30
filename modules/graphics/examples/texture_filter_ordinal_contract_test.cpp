@@ -162,9 +162,6 @@ namespace
 #elif defined(CNA_RENDERER_DIRECTX12)
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "DIRECTX12";
-#elif defined(CNA_RENDERER_LLGL)
-    constexpr bool kRasterizes = true;
-    constexpr const char* kRendererName = "LLGL";
 #else
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "UNKNOWN";
