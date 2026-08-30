@@ -688,6 +688,10 @@ SYMBOL_OWNER_OVERRIDES: dict[str, str] = {
     "Microsoft::Xna::Framework::Graphics::Texture::IsFormatAllowedByProfileEXT": "CBIND-120",
     "Microsoft::Xna::Framework::Graphics::Texture::IsCubeFormatAllowedByProfileEXT": "CBIND-120",
     "Microsoft::Xna::Framework::Graphics::Texture::IsRenderTargetFormatAllowedByProfileEXT": "CBIND-120",
+    # CBIND-121, 2026-08-30. SAMPLE-052 added this reflective shared-resource declaration after
+    # the reflective reader binding slice had closed. Integration records the one-row C-ABI
+    # design decision without inventing a C route or folding it into a completed task.
+    "Microsoft::Xna::Framework::Content::ReflectiveTypeReaderBuilder::SharedResourceField": "CBIND-121",
 }
 
 

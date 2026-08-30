@@ -1,7 +1,7 @@
 # CNA Native C Binding / Stable C ABI — Implementation Plan
 
 > **Status (2026-08-30, after synchronizing the Content Pipeline branch with current `next`):
-> B0–B11 and B13 complete; B12 and B14 are explicit
+> B0–B11 and B13 complete; B12, B14 and B15 are explicit
 > C-ABI backlog, not Content Pipeline v1 work.** Phase B10 bound all 506 rows the sixth merge
 > reopened, the CNB content format included; Phase B11 bound the seventh merge's 15-row tail. The
 > completed experimental C++ Content Pipeline, its post-XNB continuation, CP-055's manifest-v7
@@ -9,11 +9,11 @@
 > contract now add 654 deliberately
 > unbound inventory rows under `CBIND-117`.
 > Coverage:
-> **551 headers / 9,488 symbols — 8,352 implemented, 15 approved partial, 657 planned, 464 not
+> **551 headers / 9,489 symbols — 8,352 implemented, 15 approved partial, 658 planned, 464 not
 > applicable.** Phase B13 then bound `Load<Model>` and the `Tag` a content processor writes,
 > taking the ABI to **`0.19.0`** and **4,048 → 4,051** exports without moving a coverage row. The
 > release gate is consistently
-> **Not ready** on coverage alone until `CBIND-117` and `CBIND-120`; this integration does not invent C routes for
+> **Not ready** on coverage alone until `CBIND-117`, `CBIND-120` and `CBIND-121`; this integration does not invent C routes for
 > a C++ build-time extension API merely because it is public. See *Current status* and Phase B12.
 > This document is
 > the plan for a native C API, implemented inside the main CNA repository. It is intentionally
@@ -1536,6 +1536,18 @@ of attributing it to a completed task or hiding it.
 |---|---|---:|---|---|
 | CBIND-120 | Design or disposition the texture profile-format queries | 3 | ⬜ | Decide whether C callers need the renderer-independent Texture2D, TextureCube, and render-target profile/format legality queries and either add C-native routes with pure-C/runtime/negative evidence or record owner-approved dispositions. Remove each exact `SYMBOL_OWNER_OVERRIDES` entry when its row is resolved. This task is C-ABI backlog only; synchronization adds no export and does not change ABI `0.19.0`. |
 
+## Phase B15 — the ninth merge's reflective shared-resource tail
+
+The final synchronization with local `next` brought in
+`ReflectiveTypeReaderBuilder::SharedResourceField`, one public template declaration added by
+SAMPLE-052 after the reflective-reader C binding slice closed. The Content Pipeline integration
+session does not authorize a new C route, but the canonical inventory must not assign new work to
+completed `CBIND-114` or hide it as not applicable.
+
+| # | Task | Rows | Status | Acceptance criteria |
+|---|---|---:|---|---|
+| CBIND-121 | Design or disposition reflective shared-resource field declarations | 1 | ⬜ | Decide whether the existing C reflective-reader builder needs a C-native shared-resource field declaration and either add the route with full deferred-fixup, lifetime and malformed-index evidence or record an owner-approved disposition. Remove the exact `SYMBOL_OWNER_OVERRIDES` entry when resolved. This is C-ABI backlog only; synchronization adds no export and does not change ABI `0.19.0`. |
+
 ## Mandatory test layers
 
 Every implemented public C entry point must receive all applicable coverage in the same task:
@@ -1596,18 +1608,19 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-**Snapshot (2026-08-30, after synchronizing current `next` into `content-pipeline-final`):** 551 headers / 9,488 symbols —
-**8,352 implemented, 15 approved partial, 657 planned, 464 not applicable.** ABI `0.19.0`, 4,051
+**Snapshot (2026-08-30, after synchronizing current `next` into `content-pipeline-final`):** 551 headers / 9,489 symbols —
+**8,352 implemented, 15 approved partial, 658 planned, 464 not applicable.** ABI `0.19.0`, 4,051
 exported symbols — the same 4,051 with `CNA_CNAEXT` on and off (measured symbol by symbol: zero
 differ), which is the engine layer's ABI promise measured rather than asserted.
 
 The completed C++ Content Pipeline, its continuation, and Model-v2 CPU codec reopened only the
 coverage criterion: all 654 unmapped Content Pipeline declarations are assigned to open
 `CBIND-117`; the three public texture profile-format queries added by current `next` are assigned
-to open `CBIND-120`. No C route or ABI export was added, and
+to open `CBIND-120`; the reflective shared-resource builder declaration from the final local
+`next` synchronization is assigned to open `CBIND-121`. No C route or ABI export was added, and
 the four new
 not-applicable rows are explicitly deleted declarations reported by Doxygen. The release gate is
-therefore **Not ready** on that one measured criterion while B12 and B14 remain open.
+therefore **Not ready** on that one measured criterion while B12, B14 and B15 remain open.
 Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.
 
 **Phase B10 closed the matrix it was opened to close.** The sixth merge of `next` brought in 506
