@@ -1443,6 +1443,18 @@ namespace CNA::Internal::Renderers::EasyGL
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void SetSwapInterval(int interval) override;
+
+        /**
+         * @brief The swap interval this renderer was last asked for, honoured or not.
+         *
+         * A GL context without a real vertical-retrace signal refuses to engage vsync, so
+         * `SDL_GL_GetSwapInterval()` cannot distinguish "CNA never forwarded the request" from
+         * "the driver declined it". This reports the first of those on its own. Mirrors
+         * `SkiaRenderer::GetSwapIntervalEXT()`.
+         *
+         * @return The interval last passed to SetSwapInterval, or the renderer's default if none.
+         */
+        CNAEXT [[nodiscard]] int GetSwapIntervalEXT() const override { return swapInterval_; }
         void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         void GetViewportSize(int& width, int& height) override;
         void GetDefaultViewportRect(int& x, int& y, int& width, int& height) override;

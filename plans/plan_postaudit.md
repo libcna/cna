@@ -1,7 +1,7 @@
 # CNA Post-Audit Development Plan
 
 **Created:** 2026-08-03, on `feature/audit`, immediately after `REMED-GFX-202` closed.
-**Owns:** `REMED-GFX-203` … `REMED-GFX-242` and any future finding admitted by the rules below.
+**Owns:** `REMED-GFX-203` … `REMED-GFX-243` and any future finding admitted by the rules below.
 **Does not own:** the remediation campaign. `remediation/REMEDIATION_INDEX.md` and
 `remediation/REMEDIATION_PROGRESS.md` remain the authoritative status of record for every ticket,
 including the ones scheduled here.
@@ -2797,3 +2797,47 @@ renderer's capability.
 
 **Evidence.** `spikes/xna-pixel-center-spike/` leg `LEG-F`, run at both profiles
 (`build-and-run.sh`, and the same binary with `hidef`).
+
+---
+
+## 42. `REMED-GFX-243` — the vsync case skipped, and skipping it defended nothing
+
+**Status:** **CLOSED — 2026-08-30** · **Test defect plus a missing renderer observable**
+
+**Defect.** `EasyGL_GraphicsDeviceManager_Vsync` reported `Skipped` on every headless run. Its skip
+is honestly guarded — before skipping it proves the limitation by calling a raw, CNA-uninvolved
+`SDL_GL_SetSwapInterval(1)` and finding that even that cannot move the interval — so the skip itself
+was not the bug. What the skip concealed was.
+
+The case exists to guard one regression: `GraphicsDevice::Reset()` set every other
+`PresentationParameters` field on the renderer but never forwarded `PresentationInterval`, so
+`GraphicsDeviceManager.ApplyChanges()` could not turn vsync on or off. **Deleting that forward and
+re-running left the case reporting `PASS` and `SKIP`, exit 77.** Check A — vsync off must give
+`SDL_GL_GetSwapInterval() == 0` — passes vacuously with the forward gone, because the interval
+simply stays 0, which is what A expects; and Check B, the only one that could tell the difference,
+is the half that skips. Measured, not reasoned.
+
+**Root cause is an asymmetry in the renderer interface.** `IGraphicsRenderer::SetSwapInterval` had
+no counterpart, so nothing could distinguish *CNA never forwarded the request* from *the driver
+declined it*. The first is CNA's own state and is observable anywhere; the second is not.
+`EasyGLRenderer` even had a `swapInterval_` member for it — **dead, never assigned**.
+
+**Fix.** `CNAEXT GetSwapIntervalEXT()` joins the setter on `IGraphicsRenderer`, defaulted to `-1`
+for a renderer that does not record the request — the honest answer for one that ignores the setter
+too. `EasyGLRenderer` records what it is asked for and overrides it, which brings its dead member to
+life. `SkiaRenderer` already had this exact accessor (`skia_present_interval_test.cpp` uses it), so
+the shape is the established one rather than a new invention; adding the base virtual makes Skia's
+an implicit override, which is valid but **was not verified by compilation here** — no Skia
+configuration builds in this tree.
+
+The case now asks the two questions separately. `P1`/`P2` check that vsync off and on are forwarded
+to the renderer and run everywhere; `A`/`B` check that the driver honoured it, and `B` keeps its
+guarded skip. Order matters and is deliberate: `P1` sets the interval to 0 first, so `P2`'s
+transition to 1 is a real change rather than a reading of the renderer's default.
+
+**Exit code 77 is gone.** The forwarding half always runs, so reporting the whole case as skipped
+would hide a check that did execute.
+
+**Evidence.** `3/3 PASS (driver half skipped)`, exit 0, and `ctest` now says `Passed` rather than
+`Skipped`. Mutation-checked: with the `Reset()` forward deleted the case fails on `P1` with exit 1,
+where before this ticket the same deletion produced `PASS` and exit 77.

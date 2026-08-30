@@ -4740,6 +4740,10 @@ if (!ProfileIsEs2ApiGeneration())
 
     void EasyGLRenderer::SetSwapInterval(int interval)
     {
+        // Recorded as well as forwarded. Whether the driver HONOURS an interval is the driver's
+        // business and a headless GL context routinely refuses to; whether CNA asked for it is
+        // this renderer's, and is the half a test can check anywhere. REMED-GFX-243.
+        swapInterval_ = interval;
         platformContext_->SetSwapInterval(interval);
     }
 
