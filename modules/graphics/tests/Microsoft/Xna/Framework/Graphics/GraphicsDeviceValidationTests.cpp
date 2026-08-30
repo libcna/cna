@@ -250,15 +250,6 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
     // SetRenderTargets() refuses a non-empty set as well, so neither layer can accept one silently.
     EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
     }
-    else if (CNA_RENDERER_IS())
-    {
-        // From `next`: TinyGL keeps IGraphicsRenderer's nullptr CreateRenderTarget2D()/
-        // CreateRenderTargetCube() defaults -- it renders into exactly one ZBuffer and has no
-        // off-screen framebuffer concept -- so GraphicsDevice rejects the bind before reaching the
-        // renderer, and TinyGLRenderer::SetRenderTargets() refuses a non-empty set as well
-        // (modules/renderers/tinygl/examples/tinygl_rejection_test.cpp).
-        EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
-    }
     else if (CNA_RENDERER_IS(OpenGLES1))
     {
     // plans/plan_opengles1.md: OpenGL ES 1.1 has no MRT mechanism, and no extension in the CM registry

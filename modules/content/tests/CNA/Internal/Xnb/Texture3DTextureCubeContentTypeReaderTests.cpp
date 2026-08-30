@@ -84,7 +84,7 @@ using Microsoft::Xna::Framework::Graphics::TextureCube;
 /// refuses rather than fabricating voxels, and the shared layer raises NotSupportedException.
 [[nodiscard]] inline bool VolumeReadbackSupported()
 {
-    return !CNA_RENDERER_IS();
+    return true;
 }
 
 namespace

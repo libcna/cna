@@ -557,73 +557,46 @@ TEST_F(HiDefFormatConstructionTest, TheProfileItselfRefusesNothing)
 
 TEST_F(HiDefFormatConstructionTest, SingleIsTheRenderersCallOnHiDef)
 {
-    if (CNA_RENDERER_IS())
-        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Single));
-    else
         EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Single), std::runtime_error);
 }
 
 TEST_F(HiDefFormatConstructionTest, Vector2IsTheRenderersCallOnHiDef)
 {
-    if (CNA_RENDERER_IS())
-        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector2));
-    else
         EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector2), std::runtime_error);
 }
 
 TEST_F(HiDefFormatConstructionTest, Vector4IsTheRenderersCallOnHiDef)
 {
-    if (CNA_RENDERER_IS())
-        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector4));
-    else
         EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector4), std::runtime_error);
 }
 
 TEST_F(HiDefFormatConstructionTest, HalfSingleIsTheRenderersCallOnHiDef)
 {
-    if (CNA_RENDERER_IS())
-        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfSingle));
-    else
         EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfSingle), std::runtime_error);
 }
 
 TEST_F(HiDefFormatConstructionTest, HalfVector2IsTheRenderersCallOnHiDef)
 {
-    if (CNA_RENDERER_IS())
-        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector2));
-    else
         EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector2), std::runtime_error);
 }
 
 TEST_F(HiDefFormatConstructionTest, HalfVector4IsTheRenderersCallOnHiDef)
 {
-    if (CNA_RENDERER_IS())
-        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector4));
-    else
         EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector4), std::runtime_error);
 }
 
 TEST_F(HiDefFormatConstructionTest, HdrBlendableIsTheRenderersCallOnHiDef)
 {
-    if (CNA_RENDERER_IS())
-        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HdrBlendable));
-    else
         EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HdrBlendable), std::runtime_error);
 }
 
 TEST_F(HiDefFormatConstructionTest, Rgba1010102IsTheRenderersCallOnHiDef)
 {
-    if (CNA_RENDERER_IS())
-        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba1010102));
-    else
         EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba1010102), std::runtime_error);
 }
 
 TEST_F(HiDefFormatConstructionTest, Rgba64IsTheRenderersCallOnHiDef)
 {
-    if (CNA_RENDERER_IS())
-        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba64));
-    else
         EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba64), std::runtime_error);
 }
 
@@ -665,12 +638,12 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
     {
         // plans/plan_runtimerenderer.md RTR-P9-4: the Skia-promoted format list, evaluated at runtime so
         // this assertion describes the ACTIVE renderer rather than the build default.
-        const bool skia = CNA_RENDERER_IS();
+        const bool skia = false;
         // plans/plan_igl.md IGL-71: IGL's promoted set is deliberately two formats wide, not a mirror of
         // everything it can store. A format is here only once the whole public path is verified end
         // to end on both its backends, and only if its texel is a multiple of four bytes -- the
         // framework's own transfer rule, which ByteEXT, UShortEXT and HalfSingle would break.
-        const bool igl = CNA_RENDERER_IS();
+        const bool igl = false;
         const bool easyGlSignedNormalized =
             CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2);
         // REMED-GFX-244: the packed 16-bit formats Reach permits, promoted on the same ES 3

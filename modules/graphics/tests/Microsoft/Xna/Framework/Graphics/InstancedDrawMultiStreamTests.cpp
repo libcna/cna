@@ -2532,53 +2532,6 @@ TEST_F(InstancedDrawMultiStreamTest, UnsupportedRendererRejectsMixedStreamInstan
                    "different failure";
         }
     }
-    else if (CNA_RENDERER_IS())
-    {
-        // A SIXTH measured outcome (plans/plan_igl.md IGL-30/IGL-31): this renderer claims
-        // MultiStreamVertexInput natively (igl::VertexAttribute::bufferIndex expresses it) and
-        // implements a real instanced draw path -- `Igl_Instancing` renders three instances from a
-        // genuine instance-rate stream at three correctly separated positions. So the mixed-stream
-        // draw is ACCEPTED here, which is what this arm records.
-        //
-        // Deliberately not added to MultiStreamOracle() above: that set is the pixel-measurement
-        // oracle for the rest of this file, and nothing has measured this renderer's mixed-frequency
-        // multi-stream *result*. IGL-31 also records a real architectural limit on this renderer --
-        // attribute locations come from a fixed usage->slot table, so a later stream re-declaring an
-        // already-claimed usage is skipped rather than given its own location. Asserting acceptance
-        // is the honest measured outcome; asserting the pixels would be asserting something no run
-        // has produced.
-        //
-        // Before this arm existed an IGL build took the `else` below and asserted that the draw is
-        // REFUSED, which is a standing red for a renderer that implements the path.
-        EXPECT_NO_THROW(draw())
-            << "this renderer claims MultiStreamVertexInput and implements DrawInstancedPrimitivesEx, "
-               "so a mixed-frequency multi-stream instanced draw must be accepted rather than refused";
-    }
-    else if (CNA_RENDERER_IS())
-    {
-        // A FOURTH measured outcome (plans/plan_wicked.md WICKED-58 / REMED-GFX-202): this renderer claims
-        // MultiStreamVertexInput because several PER-VERTEX streams genuinely re-slot, and it
-        // implements instanced drawing -- but its instanced vertex programs declare exactly one
-        // per-instance record, so a second per-instance stream cannot be expressed. The draw must
-        // reach that declared boundary, with the message naming the exact limit -- never a render
-        // from a subset of the streams, and never some other failure.
-        try
-        {
-            draw();
-            ADD_FAILURE()
-                << "this renderer declares exactly one per-instance stream and was expected to refuse "
-                   "the second rather than render from a subset of the streams";
-        }
-        catch (const std::exception& e)
-        {
-            EXPECT_STREQ(
-                "Wicked renderer: only one per-instance VertexBufferBinding is supported (2 were "
-                "bound).",
-                e.what())
-                << "the refusal must be this renderer's own declared one-instance-stream boundary, "
-                   "not a different failure";
-        }
-    }
     else
     {
         // A THIRD, measured outcome, not a silent skip: this renderer claims MultiStreamVertexInput

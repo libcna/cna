@@ -233,7 +233,7 @@ constexpr bool kExpectCompiledEffects = false;
 /// this replaces did.
 [[nodiscard]] inline bool IsTwoDimensionalOnly()
 {
-    return CNA_RENDERER_IS();
+    return false;
 }
 
 TEST(GraphicsDeviceCapabilityTest, SupportsThreeD)
