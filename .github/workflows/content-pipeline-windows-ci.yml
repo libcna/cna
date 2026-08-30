@@ -1,11 +1,16 @@
 # CP-062: native MSVC build and CPU/CLI regression gate for the build-time Content Pipeline.
-# This does not claim validation until the workflow has actually run. It is deliberately manual,
-# matching this repository's existing Windows-CI policy, and uses HEADLESS with no runtime-device
-# tests so the job tests content compilation rather than a display, GPU, or media playback backend.
+# This does not claim validation until the workflow has actually run. workflow_dispatch remains
+# available once the workflow is registered on the default branch; the feature-branch push trigger
+# permits pre-integration validation without first merging the workflow into an integration branch.
+# HEADLESS and no runtime-device tests keep the job about content compilation rather than a display,
+# GPU, or media playback backend.
 
 name: Content Pipeline Windows CI (MSVC)
 
 on:
+  push:
+    branches:
+      - content-pipeline-final
   workflow_dispatch: {}
 
 permissions:
