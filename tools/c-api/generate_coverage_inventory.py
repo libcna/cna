@@ -682,10 +682,12 @@ SYMBOL_OWNER_OVERRIDES: dict[str, str] = {
     # The two CBIND-088B skybox entries that stood here expired when CBIND-091B bound Skybox and
     # the pipeline pair that carries it, and the four CBIND-087C image-based-light entries expired
     # when CBIND-091A bound ImageBasedLightEXT.
-    # CBIND-120, 2026-08-30. The current `next` merge added this public CNAEXT query after the
-    # graphics binding slice had closed. Recording it as new binding work does not authorize
+    # CBIND-120, 2026-08-30. The current `next` merges added these public CNAEXT queries after the
+    # graphics binding slice had closed. Recording them as new binding work does not authorize
     # growing the C ABI during Content Pipeline integration.
     "Microsoft::Xna::Framework::Graphics::Texture::IsFormatAllowedByProfileEXT": "CBIND-120",
+    "Microsoft::Xna::Framework::Graphics::Texture::IsCubeFormatAllowedByProfileEXT": "CBIND-120",
+    "Microsoft::Xna::Framework::Graphics::Texture::IsRenderTargetFormatAllowedByProfileEXT": "CBIND-120",
 }
 
 
