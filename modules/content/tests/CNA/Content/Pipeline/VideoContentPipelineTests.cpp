@@ -178,7 +178,8 @@ TEST(VideoContentPipelineTest, IsDeterministicAndByteIdenticalToExistingProducer
     EXPECT_EQ(first.runtimeReferences.front().logicalName, "Movies/intro.mp4");
     EXPECT_EQ(first.runtimeReferences.front().expectedAssetTypeId, 0u);
     ASSERT_EQ(first.deploymentFiles.size(), 1u);
-    EXPECT_EQ(first.deploymentFiles.front().source, media);
+    EXPECT_EQ(first.deploymentFiles.front().source,
+              std::filesystem::weakly_canonical(media));
     EXPECT_EQ(first.deploymentFiles.front().outputPath, "Movies/intro.mp4");
 
     Cnb::CnbVideoData expected;

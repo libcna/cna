@@ -170,7 +170,8 @@ TEST(SongContentPipelineTest, IsDeterministicAndByteIdenticalToExistingProducers
     EXPECT_EQ(first.runtimeReferences.front().logicalName, "Music/theme.ogg");
     EXPECT_EQ(first.runtimeReferences.front().expectedAssetTypeId, 0u);
     ASSERT_EQ(first.deploymentFiles.size(), 1u);
-    EXPECT_EQ(first.deploymentFiles.front().source, media);
+    EXPECT_EQ(first.deploymentFiles.front().source,
+              std::filesystem::weakly_canonical(media));
     EXPECT_EQ(first.deploymentFiles.front().outputPath, "Music/theme.ogg");
 
     Cnb::CnbSongData expected;

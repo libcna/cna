@@ -934,7 +934,8 @@ TEST(XnbContentPipelineTest, VideoUsesFnaObjectReferencesAndPreservesNativeMetad
     ASSERT_EQ(built.dependencies.size(), 2u);
     ASSERT_EQ(built.runtimeReferences.size(), 1u);
     ASSERT_EQ(built.deploymentFiles.size(), 1u);
-    EXPECT_EQ(built.deploymentFiles[0].source, scratch.Path() / "clip.ogv");
+    EXPECT_EQ(built.deploymentFiles[0].source,
+              std::filesystem::weakly_canonical(scratch.Path() / "clip.ogv"));
     EXPECT_EQ(built.deploymentFiles[0].outputPath, "clip.ogv");
 
     const std::filesystem::path nativeRoot = scratch.Path() / "native";

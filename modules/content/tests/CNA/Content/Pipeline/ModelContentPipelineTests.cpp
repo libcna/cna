@@ -35,6 +35,12 @@ using Microsoft::Xna::Framework::Graphics::Model;
 
 namespace
 {
+#if defined(_WIN32)
+    constexpr const char* NullOutputRedirection = " >NUL 2>&1";
+#else
+    constexpr const char* NullOutputRedirection = " >/dev/null 2>&1";
+#endif
+
     class ScratchDirectory
     {
     public:
@@ -162,7 +168,7 @@ TEST(ModelContentPipelineTest, IsByteIdenticalToTheExistingDirectGltfProducer)
 
     const std::string command = std::string(CNA_GLTF_TO_CNB_TOOL_PATH) + " " +
                                 fixture.string() + " " + scratch.Path().string() +
-                                " asset --quiet >/dev/null 2>&1";
+                                " asset --quiet" + NullOutputRedirection;
     ASSERT_EQ(std::system(command.c_str()), 0);
 
     const Pipeline::ContentBuildResult first = BuildModel(fixture, "asset");
@@ -183,7 +189,7 @@ TEST(ModelContentPipelineTest, AnimatedSingleModelKeepsEmbeddedClipsWithoutChang
 
     const std::string command = std::string(CNA_GLTF_TO_CNB_TOOL_PATH) + " " +
                                 fixture.string() + " " + scratch.Path().string() +
-                                " actor --quiet >/dev/null 2>&1";
+                                " actor --quiet" + NullOutputRedirection;
     ASSERT_EQ(std::system(command.c_str()), 0);
 
     const Pipeline::ContentBuildResult result = BuildModel(fixture, "actor");
