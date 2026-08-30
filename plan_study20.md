@@ -393,3 +393,149 @@ study/                              does not exist
 Re-run it in every reserve week. If `CNA production` grew without a matching
 removal, §5 was violated and that is the week's finding. `plan*.md` includes this
 document.
+
+---
+
+## Appendix B — The same plan with no AI at all
+
+The question this appendix answers is different from the one §1 answers. §1 takes a
+budget (10,400 h) and asks what fits. This asks the opposite: **take over every line
+the generator produced, never use a model again, and derive the hours from the work.**
+
+### B.1 Two measurement corrections first
+
+Both inflate every estimate if left uncorrected.
+
+**Generated shader blobs are not code.** `modules/**` carries **113,666 lines** of
+checked-in compiled shader bytecode — `hlsl_shaders.hpp` alone is 59,710 lines, and
+it is 96% of what §2 listed as `renderers/common`, the "contract everything passes
+through". It is a build artifact of `fxc`/`shaderc`/`glslc`. Nobody reads it and
+nobody rewrites it; it is *regenerated*. §2's T1 tier must lose 93,466 lines on this
+count alone.
+
+**Comments and blanks are 31% of the tree.** Doxygen is mandatory here
+(`CLAUDE.md`), so headers are comment-dense. Reading and writing rates apply to
+code lines, not file lines.
+
+| | File lines | **Code lines** |
+|---|---|---|
+| Production, blobs excluded | 567,911 | **390,065** |
+| — renderers, all 46 families | | 157,714 |
+| — `c-api` | | 103,488 |
+| — every other module | | 128,863 |
+| `sharp-runtime` | 182,552 | 90,224 |
+| Tests | 260,948 | 195,034 |
+| Examples | 359,065 | 267,153 |
+| **Total owned** | | **942,476** |
+
+### B.2 Rates
+
+Every number below follows from these. They are the argument; change one and the
+answer moves (§B.5).
+
+| | Rate |
+|---|---|
+| Deep verification reading, unfamiliar systems C++, reference open | 150 code-lines/h |
+| Skim to decide fate | 800 code-lines/h |
+| Reading formulaic code (tests, examples) | 300 code-lines/h |
+| **Rewriting production C++ with a spec in hand** | **25 code-lines/h** |
+| Writing tests by hand | 35 code-lines/h |
+| Integration, debugging, CI, release | +35% on all coding |
+| Deleting a renderer family (code, CMake, registry, docs, tests, CI) | 12 h |
+| Learning one GPU/platform API to audit level from primary docs | 80 h |
+| **The no-AI tax** — tooling §4 assigned to the green tier, now hand-built | 800–1,000 h |
+
+The no-AI tax is not a rounding term. Cross-reference generators, mechanical
+CNA↔FNA diffs across 1,700 files, fuzz harnesses for XNB/glTF/images/fonts, the
+benchmark harness, coverage and doc-consistency checkers, and the CI matrix all
+have to be written by hand and then maintained for a decade.
+
+### B.3 The three answers
+
+| Scenario | Hours | @ 20 h/wk | @ 40 h/wk |
+|---|---|---|---|
+| **A** — read everything, rewrite everything | **51,300** | **49 years** | 27 years |
+| **B** — read everything, cut hard, rewrite the kept core | **14,800** | **14 years** | 7.7 years |
+| **C** — `plan_study20.md`'s own scope, no AI, no wholesale rewrite | **16,000** | **15 years** | 8.3 years |
+
+Scenario A is not a plan. 51,300 hours is 26 person-years of full-time work; the
+reading alone is 5,071 h and the writing and integration are 43,763 h. Rewriting
+942,476 code lines by hand is a career, and at the end it is the same framework.
+
+**C costs more than B.** That is not a rounding artifact and it is the most useful
+result here: keeping 46 renderer families alive and *reading* them costs more than
+deleting 38 of them and *rewriting* what remains. Reading is cheaper than writing
+per line, but you only write the lines you keep — and you read everything you keep
+forever, in every later audit, sanitizer pass, fidelity diff and release matrix.
+
+### B.4 What 10,000 hours actually buys, and the number that settles it
+
+Inverting scenario B — how large a kept core fits the budget:
+
+| Kept core | Hours | @ 20 h/wk | vs. FNA |
+|---|---|---|---|
+| 81,000 code lines | 11,100 | 10.7 years | 1.0× |
+| 100,000 | 12,600 | 12.1 years | 1.2× |
+| 130,000 | 14,800 | 14.2 years | 1.6× |
+| 180,000 | 18,600 | 17.8 years | 2.2× |
+| 250,000 | 23,800 | 22.9 years | 3.1× |
+
+Measured in the local reference tree:
+
+```
+FNA          338 .cs files      49,576 code lines
+FNA3D                           31,599 code lines
+                                -------
+                                81,175 code lines
+```
+
+**FNA + FNA3D is 81,175 code lines. The budget's ceiling is ~81,000.** These were
+derived independently and agree to 0.2%.
+
+That is the whole answer. A complete, shipping, game-proven XNA 4.0 reimplementation
+with a real multi-backend GPU layer is an **81,000-line** program, and 81,000 lines
+is exactly what one person can own by hand in ten years at twenty hours a week
+without a model.
+
+Two comparisons that follow from it:
+
+- CNA's production code is **4.8× FNA+FNA3D** (3.5× excluding `c-api`) for the same
+  API. Note that CNA has **338 public XNA headers** against FNA's **338 `.cs`
+  files** — the API surface is right. The multiple is entirely implementation.
+- Per renderer, CNA is *not* bloated: 157,714 code lines over 46 families is ~3,400
+  each, where FNA3D spends ~7,000 per backend. **Nothing here is too big. There are
+  just 46 of them.**
+
+### B.5 What could move these numbers
+
+An estimate spanning decades should say what it rests on.
+
+- **The 25 lines/h rewrite rate is load-bearing.** At 15 l/h scenario B is 20,400 h
+  (19.6 years); at 40 l/h it is 11,700 h (11.2 years). Calibrate it in year one on
+  a real module — rewrite `math` by hand, measure, and substitute the measured rate
+  here before committing to anything downstream.
+- **Zero rework is assumed.** No estimate of a decade-long solo project survives
+  contact with that assumption. Treat every figure as a floor.
+- **Zero new features are assumed** — §5's no-growth invariant is what keeps that
+  true, and it is the only reason these numbers terminate at all.
+- **Understanding is not modelled as a prerequisite for deletion.** Deciding to
+  delete a renderer costs 12 h, not the 100+ h it would take to read it first. That
+  is deliberate (§6): deciding to remove something does not require having read it.
+
+### B.6 The consequence for this document
+
+`plan_study20.md` budgets 10,400 h **with** targeted AI in the green tier. Without a
+model anywhere, its own scope is scenario C: **~16,000 h, a 54% overrun.** The
+honest options are exactly two, and they are not a compromise between:
+
+1. **Keep the AI policy of §4.** The green tier — measurement, cross-references,
+   mechanical diffs, harnesses — is where a model earns its place precisely because
+   its output is a committed script that is verified by re-running it. Nothing in
+   §4 lets a model decide what is correct.
+2. **Drop AI entirely and cut to FNA size.** ~81,000 code lines: the XNA API,
+   `sharp-runtime`'s used surface, and three or four renderers. Everything else is
+   deleted, not frozen. That is ~11,000 h, and it fits.
+
+Option 2 makes §6's portfolio decision the *first* task of the decade rather than a
+Year-2 one, and it is the more defensible project. `plan_study.md` §4.5 already said
+so: a smaller project is a better outcome than a fully read project.
