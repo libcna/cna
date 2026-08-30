@@ -84,7 +84,7 @@ jobs:
         working-directory: cna
         run: |
           set -o pipefail
-          filter='ContentBuildConfigurationTest.*:ContentBuildManifestTest.*:ContentPipelineTest.*:ContentPipelineRegistryTest.*:Texture2DContentPipelineTest.*:SoundEffectContentPipelineTest.*:CnjContentPipelineTest.*:ModelContentPipelineTest.*:SongContentPipelineTest.*:VideoContentPipelineTest.*:Cnb*CodecTest.*:*GoldenVectorTest.*:XnbContentPipelineTest.*-*Runtime*:*MatchesRuntime*:*LoadsThrough*ContentManager*:CnbSoundEffectCodecTest.*'
+          filter='ContentBuildConfigurationTest.*:ContentBuildManifestTest.*:ContentPipelineTest.*:ContentPipelineRegistryTest.*:Texture2DContentPipelineTest.*:SoundEffectContentPipelineTest.*:CnjContentPipelineTest.*:ModelContentPipelineTest.*:SongContentPipelineTest.*:VideoContentPipelineTest.*:ReflectiveSharedTypeReaderTest.*:Cnb*CodecTest.*:*GoldenVectorTest.*:XnbContentPipelineTest.*-*Runtime*:*MatchesRuntime*:*LoadsThrough*ContentManager*:CnbSoundEffectCodecTest.*'
           ./build-content/CnaContentTests.exe --gtest_filter="${filter}" 2>&1 \
             | tee "${RUNNER_TEMP}/cna-content-tests.log"
 
