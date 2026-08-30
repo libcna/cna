@@ -162,3 +162,27 @@ with `static_assert(kPublicRendererCount == 48)`. `Igl` had not been the last en
 since `PIXIJS` and `NANOVG` were added, so both tests silently stopped short and never
 classified those two identities. Both now derive the bound from the real last enumerator.
 
+
+---
+
+## WICKED
+
+| | |
+|---|---|
+| Identity | `WICKED` (enum `Wicked`, C ABI `CNA_GRAPHICS_RENDERER_WICKED` = 36) |
+| Family | `modules/renderers/wicked` |
+| Removed | 2026-08-30, tag `removed/wicked` |
+| Size | 6,978 lines (5,935 production, 1,043 tests, 0 examples) |
+| Dependency | `https://github.com/turanszkij/WickedEngine.git` @ `27c0df160d738925474a2181d3f88bfd59edaefe` (MIT) — **plus a CNA-authored patch written against exactly that revision** |
+| Build was | `-DCNA_GRAPHICS_RENDERER=WICKED` |
+
+**What it proved.** That `wi::graphics`, a game engine's own RHI, can be driven from
+outside that engine at all — which required a patch against a pinned WickedEngine commit,
+because the RHI is not designed to be consumed independently.
+
+**Why removed.** It was the most inverted of the layering mistakes: wrapping a whole game
+engine's render hardware interface *inside* a game framework. It added no platform, and
+the patch requirement made the pin load-bearing in a way none of the other dependencies
+were — a different WickedEngine revision would not apply. It also shipped zero examples,
+so nothing demonstrated it end to end.
+

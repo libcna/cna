@@ -17,7 +17,7 @@ static_assert(getCurrentGraphicsBackendCategory() == getCurrentGraphicsBackendCa
 static_assert(!toStringView(getCurrentGraphicsBackendCategory()).empty());
 constexpr GraphicsBackendCategory kCompileTimeCategory = getCurrentGraphicsBackendCategory();
 constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::NanoVg) + 1;
-static_assert(kPublicRendererCount == 45,
+static_assert(kPublicRendererCount == 44,
               "GraphicsRendererType must expose all 48 genuine renderer identities");
 
 TEST(GraphicsBackendCategoryTest, GetCurrentGraphicsBackendCategoryDoesNotThrow)
@@ -75,7 +75,6 @@ namespace
             case GraphicsRendererType::WebGPU:
             case GraphicsRendererType::FreeDirect:
             case GraphicsRendererType::SdlGpu:
-            case GraphicsRendererType::Wicked:
             case GraphicsRendererType::Fna3d:
             case GraphicsRendererType::OpenVg:
             case GraphicsRendererType::NanoVg:

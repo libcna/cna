@@ -122,9 +122,6 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
     // that added the WICKED identity everywhere else never conflicted on this file, so its silent
     // omission surfaced only when the full CnaTests suite first ran under
     // CNA_GRAPHICS_RENDERER=WICKED and this test reported 0 enabled renderers.
-#ifdef CNA_RENDERER_WICKED
-    ++enabled;
-#endif
 #ifdef CNA_RENDERER_GLIDE
     ++enabled;
 #endif

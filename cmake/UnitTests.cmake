@@ -245,17 +245,6 @@ if(CNA_BUILD_TESTS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Microsoft/Devices/Detail/DevicesShutdownOrderingTests\\.cpp$")
     endif()
 
-    # plans/plan_wicked.md: the Wicked renderer's own regression suites live under
-    # modules/renderers/wicked/tests/, and the pipeline-key test among them includes the
-    # renderer's header, which resolves only when the WICKED renderer is configured (the
-    # WickedEngine include directories come with the renderer target). Excluded from every other
-    # renderer's corpus the same way the conditional files above are -- an unconditional glob of
-    # a renderer-local test directory otherwise breaks every other renderer's CnaTests configure.
-    # Under WICKED the corpus keeps them, and the dedicated cna_test_wicked_* targets
-    # (cmake/Tests/WickedTests.cmake) build them standalone as well.
-    if(NOT "WICKED" IN_LIST CNA_RENDERER_IDENTITIES)
-        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Renderers/Wicked/.*\\.cpp$")
-    endif()
 
     # plans/plan_magnum.md: the MAGNUM renderer's own GTest suite lives under
     # modules/renderers/magnum/tests/ and includes the renderer's headers, which resolve only

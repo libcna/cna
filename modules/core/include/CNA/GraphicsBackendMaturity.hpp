@@ -97,7 +97,6 @@ namespace CNA
             case GraphicsRendererType::Software:
             case GraphicsRendererType::Blend2D:
             case GraphicsRendererType::FreeDirect:
-            case GraphicsRendererType::Wicked:
             case GraphicsRendererType::Fna3d:
             case GraphicsRendererType::SvgDom:
             case GraphicsRendererType::OpenVg:

@@ -21,9 +21,9 @@ Authoritative companions:
 
 ## 1. What CNA supports today
 
-**45 public renderer identities**, mechanically verified by `scripts/check_renderer_identities.py`
+**44 public renderer identities**, mechanically verified by `scripts/check_renderer_identities.py`
 against `modules/core/include/CNA/GraphicsRendererType.hpp` and `cmake/RendererSelection.cmake`
-(`OK: 45 public renderer identities preserved in both registries`). Selected at configure time via
+(`OK: 44 public renderer identities preserved in both registries`). Selected at configure time via
 `-DCNA_GRAPHICS_RENDERER=<selector>`; implementations live in `modules/renderers/<family>/`.
 
 The 48 (this table's own count, pre-existing drift from the registry's true 50 -- IGL/PIXIJS are
