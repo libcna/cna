@@ -62,6 +62,42 @@ The per-blocker report `fixcnacs.md` Phase 10 asks for is `docs/c-api/CABI_BLOCK
 | CABI-33 | Static archive under Ninja; two tests registered on a driver they cannot pass under | follow-up | DONE |
 | CABI-42 | Renderer-exact WebGL contract for `cna_c_api_wasm` | CNA-TS browser audit | DONE |
 | CABI-43 | JS-driven C-API artifact without Asyncify rewind | CNA-TS browser audit | DONE |
+| CABI-44 | Full nullable-rectangle/override-window `GraphicsDevice.Present` contract | CNA-C# audit | DEFERRED — renderer-wide design |
+| CABI-45 | Stable identity for graphics-resource lifecycle events | CNA-C# audit | DEFERRED — ABI/lifecycle design |
+
+### CABI-44/CABI-45 — bounded audit, deliberately deferred
+
+Both reported gaps still exist on the live tree, but neither is a C-wrapper-sized fix.
+
+`CABI-44`: CNA currently has only `GraphicsDevice::Present()`,
+`IGraphicsRenderer::Present()` and `cna_graphics_device_present(device)`. The reference overload
+independently preserves nullable source and destination rectangles, substitutes the device window
+for a zero override and wraps a nonzero native override window before presenting. CNA has no native
+XNA overload, no renderer contract carrying those values, and its current C display contract
+deliberately does not disclose native window handles. Adding a descriptor only at the C boundary
+would therefore either ignore fields or claim support no backend implements. The follow-up must
+first define an additive native-window token/ownership contract and renderer capability/result
+semantics, then implement the XNA overload and every applicable backend before publishing the C
+descriptor and its cross-backend tests.
+
+`CABI-45`: the current C events truthfully expose only resource presence at creation and name/tag
+presence at destruction. The canonical creation event fires inside the `GraphicsResource` base
+constructor, before the concrete resource kind exists and before a C handle can be registered; the
+canonical destruction event carries no resource object at all. Consequently a raw pointer would be
+unsafe and the later-created generation-checked C handle cannot be the event identity. A correct
+follow-up needs a stable opaque lifecycle ID assigned in the native base object, carried by both
+events, queryable from every C graphics-resource handle, and defined across C++ copy/move behavior.
+Because the live event payload structs are already published at version 1, the design must also
+choose an additive versioned callback/structure evolution path rather than resizing them casually.
+Required evidence remains create -> correlate handle/ID -> destroy -> correlate the same ID with no
+post-destruction dereference.
+
+The lower-priority audit did not justify speculative production APIs. `AudioEngine` documents and
+tests that renderer selection and look-ahead are inert because the one SDL3_mixer backend has
+neither an alternate renderer nor FACT-style scheduling; fabricating either would be false
+semantics. Device-loss simulation already exists behind the renderer test seam and drives native
+event tests, so no production `LoseDevice` route was added. Input has internal test overrides and
+SDL event-based behavior probes; a public virtual-input subsystem is outside this bounded task.
 
 ### CABI-42/CABI-43 — browser artifact owns its final link contract
 
