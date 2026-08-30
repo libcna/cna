@@ -96,10 +96,11 @@ typedef uint32_t CNA_GraphicsRendererType;
 /**
  * @brief Largest defined renderer identity.
  *
- * The renderer identities occupy the closed range
- * @ref CNA_GRAPHICS_RENDERER_UNKNOWN through this value with no gaps, so a caller can walk the
- * whole identity space without naming each backend. Every value above it is refused by every
- * route that takes a @ref CNA_GraphicsRendererType.
+ * A removed renderer's numeric value is retired, not reused, so the range from
+ * @ref CNA_GRAPHICS_RENDERER_UNKNOWN through this value may contain gaps where a former
+ * identity used to be; a caller cannot assume every value in the range names a live backend.
+ * Every value above @ref CNA_GRAPHICS_RENDERER_MAXIMUM is refused by every route that takes a
+ * @ref CNA_GraphicsRendererType, as is any retired value within the range.
  */
 #define CNA_GRAPHICS_RENDERER_MAXIMUM CNA_GRAPHICS_RENDERER_PIXIJS
 

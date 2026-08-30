@@ -156,8 +156,8 @@ namespace
 
     [[nodiscard]] bool CubeStorageSupported()
     {
-        return !CNA_RENDERER_IS(SdlRenderer, Canvas, HtmlDom, FreeDirect, Headless, Gdi, OpenVg,
-                                PortableGL, TinyGL, PixiJs, NanoVg);
+        return !CNA_RENDERER_IS(SdlRenderer, Canvas, HtmlDom, FreeDirect, Headless, Gdi,
+                                PortableGL, PixiJs);
     }
 
     class EffectMaterialContentTypeReaderTest : public ::testing::Test

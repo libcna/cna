@@ -191,7 +191,7 @@ using ConditionalLoggerRoute = void (*)(std::string_view, bool);
 
 // Every public renderer identity, paired explicitly so neither side depends on the other's
 // declaration order.
-constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererType>, 50>
+constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererType>, 39>
     RendererIdentities{{
         {CNA_GRAPHICS_RENDERER_SDL_RENDERER, CNA::GraphicsRendererType::SdlRenderer},
         {CNA_GRAPHICS_RENDERER_OPENGLES2, CNA::GraphicsRendererType::OpenGLES2},
@@ -234,14 +234,29 @@ constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererTy
         {CNA_GRAPHICS_RENDERER_PIXIJS, CNA::GraphicsRendererType::PixiJs},
     }};
 
+// A retired identity's numeric value is never reused (see docs/c-api/ABI_VERSIONING.md), so
+// removing a renderer leaves a gap instead of renumbering survivors, and MAXIMUM no longer
+// equals the surviving count.
+[[nodiscard]] consteval CNA_GraphicsRendererType HighestPublishedIdentity()
+{
+    CNA_GraphicsRendererType highest = CNA_GRAPHICS_RENDERER_UNKNOWN;
+    for (const auto& [identity, native] : RendererIdentities) {
+        if (identity > highest) {
+            highest = identity;
+        }
+    }
+    return highest;
+}
+
 // A renderer this table has never heard of resolves to CNA_GRAPHICS_RENDERER_UNKNOWN and is
 // refused by every route that takes an identity, which is how TINYGL, IGL and PIXIJS were
 // unreachable from C while the coverage matrix still called them mapped. Neither the table nor
 // the published identity range may fall behind the canonical enumeration again.
 static_assert(RendererIdentities.size() == CanonicalRendererCount(),
               "A renderer was added to CNA::GraphicsRendererType without a C identity.");
-static_assert(CNA_GRAPHICS_RENDERER_MAXIMUM == RendererIdentities.size(),
-              "CNA_GRAPHICS_RENDERER_MAXIMUM must name the last published renderer identity.");
+static_assert(CNA_GRAPHICS_RENDERER_MAXIMUM == HighestPublishedIdentity(),
+              "CNA_GRAPHICS_RENDERER_MAXIMUM must name the highest-valued published renderer "
+              "identity.");
 
 [[nodiscard]] CNA_Result MapRendererType(
     const CNA_GraphicsRendererType type,
