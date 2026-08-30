@@ -86,6 +86,7 @@ namespace
             case GraphicsRendererType::Canvas:
             case GraphicsRendererType::HtmlDom:
             case GraphicsRendererType::SvgDom:
+            case GraphicsRendererType::PixiJs:
                 return GraphicsBackendCategory::Web;
 
             case GraphicsRendererType::Headless:
