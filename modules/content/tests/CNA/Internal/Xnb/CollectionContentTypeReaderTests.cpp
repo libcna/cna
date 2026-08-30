@@ -230,6 +230,36 @@ TEST_F(CollectionReaderTest, DictionaryReaderConsumesTypeIndicesForSystemStringK
     EXPECT_EQ(result.at("glow1"), 1);
 }
 
+TEST_F(CollectionReaderTest, PrimitiveRegistrationProvidesStringInt32DictionaryReader)
+{
+    auto reader = ContentTypeReaderManager::CreateReader(
+        "Microsoft.Xna.Framework.Content.DictionaryReader`2[[System.String],[System.Int32]]");
+    ASSERT_NE(reader, nullptr);
+
+    auto contentReader = MakeReader([](auto& w) {
+        w.Write7BitEncodedInt(1);
+        w.Write(std::string("Microsoft.Xna.Framework.Content.StringReader"));
+        w.Write((int32_t)0);
+        w.Write7BitEncodedInt(0);
+
+        w.Write((int32_t)2);
+        w.Write7BitEncodedInt(1);
+        w.Write(std::string("Head"));
+        w.Write((int32_t)4);
+        w.Write7BitEncodedInt(1);
+        w.Write(std::string("L_UpperArm"));
+        w.Write((int32_t)17);
+    });
+    contentReader->InitializeTypeReaders();
+
+    const auto result = std::any_cast<std::unordered_map<std::string, int32_t>>(
+        reader->ReadUntyped(*contentReader, std::any{}));
+
+    ASSERT_EQ(result.size(), 2u);
+    EXPECT_EQ(result.at("Head"), 4);
+    EXPECT_EQ(result.at("L_UpperArm"), 17);
+}
+
 TEST_F(CollectionReaderTest, NullableReaderReturnsNulloptWhenFlagIsFalse)
 {
     CNA::Internal::Xnb::NullableReader<Vector3> reader(

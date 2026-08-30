@@ -74,6 +74,8 @@ TEST_F(XnbBuiltInReaderRegistrationTest, RegistersEveryPrimitiveReader)
         "Microsoft.Xna.Framework.Content.BooleanReader",
         "Microsoft.Xna.Framework.Content.CharReader",
         "Microsoft.Xna.Framework.Content.StringReader",
+        "Microsoft.Xna.Framework.Content.ListReader`1[[System.Int32]]",
+        "Microsoft.Xna.Framework.Content.DictionaryReader`2[[System.String],[System.Int32]]",
     };
     for (const char* name : kNames)
     {

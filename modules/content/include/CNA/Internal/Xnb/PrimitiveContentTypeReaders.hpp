@@ -125,6 +125,9 @@ namespace CNA::Internal::Xnb
         std::string Read(ContentReader& input, std::optional<std::string>) override { return input.ReadString(); }
     };
 
-    /** @brief Registers all primitive readers above under their real FNA canonical names. Idempotent. */
+    /**
+     * @brief Registers all primitive readers above and the stock primitive-only collection shapes
+     *        CNA supports under their real FNA canonical names. Idempotent.
+     */
     void RegisterPrimitiveXnbReaders();
 }

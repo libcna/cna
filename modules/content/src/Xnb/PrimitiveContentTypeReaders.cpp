@@ -50,5 +50,17 @@ namespace CNA::Internal::Xnb
                     "System.Collections.Generic.List`1[[System.Int32]]",
                     "Microsoft.Xna.Framework.Content.Int32Reader");
             });
+
+        // A standard primitive-only dictionary is content-pipeline infrastructure, not metadata
+        // owned by whichever game happens to serialize one. SkinnedModelExtensions uses this
+        // shape for its processor-generated bone-name lookup table.
+        ContentTypeReaderManager::AddTypeCreator(
+            "Microsoft.Xna.Framework.Content.DictionaryReader`2[[System.String],[System.Int32]]",
+            [] {
+                return std::make_unique<DictionaryReader<std::string, std::int32_t>>(
+                    "System.Collections.Generic.Dictionary`2[[System.String],[System.Int32]]",
+                    "Microsoft.Xna.Framework.Content.StringReader",
+                    "Microsoft.Xna.Framework.Content.Int32Reader");
+            });
     }
 }

@@ -29,11 +29,11 @@ namespace CNA::Internal::Xnb
      * silently ignores a repeat registration of the same canonical name.
      *
      * Generic collection readers (`ArrayReader<T>`/`ListReader<T>`/`DictionaryReader<TKey,TValue>`/
-     * `NullableReader<T>`) are deliberately **not** included here -- CNA has no reflection to
-     * resolve `typeof(T)` at runtime, so each closed generic (e.g. `ListReader<Vector3>`) can only
-     * be registered as its own distinct combination, not "for any T" (see
-     * `CollectionContentTypeReaders.hpp`'s own design note). A game whose `.xnb` content uses a
-     * collection reader must register that specific closed-generic combination itself.
+     * `NullableReader<T>`) cannot be registered open-ended because CNA has no reflection to resolve
+     * `typeof(T)` at runtime. This function therefore includes the closed generic combinations
+     * required by CNA's built-in readers and known primitive-only XNA content shapes. A game whose
+     * `.xnb` uses a collection containing its own type must still register that specific closed
+     * combination (see `CollectionContentTypeReaders.hpp`'s design note).
      */
     void RegisterAllBuiltInXnbReaders();
 }
