@@ -97,10 +97,9 @@ namespace CNA::Internal::Xnb
      * other case: a reference stored where the static type is `object`, which is how the
      * content pipeline writes a texture-valued effect parameter.
      *
-     * **Boundary:** the reference is loaded as a `Texture2D`. That is the only asset kind an
-     * XNA effect-parameter dictionary can hold an external reference to; anything else fails
-     * loudly through the existing `Load<T>()` type check rather than being silently
-     * mis-loaded. A `TextureCube` parameter would be the next case to add.
+     * The referenced XNB's own root reader determines the concrete result type, matching FNA's
+     * `ReadExternalReference<object>()`. This is essential for effect parameter dictionaries:
+     * their external references may resolve to `Texture2D`, `Texture3D`, or `TextureCube`.
      */
     class ExternalReferenceReader : public ContentTypeReader<std::any>
     {

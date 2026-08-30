@@ -103,6 +103,23 @@ namespace Microsoft::Xna::Framework::Content
     template std::optional<std::shared_ptr<Graphics::Effect>>
         ContentReader::ReadExternalReference<std::shared_ptr<Graphics::Effect>>();
 
+    std::any ContentReader::ReadExternalReference()
+    {
+        const std::string externalReference = ReadString();
+        if (externalReference.empty())
+        {
+            return {};
+        }
+        if (!contentManager_)
+        {
+            throw ContentLoadException(
+                "'" + assetName_ + "' references external asset '" + externalReference +
+                "', but this ContentReader has no owning ContentManager to load it through.");
+        }
+        const std::string resolved = ResolveRelativeAssetPath(assetName_, externalReference);
+        return contentManager_->LoadUntypedXnbReference(resolved);
+    }
+
     ContentReader::ContentReader(
         ContentManager* manager,
         System::IO::Stream* stream,

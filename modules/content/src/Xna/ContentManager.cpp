@@ -156,6 +156,96 @@ namespace Microsoft::Xna::Framework::Content
         loadedAssets_.clear();
     }
 
+    std::any ContentManager::LoadUntypedXnbReference(const std::string& assetName)
+    {
+        if (disposed_)
+        {
+            throw std::runtime_error("ContentManager has been disposed.");
+        }
+
+        const AssetCacheKey cacheKey{std::type_index(typeid(std::any)), NormalizeKey(assetName)};
+        const auto cached = loadedAssets_.find(cacheKey);
+        if (cached != loadedAssets_.end())
+        {
+            return cached->second;
+        }
+
+        const std::string xnbPath =
+            ResolveExistingAssetPath(BuildAssetPath(assetName) + ".xnb");
+        if (!std::filesystem::exists(xnbPath))
+        {
+            throw ContentLoadException(
+                "ContentManager: external object reference '" + assetName +
+                "' does not resolve to a compiled .xnb asset.");
+        }
+
+        std::any result = LoadXnbAssetUntyped(xnbPath, assetName);
+        loadedAssets_[cacheKey] = result;
+        return result;
+    }
+
+    std::any ContentManager::LoadXnbAssetUntyped(const std::string& xnbPath,
+                                                  const std::string& assetName)
+    {
+        std::ifstream file(xnbPath, std::ios::binary);
+        if (!file.is_open())
+        {
+            throw ContentLoadException("ContentManager: cannot open '" + xnbPath + "'.");
+        }
+        std::ostringstream ss;
+        ss << file.rdbuf();
+        const std::string bytes = ss.str();
+
+        System::IO::MemoryStream headerStream(
+            reinterpret_cast<const uint8_t*>(bytes.data()), static_cast<int32_t>(bytes.size()));
+        System::IO::BinaryReader headerReader(&headerStream, true);
+        const auto header = CNA::Internal::Xnb::ParseXnbHeader(headerReader, xnbPath);
+        if (header.totalLength < 10 || static_cast<std::size_t>(header.totalLength) > bytes.size())
+        {
+            throw ContentLoadException(
+                "'" + xnbPath + "' declares a totalLength (" +
+                std::to_string(header.totalLength) + ") inconsistent with its actual file size (" +
+                std::to_string(bytes.size()) + ").");
+        }
+
+        switch (header.compression)
+        {
+            case CNA::Internal::Xnb::XnbCompression::None:
+            {
+                System::IO::MemoryStream bodyStream(
+                    reinterpret_cast<const uint8_t*>(bytes.data()) + 10,
+                    static_cast<int32_t>(bytes.size()) - 10);
+                ContentReader contentReader(this, &bodyStream, assetName,
+                                            header.version, header.platform);
+                return contentReader.ReadAsset();
+            }
+            case CNA::Internal::Xnb::XnbCompression::Lzx:
+            {
+                System::IO::MemoryStream sizeStream(
+                    reinterpret_cast<const uint8_t*>(bytes.data()) + 10, 4);
+                System::IO::BinaryReader sizeReader(&sizeStream, true);
+                const int32_t decompressedSize = sizeReader.ReadInt32();
+                const int32_t compressedSize = header.totalLength - 14;
+                const auto decompressed = CNA::Internal::Xnb::DecompressXnbPayload(
+                    reinterpret_cast<const uint8_t*>(bytes.data()) + 14,
+                    compressedSize, decompressedSize, xnbPath);
+                System::IO::MemoryStream bodyStream(
+                    decompressed.data(), static_cast<int32_t>(decompressed.size()));
+                ContentReader contentReader(this, &bodyStream, assetName,
+                                            header.version, header.platform);
+                return contentReader.ReadAsset();
+            }
+            case CNA::Internal::Xnb::XnbCompression::Lz4:
+                throw ContentLoadException(
+                    "'" + xnbPath + "' uses MonoGame's Lz4 compression, which CNA does not yet "
+                    "support (plans/plan_xnb.md XNB-30C).");
+            case CNA::Internal::Xnb::XnbCompression::Unknown:
+            default:
+                throw ContentLoadException(
+                    "'" + xnbPath + "' has an unrecognized compression flag combination.");
+        }
+    }
+
     // ---------------------------------------------------------------------------
     // Content manifest (plans/plan_xnb.md Phase B3: XNB-65/65A/66/67/61a)
     // ---------------------------------------------------------------------------

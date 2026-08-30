@@ -265,15 +265,16 @@ An unsupported renderer refuses construction with a `NotSupportedException` nami
 It never accepts the bytecode and quietly draws with a stock shader — a silent fallback would make
 a porting bug look like an art bug. That rule holds per draw route as well, not only per renderer:
 a route a backend has not implemented (a compiled effect's vertex shader sampling a texture, a
-3D/cube sampler binding, a stream set the renderer cannot bind) throws by name at draw time.
+volume sampler on a backend/profile that cannot sample it, a stream set the renderer cannot bind)
+throws by name at draw time.
 
 A refusal also has to say *which kind* of limitation it is, because the two kinds mean different
 things to a port. A **renderer-wide** limitation is one the renderer has through every route --
-vertex-stage texture sampling, for one, which no CNA renderer implements at all; a compiled Effect
-is not expected to add it. A **compiled-Effect-specific** limitation is one the renderer does not
-have elsewhere -- a `Texture3D` bound to a compiled sampler, say, which both SDL_GPU and EasyGL
-sample perfectly well in their ordinary draw families. The second kind is a debt of this feature and
-carries a task ID. `plans/plan_fx.md` section 10.5 is the full table.
+the public vertex-texture surface, for example, reaches no CNA renderer, so a compiled Effect is
+not expected to invent that renderer capability. A **compiled-Effect-specific** limitation is one
+the renderer supports elsewhere but this draw route cannot preserve. `plans/plan_fx.md` section
+10.5 is the authoritative per-renderer table. In particular, cube sampling is no longer a
+limitation: FNA3D, SDL_GPU, EasyGL and Vulkan all pass the compiled cube-sampler contract.
 
 Vulkan joined the supported set on 2026-08-18 (`CNA_VULKAN_COMPILED_EFFECTS=ON`). It is the one
 backend with no MojoShader-provided adapter -- there is no `mojoshader_vulkan.c` -- so the
@@ -462,7 +463,7 @@ green matched the original exactly and only blue differed, and only where blue w
 | `Shader parameter not found in effect.` | `std::runtime_error` | A shader's constant table names a parameter the effect does not declare |
 | `unsupported render state <n>` / `unsupported sampler state <n>` | `std::runtime_error` | A token CNA does not translate; report it with the effect that produced it |
 | `Border and MirrorOnce sampler addressing are not representable...` | `std::runtime_error` | Addressing mode outside XNA 4.0 |
-| `...binds a Texture3D/TextureCube to pixel sampler slot N. This renderer samples that kind elsewhere...` | `NotSupportedException` | A compiled-Effect-specific limitation on SDL_GPU and EasyGL (`plans/plan_fx.md` FX-110) |
+| A backend/profile-specific `Texture3D`/`sampler3D` refusal | `NotSupportedException` | Volume sampling remains renderer/profile-dependent; cube sampling is supported by every compiled-Effect backend (`plans/plan_fx.md` FX-110) |
 | `...samples slot N, but no texture is bound there.` | `NotSupportedException` | The effect's texture parameter was never assigned, and nothing was selected on `GraphicsDevice.Textures` |
 | `Vertex-stage texture sampling is not implemented in this renderer at all, by any draw route.` | `NotSupportedException` | Renderer-wide, not FX-specific (`plans/plan_fx.md` FX-109) |
 | `...cannot run after the GL context was recreated...` | `NotSupportedException` | EasyGL only: MojoShader's context and its linked programs died with the old GL context; recreate the `Effect` from its bytecode (`plans/plan_fx.md` FX-107) |

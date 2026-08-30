@@ -7,6 +7,8 @@
 #include "Microsoft/Xna/Framework/Graphics/EffectMaterial.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
@@ -28,6 +30,8 @@ namespace CNA::Internal::Xnb
     using Microsoft::Xna::Framework::Graphics::EffectMaterial;
     using Microsoft::Xna::Framework::Graphics::EffectParameter;
     using Microsoft::Xna::Framework::Graphics::Texture2D;
+    using Microsoft::Xna::Framework::Graphics::Texture3D;
+    using Microsoft::Xna::Framework::Graphics::TextureCube;
 
     namespace
     {
@@ -52,6 +56,19 @@ namespace CNA::Internal::Xnb
             if (const auto* texture = std::any_cast<Texture2D>(&value))
             {
                 auto owned = std::make_shared<Texture2D>(*texture);
+                parameter.SetValue(owned.get());
+                material.RetainParameterTextureEXT(std::move(owned));
+                return;
+            }
+            if (const auto* texture = std::any_cast<std::shared_ptr<Texture3D>>(&value))
+            {
+                material.RetainParameterTextureEXT(*texture);
+                parameter.SetValue(texture->get());
+                return;
+            }
+            if (const auto* texture = std::any_cast<TextureCube>(&value))
+            {
+                auto owned = std::make_shared<TextureCube>(*texture);
                 parameter.SetValue(owned.get());
                 material.RetainParameterTextureEXT(std::move(owned));
                 return;
@@ -130,9 +147,7 @@ namespace CNA::Internal::Xnb
     {
         (void)existingInstance;
 
-        std::optional<Texture2D> texture = input.ReadExternalReference<Texture2D>();
-        if (!texture.has_value()) return {};
-        return std::any(std::make_shared<Texture2D>(std::move(*texture)));
+        return input.ReadExternalReference();
     }
 
     void RegisterEffectMaterialXnbReaders()

@@ -158,6 +158,22 @@ namespace Microsoft::Xna::Framework::Content
         template <typename T>
         std::optional<T> ReadExternalReference();
 
+        /**
+         * @brief FNA's `ReadExternalReference<object>()`: loads the referenced compiled asset
+         *        according to the concrete root reader stored in that asset's XNB.
+         *
+         * This is the type-erased counterpart needed by FNA's `ExternalReferenceReader`, whose
+         * target type is deliberately null and whose result may therefore be any concrete
+         * content type (notably `Texture2D`, `Texture3D`, or `TextureCube` in an
+         * `EffectMaterial` parameter dictionary).
+         *
+         * @return The concrete loaded asset type-erased as `std::any`, or an empty value when the
+         *         serialized reference string is empty.
+         * @throws ContentLoadException if no ContentManager owns this reader, the path escapes
+         *         the content root, or the referenced compiled asset cannot be loaded.
+         */
+        CNAEXT std::any ReadExternalReference();
+
         /** @brief FNA's `T ReadObject<T>()`: reads the next object via the 1-based dispatch protocol. */
         template <typename T>
         T ReadObject()
@@ -259,6 +275,19 @@ namespace Microsoft::Xna::Framework::Content
         {
             InitializeTypeReaders();
             T result = ReadObject<T>();
+            ReadSharedResources();
+            return result;
+        }
+
+        /**
+         * @brief Type-erased counterpart of FNA's internal `ReadAsset<object>()`.
+         *
+         * @return The concrete root object produced by the XNB's own first type reader.
+         */
+        CNAEXT std::any ReadAsset()
+        {
+            InitializeTypeReaders();
+            std::any result = InnerReadObjectAny();
             ReadSharedResources();
             return result;
         }

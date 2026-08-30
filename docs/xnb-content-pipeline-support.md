@@ -56,9 +56,10 @@ below) — both need their own explicit registration.
 | `SoundEffectReader` | ✅ 16-bit PCM only | 8-bit PCM, IEEE float, MS-ADPCM, IMA-ADPCM, and XMA2 are recognized but explicitly rejected — no decode path exists yet. See the support matrix below |
 | `SongReader` | ✅ Full | `Song` is always an external audio file reference (`.ogg`/etc, matching FNA), never embedded PCM |
 | `AlphaTestEffectReader`, `BasicEffectReader`, `DualTextureEffectReader`, `EnvironmentMapEffectReader`, `SkinnedEffectReader` (the 5 stock effects) | ✅ Full | Each targets the common `shared_ptr<Effect>` base so `ModelReader`'s polymorphic `Effect` slot dispatches correctly regardless of which concrete stock effect a model references |
+| `EffectMaterialReader`, `ExternalReferenceReader`, `DictionaryReader<String,Object>` | ✅ Full | A parameter dictionary's type-erased external reference is loaded according to the referenced XNB's concrete root reader, so `Texture2D`, `Texture3D`, and `TextureCube` parameters retain their real type and lifetime |
 | `VertexDeclarationReader`, `VertexBufferReader`, `IndexBufferReader` | ✅ Full | |
 | `ModelReader` | ✅ Full bone hierarchy, mesh/mesh-part, shared-resource (`VertexBuffer`/`IndexBuffer`/`Effect`) resolution | Verified against a real, externally-produced multi-bone fixture. This is a **different, real binary path** from the older `.model.json`-based `ModelTypeReader` — see the scope note above |
-| The general `EffectReader` (compiled XNA Effect Framework bytecode) | ✅ on FNA3D; explicit renderer rejection elsewhere | Reads a bounded signed length and exact payload, constructs the same reflected `Effect` as the byte-array constructor, and preserves asset context in failures. The payload is XNA/FNA D3D9 Effect Framework bytecode, not MGFX or `.fx` source. |
+| The general `EffectReader` (compiled XNA Effect Framework bytecode) | ✅ on FNA3D; SDL_GPU, EasyGL and Vulkan with their compiled-effect build options | Reads a bounded signed length and exact payload, constructs the same reflected `Effect` as the byte-array constructor, and preserves asset context in failures. The payload is XNA/FNA D3D9 Effect Framework bytecode, not MGFX or `.fx` source. |
 | `ReflectiveReader<T>` (any custom `.xnb` type compiled *without* an explicit `ContentTypeWriter`/reader pair, relying on XNA's content-pipeline reflection fallback) | ✅ Supported since SAMPLE-044 via `ReflectiveTypeReaderBuilder<T>` — the game declares its field list once, CNA builds the reader | See "`ReflectiveReader<T>`" below |
 
 ### Generic collections
@@ -276,7 +277,7 @@ without changing either method's observable behavior for any valid input.
 | Area | Status |
 |---|---|
 | Automatic reflection over an undeclared C++ type | ❌ Not supported by design; implicit `ReflectiveReader<T>` payloads are supported when the game declares their serialized members through `ReflectiveTypeReaderBuilder<T>` |
-| General `EffectReader` on a renderer without `CompiledEffects` | ❌ loading fails with an asset-specific capability diagnostic rather than a silent shader fallback. True for every identity except FNA3D, and SDL_GPU / the EasyGL family with their own build option on |
+| General `EffectReader` on a renderer without `CompiledEffects` | ❌ loading fails with an asset-specific capability diagnostic rather than a silent shader fallback. FNA3D supports it unconditionally; SDL_GPU, the EasyGL family, and Vulkan support it behind their compiled-effect build options |
 | LZ4 compression | ❌ Not supported yet — deferred (`plans/plan_xnb.md` XNB-30C) |
 | Generic collection readers for an unregistered `T` combination | ❌ Not supported — each closed combination needs its own explicit registration |
 | Texture formats beyond `Texture2D`'s `Color`/`NormalizedByte4`/`Dxt1`/`Dxt3`/`Dxt5` and `Texture3D`/`TextureCube`'s existing Color/DXT scope | ❌ Not supported yet |

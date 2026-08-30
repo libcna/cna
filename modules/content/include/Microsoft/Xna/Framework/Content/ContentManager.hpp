@@ -105,6 +105,11 @@ namespace Microsoft::Xna::Framework::Content
         [[nodiscard]] std::string ResolveExistingAssetPath(const std::string& path) const;
         [[nodiscard]] std::string NormalizeKey(const std::string& assetName) const;
 
+        friend class ContentReader;
+        [[nodiscard]] std::any LoadUntypedXnbReference(const std::string& assetName);
+        [[nodiscard]] std::any LoadXnbAssetUntyped(const std::string& xnbPath,
+                                                   const std::string& assetName);
+
         void RegisterBuiltinLoaders();
 
     public:
