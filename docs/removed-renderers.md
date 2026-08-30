@@ -108,3 +108,28 @@ because it is the argument to revisit if Apple ever becomes a target. It did not
 today's balance: CNA targets no Apple platform, 21,850 production lines carried zero tests
 of their own, and `CNA_SOKOL_API` meant the identity `SOKOL` never named one behaviour.
 
+
+---
+
+## DILIGENT
+
+| | |
+|---|---|
+| Identity | `DILIGENT` (enum `Diligent`, C ABI `CNA_GRAPHICS_RENDERER_DILIGENT` = 38) |
+| Family | `modules/renderers/diligent` |
+| Removed | 2026-08-30, tag `removed/diligent` |
+| Size | 14,931 lines (7,066 production, 243 tests, 7,622 examples) |
+| Dependency | `https://github.com/DiligentGraphics/DiligentCore.git` @ `v2.5.6` (Apache-2.0) |
+| Build was | `-DCNA_GRAPHICS_RENDERER=DILIGENT` |
+
+**What it proved.** It was the only CNA renderer that chose its native API at **runtime**
+rather than at configure time — DiligentCore is itself an abstraction over
+D3D11/D3D12/Vulkan/OpenGL/Metal. That made it the one place where "which backend am I
+actually on?" was a runtime question, and the descriptor/selection plumbing it needed is a
+genuine finding about CNA's own compile-time assumptions.
+
+**Why removed.** That uniqueness is now duplicated by CNA's own feature: runtime renderer
+selection through `CNA::GraphicsRendererSelection` (`docs/runtime-renderer-selection.md`)
+does the same job without a third-party abstraction underneath. What is left is the same
+translation layer as LLGL and SOKOL, over APIs CNA already reaches natively.
+

@@ -627,14 +627,6 @@ if(CNA_BUILD_TESTS)
         target_link_libraries(cna_test_build_config INTERFACE Magnum::GL Magnum::Magnum)
     endif()
 
-    # plans/plan_diligent.md DILIGENT-15: DiligentDeviceSelectionTests.cpp includes the renderer header,
-    # which includes DiligentCore's own headers. cna_link_diligent() keeps those PRIVATE to the
-    # renderer target (same discipline as WebGPU just above), so expose them here too.
-    if("DILIGENT" IN_LIST CNA_RENDERER_IDENTITIES)
-        cna_link_diligent(${CNA_TEST_OBJECT_TARGET_renderers})
-        cna_link_diligent(CnaTests)
-        cna_link_diligent(CnaRendererTests)
-    endif()
 
     if(CNA_ENABLE_NET)
         target_link_libraries(CnaTests PRIVATE CNA_GamerServices CNA_Net)
