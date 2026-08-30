@@ -70,7 +70,6 @@ function(_cna_renderer_identity_map out_var)
         FNA3D        Fna3d
         OPENVG       OpenVg
         TINYGL       TinyGL
-        IGL          Igl
         PIXIJS       PixiJs
         NANOVG       NanoVg)
 

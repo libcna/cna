@@ -100,8 +100,6 @@ typedef uint32_t CNA_GraphicsRendererType;
 #define CNA_GRAPHICS_RENDERER_PORTABLEGL UINT32_C(46)
 /** @brief Identifies the TinyGL backend. */
 #define CNA_GRAPHICS_RENDERER_TINYGL UINT32_C(47)
-/** @brief Identifies the IGL backend. */
-#define CNA_GRAPHICS_RENDERER_IGL UINT32_C(48)
 /** @brief Identifies the PixiJS backend. */
 #define CNA_GRAPHICS_RENDERER_PIXIJS UINT32_C(49)
 /** @brief Identifies the NanoVG backend. */

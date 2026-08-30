@@ -141,7 +141,6 @@ namespace CNA
         /** @brief IGL (facebook/igl, Intermediate Graphics Library); like Llgl it names a portable
          * abstraction rather than one native API and drives OpenGL or Vulkan, chosen for the
          * process rather than compiled in. */
-        Igl,
 
         /** @brief PixiJS (pixijs.com, Emscripten only, 2D-only in v1 scope): SpriteBatch output as
          * a retained-mode PIXI.Sprite scene graph rendered through PixiJS's own WebGL batch
@@ -257,8 +256,6 @@ namespace CNA
         return GraphicsRendererType::PortableGL;
 #elif defined(CNA_RENDERER_TINYGL)
         return GraphicsRendererType::TinyGL;
-#elif defined(CNA_RENDERER_IGL)
-        return GraphicsRendererType::Igl;
 #elif defined(CNA_RENDERER_PIXIJS)
         return GraphicsRendererType::PixiJs;
 #elif defined(CNA_RENDERER_NANOVG)
@@ -330,7 +327,6 @@ namespace CNA
             case GraphicsRendererType::OpenVg:         return "OPENVG";
             case GraphicsRendererType::PortableGL:    return "PORTABLEGL";
             case GraphicsRendererType::TinyGL:        return "TINYGL";
-            case GraphicsRendererType::Igl:           return "IGL";
             case GraphicsRendererType::PixiJs:        return "PIXIJS";
             case GraphicsRendererType::NanoVg:        return "NANOVG";
         }

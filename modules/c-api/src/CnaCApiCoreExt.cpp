@@ -236,7 +236,6 @@ constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererTy
         {CNA_GRAPHICS_RENDERER_OPENVG, CNA::GraphicsRendererType::OpenVg},
         {CNA_GRAPHICS_RENDERER_PORTABLEGL, CNA::GraphicsRendererType::PortableGL},
         {CNA_GRAPHICS_RENDERER_TINYGL, CNA::GraphicsRendererType::TinyGL},
-        {CNA_GRAPHICS_RENDERER_IGL, CNA::GraphicsRendererType::Igl},
         {CNA_GRAPHICS_RENDERER_PIXIJS, CNA::GraphicsRendererType::PixiJs},
         {CNA_GRAPHICS_RENDERER_NANOVG, CNA::GraphicsRendererType::NanoVg},
     }};
