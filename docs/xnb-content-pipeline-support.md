@@ -126,12 +126,10 @@ separate reader class or name of its own ever appearing in the file's type-reade
 game-specific name at all — instead the file just names the target type directly, letting FNA's
 `ReflectiveReader<T>` machinery introspect it.
 
-**CNA decision**: only the explicit, named-reader path is supported. CNA has no runtime reflection
-of the kind `ReflectiveReader<T>` needs (walking arbitrary field lists by name/type at load time),
-and implementing a general reflection-driven fallback is out of scope — this mirrors the same
-explicit-registration-only decision `.cnj`'s `RegisterCnjLoader<T>` already made for CNA's own
-format. A `.xnb` file whose content pipeline used an implicit `ReflectiveReader<T>` for some type
-cannot be loaded by CNA at all today.
+**CNA decision**: CNA does not attempt automatic runtime reflection. A game explicitly declares
+the serialized member list because C++ cannot discover arbitrary fields by name and type at run
+time. CNA can then read the original implicit-`ReflectiveReader<T>` payload directly; rebuilding
+the content with a new writer is not required.
 
 **What a game author does instead** (updated 2026-08-27, SAMPLE-044): declare the type's fields
 once and let CNA build the reader. `ReflectiveTypeReaderBuilder<T>` is the middle ground between
@@ -168,6 +166,24 @@ all decide between the inline and the dispatched form by whether `T` is `shared_
 so the value-shaped reader reads the payload one index short and desynchronises everything after
 it. The registry key is the same either way: the `.xnb` names the serialized type, not the C++
 representation.
+
+A field marked `[ContentSerializer(SharedResource = true)]` uses the shared-resource table rather
+than the ordinary object-dispatch form. Declare it with `SharedResourceField()` and register the
+containing C# class through `RegisterShared()` so the deferred fixup target remains alive:
+
+```cpp
+ReflectiveTypeReaderBuilder<ModelPart>("CustomModelSample.CustomModel+ModelPart")
+    .Field(&ModelPart::triangleCount)
+    .Field(&ModelPart::vertexCount)
+    .Field(&ModelPart::vertexBuffer)
+    .Field(&ModelPart::indexBuffer)
+    .SharedResourceField(&ModelPart::effect)
+    .RegisterShared();
+```
+
+The assignment runs only after the root object and every shared resource have been read, matching
+XNA's two-pass fixup order. Calling value-shaped `Register()` after declaring a shared-resource
+field is rejected because its temporary target could not safely outlive the root read.
 
 The list must be in the type's **declaration order**, because that is the order
 `IntermediateSerializer` wrote the fields in. Each member is dispatched by its C++ type:
@@ -259,7 +275,7 @@ without changing either method's observable behavior for any valid input.
 
 | Area | Status |
 |---|---|
-| `ReflectiveReader<T>` (implicit custom readers) | ❌ Not supported, by design — see above |
+| Automatic reflection over an undeclared C++ type | ❌ Not supported by design; implicit `ReflectiveReader<T>` payloads are supported when the game declares their serialized members through `ReflectiveTypeReaderBuilder<T>` |
 | General `EffectReader` on a renderer without `CompiledEffects` | ❌ loading fails with an asset-specific capability diagnostic rather than a silent shader fallback. True for every identity except FNA3D, and SDL_GPU / the EasyGL family with their own build option on |
 | LZ4 compression | ✅ MonoGame's raw-block XNB representation is supported; generic LZ4 frames are intentionally not an XNB format |
 | Generic collection readers for an unregistered `T` combination | ❌ Not supported — each closed combination needs its own explicit registration |

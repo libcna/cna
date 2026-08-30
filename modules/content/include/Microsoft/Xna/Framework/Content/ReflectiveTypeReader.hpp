@@ -4,6 +4,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -276,6 +277,37 @@ namespace Microsoft::Xna::Framework::Content
         }
 
         /**
+         * @brief Declares the next field as an XNA shared-resource reference.
+         *
+         * A member marked `[ContentSerializer(SharedResource = true)]` does not contain an
+         * ordinary object-reader index. It contains a 1-based index into the file's shared
+         * resource table, and XNA assigns the member only after the root object and every shared
+         * resource have been read. This method queues the same deferred fixup through
+         * `ContentReader::ReadSharedResource`.
+         *
+         * The containing C# type is necessarily represented by `std::shared_ptr` so it remains
+         * alive until the deferred fixup runs. Register the builder with @ref RegisterShared;
+         * @ref Register rejects a declaration containing shared-resource fields.
+         *
+         * @tparam TMember The member's shared-resource type.
+         * @param member Pointer to the member.
+         * @return This builder, for chaining.
+         */
+        template <typename TMember>
+        ReflectiveTypeReaderBuilder& SharedResourceField(TMember T::*member)
+        {
+            fields_.push_back([member](T& target, ContentReader& input) {
+                T* const stableTarget = &target;
+                input.template ReadSharedResource<TMember>(
+                    [stableTarget, member](TMember value) {
+                        stableTarget->*member = std::move(value);
+                    });
+            });
+            hasSharedResourceFields_ = true;
+            return *this;
+        }
+
+        /**
          * @brief Declares the next field, which is an enum.
          * @tparam TEnum The enum type.
          * @param member       Pointer to the member.
@@ -365,9 +397,20 @@ namespace Microsoft::Xna::Framework::Content
          * one that stays**: `AddTypeCreator` keeps an existing entry rather than replacing it, so
          * registering the other shape afterwards is silently ignored. Use
          * `ContentTypeReaderManager::RemoveTypeCreatorEXT` first when the entry must change.
+         *
+         * @throws std::logic_error if the declaration contains a shared-resource field, whose
+         *         deferred fixup requires the stable object lifetime provided by
+         *         @ref RegisterShared.
          */
         void Register()
         {
+            if (hasSharedResourceFields_)
+            {
+                throw std::logic_error(
+                    "ReflectiveTypeReaderBuilder::SharedResourceField requires "
+                    "RegisterShared so the deferred fixup target remains alive.");
+            }
+
             for (auto& registration : enumRegistrations_)
                 ContentTypeReaderManager::AddTypeCreator(registration.first, registration.second);
 
@@ -422,5 +465,6 @@ namespace Microsoft::Xna::Framework::Content
         std::vector<typename ReflectiveTypeReader<T>::FieldReader> fields_;
         std::vector<std::pair<std::string, ContentTypeReaderManager::ReaderFactory>>
             enumRegistrations_;
+        bool hasSharedResourceFields_ = false;
     };
 }
