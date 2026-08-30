@@ -4,7 +4,10 @@
 #include <any>
 #include <cstring>
 #include <map>
+#include <unordered_map>
+#include <vector>
 
+#include "CNA/Internal/Xnb/CollectionContentTypeReaders.hpp"
 #include "CNA/Internal/Xnb/ModelContentTypeReaders.hpp"
 #include "CNA/Internal/Xnb/XnbCanonicalData.hpp"
 #include "XnbModelGraphReader.hpp"
@@ -18,11 +21,13 @@
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
 
 namespace CNA::Internal::Xnb
 {
     using Microsoft::Xna::Framework::Matrix;
     using Microsoft::Xna::Framework::BoundingSphere;
+    using Microsoft::Xna::Framework::Vector3;
     using Microsoft::Xna::Framework::Content::ContentLoadException;
     using Microsoft::Xna::Framework::Content::ContentTypeReaderManager;
     using Microsoft::Xna::Framework::Graphics::BufferUsage;
@@ -96,12 +101,34 @@ namespace CNA::Internal::Xnb
                 return boxedTag;
             }
 
+            // XNA can cast a closed managed Dictionary back from Object. CNA's collection reader
+            // produces an STL value, so box this stock Content Pipeline shape while retaining the
+            // original managed type name and every already-type-checked value.
+            using StringVector3ListDictionary =
+                std::unordered_map<std::string, std::vector<Vector3>>;
+            if (value.type() == typeid(StringVector3ListDictionary))
+            {
+                auto typed = std::any_cast<StringVector3ListDictionary>(std::move(value));
+                std::map<std::string, std::any> erased;
+                for (auto& [key, vertices] : typed)
+                {
+                    erased.emplace(std::move(key), std::move(vertices));
+                }
+                auto boxed = std::make_shared<CNA::Content::ObjectDictionaryEXT>(
+                    std::move(erased),
+                    "System.Collections.Generic.Dictionary`2[System.String,"
+                    "System.Collections.Generic.List`1[Microsoft.Xna.Framework.Vector3]]");
+                System::Object* boxedTag = boxed.get();
+                resources.tagOwners.push_back(std::move(boxed));
+                return boxedTag;
+            }
+
             if (value.type() != typeid(std::shared_ptr<System::Object>))
             {
                 throw ContentLoadException(
                     std::string("ModelReader: non-null ") + fieldContext +
-                    " Tag must deserialize as std::shared_ptr<System::Object> or as a "
-                    "Dictionary<string, object>.");
+                    " Tag must deserialize as std::shared_ptr<System::Object> or as "
+                    "a supported string-keyed Dictionary.");
             }
 
             auto owner = std::any_cast<std::shared_ptr<System::Object>>(std::move(value));
@@ -360,5 +387,26 @@ namespace CNA::Internal::Xnb
         ContentTypeReaderManager::AddTypeCreator(
             "Microsoft.Xna.Framework.Content.ModelReader",
             [] { return std::make_unique<ModelReader>(); });
+        // Keep the dictionary registration self-contained when callers register only the Model
+        // reader family in a focused AOT setup. RegisterSpriteFontXnbReader installs the same
+        // stateless closed reader in a normal built-in registration pass; duplicate registration
+        // is intentionally idempotent.
+        ContentTypeReaderManager::AddTypeCreator(
+            "Microsoft.Xna.Framework.Content.ListReader`1[[Microsoft.Xna.Framework.Vector3]]",
+            [] {
+                return std::make_unique<ListReader<Vector3>>(
+                    "System.Collections.Generic.List`1[[Microsoft.Xna.Framework.Vector3]]",
+                    "Microsoft.Xna.Framework.Content.Vector3Reader");
+            });
+        ContentTypeReaderManager::AddTypeCreator(
+            "Microsoft.Xna.Framework.Content.DictionaryReader`2[[System.String],"
+            "[System.Collections.Generic.List`1[[Microsoft.Xna.Framework.Vector3]]]]",
+            [] {
+                return std::make_unique<DictionaryReader<std::string, std::vector<Vector3>>>(
+                    "System.Collections.Generic.Dictionary`2[[System.String],"
+                    "[System.Collections.Generic.List`1[[Microsoft.Xna.Framework.Vector3]]]]",
+                    "Microsoft.Xna.Framework.Content.StringReader",
+                    "Microsoft.Xna.Framework.Content.ListReader`1[[Microsoft.Xna.Framework.Vector3]]");
+            });
     }
 }

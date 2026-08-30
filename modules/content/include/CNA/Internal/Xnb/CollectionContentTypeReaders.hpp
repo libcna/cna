@@ -53,6 +53,13 @@ namespace CNA::Internal::Xnb
             : std::bool_constant<IsSharedPtr<T>::value ||
                                  std::is_same_v<std::remove_cv_t<T>, std::string>> {};
 
+        // Both managed T[] and List<T> are reference types even though CNA represents their
+        // loaded value as std::vector<T>. A collection containing either therefore stores a
+        // 1-based reader dispatch index before the nested collection payload. Treating vector as
+        // a C++ value type here loses that index and shifts every following field in the stream.
+        template <typename T, typename Allocator>
+        struct IsSerializedReferenceType<std::vector<T, Allocator>> : std::true_type {};
+
         inline std::unique_ptr<ContentTypeReaderBase> RequireReader(const std::string& canonicalName)
         {
             auto reader = ContentTypeReaderManager::CreateReader(canonicalName);

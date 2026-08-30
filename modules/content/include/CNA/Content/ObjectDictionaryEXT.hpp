@@ -13,7 +13,7 @@
 namespace CNA::Content
 {
     /**
-     * @brief CNAEXT carrier for a `Dictionary<string, object>` read out of an `.xnb`.
+     * @brief CNAEXT carrier for a string-keyed dictionary read out of an `.xnb`.
      *
      * This is the shape a custom `ContentProcessor` uses to hand a game data the stock pipeline
      * has no type for: it attaches a `Dictionary<string, object>` to `Model.Tag`, and the game
@@ -35,9 +35,12 @@ namespace CNA::Content
      * ```
      *
      * Each value keeps whatever type its own content type reader produced, so the element types
-     * are the reader's, not this class's: a `Vector3[]` arrives as `std::vector<Vector3>`, a
-     * `BoundingSphere` as `BoundingSphere`. @ref Get names that C++ type and throws
-     * `System::InvalidCastException` when it is wrong, which is what the C# cast does.
+     * are the reader's, not this class's: a `Vector3[]` or `List<Vector3>` arrives as
+     * `std::vector<Vector3>`, a `BoundingSphere` as `BoundingSphere`. The same carrier also keeps
+     * a statically typed dictionary such as `Dictionary<string, List<Vector3>>`: its entries are
+     * erased only after the closed generic reader has enforced their one common value type. @ref
+     * Get names that C++ type and throws `System::InvalidCastException` when it is wrong, which is
+     * what the C# cast does.
      */
     class CNAEXT ObjectDictionaryEXT : public System::Object
     {
@@ -52,14 +55,27 @@ namespace CNA::Content
         }
 
         /**
-         * @brief Returns the fully qualified logical type name of this object.
-         * @return `"System.Collections.Generic.Dictionary`2[System.String,System.Object]"`.
+         * @brief Takes ownership of a string-keyed dictionary and its logical runtime type name.
+         *
+         * This overload is used for closed generic dictionaries whose value type is not
+         * `System.Object`. The reader converts each already-type-checked value to `std::any`, while
+         * the supplied name preserves the original managed dictionary type exposed by `Model.Tag`.
+         *
+         * @param values The deserialized entries, keyed by their `.xnb` names.
+         * @param typeName The fully qualified logical managed type name.
          */
-        [[nodiscard]] const std::string& GetTypeName() const override
+        ObjectDictionaryEXT(std::map<std::string, std::any> values, std::string typeName)
+            : values_(std::move(values)), typeName_(std::move(typeName))
         {
-            static const std::string name =
-                "System.Collections.Generic.Dictionary`2[System.String,System.Object]";
-            return name;
+        }
+
+        /**
+         * @brief Returns the fully qualified logical type name of this object.
+         * @return The managed dictionary type retained by the content reader.
+         */
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override
+        {
+            return typeName_;
         }
 
         /**
@@ -117,5 +133,7 @@ namespace CNA::Content
         [[nodiscard]] const std::any& At(const std::string& key) const;
 
         std::map<std::string, std::any> values_;
+        std::string typeName_ =
+            "System.Collections.Generic.Dictionary`2[System.String,System.Object]";
     };
 }

@@ -222,6 +222,76 @@ namespace
         return {file.begin(), file.end()};
     }
 
+    /// The exact closed generic shape MarbleMazeProcessor writes to Model.Tag.
+    std::vector<std::uint8_t> BuildTypedDictionaryTaggedModelXnb()
+    {
+        System::IO::MemoryStream bodyStream;
+        System::IO::BinaryWriter writer(&bodyStream, true);
+
+        writer.Write7BitEncodedInt(5);
+        writer.Write(std::string("Microsoft.Xna.Framework.Content.ModelReader"));
+        writer.Write(static_cast<int32_t>(0));
+        writer.Write(std::string("Microsoft.Xna.Framework.Content.StringReader"));
+        writer.Write(static_cast<int32_t>(0));
+        writer.Write(std::string(
+            "Microsoft.Xna.Framework.Content.DictionaryReader`2[[System.String],"
+            "[System.Collections.Generic.List`1[[Microsoft.Xna.Framework.Vector3]]]]"));
+        writer.Write(static_cast<int32_t>(0));
+        writer.Write(std::string(
+            "Microsoft.Xna.Framework.Content.ListReader`1[[Microsoft.Xna.Framework.Vector3]]"));
+        writer.Write(static_cast<int32_t>(0));
+        writer.Write(std::string("Microsoft.Xna.Framework.Content.Vector3Reader"));
+        writer.Write(static_cast<int32_t>(0));
+        writer.Write7BitEncodedInt(0); // shared resources
+        writer.Write7BitEncodedInt(1); // root ModelReader
+
+        writer.Write(static_cast<uint32_t>(1)); // one root bone
+        writer.Write7BitEncodedInt(2);          // bone name StringReader
+        writer.Write(std::string("Root"));
+        const float identity[16] = {
+            1, 0, 0, 0,
+            0, 1, 0, 0,
+            0, 0, 1, 0,
+            0, 0, 0, 1,
+        };
+        for (float component : identity) writer.Write(component);
+        writer.Write(static_cast<uint8_t>(0));  // no parent
+        writer.Write(static_cast<uint32_t>(0)); // no children
+        writer.Write(static_cast<int32_t>(0));  // no meshes
+        writer.Write(static_cast<uint8_t>(1));  // root bone reference
+
+        writer.Write7BitEncodedInt(3);          // Tag: Dictionary<String, List<Vector3>>
+        writer.Write(static_cast<int32_t>(2));  // two entries
+        writer.Write7BitEncodedInt(2);          // key: StringReader
+        writer.Write(std::string("Ramp"));
+        writer.Write7BitEncodedInt(4);          // value: ListReader<Vector3>
+        writer.Write(static_cast<int32_t>(3));
+        writer.Write(1.0f); writer.Write(2.0f); writer.Write(3.0f);
+        writer.Write(4.0f); writer.Write(5.0f); writer.Write(6.0f);
+        writer.Write(7.0f); writer.Write(8.0f); writer.Write(9.0f);
+        writer.Write7BitEncodedInt(2);
+        writer.Write(std::string("Floor"));
+        writer.Write7BitEncodedInt(4);
+        writer.Write(static_cast<int32_t>(1));
+        writer.Write(-1.0f); writer.Write(-2.0f); writer.Write(-3.0f);
+        writer.Flush();
+
+        const auto body = bodyStream.ToArray();
+        System::IO::MemoryStream fileStream;
+        System::IO::BinaryWriter fileWriter(&fileStream, true);
+        fileWriter.Write(static_cast<uint8_t>('X'));
+        fileWriter.Write(static_cast<uint8_t>('N'));
+        fileWriter.Write(static_cast<uint8_t>('B'));
+        fileWriter.Write(static_cast<uint8_t>('w'));
+        fileWriter.Write(static_cast<uint8_t>(5));
+        fileWriter.Write(static_cast<uint8_t>(0));
+        fileWriter.Write(static_cast<int32_t>(10 + static_cast<int32_t>(body.size())));
+        fileWriter.Write(body.data(), 0, static_cast<int32_t>(body.size()));
+        fileWriter.Flush();
+        const auto file = fileStream.ToArray();
+        return {file.begin(), file.end()};
+    }
+
     class ModelContentTypeReaderTest : public ::testing::Test
     {
     protected:
@@ -241,12 +311,15 @@ namespace
     };
 }
 
-TEST_F(ModelContentTypeReaderTest, AllFourReadersAreRegisteredUnderRealFnaCanonicalNames)
+TEST_F(ModelContentTypeReaderTest, ModelFamilyReadersAreRegisteredUnderRealFnaCanonicalNames)
 {
     EXPECT_TRUE(ContentTypeReaderManager::IsRegistered("Microsoft.Xna.Framework.Content.VertexDeclarationReader"));
     EXPECT_TRUE(ContentTypeReaderManager::IsRegistered("Microsoft.Xna.Framework.Content.VertexBufferReader"));
     EXPECT_TRUE(ContentTypeReaderManager::IsRegistered("Microsoft.Xna.Framework.Content.IndexBufferReader"));
     EXPECT_TRUE(ContentTypeReaderManager::IsRegistered("Microsoft.Xna.Framework.Content.ModelReader"));
+    EXPECT_TRUE(ContentTypeReaderManager::IsRegistered(
+        "Microsoft.Xna.Framework.Content.DictionaryReader`2[[System.String],"
+        "[System.Collections.Generic.List`1[[Microsoft.Xna.Framework.Vector3]]]]"));
 }
 
 TEST_F(ModelContentTypeReaderTest, LoadRealMonoGameFixtureEndToEnd)
@@ -408,4 +481,34 @@ TEST_F(ModelContentTypeReaderTest, DictionaryModelTagLoadsAndKeepsEachEntrysOwnT
     EXPECT_THROW(tag->Get<float>("Vertices"), System::InvalidCastException);
     EXPECT_THROW(tag->Get<int>("NotThere"),
                  System::Collections::Generic::KeyNotFoundException);
+}
+
+TEST_F(ModelContentTypeReaderTest, TypedStringVector3ListDictionaryModelTagLoadsAndRetainsItsType)
+{
+    CNA::Internal::Xnb::RegisterMathXnbReaders();
+
+    ScratchModelContentRoot root;
+    const auto bytes = BuildTypedDictionaryTaggedModelXnb();
+    std::ofstream file(root.path() / "typeddicttag.xnb", std::ios::binary);
+    file.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+    file.close();
+
+    ContentManager taggedContent(nullptr, root.path().string());
+    taggedContent.setGraphicsDevice(gd);
+    Model model = taggedContent.Load<Model>("typeddicttag");
+
+    auto* tag = dynamic_cast<CNA::Content::ObjectDictionaryEXT*>(model.getTagProperty());
+    ASSERT_NE(tag, nullptr);
+    EXPECT_EQ(
+        tag->GetTypeName(),
+        "System.Collections.Generic.Dictionary`2[System.String,"
+        "System.Collections.Generic.List`1[Microsoft.Xna.Framework.Vector3]]");
+
+    const auto& ramp = tag->Get<std::vector<Vector3>>("Ramp");
+    ASSERT_EQ(ramp.size(), 3u);
+    EXPECT_EQ(ramp[0], Vector3(1.0f, 2.0f, 3.0f));
+    EXPECT_EQ(ramp[2], Vector3(7.0f, 8.0f, 9.0f));
+    const auto& floor = tag->Get<std::vector<Vector3>>("Floor");
+    ASSERT_EQ(floor.size(), 1u);
+    EXPECT_EQ(floor[0], Vector3(-1.0f, -2.0f, -3.0f));
 }

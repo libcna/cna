@@ -75,12 +75,11 @@ namespace CNA::Internal::Xnb
      * **Current coverage**: bone name/transform/hierarchy (multi-bone, plans/plan_xnb.md XNB-37), the
      * root bone, per-mesh name/`ParentBone`/`BoundingSphere` (XNB-38/39), and per-mesh-part
      * scalar fields plus `VertexBuffer`/`IndexBuffer`/`Effect` shared-resource dedup (XNB-40).
-     * `Model`/mesh/mesh-part `Tag` fields are read (to keep the stream position correct) but a
-     * non-null `Tag` throws a clear `ContentLoadException` rather than silently dropping data --
-     * ordinary XNA content never sets a non-null `Tag` through the stock content pipeline, so this
-     * is not expected to be reached in practice. Reloading into an `existingInstance` is not
-     * supported (`CanDeserializeIntoExistingObject` stays false, matching every other reader in
-     * this plan).
+     * `Model`/mesh/mesh-part `Tag` fields retain custom reference objects and the stock-pipeline
+     * dictionary shapes currently registered by CNA. Unsupported non-null erasure shapes throw a
+     * clear `ContentLoadException` rather than silently dropping data. Reloading into an
+     * `existingInstance` is not supported (`CanDeserializeIntoExistingObject` stays false,
+     * matching every other reader in this plan).
      */
     class ModelReader : public ContentTypeReader<Model>
     {
