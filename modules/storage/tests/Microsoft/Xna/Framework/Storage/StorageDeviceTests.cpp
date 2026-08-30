@@ -53,6 +53,13 @@ namespace
             return fs::exists(fs::path(root_) / relativePath, ec);
         }
 
+        std::unique_ptr<Microsoft::Xna::Framework::Storage::StorageContainer> OpenContainer(
+            const std::string& displayName)
+        {
+            auto operation = device_->BeginOpenContainer(displayName, nullptr, nullptr);
+            return device_->EndOpenContainer(operation.get());
+        }
+
         std::string root_;
         // StorageDevice's constructor is private; the real acquisition path is
         // BeginShowSelector()/EndShowSelector(), matching the fake-async XNA 4.0 pattern.
@@ -99,4 +106,75 @@ TEST_F(StorageDeviceDeleteContainerTest, SimpleTitleNameDeletesOnlyThatContainer
 
     EXPECT_FALSE(MarkerExists("MyGame/save1.dat"));
     EXPECT_TRUE(MarkerExists("sentinel.txt"));
+}
+
+TEST_F(StorageDeviceDeleteContainerTest, ContainerOpenRejectsPathsOutsideStorageRoot)
+{
+    auto parentEscape = device_->BeginOpenContainer("../outside", nullptr, nullptr);
+    EXPECT_THROW(
+        { [[maybe_unused]] auto rejected = device_->EndOpenContainer(parentEscape.get()); },
+        std::invalid_argument);
+
+    auto absoluteEscape = device_->BeginOpenContainer("/tmp/cna-storage-escape", nullptr, nullptr);
+    EXPECT_THROW(
+        { [[maybe_unused]] auto rejected = device_->EndOpenContainer(absoluteEscape.get()); },
+        std::invalid_argument);
+}
+
+TEST_F(StorageDeviceDeleteContainerTest, ContainerOperationsRejectLexicalEscapes)
+{
+    auto container = OpenContainer("ContainedGame");
+
+    EXPECT_THROW(container->CreateDirectory("../outside"), std::invalid_argument);
+    EXPECT_THROW(
+        { [[maybe_unused]] const bool rejected = container->DirectoryExists("../outside"); },
+        std::invalid_argument);
+    EXPECT_THROW(container->DeleteDirectory("../outside"), std::invalid_argument);
+    EXPECT_THROW(
+        { [[maybe_unused]] auto rejected = container->CreateFile("../outside.bin"); },
+        std::invalid_argument);
+    EXPECT_THROW(
+        { [[maybe_unused]] const bool rejected = container->FileExists("../outside.bin"); },
+        std::invalid_argument);
+    EXPECT_THROW(container->DeleteFile("../outside.bin"), std::invalid_argument);
+    EXPECT_THROW(
+        { [[maybe_unused]] auto rejected =
+            container->OpenFile("../outside.bin", System::IO::FileMode::Open); },
+        std::invalid_argument);
+
+    EXPECT_FALSE(MarkerExists("ContainedGame/outside.bin"));
+}
+
+TEST_F(StorageDeviceDeleteContainerTest, ContainerOperationsRejectSymlinkEscapes)
+{
+    auto container = OpenContainer("ContainedGame");
+    const fs::path containerRoot = fs::path(root_) / "ContainedGame" / "AllPlayers";
+    const fs::path outsideRoot = fs::path(root_) / "outside";
+    fs::create_directories(outsideRoot);
+
+    std::error_code error;
+    fs::create_directory_symlink(outsideRoot, containerRoot / "escape", error);
+    if (error)
+    {
+        GTEST_SKIP() << "Directory symlinks are unavailable: " << error.message();
+    }
+
+    EXPECT_THROW(
+        { [[maybe_unused]] auto rejected = container->CreateFile("escape/outside.bin"); },
+        std::invalid_argument);
+    EXPECT_THROW(
+        { [[maybe_unused]] const bool rejected = container->FileExists("escape/outside.bin"); },
+        std::invalid_argument);
+    EXPECT_FALSE(fs::exists(outsideRoot / "outside.bin"));
+}
+
+TEST_F(StorageDeviceDeleteContainerTest, ContainerAllowsNormalizedPathsThatRemainContained)
+{
+    auto container = OpenContainer("ContainedGame");
+    container->CreateDirectory("saves/../profiles");
+    EXPECT_TRUE(container->DirectoryExists("profiles"));
+
+    auto stream = container->CreateFile("profiles/../save.bin");
+    stream.reset();
+    EXPECT_TRUE(container->FileExists("save.bin"));
 }

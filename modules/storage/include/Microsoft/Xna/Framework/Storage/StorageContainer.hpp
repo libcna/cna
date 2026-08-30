@@ -19,7 +19,12 @@ namespace Microsoft::Xna::Framework::Storage
 {
     class StorageDevice;
 
-    /** @brief Provides a logical collection of files used for user-data persistence. */
+        /**
+         * @brief Provides a logical collection of files used for user-data persistence.
+         *
+         * File and directory paths are confined to this container. Absolute paths, parent
+         * traversal outside the container and symlink escapes are rejected.
+         */
     class StorageContainer : public System::Object, public System::IDisposable
     {
     public:

@@ -560,6 +560,35 @@ static int validate_files(const CNA_StorageContainerHandle container)
         exists == CNA_FALSE;
 }
 
+static int validate_container_path_containment(const CNA_StorageContainerHandle container)
+{
+    CNA_StorageStreamHandle stream = UINT64_C(77);
+    CNA_Bool exists = CNA_TRUE;
+
+    if (cna_storage_container_create_directory(container, view("../outside")) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_storage_container_directory_exists(container, view("../outside"), &exists) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_storage_container_delete_directory(container, view("../outside")) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_storage_container_create_file(container, view("../outside.bin"), &stream) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        stream != CNA_INVALID_HANDLE ||
+        cna_storage_container_file_exists(container, view("../outside.bin"), &exists) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_storage_container_delete_file(container, view("../outside.bin")) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_storage_container_open_file(
+            container, view("../outside.bin"), CNA_FILE_MODE_OPEN, &stream) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        stream != CNA_INVALID_HANDLE ||
+        cna_storage_container_file_exists(container, view("/tmp/cna-storage-escape"), &exists) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    return 1;
+}
+
 static int validate_disposal(const CNA_StorageContainerHandle container)
 {
     CNA_Handle registration = CNA_INVALID_HANDLE;
@@ -809,7 +838,8 @@ static int validate_storage(void)
         return 0;
     }
     if (!validate_container_identity(device, container) || !validate_directories(container) ||
-        !validate_files(container) || !validate_disposal(container) ||
+        !validate_files(container) || !validate_container_path_containment(container) ||
+        !validate_disposal(container) ||
         !validate_disposal_edges(device)) {
         return 0;
     }
@@ -832,6 +862,12 @@ static int validate_storage(void)
     }
     if (cna_storage_container_open(device, all_names(), 0, 0, &container) !=
         CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    container = UINT64_C(77);
+    if (cna_storage_container_open(device, view("../escape"), 0, 0, &container) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        container != CNA_INVALID_HANDLE) {
         return 0;
     }
     return cna_storage_device_destroy(device) == CNA_RESULT_SUCCESS &&

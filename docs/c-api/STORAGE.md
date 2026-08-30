@@ -82,6 +82,12 @@ The root is derived from the platform preference path, so a test suite or tool t
 into the real user data directory should pin the platform's data-home environment variable rather
 than expecting the C API to accept an absolute root.
 
+Both container names and every file/directory path are confined to their owning storage root.
+Absolute paths, lexical parent traversal outside the container, and existing symlinks that resolve
+outside it return `CNA_RESULT_INVALID_ARGUMENT`. Normalized paths such as
+`profiles/../save.bin` remain valid when the final path stays inside the same container. This is a
+deliberate CNA security hardening over FNA's unchecked `Path.Combine` behavior.
+
 ## Events
 
 `StorageDevice::DeviceChanged` is a canonical *static* event, so
@@ -101,7 +107,8 @@ exactly once.
 | `System::NotSupportedException` (unwritable or unreadable stream) | `CNA_RESULT_NOT_SUPPORTED` |
 | `System::ObjectDisposedException` | `CNA_RESULT_INVALID_STATE` |
 
-`cna_storage_device_delete_container` keeps the canonical containment guard: a title name that is
-absolute or escapes the storage root is refused with `CNA_RESULT_INVALID_ARGUMENT` instead of being
-resolved. No native exception object, type name or C++ throw crosses the ABI; messages reach the
-caller through the per-thread UTF-8 diagnostic.
+`cna_storage_device_delete_container` keeps the containment guard: a title name that is absolute or
+escapes the storage root is refused with `CNA_RESULT_INVALID_ARGUMENT` instead of being resolved.
+The same result protects container opening and all paths used through a container. No native
+exception object, type name or C++ throw crosses the ABI; messages reach the caller through the
+per-thread UTF-8 diagnostic.

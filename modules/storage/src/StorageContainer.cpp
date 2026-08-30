@@ -1,10 +1,10 @@
-// SPDX-License-Identifier: MIT
-// Copyright (c) Robert Vokac and contributors
+// SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Storage/StorageContainer.hpp"
 
 #include <filesystem>
 #include <stdexcept>
 
+#include "CNA/Internal/PathContainment.hpp"
 #include "System/IO/FileStream.hpp"
 
 namespace
@@ -53,7 +53,17 @@ namespace Microsoft::Xna::Framework::Storage
             ? "Player" + std::to_string(playerIndex + 1)
             : "AllPlayers";
 
-        storagePath_ = (fs::path(rootPath) / displayName / playerFolder).string();
+        // Intentional security deviation from FNA: Path.Combine permits a rooted display name to
+        // discard the storage root and permits parent traversal. A StorageContainer is an
+        // authority boundary in CNA, so construction must remain below the device storage root.
+        const auto contained = CNA::Internal::ResolveContainedPath(
+            rootPath, displayName + "/" + playerFolder);
+        if (!contained.ok)
+        {
+            throw std::invalid_argument(
+                "The storage container name must resolve within the storage root.");
+        }
+        storagePath_ = contained.resolvedPath;
 
         if (!fs::exists(storagePath_))
             fs::create_directories(storagePath_);
@@ -83,7 +93,15 @@ namespace Microsoft::Xna::Framework::Storage
 
     std::string StorageContainer::ResolvePath(const std::string& relative) const
     {
-        return (fs::path(storagePath_) / relative).string();
+        // Intentional security deviation from FNA: its unchecked Path.Combine calls can escape
+        // the logical container through absolute paths, parent traversal or an existing symlink.
+        const auto contained = CNA::Internal::ResolveContainedPath(storagePath_, relative);
+        if (!contained.ok)
+        {
+            throw std::invalid_argument(
+                "The storage path must be relative and remain within the container.");
+        }
+        return contained.resolvedPath;
     }
 
     // ---- Directory ----
