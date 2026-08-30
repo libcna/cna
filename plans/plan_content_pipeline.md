@@ -44,7 +44,8 @@
 > new `content-pipeline-final` branch was created from it, and current `next` was merged normally.
 > The resulting combined baseline is `5671ebb54`; neither history was rebased, squashed or reset,
 > and `next` remains untouched. `CP-051` resumes the remaining evidence-backed backlog from that
-> combined history.
+> combined history. `CP-051` through `CP-056` are complete: the manifest/explain and named-source-
+> root work is implemented, and the Model-v2 audit has found a coherent bounded native design.
 >
 > **Boundary:** this plan owns the build-time CNA Content Pipeline. `plans/plan_cnb.md` remains the
 > engineering record for the frozen CNB compiled format. The pipeline consumes the existing CNB
@@ -1207,12 +1208,14 @@ carrying forward task-local results:
 | `CP-053` | **completed** | Added private structured build decisions and `build ... --explain`. Reasons compare inspectable route/schema/codec fields plus the persisted v6 domains, effective graph inputs and per-artifact digests; they distinguish manifest state, source/dependency/configuration/component/output/deployment changes and missing versus tampered artifacts without guessing from aggregate hashes. Root-relative sorted explanations are byte-identical under workers 1/2/4; `--quiet` suppresses successful explanations and `clean` rejects the option. The complete 71-case manifest/CLI ASan+UBSan boundary and an 11-case TSan selection pass. On the 128-node no-op fixture the median was 0.291 s with explanations versus 0.276 s normally (5.6%, about 15 ms). |
 | `CP-054` | **completed** | Audited configuration, context resolution, manifest hashing, deployment and destructive paths and specified the bounded capability model in section 30. Strict configuration gains at most 32 lowercase aliases under `sourceRoots`; authored references use explicit `@alias/root-relative-path` syntax. The native mapping is request-local and never persisted. Manifest v7 stores alias and relative path as separate fields, hashes both, and resolves without root search. Existing source-relative resolution remains the default. Canonical source/external/output roots may not equal or nest; deployment from an external root is accepted only after the same explicitly aliased source dependency was recorded, while publication/clean/GC remain output-root-only. |
 | `CP-055` | **completed** | Implemented bounded named external source roots end to end. Strict config maps aliases under `sourceRoots`; unqualified dependencies retain source-root containment while `@alias/path` resolves directly through a canonical request-local read capability. Manifest v7 persists alias plus relative identity, hashes both, and never stores physical roots. Same-byte physical remapping skips; alias/identity/set/byte changes invalidate. External deployment requires the exact aliased dependency first and still publishes only below the output root. Normal 101-test, ASan+UBSan 101-test and focused TSan 10-test gates prove workers 1/4 identity, migration, traversal/absolute/backslash/symlink/unknown/duplicate/missing/file/overlap rejection, and external sentinel survival through deployment contraction, GC and clean. |
-| `CP-056` | **planned** | Audit actual XNB Model reader semantics, CNA runtime vertex/buffer/effect capabilities, schema-1 wire/runtime behavior and glTF/CNJ carriers. Produce a support matrix and a precise schema-2 design only if the runtime can consume the proposed semantics without arbitrary CLR object serialization. |
-| `CP-057` | **conditional** | Implement and independently golden-test Model schema 2, then broaden lossless XNB Model transcoding, only if CP-056 proves a coherent design. Schema 1, its reader and all existing golden bytes remain immutable; unsupported tags/effects must still fail explicitly. |
-| `CP-058` | **planned** | Measure generated glTF child rebuild behavior and retain same-node scheduling unless independent nodes provide real cache isolation without changing embedded-clip or texture-XREF semantics. |
-| `CP-059` | **planned** | Audit current processors for a concrete output-affecting target policy. Add no profile abstraction unless an existing implementable policy justifies stable fingerprint identity. |
-| `CP-060` | **planned** | Audit available native Windows/MSVC execution and existing CI conventions; add only a meaningful, maintainable gate executable in the available environment. Preserve the honest cooperative mixed-version lock limitation. |
-| `CP-061` | **planned** | Perform final Content Pipeline compatibility, security, performance, sanitizer, portability, CMake and C-API-inventory review; reconcile plans/docs and record remaining evidence-backed backlog. |
+| `CP-056` | **completed** | Audited FNA's complete Model/vertex/index/stock-effect readers against CNA's canonical XNB graph, frozen schema-1 carrier, runtime Model/buffer/effect APIs, CNB adapter and renderer declaration boundary. Section 32 records the field matrix and a demonstrated real use case: MonoGame's Blender cube needs an explicit Position+Normal declaration, serialized sphere and non-default BasicEffect SpecularPower, all of which CNA already constructs and exposes. A separate resource-table schema is coherent without CLR object graphs; null tags remain the only supported tag policy, custom effects remain rejected, and declaration-limited renderers retain their existing explicit fidelity rejection. No CNB definition or byte changed in this audit. |
+| `CP-057` | **planned** | Specify Model schema 2 precisely: separate CPU carrier/codec, stable declaration/effect IDs, scoped buffer/effect resource tables, exact part windows/bounds/root identity, null-only tags, count/range validation and schema-1/default-route compatibility. The specification is not normative until an independent implementation and golden vector prove it. |
+| `CP-058` | **conditional** | Implement and independently golden-test Model schema 2 only after CP-057 closes every wire and validation rule. Schema 1, its decoder, its producer routes and all existing golden bytes remain immutable. |
+| `CP-059` | **conditional** | Broaden lossless XNB Model transcoding onto schema 2 for the exact support matrix CP-057/058 prove. Schema-1-compatible XNB Models continue to emit schema 1; unsupported tags/custom effects fail explicitly. |
+| `CP-060` | **planned** | Measure generated glTF child rebuild behavior and retain same-node scheduling unless independent nodes provide real cache isolation without changing embedded-clip or texture-XREF semantics. |
+| `CP-061` | **planned** | Audit current processors for a concrete output-affecting target policy. Add no profile abstraction unless an existing implementable policy justifies stable fingerprint identity. |
+| `CP-062` | **planned** | Audit available native Windows/MSVC execution and existing CI conventions; add only a meaningful, maintainable gate executable in the available environment. Preserve the honest cooperative mixed-version lock limitation. |
+| `CP-063` | **planned** | Perform final Content Pipeline compatibility, security, performance, sanitizer, portability, CMake and C-API-inventory review; reconcile plans/docs and record remaining evidence-backed backlog. |
 
 Tasks are intentionally vertical/coherent. The ledger is revised when implementation evidence makes
 the ordering wrong; it is not a promise to build speculative abstractions.
@@ -1306,8 +1309,8 @@ the ordering wrong; it is not a promise to build speculative abstractions.
   need explicit external-root reference syntax. In particular, glTF's shared converter validates
   and opens URIs before the pipeline context observes them, so it must not claim capability support
   without a separately reviewed resolver callback.
-* Whether the CP-056 Model audit can justify a coherent schema 2 that CNA can construct and render;
-  CP-057 remains conditional and schema 1 remains frozen regardless of the answer.
+* Whether the CP-057 wire specification and independent proof can close the bounded schema-2
+  implementation authorized by CP-056. Schema 1 remains frozen regardless of the answer.
 
 ---
 
@@ -2238,3 +2241,96 @@ The durable invariants are:
 glTF remains intentionally outside this claim because its shared converter opens authored URIs
 before the pipeline context observes them. Extending it would require a separately reviewed
 resolver callback, not a containment exception.
+
+---
+
+## 32. Model schema-2 feasibility audit (`CP-056`)
+
+This audit returns to the authoritative FNA readers rather than extrapolating from schema 1.
+`ModelReader` serializes bone names/transforms plus explicit parent and child references; mesh
+name, parent bone, exact `BoundingSphere` and tag; each part's `VertexOffset`, `NumVertices`,
+`StartIndex`, `PrimitiveCount`, tag and three shared-resource references; an explicit root bone;
+and the Model tag. `VertexBufferReader` retains a complete `VertexDeclaration` (stride plus every
+element's offset, format, usage and usage index) and complete bytes. `IndexBufferReader` retains
+the 16/32-bit choice and bytes. The five stock effect readers retain the following source state:
+
+| Reader | Serialized state relevant to a native record |
+|---|---|
+| `BasicEffectReader` | Texture2D, diffuse/emissive/specular RGB, `SpecularPower`, alpha, vertex-colour enable |
+| `SkinnedEffectReader` | Texture2D, weights per vertex, diffuse/emissive/specular RGB, `SpecularPower`, alpha |
+| `DualTextureEffectReader` | two Texture2D references, diffuse RGB, alpha, vertex-colour enable |
+| `AlphaTestEffectReader` | Texture2D, compare function, reference alpha, diffuse RGB, alpha, vertex-colour enable |
+| `EnvironmentMapEffectReader` | Texture2D, TextureCube, amount, specular RGB, Fresnel, diffuse/emissive RGB, alpha |
+
+These are content properties; World/View/Projection, fog, lighting enablement and palettes remain
+constructor/draw-time state exactly as they do after direct XNB loading.
+
+### 32.1 Runtime and carrier evidence
+
+| Semantic | CNA evidence | Schema-2 conclusion |
+|---|---|---|
+| arbitrary XNA vertex declaration | `VertexDeclaration(stride, elements)`, `VertexBuffer`'s declaration constructor and raw upload already carry all twelve `VertexElementFormat` and thirteen `VertexElementUsage` values | preserve stable CNB-owned IDs, exact order and stride; validate nonempty, in-stride and non-overlapping elements |
+| declaration rendering | declaration-translating renderers consume the exact elements; seven stride-table renderers run the shared fidelity guard and explicitly refuse an unrepresentable declaration before submission | schema may preserve declarations; it must not promise every renderer can draw every XNA layout, and must retain the loud runtime capability failure |
+| shared whole buffers | runtime XNB fixups already give multiple parts the same `VertexBuffer*`/`IndexBuffer*`; `ModelResources` can own one object per table row | use document-local resource indices and one payload chunk per buffer, never pointer or XNB fixup identity |
+| part windows | `ModelMeshPart` stores all four fields and `ModelMesh::Draw` passes them to `DrawIndexedPrimitives`; the graphics boundary validates the declared vertex and index windows | store all four signed-XNA values as bounded nonnegative `u32` after validation; XNB Model topology remains TriangleList |
+| mesh bounds | public setter and getter already preserve the serialized sphere | store center/radius floats and reject non-finite/negative values; never recompute in schema 2 |
+| explicit root and root transform | the five-argument CNAEXT `Model` constructor takes `rootBoneIndex`; every `ModelBone` transform is settable | store root index explicitly and apply every transform, including the root's |
+| Basic/Skinned/Dual/AlphaTest/EnvironmentMap effects | CNA implements all five classes and production XNB readers already construct and assign every serialized field | use discriminated complete stock records and a shared effect table; no generic `Effect` record |
+| texture references | CNB's container `XREF` is a validated logical ContentManager identity; Texture2D and TextureCube have frozen asset IDs | stock records address typed XREF rows; do not embed textures or physical paths |
+| resource sharing | buffer/effect identity and mutation are observable, and direct XNB preserves them | table indices preserve same-versus-distinct identity within one Model document |
+| tags | XNA accepts arbitrary CLR objects; CNA runtime readers can retain some registered `System::Object` values, but there is no bounded native wire contract common to those graphs | schema 2 initially admits null Model/Mesh/MeshPart tags only; every non-null tag remains an explicit transcode failure |
+| custom effects | direct XNB may resolve registered Effect readers, but no stable CNA-native custom effect graph or frozen `Effect.cnb` schema exists | reject every reader outside the five complete stock readers; do not serialize bytecode, XNB reader names or CLR graphs |
+
+The declaration boundary is a capability fact, not a reason to discard the format. The direct XNB
+runtime already constructs the exact Position+Normal stride-24 declaration in MonoGame's
+`BlenderDefaultCube.xnb`; renderers capable of declaration translation can consume it, while an
+inference-only renderer refuses rather than silently reading Normal bytes as Color/UV. A schema-2
+runtime adapter can use the same public declaration/buffer path. The compiler itself remains
+headless and does not initialize a device or renderer.
+
+### 32.2 Demonstrated source/runtime use case
+
+The repository's independently described MonoGame fixture is outside schema 1 for three
+observable reasons and inside the bounded design above:
+
+* stride 24 contains `Position Vector3 @ 0` plus `Normal Vector3 @ 12`, rather than schema 1's
+  inferred Position/Color/UV layout;
+* `BasicEffect.SpecularPower` is `9.607843399047852`, rather than schema 1's reconstructed 16; and
+* its authored mesh sphere must be retained as serialized rather than accepted only when equal to
+  a schema-1 recomputation.
+
+The direct XNB runtime test already proves bone/root/mesh/part geometry, the exact declaration and
+material values. It therefore supplies an external producer fixture for the required future
+runtime-XNB versus native-CNB semantic comparison, not merely a production-code-generated vector.
+Synthetic fixtures can separately prove sharing, nonzero part windows, other roots and each stock
+effect without weakening that independent case.
+
+### 32.3 Compatibility and implementation boundary
+
+The coherent design is a separate `CnbModelDataV2` CPU carrier and separate codec. It uses the
+existing Model asset type ID with schema version 2 and does not add optional fields to or reinterpret
+the schema-1 carrier. The schema-1 encoder/decoder and its chunk meanings stay source-compatible and
+byte-identical. Runtime dispatch selects a decoder from the header schema version; it does not make
+the existing schema-1 decoder accept version 2.
+
+Pipeline routing must also remain explicit. A schema-1-compatible XNB Model continues through the
+existing `ImportedModelDocument -> ModelProcessor -> ModelContentWriter` route and emits schema 1.
+A Model that requires schema 2 uses a distinct imported/processed stable type and writer, so the
+writer's declared schema/codec identity matches the bytes it actually emits. PNG/WAV/CNJ/glTF and
+generated Model children therefore never change merely because a second schema exists. Catching a
+schema-1 subset error and blindly upgrading is insufficient: the schema-2 converter must revalidate
+the original canonical graph and reject malformed windows, inconsistent bone links, non-null tags,
+unsupported effects and unsafe XREFs on their own merits.
+
+The wire format must bound and cross-check every header count, fixed-stride table size, string/XREF
+index, declaration element range, buffer byte product, mesh-part slot, resource index, root/parent
+index and draw window before allocation or GPU construction. It must validate selected indices
+against the part's declared vertex window, preserve unused shared resources if the XNB graph
+contains them, and allow distinct resource rows with equal bytes. All identities are document-local
+ordinals; no pointer, RTTI name, XNB shared-resource number, assembly name or host path is semantic
+output.
+
+This proves a bounded schema 2 is architecturally justified. It does not authorize implementation
+from prose alone: CP-057 owns the byte-exact table/chunk specification and malformed-input rules;
+CP-058 requires an independent Python golden vector plus frozen-schema-1 byte regression before a
+producer or runtime reader lands; CP-059 then broadens XNB support only to the proven matrix.

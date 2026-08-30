@@ -1162,9 +1162,12 @@ plus clean through a non-ASCII path. Native Windows and MSVC remain untested and
 - optional target profiles, if a concrete portable-output policy requires them;
 - independently scheduled glTF generated assets only if a concrete cache-isolation benefit
   justifies a generated-source graph contract;
-- broader XNB Model support only through a separately reviewed Model schema revision that can
-  preserve the unsupported vertex, effect/material, tag, shared-resource, and external-reference
-  semantics;
+- Model schema 2 and broader XNB Model support remain future implementation. The completed CP-056
+  audit permits a separate resource-table design for exact declarations, shared buffers/effects,
+  part windows, authored bounds, explicit root identity, and complete built-in stock-effect
+  records. It deliberately keeps tags null-only and custom effects unsupported; schema 1 and all
+  existing producer routes stay frozen until an independent schema-2 specification and golden
+  vector are proved;
 - stable machine-readable build-decision output, if an IDE/build integration contract justifies a
   separately versioned format;
 
