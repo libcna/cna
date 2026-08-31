@@ -9,6 +9,17 @@
 #include <string.h>
 #include <threads.h>
 
+#define CONTENT_CHECK(condition) \
+    ((condition) ? 1 : \
+        (fprintf(stderr, "ContentSmoke failure at line %d: %s\n", __LINE__, #condition), 0))
+
+#define CONTENT_VALIDATE(condition) \
+    do { \
+        if (!CONTENT_CHECK(condition)) { \
+            return CNA_RESULT_INVALID_STATE; \
+        } \
+    } while (0)
+
 static const char FixturePath[] = "cna_c_api_content_\xC5\xBE_fixture.bmp";
 
 typedef struct ContentState {
@@ -838,7 +849,9 @@ static int write_unsupported_texture_asset(void)
     return write_binary_file(UnsupportedTextureAssetPath, asset, offset);
 }
 
-static int validate_normalized_byte2_load(const CNA_Handle manager)
+static int validate_normalized_byte2_load(
+    const CNA_Handle manager,
+    const CNA_Handle graphics_device)
 {
     static const CNA_PackedNormalizedByte2 ExpectedLevelZero[] = {
         UINT16_C(0x4081), UINT16_C(0x7fc0), UINT16_C(0x8181), UINT16_C(0x4040)
@@ -854,18 +867,58 @@ static int validate_normalized_byte2_load(const CNA_Handle manager)
         {0U, 0U, 0U}, {0, 0, 0, 0}, UINT64_C(0), UINT64_C(4)
     };
     uint64_t required = 0U;
+    CNA_RendererFormatUsageFlags known_usages = 0U;
+    CNA_RendererFormatUsageFlags supported_usages = 0U;
 
-    if (cna_content_manager_load_texture2d(
-            manager, view(NormalizedByte2AssetName), &texture) != CNA_RESULT_SUCCESS ||
-        texture == CNA_INVALID_HANDLE ||
-        cna_texture2d_get_info(texture, &info) != CNA_RESULT_SUCCESS ||
-        info.width != 2U || info.height != 2U || info.level_count != 2U ||
-        info.format != CNA_SURFACE_FORMAT_NORMALIZED_BYTE2 ||
-        cna_texture2d_get_data(
-            texture, CNA_TEXTURE_DATA_NORMALIZED_BYTE2, &transfer,
-            actual, UINT64_C(4), &required) != CNA_RESULT_SUCCESS ||
-        required != UINT64_C(4) ||
+    if (cna_graphics_device_get_surface_format_support_ext(
+            graphics_device,
+            CNA_SURFACE_FORMAT_NORMALIZED_BYTE2,
+            &known_usages,
+            &supported_usages) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    if ((known_usages & CNA_RENDERER_FORMAT_USAGE_TEXTURE_STORAGE) != 0U &&
+        (supported_usages & CNA_RENDERER_FORMAT_USAGE_TEXTURE_STORAGE) == 0U) {
+        CNA_ErrorInfo error = {
+            sizeof(CNA_ErrorInfo), UINT32_C(1), CNA_RESULT_SUCCESS, CNA_ERROR_CATEGORY_NONE, 0U
+        };
+        const CNA_Result result = cna_content_manager_load_texture2d(
+            manager, view(NormalizedByte2AssetName), &texture);
+        return result == CNA_RESULT_IO && texture == CNA_INVALID_HANDLE &&
+            cna_error_get_last_info(&error) == CNA_RESULT_SUCCESS &&
+            error.result == CNA_RESULT_IO && error.category == CNA_ERROR_CATEGORY_IO &&
+            error.message_byte_length != 0U;
+    }
+
+    const CNA_Result load_result = cna_content_manager_load_texture2d(
+        manager, view(NormalizedByte2AssetName), &texture);
+    const CNA_Result info_result = texture == CNA_INVALID_HANDLE
+        ? CNA_RESULT_INVALID_HANDLE
+        : cna_texture2d_get_info(texture, &info);
+    const CNA_Result data_result = info_result != CNA_RESULT_SUCCESS
+        ? CNA_RESULT_INVALID_STATE
+        : cna_texture2d_get_data(
+              texture, CNA_TEXTURE_DATA_NORMALIZED_BYTE2, &transfer,
+              actual, UINT64_C(4), &required);
+    if (load_result != CNA_RESULT_SUCCESS || texture == CNA_INVALID_HANDLE ||
+        info_result != CNA_RESULT_SUCCESS || info.width != 2U || info.height != 2U ||
+        info.level_count != 2U || info.format != CNA_SURFACE_FORMAT_NORMALIZED_BYTE2 ||
+        data_result != CNA_RESULT_SUCCESS || required != UINT64_C(4) ||
         memcmp(actual, ExpectedLevelZero, sizeof(ExpectedLevelZero)) != 0) {
+        char error_message[512] = {0};
+        uint64_t error_bytes = 0U;
+        (void)cna_error_copy_last_message(
+            error_message, sizeof(error_message) - 1U, &error_bytes);
+        fprintf(
+            stderr,
+            "NormalizedByte2 load failed: load=%u info=%u data=%u handle=%llu "
+            "shape=%ux%u/%u format=%u required=%llu values=%04x,%04x,%04x,%04x error=%s\n",
+            (unsigned)load_result, (unsigned)info_result, (unsigned)data_result,
+            (unsigned long long)texture, (unsigned)info.width, (unsigned)info.height,
+            (unsigned)info.level_count, (unsigned)info.format, (unsigned long long)required,
+            (unsigned)actual[0], (unsigned)actual[1], (unsigned)actual[2],
+            (unsigned)actual[3], error_message);
         if (texture != CNA_INVALID_HANDLE) {
             (void)cna_texture2d_destroy(texture);
         }
@@ -1539,6 +1592,11 @@ static int validate_object_dictionary(const CNA_Handle manager)
 
 static const char TaggedModelPath[] = "cna_c_api_content_tagged_model.xnb";
 static const char TaggedModelName[] = "cna_c_api_content_tagged_model";
+static const char TypedTaggedModelPath[] = "cna_c_api_content_typed_tagged_model.xnb";
+static const char TypedTaggedModelName[] = "cna_c_api_content_typed_tagged_model";
+static const char TypedDictionaryTypeName[] =
+    "System.Collections.Generic.Dictionary`2[System.String,"
+    "System.Collections.Generic.List`1[Microsoft.Xna.Framework.Vector3]]";
 static const char ForeignModelPath[] = "cna_c_api_content_foreign_model.xnb";
 static const char ForeignModelName[] = "cna_c_api_content_foreign_model";
 static const char ForeignTagTypeName[] = "CNA.Test.ModelTagEntry";
@@ -1628,6 +1686,44 @@ static int write_tagged_model_asset(void)
     return write_binary_file(TaggedModelPath, asset, offset);
 }
 
+/* The exact closed generic dictionary shape MarbleMazeProcessor writes to Model.Tag. */
+static int write_typed_tagged_model_asset(void)
+{
+    uint8_t asset[1024];
+    size_t offset = 10U;
+
+    offset = push_seven_bit(asset, offset, UINT32_C(5));
+    offset = push_reader_name(asset, offset, "Microsoft.Xna.Framework.Content.ModelReader");
+    offset = push_reader_name(asset, offset, "Microsoft.Xna.Framework.Content.StringReader");
+    offset = push_reader_name(
+        asset, offset,
+        "Microsoft.Xna.Framework.Content.DictionaryReader`2[[System.String],"
+        "[System.Collections.Generic.List`1[[Microsoft.Xna.Framework.Vector3]]]]");
+    offset = push_reader_name(
+        asset, offset,
+        "Microsoft.Xna.Framework.Content.ListReader`1[[Microsoft.Xna.Framework.Vector3]]");
+    offset = push_reader_name(asset, offset, "Microsoft.Xna.Framework.Content.Vector3Reader");
+    offset = push_seven_bit(asset, offset, UINT32_C(0)); /* no shared resources */
+    offset = push_seven_bit(asset, offset, UINT32_C(1)); /* root object: ModelReader */
+
+    offset = push_tagged_model_body(asset, offset);
+    offset = push_seven_bit(asset, offset, UINT32_C(3)); /* typed dictionary tag */
+    offset = push_u32_le(asset, offset, UINT32_C(1));    /* one entry */
+    offset = push_seven_bit(asset, offset, UINT32_C(2));
+    offset = push_utf8(asset, offset, "Ramp");
+    offset = push_seven_bit(asset, offset, UINT32_C(4)); /* ListReader<Vector3> */
+    offset = push_u32_le(asset, offset, UINT32_C(2));
+    offset = push_f32_le(asset, offset, 1.0f);
+    offset = push_f32_le(asset, offset, 2.0f);
+    offset = push_f32_le(asset, offset, 3.0f);
+    offset = push_f32_le(asset, offset, 4.0f);
+    offset = push_f32_le(asset, offset, 5.0f);
+    offset = push_f32_le(asset, offset, 6.0f);
+
+    finish_xnb(asset, offset);
+    return write_binary_file(TypedTaggedModelPath, asset, offset);
+}
+
 /* The same model, tagged with a type the caller declared from C instead. */
 static int write_foreign_tagged_model_asset(
     const char* const path,
@@ -1707,6 +1803,78 @@ static int validate_foreign_model_tag(const CNA_Handle manager)
         return 0;
     }
     return cna_model_destroy(model) == CNA_RESULT_SUCCESS;
+}
+
+static int validate_typed_dictionary_model_tag(const CNA_Handle manager)
+{
+    CNA_ModelHandle model = CNA_INVALID_HANDLE;
+    CNA_ObjectDictionaryHandle tag = CNA_INVALID_HANDLE;
+    CNA_ObjectDictionaryEntry entry;
+    CNA_Bool present = CNA_FALSE;
+    uint64_t bytes = 0U;
+    char type_name[128];
+
+    if (!CONTENT_CHECK(write_typed_tagged_model_asset()) ||
+        !CONTENT_CHECK(
+            cna_content_manager_load_model(manager, view(TypedTaggedModelName), &model) ==
+            CNA_RESULT_SUCCESS) ||
+        !CONTENT_CHECK(
+            cna_model_get_content_tag_dictionary_ext(model, &present, &tag) ==
+            CNA_RESULT_SUCCESS) ||
+        !CONTENT_CHECK(present == CNA_TRUE) || !CONTENT_CHECK(tag != CNA_INVALID_HANDLE)) {
+        goto fail;
+    }
+
+    memset(type_name, 'q', sizeof(type_name));
+    entry.struct_size = (uint32_t)sizeof(entry);
+    if (!CONTENT_CHECK(
+            cna_object_dictionary_ext_get_runtime_type_name_size(tag, &bytes) ==
+            CNA_RESULT_SUCCESS) ||
+        !CONTENT_CHECK(bytes == (uint64_t)strlen(TypedDictionaryTypeName)) ||
+        !CONTENT_CHECK(
+            cna_object_dictionary_ext_copy_runtime_type_name(
+                tag, type_name, sizeof(type_name), &bytes) == CNA_RESULT_SUCCESS) ||
+        !CONTENT_CHECK(memcmp(type_name, TypedDictionaryTypeName, (size_t)bytes) == 0) ||
+        !CONTENT_CHECK(
+            cna_object_dictionary_ext_copy_runtime_type_name(tag, type_name, 1U, &bytes) ==
+            CNA_RESULT_BUFFER_TOO_SMALL) ||
+        !CONTENT_CHECK(type_name[0] == TypedDictionaryTypeName[0]) ||
+        !CONTENT_CHECK(
+            cna_object_dictionary_ext_get_runtime_type_name_size(tag, 0) ==
+            CNA_RESULT_INVALID_ARGUMENT) ||
+        !CONTENT_CHECK(
+            cna_object_dictionary_ext_copy_runtime_type_name(tag, 0, 1U, &bytes) ==
+            CNA_RESULT_INVALID_ARGUMENT) ||
+        !CONTENT_CHECK(
+            cna_object_dictionary_ext_get_entry(tag, view("Ramp"), &entry) ==
+            CNA_RESULT_SUCCESS) ||
+        !CONTENT_CHECK(entry.kind == CNA_OBJECT_DICTIONARY_VALUE_VECTOR3) ||
+        !CONTENT_CHECK(entry.is_array == CNA_TRUE) ||
+        !CONTENT_CHECK(entry.element_count == UINT64_C(2))) {
+        goto fail;
+    }
+
+    /* The aliasing tag handle retains both the dictionary and its logical identity. */
+    if (!CONTENT_CHECK(cna_model_destroy(model) == CNA_RESULT_SUCCESS) ||
+        !CONTENT_CHECK(
+            cna_object_dictionary_ext_get_runtime_type_name_size(tag, &bytes) ==
+            CNA_RESULT_SUCCESS) ||
+        !CONTENT_CHECK(cna_object_dictionary_ext_destroy(tag) == CNA_RESULT_SUCCESS) ||
+        !CONTENT_CHECK(
+            cna_object_dictionary_ext_get_runtime_type_name_size(tag, &bytes) ==
+            CNA_RESULT_INVALID_HANDLE)) {
+        goto fail;
+    }
+    return 1;
+
+fail:
+    if (tag != CNA_INVALID_HANDLE) {
+        (void)cna_object_dictionary_ext_destroy(tag);
+    }
+    if (model != CNA_INVALID_HANDLE) {
+        (void)cna_model_destroy(model);
+    }
+    return 0;
 }
 
 static int validate_content_model(const CNA_Handle manager)
@@ -1835,7 +2003,7 @@ static int validate_content_model(const CNA_Handle manager)
     if (cna_model_destroy(model) != CNA_RESULT_SUCCESS) {
         return 0;
     }
-    return validate_foreign_model_tag(manager);
+    return validate_foreign_model_tag(manager) && validate_typed_dictionary_model_tag(manager);
 }
 
 static int validate_cnb_loader_through_manager(const CNA_Handle manager)
@@ -2216,20 +2384,18 @@ static CNA_Result on_load(
         return CNA_RESULT_INVALID_STATE;
     }
 
-    if (!validate_paths_and_device(state->content_manager, graphics_device) ||
-        !validate_resource_manager(graphics_device) ||
-        !validate_font_load(state->content_manager) ||
-        !validate_normalized_byte2_load(state->content_manager) ||
-        !validate_unsupported_texture_load(state->content_manager) ||
-        !validate_foreign_load(state->content_manager) ||
-        !validate_reflective_reader(state->content_manager) ||
-        !validate_object_dictionary(state->content_manager) ||
-        !validate_content_model(state->content_manager) ||
-        !validate_cnb_loader_through_manager(state->content_manager) ||
-        !validate_effect_load(state->content_manager) ||
-        !validate_cnj_loader(state->content_manager)) {
-        return CNA_RESULT_INVALID_STATE;
-    }
+    CONTENT_VALIDATE(validate_paths_and_device(state->content_manager, graphics_device));
+    CONTENT_VALIDATE(validate_resource_manager(graphics_device));
+    CONTENT_VALIDATE(validate_font_load(state->content_manager));
+    CONTENT_VALIDATE(validate_normalized_byte2_load(state->content_manager, graphics_device));
+    CONTENT_VALIDATE(validate_unsupported_texture_load(state->content_manager));
+    CONTENT_VALIDATE(validate_foreign_load(state->content_manager));
+    CONTENT_VALIDATE(validate_reflective_reader(state->content_manager));
+    CONTENT_VALIDATE(validate_object_dictionary(state->content_manager));
+    CONTENT_VALIDATE(validate_content_model(state->content_manager));
+    CONTENT_VALIDATE(validate_cnb_loader_through_manager(state->content_manager));
+    CONTENT_VALIDATE(validate_effect_load(state->content_manager));
+    CONTENT_VALIDATE(validate_cnj_loader(state->content_manager));
 
     RootFixture fixture;
     if (!create_root_fixture(&fixture)) {

@@ -1,7 +1,7 @@
 # CNA Native C Binding / Stable C ABI — Implementation Plan
 
-> **Status (2026-08-30, after synchronizing the Content Pipeline branch with current `next`):
-> B0–B11 and B13 complete; B12, B14 and B15 are explicit
+> **Status (2026-08-31, after `CBIND-124`):
+> B0–B11, B13 and B18 complete; B12, B14 and B15 are explicit
 > C-ABI backlog, not Content Pipeline v1 work.** Phase B10 bound all 506 rows the sixth merge
 > reopened, the CNB content format included; Phase B11 bound the seventh merge's 15-row tail. The
 > completed experimental C++ Content Pipeline, its post-XNB continuation, CP-055's manifest-v7
@@ -9,9 +9,9 @@
 > contract now add 654 deliberately
 > unbound inventory rows under `CBIND-117`.
 > Coverage:
-> **551 headers / 9,483 symbols — 8,341 implemented, 15 approved partial, 663 planned, 464 not
-> applicable.** Phase B13 then bound `Load<Model>` and the `Tag` a content processor writes,
-> taking the ABI to **`0.19.0`** and **4,048 → 4,051** exports without moving a coverage row. The
+> **553 headers / 9,492 symbols — 8,348 implemented, 15 approved partial, 663 planned, 466 not
+> applicable.** Phase B13 bound `Load<Model>` and the `Tag` a content processor writes; Phase B18
+> closes the small SAMPLE-060/061 public-API tail and takes the ABI to **`0.21.0` / 4,054 exports**. The
 > release gate is consistently
 > **Not ready** on coverage alone until `CBIND-117`, `CBIND-120`, `CBIND-121` and `CBIND-122`; this integration does not invent C routes for
 > a C++ build-time extension API merely because it is public. See *Current status* and Phase B12.
@@ -1571,6 +1571,12 @@ after the campaign had formally exited.
 |---|---|---|---|
 | CBIND-123 | Stop recurring full-file report commits | ✅ | **Done 2026-08-30.** `docs/c-api/COVERAGE.md` is now a compact generated summary carrying the full inventory's SHA-256; `--write` emits the complete matrix to ignored `build/c-api/COVERAGE_FULL.md`, while `--check`, the release gate, the limitations generator, CTest and all three CI workflows still rebuild and validate the canonical inventory. `remediation/REMEDIATION_PROGRESS.md` and its README now freeze that manually maintained file as a historical archive and direct new work to active plans. Existing Git history is intentionally unchanged; rewriting shared history is a separate destructive repository-owner decision. |
 
+## Phase B18 — close the sample-port public-API tail
+
+| # | Task | Status | Acceptance criteria |
+|---|---|---|---|
+| CBIND-124 | Bind public APIs added while completing SAMPLE-060/061 | ✅ | **Done 2026-08-31.** The Windows Phone `Microsoft.Devices.Environment.DeviceType` query is now a fixed C identity plus `cna_environment_get_device_type`, available independently of the optional extended-device layer. `ObjectDictionaryEXT::GetTypeName` became data-bearing when SAMPLE-061 taught `ModelReader` to preserve a closed generic model-tag dictionary, so its logical managed name now has count/copy routes and is tested with the exact `Dictionary<string, List<Vector3>>` tag shape used by Marble Maze. The newly public `ContentReader` destructor and `GraphicsDevice` friendship declaration are dispositioned through their already-existing destroy route and non-callable friendship rule. Three additive exports take the ABI from `0.20.0` to `0.21.0`; strict-C behavior, C/C++ ABI walls, generated coverage, export baseline and release documents are required green. |
+
 ## Mandatory test layers
 
 Every implemented public C entry point must receive all applicable coverage in the same task:
@@ -1631,9 +1637,9 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-**Snapshot (2026-08-30, after regenerating the current `next` inventory):** 551 headers / 9,483 symbols —
-**8,341 implemented, 15 approved partial, 663 planned, 464 not applicable.** ABI `0.19.0`, 4,051
-exported symbols — the same 4,051 with `CNA_CNAEXT` on and off (measured symbol by symbol: zero
+**Snapshot (2026-08-31, after `CBIND-124`):** 553 headers / 9,492 symbols —
+**8,348 implemented, 15 approved partial, 663 planned, 466 not applicable.** ABI `0.21.0`, 4,054
+exported symbols — the same 4,054 with `CNA_CNAEXT` on and off (measured symbol by symbol: zero
 differ), which is the engine layer's ABI promise measured rather than asserted.
 
 The completed C++ Content Pipeline, its continuation, and Model-v2 CPU codec reopened only the

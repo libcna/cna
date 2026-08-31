@@ -133,7 +133,7 @@ and no reachable implementation.
 ## 10. ABI version query
 
 `cna._cna_get_abi_version()` returns the packed `uint32`: major in bits 31..16, minor 15..8, patch
-7..0. The qualified artifact answered **0.20.0**. A consumer must check this before trusting any
+7..0. The qualified artifact answered **0.21.0**. A consumer must check this before trusting any
 other route; see `ABI_VERSIONING.md` for the versioning rules.
 
 ## 11. Artifact provenance

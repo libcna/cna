@@ -5,6 +5,7 @@
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "Microsoft/Devices/Detail/IVibrateBackend.hpp"
+#include "Microsoft/Devices/Environment.hpp"
 #include "Microsoft/Devices/VibrateController.hpp"
 #include "System/TimeSpan.hpp"
 
@@ -12,6 +13,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -57,6 +59,13 @@ namespace {
 using Microsoft::Devices::VibrateController;
 
 constexpr uint32_t StructureVersion = UINT32_C(1);
+
+static_assert(
+    static_cast<std::underlying_type_t<Microsoft::Devices::DeviceType>>(
+        Microsoft::Devices::DeviceType::Device) == CNA_DEVICE_TYPE_DEVICE);
+static_assert(
+    static_cast<std::underlying_type_t<Microsoft::Devices::DeviceType>>(
+        Microsoft::Devices::DeviceType::Emulator) == CNA_DEVICE_TYPE_EMULATOR);
 
 [[nodiscard]] CNA_Result InvalidInput(const char* const message)
 {
@@ -779,6 +788,18 @@ struct CameraResource final {
 #endif // CNA_DEVICES
 
 } // namespace
+
+CNA_Result cna_environment_get_device_type(CNA_DeviceType* const outDeviceType)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outDeviceType == nullptr) {
+            return InvalidInput("The environment device-type output is null.");
+        }
+        *outDeviceType = static_cast<CNA_DeviceType>(
+            Microsoft::Devices::Environment::getDeviceTypeProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
 
 CNA_Result cna_devices_ext_is_available(CNA_Bool* const outAvailable)
 {

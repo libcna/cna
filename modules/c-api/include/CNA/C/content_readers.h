@@ -993,6 +993,36 @@ typedef struct CNA_ObjectDictionaryEntry {
 } CNA_ObjectDictionaryEntry;
 
 /**
+ * @brief Reports the byte length of the dictionary's logical managed runtime type name.
+ *
+ * @param dictionary The dictionary.
+ * @param out_byte_count Receives the length, without a terminator.
+ * @return A CNA result code.
+ *
+ * Unlike an entry's diagnostic C++ type name, this is the stable managed identity retained from
+ * the compiled asset, such as
+ * `System.Collections.Generic.Dictionary\`2[System.String,System.Object]`.
+ */
+CNA_C_API CNA_Result cna_object_dictionary_ext_get_runtime_type_name_size(
+    CNA_ObjectDictionaryHandle dictionary,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies the dictionary's logical managed runtime type name.
+ *
+ * @param dictionary The dictionary.
+ * @param destination Destination bytes, or null only for zero capacity. Not terminated.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_object_dictionary_ext_copy_runtime_type_name(
+    CNA_ObjectDictionaryHandle dictionary,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
  * @brief Reports how many entries the dictionary holds.
  * @param dictionary The dictionary.
  * @param out_count Receives the entry count.

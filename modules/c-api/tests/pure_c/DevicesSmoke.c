@@ -657,7 +657,14 @@ static int validate_unavailable(const CNA_Handle game)
 
 static int validate_identities(void)
 {
-    return CNA_POWER_STATE_ERROR == UINT32_C(0) && CNA_POWER_STATE_UNKNOWN == UINT32_C(1) &&
+    CNA_DeviceType device_type = UINT32_MAX;
+    return sizeof(CNA_DeviceType) == sizeof(uint32_t) &&
+        CNA_DEVICE_TYPE_DEVICE == UINT32_C(0) && CNA_DEVICE_TYPE_EMULATOR == UINT32_C(1) &&
+        CNA_DEVICE_TYPE_MAXIMUM == CNA_DEVICE_TYPE_EMULATOR &&
+        cna_environment_get_device_type(&device_type) == CNA_RESULT_SUCCESS &&
+        device_type == CNA_DEVICE_TYPE_DEVICE &&
+        cna_environment_get_device_type(0) == CNA_RESULT_INVALID_ARGUMENT &&
+        CNA_POWER_STATE_ERROR == UINT32_C(0) && CNA_POWER_STATE_UNKNOWN == UINT32_C(1) &&
         CNA_POWER_STATE_ON_BATTERY == UINT32_C(2) && CNA_POWER_STATE_NO_BATTERY == UINT32_C(3) &&
         CNA_POWER_STATE_CHARGING == UINT32_C(4) && CNA_POWER_STATE_CHARGED == UINT32_C(5) &&
         CNA_POWER_STATE_MAXIMUM == CNA_POWER_STATE_CHARGED &&

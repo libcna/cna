@@ -5476,7 +5476,7 @@
     },
     {
       "id": "graphics-device-friend-declarations",
-      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::(?:Game|GameWindow|GraphicsDeviceManager)$",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::(?:ContentReader|Game|GameWindow|GraphicsDeviceManager)$",
       "kinds": [
         "method"
       ],
@@ -5487,7 +5487,8 @@
       "approved_symbols": [
         "CPP-52CE4F5E561D",
         "CPP-624179F398A3",
-        "CPP-CB81C793362F"
+        "CPP-CB81C793362F",
+        "CPP-F8AEB07CB5E6"
       ]
     },
     {
@@ -6320,13 +6321,14 @@
     },
     {
       "id": "content-reader-core",
-      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentReader(?:::(?:ContentReader|getContentManagerProperty|getAssetNameProperty|getVersionProperty|getPlatformProperty|ReadMatrix|ReadQuaternion|ReadVector2|ReadVector3|ReadVector4|ReadColor|ReadBoundingSphere|InitializeTypeReaders|ReadSharedResources|CheckCollectionElementCount|CheckDecodedByteSize|ReadBytesExactOrThrow))?$",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentReader(?:::(?:~?ContentReader|getContentManagerProperty|getAssetNameProperty|getVersionProperty|getPlatformProperty|ReadMatrix|ReadQuaternion|ReadVector2|ReadVector3|ReadVector4|ReadColor|ReadBoundingSphere|InitializeTypeReaders|ReadSharedResources|CheckCollectionElementCount|CheckDecodedByteSize|ReadBytesExactOrThrow))?$",
       "kinds": [
         "class",
         "constructor",
+        "destructor",
         "method"
       ],
-      "mapping": "an owned `CNA_ContentReaderHandle` created over an owned storage stream and an optional content-manager handle, plus asset-name count/copy, container version and platform, the six fixed-value reads and the bounding-sphere read into `CNA_*` PODs, the type-reader table and shared-resource passes, both bounds checks, and a capacity-checked exact-byte read. Neither `System::IO::Stream` nor `ContentManager` crosses the boundary: the reader borrows both through the adapter, the borrow blocks closing the stream, and the canonical disposal-recording callback and read limits keep their defaults because a C callback cannot receive a Sharp Runtime disposable",
+      "mapping": "an owned `CNA_ContentReaderHandle` created over an owned storage stream and an optional content-manager handle, released by `cna_content_reader_destroy`, plus asset-name count/copy, container version and platform, the six fixed-value reads and the bounding-sphere read into `CNA_*` PODs, the type-reader table and shared-resource passes, both bounds checks, and a capacity-checked exact-byte read. Neither `System::IO::Stream` nor `ContentManager` crosses the boundary: the reader borrows both through the adapter, the borrow blocks closing the stream, and the canonical disposal-recording callback and read limits keep their defaults because a C callback cannot receive a Sharp Runtime disposable",
       "tests": "`ContentReaderSmoke.c` builds a compiled-asset fixture through the storage API and asserts the whole protocol against it: an empty type-reader table, an empty shared-resource pass, a null object reference, byte-exact matrix/quaternion/vector/color/bounding-sphere values, asset-name count/copy, container version and platform, the standalone no-manager answer, both limit checks in their accepting and refusing forms, exact-byte reads including the capacity-checked refusal that consumes nothing and the truncation failure at end of stream, and the refusal to close a stream a reader still borrows, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-036B2",
@@ -6346,6 +6348,7 @@
         "CPP-970DB756718C",
         "CPP-9E9858D986BE",
         "CPP-A9A4432FB116",
+        "CPP-C3AB1E941EA8",
         "CPP-C69BAE3503EE",
         "CPP-CB197EACFEF6",
         "CPP-D10F2B78FE21"
@@ -10788,6 +10791,27 @@
       "task": "CBIND-037D3",
       "approved_symbols": [
         "CPP-A2A6BFAA7CB8"
+      ]
+    },
+    {
+      "id": "windows-phone-environment",
+      "qualified_name_regex": "^Microsoft::Devices::(?:DeviceType(?:::(?:Device|Emulator))?|Environment(?:::getDeviceTypeProperty)?)$",
+      "kinds": [
+        "class",
+        "enum",
+        "enum-value",
+        "method"
+      ],
+      "mapping": "`CNA_DeviceType` with the `CNA_DEVICE_TYPE_DEVICE` and `CNA_DEVICE_TYPE_EMULATOR` identities at their canonical ordinals, plus `cna_environment_get_device_type`. The canonical class is a static facade with a deleted constructor, so C has one free query and no object handle. It is an ordinary Microsoft.Devices API and remains available when CNA's optional extended device layer is disabled",
+      "tests": "strict-C `DevicesSmoke.c` asserts both identities, the maximum alias, the physical-device answer and the null-output refusal in the same test under both extension build states; `AbiHeaderC.c` and `AbiHeaderCpp.cpp` pin the fixed width and ordinals; native `EnvironmentTests.cpp` independently asserts the canonical answer",
+      "status": "implemented",
+      "task": "CBIND-124",
+      "approved_symbols": [
+        "CPP-20BD20FB6F6A",
+        "CPP-3470C180A82D",
+        "CPP-576090513E18",
+        "CPP-7F4FB3CDE467",
+        "CPP-9950586CED45"
       ]
     },
     {
@@ -18927,8 +18951,8 @@
         "method",
         "operator"
       ],
-      "mapping": "`CNA_ObjectDictionaryHandle` with `cna_content_manager_load_object_dictionary_ext`, `cna_object_dictionary_ext_destroy` and eleven reading routes.\n\nThe constructor is the loader: this type is only ever made by boxing what `DictionaryReader<String, Object>` produced, which is what `ModelReader` does for a `Model.Tag` and what the loader route does for an asset whose root object is the dictionary. `ContainsKey` is `cna_object_dictionary_ext_contains_key`; `getValuesProperty` becomes `_get_count` with indexed `_get_key_size_at`/`_copy_key_at`, because a C caller enumerates a map by index rather than by iterator, and the canonical container is ordered so the order is stable. `GetTypeName` is not a route: it answers the same fixed .NET name for every instance of this type, so publishing it would add a call whose result the header can simply state.\n\n**`Get<T>` and `operator[]` are one pair of routes with a kind argument, because C has no `T`.** `_get_entry` reports what an entry holds -- which is `operator[]`'s type-erased answer, made useful -- and `_copy_value`/`_copy_array`/`_copy_string`/`_get_foreign_object` read it. Naming the wrong kind is refused rather than reinterpreted, which is the C form of the `InvalidCastException` `Get<T>` throws; the canonical `KeyNotFoundException` shares that result code and is separated by the message. A type this ABI does not name reports `UNKNOWN` with its C++ type name still readable, so an unexpected entry can be described rather than merely failing.\n\n**Where the C surface stops:** in C++ this dictionary is reached through `Model.Tag`, and no route in this ABI loads a `Model` from content -- every `CNA_ModelHandle` is built by hand. The loader route reaches the same reader's product from an asset of its own instead. Binding `Model` loading is separate work and the header says so rather than implying the tag path works.",
-      "tests": "`ContentSmoke.c` `validate_object_dictionary` loads a **hand-written `.xnb`** whose root is a five-entry dictionary -- a `BoundingSphere`, a `Vector3[]`, a string and two types declared from C -- the shape XNA's own `TrianglePickingSample` writes. Every route is exercised: the count, containment both ways, indexed keys in the container's order with a short destination reporting the size it needed, the entry description of a scalar, an array and a foreign object, the values themselves against the bytes the fixture wrote, the string, and the caller's own object identity. Refusals are covered separately: a wrong kind, an array through the scalar route and a scalar through the array route, an absent key, an undersized destination, an undersized `CNA_ObjectDictionaryEntry`, an index past the end, and a released handle. Mutation-checked twice -- changing the expected `magic` and changing an expected vertex each fail the suite -- so the assertions are read from the file rather than from the fixture's own constants. The entry type name is asserted present and non-empty but never spelled, because it is the toolchain's rather than this ABI's.",
+      "mapping": "`CNA_ObjectDictionaryHandle` with `cna_content_manager_load_object_dictionary_ext`, `cna_object_dictionary_ext_destroy` and the reading routes.\n\nThe constructors are reached by loading: the ordinary dictionary asset uses the one-argument form, while `ModelReader` uses the two-argument form when it boxes a closed string-to-list dictionary from `Model.Tag`. `GetTypeName` is therefore no longer constant and is exposed by `_get_runtime_type_name_size`/`_copy_runtime_type_name`; unlike an entry's diagnostic toolchain type spelling, this is the stable managed identity retained from the asset. `ContainsKey` is `cna_object_dictionary_ext_contains_key`; `getValuesProperty` becomes `_get_count` with indexed `_get_key_size_at`/`_copy_key_at`, because a C caller enumerates a map by index rather than by iterator, and the canonical container is ordered so the order is stable.\n\n**`Get<T>` and `operator[]` are one pair of routes with a kind argument, because C has no `T`.** `_get_entry` reports what an entry holds -- which is `operator[]`'s type-erased answer, made useful -- and `_copy_value`/`_copy_array`/`_copy_string`/`_get_foreign_object` read it. Naming the wrong kind is refused rather than reinterpreted, which is the C form of the `InvalidCastException` `Get<T>` throws; the canonical `KeyNotFoundException` shares that result code and is separated by the message. A type this ABI does not name reports `UNKNOWN` with its C++ type name still readable, so an unexpected entry can be described rather than merely failing. `cna_model_get_content_tag_dictionary_ext` publishes the same object from a loaded model and retains its lifetime independently of the model handle.",
+      "tests": "`ContentSmoke.c` `validate_object_dictionary` loads a hand-written `.xnb` whose root is a five-entry dictionary -- a `BoundingSphere`, a `Vector3[]`, a string and two types declared from C -- and exercises count, containment, ordered keys, entry descriptions, values, string, foreign identity, cast/refusal and lifetime behavior. `validate_typed_dictionary_model_tag` loads the exact closed generic string-to-`List<Vector3>` tag shape used by Marble Maze, asserts the retained managed runtime name byte-for-byte through both new routes, checks short/null/stale outputs, confirms the entry remains a vector array, and proves the tag identity remains readable after the model handle is destroyed. Entry C++ type names remain diagnostic and are asserted only as non-empty.",
       "status": "implemented",
       "task": "CBIND-116",
       "approved_symbols": [
@@ -18937,6 +18961,7 @@
         "CPP-65DC4D18FC58",
         "CPP-C70CB76938DF",
         "CPP-CAA858FE9FF3",
+        "CPP-E126699F37DC",
         "CPP-E3D095C0C473",
         "CPP-FA742DF14CAE"
       ]

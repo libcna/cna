@@ -1973,6 +1973,45 @@ template <typename T>
 
 } // namespace
 
+CNA_Result cna_object_dictionary_ext_get_runtime_type_name_size(
+    const CNA_ObjectDictionaryHandle dictionaryHandle,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return InvalidArgument("The dictionary runtime type-name size output is null.");
+        }
+        std::shared_ptr<ObjectDictionaryResource> dictionary;
+        if (const CNA_Result result = GetObjectDictionary(dictionaryHandle, &dictionary);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBytes = static_cast<uint64_t>(dictionary->value->GetTypeName().size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_object_dictionary_ext_copy_runtime_type_name(
+    const CNA_ObjectDictionaryHandle dictionaryHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
+            return InvalidArgument("The dictionary runtime type-name output is invalid.");
+        }
+        std::shared_ptr<ObjectDictionaryResource> dictionary;
+        if (const CNA_Result result = GetObjectDictionary(dictionaryHandle, &dictionary);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyText(
+            dictionary->value->GetTypeName(), destination, capacity, outBytes,
+            "The destination capacity is smaller than the dictionary runtime type name.");
+    });
+}
+
 CNA_Result cna_object_dictionary_ext_get_count(
     const CNA_ObjectDictionaryHandle dictionaryHandle,
     uint64_t* const outCount)

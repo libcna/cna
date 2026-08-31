@@ -8,7 +8,7 @@
 
 #include <stddef.h>
 
-_Static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 20, 0),
+_Static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 21, 0),
                "CNA C ABI version encoding must remain stable");
 _Static_assert(sizeof(CNA_Result) == sizeof(uint32_t),
                "CNA_Result must have a fixed-width representation");
@@ -1146,7 +1146,11 @@ _Static_assert(offsetof(CNA_GamePadAnalogState, left_thumb_stick) ==
 
 _Static_assert(sizeof(CNA_GamePadButtonLabel) == sizeof(uint32_t) &&
                    sizeof(CNA_GamePadConnectionState) == sizeof(uint32_t) &&
+                   sizeof(CNA_DeviceType) == sizeof(uint32_t) &&
                    sizeof(CNA_PowerState) == sizeof(uint32_t) &&
+                   CNA_DEVICE_TYPE_DEVICE == UINT32_C(0) &&
+                   CNA_DEVICE_TYPE_EMULATOR == UINT32_C(1) &&
+                   CNA_DEVICE_TYPE_MAXIMUM == CNA_DEVICE_TYPE_EMULATOR &&
                    CNA_GAMEPAD_BUTTON_LABEL_UNKNOWN == UINT32_C(0) &&
                    CNA_GAMEPAD_BUTTON_LABEL_TRIANGLE == UINT32_C(8) &&
                    CNA_GAMEPAD_CONNECTION_STATE_UNKNOWN == UINT32_C(0) &&

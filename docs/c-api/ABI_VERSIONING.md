@@ -2,7 +2,14 @@
 
 ## ABI identity
 
-The ABI is `0.20.0`. It **removes eleven public renderer identities** -- `LLGL`, `SKIA`,
+The ABI is `0.21.0`. It adds the small public-API tail introduced by SAMPLE-060/061, from
+`plans/plan_binding.md` `CBIND-124`: `cna_environment_get_device_type` with its two fixed device
+identities, and the count/copy pair for an object dictionary's retained logical managed type name.
+All three routes are additive. The type-name pair matters because a content-loaded model tag can
+now preserve a closed generic identity such as `Dictionary<string, List<Vector3>>`; it is not the
+toolchain-dependent diagnostic spelling of an individual entry.
+
+`0.20.0` **removed eleven public renderer identities** -- `LLGL`, `SKIA`,
 `SOKOL`, `DILIGENT`, `IGL`, `WICKED`, `MAGNUM`, `BLEND2D`, `NANOVG`, `OPENVG` and `TINYGL` --
 together with the eleven `CNA_GRAPHICS_RENDERER_*` constants that named them, and it moves
 `CNA_GRAPHICS_RENDERER_MAXIMUM` from `50` to `49`. That is an incompatible change, which under
@@ -304,7 +311,7 @@ Recording the baseline needs the library:
 python3 tools/c-api/generate_abi_baseline.py --write --library <build>/modules/c-api/libcna_c_api.so
 ```
 
-All four build configurations export the same 4,051 symbols. That is itself part of the contract:
+All four build configurations export the same 4,054 symbols. That is itself part of the contract:
 the ABI **surface** does not vary with the renderer, with `CNA_DEVICES`, or with `CNA_CNAEXT` —
 only the answers do. A route whose backend or layer is absent exists and refuses, rather than
 disappearing from the library. `CNA_CNAEXT` is the newest member of that list and the one with the

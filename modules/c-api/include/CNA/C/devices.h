@@ -10,6 +10,27 @@
 extern "C" {
 #endif
 
+/** @brief Fixed-width identity for the host environment reported by Microsoft.Devices.Environment. */
+typedef uint32_t CNA_DeviceType;
+
+/** @brief The application is running on a physical device. */
+#define CNA_DEVICE_TYPE_DEVICE UINT32_C(0)
+/** @brief The application is running in the Windows Phone emulator. */
+#define CNA_DEVICE_TYPE_EMULATOR UINT32_C(1)
+/** @brief Largest defined @ref CNA_DeviceType value. */
+#define CNA_DEVICE_TYPE_MAXIMUM CNA_DEVICE_TYPE_EMULATOR
+
+/**
+ * @brief Gets the kind of device on which the application is running.
+ *
+ * @param out_device_type Receives one of the `CNA_DEVICE_TYPE_*` identities.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ *
+ * CNA reports a physical device on every currently supported host. This query is part of the
+ * canonical Windows Phone API and is available independently of CNA's extended device layer.
+ */
+CNA_C_API CNA_Result cna_environment_get_device_type(CNA_DeviceType* out_device_type);
+
 /**
  * @brief Reports whether this build contains the extended device layer.
  *

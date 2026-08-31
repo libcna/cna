@@ -1,10 +1,10 @@
 {
  "abi_version": {
-  "encoded": 5120,
+  "encoded": 5376,
   "major": 0,
-  "minor": 20,
+  "minor": 21,
   "patch": 0,
-  "runtime": 5120
+  "runtime": 5376
  },
  "colors": {
   "CNA_COLOR_ALICE_BLUE": [
@@ -2201,6 +2201,7 @@
   "cna_engine_layer_get_version",
   "cna_enum_type_reader_copy_canonical_name",
   "cna_enum_type_reader_get_canonical_name_size",
+  "cna_environment_get_device_type",
   "cna_environment_map_effect_create",
   "cna_environment_map_effect_get_alpha",
   "cna_environment_map_effect_get_amount",
@@ -3623,6 +3624,7 @@
   "cna_object_dictionary_ext_contains_key",
   "cna_object_dictionary_ext_copy_array",
   "cna_object_dictionary_ext_copy_key_at",
+  "cna_object_dictionary_ext_copy_runtime_type_name",
   "cna_object_dictionary_ext_copy_string",
   "cna_object_dictionary_ext_copy_type_name",
   "cna_object_dictionary_ext_copy_value",
@@ -3631,6 +3633,7 @@
   "cna_object_dictionary_ext_get_entry",
   "cna_object_dictionary_ext_get_foreign_object",
   "cna_object_dictionary_ext_get_key_size_at",
+  "cna_object_dictionary_ext_get_runtime_type_name_size",
   "cna_object_dictionary_ext_get_string_size",
   "cna_object_dictionary_ext_get_type_name_size",
   "cna_occlusion_query_begin",
@@ -4908,9 +4911,9 @@
   "cna_write_leaderboards_event_info_init"
  ],
  "integers": {
-  "CNA_ABI_VERSION": 5120,
+  "CNA_ABI_VERSION": 5376,
   "CNA_ABI_VERSION_MAJOR": 0,
-  "CNA_ABI_VERSION_MINOR": 20,
+  "CNA_ABI_VERSION_MINOR": 21,
   "CNA_ABI_VERSION_PATCH": 0,
   "CNA_ALPHA_MODE_BLEND_EXT": 2,
   "CNA_ALPHA_MODE_MASK_EXT": 1,
@@ -5380,6 +5383,9 @@
   "CNA_DESKTOP_OS_MACOSX": 2,
   "CNA_DESKTOP_OS_OTHER": 3,
   "CNA_DESKTOP_OS_WINDOWS": 0,
+  "CNA_DEVICE_TYPE_DEVICE": 0,
+  "CNA_DEVICE_TYPE_EMULATOR": 1,
+  "CNA_DEVICE_TYPE_MAXIMUM": 1,
   "CNA_DISPLAY_COLOR_SPACE_HDR10": 2,
   "CNA_DISPLAY_COLOR_SPACE_SCRGB": 1,
   "CNA_DISPLAY_COLOR_SPACE_SRGB": 0,
@@ -6853,6 +6859,10 @@
    4
   ],
   "CNA_DesktopOS": [
+   4,
+   4
+  ],
+  "CNA_DeviceType": [
    4,
    4
   ],
