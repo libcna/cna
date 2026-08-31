@@ -93,6 +93,19 @@ TEST_F(VideoContentTypeReaderTest, ReferenceResolvesToRealFileViaFallback)
     EXPECT_TRUE(std::filesystem::exists(video.getFileNameProperty()));
 }
 
+TEST_F(VideoContentTypeReaderTest, WindowsStyleNestedAssetNameResolvesMediaBesideXnb)
+{
+    ContentManager cm(nullptr, "tests/assets/media");
+    cm.setGraphicsDevice(gd);
+
+    Video video = ReadVideoFields(
+        cm, R"(video\chroma_420)", "chroma_420.mkv", 2000, 160, 90, 25.0f,
+        VideoSoundtrackType::Music);
+
+    EXPECT_EQ(video.getFileNameProperty(), "tests/assets/media/video/chroma_420.mkv");
+    EXPECT_TRUE(std::filesystem::exists(video.getFileNameProperty()));
+}
+
 // plans/plan_media.md MEDIA-70/71: all 5 numeric fields round-trip correctly using direct typed reads
 // (ReadInt32/ReadSingle), matching SongContentTypeReader's established code style.
 TEST_F(VideoContentTypeReaderTest, AllFieldsRoundTripCorrectly)

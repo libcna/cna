@@ -92,3 +92,17 @@ TEST_F(SongContentTypeReaderTest, ReferenceEndingInFourCharacterRealExtensionRes
     EXPECT_EQ(song.getHandle(), "tests/assets/xnb/monogame/windows/uncompressed/song/one_two_three.ogg");
     EXPECT_TRUE(std::filesystem::exists(song.getHandle()));
 }
+
+TEST_F(SongContentTypeReaderTest, WindowsStyleNestedAssetNameResolvesMediaBesideXnb)
+{
+    ContentManager cm(nullptr, "tests/assets/xnb/monogame/windows/uncompressed");
+
+    Song song = ReadSongFields(
+        cm, R"(song\one_two_three)", "one_two_three.ogg", 769282);
+
+    EXPECT_EQ(
+        song.getHandle(),
+        "tests/assets/xnb/monogame/windows/uncompressed/song/one_two_three.ogg");
+    EXPECT_EQ(song.getNameProperty(), R"(song\one_two_three)");
+    EXPECT_TRUE(std::filesystem::exists(song.getHandle()));
+}

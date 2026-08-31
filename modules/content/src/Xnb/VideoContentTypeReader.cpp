@@ -4,6 +4,7 @@
 #include <array>
 #include <filesystem>
 
+#include "CNA/Internal/CaseInsensitivePath.hpp"
 #include "CNA/Internal/PathContainment.hpp"
 #include "CNA/Internal/Xnb/XnbCanonicalData.hpp"
 #include "XnbCanonicalReaderAccess.hpp"
@@ -77,7 +78,9 @@ namespace CNA::Internal::Xnb
 
         namespace fs = std::filesystem;
         const std::string& contentRoot = contentManager->getRootDirectoryProperty();
-        fs::path assetPath = fs::path(contentRoot) / input.getAssetNameProperty();
+        const std::string normalizedAssetName =
+            CNA::Internal::NormalizeXnaPathSeparators(input.getAssetNameProperty());
+        fs::path assetPath = fs::path(contentRoot) / normalizedAssetName;
         assetPath += ".xnb";
         std::string path = ResolveRelativeFilePath(
             contentRoot, assetPath.string(), decoded.mediaPath);

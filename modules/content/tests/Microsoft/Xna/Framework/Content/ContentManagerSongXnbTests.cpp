@@ -112,6 +112,19 @@ TEST_F(ContentManagerSongXnbTest, LoadRealMonoGameFixtureEndToEnd)
               System::TimeSpan::FromMilliseconds(769282).getTicksProperty());
 }
 
+TEST_F(ContentManagerSongXnbTest, LoadNestedRealFixtureWithXnaBackslashPathEndToEnd)
+{
+    ContentManager cm(nullptr, "tests/assets/xnb/monogame/windows/uncompressed");
+
+    Song song = cm.Load<Song>(R"(song\one_two_three)");
+
+    EXPECT_EQ(
+        song.getHandle(),
+        "tests/assets/xnb/monogame/windows/uncompressed/song/one_two_three.ogg");
+    EXPECT_EQ(song.getNameProperty(), R"(song\one_two_three)");
+    EXPECT_TRUE(std::filesystem::exists(song.getHandle()));
+}
+
 // plans/plan_media.md MEDIA-75: re-verify that Song's corrected exception type (System::IO::
 // FileNotFoundException, not a bare std::runtime_error -- see MEDIA-10) actually propagates all
 // the way out of ContentManager::Load<Song>() through the full, real .xnb container-parsing path
