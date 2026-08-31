@@ -1610,8 +1610,17 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void MapLogicalRectToPresentation(int& x, int& y, int& width, int& height) const;
 
+        /**
+         * @brief Acquires the renderer context for one bounded framework operation.
+         *
+         * @return A lifetime token, or null when the renderer needs no explicit context lease.
+         */
         CNAEXT [[nodiscard]] std::unique_ptr<CNA::Internal::Renderers::IRendererThreadContextLease>
             AcquireRendererThreadContextLease();
+
+        /** @brief Acquires a frame lease that may release this renderer's own prior binding. */
+        CNAEXT [[nodiscard]] std::unique_ptr<CNA::Internal::Renderers::IRendererThreadContextLease>
+            AcquireRendererThreadContextLeaseForFrame();
 
         friend class Texture2D;
         friend class RenderTargetCube;

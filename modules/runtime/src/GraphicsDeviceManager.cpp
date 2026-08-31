@@ -343,7 +343,7 @@ namespace Microsoft::Xna::Framework
             return false;
         }
 
-        frameContextLease_ = graphicsDevice_->AcquireRendererThreadContextLease();
+        frameContextLease_ = graphicsDevice_->AcquireRendererThreadContextLeaseForFrame();
         drawBegun_ = true;
         return true;
     }

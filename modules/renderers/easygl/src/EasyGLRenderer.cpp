@@ -544,14 +544,19 @@ namespace CNA::Internal::Renderers::EasyGL
         {
             return service_.GetCurrentBinding();
         }
-        void RestoreBinding(const CNA::Platform::GlContextBinding& binding)
+        void RestoreBinding(
+            const CNA::Platform::GlContextBinding& binding,
+            const RendererThreadContextLeaseRelease release)
         {
-            // A lease entered while another GraphicsDevice was current must restore that external
-            // device. Rebinding this renderer's own context, however, would leave it owned by the
-            // releasing thread and make the next background ContentManager load fail with
-            // BadAccess when it tries to acquire the same context. The normal EasyGL contract is
-            // therefore to release its own context at the outer lease boundary.
-            if (binding.context != nullptr && binding.context != context_)
+            if (binding.context == context_
+                && release == RendererThreadContextLeaseRelease::ReleaseRendererBinding)
+            {
+                // A completed frame deliberately hands this context back so a background content
+                // load can acquire it. Ordinary bounded operations restore their prior binding;
+                // clearing it there would make the next legacy renderer call run without a context.
+                ClearCurrent();
+            }
+            else if (binding.context != nullptr)
             {
                 service_.MakeCurrent(binding.window, binding.context);
             }
@@ -596,6 +601,8 @@ namespace CNA::Internal::Renderers::EasyGL
         {
             std::size_t depth = 0;
             CNA::Platform::GlContextBinding previousBinding;
+            RendererThreadContextLeaseRelease release =
+                RendererThreadContextLeaseRelease::RestorePreviousBinding;
         };
 
         std::unordered_map<const EasyGLRenderer*, EasyGLThreadContextLeaseState>&
@@ -5029,7 +5036,8 @@ if (!ProfileIsEs2ApiGeneration())
     }
 
     std::unique_ptr<IRendererThreadContextLease>
-    EasyGLRenderer::AcquireThreadContextLeaseEXT()
+    EasyGLRenderer::AcquireThreadContextLeaseEXT(
+        const RendererThreadContextLeaseRelease release)
     {
 #if defined(__EMSCRIPTEN__)
         // Emscripten's OFFSCREEN_FRAMEBUFFER path proxies GL work to the browser thread and does
@@ -5043,6 +5051,7 @@ if (!ProfileIsEs2ApiGeneration())
             if (state.depth == 0)
             {
                 state.previousBinding = platformContext_->GetCurrentBinding();
+                state.release = release;
                 EnsureCallingThreadContext();
             }
             ++state.depth;
@@ -5085,7 +5094,8 @@ if (!ProfileIsEs2ApiGeneration())
         {
             try
             {
-                platformContext_->RestoreBinding(it->second.previousBinding);
+                platformContext_->RestoreBinding(
+                    it->second.previousBinding, it->second.release);
             }
             catch (const std::exception& error)
             {

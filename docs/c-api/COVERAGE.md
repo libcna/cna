@@ -12,7 +12,7 @@ No symbol counts as implemented merely because a related C operation exists.
 
 Snapshot: **553 headers**, **9492 symbols**, **8348 implemented**, **15 partial**, **663 planned**, **466 not applicable**. Explicitly excluded internal/detail headers: **132**.
 
-Full inventory SHA-256: `30848e43a2405d4831c277cea857b0c239f5436a0b32cec5b51c4213b2a0e05a`.
+Full inventory SHA-256: `540878c18542b6e00e19af578daad261b42a38fe7d708d7c25d2546b72687485`.
 
 The complete per-symbol Markdown is generated on demand into the ignored build tree so
 that a multi-megabyte derived file is not recommitted whenever one public declaration moves:

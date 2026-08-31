@@ -1237,10 +1237,13 @@ namespace CNA::Internal::Renderers::EasyGL
 
         /**
          * @brief Serializes a complete operation while owning this renderer's GL context.
+         * @param release Selects whether this renderer's own prior binding is restored or released.
          * @return A token that releases the calling thread's context ownership when destroyed.
          */
         [[nodiscard]] std::unique_ptr<IRendererThreadContextLease>
-            AcquireThreadContextLeaseEXT() override;
+            AcquireThreadContextLeaseEXT(
+                RendererThreadContextLeaseRelease release =
+                    RendererThreadContextLeaseRelease::RestorePreviousBinding) override;
 
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
         /**

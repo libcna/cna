@@ -1790,17 +1790,30 @@ namespace CNA::Internal::Renderers
         virtual ~IRendererThreadContextLease() = default;
     };
 
+    /** @brief Selects how an outer renderer-thread context lease handles its own prior binding. */
+    enum class RendererThreadContextLeaseRelease : int
+    {
+        /** @brief Restore the binding that was current before the bounded operation. */
+        RestorePreviousBinding,
+        /** @brief Release this renderer's own prior binding so another thread can acquire it. */
+        ReleaseRendererBinding
+    };
+
     class IGraphicsRenderer
     {
     public:
         virtual ~IGraphicsRenderer() = default;
         /**
          * @brief Acquires this renderer's context for a complete caller-owned operation.
+         * @param release Selects whether this renderer's own prior binding is restored or released.
          * @return A lifetime token, or null when this renderer needs no explicit context lease.
          */
         [[nodiscard]] virtual std::unique_ptr<IRendererThreadContextLease>
-            AcquireThreadContextLeaseEXT()
+            AcquireThreadContextLeaseEXT(
+                RendererThreadContextLeaseRelease release =
+                    RendererThreadContextLeaseRelease::RestorePreviousBinding)
         {
+            (void)release;
             return nullptr;
         }
         virtual void Clear(float r, float g, float b, float a) = 0;

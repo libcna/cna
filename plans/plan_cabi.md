@@ -64,6 +64,28 @@ The per-blocker report `fixcnacs.md` Phase 10 asks for is `docs/c-api/CABI_BLOCK
 | CABI-43 | JS-driven C-API artifact without Asyncify rewind | CNA-TS browser audit | DONE |
 | CABI-44 | Full nullable-rectangle/override-window `GraphicsDevice.Present` contract | CNA-C# audit | DEFERRED — renderer-wide design |
 | CABI-45 | Stable identity for graphics-resource lifecycle events | CNA-C# audit | DEFERRED — ABI/lifecycle design |
+| CABI-46 | Preserve GL bindings for bounded operations while releasing them after frames | qualification follow-up | DONE |
+
+### CABI-46 — operation restore and frame handoff are different contracts
+
+The secondary-device fix was present on the live tree, and its dedicated regression passed, but
+the later threaded-content handoff changed every outer EasyGL context lease to clear its own prior
+binding. That correctly allowed a background content thread to acquire the context after a frame,
+but it also left legacy renderer calls without a current context after ordinary bounded operations.
+Real `Draw3D`, lifecycle and render-target readback tests reproduced that regression.
+
+Renderer context leases now state their release policy. Ordinary device operations restore exactly
+the binding observed on entry, including the same device's binding; the frame lease used by
+`GraphicsDeviceManager::BeginDraw` alone releases that binding at the outer frame boundary. A lease
+entered while another device is current still restores the other device, preserving the original
+secondary-device invariant without retaining a dead or unrelated context.
+
+Regression evidence uses actual OPENGLES3 contexts: the complete 93-test C API suite passes,
+including `CApi_GameSecondaryGraphicsDeviceContext`, `CApi_Draw3DSmoke`, `CApi_LifecycleSmoke` and
+`CApi_EngineLayerSmoke`; `EasyGL_RenderTarget2D_Readback` and
+`EasyGL_BackgroundContent_ContextOwnership` both pass in the same Debug build. The clean Release
+build passes those C API routes, all four platform context-owner tests and the 107 selected
+Game/GraphicsDeviceManager runtime tests. All eleven C API coverage/ABI/release gates pass.
 
 ### CABI-44/CABI-45 — bounded audit, deliberately deferred
 
