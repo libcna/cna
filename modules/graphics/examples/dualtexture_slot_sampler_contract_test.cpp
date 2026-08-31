@@ -91,8 +91,10 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
-#include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
-#include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "System/Exception.hpp"
 
@@ -181,13 +183,34 @@ namespace
     const Color kSentinel(11, 13, 17, 255);
     const Color kWhite(255, 255, 255, 255);
 
-    /// Stride-20 VertexPositionTexture.
+    /// Stride-20 VertexPositionTexture, used by the interleaved BasicEffect draw.
     struct VtxPT { float px, py, pz; float u, v; };
     static_assert(sizeof(VtxPT) == 20, "stride 20");
 
-    /// Stride-24 VertexPositionColorTexture -- the SECOND DualTexture shader module and pipeline.
-    struct VtxPCT { float px, py, pz; std::uint32_t rgba; float u, v; };
-    static_assert(sizeof(VtxPCT) == 24, "stride 24");
+    /// DualTextureEffect vertex with independent TextureCoordinate0/1 channels.
+    struct VtxDualPT { float px, py, pz; float u0, v0; float u1, v1; };
+    static_assert(sizeof(VtxDualPT) == 28, "stride 28");
+
+    /// Vertex-colour DualTextureEffect vertex with independent TextureCoordinate0/1 channels.
+    struct VtxDualPCT { float px, py, pz; std::uint32_t rgba; float u0, v0; float u1, v1; };
+    static_assert(sizeof(VtxDualPCT) == 32, "stride 32");
+
+    const VertexDeclaration kDualDeclaration(
+        28,
+        {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+            VertexElement(20, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 1),
+        });
+
+    const VertexDeclaration kDualColorDeclaration(
+        32,
+        {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Color, VertexElementUsage::Color, 0),
+            VertexElement(16, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+            VertexElement(24, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 1),
+        });
 
     bool SameColor(const Color& a, const Color& b)
     {
@@ -580,40 +603,42 @@ class DualTextureSlotSamplerContractTest : public Game
 
     /// UV span. 1.0 covers the texture exactly once (the magnifying default); larger values are
     /// what leg K uses to push the sample outside [0,1] and make the address mode decide.
-    static std::vector<VtxPT> Quad(float uvMax = 1.0f)
+    static std::vector<VtxDualPT> Quad(float uvMax = 1.0f)
     {
         auto v = [](float x, float y, float u, float w) {
-            VtxPT r{};
+            VtxDualPT r{};
             r.px = x; r.py = y; r.pz = 0.0f;
-            r.u = u; r.v = w;
+            r.u0 = u; r.v0 = w;
+            r.u1 = u; r.v1 = w;
             return r;
         };
-        const VtxPT tl = v(-1.0f,  1.0f, 0.0f,   0.0f);
-        const VtxPT bl = v(-1.0f, -1.0f, 0.0f,   uvMax);
-        const VtxPT br = v( 1.0f, -1.0f, uvMax,  uvMax);
-        const VtxPT tr = v( 1.0f,  1.0f, uvMax,  0.0f);
+        const VtxDualPT tl = v(-1.0f,  1.0f, 0.0f,   0.0f);
+        const VtxDualPT bl = v(-1.0f, -1.0f, 0.0f,   uvMax);
+        const VtxDualPT br = v( 1.0f, -1.0f, uvMax,  uvMax);
+        const VtxDualPT tr = v( 1.0f,  1.0f, uvMax,  0.0f);
         return { tl, bl, br, tl, br, tr };
     }
 
-    static std::vector<VtxPCT> QuadColored(float uvMax = 1.0f)
+    static std::vector<VtxDualPCT> QuadColored(float uvMax = 1.0f)
     {
-        std::vector<VtxPCT> out;
-        for (const VtxPT& s : Quad(uvMax))
+        std::vector<VtxDualPCT> out;
+        for (const VtxDualPT& s : Quad(uvMax))
         {
-            VtxPCT r{};
+            VtxDualPCT r{};
             r.px = s.px; r.py = s.py; r.pz = s.pz;
             r.rgba = 0xFFFFFFFFu;   ///< white, so the tint is exactly DiffuseColor
-            r.u = s.u; r.v = s.v;
+            r.u0 = s.u0; r.v0 = s.v0;
+            r.u1 = s.u1; r.v1 = s.v1;
             out.push_back(r);
         }
         return out;
     }
 
-    static std::vector<VertexPositionTexture> QuadXna(float uvMax = 1.0f)
+    static std::vector<VtxPT> QuadBasic(float uvMax = 1.0f)
     {
-        std::vector<VertexPositionTexture> out;
-        for (const VtxPT& s : Quad(uvMax))
-            out.emplace_back(Vector3(s.px, s.py, s.pz), Vector2(s.u, s.v));
+        std::vector<VtxPT> out;
+        for (const VtxDualPT& s : Quad(uvMax))
+            out.push_back({s.px, s.py, s.pz, s.u0, s.v0});
         return out;
     }
 
@@ -651,7 +676,7 @@ class DualTextureSlotSamplerContractTest : public Game
         Texture2D* tex0 = nullptr;   ///< DualTextureEffect.Texture  -- SamplerStates[0]
         Texture2D* tex1 = nullptr;   ///< DualTextureEffect.Texture2 -- SamplerStates[1]
         float uvMax = 1.0f;
-        bool vertexColor = false;    ///< stride 24 (the second shader module) instead of stride 20
+        bool vertexColor = false;    ///< the second, vertex-colour DualTexture shader module
         Path path = Path::StaticNonIndexed;
     };
 
@@ -678,22 +703,22 @@ class DualTextureSlotSamplerContractTest : public Game
 
         if (cfg.vertexColor)
         {
-            const std::vector<VtxPCT> quad = QuadColored(cfg.uvMax);
-            VertexBuffer vb(dev, static_cast<int>(quad.size()));
-            vb.SetDataRaw(quad.data(), static_cast<int>(quad.size()), static_cast<int>(sizeof(VtxPCT)));
+            const std::vector<VtxDualPCT> quad = QuadColored(cfg.uvMax);
+            VertexBuffer vb(dev, kDualColorDeclaration, static_cast<int>(quad.size()), BufferUsage::None);
+            vb.SetDataRaw(quad.data(), static_cast<int>(quad.size()), static_cast<int>(sizeof(VtxDualPCT)));
             dev.SetVertexBuffer(&vb);
             dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
             dev.SetVertexBuffer(nullptr);
             return;
         }
 
-        const std::vector<VtxPT> quad = Quad(cfg.uvMax);
+        const std::vector<VtxDualPT> quad = Quad(cfg.uvMax);
         switch (cfg.path)
         {
             case Path::StaticNonIndexed:
             {
-                VertexBuffer vb(dev, static_cast<int>(quad.size()));
-                vb.SetDataRaw(quad.data(), static_cast<int>(quad.size()), static_cast<int>(sizeof(VtxPT)));
+                VertexBuffer vb(dev, kDualDeclaration, static_cast<int>(quad.size()), BufferUsage::None);
+                vb.SetDataRaw(quad.data(), static_cast<int>(quad.size()), static_cast<int>(sizeof(VtxDualPT)));
                 dev.SetVertexBuffer(&vb);
                 dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
                 dev.SetVertexBuffer(nullptr);
@@ -703,10 +728,10 @@ class DualTextureSlotSamplerContractTest : public Game
             {
                 // A dynamic buffer written twice, so the draw reads the SECOND write -- a renderer
                 // that shadows vertex data at creation time cannot pass this by accident.
-                std::vector<VtxPT> decoy(quad.size(), quad.front());
-                VertexBuffer vb(dev, static_cast<int>(quad.size()));
-                vb.SetDataRaw(decoy.data(), static_cast<int>(decoy.size()), static_cast<int>(sizeof(VtxPT)));
-                vb.SetDataRaw(quad.data(), static_cast<int>(quad.size()), static_cast<int>(sizeof(VtxPT)));
+                std::vector<VtxDualPT> decoy(quad.size(), quad.front());
+                VertexBuffer vb(dev, kDualDeclaration, static_cast<int>(quad.size()), BufferUsage::None);
+                vb.SetDataRaw(decoy.data(), static_cast<int>(decoy.size()), static_cast<int>(sizeof(VtxDualPT)));
+                vb.SetDataRaw(quad.data(), static_cast<int>(quad.size()), static_cast<int>(sizeof(VtxDualPT)));
                 dev.SetVertexBuffer(&vb);
                 dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
                 dev.SetVertexBuffer(nullptr);
@@ -714,9 +739,9 @@ class DualTextureSlotSamplerContractTest : public Game
             }
             case Path::StaticIndexed16:
             {
-                VertexBuffer vb(dev, 4);
-                const VtxPT corners[4] = { quad[0], quad[1], quad[2], quad[5] };
-                vb.SetDataRaw(corners, 4, static_cast<int>(sizeof(VtxPT)));
+                VertexBuffer vb(dev, kDualDeclaration, 4, BufferUsage::None);
+                const VtxDualPT corners[4] = { quad[0], quad[1], quad[2], quad[5] };
+                vb.SetDataRaw(corners, 4, static_cast<int>(sizeof(VtxDualPT)));
                 const std::uint16_t idx[6] = { 0, 1, 2, 0, 2, 3 };
                 IndexBuffer ib(dev, IndexElementSize::SixteenBits, 6, BufferUsage::WriteOnly);
                 ib.SetData(idx, 6);
@@ -729,9 +754,9 @@ class DualTextureSlotSamplerContractTest : public Game
             }
             case Path::StaticIndexed32:
             {
-                VertexBuffer vb(dev, 4);
-                const VtxPT corners[4] = { quad[0], quad[1], quad[2], quad[5] };
-                vb.SetDataRaw(corners, 4, static_cast<int>(sizeof(VtxPT)));
+                VertexBuffer vb(dev, kDualDeclaration, 4, BufferUsage::None);
+                const VtxDualPT corners[4] = { quad[0], quad[1], quad[2], quad[5] };
+                vb.SetDataRaw(corners, 4, static_cast<int>(sizeof(VtxDualPT)));
                 const std::uint32_t idx[6] = { 0, 1, 2, 0, 2, 3 };
                 IndexBuffer ib(dev, IndexElementSize::ThirtyTwoBits, 6, BufferUsage::WriteOnly);
                 ib.SetData(idx, 6);
@@ -746,11 +771,11 @@ class DualTextureSlotSamplerContractTest : public Game
             {
                 // Two decoy vertices in front and three decoy indices in front, so the draw is only
                 // correct when BOTH baseVertex and startIndex are honoured (REMED-GFX-117).
-                VtxPT decoy = quad[0];
+                VtxDualPT decoy = quad[0];
                 decoy.px = decoy.py = 0.0f;
-                std::vector<VtxPT> verts = { decoy, decoy, quad[0], quad[1], quad[2], quad[5] };
-                VertexBuffer vb(dev, static_cast<int>(verts.size()));
-                vb.SetDataRaw(verts.data(), static_cast<int>(verts.size()), static_cast<int>(sizeof(VtxPT)));
+                std::vector<VtxDualPT> verts = { decoy, decoy, quad[0], quad[1], quad[2], quad[5] };
+                VertexBuffer vb(dev, kDualDeclaration, static_cast<int>(verts.size()), BufferUsage::None);
+                vb.SetDataRaw(verts.data(), static_cast<int>(verts.size()), static_cast<int>(sizeof(VtxDualPT)));
                 const std::uint16_t idx[9] = { 0, 0, 0, 0, 1, 2, 0, 2, 3 };
                 IndexBuffer ib(dev, IndexElementSize::SixteenBits, 9, BufferUsage::WriteOnly);
                 ib.SetData(idx, 9);
@@ -763,24 +788,24 @@ class DualTextureSlotSamplerContractTest : public Game
             }
             case Path::UserNonIndexed:
             {
-                const std::vector<VertexPositionTexture> v = QuadXna(cfg.uvMax);
-                dev.DrawUserPrimitives(PrimitiveType::TriangleList, v.data(), 0, 2);
+                dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad.data(), 0, 2,
+                                       kDualDeclaration);
                 break;
             }
             case Path::UserIndexed16:
             {
-                const std::vector<VertexPositionTexture> all = QuadXna(cfg.uvMax);
-                const VertexPositionTexture v[4] = { all[0], all[1], all[2], all[5] };
+                const VtxDualPT v[4] = { quad[0], quad[1], quad[2], quad[5] };
                 const std::uint16_t idx[6] = { 0, 1, 2, 0, 2, 3 };
-                dev.DrawUserIndexedPrimitives(PrimitiveType::TriangleList, v, 0, 4, idx, 0, 2);
+                dev.DrawUserIndexedPrimitives(PrimitiveType::TriangleList, v, 0, 4, idx, 0, 2,
+                                              kDualDeclaration);
                 break;
             }
             case Path::UserIndexed32:
             {
-                const std::vector<VertexPositionTexture> all = QuadXna(cfg.uvMax);
-                const VertexPositionTexture v[4] = { all[0], all[1], all[2], all[5] };
+                const VtxDualPT v[4] = { quad[0], quad[1], quad[2], quad[5] };
                 const std::uint32_t idx[6] = { 0, 1, 2, 0, 2, 3 };
-                dev.DrawUserIndexedPrimitives(PrimitiveType::TriangleList, v, 0, 4, idx, 0, 2);
+                dev.DrawUserIndexedPrimitives(PrimitiveType::TriangleList, v, 0, 4, idx, 0, 2,
+                                              kDualDeclaration);
                 break;
             }
         }
@@ -800,7 +825,7 @@ class DualTextureSlotSamplerContractTest : public Game
         fx.setAlphaProperty(1.0f);
         fx.setFogEnabledProperty(false);
         fx.Apply();
-        const std::vector<VtxPT> quad = Quad(1.0f);
+        const std::vector<VtxPT> quad = QuadBasic(1.0f);
         VertexBuffer vb(dev, static_cast<int>(quad.size()));
         vb.SetDataRaw(quad.data(), static_cast<int>(quad.size()), static_cast<int>(sizeof(VtxPT)));
         dev.SetVertexBuffer(&vb);
@@ -1423,7 +1448,7 @@ class DualTextureSlotSamplerContractTest : public Game
     }
 
     // ----------------------------------------------------------------------------------------
-    // L -- the stride-24 vertex-colour variant (a SECOND shader module and pipeline)
+    // L -- the vertex-colour variant (a SECOND shader module and pipeline)
     // ----------------------------------------------------------------------------------------
 
     void RunL(GraphicsDevice& dev)
@@ -1451,7 +1476,7 @@ class DualTextureSlotSamplerContractTest : public Game
 
         std::string why;
         check(BlockUniform(pp, why),
-              "L1: the stride-24 vertex-colour shader, both slots Point -- every block flat. " + why);
+              "L1: the vertex-colour shader, both slots Point -- every block flat. " + why);
         check(YEdgeVariation(pl) > 0 && XEdgeVariation(pl) == 0,
               "L2: it honours slot 1 independently too (x=" + std::to_string(XEdgeVariation(pl)) +
               ", y=" + std::to_string(YEdgeVariation(pl)) + ")");

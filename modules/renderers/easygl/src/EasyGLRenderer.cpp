@@ -7890,15 +7890,18 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "precision highp float;\n"
 "layout(location=0) in vec3 aPos;\n"
 "layout(location=1) in vec2 aUV;\n"
+"layout(location=2) in vec2 aUV1;\n"
 CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform mat4 uWVP;\n"
 "uniform vec4 uFogVector;\n"
 "out vec2 vUV;\n"
+"out vec2 vUV1;\n"
 "out float vFogFactor;\n"
 "void main(){\n"
 "    vec4 cnaPos=cnaInstancePosition(vec4(aPos,1.0));\n"
 "    gl_Position=uWVP*cnaPos;\n"
 "    vUV=aUV;\n"
+"    vUV1=aUV1;\n"
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
@@ -7911,6 +7914,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "#version 300 es\n"
 "precision mediump float;\n"
 "in vec2 vUV;\n"
+"in vec2 vUV1;\n"
 "in float vFogFactor;\n"
 "uniform sampler2D uTexture;\n"
 "uniform sampler2D uTexture2;\n"
@@ -7922,7 +7926,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "void main(){\n"
 "    vec4 base=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x));\n"
 "    base.rgb*=2.0;\n"
-"    FragColor=base*texture(uTexture2,cnaSampleUV(vUV,uRtFlipV.y))*uDiffuseColor;\n"
+"    FragColor=base*texture(uTexture2,cnaSampleUV(vUV1,uRtFlipV.y))*uDiffuseColor;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
 "    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
@@ -7954,17 +7958,20 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "layout(location=0) in vec3 aPos;\n"
 "layout(location=1) in vec4 aColor;\n"
 "layout(location=2) in vec2 aUV;\n"
+"layout(location=3) in vec2 aUV1;\n"
 CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform mat4 uWVP;\n"
 "uniform vec4 uFogVector;\n"
 "out vec4 vColor;\n"
 "out vec2 vUV;\n"
+"out vec2 vUV1;\n"
 "out float vFogFactor;\n"
 "void main(){\n"
 "    vec4 cnaPos=cnaInstancePosition(vec4(aPos,1.0));\n"
 "    gl_Position=uWVP*cnaPos;\n"
 "    vColor=aColor;\n"
 "    vUV=aUV;\n"
+"    vUV1=aUV1;\n"
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
@@ -7978,6 +7985,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "precision mediump float;\n"
 "in vec4 vColor;\n"
 "in vec2 vUV;\n"
+"in vec2 vUV1;\n"
 "in float vFogFactor;\n"
 "uniform sampler2D uTexture;\n"
 "uniform sampler2D uTexture2;\n"
@@ -7991,7 +7999,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    vec4 vc=(uVertexColorEnabled>0.5)?vColor:vec4(1.0,1.0,1.0,1.0);\n"
 "    vec4 base=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x));\n"
 "    base.rgb*=2.0;\n"
-"    FragColor=base*texture(uTexture2,cnaSampleUV(vUV,uRtFlipV.y))*vc*uDiffuseColor;\n"
+"    FragColor=base*texture(uTexture2,cnaSampleUV(vUV1,uRtFlipV.y))*vc*uDiffuseColor;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
 "    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
@@ -9326,6 +9334,9 @@ CNA_GL_PUNCTUAL_DECL
         static constexpr StockProgramInput kColored[]        = {kPos, kColor};
         static constexpr StockProgramInput kTextured[]       = {kPos, kUv};
         static constexpr StockProgramInput kColTextured[]    = {kPos, kColor, kUv};
+        static constexpr StockProgramInput kDualTextured[]   = {kPos, kUv, kUv1};
+        static constexpr StockProgramInput kDualTexturedColored[] = {
+            kPos, kColor, kUv, kUv1};
         static constexpr StockProgramInput kLitUntextured[]  = {kPos, kNormal};
         static constexpr StockProgramInput kLit[]            = {kPos, kNormal, kUv};
         static constexpr StockProgramInput kLitColor[]            = {kPos, kNormal, kUv, kColor};
@@ -9378,10 +9389,11 @@ CNA_GL_PUNCTUAL_DECL
         case StockProgramShape::EnvMapped:
             inputs = kLit; count = std::size(kLit); name = "env_mapped3d"; break;
         case StockProgramShape::DualTexturedColored:
-            inputs = kColTextured; count = std::size(kColTextured);
+            inputs = kDualTexturedColored; count = std::size(kDualTexturedColored);
             name = "dual_textured_colored3d"; break;
         case StockProgramShape::DualTextured:
-            inputs = kTextured; count = std::size(kTextured); name = "dual_textured3d"; break;
+            inputs = kDualTextured; count = std::size(kDualTextured);
+            name = "dual_textured3d"; break;
         case StockProgramShape::Textured:
             inputs = kTextured; count = std::size(kTextured); name = "textured3d"; break;
         case StockProgramShape::ColoredTextured:
@@ -9444,6 +9456,9 @@ CNA_GL_PUNCTUAL_DECL
         static constexpr StockProgramInput kColored[] = {kPos, kColor};
         static constexpr StockProgramInput kTextured[] = {kPos, kUv};
         static constexpr StockProgramInput kColTextured[] = {kPos, kColor, kUv};
+        static constexpr StockProgramInput kDualTextured[] = {kPos, kUv, kUv1};
+        static constexpr StockProgramInput kDualTexturedColored[] = {
+            kPos, kColor, kUv, kUv1};
         static constexpr StockProgramInput kLitUntextured[] = {kPos, kNormal};
         static constexpr StockProgramInput kLit[] = {kPos, kNormal, kUv};
         static constexpr StockProgramInput kLitColor[] = {kPos, kNormal, kUv, kColor};
@@ -9503,8 +9518,9 @@ CNA_GL_PUNCTUAL_DECL
             else              { inputs = kLit;      count = std::size(kLit); }
             break;
         case StockProgramShape::DualTexturedColored:
-            inputs = kColTextured; count = std::size(kColTextured); break;
+            inputs = kDualTexturedColored; count = std::size(kDualTexturedColored); break;
         case StockProgramShape::DualTextured:
+            inputs = kDualTextured; count = std::size(kDualTextured); break;
         case StockProgramShape::Textured:
             inputs = kTextured; count = std::size(kTextured); break;
         case StockProgramShape::ColoredTextured:

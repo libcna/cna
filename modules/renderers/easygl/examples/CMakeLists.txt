@@ -1443,6 +1443,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_DualTexture COMMAND cna_test_easygl_dualtexture
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # SAMPLE-073: FNA's DualTextureEffect consumes TEXCOORD0 and TEXCOORD1 independently.
+        cna_easygl_test(cna_test_easygl_dualtextureeffect_independent_uv
+                        easygl_dualtextureeffect_independent_uv_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_DualTextureEffect_IndependentUV
+            COMMAND cna_test_easygl_dualtextureeffect_independent_uv
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         cna_easygl_test(cna_test_easygl_skinned_effect_bones
                         easygl_skinned_effect_bones_test.cpp)
         cna_register_renderer_test(NAME EasyGL_SkinnedBones COMMAND cna_test_easygl_skinned_effect_bones

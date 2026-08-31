@@ -116,6 +116,7 @@ Task 377.
 | First texture (`Texture`) null-fallback | ✅ Task 386 | ✅ Task 386 | ✅ Task 379/386 |
 | Second texture (`Texture2`) null-fallback | ✅ Task 387 | ✅ Task 387 | ✅ fixed Task 387 |
 | Fog (`FogEnabled`/`FogColor`/`FogStart`/`FogEnd`) | ✅ fixed Task 388 | ✅ fixed Task 899 (2026-07-07) | ✅ fixed Task 899 (2026-07-07) |
+| Independent `TextureCoordinate0` / `TextureCoordinate1` | ✅ fixed SAMPLE-073 | not audited here | not audited here |
 | `VertexColorEnabled` | ❌ Task 889 | ❌ Task 889 | ❌ Task 889 |
 | Cross-renderer pixel consistency | ✅ Task 389 | ✅ Task 389 | ✅ Task 389 |
 
@@ -124,6 +125,12 @@ Legend: ✅ verified working · ❌ confirmed not implemented.
 ## Open, tracked follow-up work
 
 Phase 44 opened 1 new tracked task and confirmed 2 already-open ones apply here too:
+
+- **SAMPLE-073 follow-up (2026-08-31)** — the earlier matrix never exercised FNA's distinct
+  `TEXCOORD0`/`TEXCOORD1` inputs. EasyGL incorrectly forwarded one UV to both samplers. Its stock
+  declaration mapper and shaders now consume usage indices 0 and 1 independently; the real-GL
+  `EasyGL_DualTextureEffect_IndependentUV` regression uses the original SoccerPitch 40-byte
+  position/normal/two-UV declaration and fails black if the second sampler reuses the first UV.
 
 - **Task 887** (opened by Task 377, `AlphaTestEffect`) — Vulkan/Bgfx alpha-test vertex-color
   unification. Architecturally related to Task 889 but a distinct effect/pipeline. Still open.
