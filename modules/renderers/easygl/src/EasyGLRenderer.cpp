@@ -546,7 +546,12 @@ namespace CNA::Internal::Renderers::EasyGL
         }
         void RestoreBinding(const CNA::Platform::GlContextBinding& binding)
         {
-            if (binding.context != nullptr)
+            // A lease entered while another GraphicsDevice was current must restore that external
+            // device. Rebinding this renderer's own context, however, would leave it owned by the
+            // releasing thread and make the next background ContentManager load fail with
+            // BadAccess when it tries to acquire the same context. The normal EasyGL contract is
+            // therefore to release its own context at the outer lease boundary.
+            if (binding.context != nullptr && binding.context != context_)
             {
                 service_.MakeCurrent(binding.window, binding.context);
             }

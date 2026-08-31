@@ -50,6 +50,9 @@ protected:
         ++updateCount_;
         if (updateCount_ == 2)
         {
+            // BeginDraw/EndDraw completed once before this worker starts. This specifically guards
+            // against an outer frame lease rebinding its own context on the main thread: doing so
+            // makes the worker's real XNB texture upload fail with SDL/GL BadAccess.
             worker_ = std::thread([this]()
             {
                 try
