@@ -167,15 +167,73 @@ static int validate_names(void)
             CNA_RESULT_INVALID_ARGUMENT;
 }
 
+static const CNA_GraphicsRendererType live_renderer_identities[] = {
+        CNA_GRAPHICS_RENDERER_SDL_RENDERER,
+        CNA_GRAPHICS_RENDERER_OPENGLES2,
+        CNA_GRAPHICS_RENDERER_OPENGLES3,
+        CNA_GRAPHICS_RENDERER_OPENGL33,
+        CNA_GRAPHICS_RENDERER_WEBGL1,
+        CNA_GRAPHICS_RENDERER_WEBGL2,
+        CNA_GRAPHICS_RENDERER_BGFX,
+        CNA_GRAPHICS_RENDERER_VULKAN,
+        CNA_GRAPHICS_RENDERER_WEBGPU,
+        CNA_GRAPHICS_RENDERER_HEADLESS,
+        CNA_GRAPHICS_RENDERER_SOFTWARE,
+        CNA_GRAPHICS_RENDERER_STUB,
+        CNA_GRAPHICS_RENDERER_DIRECTX11,
+        CNA_GRAPHICS_RENDERER_DIRECTX12,
+        CNA_GRAPHICS_RENDERER_DIRECT2D,
+        CNA_GRAPHICS_RENDERER_CANVAS,
+        CNA_GRAPHICS_RENDERER_HTML_DOM,
+        CNA_GRAPHICS_RENDERER_FREEDIRECT,
+        CNA_GRAPHICS_RENDERER_DIRECTX9,
+        CNA_GRAPHICS_RENDERER_DIRECTX1,
+        CNA_GRAPHICS_RENDERER_DIRECTX2,
+        CNA_GRAPHICS_RENDERER_DIRECTX3,
+        CNA_GRAPHICS_RENDERER_DIRECTX5,
+        CNA_GRAPHICS_RENDERER_DIRECTX6,
+        CNA_GRAPHICS_RENDERER_DIRECTX7,
+        CNA_GRAPHICS_RENDERER_DIRECTX8,
+        CNA_GRAPHICS_RENDERER_DIRECTX10,
+        CNA_GRAPHICS_RENDERER_SDL_GPU,
+        CNA_GRAPHICS_RENDERER_OPENGLES1,
+        CNA_GRAPHICS_RENDERER_OPENGL4,
+        CNA_GRAPHICS_RENDERER_OPENGL1,
+        CNA_GRAPHICS_RENDERER_OPENGL2,
+        CNA_GRAPHICS_RENDERER_GLIDE,
+        CNA_GRAPHICS_RENDERER_GDI,
+        CNA_GRAPHICS_RENDERER_METAL,
+        CNA_GRAPHICS_RENDERER_FNA3D,
+        CNA_GRAPHICS_RENDERER_SVG_DOM,
+        CNA_GRAPHICS_RENDERER_PORTABLEGL,
+        CNA_GRAPHICS_RENDERER_PIXIJS
+};
+
+static int is_live_renderer_identity(const CNA_GraphicsRendererType identity)
+{
+    size_t index = 0U;
+    for (index = 0U;
+         index < sizeof(live_renderer_identities) / sizeof(live_renderer_identities[0]); ++index) {
+        if (identity == live_renderer_identities[index]) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static int validate_backend_classification(void)
 {
     CNA_GraphicsBackendCategory category = UINT32_C(999);
     CNA_GraphicsBackendMaturity maturity = UINT32_C(999);
     CNA_GraphicsRendererType type = UINT32_C(999);
     CNA_GraphicsRendererType identity = UINT32_C(0);
+    size_t live_index = 0U;
 
     /* Every public identity classifies, not only the one this build compiled in. */
-    for (identity = UINT32_C(1); identity <= UINT32_C(46); ++identity) {
+    for (live_index = 0U;
+         live_index < sizeof(live_renderer_identities) / sizeof(live_renderer_identities[0]);
+         ++live_index) {
+        identity = live_renderer_identities[live_index];
         if (cna_graphics_backend_get_category(identity, &category) != CNA_RESULT_SUCCESS ||
             category > CNA_GRAPHICS_BACKEND_CATEGORY_DIAGNOSTIC ||
             cna_graphics_backend_get_maturity(identity, &maturity) != CNA_RESULT_SUCCESS ||
@@ -208,21 +266,15 @@ static int validate_backend_classification(void)
         return 0;
     }
 
-    /* CBIND-052A: every published identity classifies, walked as a range. A backend that reached
-       CNA::GraphicsRendererType without a C identity is refused by both routes, which is what
-       TINYGL, IGL and PIXIJS were until this slice -- and the bound this loop and the refusal
-       above are written against is now the published maximum rather than a literal that has to
-       be remembered. */
+    /* Retired numeric values remain gaps and must not silently alias a surviving renderer. */
     {
-        CNA_GraphicsRendererType identity = CNA_GRAPHICS_RENDERER_UNKNOWN;
         for (identity = CNA_GRAPHICS_RENDERER_SDL_RENDERER;
              identity <= CNA_GRAPHICS_RENDERER_MAXIMUM; ++identity) {
-            category = UINT32_C(999);
-            maturity = UINT32_C(999);
-            if (cna_graphics_backend_get_category(identity, &category) != CNA_RESULT_SUCCESS ||
-                category == UINT32_C(999) ||
-                cna_graphics_backend_get_maturity(identity, &maturity) != CNA_RESULT_SUCCESS ||
-                maturity == UINT32_C(999)) {
+            if (!is_live_renderer_identity(identity) &&
+                (cna_graphics_backend_get_category(identity, &category) !=
+                     CNA_RESULT_INVALID_ARGUMENT ||
+                 cna_graphics_backend_get_maturity(identity, &maturity) !=
+                     CNA_RESULT_INVALID_ARGUMENT)) {
                 return 0;
             }
         }
@@ -452,25 +504,22 @@ static int validate_renderer_selection(void)
         }
     }
 
-    /* CBIND-052A: every published identity is one the selection surface actually knows, walked as
-       a range rather than named one backend at a time. That is what this arm is for: TINYGL, IGL
-       and PIXIJS existed in CNA::GraphicsRendererType while the C identity table had never heard
-       of them, so each was refused here as "not a public CNA renderer identity" -- and because no
-       test enumerated the range, nothing said so. A backend added to CNA without a C identity
-       fails this arm now. */
+    /* Every live identity is accepted and every retired numeric gap is refused. */
     {
         CNA_GraphicsRendererType identity = CNA_GRAPHICS_RENDERER_UNKNOWN;
         for (identity = CNA_GRAPHICS_RENDERER_SDL_RENDERER;
              identity <= CNA_GRAPHICS_RENDERER_MAXIMUM; ++identity) {
             flag = UINT8_C(9);
-            if (cna_graphics_renderer_get_is_available_ext(identity, &flag) !=
-                    CNA_RESULT_SUCCESS ||
-                (flag != CNA_FALSE && flag != CNA_TRUE)) {
+            const CNA_Result result = cna_graphics_renderer_get_is_available_ext(identity, &flag);
+            if ((is_live_renderer_identity(identity) &&
+                 (result != CNA_RESULT_SUCCESS ||
+                  (flag != CNA_FALSE && flag != CNA_TRUE))) ||
+                (!is_live_renderer_identity(identity) &&
+                 result != CNA_RESULT_INVALID_ARGUMENT)) {
                 return (fprintf(stderr, "SEL ARM %d (identity %u)\n", 15, (unsigned)identity), 0);
             }
         }
-        /* The range is closed at both ends: nothing below the first identity and nothing above
-           the last one is an identity, so UNKNOWN stays a report and never an argument. */
+        /* UNKNOWN and values above the last published identity remain invalid arguments. */
         if (cna_graphics_renderer_get_is_available_ext(CNA_GRAPHICS_RENDERER_UNKNOWN, &flag) !=
                 CNA_RESULT_INVALID_ARGUMENT ||
             cna_graphics_renderer_get_is_available_ext(

@@ -65,6 +65,7 @@ The per-blocker report `fixcnacs.md` Phase 10 asks for is `docs/c-api/CABI_BLOCK
 | CABI-44 | Full nullable-rectangle/override-window `GraphicsDevice.Present` contract | CNA-C# audit | DEFERRED — renderer-wide design |
 | CABI-45 | Stable identity for graphics-resource lifecycle events | CNA-C# audit | DEFERRED — ABI/lifecycle design |
 | CABI-46 | Preserve GL bindings for bounded operations while releasing them after frames | qualification follow-up | DONE |
+| CABI-47 | C API renderer registry test handles retired numeric identity gaps | qualification follow-up | DONE |
 
 ### CABI-46 — operation restore and frame handoff are different contracts
 
@@ -86,6 +87,16 @@ including `CApi_GameSecondaryGraphicsDeviceContext`, `CApi_Draw3DSmoke`, `CApi_L
 `EasyGL_BackgroundContent_ContextOwnership` both pass in the same Debug build. The clean Release
 build passes those C API routes, all four platform context-owner tests and the 107 selected
 Game/GraphicsDeviceManager runtime tests. All eleven C API coverage/ABI/release gates pass.
+
+### CABI-47 — public renderer identities are a set, not a dense integer range
+
+`CApi_CoreExtSmoke` treated every integer from the first renderer identity through
+`CNA_GRAPHICS_RENDERER_MAXIMUM` as live. The registry deliberately preserves retired numeric values
+as invalid gaps, so the test failed after renderer removal even though the C API correctly refused
+those values. The test now enumerates every currently published renderer macro, requires successful
+classification and canonical availability for each one, and separately requires every gap in the
+numeric range to return `CNA_RESULT_INVALID_ARGUMENT`. `CApi_CoreExtSmoke` and the full 93-test C API
+suite pass in Debug; the clean Release build passes the same smoke test.
 
 ### CABI-44/CABI-45 — bounded audit, deliberately deferred
 
