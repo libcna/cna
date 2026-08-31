@@ -18,6 +18,7 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "System/TimeSpan.hpp"
@@ -191,6 +192,56 @@ namespace Microsoft::Xna::Framework::Content
     };
 
     /**
+     * @brief Resolves an XNB reflective-reader table entry for an abstract class or interface.
+     *
+     * XNA includes reflective readers for abstract base types and interfaces in a file's reader
+     * table even when every serialized object is a concrete derived type. The table must still
+     * resolve in full before any object can be read, but invoking such a reader would be invalid
+     * because the target cannot be constructed. This reader preserves that distinction: it
+     * resolves the entry and fails honestly if malformed content dispatches to it.
+     *
+     * @tparam TAbstract The abstract serialized type named by the XNB.
+     * @tparam TStored The pointer type exposed to the C++ object graph.
+     */
+    template <typename TAbstract, typename TStored = TAbstract>
+    class CNAEXT AbstractReflectiveTypeReader
+        : public ContentTypeReader<std::shared_ptr<TStored>>
+    {
+        static_assert(std::is_abstract_v<TAbstract>, "TAbstract must be abstract.");
+        static_assert(std::is_base_of_v<TStored, TAbstract> || std::is_same_v<TStored, TAbstract>,
+                      "TStored must be TAbstract itself or a base class of it.");
+
+    public:
+        /**
+         * @brief Constructs the resolving-only reader.
+         * @param targetTypeName The .NET name of the abstract serialized type.
+         */
+        explicit AbstractReflectiveTypeReader(std::string targetTypeName)
+            : ContentTypeReader<std::shared_ptr<TStored>>(std::move(targetTypeName))
+        {
+        }
+
+    protected:
+        /**
+         * @brief Rejects an attempt to instantiate the abstract serialized type.
+         * @param input The content reader.
+         * @param existingInstance Ignored because an abstract object cannot be populated.
+         * @return This method never returns.
+         * @throws ContentLoadException Always.
+         */
+        std::shared_ptr<TStored> Read(
+            ContentReader& input,
+            std::optional<std::shared_ptr<TStored>> existingInstance) override
+        {
+            (void) input;
+            (void) existingInstance;
+            throw ContentLoadException(
+                "Cannot deserialize abstract reflective type '" +
+                this->getTargetTypeNameProperty() + "'.");
+        }
+    };
+
+    /**
      * @brief Reads an enum written by XNA's `EnumReader<T>`, which stores it as an `Int32`.
      *
      * Exists so that a reflectively-read type's enum fields can satisfy the `.xnb`'s type-reader
@@ -273,6 +324,38 @@ namespace Microsoft::Xna::Framework::Content
             fields_.push_back([member](T& target, ContentReader& input) {
                 target.*member = ReadMember<TMember>(input);
             });
+            return *this;
+        }
+
+        /**
+         * @brief Prepends the serialized members declared by a reflected base type.
+         *
+         * FNA's `ReflectiveReader<T>` first deserializes the base class into the same object, then
+         * reads the members declared by `T`. CNA has no reflection with which to discover that
+         * relationship, so callers describe it explicitly by composing the base declaration.
+         * Call this before declaring members of the derived type.
+         *
+         * @tparam TBase A base class of @p T.
+         * @param baseBuilder The base type's reflective declaration.
+         * @return This builder, for chaining.
+         */
+        template <typename TBase>
+        ReflectiveTypeReaderBuilder& Base(
+            const ReflectiveTypeReaderBuilder<TBase>& baseBuilder)
+        {
+            static_assert(std::is_base_of_v<TBase, T>, "TBase must be a base class of T.");
+            for (const auto& baseField : baseBuilder.fields_)
+            {
+                fields_.push_back([baseField](T& target, ContentReader& input) {
+                    baseField(static_cast<TBase&>(target), input);
+                });
+            }
+            enumRegistrations_.insert(
+                enumRegistrations_.end(),
+                baseBuilder.enumRegistrations_.begin(),
+                baseBuilder.enumRegistrations_.end());
+            hasSharedResourceFields_ =
+                hasSharedResourceFields_ || baseBuilder.hasSharedResourceFields_;
             return *this;
         }
 
@@ -391,6 +474,33 @@ namespace Microsoft::Xna::Framework::Content
         }
 
         /**
+         * @brief Registers a resolving-only reader for an abstract class or interface.
+         *
+         * Use this when the XNB reader table names an abstract type but all actual object
+         * dispatches select concrete derived readers. The registration allows the table to
+         * initialize and throws if content incorrectly tries to instantiate the abstract type.
+         *
+         * @tparam TStored The pointee shape used by the surrounding C++ object graph.
+         */
+        template <typename TStored = T>
+        void RegisterAbstract()
+        {
+            static_assert(std::is_abstract_v<T>, "RegisterAbstract requires an abstract type.");
+            static_assert(std::is_base_of_v<TStored, T> || std::is_same_v<TStored, T>,
+                          "TStored must be T itself or a base class of T.");
+
+            for (auto& registration : enumRegistrations_)
+                ContentTypeReaderManager::AddTypeCreator(registration.first, registration.second);
+
+            ContentTypeReaderManager::AddTypeCreator(
+                ReflectiveTypeReader<T>::CanonicalReaderName(targetTypeName_),
+                [name = targetTypeName_] {
+                    return std::unique_ptr<ContentTypeReaderBase>(
+                        std::make_unique<AbstractReflectiveTypeReader<T, TStored>>(name));
+                });
+        }
+
+        /**
          * @brief Registers the reflective reader and every enum reader the type needs.
          *
          * Safe to call more than once, but **the first registration for a canonical name is the
@@ -423,6 +533,9 @@ namespace Microsoft::Xna::Framework::Content
         }
 
     private:
+        template <typename>
+        friend class ReflectiveTypeReaderBuilder;
+
         template <typename TMember>
         static TMember ReadMember(ContentReader& input)
         {

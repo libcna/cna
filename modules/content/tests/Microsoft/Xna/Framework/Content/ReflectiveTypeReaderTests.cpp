@@ -253,6 +253,131 @@ namespace
         }
     };
 
+    class AbstractAnimal : public System::Object
+    {
+    public:
+        std::int32_t Legs = 0;
+
+        virtual std::string Speak() const = 0;
+    };
+
+    class NamedAnimal final : public AbstractAnimal
+    {
+    public:
+        std::string Name;
+
+        [[nodiscard]] std::string Speak() const override { return Name; }
+
+        [[nodiscard]] const std::string& GetTypeName() const override
+        {
+            static const std::string name = "Bestiary.NamedAnimal";
+            return name;
+        }
+    };
+
+    std::vector<std::uint8_t> BuildInheritedAnimalXnb(bool dispatchAbstractRoot)
+    {
+        System::IO::MemoryStream body;
+        System::IO::BinaryWriter w(&body, true);
+
+        w.Write7BitEncodedInt(4);
+        w.Write(std::string("Microsoft.Xna.Framework.Content.ReflectiveReader`1"
+                            "[[Bestiary.NamedAnimal, Bestiary, Version=1.0.0.0, Culture=neutral, "
+                            "PublicKeyToken=null]]"));
+        w.Write(static_cast<std::int32_t>(0));
+        w.Write(std::string("Microsoft.Xna.Framework.Content.ReflectiveReader`1"
+                            "[[Bestiary.AbstractAnimal, Bestiary, Version=1.0.0.0, Culture=neutral, "
+                            "PublicKeyToken=null]]"));
+        w.Write(static_cast<std::int32_t>(0));
+        w.Write(std::string("Microsoft.Xna.Framework.Content.Int32Reader"));
+        w.Write(static_cast<std::int32_t>(0));
+        w.Write(std::string("Microsoft.Xna.Framework.Content.StringReader"));
+        w.Write(static_cast<std::int32_t>(0));
+
+        w.Write7BitEncodedInt(0);
+        w.Write7BitEncodedInt(dispatchAbstractRoot ? 2 : 1);
+        if (!dispatchAbstractRoot)
+        {
+            w.Write(static_cast<std::int32_t>(4));
+            w.Write7BitEncodedInt(4);
+            w.Write(std::string("Bear"));
+        }
+        w.Flush();
+        const auto bodyBytes = body.ToArray();
+
+        System::IO::MemoryStream file;
+        System::IO::BinaryWriter fw(&file, true);
+        fw.Write(static_cast<std::uint8_t>('X'));
+        fw.Write(static_cast<std::uint8_t>('N'));
+        fw.Write(static_cast<std::uint8_t>('B'));
+        fw.Write(static_cast<std::uint8_t>('w'));
+        fw.Write(static_cast<std::uint8_t>(5));
+        fw.Write(static_cast<std::uint8_t>(0));
+        fw.Write(static_cast<std::int32_t>(10 + static_cast<std::int32_t>(bodyBytes.size())));
+        fw.Write(bodyBytes.data(), 0, static_cast<std::int32_t>(bodyBytes.size()));
+        fw.Flush();
+
+        const auto fileBytes = file.ToArray();
+        return std::vector<std::uint8_t>(fileBytes.begin(), fileBytes.end());
+    }
+
+    class ReflectiveInheritanceTest : public ::testing::Test
+    {
+    protected:
+        void SetUp() override
+        {
+            CNA::Internal::Xnb::RegisterPrimitiveXnbReaders();
+
+            ReflectiveTypeReaderBuilder<AbstractAnimal> base("Bestiary.AbstractAnimal");
+            base.Field(&AbstractAnimal::Legs);
+            base.RegisterAbstract();
+
+            ReflectiveTypeReaderBuilder<NamedAnimal>("Bestiary.NamedAnimal")
+                .Base(base)
+                .Field(&NamedAnimal::Name)
+                .RegisterShared<AbstractAnimal>();
+        }
+
+        void TearDown() override
+        {
+            ContentTypeReaderManager::RemoveTypeCreatorEXT(
+                ReflectiveTypeReader<AbstractAnimal>::CanonicalReaderName(
+                    "Bestiary.AbstractAnimal"));
+            ContentTypeReaderManager::RemoveTypeCreatorEXT(
+                ReflectiveTypeReader<NamedAnimal>::CanonicalReaderName("Bestiary.NamedAnimal"));
+        }
+    };
+
+    TEST_F(ReflectiveInheritanceTest, ReadsBaseMembersBeforeDerivedMembersIntoTheSameObject)
+    {
+        ScratchContentRoot root;
+        WriteBytes(root.path() / "named-animal.xnb", BuildInheritedAnimalXnb(false));
+
+        ContentManager content;
+        content.setRootDirectoryProperty(root.path().string());
+        const auto loaded = content.Load<std::shared_ptr<AbstractAnimal>>("named-animal");
+
+        ASSERT_NE(nullptr, loaded);
+        EXPECT_EQ(4, loaded->Legs);
+        EXPECT_EQ("Bear", loaded->Speak());
+    }
+
+    TEST_F(ReflectiveInheritanceTest, AbstractReaderResolvesTheTableButRejectsDispatch)
+    {
+        ScratchContentRoot root;
+        WriteBytes(root.path() / "abstract-animal.xnb", BuildInheritedAnimalXnb(true));
+
+        ContentManager content;
+        content.setRootDirectoryProperty(root.path().string());
+        EXPECT_THROW(
+            {
+                const auto ignored =
+                    content.Load<std::shared_ptr<AbstractAnimal>>("abstract-animal");
+                (void) ignored;
+            },
+            Microsoft::Xna::Framework::Content::ContentLoadException);
+    }
+
     // The three collection shapes a custom model processor writes on a Model.Tag: a list of its
     // own class, a list of Matrix (a bind pose) and a list of int (a skeleton hierarchy).
     std::vector<std::uint8_t> BuildHerdXnb()
