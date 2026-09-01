@@ -10,6 +10,7 @@
 #include "CNA/Platform/PlatformEvent.hpp"
 #include "CNA/Platform/PlatformFactory.hpp"
 #include "CNA/TargetPlatform.hpp"
+#include "System/Globalization/CultureInfo.hpp"
 
 #include <algorithm>
 #include <iterator>
@@ -105,6 +106,54 @@ namespace Microsoft::Xna::Framework
         {
             return CNA::Platform::HasCurrentPlatform() ? &CNA::Platform::GetCurrentPlatform()
                                                        : nullptr;
+        }
+
+        void InitializeDefaultCulture(CNA::Platform::IPlatform& platform)
+        {
+            using System::Globalization::CultureInfo;
+
+            const bool needsCulture =
+                !CultureInfo::getDefaultThreadCurrentCultureProperty().has_value();
+            const bool needsUiCulture =
+                !CultureInfo::getDefaultThreadCurrentUICultureProperty().has_value();
+            if (!needsCulture && !needsUiCulture)
+            {
+                return;
+            }
+
+            for (const CNA::Platform::PlatformLocale& locale :
+                 platform.GetSystemInfo()->GetPreferredLocales())
+            {
+                if (locale.language.empty())
+                {
+                    continue;
+                }
+
+                std::string name = locale.language;
+                if (!locale.country.empty())
+                {
+                    name += "-" + locale.country;
+                }
+
+                try
+                {
+                    const CultureInfo preferred(name);
+                    if (needsCulture)
+                    {
+                        CultureInfo::setDefaultThreadCurrentCultureProperty(preferred);
+                    }
+                    if (needsUiCulture)
+                    {
+                        CultureInfo::setDefaultThreadCurrentUICultureProperty(preferred);
+                    }
+                    return;
+                }
+                catch (const System::Globalization::CultureNotFoundException&)
+                {
+                    // A platform can report a locale newer than the runtime's accepted syntax.
+                    // Keep walking the ordered preference list instead of discarding all choices.
+                }
+            }
         }
 
         // Live games, in the order they installed themselves; the back entry is the one currently
@@ -252,6 +301,8 @@ namespace Microsoft::Xna::Framework
           worstCaseSleepPrecision_(System::TimeSpan::FromMilliseconds(1.0)),
           RunApplication(true)
     {
+        InitializeDefaultCulture(*platform_);
+
         for (auto& previousSleepTime : previousSleepTimes_)
         {
             previousSleepTime = System::TimeSpan::FromMilliseconds(1.0);
