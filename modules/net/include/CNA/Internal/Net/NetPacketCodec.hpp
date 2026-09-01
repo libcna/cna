@@ -3,6 +3,7 @@
 #pragma once
 
 #include "Microsoft/Xna/Framework/Net/NetworkSessionState.hpp"
+#include "Microsoft/Xna/Framework/Net/NetworkSessionProperties.hpp"
 #include "Microsoft/Xna/Framework/Net/PacketReader.hpp"
 #include "Microsoft/Xna/Framework/Net/PacketWriter.hpp"
 #include "Microsoft/Xna/Framework/Net/SendDataOptions.hpp"
@@ -15,6 +16,7 @@
 namespace CNA::Internal::Net
 {
     using Microsoft::Xna::Framework::Net::NetworkSessionState;
+    using Microsoft::Xna::Framework::Net::NetworkSessionProperties;
     using Microsoft::Xna::Framework::Net::PacketReader;
     using Microsoft::Xna::Framework::Net::PacketWriter;
     using Microsoft::Xna::Framework::Net::SendDataOptions;
@@ -30,6 +32,7 @@ namespace CNA::Internal::Net
         GamerLeaveBroadcast = 0x04,
         // 0x05 is reserved for a future HostChangeBroadcast (host migration); not implemented.
         StateChangeBroadcast = 0x06,
+        SessionPropertiesBroadcast = 0x07,
         AppData = 0x10,
     };
 
@@ -60,6 +63,8 @@ namespace CNA::Internal::Net
     {
         std::vector<uint8_t> AssignedWireIds;
         std::vector<RosterEntry> ExistingRoster;
+        /** @brief Complete host-authoritative session-property snapshot at join time. */
+        NetworkSessionProperties SessionProperties;
     };
 
     /** @brief Sent by the host to already-connected clients when new gamers join. */
@@ -78,6 +83,13 @@ namespace CNA::Internal::Net
     struct StateChangeBroadcastMessage
     {
         NetworkSessionState NewState{NetworkSessionState::Lobby};
+    };
+
+    /** @brief Sent by the host when its mutable session properties change. */
+    struct SessionPropertiesBroadcastMessage
+    {
+        /** @brief Complete replacement snapshot, including null entries and list length. */
+        NetworkSessionProperties SessionProperties;
     };
 
     /** @brief Carries application SendData/ReceiveData payloads between peers, relayed by the host. */
@@ -106,6 +118,13 @@ namespace CNA::Internal::Net
         static std::vector<SharpRuntime::bytecs> Encode(const GamerJoinBroadcastMessage& message);
         static std::vector<SharpRuntime::bytecs> Encode(const GamerLeaveBroadcastMessage& message);
         static std::vector<SharpRuntime::bytecs> Encode(const StateChangeBroadcastMessage& message);
+        /**
+         * @brief Encodes a complete host-authoritative session-property snapshot.
+         *
+         * @param message The snapshot message to encode.
+         * @return Connected-channel packet bytes.
+         */
+        static std::vector<SharpRuntime::bytecs> Encode(const SessionPropertiesBroadcastMessage& message);
         static std::vector<SharpRuntime::bytecs> Encode(const AppDataMessage& message);
 
         /** @brief Reads the leading MessageTag byte without needing a full decode. */
@@ -116,6 +135,15 @@ namespace CNA::Internal::Net
         static GamerJoinBroadcastMessage DecodeGamerJoinBroadcast(const std::vector<SharpRuntime::bytecs>& data);
         static GamerLeaveBroadcastMessage DecodeGamerLeaveBroadcast(const std::vector<SharpRuntime::bytecs>& data);
         static StateChangeBroadcastMessage DecodeStateChangeBroadcast(const std::vector<SharpRuntime::bytecs>& data);
+        /**
+         * @brief Decodes a complete host-authoritative session-property snapshot.
+         *
+         * @param data Connected-channel packet bytes.
+         * @return The decoded snapshot message.
+         */
+        static SessionPropertiesBroadcastMessage DecodeSessionPropertiesBroadcast(
+            const std::vector<SharpRuntime::bytecs>& data
+        );
         static AppDataMessage DecodeAppData(const std::vector<SharpRuntime::bytecs>& data);
 
         /**

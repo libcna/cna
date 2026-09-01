@@ -18,6 +18,7 @@
 #include "Microsoft/Xna/Framework/Net/NetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSessionEndedEventArgs.hpp"
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -94,7 +95,12 @@ namespace {
     // SimulatedPacketLoss tests below - connects fakeClient to host's real bound port, completes a
     // real ClientHello/ServerWelcome round trip, and returns the wire id the host assigned to
     // fakeClient's own gamer (needed as AppDataMessage::SenderWireId for every AppData sent below).
-    uint8_t ConnectFakeClientAndCompleteHandshake(ENetHostHandle& fakeClient, NetworkSession* hostSession, ENetPeer** outPeerFromHostSide) {
+    uint8_t ConnectFakeClientAndCompleteHandshake(
+        ENetHostHandle& fakeClient,
+        NetworkSession* hostSession,
+        ENetPeer** outPeerFromHostSide,
+        ServerWelcomeMessage* outWelcome = nullptr
+    ) {
         uint16_t hostPort = ENetBackend::GetBoundPort(hostSession);
         EXPECT_GT(hostPort, 0);
         *outPeerFromHostSide = fakeClient.Connect("127.0.0.1", hostPort, 2);
@@ -132,6 +138,9 @@ namespace {
         }
         EXPECT_TRUE(gotWelcome);
         EXPECT_EQ(welcome.AssignedWireIds.size(), 1u);
+        if (outWelcome != nullptr) {
+            *outWelcome = welcome;
+        }
         return welcome.AssignedWireIds.empty() ? 0 : welcome.AssignedWireIds[0];
     }
 }
@@ -1798,6 +1807,174 @@ TEST(ENetBackendTest, ClientProcessesStateChangeBroadcast) {
     EXPECT_EQ(startedCount, 1);
 }
 
+TEST(ENetBackendTest, HostWelcomeAndLaterBroadcastPreserveCurrentSessionProperties) {
+    SystemLinkSessionFixture host("HostPlayer");
+    auto& properties = host.session->getSessionPropertiesProperty();
+    properties[0] = 1;
+    properties[1] = std::nullopt;
+    properties[2] = -7;
+    properties[3] = 1;
+
+    ENetHostHandle fakeClient = ENetHostHandle::CreateClient(2);
+    ENetPeer* peerFromClientSide = nullptr;
+    ServerWelcomeMessage welcome;
+    ConnectFakeClientAndCompleteHandshake(
+        fakeClient, host.session, &peerFromClientSide, &welcome
+    );
+
+    ASSERT_EQ(welcome.SessionProperties.getCountProperty(), 4);
+    EXPECT_EQ(welcome.SessionProperties.getItem(0), 1);
+    EXPECT_EQ(welcome.SessionProperties.getItem(1), std::nullopt);
+    EXPECT_EQ(welcome.SessionProperties.getItem(2), -7);
+    EXPECT_EQ(welcome.SessionProperties.getItem(3), 1);
+
+    properties.setItem(0, 2);
+    properties.setItem(1, 6);
+    properties.setItem(2, std::numeric_limits<int>::min());
+    properties.setItem(3, 0);
+
+    SessionPropertiesBroadcastMessage broadcast;
+    bool receivedBroadcast = false;
+    for (int i = 0; i < 200 && !receivedBroadcast; ++i, PollYield()) {
+        host.session->Update();
+        ENetEvent evt{};
+        if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_RECEIVE) {
+            std::vector<SharpRuntime::bytecs> data(
+                evt.packet->data, evt.packet->data + evt.packet->dataLength
+            );
+            if (NetPacketCodec::PeekTag(data) == MessageTag::SessionPropertiesBroadcast) {
+                broadcast = NetPacketCodec::DecodeSessionPropertiesBroadcast(data);
+                receivedBroadcast = true;
+            }
+            enet_packet_destroy(evt.packet);
+        }
+    }
+
+    ASSERT_TRUE(receivedBroadcast);
+    ASSERT_EQ(broadcast.SessionProperties.getCountProperty(), 4);
+    EXPECT_EQ(broadcast.SessionProperties.getItem(0), 2);
+    EXPECT_EQ(broadcast.SessionProperties.getItem(1), 6);
+    EXPECT_EQ(broadcast.SessionProperties.getItem(2), std::numeric_limits<int>::min());
+    EXPECT_EQ(broadcast.SessionProperties.getItem(3), 0);
+}
+
+TEST(ENetBackendTest, ClientAppliesWelcomeAndLaterAuthoritativeSessionPropertiesBroadcast) {
+    ENetHostHandle fakeHost = ENetHostHandle::CreateHost(kFakeHostTestPort, 4, 2);
+    const uint16_t fakeHostPort = fakeHost.getBoundPortProperty();
+    ASSERT_GT(fakeHostPort, 0);
+
+    SystemLinkSessionFixture client("ClientPlayer");
+    ENetBackend::ConnectToHost(client.session, "127.0.0.1", fakeHostPort);
+
+    ENetPeer* clientPeerFromHostSide = nullptr;
+    bool gotHello = false;
+    for (int i = 0; i < 200 && !gotHello; ++i, PollYield()) {
+        client.session->Update();
+        ENetEvent evt{};
+        if (fakeHost.Service(0, evt) > 0) {
+            if (evt.type == ENET_EVENT_TYPE_CONNECT) {
+                clientPeerFromHostSide = evt.peer;
+            } else if (evt.type == ENET_EVENT_TYPE_RECEIVE) {
+                std::vector<SharpRuntime::bytecs> data(
+                    evt.packet->data, evt.packet->data + evt.packet->dataLength
+                );
+                gotHello = NetPacketCodec::PeekTag(data) == MessageTag::ClientHello;
+                enet_packet_destroy(evt.packet);
+            }
+        }
+    }
+    ASSERT_TRUE(gotHello);
+    ASSERT_NE(clientPeerFromHostSide, nullptr);
+
+    ServerWelcomeMessage welcome;
+    welcome.AssignedWireIds = {5};
+    welcome.ExistingRoster = {{0, "HostPlayer", true}};
+    welcome.SessionProperties.Add(1);
+    welcome.SessionProperties.Add(std::nullopt);
+    welcome.SessionProperties.Add(3);
+    const auto welcomeBytes = NetPacketCodec::Encode(welcome);
+    fakeHost.Send(
+        clientPeerFromHostSide, 0, welcomeBytes.data(), welcomeBytes.size(), ENET_PACKET_FLAG_RELIABLE
+    );
+    fakeHost.Flush();
+
+    for (int i = 0;
+         i < 200 && client.session->getSessionPropertiesProperty().getCountProperty() != 3;
+         ++i, PollYield()) {
+        client.session->Update();
+    }
+    const NetworkSession& constClientAfterWelcome = *client.session;
+    const auto& welcomed = constClientAfterWelcome.getSessionPropertiesProperty();
+    ASSERT_EQ(welcomed.getCountProperty(), 3);
+    EXPECT_EQ(welcomed.getItem(0), 1);
+    EXPECT_EQ(welcomed.getItem(1), std::nullopt);
+    EXPECT_EQ(welcomed.getItem(2), 3);
+
+    SessionPropertiesBroadcastMessage update;
+    update.SessionProperties.Add(2);
+    update.SessionProperties.Add(6);
+    update.SessionProperties.Add(std::numeric_limits<int>::max());
+    update.SessionProperties.Add(0);
+    const auto updateBytes = NetPacketCodec::Encode(update);
+    fakeHost.Send(
+        clientPeerFromHostSide, 0, updateBytes.data(), updateBytes.size(), ENET_PACKET_FLAG_RELIABLE
+    );
+    fakeHost.Flush();
+
+    for (int i = 0;
+         i < 200 && client.session->getSessionPropertiesProperty().getCountProperty() != 4;
+         ++i, PollYield()) {
+        client.session->Update();
+    }
+    const NetworkSession& constClientAfterUpdate = *client.session;
+    const auto& updated = constClientAfterUpdate.getSessionPropertiesProperty();
+    ASSERT_EQ(updated.getCountProperty(), 4);
+    EXPECT_EQ(updated.getItem(0), 2);
+    EXPECT_EQ(updated.getItem(1), 6);
+    EXPECT_EQ(updated.getItem(2), std::numeric_limits<int>::max());
+    EXPECT_EQ(updated.getItem(3), 0);
+}
+
+TEST(ENetBackendTest, HostRejectsForgedSessionPropertiesBroadcastFromClient) {
+    SystemLinkSessionFixture host("HostPlayer");
+    host.session->getSessionPropertiesProperty()[0] = 7;
+
+    ENetHostHandle fakeClient = ENetHostHandle::CreateClient(2);
+    ENetPeer* peerFromClientSide = fakeClient.Connect(
+        "127.0.0.1", ENetBackend::GetBoundPort(host.session), 2
+    );
+    ASSERT_NE(peerFromClientSide, nullptr);
+
+    bool connected = false;
+    for (int i = 0; i < 200 && !connected; ++i, PollYield()) {
+        host.session->Update();
+        ENetEvent evt{};
+        if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
+            connected = true;
+        }
+    }
+    ASSERT_TRUE(connected);
+
+    SessionPropertiesBroadcastMessage forged;
+    forged.SessionProperties.Add(999);
+    const auto bytes = NetPacketCodec::Encode(forged);
+    fakeClient.Send(peerFromClientSide, 0, bytes.data(), bytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    fakeClient.Flush();
+
+    bool disconnected = false;
+    for (int i = 0; i < 200 && !disconnected; ++i, PollYield()) {
+        host.session->Update();
+        ENetEvent evt{};
+        if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_DISCONNECT) {
+            disconnected = true;
+        }
+    }
+    EXPECT_TRUE(disconnected);
+    const NetworkSession& constHost = *host.session;
+    ASSERT_EQ(constHost.getSessionPropertiesProperty().getCountProperty(), 1);
+    EXPECT_EQ(constHost.getSessionPropertiesProperty().getItem(0), 7);
+}
+
 // --- Task 1.4: HandleReceive must not let a decode exception escape Update() ---
 
 // Task 1.4: any Decode* call in HandleReceive throws std::runtime_error on a truncated/malformed
@@ -2088,10 +2265,11 @@ TEST(ENetBackendTest, HostMeasuresRealRoundtripTimeForRemoteGamer) {
 // dispatched to their handlers with no check that the sending peer is this session's actual
 // authoritative host (state.HostPeer) - any already-connected peer, speaking this fully-inferable
 // wire format, could forge one of these directly. The fix rejects (logs + disconnects the peer)
-// any of these four message types received from a peer that isn't state.HostPeer. All four tests
-// below prove both halves: the forgery has no effect on authoritative state, AND the offending
-// peer gets disconnected rather than silently ignored (a first-class protocol event, not a quiet
-// drop). Legitimate broadcasts still working end to end is covered by the many pre-existing
+// any host-only message received from a peer that isn't state.HostPeer. The four original tests
+// below and HostRejectsForgedSessionPropertiesBroadcastFromClient above prove both halves: the
+// forgery has no effect on authoritative state, AND the offending peer gets disconnected rather
+// than silently ignored (a first-class protocol event, not a quiet drop). Legitimate broadcasts
+// still working end to end is covered by the many pre-existing
 // ClientProcessesGamerLeaveBroadcast/ClientProcessesStateChangeBroadcast/
 // ClientSendsClientHelloAndProcessesServerWelcome/HostRespondsToClientHelloWithServerWelcome.../
 // HostBroadcastsStateChangeOnStartAndEndGame tests above (unchanged by this fix, still exercising

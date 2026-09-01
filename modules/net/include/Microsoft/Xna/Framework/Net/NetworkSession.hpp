@@ -269,6 +269,17 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Gets the custom properties advertised for this session.
          *
+         * The returned collection is mutable, matching XNA's get-only property whose indexer can
+         * be assigned by the session host. Changes are replicated to connected SystemLink peers
+         * during Update().
+         *
+         * @return Mutable reference to the NetworkSessionProperties.
+         */
+        [[nodiscard]] NetworkSessionProperties& getSessionPropertiesProperty();
+
+        /**
+         * @brief Gets the custom properties advertised for this session.
+         *
          * @return Const reference to the NetworkSessionProperties.
          */
         [[nodiscard]] const NetworkSessionProperties& getSessionPropertiesProperty() const;
@@ -799,6 +810,13 @@ namespace Microsoft::Xna::Framework::Net
          * @param raiseHostChanged Whether to raise HostChanged for a migration replacement.
          */
         CNAEXT void SetHostFromTransport(NetworkGamer* host, bool raiseHostChanged);
+
+        /**
+         * @brief Replaces the local session-property snapshot with the host-authoritative values.
+         *
+         * @param properties The properties received from the transport host.
+         */
+        CNAEXT void SetSessionPropertiesFromTransport(NetworkSessionProperties properties);
 
         /**
          * @brief Internal IAsyncResult implementation backing NetworkSession's Begin/End pairs.

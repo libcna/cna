@@ -13,6 +13,8 @@ namespace CNA::Internal::Net
 
     namespace
     {
+        bytecs EncodeCount(std::size_t size, const char* fieldName);
+
         RosterEntry ReadRosterEntry(PacketReader& reader)
         {
             RosterEntry entry;
@@ -27,6 +29,40 @@ namespace CNA::Internal::Net
             writer.Write(entry.WireId);
             writer.Write(entry.Gamertag);
             writer.Write(entry.IsHost);
+        }
+
+        void WriteSessionProperties(PacketWriter& writer, const NetworkSessionProperties& properties)
+        {
+            writer.Write(EncodeCount(
+                static_cast<std::size_t>(properties.getCountProperty()),
+                "NetworkSessionProperties"
+            ));
+            for (const auto& value : properties)
+            {
+                writer.Write(value.has_value());
+                if (value.has_value())
+                {
+                    writer.Write(*value);
+                }
+            }
+        }
+
+        NetworkSessionProperties ReadSessionProperties(PacketReader& reader)
+        {
+            NetworkSessionProperties properties;
+            const bytecs count = reader.ReadByte();
+            for (bytecs i = 0; i < count; ++i)
+            {
+                if (reader.ReadBoolean())
+                {
+                    properties.Add(reader.ReadInt32());
+                }
+                else
+                {
+                    properties.Add(std::nullopt);
+                }
+            }
+            return properties;
         }
 
         // Task 2.12: every list-length count field in this wire format is a single byte; naively
@@ -120,6 +156,8 @@ namespace CNA::Internal::Net
             WriteRosterEntry(writer, entry);
         }
 
+        WriteSessionProperties(writer, message.SessionProperties);
+
         return ExtractBytes(writer);
     }
 
@@ -144,6 +182,8 @@ namespace CNA::Internal::Net
         {
             message.ExistingRoster.push_back(ReadRosterEntry(reader));
         }
+
+        message.SessionProperties = ReadSessionProperties(reader);
 
         return message;
     }
@@ -226,6 +266,29 @@ namespace CNA::Internal::Net
 
         StateChangeBroadcastMessage message;
         message.NewState = static_cast<NetworkSessionState>(reader.ReadByte());
+        return message;
+    }
+
+    // --- SessionPropertiesBroadcast ---
+
+    std::vector<bytecs> NetPacketCodec::Encode(const SessionPropertiesBroadcastMessage& message)
+    {
+        PacketWriter writer;
+        writer.Write(static_cast<bytecs>(MessageTag::SessionPropertiesBroadcast));
+        WriteSessionProperties(writer, message.SessionProperties);
+        return ExtractBytes(writer);
+    }
+
+    SessionPropertiesBroadcastMessage NetPacketCodec::DecodeSessionPropertiesBroadcast(
+        const std::vector<bytecs>& data
+    )
+    {
+        PacketReader reader;
+        FillReader(reader, data);
+        (void) reader.ReadByte(); // skip the tag byte (already inspected by the caller via PeekTag)
+
+        SessionPropertiesBroadcastMessage message;
+        message.SessionProperties = ReadSessionProperties(reader);
         return message;
     }
 

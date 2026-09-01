@@ -2142,6 +2142,43 @@ and not by moving the regression thresholds.
 
 ---
 
+## Phase 16 — SAMPLE-100 `NetworkSession.SessionProperties` runtime replication (2026-09-01)
+
+- [x] **Task 16.1 — live-state and reference audit.** CNA HEAD `e5ae0820e2` still exposed only a
+  const `NetworkSession::getSessionPropertiesProperty()` and the connected ENet protocol had no
+  property-replication message. The original XNA `NetworkPredictionSample_4_0` explicitly writes
+  indices 0–3 on the host and states that changes are automatically replicated to clients; the
+  local Microsoft XNA 4.0 documentation confirms a get/set indexer and up to eight intended
+  integer values. FNA remains the implementation reference for the collection's already-ported
+  append quirk; no change to `NetworkSessionProperties` itself was needed.
+- [x] **Task 16.2 — mutable XNA property surface.** Added the non-const getter overload while
+  preserving the const overload. This maps the C# get-only property correctly: the returned
+  collection itself remains mutable, so host code can use the original
+  `session.SessionProperties[index] = value` pattern with no application packet workaround.
+- [x] **Task 16.3 — authoritative wire synchronization.** `ServerWelcome` now carries the full
+  current property collection (including its length and null entries), so late joiners do not
+  depend on seeing a prior mutation. A reliable `SessionPropertiesBroadcast` carries complete
+  replacement snapshots after host mutations. `NetworkSession::Update()` compares against the
+  last published snapshot; this is necessary because the public API returns the real mutable
+  collection rather than a CNA-specific mutation proxy. Clients apply welcome/broadcast values,
+  while host-side or rogue-peer attempts to send this host-only message are logged and rejected
+  by disconnecting the sender.
+- [x] **Task 16.4 — focused regression evidence.** Codec tests cover empty and sparse collections,
+  `INT_MIN`/`INT_MAX`, null preservation, truncation, welcome inclusion, and the connected
+  protocol's explicit 255-entry size guard (well above XNA's documented eight). Real native ENet
+  loopback tests prove current values in `ServerWelcome`, a later host mutation arriving without
+  manual application packets, client-side replacement, and rejection of a forged client update.
+  The complete matching native Net selection passed **289/289** tests.
+- [x] **Task 16.5 — final qualification and commit.** The complete Debug build passed all **998**
+  build steps. The matching native Net selection passed **289/289** tests, including the real UDP
+  loopback regressions. Fourteen focused strict-XNA/module/C-API header, export, ABI and Net smoke
+  gates passed (the two configuration-disabled module-link probes were reported as skipped, not
+  failures). The Release OPENGLES3 configuration with ENet and the C API enabled passed all **165**
+  build steps and produced both `libcna_c_api.so` and the combined static archive with **4054**
+  exported `cna_*` symbols. `git diff --check` passed before the separate engine commit.
+
+---
+
 ## Implementation quality rules (carried over, still binding)
 
 - Keep changes minimal but complete — no half-finished implementations.

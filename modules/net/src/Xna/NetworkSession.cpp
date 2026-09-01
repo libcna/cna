@@ -287,6 +287,7 @@ namespace Microsoft::Xna::Framework::Net
     int NetworkSession::getPrivateGamerSlotsProperty() const { return privateGamerSlots_; }
     void NetworkSession::setPrivateGamerSlotsProperty(int value) { privateGamerSlots_ = value; }
 
+    NetworkSessionProperties& NetworkSession::getSessionPropertiesProperty() { return sessionProperties_; }
     const NetworkSessionProperties& NetworkSession::getSessionPropertiesProperty() const { return sessionProperties_; }
     NetworkSessionState NetworkSession::getSessionStateProperty() const { return sessionState_; }
     NetworkSessionType NetworkSession::getSessionTypeProperty() const { return sessionType_; }
@@ -530,6 +531,11 @@ namespace Microsoft::Xna::Framework::Net
             HostChanged.Raise(this, HostChangedEventArgs(oldHost, host));
         }
         host_ = host;
+    }
+
+    void NetworkSession::SetSessionPropertiesFromTransport(NetworkSessionProperties properties)
+    {
+        sessionProperties_ = std::move(properties);
     }
 
     void NetworkSession::AddRemoteGamer(NetworkGamer* gamer)

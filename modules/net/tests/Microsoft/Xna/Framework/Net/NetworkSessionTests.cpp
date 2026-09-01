@@ -58,6 +58,27 @@ TEST(NetworkSessionTest, CreateWithExplicitLocalGamers) {
     EXPECT_TRUE(session->getIsDisposedProperty());
 }
 
+TEST(NetworkSessionTest, SessionPropertiesGetterExposesMutableXnaIndexerCollection) {
+    auto gamer = MakeSignedInGamer();
+    NetworkSession* session = NetworkSession::Create(
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
+    );
+
+    NetworkSessionProperties& mutableProperties = session->getSessionPropertiesProperty();
+    mutableProperties[0] = 7;
+    mutableProperties[1] = std::nullopt;
+    mutableProperties[2] = -9;
+
+    const NetworkSession& constSession = *session;
+    const NetworkSessionProperties& observed = constSession.getSessionPropertiesProperty();
+    ASSERT_EQ(observed.getCountProperty(), 3);
+    EXPECT_EQ(observed.getItem(0), 7);
+    EXPECT_EQ(observed.getItem(1), std::nullopt);
+    EXPECT_EQ(observed.getItem(2), -9);
+
+    session->Dispose();
+}
+
 // Task 3.2: every End* (EndCreate/EndFind/EndJoin/EndJoinInvited) used to just drop activeAction_
 // (a bare `= nullptr;`) with no prior delete - `new NetworkSessionAction(...)` in every Begin*
 // permanently leaked one object per Begin*/End* cycle. Confirms a full Create() (BeginCreate ->

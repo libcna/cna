@@ -3,6 +3,7 @@
 #pragma once
 
 #include "Microsoft/Xna/Framework/Net/NetworkSessionState.hpp"
+#include "Microsoft/Xna/Framework/Net/NetworkSessionProperties.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSessionType.hpp"
 #include "Microsoft/Xna/Framework/Net/SendDataOptions.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
@@ -21,6 +22,7 @@ namespace CNA::Internal::Net
 {
     using Microsoft::Xna::Framework::Net::NetworkGamer;
     using Microsoft::Xna::Framework::Net::NetworkSession;
+    using Microsoft::Xna::Framework::Net::NetworkSessionProperties;
     using Microsoft::Xna::Framework::Net::NetworkSessionState;
     using Microsoft::Xna::Framework::Net::NetworkSessionType;
     using Microsoft::Xna::Framework::Net::SendDataOptions;
@@ -72,6 +74,17 @@ namespace CNA::Internal::Net
             NetworkSession* session,
             NetworkGamer* host,
             bool raiseHostChanged
+        );
+
+        /**
+         * @brief Installs the host-authoritative session properties received by the transport.
+         *
+         * @param session The client session whose property snapshot is being updated.
+         * @param properties The complete property collection received from the host.
+         */
+        static void ApplyTransportSessionProperties(
+            NetworkSession* session,
+            NetworkSessionProperties properties
         );
 
         /**

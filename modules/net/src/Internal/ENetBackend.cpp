@@ -28,6 +28,7 @@ namespace CNA::Internal::Net
     using Microsoft::Xna::Framework::Net::NetworkGamer;
     using Microsoft::Xna::Framework::Net::NetworkSession;
     using Microsoft::Xna::Framework::Net::NetworkSessionEndReason;
+    using Microsoft::Xna::Framework::Net::NetworkSessionProperties;
 
     namespace
     {
@@ -173,6 +174,11 @@ namespace CNA::Internal::Net
             std::vector<PendingDelayedDelivery> PendingDeliveries;
             // audit_net.md remediation (2026-07-18): see PendingPreHandshakeAppData's own comment.
             std::vector<PendingPreHandshakeAppData> PendingPreHandshakeSends;
+            // Snapshot last published by this transport host. NetworkSession exposes the XNA
+            // get-only property as a mutable collection reference, so polling during Update() is
+            // the only way to observe arbitrary indexer mutations without wrapping that public
+            // collection in a CNA-specific proxy.
+            NetworkSessionProperties LastPublishedSessionProperties;
         };
 
         // Task 2.13: process-wide, since SendAppData's silent-drop path (sender/target not yet in
@@ -281,6 +287,49 @@ namespace CNA::Internal::Net
             state.Host.Flush();
         }
 
+        bool SessionPropertiesEqual(
+            const NetworkSessionProperties& left,
+            const NetworkSessionProperties& right
+        )
+        {
+            if (left.getCountProperty() != right.getCountProperty())
+            {
+                return false;
+            }
+            for (int i = 0; i < left.getCountProperty(); ++i)
+            {
+                if (left.getItem(i) != right.getItem(i))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        void PublishSessionPropertiesIfChanged(NetworkSession* session, SessionState& state)
+        {
+            if (state.HostPeer != nullptr)
+            {
+                return; // only the transport host owns and publishes session properties
+            }
+
+            const NetworkSessionProperties& current = session->getSessionPropertiesProperty();
+            if (SessionPropertiesEqual(current, state.LastPublishedSessionProperties))
+            {
+                return;
+            }
+
+            SessionPropertiesBroadcastMessage message;
+            message.SessionProperties = current;
+            const auto bytes = NetPacketCodec::Encode(message);
+            for (auto& [peer, wireIds] : state.PeerWireIds)
+            {
+                QueueSend(state, peer, bytes, SendDataOptions::Reliable);
+            }
+            state.Host.Flush();
+            state.LastPublishedSessionProperties = current;
+        }
+
         // audit_net.md remediation (2026-07-18): the actual wire-send + relay logic, shared by
         // SendAppData's immediate-resolve path and FlushPendingPreHandshakeAppData's later-resolve
         // path below - identical routing either way, only the timing of wire-id resolution
@@ -363,13 +412,14 @@ namespace CNA::Internal::Net
             pending.erase(removedBegin, pending.end());
         }
 
-        // REMED-NET-001: ServerWelcome/GamerJoinBroadcast/GamerLeaveBroadcast/StateChangeBroadcast
+        // REMED-NET-001: ServerWelcome/GamerJoinBroadcast/GamerLeaveBroadcast/StateChangeBroadcast/
+        // SessionPropertiesBroadcast
         // are, by this protocol's own design, sent only by the session's authoritative host to its
         // connected clients. The only peer connection that is ever the authoritative host from this
         // SessionState's own point of view is state.HostPeer (set exclusively by ConnectToHost/
         // AttemptHostMigration, when this side is acting as a client of someone else). A host's own
         // HostPeer is always null (a host never connects out to anyone), so this correctly rejects
-        // these four message types unconditionally on the host side too - a host should never
+        // these five message types unconditionally on the host side too - a host should never
         // receive host-authoritative messages from one of its own connecting clients at all.
         bool IsFromAuthoritativeHost(const SessionState& state, ENetPeer* peer)
         {
@@ -434,6 +484,7 @@ namespace CNA::Internal::Net
 
             ServerWelcomeMessage welcome;
             welcome.ExistingRoster = SnapshotRoster(session, state);
+            welcome.SessionProperties = session->getSessionPropertiesProperty();
 
             GamerJoinBroadcastMessage broadcastMsg;
             std::vector<uint8_t> newWireIds;
@@ -487,6 +538,8 @@ namespace CNA::Internal::Net
 
         void HandleServerWelcome(NetworkSession* session, SessionState& state, const ServerWelcomeMessage& welcome)
         {
+            ENetBackend::ApplyTransportSessionProperties(session, welcome.SessionProperties);
+
             const auto& locals = session->getLocalGamersProperty();
             for (int i = 0; i < locals.getCountProperty() && i < static_cast<int>(welcome.AssignedWireIds.size()); ++i)
             {
@@ -572,6 +625,14 @@ namespace CNA::Internal::Net
             evt.Type = NetworkSession::NetworkEventType::StateChange;
             evt.State = msg.NewState;
             session->SendNetworkEvent(std::move(evt));
+        }
+
+        void HandleSessionPropertiesBroadcast(
+            NetworkSession* session,
+            const SessionPropertiesBroadcastMessage& message
+        )
+        {
+            ENetBackend::ApplyTransportSessionProperties(session, message.SessionProperties);
         }
 
         void HandleAppData(NetworkSession* session, SessionState& state, ENetPeer* fromPeer, const AppDataMessage& msg)
@@ -1025,6 +1086,17 @@ namespace CNA::Internal::Net
                         }
                         HandleStateChangeBroadcast(session, state, NetPacketCodec::DecodeStateChangeBroadcast(data));
                         break;
+                    case MessageTag::SessionPropertiesBroadcast:
+                        if (!IsFromAuthoritativeHost(state, peer))
+                        {
+                            RejectUnauthorizedHostOnlyMessage(state, peer, "SessionPropertiesBroadcast");
+                            break;
+                        }
+                        HandleSessionPropertiesBroadcast(
+                            session,
+                            NetPacketCodec::DecodeSessionPropertiesBroadcast(data)
+                        );
+                        break;
                     case MessageTag::AppData:
                         HandleAppData(session, state, peer, NetPacketCodec::DecodeAppData(data));
                         break;
@@ -1064,6 +1136,14 @@ namespace CNA::Internal::Net
         session->SetHostFromTransport(host, raiseHostChanged);
     }
 
+    void ENetBackend::ApplyTransportSessionProperties(
+        NetworkSession* session,
+        NetworkSessionProperties properties
+    )
+    {
+        session->SetSessionPropertiesFromTransport(std::move(properties));
+    }
+
     bool ENetBackend::RealNetworkingEnabled(NetworkSessionType sessionType)
     {
         return sessionType == NetworkSessionType::SystemLink;
@@ -1092,6 +1172,7 @@ namespace CNA::Internal::Net
         );
 #endif
         uint16_t boundPort = state->Host.getBoundPortProperty();
+        state->LastPublishedSessionProperties = session->getSessionPropertiesProperty();
 
         // Task 6.3: RegisterHost can throw (EnsureSocket's bind/create failure). Previously the
         // session was already emplace()'d into Sessions() by this point - a throw here left a
@@ -1177,6 +1258,7 @@ namespace CNA::Internal::Net
         // every pump regardless of whether any new ENet events arrived above, so a packet queued
         // by a previous pump still gets released on schedule even if nothing new comes in.
         ReleaseDuePendingDeliveries(session, state);
+        PublishSessionPropertiesIfChanged(session, state);
     }
 
     uint16_t ENetBackend::GetBoundPort(NetworkSession* session)
@@ -1253,6 +1335,7 @@ namespace CNA::Internal::Net
         Sessions()[session] = std::make_unique<SessionState>(
             SessionState{ENetHostHandle::CreateClient(kChannelLimit)}
         );
+        Sessions()[session]->LastPublishedSessionProperties = session->getSessionPropertiesProperty();
 #else
         StartHosting(session);
 #endif
