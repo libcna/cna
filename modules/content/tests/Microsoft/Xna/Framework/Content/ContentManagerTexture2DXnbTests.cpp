@@ -9,6 +9,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Internal/Xnb/Texture2DContentTypeReader.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -18,6 +19,7 @@
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Content::ContentManager;
+using Microsoft::Xna::Framework::Content::ContentLoadException;
 using Microsoft::Xna::Framework::Content::ContentTypeReaderManager;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::IGraphicsDeviceService;
@@ -165,6 +167,15 @@ TEST_F(ContentManagerTexture2DXnbTest, ResolvesGraphicsDeviceFromServiceProvider
 
     EXPECT_EQ(texture.getWidthProperty(), 1);
     EXPECT_EQ(texture.getHeightProperty(), 1);
+}
+
+TEST_F(ContentManagerTexture2DXnbTest, MissingCultureSuffixedTextureThrowsContentLoadException)
+{
+    ScratchContentRoot root;
+    ContentManager cm(nullptr, root.path().string());
+    cm.setGraphicsDevice(gd);
+
+    EXPECT_THROW((void)cm.Load<Texture2D>("Flag.fr-FR"), ContentLoadException);
 }
 
 TEST_F(ContentManagerTexture2DXnbTest, LoadRealLzxCompressedFixtureEndToEnd)

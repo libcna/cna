@@ -132,11 +132,9 @@ TEST_F(CnjSourceFileTest, MissingSourceFileThrows)
     ContentManager cm(nullptr, root.path().string());
     cm.setGraphicsDevice(gd);
 
-    // The missing sourceFile ultimately fails inside the same native image decode path an
-    // ordinary missing Texture2D file would (ImageLoader::Load throws std::runtime_error, not
-    // ContentLoadException) -- CNB-7/8 deliberately don't re-wrap that failure into a different
-    // exception type, since it's not a .cnj-specific error.
-    EXPECT_THROW(cm.Load<Texture2D>("broken"), std::runtime_error);
+    // The missing sourceFile ultimately fails inside the native image decode path. ContentManager
+    // exposes that reader failure through its documented ContentLoadException contract.
+    EXPECT_THROW(cm.Load<Texture2D>("broken"), ContentLoadException);
 }
 
 TEST_F(CnjSourceFileTest, MismatchedTypeThrowsContentLoadException)

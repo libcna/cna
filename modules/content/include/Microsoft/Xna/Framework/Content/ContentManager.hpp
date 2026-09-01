@@ -462,7 +462,25 @@ namespace Microsoft::Xna::Framework::Content
             LooseFileContentTypeReader<T>& reader = **readerPtr;
             const std::string resolvedPath = ResolveAssetPath(assetName, reader);
 
-            T result = reader.Read(resolvedPath, *this);
+            T result = [&]() -> T
+            {
+                try
+                {
+                    return reader.Read(resolvedPath, *this);
+                }
+                catch (const ContentLoadException&)
+                {
+                    throw;
+                }
+                catch (const std::exception& exception)
+                {
+                    // XNA exposes raw-file open/decode failures through ContentLoadException
+                    // too. Besides honoring Load<T>()'s public contract, this lets callers probe
+                    // a specialized asset name and fall back without knowing which reader ran.
+                    throw ContentLoadException(
+                        "ContentManager: could not load asset '" + assetName + "'.", exception);
+                }
+            }();
             loadedAssets_[cacheKey] = result;
             return result;
         }
