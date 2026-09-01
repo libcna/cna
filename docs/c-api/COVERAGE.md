@@ -10,9 +10,9 @@ The mandatory coverage gate derives the complete public C++ declaration inventor
 `modules/platform` substrate, and the C API's own headers are excluded by declared rules.
 No symbol counts as implemented merely because a related C operation exists.
 
-Snapshot: **553 headers**, **9492 symbols**, **8348 implemented**, **15 partial**, **663 planned**, **466 not applicable**. Explicitly excluded internal/detail headers: **132**.
+Snapshot: **553 headers**, **9497 symbols**, **8348 implemented**, **15 partial**, **668 planned**, **466 not applicable**. Explicitly excluded internal/detail headers: **132**.
 
-Full inventory SHA-256: `540878c18542b6e00e19af578daad261b42a38fe7d708d7c25d2546b72687485`.
+Full inventory SHA-256: `5144301b5c872600e5d56c40da2e7bb095a270a4c40f5ab47ace6d5dfeef940f`.
 
 The complete per-symbol Markdown is generated on demand into the ignored build tree so
 that a multi-megabyte derived file is not recommitted whenever one public declaration moves:
@@ -32,7 +32,7 @@ owner, hashes the complete matrix, and compares this summary. The CTest
 | Module | Headers | Symbols | Implemented | Partial | Planned | N/A |
 |---|---:|---:|---:|---:|---:|---:|
 | `audio` | 22 | 310 | 217 | 0 | 0 | 93 |
-| `content` | 48 | 1262 | 563 | 10 | 660 | 29 |
+| `content` | 48 | 1267 | 563 | 10 | 665 | 29 |
 | `core` | 15 | 157 | 151 | 0 | 0 | 6 |
 | `devices` | 20 | 215 | 187 | 0 | 0 | 28 |
 | `devices-ext` | 17 | 84 | 79 | 0 | 0 | 5 |

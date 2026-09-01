@@ -702,6 +702,15 @@ SYMBOL_OWNER_OVERRIDES: dict[str, str] = {
     "Microsoft::Xna::Framework::Content::ContentManager::LoadXnbAssetUntyped": "CBIND-122",
     "Microsoft::Xna::Framework::Content::ContentReader::ReadExternalReference": "CBIND-122",
     "Microsoft::Xna::Framework::Content::ContentReader::ReadAsset": "CBIND-122",
+    # CBIND-125, 2026-09-01. SAMPLE-077 added inheritance-aware reflective readers after the
+    # reflective-reader C binding slice had closed. These are C++ template/customization seams;
+    # keep only the five new declarations on an explicit design task instead of reopening the
+    # completed whole-header CBIND-114 owner.
+    "Microsoft::Xna::Framework::Content::AbstractReflectiveTypeReader": "CBIND-125",
+    "Microsoft::Xna::Framework::Content::AbstractReflectiveTypeReader::AbstractReflectiveTypeReader": "CBIND-125",
+    "Microsoft::Xna::Framework::Content::AbstractReflectiveTypeReader::Read": "CBIND-125",
+    "Microsoft::Xna::Framework::Content::ReflectiveTypeReaderBuilder::Base": "CBIND-125",
+    "Microsoft::Xna::Framework::Content::ReflectiveTypeReaderBuilder::RegisterAbstract": "CBIND-125",
 }
 
 

@@ -1577,6 +1577,16 @@ after the campaign had formally exited.
 |---|---|---|---|
 | CBIND-124 | Bind public APIs added while completing SAMPLE-060/061 | ✅ | **Done 2026-08-31.** The Windows Phone `Microsoft.Devices.Environment.DeviceType` query is now a fixed C identity plus `cna_environment_get_device_type`, available independently of the optional extended-device layer. `ObjectDictionaryEXT::GetTypeName` became data-bearing when SAMPLE-061 taught `ModelReader` to preserve a closed generic model-tag dictionary, so its logical managed name now has count/copy routes and is tested with the exact `Dictionary<string, List<Vector3>>` tag shape used by Marble Maze. The newly public `ContentReader` destructor and `GraphicsDevice` friendship declaration are dispositioned through their already-existing destroy route and non-callable friendship rule. Three additive exports take the ABI from `0.20.0` to `0.21.0`; strict-C behavior, C/C++ ABI walls, generated coverage, export baseline and release documents are required green. |
 
+## Phase B19 — the inherited reflective-reader tail
+
+SAMPLE-077 added inheritance-aware reflective XNB customization points after the reflective-reader
+C binding slice closed. They are public C++ templates rather than an immediately obvious C ABI,
+and assigning them to the completed whole-header owner made the mandatory coverage gate fail.
+
+| # | Task | Rows | Status | Acceptance criteria |
+|---|---|---:|---|---|
+| CBIND-125 | Design or disposition inheritance-aware reflective-reader customization | 5 | ⬜ | Decide whether C callers need to declare an abstract stored type, register a concrete stored type, and compose a derived reader from a base reader. If bound, design a C-native descriptor/callback contract without exposing templates, RTTI or C++ ownership and add strict-C dispatch, malformed-type, inheritance and lifetime evidence; otherwise record an owner-approved disposition. Remove the five exact `SYMBOL_OWNER_OVERRIDES` entries when resolved. This intermediate qualification records the live backlog only and adds no export or ABI bump. |
+
 ## Mandatory test layers
 
 Every implemented public C entry point must receive all applicable coverage in the same task:
@@ -1637,8 +1647,9 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-**Snapshot (2026-08-31, after `CBIND-124`):** 553 headers / 9,492 symbols —
-**8,348 implemented, 15 approved partial, 663 planned, 466 not applicable.** ABI `0.21.0`, 4,054
+**Snapshot (2026-09-01, after `CBIND-125` records the inherited-reader tail):** 553 headers /
+**9,497 symbols — 8,348 implemented, 15 approved partial, 668 planned, 466 not applicable.** ABI
+`0.21.0`, 4,054
 exported symbols — the same 4,054 with `CNA_CNAEXT` on and off (measured symbol by symbol: zero
 differ), which is the engine layer's ABI promise measured rather than asserted.
 
