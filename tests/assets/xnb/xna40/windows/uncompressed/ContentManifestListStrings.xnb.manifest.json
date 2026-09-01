@@ -1,0 +1,35 @@
+{
+  "producer": "Microsoft XNA Game Studio 4.0 Content Pipeline",
+  "sourceSample": "ContentManifestExtensions_4_0",
+  "sourcePath": "SampleGame/SampleGameContent/manifest.manifest",
+  "sourceLicense": "MS-PL (same license as CNA itself)",
+  "sha256": "84bc94f58c304101061c37a5c9b235c47761b27966442fb14511c62308a6949e",
+  "platform": "w",
+  "version": 5,
+  "compressed": false,
+  "totalLength": 454,
+  "rootReader": "Microsoft.Xna.Framework.Content.ListReader`1[[System.String]]",
+  "expectedType": "std::vector<std::string>",
+  "sharedResourceCount": 0,
+  "typeReaderTable": [
+    "Microsoft.Xna.Framework.Content.ListReader`1[[System.String]]",
+    "Microsoft.Xna.Framework.Content.StringReader"
+  ],
+  "expectedItems": [
+    "Characters\\Bear",
+    "Characters\\Cardinal",
+    "Characters\\Dog",
+    "Characters\\Duck",
+    "clock",
+    "flashlight",
+    "heart",
+    "heart_grey",
+    "Font",
+    "Content\\Characters\\Duck.png",
+    "Content\\CopiedFile1.txt",
+    "Content\\CopiedFile2.txt",
+    "Content\\CopiedFile3.txt",
+    "Content\\CopiedFile4.txt"
+  ],
+  "notes": "SAMPLE-092 fixture built from the unchanged Microsoft sample's ManifestImporter/ManifestProcessor with the official XNA 4.0 BuildContent task. The processor parsed the original content project, rewrote the manifest source to the exact 14-item deployment list, and let XNA's automatic writer serialize the returned List<string>. Reproduction and independent payload dump are retained under /rv/tmp/samples/SAMPLE-092-ContentManifestExtensions_4_0/."
+}

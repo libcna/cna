@@ -56,6 +56,7 @@ namespace
     };
 
     constexpr const char* kUncompressedDir = "tests/assets/xnb/monogame/windows/uncompressed";
+    constexpr const char* kXna40UncompressedDir = "tests/assets/xnb/xna40/windows/uncompressed";
 }
 
 TEST_F(XnbBuiltInReaderRegistrationTest, RegistersEveryPrimitiveReader)
@@ -75,12 +76,39 @@ TEST_F(XnbBuiltInReaderRegistrationTest, RegistersEveryPrimitiveReader)
         "Microsoft.Xna.Framework.Content.CharReader",
         "Microsoft.Xna.Framework.Content.StringReader",
         "Microsoft.Xna.Framework.Content.ListReader`1[[System.Int32]]",
+        "Microsoft.Xna.Framework.Content.ListReader`1[[System.String]]",
         "Microsoft.Xna.Framework.Content.DictionaryReader`2[[System.String],[System.Int32]]",
     };
     for (const char* name : kNames)
     {
         EXPECT_TRUE(ContentTypeReaderManager::IsRegistered(name)) << name;
     }
+}
+
+TEST_F(XnbBuiltInReaderRegistrationTest,
+       FreshContentManagerLoadsAnXna40ListOfStringsFixtureWithNoOtherSetup)
+{
+    ContentManager cm(nullptr, kXna40UncompressedDir);
+    const std::vector<std::string> files =
+        cm.Load<std::vector<std::string>>("ContentManifestListStrings");
+
+    const std::vector<std::string> expected = {
+        "Characters\\Bear",
+        "Characters\\Cardinal",
+        "Characters\\Dog",
+        "Characters\\Duck",
+        "clock",
+        "flashlight",
+        "heart",
+        "heart_grey",
+        "Font",
+        "Content\\Characters\\Duck.png",
+        "Content\\CopiedFile1.txt",
+        "Content\\CopiedFile2.txt",
+        "Content\\CopiedFile3.txt",
+        "Content\\CopiedFile4.txt",
+    };
+    EXPECT_EQ(files, expected);
 }
 
 TEST_F(XnbBuiltInReaderRegistrationTest, RegistersEveryMathReader)

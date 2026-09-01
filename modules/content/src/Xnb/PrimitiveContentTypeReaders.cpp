@@ -39,6 +39,18 @@ namespace CNA::Internal::Xnb
         ContentTypeReaderManager::AddTypeCreator(
             "Microsoft.Xna.Framework.Content.StringReader", [] { return std::make_unique<StringReader>(); });
 
+        // XNA 4.0's automatic writer serializes a processor-returned List<string> with this
+        // framework reader pair. ContentManifestExtensions uses it as the root object of its
+        // generated deployment manifest; it is a standard primitive collection, not a reader
+        // owned by that sample (SAMPLE-092).
+        ContentTypeReaderManager::AddTypeCreator(
+            "Microsoft.Xna.Framework.Content.ListReader`1[[System.String]]",
+            [] {
+                return std::make_unique<ListReader<std::string>>(
+                    "System.Collections.Generic.List`1[[System.String]]",
+                    "Microsoft.Xna.Framework.Content.StringReader");
+            });
+
         // A `List<int>`, which is how a skeleton hierarchy -- one parent index per bone -- reaches
         // a game from a custom model processor. The template existed but no instantiation of it
         // was registered, and an .xnb's type-reader table must resolve IN FULL before a single
