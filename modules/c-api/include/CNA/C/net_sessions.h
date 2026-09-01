@@ -655,6 +655,21 @@ CNA_C_API CNA_Result cna_network_session_copy_session_properties(
     CNA_NetworkSessionPropertiesHandle* out_properties);
 
 /**
+ * @brief Replaces a session's properties from a caller-owned list.
+ *
+ * @param session Owned session handle.
+ * @param properties Property-list handle whose current values are copied into the session.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ *
+ * The canonical getter returns a mutable reference. The C ABI keeps that reference from escaping
+ * its native lifetime: copy the session properties, mutate the owned list through the
+ * `cna_network_session_properties_*` routes, then call this function to apply the values.
+ */
+CNA_C_API CNA_Result cna_network_session_replace_session_properties(
+    CNA_NetworkSessionHandle session,
+    CNA_NetworkSessionPropertiesHandle properties);
+
+/**
  * @brief Gets a session's current state.
  *
  * @param session Owned session handle.

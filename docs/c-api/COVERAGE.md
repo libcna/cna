@@ -10,9 +10,9 @@ The mandatory coverage gate derives the complete public C++ declaration inventor
 `modules/platform` substrate, and the C API's own headers are excluded by declared rules.
 No symbol counts as implemented merely because a related C operation exists.
 
-Snapshot: **553 headers**, **9498 symbols**, **8348 implemented**, **15 partial**, **668 planned**, **467 not applicable**. Explicitly excluded internal/detail headers: **132**.
+Snapshot: **553 headers**, **9499 symbols**, **8349 implemented**, **15 partial**, **668 planned**, **467 not applicable**. Explicitly excluded internal/detail headers: **132**.
 
-Full inventory SHA-256: `719b7e7ef795f58c653ee5060579fd402e1d82da8499f0f45787da67b2bcb1b8`.
+Full inventory SHA-256: `74267a1da5ced7f9e36e4673afe7d9bcc1207b6ab30ade2610e9b64b5b67d6eb`.
 
 The complete per-symbol Markdown is generated on demand into the ignored build tree so
 that a multi-megabyte derived file is not recommitted whenever one public declaration moves:
@@ -42,7 +42,7 @@ owner, hashes the complete matrix, and compares this summary. The CTest
 | `input` | 50 | 864 | 836 | 0 | 0 | 28 |
 | `math` | 23 | 928 | 927 | 0 | 0 | 1 |
 | `media` | 24 | 337 | 285 | 0 | 0 | 52 |
-| `net` | 23 | 268 | 251 | 1 | 0 | 16 |
+| `net` | 23 | 269 | 252 | 1 | 0 | 16 |
 | `runtime` | 20 | 302 | 225 | 4 | 0 | 73 |
 | `storage` | 3 | 42 | 42 | 0 | 0 | 0 |
 

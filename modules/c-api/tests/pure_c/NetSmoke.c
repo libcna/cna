@@ -862,6 +862,7 @@ static int validate_session_state(const CNA_NetworkSessionHandle session)
     CNA_NetworkSessionState state = CNA_NETWORK_SESSION_STATE_ENDED;
     CNA_NetworkSessionType type = CNA_NETWORK_SESSION_TYPE_RANKED;
     CNA_NetworkSessionPropertiesHandle properties = CNA_INVALID_HANDLE;
+    CNA_OptionalInt32 property = absent();
     CNA_Bool flag = CNA_TRUE;
     char buffer[80];
     uint64_t bytes = UINT64_C(0);
@@ -922,10 +923,23 @@ static int validate_session_state(const CNA_NetworkSessionHandle session)
         flag != CNA_TRUE) {
         return 0;
     }
-    /* Session properties come back as an independent copy, like every other copied collection. */
+    /* C preserves the mutable XNA property through an owned copy/mutate/replace round trip. */
+    if (cna_network_session_replace_session_properties(session, CNA_INVALID_HANDLE) !=
+            CNA_RESULT_INVALID_HANDLE ||
+        cna_network_session_copy_session_properties(session, &properties) != CNA_RESULT_SUCCESS ||
+        cna_network_session_properties_get_count(properties, &number) != CNA_RESULT_SUCCESS ||
+        number != 0 ||
+        cna_network_session_properties_add(properties, present(23)) != CNA_RESULT_SUCCESS ||
+        cna_network_session_replace_session_properties(session, properties) != CNA_RESULT_SUCCESS ||
+        cna_network_session_properties_destroy(properties) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    properties = CNA_INVALID_HANDLE;
     if (cna_network_session_copy_session_properties(session, &properties) != CNA_RESULT_SUCCESS ||
         cna_network_session_properties_get_count(properties, &number) != CNA_RESULT_SUCCESS ||
-        number != 0) {
+        number != 1 ||
+        cna_network_session_properties_get_item(properties, 0, &property) != CNA_RESULT_SUCCESS ||
+        property.has_value != CNA_TRUE || property.value != 23) {
         return 0;
     }
     return cna_network_session_properties_destroy(properties) == CNA_RESULT_SUCCESS &&

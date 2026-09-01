@@ -67,6 +67,26 @@ The per-blocker report `fixcnacs.md` Phase 10 asks for is `docs/c-api/CABI_BLOCK
 | CABI-46 | Preserve GL bindings for bounded operations while releasing them after frames | qualification follow-up | DONE |
 | CABI-47 | C API renderer registry test handles retired numeric identity gaps | qualification follow-up | DONE |
 | CABI-48 | Synthetic PlayerMatch joins remain transport-free after blocking SystemLink Join | qualification follow-up | DONE |
+| CABI-49 | Preserve mutable `NetworkSession.SessionProperties` through C | SAMPLE-100 qualification follow-up | DONE |
+
+### CABI-49 — session-property copies can be applied back to the live session
+
+SAMPLE-100 added the missing non-const XNA `NetworkSession.SessionProperties` getter so a host can
+change its advertised options. The C coverage gate correctly caught that new overload: the
+existing C route returned an independently owned property-list copy, but C had no operation that
+could apply mutations to the live session. Merely approving the new symbol against the old copy
+route would therefore have hidden a real binding gap.
+
+`cna_network_session_replace_session_properties` completes the safe C adaptation: copy the list,
+mutate the owned `CNA_NetworkSessionPropertiesHandle`, then copy its values back into the live
+canonical collection. No C++ reference or lifetime-bound pointer crosses the ABI. `NetSmoke.c`
+proves invalid-handle refusal and the full empty-copy -> mutate -> replace -> fresh-copy readback
+sequence. The strict-C Debug smoke, all eleven coverage/ABI/release gates and the optimized Release
+ABI check pass. The change is additive: the measured surface is now 4,055 exports with every prior
+layout and symbol unchanged. Both WEBGL1 and WEBGL2 regenerate all 4,055 exports, pass their exact
+1/1 and 2/2 link contracts, instantiate under Node and complete the real five-frame browser probe.
+WEBGL2 additionally completes the 60- and 600-frame browser canaries with exact Update/Draw counts,
+BigInt handles and no page errors or unhandled rejections.
 
 ### CABI-48 — only real SystemLink sessions perform a transport handshake
 

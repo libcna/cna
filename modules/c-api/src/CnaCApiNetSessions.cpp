@@ -1238,6 +1238,22 @@ CNA_Result cna_network_session_copy_session_properties(
     });
 }
 
+CNA_Result cna_network_session_replace_session_properties(
+    const CNA_NetworkSessionHandle sessionHandle,
+    const CNA_NetworkSessionPropertiesHandle propertiesHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        NetworkSessionProperties* properties = nullptr;
+        if (const CNA_Result result = BorrowNetworkSessionProperties(propertiesHandle, &properties);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return NetworkSessionCommand(sessionHandle, [properties](NetworkSession& session) {
+            session.getSessionPropertiesProperty() = *properties;
+        });
+    });
+}
+
 CNA_Result cna_network_session_get_session_state(
     const CNA_NetworkSessionHandle sessionHandle,
     CNA_NetworkSessionState* const outValue)

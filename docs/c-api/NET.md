@@ -165,6 +165,12 @@ All four rosters — all, local, remote and previous — are a roster identity p
 indexed **borrowed view**. A view keeps its session alive and blocks the session's release, so a
 caller releases every view first.
 
+The canonical `SessionProperties` getter returns a mutable list. C does not receive a reference
+whose lifetime is tied invisibly to the session: `cna_network_session_copy_session_properties`
+creates an owned list, the ordinary property-list routes mutate it, and
+`cna_network_session_replace_session_properties` copies those values back into the live session.
+The temporary list may be destroyed immediately after replacement.
+
 Two lifetime rules follow from the canonical contract rather than from the binding:
 
 - `cna_network_session_add_remote_gamer_ext` retains the gamer handle's resource for the session's
