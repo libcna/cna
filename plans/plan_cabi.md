@@ -66,6 +66,23 @@ The per-blocker report `fixcnacs.md` Phase 10 asks for is `docs/c-api/CABI_BLOCK
 | CABI-45 | Stable identity for graphics-resource lifecycle events | CNA-C# audit | DEFERRED — ABI/lifecycle design |
 | CABI-46 | Preserve GL bindings for bounded operations while releasing them after frames | qualification follow-up | DONE |
 | CABI-47 | C API renderer registry test handles retired numeric identity gaps | qualification follow-up | DONE |
+| CABI-48 | Synthetic PlayerMatch joins remain transport-free after blocking SystemLink Join | qualification follow-up | DONE |
+
+### CABI-48 — only real SystemLink sessions perform a transport handshake
+
+SAMPLE-091 correctly made native `SystemLink` Join wait for `ServerWelcome`, but live C-API
+qualification exposed an over-broad edge: a caller-created synthetic `PlayerMatch`
+`AvailableNetworkSession` can carry descriptive host metadata, and `EndJoin` interpreted that
+address as a real ENet endpoint. The synchronous C route then waited five seconds for a transport
+that CNA deliberately does not implement for `PlayerMatch`.
+
+`EndJoin` now applies the existing `ENetBackend::RealNetworkingEnabled(sessionType)` policy before
+connecting or waiting. A new native regression proves that a metadata-bearing synthetic
+`PlayerMatch` session returns without binding ENet, while the real-peer SystemLink regression still
+proves the authoritative Host handshake. `CApi_NetSmoke` covers the original C-facing sequence.
+The transport-only `SetHostFromTransport` hook is private to `ENetBackend` rather than an accidental
+public CNAEXT declaration; this restores the generated C-API coverage invariant without inventing
+a binding route for an internal operation.
 
 ### CABI-46 — operation restore and frame handoff are different contracts
 

@@ -59,6 +59,22 @@ namespace CNA::Internal::Net
         static bool RealNetworkingEnabled(NetworkSessionType sessionType);
 
         /**
+         * @brief Installs the host identity established by the transport handshake.
+         *
+         * This internal bridge is the only ENet route allowed to mutate NetworkSession's private
+         * host pointer. Initial establishment is silent; migration can request HostChanged.
+         *
+         * @param session The session whose host was established.
+         * @param host The authoritative local or remote host gamer.
+         * @param raiseHostChanged Whether the replacement represents host migration.
+         */
+        static void EstablishTransportHost(
+            NetworkSession* session,
+            NetworkGamer* host,
+            bool raiseHostChanged
+        );
+
+        /**
          * @brief Starts hosting a real ENet host for session, if not already hosting.
          *
          * Binds to an OS-assigned ephemeral UDP port. No-op if

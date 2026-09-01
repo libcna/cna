@@ -36,6 +36,11 @@ namespace Microsoft::Xna::Framework::GamerServices
     class SignedInGamer;
 }
 
+namespace CNA::Internal::Net
+{
+    class ENetBackend;
+}
+
 namespace Microsoft::Xna::Framework::Net
 {
     class NetworkGamer;
@@ -481,17 +486,6 @@ namespace Microsoft::Xna::Framework::Net
         CNAEXT void SendNetworkEvent(NetworkEvent evt);
 
         /**
-         * @brief Replaces the session host with the identity established by the transport.
-         *
-         * This is an internal CNA extension used by the ENet handshake. Initial host discovery
-         * does not raise HostChanged; a host-migration replacement does.
-         *
-         * @param host The authoritative local or remote host identity.
-         * @param raiseHostChanged Whether to raise HostChanged for a migration replacement.
-         */
-        CNAEXT void SetHostFromTransport(NetworkGamer* host, bool raiseHostChanged);
-
-        /**
          * @brief Adds a remote gamer to the session and queues its GamerJoin event.
          *
          * Not part of FNA's original design (FNA's Update() never populates AllGamers/
@@ -794,6 +788,18 @@ namespace Microsoft::Xna::Framework::Net
         [[nodiscard]] static NetworkSession* EndJoinInvited(System::IAsyncResult* result);
 
     private:
+        friend class CNA::Internal::Net::ENetBackend;
+
+        /**
+         * @brief Replaces the session host with the identity established by the transport.
+         *
+         * Initial host discovery does not raise HostChanged; a host-migration replacement does.
+         *
+         * @param host The authoritative local or remote host identity.
+         * @param raiseHostChanged Whether to raise HostChanged for a migration replacement.
+         */
+        CNAEXT void SetHostFromTransport(NetworkGamer* host, bool raiseHostChanged);
+
         /**
          * @brief Internal IAsyncResult implementation backing NetworkSession's Begin/End pairs.
          */

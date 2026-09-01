@@ -528,8 +528,8 @@ namespace CNA::Internal::Net
             // not represent a host replacement and deliberately stays silent.
             if (welcomedHostGamer != nullptr)
             {
-                session->SetHostFromTransport(
-                    welcomedHostGamer, state.AwaitingMigrationHostChangeEXT
+                ENetBackend::EstablishTransportHost(
+                    session, welcomedHostGamer, state.AwaitingMigrationHostChangeEXT
                 );
                 state.AwaitingMigrationHostChangeEXT = false;
             }
@@ -821,7 +821,9 @@ namespace CNA::Internal::Net
                 // connections.
                 ENetDiscoveryService::RegisterHost(session, state.Host.getBoundPortProperty());
 
-                session->SetHostFromTransport(session->getLocalGamersProperty()[0], true);
+                ENetBackend::EstablishTransportHost(
+                    session, session->getLocalGamersProperty()[0], true
+                );
                 return true;
             }
 
@@ -1051,6 +1053,15 @@ namespace CNA::Internal::Net
         private:
             ENetPacket* packet_;
         };
+    }
+
+    void ENetBackend::EstablishTransportHost(
+        NetworkSession* session,
+        NetworkGamer* host,
+        bool raiseHostChanged
+    )
+    {
+        session->SetHostFromTransport(host, raiseHostChanged);
     }
 
     bool ENetBackend::RealNetworkingEnabled(NetworkSessionType sessionType)

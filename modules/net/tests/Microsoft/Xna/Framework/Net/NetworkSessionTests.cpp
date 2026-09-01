@@ -950,6 +950,41 @@ TEST(NetworkSessionTest, JoinActivatesRealNetworkingForTheCorrectSessionType) {
     serverThread.request_stop();
 }
 
+// A C binding can construct an AvailableNetworkSession description directly. Host metadata on a
+// synthetic PlayerMatch entry is descriptive only: CNA has no PlayerMatch transport, so Join must
+// not interpret that address as a SystemLink endpoint and wait for a ServerWelcome that can never
+// arrive. The SAMPLE-091 handshake wait originally missed this session-type gate.
+TEST(NetworkSessionTest, JoinDoesNotActivateTransportForSyntheticPlayerMatchSession) {
+    SignedInGamer joiningGamer = MakeSignedInGamer("PlayerMatchJoiner");
+    Gamer::setSignedInGamersProperty(new SignedInGamerCollection(
+        SignedInGamerCollection::CreateInternal({&joiningGamer})
+    ));
+    struct RestoreGlobalGuard {
+        ~RestoreGlobalGuard() {
+            Gamer::setSignedInGamersProperty(
+                new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({}))
+            );
+        }
+    } restoreGuard;
+
+    AvailableNetworkSession availableSession = AvailableNetworkSession::CreateInternal(
+        1, "SyntheticHost", 0, 8, NetworkSessionProperties{},
+        QualityOfService::CreateInternal(), "127.0.0.1", 27015,
+        NetworkSessionType::PlayerMatch
+    );
+
+    NetworkSession* joined = nullptr;
+    ASSERT_NO_THROW(joined = NetworkSession::Join(&availableSession));
+    ASSERT_NE(joined, nullptr);
+    EXPECT_EQ(joined->getSessionTypeProperty(), NetworkSessionType::PlayerMatch);
+    EXPECT_FALSE(joined->getIsHostProperty());
+    EXPECT_EQ(joined->getHostProperty(), joined->getLocalGamersProperty()[0]);
+    EXPECT_EQ(CNA::Internal::Net::ENetBackend::GetBoundPort(joined), 0);
+
+    joined->Dispose();
+    delete joined;
+}
+
 // --- Static JoinInvited/BeginJoinInvited/EndJoinInvited family ---
 
 TEST(NetworkSessionTest, BeginJoinInvitedValidatesMaxLocalGamers) {

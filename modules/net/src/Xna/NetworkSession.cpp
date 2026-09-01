@@ -998,9 +998,12 @@ namespace Microsoft::Xna::Framework::Net
         // Task 2.15: the constructor above only starts activeSession_'s own ENet host (see its
         // own RealNetworkingEnabled-gated StartHosting call) - actually connecting out to the
         // session being joined is this call's own responsibility, same as ConnectToHost's other
-        // production caller. Skipped for a manually-constructed AvailableNetworkSession with no
-        // real discovery-sourced connect info (GetConnectAddress() empty).
-        if (!pendingJoinAddress_.empty())
+        // production caller. Non-SystemLink session types remain synthetic even if an external
+        // caller supplied descriptive host metadata, and a manually-constructed SystemLink entry
+        // with no real discovery-sourced connect info (GetConnectAddress() empty) also stays
+        // disconnected.
+        if (CNA::Internal::Net::ENetBackend::RealNetworkingEnabled(actionSessionType) &&
+            !pendingJoinAddress_.empty())
         {
             const auto cleanupFailedJoin = []
             {

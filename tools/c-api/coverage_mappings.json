@@ -13828,6 +13828,20 @@
       ]
     },
     {
+      "id": "network-session-transport-friend",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::NetworkSession::ENetBackend$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "no C form: this friendship declaration lets CNA's private ENet transport establish the authoritative host identity after its wire handshake. It declares no callable operation and does not grant a C caller transport ownership",
+      "tests": "the public result of the handshake is covered by `CApi_NetSmoke`, the real-peer `NetworkSessionTest.JoinActivatesRealNetworkingForTheCorrectSessionType` regression and the synthetic-session type-policy regression",
+      "status": "not-applicable",
+      "task": "CBIND-047",
+      "approved_symbols": [
+        "CPP-7D3AD649A208"
+      ]
+    },
+    {
       "id": "game-platform-accessors",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Game::(GetPlatformEXT|GetPlatformCapabilitiesEXT|GameTestPeer)$",
       "kinds": [
