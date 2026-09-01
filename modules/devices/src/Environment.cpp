@@ -2,10 +2,14 @@
 
 #include "Microsoft/Devices/Environment.hpp"
 
+#include "CNA/TargetPlatform.hpp"
+
 namespace Microsoft::Devices
 {
     DeviceType Environment::getDeviceTypeProperty()
     {
-        return DeviceType::Device;
+        return CNA::getCurrentPlatform() == CNA::TargetPlatform::Web
+            ? DeviceType::Emulator
+            : DeviceType::Device;
     }
 }

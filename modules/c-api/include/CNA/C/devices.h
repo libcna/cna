@@ -26,8 +26,10 @@ typedef uint32_t CNA_DeviceType;
  * @param out_device_type Receives one of the `CNA_DEVICE_TYPE_*` identities.
  * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
  *
- * CNA reports a physical device on every currently supported host. This query is part of the
- * canonical Windows Phone API and is available independently of CNA's extended device layer.
+ * CNA reports `CNA_DEVICE_TYPE_EMULATOR` on its browser target because that target emulates the
+ * Windows Phone input environment without physical sensor access. Supported physical host targets
+ * report `CNA_DEVICE_TYPE_DEVICE`. This query is part of the canonical Windows Phone API and is
+ * available independently of CNA's extended device layer.
  */
 CNA_C_API CNA_Result cna_environment_get_device_type(CNA_DeviceType* out_device_type);
 

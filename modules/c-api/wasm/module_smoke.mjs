@@ -55,6 +55,23 @@ try {
     cna._free(out);
 }
 
+// The browser build emulates the Windows Phone input environment: it has no physical browser
+// sensor backend, so canonical phone samples must take their emulator-input branch. Exercise the
+// C route, not only the C++ Environment property, so bindings cannot observe a different identity.
+const deviceTypeOut = cna._malloc(4);
+try {
+    cna.HEAPU32[deviceTypeOut >> 2] = 0xffffffff;
+    const result = cna._cna_environment_get_device_type(deviceTypeOut);
+    const deviceType = cna.HEAPU32[deviceTypeOut >> 2];
+    console.log(`cna_environment_get_device_type() -> result=${result} type=${deviceType}`);
+    if (result !== 0 || deviceType !== 1) {
+        console.error('the Web target did not report CNA_DEVICE_TYPE_EMULATOR');
+        exit(1);
+    }
+} finally {
+    cna._free(deviceTypeOut);
+}
+
 // Completeness: every generated name must actually be on the module.
 if (exportsPath) {
     const declared = JSON.parse(readFileSync(exportsPath, 'utf8'));

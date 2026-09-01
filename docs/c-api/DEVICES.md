@@ -10,6 +10,15 @@ records only what a consumer cannot read off the headers; the general contracts 
 The family is being mapped in slices; [`COVERAGE.md`](COVERAGE.md) reports the current counts and
 explains how to generate the authoritative per-symbol matrix.
 
+## Host identity
+
+`cna_environment_get_device_type` preserves the Windows Phone distinction used by samples to
+select physical sensor input or the emulator's keyboard controls. CNA's Android, iOS and desktop
+targets are physical hosts and report `CNA_DEVICE_TYPE_DEVICE`; the browser target reports
+`CNA_DEVICE_TYPE_EMULATOR`, because CNA deliberately exposes no physical browser sensor backend.
+The query is canonical and remains available when the optional CNA device-extension layer is
+compiled out.
+
 ## Timestamps
 
 Sensor readings carry `CNA_DateTimeOffset`, the ABI form of the runtime's date-and-offset type: two

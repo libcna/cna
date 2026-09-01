@@ -14,7 +14,8 @@ namespace Microsoft::Devices
 
         /**
          * @brief Gets the kind of device on which the application is running.
-         * @return Device for CNA's supported physical host platforms.
+         * @return Emulator for CNA's browser target, which emulates the Windows Phone input
+         * environment without physical sensor access; Device for supported physical host targets.
          */
         [[nodiscard]] static DeviceType getDeviceTypeProperty();
     };

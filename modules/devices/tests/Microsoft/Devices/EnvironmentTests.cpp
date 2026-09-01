@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include "CNA/TargetPlatform.hpp"
 #include "Microsoft/Devices/DeviceType.hpp"
 #include "Microsoft/Devices/Environment.hpp"
 
@@ -13,7 +14,10 @@ TEST(EnvironmentTests, DeviceTypeDefinesDeviceAndEmulatorAsDistinctValues)
     EXPECT_NE(DeviceType::Device, DeviceType::Emulator);
 }
 
-TEST(EnvironmentTests, DeviceTypePropertyReportsPhysicalDeviceOnSupportedHosts)
+TEST(EnvironmentTests, DeviceTypePropertyMatchesTheCurrentHostKind)
 {
-    EXPECT_EQ(Environment::getDeviceTypeProperty(), DeviceType::Device);
+    const DeviceType expected = CNA::getCurrentPlatform() == CNA::TargetPlatform::Web
+        ? DeviceType::Emulator
+        : DeviceType::Device;
+    EXPECT_EQ(Environment::getDeviceTypeProperty(), expected);
 }
