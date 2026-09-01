@@ -14,6 +14,10 @@
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
+#include <atomic>
+#include <chrono>
+#include <future>
+#include <thread>
 
 using namespace Microsoft::Xna::Framework::Net;
 using Microsoft::Xna::Framework::GamerServices::Gamer;
@@ -838,20 +842,60 @@ TEST(NetworkSessionTest, BeginJoinRejectsNullAvailableSession) {
     );
 }
 
-// Task 2.15: BeginJoin/EndJoin hardcoded NetworkSessionType::PlayerMatch instead of deriving it
-// from the AvailableNetworkSession being joined (an acknowledged upstream FNA FIXME - harmless in
-// FNA itself since its networking is entirely stubbed out regardless of session type, but a real
-// functional gap in CNA, whose ENet transport is gated specifically on SystemLink). Every session
-// produced via the real public Join() entry point used to have real networking permanently
-// disabled; only tests calling ConnectToHost directly (bypassing Join()) ever exercised the real
-// handshake. This test calls the real public Join() - not ConnectToHost directly - and confirms
-// real networking actually activates end-to-end: the joined session reports the correct session
-// type, gets its own real ENet host bound, and actually connects out to (and completes a full
-// ClientHello/ServerWelcome handshake with) the session described by the AvailableNetworkSession.
+// SAMPLE-091 regression: Join previously returned before ClientHello/ServerWelcome completed and
+// left Host pointing at the client's own local gamer. ClientServerSample faithfully sends its
+// first input packet to session.Host before calling session.Update, so the 16-byte client-input
+// packet was looped back locally and then misread as the host's 17-byte state record. Exercise the
+// real public Join route and a real ENet handshake; Host must already identify the remote peer at
+// return, and the first packet sent through that identity must reach the actual server.
 TEST(NetworkSessionTest, JoinActivatesRealNetworkingForTheCorrectSessionType) {
     CNA::Internal::Net::ENetHostHandle fakeHostBeingJoined = CNA::Internal::Net::ENetHostHandle::CreateHost(0, 4, 2);
     uint16_t fakeHostPort = fakeHostBeingJoined.getBoundPortProperty();
     ASSERT_GT(fakeHostPort, 0);
+
+    std::promise<CNA::Internal::Net::AppDataMessage> receivedAppDataPromise;
+    std::future<CNA::Internal::Net::AppDataMessage> receivedAppData = receivedAppDataPromise.get_future();
+    std::atomic<bool> receivedHello{false};
+    std::atomic<bool> appDataRecorded{false};
+    std::jthread serverThread([&](std::stop_token stopToken) {
+        ENetPeer* peerFromHostSide = nullptr;
+        while (!stopToken.stop_requested()) {
+            ENetEvent evt{};
+            if (fakeHostBeingJoined.Service(0, evt) <= 0) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                continue;
+            }
+            if (evt.type == ENET_EVENT_TYPE_CONNECT) {
+                peerFromHostSide = evt.peer;
+                continue;
+            }
+            if (evt.type != ENET_EVENT_TYPE_RECEIVE) {
+                continue;
+            }
+
+            std::vector<SharpRuntime::bytecs> data(
+                evt.packet->data, evt.packet->data + evt.packet->dataLength
+            );
+            const auto tag = CNA::Internal::Net::NetPacketCodec::PeekTag(data);
+            if (tag == CNA::Internal::Net::MessageTag::ClientHello) {
+                receivedHello.store(true);
+                CNA::Internal::Net::ServerWelcomeMessage welcome;
+                welcome.AssignedWireIds = {5};
+                welcome.ExistingRoster = {{0, "FakeHost", true}};
+                const auto bytes = CNA::Internal::Net::NetPacketCodec::Encode(welcome);
+                fakeHostBeingJoined.Send(
+                    peerFromHostSide, 0, bytes.data(), bytes.size(), ENET_PACKET_FLAG_RELIABLE
+                );
+                fakeHostBeingJoined.Flush();
+            } else if (tag == CNA::Internal::Net::MessageTag::AppData &&
+                       !appDataRecorded.exchange(true)) {
+                receivedAppDataPromise.set_value(
+                    CNA::Internal::Net::NetPacketCodec::DecodeAppData(data)
+                );
+            }
+            enet_packet_destroy(evt.packet);
+        }
+    });
 
     // See Task 2.15's fix note on AddLocalGamerRaisesGamerJoinedForAnAlreadySubscribedHandler
     // (above) for why this installs a fresh empty collection on teardown rather than restoring a
@@ -876,44 +920,34 @@ TEST(NetworkSessionTest, JoinActivatesRealNetworkingForTheCorrectSessionType) {
     NetworkSession* joined = NetworkSession::Join(&availableSession);
     ASSERT_NE(joined, nullptr);
     EXPECT_EQ(joined->getSessionTypeProperty(), NetworkSessionType::SystemLink);
-    // Real networking activated at all - false under the old hardcoded-PlayerMatch bug, since
-    // RealNetworkingEnabled(PlayerMatch) is false and StartHosting is never called.
     EXPECT_GT(CNA::Internal::Net::ENetBackend::GetBoundPort(joined), 0);
 
-    // The stronger, full round-trip proof: Join() actually called ConnectToHost with the right
-    // address/port, and the fake host on the other end sees a real CONNECT plus a ClientHello.
-    bool connected = false;
-    ENetPeer* peerFromHostSide = nullptr;
-    for (int i = 0; i < 200 && !connected; ++i) {
-        joined->Update();
-        ENetEvent evt{};
-        if (fakeHostBeingJoined.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
-            connected = true;
-            peerFromHostSide = evt.peer;
-        }
-    }
-    ASSERT_TRUE(connected);
+    ASSERT_TRUE(receivedHello.load());
+    NetworkGamer* host = joined->getHostProperty();
+    ASSERT_NE(host, nullptr);
+    EXPECT_NE(host, joined->getLocalGamersProperty()[0]);
+    EXPECT_FALSE(host->getIsLocalProperty());
+    EXPECT_TRUE(host->getIsHostProperty());
+    EXPECT_EQ(host->getGamertagProperty(), "FakeHost");
 
-    CNA::Internal::Net::ClientHelloMessage* receivedHello = nullptr;
-    CNA::Internal::Net::ClientHelloMessage helloStorage;
-    for (int i = 0; i < 200 && !receivedHello; ++i) {
+    const std::vector<SharpRuntime::bytecs> payload{1, 2, 3, 4};
+    joined->getLocalGamersProperty()[0]->SendData(payload, SendDataOptions::Reliable, host);
+    for (int i = 0; i < 200 &&
+                    receivedAppData.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready;
+         ++i) {
         joined->Update();
-        ENetEvent evt{};
-        if (fakeHostBeingJoined.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_RECEIVE) {
-            std::vector<SharpRuntime::bytecs> data(evt.packet->data, evt.packet->data + evt.packet->dataLength);
-            if (CNA::Internal::Net::NetPacketCodec::PeekTag(data) == CNA::Internal::Net::MessageTag::ClientHello) {
-                helloStorage = CNA::Internal::Net::NetPacketCodec::DecodeClientHello(data);
-                receivedHello = &helloStorage;
-            }
-            enet_packet_destroy(evt.packet);
-        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
-    ASSERT_NE(receivedHello, nullptr);
-    ASSERT_EQ(receivedHello->LocalGamertags.size(), 1u);
-    EXPECT_EQ(receivedHello->LocalGamertags[0], "Joiner");
-    (void) peerFromHostSide;
+    ASSERT_EQ(receivedAppData.wait_for(std::chrono::milliseconds(0)), std::future_status::ready);
+    const auto packet = receivedAppData.get();
+    EXPECT_EQ(packet.SenderWireId, 5);
+    EXPECT_EQ(packet.TargetWireId, 0);
+    EXPECT_EQ(packet.Options, SendDataOptions::Reliable);
+    EXPECT_EQ(packet.Payload, payload);
 
     joined->Dispose();
+    delete joined;
+    serverThread.request_stop();
 }
 
 // --- Static JoinInvited/BeginJoinInvited/EndJoinInvited family ---

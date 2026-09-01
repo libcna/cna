@@ -521,20 +521,17 @@ namespace CNA::Internal::Net
                 }
             }
 
-            // Task 5.3: this ServerWelcome completed a migration reconnect (AttemptHostMigration
-            // set the flag right before issuing the Connect() call, and always fully cleared
-            // WireIdToGamer first - see its own doc comment - so the host's own roster entry is
-            // guaranteed fresh here, never skipped by the `contains` check above).
-            if (state.AwaitingMigrationHostChangeEXT)
+            // A normal Join() must not expose the construction-time local gamer as Host. Establish
+            // the authoritative remote identity immediately while PumpSession is already running
+            // on NetworkSession's owner thread, so EndJoin can observe completed ServerWelcome.
+            // A migration asks the same helper to raise HostChanged; initial establishment does
+            // not represent a host replacement and deliberately stays silent.
+            if (welcomedHostGamer != nullptr)
             {
+                session->SetHostFromTransport(
+                    welcomedHostGamer, state.AwaitingMigrationHostChangeEXT
+                );
                 state.AwaitingMigrationHostChangeEXT = false;
-                if (welcomedHostGamer != nullptr)
-                {
-                    NetworkSession::NetworkEvent evt;
-                    evt.Type = NetworkSession::NetworkEventType::HostChange;
-                    evt.Gamer = welcomedHostGamer;
-                    session->SendNetworkEvent(std::move(evt));
-                }
             }
 
             // audit_net.md remediation (2026-07-18): GamerToWireId just gained entries for this
@@ -718,13 +715,10 @@ namespace CNA::Internal::Net
                 return false;
             }
 
-            // NetworkSession::getHostProperty() cannot be used here: host_ is only ever set to
-            // localGamers_[0] at construction (both for a real Create()-based host and for a real
-            // Join()-based client - see the constructor) and, before this task, was never updated
-            // to reflect an actual remote host afterward (NetworkEventType::HostChange existed but
-            // nothing ever enqueued it - see Task 5.1's own investigation notes). Find the dying
-            // host by its real IsHost flag instead - correctly maintained on every known gamer by
-            // HandleServerWelcome/HandleGamerJoinBroadcast per Task 4.6.
+            // Find the dying host by its real IsHost flag instead of the public Host property.
+            // This code runs while the disconnect is actively pruning the wire roster, so using
+            // the transport's authoritative map keeps the migration decision independent of the
+            // public event queue's dispatch timing.
             // Only ever matches a *remote* gamer: this peer just lost a connection it was the
             // client of (peer == state.HostPeer, checked by the caller), so the dying host can
             // never be one of this peer's own local gamers by construction - excluding locals also
@@ -802,14 +796,15 @@ namespace CNA::Internal::Net
             state.WireIdToPeer.clear();
             state.FreeWireIds.clear();
             state.NextWireId = 0;
-            state.OwnedRemoteGamers.clear();
-            // audit_net.md remediation (2026-07-18): OwnedRemoteGamers.clear() just freed every
-            // remote NetworkGamer this peer knew about - any PendingPreHandshakeSends entry still
-            // naming one of them would otherwise dangle. The new topology after migration makes a
-            // pre-migration cross-machine send meaningless regardless, so the whole queue is
-            // dropped rather than selectively purged. Counted (third-round remediation): every
-            // entry here genuinely can never be delivered now, matching
-            // GetDroppedAppDataCount()'s "could not eventually be delivered" contract.
+            // Keep departed remote identities alive until session teardown. RemoveGamer stores
+            // them in PreviousGamers and queues GamerLeft arguments, while Host still names the
+            // old remote until the migration result is established. Freeing OwnedRemoteGamers
+            // here made all three public views dangle; the old construction-time Host bug merely
+            // masked that use-after-free. Wire maps above are still cleared, so retained objects
+            // cannot participate in the new transport topology.
+            //
+            // Pending sends name the old topology and therefore still cannot be delivered. Count
+            // and clear them exactly as before, without relying on gamer destruction for safety.
             droppedAppDataCount_ += state.PendingPreHandshakeSends.size();
             state.PendingPreHandshakeSends.clear();
             state.HostPeer = nullptr;
@@ -826,10 +821,7 @@ namespace CNA::Internal::Net
                 // connections.
                 ENetDiscoveryService::RegisterHost(session, state.Host.getBoundPortProperty());
 
-                NetworkSession::NetworkEvent evt;
-                evt.Type = NetworkSession::NetworkEventType::HostChange;
-                evt.Gamer = session->getLocalGamersProperty()[0];
-                session->SendNetworkEvent(std::move(evt));
+                session->SetHostFromTransport(session->getLocalGamersProperty()[0], true);
                 return true;
             }
 

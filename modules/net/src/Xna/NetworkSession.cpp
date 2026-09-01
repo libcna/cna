@@ -8,11 +8,14 @@
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkGamer.hpp"
+#include "Microsoft/Xna/Framework/Net/NetworkSessionJoinException.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
+#include <chrono>
+#include <thread>
 
 namespace Microsoft::Xna::Framework::Net
 {
@@ -519,6 +522,16 @@ namespace Microsoft::Xna::Framework::Net
         networkEvents_.push(std::move(evt));
     }
 
+    void NetworkSession::SetHostFromTransport(NetworkGamer* host, bool raiseHostChanged)
+    {
+        NetworkGamer* oldHost = host_;
+        if (raiseHostChanged && oldHost != host)
+        {
+            HostChanged.Raise(this, HostChangedEventArgs(oldHost, host));
+        }
+        host_ = host;
+    }
+
     void NetworkSession::AddRemoteGamer(NetworkGamer* gamer)
     {
         // Task 3.1: AddRemoteGamer deliberately does NOT take ownership of gamer, unlike the
@@ -989,7 +1002,67 @@ namespace Microsoft::Xna::Framework::Net
         // real discovery-sourced connect info (GetConnectAddress() empty).
         if (!pendingJoinAddress_.empty())
         {
-            CNA::Internal::Net::ENetBackend::ConnectToHost(activeSession_, pendingJoinAddress_, pendingJoinPort_);
+            const auto cleanupFailedJoin = []
+            {
+                NetworkSession* failedSession = activeSession_;
+                if (failedSession != nullptr)
+                {
+                    failedSession->Dispose();
+                    delete failedSession;
+                }
+                activeSession_ = nullptr;
+                pendingJoinAddress_.clear();
+                pendingJoinPort_ = 0;
+            };
+
+            try
+            {
+                CNA::Internal::Net::ENetBackend::ConnectToHost(
+                    activeSession_, pendingJoinAddress_, pendingJoinPort_
+                );
+
+#ifndef __EMSCRIPTEN__
+                // XNA 4.0 documents Join as blocking until the operation completes. EndJoin is
+                // where CNA's current synchronous action performs the real work, so keep pumping
+                // on this same owner thread until ServerWelcome has replaced the construction-
+                // time local Host placeholder with the authoritative remote host. Returning any
+                // earlier lets a faithful caller send its first packet to itself
+                // (ClientServerSample does exactly that before its first Update call).
+                NetworkGamer* constructionTimeHost = activeSession_->getHostProperty();
+                const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+                while (activeSession_->getHostProperty() == constructionTimeHost &&
+                       activeSession_->getSessionStateProperty() != NetworkSessionState::Ended)
+                {
+                    activeSession_->Update();
+                    if (std::chrono::steady_clock::now() >= deadline)
+                    {
+                        break;
+                    }
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                }
+
+                if (activeSession_->getHostProperty() == constructionTimeHost)
+                {
+                    cleanupFailedJoin();
+                    throw NetworkSessionJoinException(
+                        "The requested network session could not be found.",
+                        NetworkSessionJoinError::SessionNotFound
+                    );
+                }
+#endif
+            }
+            catch (const NetworkSessionJoinException&)
+            {
+                throw;
+            }
+            catch (...)
+            {
+                const std::exception_ptr cause = std::current_exception();
+                cleanupFailedJoin();
+                throw NetworkSessionJoinException(
+                    "The requested network session could not be found.", cause
+                );
+            }
         }
         pendingJoinAddress_.clear();
         pendingJoinPort_ = 0;

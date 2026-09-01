@@ -481,6 +481,17 @@ namespace Microsoft::Xna::Framework::Net
         CNAEXT void SendNetworkEvent(NetworkEvent evt);
 
         /**
+         * @brief Replaces the session host with the identity established by the transport.
+         *
+         * This is an internal CNA extension used by the ENet handshake. Initial host discovery
+         * does not raise HostChanged; a host-migration replacement does.
+         *
+         * @param host The authoritative local or remote host identity.
+         * @param raiseHostChanged Whether to raise HostChanged for a migration replacement.
+         */
+        CNAEXT void SetHostFromTransport(NetworkGamer* host, bool raiseHostChanged);
+
+        /**
          * @brief Adds a remote gamer to the session and queues its GamerJoin event.
          *
          * Not part of FNA's original design (FNA's Update() never populates AllGamers/
@@ -698,6 +709,8 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Synchronously joins an available network session.
          *
+         * Blocks until the join handshake has completed, matching the XNA 4.0 contract.
+         *
          * @param availableSession The session to join.
          * @return The joined NetworkSession.
          */
@@ -719,6 +732,9 @@ namespace Microsoft::Xna::Framework::Net
 
         /**
          * @brief Completes an asynchronous join.
+         *
+         * On CNA's native SystemLink transport, completes the ClientHello/ServerWelcome handshake
+         * before returning the joined session.
          *
          * @param result The IAsyncResult returned by BeginJoin.
          * @return The joined NetworkSession.
