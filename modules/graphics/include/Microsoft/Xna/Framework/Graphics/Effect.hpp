@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <string>
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterCollection.hpp"
@@ -209,6 +210,18 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT virtual void FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& params) const;
 
     protected:
+        /**
+         * @brief Constructs a stock effect with its exact reflected technique name.
+         *
+         * XNA's stock effects are backed by embedded compiled blobs, so their technique names are
+         * observable through the ordinary Effect API even when CNA implements their draw path
+         * directly. This constructor preserves that metadata without exposing a mutable-name API.
+         *
+         * @param device The graphics device that owns the stock effect.
+         * @param stockTechniqueName The exact technique name exposed by XNA's embedded effect.
+         */
+        CNAEXT Effect(GraphicsDevice& device, const std::string& stockTechniqueName);
+
         /**
          * @brief Derived classes override this to upload shader parameters to the GPU before drawing.
          */

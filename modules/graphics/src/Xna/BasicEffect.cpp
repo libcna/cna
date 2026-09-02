@@ -24,7 +24,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     BasicEffect::BasicEffect(GraphicsDevice& device)
-        : Effect(device)
+        : Effect(device, "BasicEffect")
     {
         CacheEffectParameters();
         DirectionalLight0.setEnabledProperty(true);
@@ -35,7 +35,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     BasicEffect::BasicEffect(const BasicEffect& cloneSource)
-        : Effect(*cloneSource.device_)
+        : Effect(*cloneSource.device_, "BasicEffect")
         , World(cloneSource.World)
         , View(cloneSource.View)
         , Projection(cloneSource.Projection)

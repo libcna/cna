@@ -47,6 +47,20 @@ namespace
     };
 }
 
+TEST_F(BasicEffectDefaultsTest, TechniqueMetadataMatchesXnaEmbeddedBasicEffect)
+{
+    const auto& techniques = fx.getTechniquesProperty();
+    ASSERT_EQ(techniques.getCountProperty(), 1);
+    ASSERT_NE(fx.getCurrentTechniqueProperty(), nullptr);
+    EXPECT_EQ(fx.getCurrentTechniqueProperty()->getNameProperty(), "BasicEffect");
+    EXPECT_EQ(techniques["BasicEffect"], fx.getCurrentTechniqueProperty());
+    EXPECT_EQ(techniques["Default"], nullptr);
+
+    std::unique_ptr<Effect> clone(fx.Clone());
+    ASSERT_NE(clone->getCurrentTechniqueProperty(), nullptr);
+    EXPECT_EQ(clone->getCurrentTechniqueProperty()->getNameProperty(), "BasicEffect");
+}
+
 // -----------------------------------------------------------------------
 // Matrices (IEffectMatrices) — FNA: world/view/projection = Matrix.Identity
 

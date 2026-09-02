@@ -767,6 +767,14 @@ namespace Microsoft::Xna::Framework::Graphics
         currentTechnique_ = &techniques_[0];
     }
 
+    Effect::Effect(GraphicsDevice& device, const std::string& stockTechniqueName)
+        : GraphicsResource(&device)
+        , device_(&device)
+    {
+        techniques_.Add(EffectTechnique(this, stockTechniqueName));
+        currentTechnique_ = &techniques_[0];
+    }
+
     Effect::Effect(GraphicsDevice& device, const std::vector<SharpRuntime::bytecs>& effectCode)
         : GraphicsResource(&device)
         , device_(&device)
