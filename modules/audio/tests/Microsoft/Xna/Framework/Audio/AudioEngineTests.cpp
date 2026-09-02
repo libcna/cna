@@ -41,6 +41,7 @@ using Microsoft::Xna::Framework::Audio::CueTestAccess;
 using Microsoft::Xna::Framework::Audio::SoundBank;
 using Microsoft::Xna::Framework::Audio::SoundBankTestAccess;
 using Microsoft::Xna::Framework::Audio::SoundEffectInstance;
+using Microsoft::Xna::Framework::Audio::SoundState;
 using Microsoft::Xna::Framework::Audio::WaveBank;
 
 namespace
@@ -1022,7 +1023,22 @@ TEST(AudioEngineTest, UpdateSweepsFinishedFireAndForgetCueWithoutNeedingAnotherP
                             "could not exercise real playback";
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        Cue* fireAndForget = SoundBankTestAccess::LastFireAndForgetCue(sb);
+        ASSERT_NE(fireAndForget, nullptr);
+        SoundEffectInstance* instance = CueTestAccess::ActiveInstance(*fireAndForget, 0);
+        ASSERT_NE(instance, nullptr);
+
+        // SDL3 device callback sizes are backend/platform selected, so a fixed sleep can expire
+        // before the first callback even though playback is healthy. Wait for the real mixer
+        // track to finish without reconciling the owning Cue; Update() below must still perform
+        // that reconciliation and sweep the fire-and-forget entry itself.
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+        while (instance->getStateProperty() != SoundState::Stopped
+               && std::chrono::steady_clock::now() < deadline)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        ASSERT_EQ(instance->getStateProperty(), SoundState::Stopped);
         ASSERT_EQ(SoundBankTestAccess::FireAndForgetCount(sb), 1u); // not swept yet, no new PlayCue()
 
         engine.Update();
