@@ -44,6 +44,23 @@ TEST(TitleContainerTest, OpenStreamRelativeNameReadsContent)
     std::filesystem::remove_all(tmpDir);
 }
 
+TEST(TitleContainerTest, OpenStreamReturnsReadOnlyStream)
+{
+    auto tmpDir = std::filesystem::temp_directory_path() / "cna_tc_test_read_only";
+    std::filesystem::create_directories(tmpDir);
+    WriteTempFile(tmpDir, "content.bin", "readonly");
+
+    TitleLocation::setPathProperty(tmpDir.string());
+
+    auto stream = TitleContainer::OpenStream("content.bin");
+    ASSERT_NE(stream, nullptr);
+    EXPECT_TRUE(stream->getCanReadProperty());
+    EXPECT_FALSE(stream->getCanWriteProperty());
+    stream.reset();
+
+    std::filesystem::remove_all(tmpDir);
+}
+
 // -----------------------------------------------------------------------
 // OpenStream — absolute (rooted) name
 // -----------------------------------------------------------------------

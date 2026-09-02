@@ -32,7 +32,8 @@ namespace Microsoft::Xna::Framework
 
         if (std::filesystem::exists(realName))
         {
-            return std::make_unique<System::IO::FileStream>(realName);
+            return std::make_unique<System::IO::FileStream>(
+                realName, System::IO::FileMode::Open, System::IO::FileAccess::Read);
         }
 
 #if defined(__ANDROID__)
