@@ -1288,8 +1288,18 @@ namespace CNA::Internal::GltfImport
         {
             AddImportDiagnosticEXT(
                 destination, "tangent-dropped", GltfImportDiagnosticKindEXT::DroppedData,
-                "The primitive authored TANGENT, but the selected vertex layout has no tangent slot.",
+                "The primitive authored a tangent basis, but the selected vertex layout has no "
+                "tangent slot.",
                 1, 0.0, subject);
+        }
+        if (mesh.legacyTangentBasisEXT && !mesh.droppedTangentForStrideEXT)
+        {
+            AddImportDiagnosticEXT(
+                destination, "legacy-tangent-basis-imported",
+                GltfImportDiagnosticKindEXT::Information,
+                "Legacy _TANGENT/_BINORMAL VEC3 attributes supplied tangent xyz and the "
+                "reconstructed handedness stored in CNA's tangent VEC4.",
+                1, 0.0, subject, {"_TANGENT", "_BINORMAL"});
         }
         if (mesh.droppedIncompleteIndicesEXT > 0)
         {
@@ -2787,6 +2797,29 @@ namespace CNA::Internal::GltfImport
         const cgltf_accessor* jointsAcc = skel ? cgltf_find_accessor(&prim, cgltf_attribute_type_joints, 0) : nullptr;
         const cgltf_accessor* weightsAcc = skel ? cgltf_find_accessor(&prim, cgltf_attribute_type_weights, 0) : nullptr;
 
+        const auto findCustomAttribute = [&prim](const char* name) -> const cgltf_accessor* {
+            for (cgltf_size a = 0; a < prim.attributes_count; ++a)
+            {
+                const cgltf_attribute& attribute = prim.attributes[a];
+                if (attribute.name != nullptr && std::strcmp(attribute.name, name) == 0)
+                {
+                    return attribute.data;
+                }
+            }
+            return nullptr;
+        };
+        const cgltf_accessor* standardTangentAcc =
+            cgltf_find_accessor(&prim, cgltf_attribute_type_tangent, 0);
+        const cgltf_accessor* legacyTangentAcc = findCustomAttribute("_TANGENT");
+        const cgltf_accessor* legacyBinormalAcc = findCustomAttribute("_BINORMAL");
+        const bool hasLegacyTangentBasis =
+            standardTangentAcc == nullptr && normAcc != nullptr &&
+            legacyTangentAcc != nullptr && legacyBinormalAcc != nullptr &&
+            legacyTangentAcc->type == cgltf_type_vec3 &&
+            legacyBinormalAcc->type == cgltf_type_vec3 &&
+            legacyTangentAcc->component_type == cgltf_component_type_r_32f &&
+            legacyBinormalAcc->component_type == cgltf_component_type_r_32f;
+
         MeshOut out;
         out.name = name;
         // The topology travels with the data it describes, so no downstream consumer has to assume
@@ -2818,11 +2851,15 @@ namespace CNA::Internal::GltfImport
             {
                 ++out.extraColorSetsEXT;
             }
-            if (attribute.name != nullptr && attribute.name[0] == '_')
+            if (attribute.name != nullptr && attribute.name[0] == '_' &&
+                !(hasLegacyTangentBasis &&
+                  (std::strcmp(attribute.name, "_TANGENT") == 0 ||
+                   std::strcmp(attribute.name, "_BINORMAL") == 0)))
             {
                 out.ignoredCustomAttributesEXT.emplace_back(attribute.name);
             }
         }
+        out.legacyTangentBasisEXT = hasLegacyTangentBasis;
         out.material.baseColorImage = FindBaseColorImage(prim, &out.unsupportedTextureSourcesEXT);
         // An unskinned, uncolored primitive with both a base-color and an occlusion texture is
         // imported through DualTextureEffect (Texture=base color, Texture2=occlusion) instead of
@@ -3688,14 +3725,13 @@ namespace CNA::Internal::GltfImport
         // dropped. It cannot be carried: there is nowhere to put it. Reported instead, which is the
         // other outcome GLTF-086's acceptance allows, because a file that went to the trouble of
         // authoring tangents did so for a reason.
-        if (!out.usePbr &&
-            cgltf_find_accessor(&prim, cgltf_attribute_type_tangent, 0) != nullptr)
+        if (!out.usePbr && (standardTangentAcc != nullptr || hasLegacyTangentBasis))
         {
             out.droppedTangentForStrideEXT = true;
         }
         if (out.usePbr)
         {
-            const cgltf_accessor* tangentAcc = cgltf_find_accessor(&prim, cgltf_attribute_type_tangent, 0);
+            const cgltf_accessor* tangentAcc = standardTangentAcc;
             // plans/plan_gltf.md GLTF-461. §3.7.2.1 does not merely require flat normals when NORMAL is
             // absent -- it continues "and the provided tangents (if present) MUST be ignored", and
             // §3.7.2.2 repeats it for morph targets. The reason is not arbitrary: an authored
@@ -3717,6 +3753,27 @@ namespace CNA::Internal::GltfImport
                 {
                     const std::size_t o = static_cast<std::size_t>(v) * 4;
                     tangents[v] = Vector4(raw[o], raw[o + 1], raw[o + 2], raw[o + 3]);
+                }
+            }
+            else if (hasLegacyTangentBasis)
+            {
+                std::vector<float> rawTangents =
+                    UnpackAccessor(legacyTangentAcc, 3, "_TANGENT");
+                std::vector<float> rawBinormals =
+                    UnpackAccessor(legacyBinormalAcc, 3, "_BINORMAL");
+                gatherFloats(rawTangents, 3);
+                gatherFloats(rawBinormals, 3);
+                tangents.resize(packedVertexCount);
+                for (cgltf_size v = 0; v < packedVertexCount; ++v)
+                {
+                    const std::size_t o = static_cast<std::size_t>(v) * 3;
+                    const Vector3 normal(normals[o], normals[o + 1], normals[o + 2]);
+                    const Vector3 tangent(rawTangents[o], rawTangents[o + 1], rawTangents[o + 2]);
+                    const Vector3 binormal(rawBinormals[o], rawBinormals[o + 1], rawBinormals[o + 2]);
+                    const float handedness =
+                        Vector3::Dot(Vector3::Cross(normal, tangent), binormal) < 0.0f
+                            ? -1.0f : 1.0f;
+                    tangents[v] = Vector4(tangent.X, tangent.Y, tangent.Z, handedness);
                 }
             }
             else

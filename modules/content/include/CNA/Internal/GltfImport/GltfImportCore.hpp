@@ -550,6 +550,17 @@ namespace CNA::Internal::GltfImport
          */
         std::vector<std::string> ignoredCustomAttributesEXT;
         /**
+         * @brief True when legacy `_TANGENT` plus `_BINORMAL` VEC3 attributes supplied the tangent
+         * basis in place of glTF's standard `TANGENT` VEC4 attribute.
+         *
+         * @note CNAEXT — not part of core glTF. Some XNA-era model converters preserve the source
+         * processor's tangent and binormal channels as two custom VEC3 attributes. When both are
+         * present beside an authored normal, CNA packs the tangent xyz and reconstructs glTF's
+         * handedness component as `sign(dot(cross(normal, tangent), binormal))`. A standard
+         * `TANGENT` always wins when both representations are present.
+         */
+        bool legacyTangentBasisEXT = false;
+        /**
          * @brief The complete decoded material record (plans/plan_gltf.md `GLTF-236`).
          *
          * Kept separate from the flags below that choose an effect/layout: the file's material is

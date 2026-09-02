@@ -332,7 +332,7 @@ severity it deserves:
 |---|---|---|
 | `COLOR_0` in `FLOAT` or `UNSIGNED_SHORT` | quantised to `Color`'s 8 bits per channel, `round(clamp(f,0,1) × 255)` | nothing — this is the layout working as designed |
 | `COLOR_1` and beyond | ignored; XNA carries one colour channel | a **warning**, with the count |
-| `_ANYTHING` (application-specific) | ignored; §3.7.2.1 reserves the prefix so a reader may | a **debug** line, naming each |
+| `_ANYTHING` (application-specific), except the legacy basis below | ignored; §3.7.2.1 reserves the prefix so a reader may | a **debug** line, naming each |
 
 The severities are the point. Quantisation is lossless at the endpoints and within half a
 step everywhere else, and is what every XNA `Color` does — warning about it would be noise on every
@@ -340,6 +340,14 @@ coloured mesh. A second colour set is data that does not arrive: a mesh whose re
 `COLOR_1` imports looking like a mistake, and the warning is the only thing that traces it. A
 custom attribute is *expected* to be ignored — a file whose own tooling reads `_BATCHID` still
 imports as ordinary geometry — so it is named at debug level rather than warned about.
+
+There is one deliberately narrow legacy exception. Some XNA-era exporters store an authored
+tangent basis as paired `FLOAT VEC3` custom attributes named exactly `_TANGENT` and `_BINORMAL`.
+When a primitive also authors `NORMAL` and does not carry glTF's standard `TANGENT VEC4`, CNA
+preserves the pair: `_TANGENT` supplies xyz and CNA reconstructs w as
+`sign(dot(cross(normal, tangent), binormal))`. The import report records
+`legacy-tangent-basis-imported` as information. A standard `TANGENT` always wins; an incomplete or
+wrongly typed legacy pair remains ordinary ignored custom data and is named in the debug report.
 
 ## Every primitive gets an index buffer
 

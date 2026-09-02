@@ -92,6 +92,8 @@ namespace
         {"TEXCOORD_1", "VEC2", 5126, 2},
         {"COLOR_0",    "VEC4", 5126, 4},
         {"COLOR_1",    "VEC4", 5126, 4},
+        {"_TANGENT",   "VEC3", 5126, 3},
+        {"_BINORMAL",  "VEC3", 5126, 3},
         {"_BATCHID",   "SCALAR", 5126, 1},
     };
 
@@ -124,6 +126,8 @@ namespace
                     {
                         AppendFloat(buffer, c == 0 ? 1.0f : (c == 3 ? 1.0f : 0.0f));
                     }
+                    else if (name == "_TANGENT") { AppendFloat(buffer, c == 0 ? 1.0f : 0.0f); }
+                    else if (name == "_BINORMAL") { AppendFloat(buffer, c == 1 ? -1.0f : 0.0f); }
                     else if (name.rfind("WEIGHTS", 0) == 0) { AppendFloat(buffer, c == 0 ? 1.0f : 0.0f); }
                     else { AppendFloat(buffer, 0.5f); }
                 }
@@ -252,6 +256,13 @@ namespace
             return false;
         }
         return cgltf_load_buffers(&options, out.data, ".") == cgltf_result_success;
+    }
+
+    float ReadFloat(const std::vector<std::uint8_t>& bytes, std::size_t offset)
+    {
+        float value = 0.0f;
+        std::memcpy(&value, bytes.data() + offset, sizeof(value));
+        return value;
     }
 }
 
@@ -390,20 +401,22 @@ TEST(GltfAttributeCoverage, EveryAuthoredAttributeEitherArrivesOrIsNamedInARepor
                 << "iteration " << iteration << ": a colour set was counted that nobody authored";
         }
 
-        if (authored("_BATCHID"))
-        {
-            EXPECT_FALSE(out.ignoredCustomAttributesEXT.empty())
-                << "iteration " << iteration << ": _BATCHID was authored and not named";
-            EXPECT_NE(out.ignoredCustomAttributesEXT.end(),
-                      std::find(out.ignoredCustomAttributesEXT.begin(),
-                                out.ignoredCustomAttributesEXT.end(), "_BATCHID"));
-        }
-        else
-        {
-            EXPECT_TRUE(out.ignoredCustomAttributesEXT.empty())
-                << "iteration " << iteration << ": a custom attribute was named that nobody "
-                   "authored -- a report nobody can trust is worse than none";
-        }
+        const auto customWasIgnored = [&out](const char* name) {
+            return std::find(out.ignoredCustomAttributesEXT.begin(),
+                             out.ignoredCustomAttributesEXT.end(), name) !=
+                   out.ignoredCustomAttributesEXT.end();
+        };
+        EXPECT_EQ(authored("_BATCHID"), customWasIgnored("_BATCHID"))
+            << "iteration " << iteration << ": _BATCHID report disagrees with the source";
+
+        const bool legacyBasis = authored("NORMAL") && authored("_TANGENT") &&
+                                 authored("_BINORMAL") && !authored("TANGENT");
+        EXPECT_EQ(legacyBasis, out.legacyTangentBasisEXT)
+            << "iteration " << iteration << ": legacy tangent-basis recognition disagrees";
+        EXPECT_EQ(authored("_TANGENT") && !legacyBasis, customWasIgnored("_TANGENT"))
+            << "iteration " << iteration << ": _TANGENT was neither carried nor reported";
+        EXPECT_EQ(authored("_BINORMAL") && !legacyBasis, customWasIgnored("_BINORMAL"))
+            << "iteration " << iteration << ": _BINORMAL was neither carried nor reported";
 
         // A dropped NORMAL or TANGENT is a stride consequence, so the two reports must agree with
         // the layout that was actually selected rather than with each other.
@@ -472,4 +485,102 @@ TEST(GltfAttributeCoverage, EveryAuthoredAttributeEitherArrivesOrIsNamedInARepor
     EXPECT_GE(stridesReached.size(), 6u)
         << "the permutations reached only " << stridesReached.size()
         << " strides, so most of the layout table went unexercised";
+}
+
+// --- GLTF-480: XNA-era exporters' two-VEC3 tangent basis -------------------------------
+
+TEST(GltfAttributeCoverage, LegacyTangentAndBinormalArePackedAsOneSignedTangent)
+{
+    using namespace CNA::Internal::GltfImport;
+
+    Parsed parsed;
+    ASSERT_TRUE(ParseText(parsed, BuildFuzzDocument(
+        {"NORMAL", "TEXCOORD_0", "_TANGENT", "_BINORMAL"}, false, false, false)));
+
+    const MeshOut out = ExtractMesh(
+        parsed.data, parsed.data->meshes[0].primitives[0], "legacy", nullptr, 1.0f);
+    ASSERT_TRUE(out.legacyTangentBasisEXT);
+    ASSERT_EQ(48, out.stride);
+    ASSERT_EQ(3u * 48u, out.vertexBytes.size());
+    EXPECT_FLOAT_EQ(1.0f, ReadFloat(out.vertexBytes, 24));
+    EXPECT_FLOAT_EQ(0.0f, ReadFloat(out.vertexBytes, 28));
+    EXPECT_FLOAT_EQ(0.0f, ReadFloat(out.vertexBytes, 32));
+    EXPECT_FLOAT_EQ(-1.0f, ReadFloat(out.vertexBytes, 36));
+    EXPECT_EQ(out.ignoredCustomAttributesEXT.end(),
+              std::find(out.ignoredCustomAttributesEXT.begin(),
+                        out.ignoredCustomAttributesEXT.end(), "_TANGENT"));
+    EXPECT_EQ(out.ignoredCustomAttributesEXT.end(),
+              std::find(out.ignoredCustomAttributesEXT.begin(),
+                        out.ignoredCustomAttributesEXT.end(), "_BINORMAL"));
+
+    Microsoft::Xna::Framework::Graphics::GltfImportReportEXT report;
+    AppendGltfMeshReportEXT(report, out, "legacy");
+    ASSERT_EQ(1u, report.Diagnostics.size());
+    EXPECT_EQ("legacy-tangent-basis-imported", report.Diagnostics[0].Code);
+    EXPECT_EQ(Microsoft::Xna::Framework::Graphics::GltfImportDiagnosticSeverityEXT::Information,
+              report.Diagnostics[0].Severity);
+    EXPECT_FALSE(report.AnythingLost());
+}
+
+TEST(GltfAttributeCoverage, StandardTangentWinsOverTheLegacyCustomPair)
+{
+    using namespace CNA::Internal::GltfImport;
+
+    Parsed parsed;
+    ASSERT_TRUE(ParseText(parsed, BuildFuzzDocument(
+        {"NORMAL", "TANGENT", "TEXCOORD_0", "_TANGENT", "_BINORMAL"},
+        false, false, false)));
+
+    const MeshOut out = ExtractMesh(
+        parsed.data, parsed.data->meshes[0].primitives[0], "standard", nullptr, 1.0f);
+    EXPECT_FALSE(out.legacyTangentBasisEXT);
+    EXPECT_FLOAT_EQ(1.0f, ReadFloat(out.vertexBytes, 36));
+    EXPECT_NE(out.ignoredCustomAttributesEXT.end(),
+              std::find(out.ignoredCustomAttributesEXT.begin(),
+                        out.ignoredCustomAttributesEXT.end(), "_TANGENT"));
+    EXPECT_NE(out.ignoredCustomAttributesEXT.end(),
+              std::find(out.ignoredCustomAttributesEXT.begin(),
+                        out.ignoredCustomAttributesEXT.end(), "_BINORMAL"));
+}
+
+TEST(GltfAttributeCoverage, AnIncompleteLegacyBasisRemainsHonestCustomData)
+{
+    using namespace CNA::Internal::GltfImport;
+
+    Parsed parsed;
+    ASSERT_TRUE(ParseText(parsed, BuildFuzzDocument(
+        {"NORMAL", "TEXCOORD_0", "_TANGENT"}, false, false, false)));
+
+    const MeshOut out = ExtractMesh(
+        parsed.data, parsed.data->meshes[0].primitives[0], "incomplete", nullptr, 1.0f);
+    EXPECT_FALSE(out.legacyTangentBasisEXT);
+    EXPECT_NE(out.ignoredCustomAttributesEXT.end(),
+              std::find(out.ignoredCustomAttributesEXT.begin(),
+                        out.ignoredCustomAttributesEXT.end(), "_TANGENT"));
+}
+
+TEST(GltfAttributeCoverage, AWronglyTypedLegacyBasisRemainsHonestCustomData)
+{
+    using namespace CNA::Internal::GltfImport;
+
+    Parsed parsed;
+    ASSERT_TRUE(ParseText(parsed, BuildFuzzDocument(
+        {"NORMAL", "TEXCOORD_0", "_TANGENT", "_BINORMAL"}, false, false, false)));
+    cgltf_primitive& primitive = parsed.data->meshes[0].primitives[0];
+    const auto binormal = std::find_if(
+        primitive.attributes, primitive.attributes + primitive.attributes_count,
+        [](const cgltf_attribute& attribute) {
+            return attribute.name != nullptr && std::strcmp(attribute.name, "_BINORMAL") == 0;
+        });
+    ASSERT_NE(primitive.attributes + primitive.attributes_count, binormal);
+    binormal->data->type = cgltf_type_vec2;
+
+    const MeshOut out = ExtractMesh(parsed.data, primitive, "wrong-type", nullptr, 1.0f);
+    EXPECT_FALSE(out.legacyTangentBasisEXT);
+    EXPECT_NE(out.ignoredCustomAttributesEXT.end(),
+              std::find(out.ignoredCustomAttributesEXT.begin(),
+                        out.ignoredCustomAttributesEXT.end(), "_TANGENT"));
+    EXPECT_NE(out.ignoredCustomAttributesEXT.end(),
+              std::find(out.ignoredCustomAttributesEXT.begin(),
+                        out.ignoredCustomAttributesEXT.end(), "_BINORMAL"));
 }
