@@ -9,20 +9,31 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <memory>
+#include <string>
 
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectParameter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectParameterClass.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectParameterCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectParameterType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
 
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Vector3;
+using Microsoft::Xna::Framework::Vector4;
 using Microsoft::Xna::Framework::Graphics::BasicEffect;
 using Microsoft::Xna::Framework::Graphics::DirectionalLight;
 using Microsoft::Xna::Framework::Graphics::Effect;
+using Microsoft::Xna::Framework::Graphics::EffectParameter;
+using Microsoft::Xna::Framework::Graphics::EffectParameterClass;
+using Microsoft::Xna::Framework::Graphics::EffectParameterType;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 
@@ -178,6 +189,121 @@ TEST_F(BasicEffectDefaultsTest, VertexColorEnabledDefaultsToFalse)
 TEST_F(BasicEffectDefaultsTest, TextureDefaultsToNull)
 {
     EXPECT_EQ(fx.getTextureProperty(), nullptr);
+}
+
+TEST_F(BasicEffectDefaultsTest, ExposesAuthenticXnaParameterGraph)
+{
+    struct ExpectedParameter
+    {
+        const char* name;
+        EffectParameterClass parameterClass;
+        EffectParameterType parameterType;
+        int rows;
+        int columns;
+    };
+
+    constexpr std::array<ExpectedParameter, 21> expected{{
+        {"Texture", EffectParameterClass::Object, EffectParameterType::Texture2D, 0, 0},
+        {"DiffuseColor", EffectParameterClass::Vector, EffectParameterType::Single, 1, 4},
+        {"EmissiveColor", EffectParameterClass::Vector, EffectParameterType::Single, 1, 3},
+        {"SpecularColor", EffectParameterClass::Vector, EffectParameterType::Single, 1, 3},
+        {"SpecularPower", EffectParameterClass::Scalar, EffectParameterType::Single, 1, 1},
+        {"DirLight0Direction", EffectParameterClass::Vector, EffectParameterType::Single, 1, 3},
+        {"DirLight0DiffuseColor", EffectParameterClass::Vector, EffectParameterType::Single, 1, 3},
+        {"DirLight0SpecularColor", EffectParameterClass::Vector, EffectParameterType::Single, 1, 3},
+        {"DirLight1Direction", EffectParameterClass::Vector, EffectParameterType::Single, 1, 3},
+        {"DirLight1DiffuseColor", EffectParameterClass::Vector, EffectParameterType::Single, 1, 3},
+        {"DirLight1SpecularColor", EffectParameterClass::Vector, EffectParameterType::Single, 1, 3},
+        {"DirLight2Direction", EffectParameterClass::Vector, EffectParameterType::Single, 1, 3},
+        {"DirLight2DiffuseColor", EffectParameterClass::Vector, EffectParameterType::Single, 1, 3},
+        {"DirLight2SpecularColor", EffectParameterClass::Vector, EffectParameterType::Single, 1, 3},
+        {"EyePosition", EffectParameterClass::Vector, EffectParameterType::Single, 1, 3},
+        {"FogColor", EffectParameterClass::Vector, EffectParameterType::Single, 1, 3},
+        {"FogVector", EffectParameterClass::Vector, EffectParameterType::Single, 1, 4},
+        {"World", EffectParameterClass::Matrix, EffectParameterType::Single, 4, 4},
+        {"WorldInverseTranspose", EffectParameterClass::Matrix, EffectParameterType::Single, 3, 3},
+        {"WorldViewProj", EffectParameterClass::Matrix, EffectParameterType::Single, 4, 4},
+        {"ShaderIndex", EffectParameterClass::Scalar, EffectParameterType::Int32, 1, 1},
+    }};
+
+    const auto& parameters = fx.getParametersProperty();
+    ASSERT_EQ(parameters.getCountProperty(), static_cast<int>(expected.size()));
+    for (int i = 0; i < parameters.getCountProperty(); ++i)
+    {
+        const EffectParameter& actual = parameters[i];
+        const ExpectedParameter& wanted = expected[static_cast<std::size_t>(i)];
+        EXPECT_EQ(actual.getNameProperty(), wanted.name) << "parameter " << i;
+        EXPECT_EQ(actual.getParameterClassProperty(), wanted.parameterClass) << wanted.name;
+        EXPECT_EQ(actual.getParameterTypeProperty(), wanted.parameterType) << wanted.name;
+        EXPECT_EQ(actual.getRowCountProperty(), wanted.rows) << wanted.name;
+        EXPECT_EQ(actual.getColumnCountProperty(), wanted.columns) << wanted.name;
+    }
+}
+
+TEST_F(BasicEffectDefaultsTest, ParameterBackedPropertiesStaySynchronized)
+{
+    Texture2D texture(gd, 2, 2);
+    auto& parameters = fx.getParametersProperty();
+
+    fx.setSpecularColorProperty(Vector3{0.1f, 0.2f, 0.3f});
+    EXPECT_EQ(parameters["SpecularColor"]->GetValueVector3(), Vector3(0.1f, 0.2f, 0.3f));
+    parameters["SpecularColor"]->SetValue(Vector3{0.4f, 0.5f, 0.6f});
+    EXPECT_EQ(fx.getSpecularColorProperty(), Vector3(0.4f, 0.5f, 0.6f));
+
+    fx.setSpecularPowerProperty(7.5f);
+    EXPECT_FLOAT_EQ(parameters["SpecularPower"]->GetValueSingle(), 7.5f);
+    parameters["SpecularPower"]->SetValue(12.0f);
+    EXPECT_FLOAT_EQ(fx.getSpecularPowerProperty(), 12.0f);
+
+    fx.setFogColorProperty(Vector3{0.7f, 0.8f, 0.9f});
+    EXPECT_EQ(parameters["FogColor"]->GetValueVector3(), Vector3(0.7f, 0.8f, 0.9f));
+    parameters["FogColor"]->SetValue(Vector3{0.3f, 0.2f, 0.1f});
+    EXPECT_EQ(fx.getFogColorProperty(), Vector3(0.3f, 0.2f, 0.1f));
+
+    fx.setTextureProperty(&texture);
+    EXPECT_EQ(parameters["Texture"]->GetValueTexture2D(), &texture);
+    parameters["Texture"]->SetValue(static_cast<Texture2D*>(nullptr));
+    EXPECT_EQ(fx.getTextureProperty(), nullptr);
+}
+
+TEST_F(BasicEffectDefaultsTest, ApplyPopulatesDerivedParameterValues)
+{
+    fx.World = Matrix::CreateTranslation(2.0f, 3.0f, 4.0f);
+    fx.setDiffuseColorProperty(Vector3{0.2f, 0.4f, 0.6f});
+    fx.setEmissiveColorProperty(Vector3{0.1f, 0.1f, 0.1f});
+    fx.setAlphaProperty(0.5f);
+
+    fx.Apply();
+
+    auto& parameters = fx.getParametersProperty();
+    EXPECT_EQ(parameters["WorldViewProj"]->GetValueMatrix(), fx.World);
+    EXPECT_EQ(parameters["FogVector"]->GetValueVector4(), Vector4::Zero);
+    const Vector4 unlitDiffuse = parameters["DiffuseColor"]->GetValueVector4();
+    EXPECT_FLOAT_EQ(unlitDiffuse.X, 0.15f);
+    EXPECT_FLOAT_EQ(unlitDiffuse.Y, 0.25f);
+    EXPECT_FLOAT_EQ(unlitDiffuse.Z, 0.35f);
+    EXPECT_FLOAT_EQ(unlitDiffuse.W, 0.5f);
+    EXPECT_EQ(parameters["DirLight0Direction"]->GetValueVector3(), Vector3::Down);
+    EXPECT_EQ(parameters["DirLight0DiffuseColor"]->GetValueVector3(), Vector3::One);
+    EXPECT_EQ(parameters["DirLight1DiffuseColor"]->GetValueVector3(), Vector3::Zero);
+    EXPECT_EQ(parameters["ShaderIndex"]->GetValueInt32(), 1);
+
+    fx.setLightingEnabledProperty(true);
+    fx.setAmbientLightColorProperty(Vector3{0.5f, 0.25f, 0.0f});
+    fx.Apply();
+
+    EXPECT_EQ(parameters["World"]->GetValueMatrix(), fx.World);
+    EXPECT_EQ(parameters["EyePosition"]->GetValueVector3(), Vector3::Zero);
+    const Vector4 litDiffuse = parameters["DiffuseColor"]->GetValueVector4();
+    EXPECT_FLOAT_EQ(litDiffuse.X, 0.1f);
+    EXPECT_FLOAT_EQ(litDiffuse.Y, 0.2f);
+    EXPECT_FLOAT_EQ(litDiffuse.Z, 0.3f);
+    EXPECT_FLOAT_EQ(litDiffuse.W, 0.5f);
+    const Vector3 litEmissive = parameters["EmissiveColor"]->GetValueVector3();
+    EXPECT_FLOAT_EQ(litEmissive.X, 0.1f);
+    EXPECT_FLOAT_EQ(litEmissive.Y, 0.1f);
+    EXPECT_FLOAT_EQ(litEmissive.Z, 0.05f);
+    EXPECT_EQ(parameters["ShaderIndex"]->GetValueInt32(), 17);
 }
 
 // -----------------------------------------------------------------------

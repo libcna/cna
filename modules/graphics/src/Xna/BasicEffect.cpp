@@ -2,15 +2,36 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include <cmath>
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectParameter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectParameterClass.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectParameterCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectParameterType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
+    namespace
+    {
+        void AddParam(EffectParameterCollection& params, const std::string& name,
+                      int rows, int columns,
+                      EffectParameterClass parameterClass, EffectParameterType parameterType)
+        {
+            params.Add(EffectParameter(
+                name, "", rows, columns, parameterClass, parameterType));
+        }
+    }
+
     BasicEffect::BasicEffect(GraphicsDevice& device)
         : Effect(device)
     {
+        CacheEffectParameters();
         DirectionalLight0.setEnabledProperty(true);
+        setSpecularColorProperty(Vector3::One);
+        setSpecularPowerProperty(16.0f);
+        setFogColorProperty(Vector3::Zero);
+        setTextureProperty(nullptr);
     }
 
     BasicEffect::BasicEffect(const BasicEffect& cloneSource)
@@ -38,6 +59,60 @@ namespace Microsoft::Xna::Framework::Graphics
         , fogStart_(cloneSource.fogStart_)
         , fogEnd_(cloneSource.fogEnd_)
     {
+        CacheEffectParameters();
+        setSpecularColorProperty(cloneSource.getSpecularColorProperty());
+        setSpecularPowerProperty(cloneSource.getSpecularPowerProperty());
+        setFogColorProperty(cloneSource.getFogColorProperty());
+        setTextureProperty(cloneSource.getTextureProperty());
+    }
+
+    void BasicEffect::CacheEffectParameters()
+    {
+        auto& params = getParametersProperty();
+        AddParam(params, "Texture", 0, 0,
+                 EffectParameterClass::Object, EffectParameterType::Texture2D);
+        AddParam(params, "DiffuseColor", 1, 4, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddParam(params, "EmissiveColor", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddParam(params, "SpecularColor", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddParam(params, "SpecularPower", 1, 1, EffectParameterClass::Scalar, EffectParameterType::Single);
+        AddParam(params, "DirLight0Direction", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddParam(params, "DirLight0DiffuseColor", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddParam(params, "DirLight0SpecularColor", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddParam(params, "DirLight1Direction", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddParam(params, "DirLight1DiffuseColor", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddParam(params, "DirLight1SpecularColor", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddParam(params, "DirLight2Direction", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddParam(params, "DirLight2DiffuseColor", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddParam(params, "DirLight2SpecularColor", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddParam(params, "EyePosition", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddParam(params, "FogColor", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddParam(params, "FogVector", 1, 4, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddParam(params, "World", 4, 4, EffectParameterClass::Matrix, EffectParameterType::Single);
+        AddParam(params, "WorldInverseTranspose", 3, 3, EffectParameterClass::Matrix, EffectParameterType::Single);
+        AddParam(params, "WorldViewProj", 4, 4, EffectParameterClass::Matrix, EffectParameterType::Single);
+        AddParam(params, "ShaderIndex", 1, 1, EffectParameterClass::Scalar, EffectParameterType::Int32);
+
+        textureParam_ = params["Texture"];
+        diffuseColorParam_ = params["DiffuseColor"];
+        emissiveColorParam_ = params["EmissiveColor"];
+        specularColorParam_ = params["SpecularColor"];
+        specularPowerParam_ = params["SpecularPower"];
+        dirLight0DirectionParam_ = params["DirLight0Direction"];
+        dirLight0DiffuseColorParam_ = params["DirLight0DiffuseColor"];
+        dirLight0SpecularColorParam_ = params["DirLight0SpecularColor"];
+        dirLight1DirectionParam_ = params["DirLight1Direction"];
+        dirLight1DiffuseColorParam_ = params["DirLight1DiffuseColor"];
+        dirLight1SpecularColorParam_ = params["DirLight1SpecularColor"];
+        dirLight2DirectionParam_ = params["DirLight2Direction"];
+        dirLight2DiffuseColorParam_ = params["DirLight2DiffuseColor"];
+        dirLight2SpecularColorParam_ = params["DirLight2SpecularColor"];
+        eyePositionParam_ = params["EyePosition"];
+        fogColorParam_ = params["FogColor"];
+        fogVectorParam_ = params["FogVector"];
+        worldParam_ = params["World"];
+        worldInverseTransposeParam_ = params["WorldInverseTranspose"];
+        worldViewProjParam_ = params["WorldViewProj"];
+        shaderIndexParam_ = params["ShaderIndex"];
     }
 
     Effect* BasicEffect::Clone()
@@ -47,7 +122,96 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void BasicEffect::OnApply()
     {
-        // SetCurrentEffect is now called by Effect::Apply() after OnApply() returns.
+        Matrix worldView;
+        Matrix worldViewProjection;
+        Matrix::Multiply(World, View, worldView);
+        Matrix::Multiply(worldView, Projection, worldViewProjection);
+        worldViewProjParam_->SetValue(worldViewProjection);
+
+        if (!fogEnabled_)
+        {
+            fogVectorParam_->SetValue(Vector4::Zero);
+        }
+        else if (fogStart_ == fogEnd_)
+        {
+            fogVectorParam_->SetValue(Vector4{0.0f, 0.0f, 0.0f, 1.0f});
+        }
+        else
+        {
+            const float scale = 1.0f / (fogStart_ - fogEnd_);
+            fogVectorParam_->SetValue(Vector4{
+                worldView.M13 * scale,
+                worldView.M23 * scale,
+                worldView.M33 * scale,
+                (worldView.M43 + fogStart_) * scale});
+        }
+
+        if (lightingEnabled_)
+        {
+            diffuseColorParam_->SetValue(Vector4{
+                diffuseColor_.X * alpha_,
+                diffuseColor_.Y * alpha_,
+                diffuseColor_.Z * alpha_,
+                alpha_});
+            emissiveColorParam_->SetValue(Vector3{
+                (emissiveColor_.X + ambientLightColor_.X * diffuseColor_.X) * alpha_,
+                (emissiveColor_.Y + ambientLightColor_.Y * diffuseColor_.Y) * alpha_,
+                (emissiveColor_.Z + ambientLightColor_.Z * diffuseColor_.Z) * alpha_});
+
+            worldParam_->SetValue(World);
+            Matrix inverseWorld;
+            Matrix inverseTransposeWorld;
+            Matrix::Invert(World, inverseWorld);
+            Matrix::Transpose(inverseWorld, inverseTransposeWorld);
+            worldInverseTransposeParam_->SetValue(inverseTransposeWorld);
+
+            const Matrix inverseView = Matrix::Invert(View);
+            eyePositionParam_->SetValue(inverseView.getTranslationProperty());
+        }
+        else
+        {
+            diffuseColorParam_->SetValue(Vector4{
+                (diffuseColor_.X + emissiveColor_.X) * alpha_,
+                (diffuseColor_.Y + emissiveColor_.Y) * alpha_,
+                (diffuseColor_.Z + emissiveColor_.Z) * alpha_,
+                alpha_});
+        }
+
+        const auto setLightParameters = [](
+            const DirectionalLight& light,
+            EffectParameter& direction,
+            EffectParameter& diffuse,
+            EffectParameter& specular)
+        {
+            direction.SetValue(light.getDirectionProperty());
+            diffuse.SetValue(light.getEnabledProperty()
+                ? light.getDiffuseColorProperty()
+                : Vector3::Zero);
+            specular.SetValue(light.getEnabledProperty()
+                ? light.getSpecularColorProperty()
+                : Vector3::Zero);
+        };
+        setLightParameters(DirectionalLight0, *dirLight0DirectionParam_,
+                           *dirLight0DiffuseColorParam_, *dirLight0SpecularColorParam_);
+        setLightParameters(DirectionalLight1, *dirLight1DirectionParam_,
+                           *dirLight1DiffuseColorParam_, *dirLight1SpecularColorParam_);
+        setLightParameters(DirectionalLight2, *dirLight2DirectionParam_,
+                           *dirLight2DiffuseColorParam_, *dirLight2SpecularColorParam_);
+
+        int shaderIndex = 0;
+        if (!fogEnabled_) shaderIndex += 1;
+        if (VertexColorEnabled) shaderIndex += 2;
+        if (textureEnabled_) shaderIndex += 4;
+        if (lightingEnabled_)
+        {
+            if (preferPerPixelLighting_)
+                shaderIndex += 24;
+            else if (!DirectionalLight1.getEnabledProperty() && !DirectionalLight2.getEnabledProperty())
+                shaderIndex += 16;
+            else
+                shaderIndex += 8;
+        }
+        shaderIndexParam_->SetValue(shaderIndex);
     }
 
     void BasicEffect::FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& p) const
@@ -126,7 +290,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (p.textureEnabled)
         {
-            if (texture_) p.texture0 = &texture_->GetRenderer();
+            if (Texture2D* texture = getTextureProperty()) p.texture0 = &texture->GetRenderer();
         }
 
         // FNA's EffectHelpers.SetMaterialColor: when lighting is disabled, ambient/directional
@@ -185,10 +349,11 @@ namespace Microsoft::Xna::Framework::Graphics
             p.emissiveColor[1] = emissiveColor_.Y * alpha_;
             p.emissiveColor[2] = emissiveColor_.Z * alpha_;
 
-            p.specularColor[0] = specularColor_.X;
-            p.specularColor[1] = specularColor_.Y;
-            p.specularColor[2] = specularColor_.Z;
-            p.specularPower     = specularPower_;
+            const Vector3 specularColor = getSpecularColorProperty();
+            p.specularColor[0] = specularColor.X;
+            p.specularColor[1] = specularColor.Y;
+            p.specularColor[2] = specularColor.Z;
+            p.specularPower     = getSpecularPowerProperty();
 
             const Matrix  viewInverse = Matrix::Invert(View);
             const Vector3 eyePos      = viewInverse.getTranslationProperty();
@@ -200,9 +365,10 @@ namespace Microsoft::Xna::Framework::Graphics
         World.ToColumnMajor(p.worldColMajor);
 
         p.fogEnabled   = fogEnabled_;
-        p.fogColor[0]  = fogColor_.X;
-        p.fogColor[1]  = fogColor_.Y;
-        p.fogColor[2]  = fogColor_.Z;
+        const Vector3 fogColor = getFogColorProperty();
+        p.fogColor[0]  = fogColor.X;
+        p.fogColor[1]  = fogColor.Y;
+        p.fogColor[2]  = fogColor.Z;
         // REMED-GFX-010: FNA EffectHelpers.SetFogVector. Fog is a view-space Z term computed by
         // dotting this vector with the object-space vertex position in the shader; the vector bakes
         // the third column of World*View. Matches OnApply()'s fogVectorParam path exactly. Zero when
@@ -243,26 +409,54 @@ namespace Microsoft::Xna::Framework::Graphics
     void BasicEffect::setDiffuseColorProperty(const Vector3& v) { diffuseColor_ = v; }
     Vector3 BasicEffect::getEmissiveColorProperty() const { return emissiveColor_; }
     void BasicEffect::setEmissiveColorProperty(const Vector3& v) { emissiveColor_ = v; }
-    Vector3 BasicEffect::getSpecularColorProperty() const { return specularColor_; }
-    void BasicEffect::setSpecularColorProperty(const Vector3& v) { specularColor_ = v; }
-    float BasicEffect::getSpecularPowerProperty() const { return specularPower_; }
-    void BasicEffect::setSpecularPowerProperty(float v) { specularPower_ = v; }
+    Vector3 BasicEffect::getSpecularColorProperty() const
+    {
+        return specularColorParam_ ? specularColorParam_->GetValueVector3() : specularColor_;
+    }
+    void BasicEffect::setSpecularColorProperty(const Vector3& v)
+    {
+        specularColor_ = v;
+        if (specularColorParam_) specularColorParam_->SetValue(v);
+    }
+    float BasicEffect::getSpecularPowerProperty() const
+    {
+        return specularPowerParam_ ? specularPowerParam_->GetValueSingle() : specularPower_;
+    }
+    void BasicEffect::setSpecularPowerProperty(float v)
+    {
+        specularPower_ = v;
+        if (specularPowerParam_) specularPowerParam_->SetValue(v);
+    }
     float BasicEffect::getAlphaProperty() const { return alpha_; }
     void BasicEffect::setAlphaProperty(float v) { alpha_ = v; }
 
     bool BasicEffect::getTextureEnabledProperty() const { return textureEnabled_; }
     void BasicEffect::setTextureEnabledProperty(bool v) { textureEnabled_ = v; }
-    Texture2D* BasicEffect::getTextureProperty() const { return texture_; }
-    void BasicEffect::setTextureProperty(Texture2D* v) { texture_ = v; }
+    Texture2D* BasicEffect::getTextureProperty() const
+    {
+        return textureParam_ ? textureParam_->GetValueTexture2D() : texture_;
+    }
+    void BasicEffect::setTextureProperty(Texture2D* v)
+    {
+        texture_ = v;
+        if (textureParam_) textureParam_->SetValue(v);
+    }
     void BasicEffect::SetOwnedTexture(std::shared_ptr<Texture2D> texture)
     {
         ownedTexture_ = std::move(texture);
-        texture_ = ownedTexture_.get();
+        setTextureProperty(ownedTexture_.get());
     }
 
     // IEffectFog
-    Vector3 BasicEffect::getFogColorProperty() const { return fogColor_; }
-    void BasicEffect::setFogColorProperty(const Vector3& v) { fogColor_ = v; }
+    Vector3 BasicEffect::getFogColorProperty() const
+    {
+        return fogColorParam_ ? fogColorParam_->GetValueVector3() : fogColor_;
+    }
+    void BasicEffect::setFogColorProperty(const Vector3& v)
+    {
+        fogColor_ = v;
+        if (fogColorParam_) fogColorParam_->SetValue(v);
+    }
     bool BasicEffect::getFogEnabledProperty() const { return fogEnabled_; }
     void BasicEffect::setFogEnabledProperty(bool v) { fogEnabled_ = v; }
     float BasicEffect::getFogStartProperty() const { return fogStart_; }

@@ -410,6 +410,30 @@ namespace Microsoft::Xna::Framework::Graphics
 
     private:
 
+        void CacheEffectParameters();
+
+        EffectParameter* textureParam_ = nullptr;
+        EffectParameter* diffuseColorParam_ = nullptr;
+        EffectParameter* emissiveColorParam_ = nullptr;
+        EffectParameter* specularColorParam_ = nullptr;
+        EffectParameter* specularPowerParam_ = nullptr;
+        EffectParameter* dirLight0DirectionParam_ = nullptr;
+        EffectParameter* dirLight0DiffuseColorParam_ = nullptr;
+        EffectParameter* dirLight0SpecularColorParam_ = nullptr;
+        EffectParameter* dirLight1DirectionParam_ = nullptr;
+        EffectParameter* dirLight1DiffuseColorParam_ = nullptr;
+        EffectParameter* dirLight1SpecularColorParam_ = nullptr;
+        EffectParameter* dirLight2DirectionParam_ = nullptr;
+        EffectParameter* dirLight2DiffuseColorParam_ = nullptr;
+        EffectParameter* dirLight2SpecularColorParam_ = nullptr;
+        EffectParameter* eyePositionParam_ = nullptr;
+        EffectParameter* fogColorParam_ = nullptr;
+        EffectParameter* fogVectorParam_ = nullptr;
+        EffectParameter* worldParam_ = nullptr;
+        EffectParameter* worldInverseTransposeParam_ = nullptr;
+        EffectParameter* worldViewProjParam_ = nullptr;
+        EffectParameter* shaderIndexParam_ = nullptr;
+
         // CNAEXT shadow reception (MOD-820). Inert by default: an effect that is never given a
         // shadow map renders exactly as it did before this existed.
         Texture2D* shadowMapEXT_ = nullptr;
