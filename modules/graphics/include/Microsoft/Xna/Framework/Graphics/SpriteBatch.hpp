@@ -125,9 +125,9 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void Begin(SpriteSortMode sortMode,
                    BlendState blendState,
-                   SamplerState* samplerState,
-                   DepthStencilState* depthStencilState,
-                   RasterizerState* rasterizerState);
+                   const SamplerState* samplerState,
+                   const DepthStencilState* depthStencilState,
+                   const RasterizerState* rasterizerState);
 
         /**
          * @brief Begins a sprite batch with nullable XNA state objects; transform defaults to
@@ -141,9 +141,9 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void Begin(SpriteSortMode sortMode,
                    const BlendState* blendState,
-                   SamplerState* samplerState,
-                   DepthStencilState* depthStencilState,
-                   RasterizerState* rasterizerState);
+                   const SamplerState* samplerState,
+                   const DepthStencilState* depthStencilState,
+                   const RasterizerState* rasterizerState);
 
         /**
          * @brief Begins a sprite batch with a custom effect; transform defaults to Identity.
@@ -157,9 +157,9 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void Begin(SpriteSortMode sortMode,
                    BlendState blendState,
-                   SamplerState* samplerState,
-                   DepthStencilState* depthStencilState,
-                   RasterizerState* rasterizerState,
+                   const SamplerState* samplerState,
+                   const DepthStencilState* depthStencilState,
+                   const RasterizerState* rasterizerState,
                    Effect* effect);
 
         /**
@@ -175,9 +175,9 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void Begin(SpriteSortMode sortMode,
                    const BlendState* blendState,
-                   SamplerState* samplerState,
-                   DepthStencilState* depthStencilState,
-                   RasterizerState* rasterizerState,
+                   const SamplerState* samplerState,
+                   const DepthStencilState* depthStencilState,
+                   const RasterizerState* rasterizerState,
                    Effect* effect);
 
         /**
@@ -193,9 +193,9 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void Begin(SpriteSortMode sortMode,
                    BlendState blendState,
-                   SamplerState* samplerState,
-                   DepthStencilState* depthStencilState,
-                   RasterizerState* rasterizerState,
+                   const SamplerState* samplerState,
+                   const DepthStencilState* depthStencilState,
+                   const RasterizerState* rasterizerState,
                    Effect* effect,
                    Matrix transformMatrix);
 
@@ -212,9 +212,9 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void Begin(SpriteSortMode sortMode,
                    const BlendState* blendState,
-                   SamplerState* samplerState,
-                   DepthStencilState* depthStencilState,
-                   RasterizerState* rasterizerState,
+                   const SamplerState* samplerState,
+                   const DepthStencilState* depthStencilState,
+                   const RasterizerState* rasterizerState,
                    Effect* effect,
                    Matrix transformMatrix);
 

@@ -128,6 +128,22 @@ TEST(SpriteBatchTest, BeginSortBlendWithoutRendererDoesNotThrow)
     EXPECT_NO_THROW(batch.Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend));
 }
 
+TEST(SpriteBatchTest, BeginAcceptsConstPresetStates)
+{
+    using Microsoft::Xna::Framework::Graphics::BlendState;
+    using Microsoft::Xna::Framework::Graphics::DepthStencilState;
+    using Microsoft::Xna::Framework::Graphics::RasterizerState;
+    using Microsoft::Xna::Framework::Graphics::SamplerState;
+    SpriteBatch batch;
+
+    EXPECT_NO_THROW(batch.Begin(SpriteSortMode::Deferred,
+                                BlendState::AlphaBlend,
+                                &SamplerState::LinearWrap,
+                                &DepthStencilState::None,
+                                &RasterizerState::CullNone));
+    batch.End();
+}
+
 TEST(SpriteBatchTest, BeginFiveParameterNullBlendUsesAlphaBlend)
 {
     using Microsoft::Xna::Framework::Graphics::BlendState;

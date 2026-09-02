@@ -124,9 +124,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SpriteBatch::Begin(SpriteSortMode sortMode,
                             BlendState blendState,
-                            SamplerState* samplerState,
-                            DepthStencilState* depthStencilState,
-                            RasterizerState* rasterizerState)
+                            const SamplerState* samplerState,
+                            const DepthStencilState* depthStencilState,
+                            const RasterizerState* rasterizerState)
     {
         Begin(sortMode, blendState, samplerState, depthStencilState, rasterizerState,
               nullptr, Matrix::getIdentityProperty());
@@ -134,9 +134,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SpriteBatch::Begin(SpriteSortMode sortMode,
                             const BlendState* blendState,
-                            SamplerState* samplerState,
-                            DepthStencilState* depthStencilState,
-                            RasterizerState* rasterizerState)
+                            const SamplerState* samplerState,
+                            const DepthStencilState* depthStencilState,
+                            const RasterizerState* rasterizerState)
     {
         Begin(sortMode, blendState, samplerState, depthStencilState, rasterizerState,
               nullptr, Matrix::getIdentityProperty());
@@ -144,9 +144,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SpriteBatch::Begin(SpriteSortMode sortMode,
                             BlendState blendState,
-                            SamplerState* samplerState,
-                            DepthStencilState* depthStencilState,
-                            RasterizerState* rasterizerState,
+                            const SamplerState* samplerState,
+                            const DepthStencilState* depthStencilState,
+                            const RasterizerState* rasterizerState,
                             Effect* effect)
     {
         Begin(sortMode, blendState, samplerState, depthStencilState, rasterizerState,
@@ -155,9 +155,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SpriteBatch::Begin(SpriteSortMode sortMode,
                             const BlendState* blendState,
-                            SamplerState* samplerState,
-                            DepthStencilState* depthStencilState,
-                            RasterizerState* rasterizerState,
+                            const SamplerState* samplerState,
+                            const DepthStencilState* depthStencilState,
+                            const RasterizerState* rasterizerState,
                             Effect* effect)
     {
         Begin(sortMode, blendState, samplerState, depthStencilState, rasterizerState,
@@ -166,9 +166,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SpriteBatch::Begin(SpriteSortMode sortMode,
                             BlendState blendState,
-                            SamplerState* samplerState,
-                            DepthStencilState* depthStencilState,
-                            RasterizerState* rasterizerState,
+                            const SamplerState* samplerState,
+                            const DepthStencilState* depthStencilState,
+                            const RasterizerState* rasterizerState,
                             Effect* effect,
                             Matrix transformMatrix)
     {
@@ -178,9 +178,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SpriteBatch::Begin(SpriteSortMode sortMode,
                             const BlendState* blendState,
-                            SamplerState* samplerState,
-                            DepthStencilState* depthStencilState,
-                            RasterizerState* rasterizerState,
+                            const SamplerState* samplerState,
+                            const DepthStencilState* depthStencilState,
+                            const RasterizerState* rasterizerState,
                             Effect* effect,
                             Matrix transformMatrix)
     {
