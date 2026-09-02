@@ -273,6 +273,29 @@ TEST(EffectTest, AuthenticXna4EffectAcceptsRepeatedAndAuxiliaryObjectRecords)
     }
 }
 
+TEST(EffectTest, AuthenticXna4ShaderStateIdentifiersSurvivePassApplication)
+{
+    GraphicsDevice gd;
+    const auto racingEffect = LoadAuthenticRacingCompiledEffectFixture();
+    ASSERT_FALSE(racingEffect.empty());
+
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+    {
+        GTEST_SKIP() << "renderer does not execute compiled effects";
+    }
+
+    TestEffect effect(gd, racingEffect);
+    ASSERT_GE(effect.getTechniquesProperty().getCountProperty(), 2);
+    EffectTechnique& technique = effect.getTechniquesProperty()[1];
+    ASSERT_EQ(technique.getPassesProperty().getCountProperty(), 1);
+    effect.setCurrentTechniqueProperty(&technique);
+
+    // The authentic XNA 4 payload stores VertexShader/PixelShader as MojoShader render-state
+    // identifiers 146/147. If either identifier is incorrectly stripped to 18/19, applying this
+    // pass reports unsupported FogStart/FogEnd before any draw can occur.
+    EXPECT_NO_THROW(technique.getPassesProperty()[0].Apply());
+}
+
 TEST(EffectTest, RejectsInvalidRenderStateIdentifierBeforeEnumConversion)
 {
     GraphicsDevice gd;

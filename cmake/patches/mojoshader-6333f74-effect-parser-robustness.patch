@@ -187,6 +187,26 @@ index 39cb5c0..1b7b303 100644
              text += len;
              if (len >= left)
                  left = (left < 1) ? left : 1;
+diff --git a/mojoshader.h b/mojoshader.h
+index c0d45c4..ce64d9f 100644
+--- a/mojoshader.h
++++ b/mojoshader.h
+@@ -2396,8 +2396,14 @@ typedef enum MOJOSHADER_renderStateType
+      * referred to by MOJOSHADER_effectStateType as such.
+      */
+     MOJOSHADER_RS_VERTEXSHADER = 146,
+-    MOJOSHADER_RS_PIXELSHADER = 147
++    MOJOSHADER_RS_PIXELSHADER = 147,
++
++    /* XNA 4 Effect Framework payloads can retain these legacy assignment records. Giving them
++     * names keeps a C++ consumer from observing an out-of-range enum value. -CNA
++     */
++    MOJOSHADER_RS_PIXELSHADERCONSTANT = 160,
++    MOJOSHADER_RS_SETSAMPLER = 178
+ } MOJOSHADER_renderStateType;
+ 
+ typedef enum MOJOSHADER_zBufferType
+ {
 diff --git a/mojoshader_effects.c b/mojoshader_effects.c
 index 036f18d..bbb578a 100644
 --- a/mojoshader_effects.c
@@ -558,9 +578,9 @@ index 036f18d..bbb578a 100644
 -static void readstates(const uint32 numstates,
 +static int render_state_type_is_valid(const uint32 type)
 +{
-+    return (type <= MOJOSHADER_RS_BLENDOPALPHA)
-+        || (type == MOJOSHADER_RS_VERTEXSHADER)
-+        || (type == MOJOSHADER_RS_PIXELSHADER);
++    return (type <= MOJOSHADER_RS_BLENDOPALPHA) || (type == MOJOSHADER_RS_VERTEXSHADER)
++        || (type == MOJOSHADER_RS_PIXELSHADER) || (type == MOJOSHADER_RS_PIXELSHADERCONSTANT)
++        || (type == MOJOSHADER_RS_SETSAMPLER);
 +} // render_state_type_is_valid
 +
 +static int readstates(const uint32 numstates,
@@ -583,7 +603,7 @@ index 036f18d..bbb578a 100644
          MOJOSHADER_effectState *state = &(*states)[i];
  
 -        const uint32 type = readui32(ptr, len);
-+        const uint32 type = readui32(ptr, len) & ~0xA0;
++        const uint32 type = readui32(ptr, len);  /* already a render-state ABI identifier. */
          /*const uint32 FIXME =*/ readui32(ptr, len);
          const uint32 typeoffset = readui32(ptr, len);
          const uint32 valoffset = readui32(ptr, len);

@@ -23,16 +23,15 @@ namespace
     constexpr std::size_t kMaximumReflectionDepth = 32u;
     constexpr std::size_t kMaximumReflectedItems = 64u * 1024u;
 
-    std::uint32_t NormalizeRenderStateType(std::uint32_t value)
-    {
-        return value & ~0xA0u;
-    }
-
     bool IsValidRenderStateType(std::uint32_t value)
     {
         // MojoShader's Effect ABI numbers the ordinary D3D9 render states contiguously from
         // ZENABLE through BLENDOPALPHA, then reserves a gap before its two shader pseudo-states.
-        return value <= 102u || value == 146u || value == 147u;
+        // The legacy compiler also emits 160 for PixelShaderConstant assignments and 178 for
+        // SetSampler metadata. They must remain distinguishable from ordinary enum values even
+        // when a backend cannot execute the corresponding Shader Model 1 assignment.
+        return value <= 102u || value == 146u || value == 147u || value == 160u ||
+            value == 178u;
     }
 
     std::uint32_t ReadUInt32LittleEndian(
@@ -161,7 +160,7 @@ namespace
                         std::uint32_t stateTypeOffset = 0;
                         std::uint32_t stateValueOffset = 0;
                         if (!Read(cursor, rawStateType) ||
-                            !IsValidRenderStateType(NormalizeRenderStateType(rawStateType)) ||
+                            !IsValidRenderStateType(rawStateType) ||
                             !Read(cursor, legacy) ||
                             !Read(cursor, stateTypeOffset) ||
                             !Read(cursor, stateValueOffset))
