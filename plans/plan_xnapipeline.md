@@ -1,9 +1,24 @@
 # plan_xnapipeline.md — CNA XNA 4.0 Content Pipeline and XNB writing
 
-> **Status (2026-09-02):** active. This plan owns the **write** side of `.xnb`: a native C++ CNA
+> **Status (2026-09-02):** phases 1–7, 9 and the tooling landed; phase 8 (compression) and two
+> named source routes remain open. This plan owns the **write** side of `.xnb`: a native C++ CNA
 > equivalent of the useful parts of the XNA 4.0 Content Pipeline architecture, ending in real
 > `.xnb` production. It is a first-class CNA subsystem, not a converter script and not a wrapper
 > around MonoGame tooling.
+>
+> **What works today.** `cna-content build <source> -o <out> --format xnb` compiles PNG/JPG/BMP/TGA
+> to `Texture2D`, `.wav` to `SoundEffect`, and `.cnj` sources to `Texture3D`, `TextureCube`,
+> `SpriteFont` and `Curve`, plus `Song` and `Video`; the whole `Model` graph writes, including
+> shared `VertexBuffer`/`IndexBuffer`/stock-effect resources. Every produced file loads back
+> through CNA's own unmodified `ContentManager`, and every one is validated by an independent
+> specification checker that shares no code with CNA's reader.
+>
+> **What does not.** No compression (uncompressed only, which every XNA-compatible runtime reads);
+> no DXT/BC encoding on write (textures go out as `SurfaceFormat.Color`); no HLSL/FX compilation
+> (the `Effect` writer serializes bytecode a caller already has); no glTF → `Model` route, because
+> the frozen CNB schema-1 carrier has no vertex declaration; and no automated verification against
+> a real XNA 4.0 runtime, which cannot be installed on this host — `docs/xnb-interoperability.md`
+> carries the corpus and procedure for a machine that has one.
 >
 > **Boundary with existing plans.**
 > * `plans/plan_xnb.md` + `xnb.md` own the **runtime `.xnb` reader**. This plan does not reopen
@@ -877,9 +892,24 @@ This plan is complete when **all** of the following hold:
 9. This plan's task log accurately reflects what landed, what was deferred and why.
 
 **Known limitations accepted at completion** (each must be documented, not hidden): no DXT/BC
-compression on write; no LZX/LZ4 compression on write; no HLSL/FX compilation; `Model` and
-stock-effect writing status as recorded in §22; no automated external-runtime interoperability run
-on this machine; runtime and pipeline still share one library (`F3`).
+compression on write; no LZX/LZ4 compression on write; no HLSL/FX compilation; no glTF → `Model`
+source route while the frozen schema-1 carrier lacks a vertex declaration; no automated
+external-runtime interoperability run on this machine; runtime and pipeline still share one
+library (`F3`).
+
+### Assessment against the criteria, 2026-09-02
+
+| # | Criterion | State |
+|---|---|---|
+| 1 | Spec-conformant uncompressed container | ✅ Header, type-writer table, shared resources, root, polymorphic/raw/`Object? T` forms, 7-bit integers, strings, null |
+| 2 | Typed, RTTI-free, extensible writer registry with the built-in set | ✅ Plus `Model`, the buffers and all five stock effects, beyond what this criterion asked for |
+| 3 | `source → importer → processor → XNB` for `Texture2D`, `SpriteFont`, `SoundEffect`, `Curve` | ✅ All four, plus `Texture3D`, `TextureCube`, `Song`, `Video` |
+| 4 | `cna-content … --format xnb` end to end | ✅ With dependency tracking, format-aware incremental skipping, deterministic output and non-zero failure exits |
+| 5 | Every produced `.xnb` loads through CNA's unmodified `ContentManager` | ✅ Verified by round trip and by the PNG → `.xnb` → `Load<Texture2D>()` pixel-equality test |
+| 6 | Round-trip and conformance tests pass; pre-existing suites stay green | ✅ 7837 tests, 33 failures, identical to the recorded baseline |
+| 7 | CNB unchanged | ✅ No chunk, schema version, asset type or byte layout changed |
+| 8 | Documentation matches capability | ✅ `docs/xna-content-pipeline.md`, `docs/xnb-interoperability.md`; the contradictory permanent-out-of-scope statements are corrected |
+| 9 | Plan reflects reality | ✅ §22, including the two `[~]` partials and the deferred phase |
 
 ---
 
