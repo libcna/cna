@@ -467,6 +467,19 @@ TEST(EasyGLCompiledEffectTest, SharedBackendConformanceContract)
     CNA::TestSupport::RunCompiledEffectContract(device);
 }
 
+TEST(EasyGLCompiledEffectTest, PixelShaderOnlyPassAppliesOnDesktopCoreContext)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeSampler = true;
+    Effect effect(device, CNA::TestSupport::BuildSyntheticEffect(options));
+
+    EXPECT_NO_THROW(effect.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply());
+}
+
 // plans/plan_fx.md FX-084/FX-086: the shared draw matrix. Each of these renders the compiled effect's
 // own Tint parameter into a render target and reads it back, so a draw that silently used a stock
 // shader -- or bound an attribute from the wrong stream -- fails instead of passing quietly.

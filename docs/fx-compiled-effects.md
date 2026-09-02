@@ -256,6 +256,12 @@ shared.
 | EasyGL family (`OPENGLES2`, `OPENGLES3`, `OPENGL33`, `WEBGL1`, `WEBGL2`) | **true** | `CNA_EASYGL_COMPILED_EFFECTS` (off by default) | MojoShader's OpenGL adapter; passes the full shared contract, including multi-stream and instanced draws |
 | every other renderer identity | false | — | No compiled-effect runtime yet, or no programmable shader target at all |
 
+EasyGL selects the MojoShader source dialect from the renderer instance that owns the GL context:
+desktop `OPENGL33` uses `glsl120`, the ES 2/WebGL 1 identities use `glsles`, and the ES 3/WebGL 2
+identities use `glsles3`. It deliberately does not accept `MOJOSHADER_glBestProfile` choosing
+`glspirv` on a newer desktop driver: that adapter assumes a complete vertex/pixel pair, while an
+XNA Effect pass may validly assign only one stage and inherit the other at draw time.
+
 The two opt-in options exist because MojoShader is a fetched dependency those renderers do not
 otherwise need. With the option off the renderer reports `CompiledEffects == false` and refuses a
 compiled `Effect` exactly like any unsupported backend -- the capability never claims more than the

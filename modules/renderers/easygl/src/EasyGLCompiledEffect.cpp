@@ -37,6 +37,29 @@ namespace CNA::Internal::Renderers::EasyGL
         /// Same ceiling the shared translation applies to reflected tables.
         constexpr std::size_t kMaximumReflectedItems = 64u * 1024u;
 
+        /// Chooses the MojoShader source profile matching the GL context EasyGL created.
+        ///
+        /// `MOJOSHADER_glBestProfile` prefers `glspirv` on recent desktop drivers. That adapter
+        /// cannot link a valid pixel-only Effect pass because its program finalisation assumes
+        /// both shader stages exist. EasyGL's compiled-effect contract is the GLSL family described
+        /// by the renderer profile, so select that dialect explicitly just as the ES profiles
+        /// already require.
+        [[nodiscard]] constexpr const char* MojoShaderProfileFor(GlProfile profile)
+        {
+            switch (profile)
+            {
+                case GlProfile::OpenGLES2:
+                case GlProfile::WebGL1:
+                    return MOJOSHADER_PROFILE_GLSLES;
+                case GlProfile::OpenGLES3:
+                case GlProfile::WebGL2:
+                    return MOJOSHADER_PROFILE_GLSLES3;
+                case GlProfile::OpenGL33:
+                    return MOJOSHADER_PROFILE_GLSL120;
+            }
+            return MOJOSHADER_PROFILE_GLSLES3;
+        }
+
         /// Resolves a public texture to the EasyGL resource behind it, or null if it is not one.
         ///
         /// plans/plan_fx.md FX-099: a `RenderTarget2D` is a `Texture2D` whose renderer is an
@@ -596,15 +619,11 @@ namespace CNA::Internal::Renderers::EasyGL
         // MOJOSHADER_glCreateContext looks up the GL functions it needs itself, through this same
         // loader every other GL call in this renderer resolves through -- passed as `lookup_d` so
         // GlProcAddressTrampoline above can forward to it without a static/global capture.
-        // MOJOSHADER_glBestProfile picks the right GLSL/GLSLES/GLSLES3 dialect for whichever of the
-        // five CNA_GL_PROFILE_* identities actually created this GL context, rather than hard-
-        // coding one -- confirmed correct for GLES3 by tools/graphics/mojoshader_gl_probe.cpp's
-        // existence gate.
+        // The requested dialect follows this renderer instance rather than the build default, so
+        // multi-renderer builds keep using the profile of the context that owns this MojoShader
+        // context. tools/graphics/mojoshader_gl_probe.cpp independently qualifies the GLES3 route.
         void* loaderData = reinterpret_cast<void*>(GetProcAddressLoaderEXT());
-        const char* profile = MOJOSHADER_glBestProfile(
-            GlProcAddressTrampoline, loaderData, nullptr, nullptr, nullptr);
-        if (profile == nullptr)
-            return nullptr;
+        const char* profile = MojoShaderProfileFor(profile_);
         mojoShaderContext_ = MOJOSHADER_glCreateContext(
             profile, GlProcAddressTrampoline, loaderData, nullptr, nullptr, nullptr);
         if (mojoShaderContext_ != nullptr)
