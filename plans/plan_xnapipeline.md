@@ -800,14 +800,16 @@ resolve it by consulting a prohibited implementation.
 - [x] **XNAP-017** `Song` and `Video` writers (external streaming filename + metadata).
 
 ### Phase 7 — Model and effects
-- [ ] **XNAP-018** `VertexDeclaration`, `VertexBuffer`, `IndexBuffer` writers.
-- [ ] **XNAP-019** `Model` writer: bone table, bone-reference width rule, mesh/mesh-part graph,
+- [x] **XNAP-018** `VertexDeclaration`, `VertexBuffer`, `IndexBuffer` writers.
+- [x] **XNAP-019** `Model` writer: bone table, bone-reference width rule, mesh/mesh-part graph,
       shared `VertexBuffer`/`IndexBuffer`/`Effect` resources.
-- [ ] **XNAP-020** Stock-effect writers (`BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`,
+- [x] **XNAP-020** Stock-effect writers (`BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`,
       `EnvironmentMapEffect`, `SkinnedEffect`) and `EffectMaterial`.
-- [ ] **XNAP-021** General `Effect` writer (opaque compiled bytecode blob). **Serialization only** —
+- [x] **XNAP-021** General `Effect` writer (opaque compiled bytecode blob). **Serialization only** —
       this plan does not claim HLSL/FX compilation. Documented separately.
-- [ ] **XNAP-022** `ModelXnbAssetWriter` + glTF → `.xnb` end-to-end test.
+- [~] **XNAP-022** `ModelXnbAssetWriter` over the lossless schema-2 carrier, with the
+      relative-external-reference rule. The glTF → `.xnb` route stays open: glTF produces the
+      frozen schema-1 carrier, which has no vertex declaration.
 
 ### Phase 8 — Compression (provenance-gated)
 - [ ] **XNAP-023** Investigate LZX compression provenance; implement only if clean. Uncompressed
@@ -823,8 +825,13 @@ resolve it by consulting a prohibited implementation.
 - [x] **XNAP-026** `docs/xnb-interoperability.md` + generated fixture corpus + validation script.
 
 ### Phase 10 — Evaluated, decided later
-- [ ] **XNAP-027** Custom-type writer support (an explicit field-list builder mirroring
-      `ReflectiveTypeReaderBuilder<T>`).
+- [~] **XNAP-027** Custom-type writer support. The **extension point** is complete and proven
+      end to end: a game specializes `XnbTypeKey<T>`, subclasses `XnbTypeWriterT<T>`, registers
+      both, and its own type round-trips through its own reader, composes with the built-in
+      generic collections, and lands its own reader name in the type table -- with no CNA-side
+      change and no RTTI in the lookup path (`XnbCustomTypeWriterTests.cpp`). Still open: an
+      optional field-list *builder* mirroring `ReflectiveTypeReaderBuilder<T>`, which would only
+      remove the ten lines of boilerplate a writer subclass costs today.
 - [ ] **XNAP-028** Evaluate read-only `.contentproj` ingestion. Default answer: **no** — XML/MSBuild
       must not become a mandatory architectural dependency; `.cna-content.json` already covers the
       need. Revisit only with a concrete migration request.
@@ -903,4 +910,10 @@ Status legend: `[ ]` open · `[x]` complete · `[~]` partial (scope recorded) ·
 | XNAP-017 | [x] | `Song` and `Video` writers, both in the specification's dispatched-object form. |
 | XNAP-024 | [x] | `cna-content --format cnb\|xnb` with `--xnb-platform/--xnb-version/--xnb-profile`, a format-aware build manifest (schema 9: `outputFormat` per node, `rootReaderName` per output), format-aware incremental skipping, and a format switch that retires the previous artifact. |
 | XNAP-025 | [x] | `docs/xna-content-pipeline.md`; corrected the permanent-out-of-scope statements in `docs/xnb-content-pipeline-support.md` and `xnb.md`, and the CNB-only framing in `docs/content-pipeline.md`. |
+| XNAP-018 | [x] | `VertexDeclaration`, `VertexBuffer` and `IndexBuffer` writers, each validating that its declared counts and its payload agree. |
+| XNAP-019 | [x] | The `Model` writer: bone table, the `Byte`-below-255-bones reference width, mesh and mesh-part graph, and shared `VertexBuffer`/`IndexBuffer`/`Effect` resources registered once and referenced by index. Verified by decoding a real MonoGame `Model` `.xnb`, writing it back and decoding again: bones, children, meshes, parts, buffers, declarations and the effect all reproduce exactly. |
+| XNAP-020 | [x] | All five stock-effect writers, including their external texture references. |
+| XNAP-021 | [~] | The general `Effect` writer stores an already-compiled bytecode blob and refuses an empty one. HLSL/FX **compilation** is explicitly not part of this and is not claimed anywhere. |
+| XNAP-022 | [~] | `ModelXnbAssetWriter` plus `ConvertCnbModelV2ToXnb()` and `XnbRelativeAssetReference()` (XNA external references are relative to the referring asset; CNB logical names are relative to the content root). The lossless schema-2 carrier converts and writes end to end. The glTF source route remains open, because the frozen schema-1 carrier stores a vertex stride but no vertex declaration, and inventing one would be a fabrication rather than a conversion; the writer says exactly that instead. |
+| XNAP-027 | [~] | The extension point is complete and covered end to end; the optional field-list builder is not built. A custom writer's `IsValueType()` must match the reader's own shape (a C# struct is a value type with a plain `T` reader; a C# class is a reference type with a `shared_ptr<T>` reader), which is now documented as the single easiest custom-type mistake to make. |
 | XNAP-026 | [x] | `scripts/xnb_conformance.py` (an independent Python implementation of the reader side, written from the specification), the CNA fixture corpus and its generator, `docs/xnb-interoperability.md`, and the `CnaXnbSpecificationConformance` ctest. |

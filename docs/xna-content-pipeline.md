@@ -95,8 +95,10 @@ one never shadows the other.
 | `Curve` | `.cnj` curve | `CurveReader` | ✅ Full |
 | `Song` | audio source | `SongReader` | ✅ Streaming file name plus the dispatched `Object: Int32` duration |
 | `Video` | video source | `VideoReader` | ✅ All six fields in their dispatched `Object` form |
-| `Model` | glTF | `ModelReader` | ❌ Not yet — `plans/plan_xnapipeline.md` Phase 7 |
-| `Effect` / stock effects | — | `EffectReader` etc. | ❌ Not yet — Phase 7; see §6 |
+| `Model` | a canonical schema-2 model (e.g. an imported `.xnb`) | `ModelReader` | ✅ Full graph: bones, the bone-reference width rule, meshes, mesh parts and the shared `VertexBuffer`/`IndexBuffer`/`Effect` resources. ⚠️ The glTF route produces the frozen schema-1 carrier, which has no vertex declaration; see §6 |
+| `VertexBuffer`, `IndexBuffer`, `VertexDeclaration` | inside a `Model` | matching readers | ✅ Full |
+| `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect` | inside a `Model` | matching readers | ✅ Full, including their external texture references |
+| `Effect` (compiled) | a caller-supplied bytecode blob | `EffectReader` | ⚠️ Serialization only — CNA does not compile HLSL/FX; see §6 |
 
 Plain data types are supported as root assets and as members of any of the above: every primitive
 (`Byte`…`String`), every XNA math value type (`Vector2/3/4`, `Matrix`, `Quaternion`, `Color`,
@@ -118,7 +120,7 @@ specification (see §8):
 | Version | 5 by default; 4 on request. Both are XNA 4.0-valid |
 | Flags | bit `0x01` HiDef when requested, otherwise Reach; bit `0x80` always clear (uncompressed) |
 | File size | `UInt32`, counted including the 10-byte header, always exactly the emitted length |
-| Type-reader table | 7-bit count, then per entry a 7-bit-length-prefixed UTF-8 assembly-unqualified reader name and an `Int32` version of `0` |
+| Type-reader table | 7-bit count, then per entry a 7-bit-length-prefixed UTF-8 reader name and an `Int32` version of `0`. A reader outside `Microsoft.Xna.Framework` is assembly-qualified (`…Texture2DReader, Microsoft.Xna.Framework.Graphics, Version=4.0.0.0, …`) and one inside it is not, matching real XNA content exactly, because a loading runtime resolves them with `Type.GetType()` |
 | Shared resources | 7-bit count after the table; entries serialized after the root, referenced by 1-based index |
 | Objects | 7-bit `typeId`; `0` = null; otherwise `typeId - 1` indexes the table |
 | Value types | Written raw, with no type identifier, wherever the format specifies `Object? T` |
@@ -192,6 +194,15 @@ The reader side of the same pair is documented in
 [`docs/xnb-content-pipeline-support.md`](xnb-content-pipeline-support.md) — the reader name here
 must be the name that game registers with `ContentTypeReaderManager::AddTypeCreator()`.
 
+**`IsValueType()` must match the reader's own shape.** It decides whether the type is written
+inline or with a leading type identifier wherever the format says `Object? T` — a collection
+element, most struct fields. CNA's reader infers the same distinction from C++: a
+`std::shared_ptr<T>` element is a reference type, anything else is a value type. So a C# `struct`
+is `IsValueType() == true` with a plain `T` reader, and a C# `class` is `IsValueType() == false`
+with a `std::shared_ptr<T>` reader (the read side's `RegisterShared()`). Getting this wrong emits
+or consumes one extra identifier per element and desynchronises everything after it; it is the
+single easiest custom-type mistake to make.
+
 ### A custom asset in the build
 
 Implement `XnbAssetWriter` and register it with `ContentPipelineRegistry::RegisterXnbWriter()`,
@@ -229,8 +240,8 @@ writer.WriteSharedResource("vertexBuffer:0", vertexBufferTypeName, std::any(buff
 |---|---|
 | Compression (LZX, LZ4) | ❌ Uncompressed only. Every XNA-compatible runtime reads uncompressed `.xnb` unconditionally, so this costs compatibility nothing — only file size. LZX **compression** is a separate algorithm from the decompressor CNA already has, and is gated on clean provenance (`plans/plan_xnapipeline.md` `XNAP-023`). |
 | DXT/BC compression on write | ❌ CNA has a DXT *decompressor*, not a compressor, so textures are written as `SurfaceFormat.Color`. A pre-compressed BC source can be written once a block encoder exists. |
-| `Model` | ❌ Phase 7. The reader, and a canonical `XnbModelData` decode, already exist; the writer and its shared-resource graph do not. |
-| `Effect` and the five stock effects | ❌ Phase 7. **Serializing an `Effect` `.xnb` is not the same as compiling HLSL/FX**: the payload is XNA D3D9 Effect Framework bytecode, which CNA does not produce. The serialization architecture is planned separately from any shader compilation, and this document will not claim the latter. |
+| `Model` from glTF | ⚠️ The `Model` **writer** is complete and verified against a real, externally produced `Model` `.xnb` (decode → write → decode reproduces the graph exactly). What is missing is the *source* route: CNA's glTF import produces the frozen CNB schema-1 carrier, which stores a vertex stride but **no vertex declaration**, and an `.xnb` `VertexBuffer` requires the full declaration. The writer refuses a schema-1 carrier with exactly that reason rather than inventing element offsets, formats and usages that were never authored. The lossless schema-2 carrier — which an imported `.xnb` produces — converts and writes end to end today. |
+| `Effect` compilation | ❌ **Serializing an `Effect` `.xnb` is not the same as compiling HLSL/FX.** The payload is XNA D3D9 Effect Framework bytecode, which CNA does not produce. The writer stores bytecode a caller already has and refuses an empty payload; it never claims to have compiled anything. Integrating CNA's own FX infrastructure is a separate subsystem (`plans/plan_fx.md`). |
 | `ReflectiveWriter` | ❌ Not reproduced. C++ has no runtime reflection; the reader side solves the equivalent problem with an explicit field-list builder, and the writer side would do the same (`XNAP-027`). |
 | `.contentproj` | ❌ Not supported, and evaluated as a deliberate no: `.cna-content.json` already covers per-asset importer/processor/writer/parameter configuration without making XML and MSBuild an architectural dependency. |
 | Xbox 360 platform | ❌ Not writable, by design — see §3. |

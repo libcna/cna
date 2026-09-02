@@ -1045,9 +1045,6 @@ if(CNA_BUILD_TESTS)
             "${CMAKE_SOURCE_DIR}/tests/assets/xnb/monogame/windows/uncompressed/audio/*.xnb"
             "${CMAKE_SOURCE_DIR}/tests/assets/xnb/monogame/windows/uncompressed/song/*.xnb"
             "${CMAKE_SOURCE_DIR}/tests/assets/xnb/xna40/windows/uncompressed/*.xnb")
-        # BlenderDefaultCube.xnb is a Model, which CNA does not write yet and this checker does
-        # not decode; it is excluded by name rather than by silently passing unknown roots.
-        list(FILTER _cna_xnb_conformance_files EXCLUDE REGEX "BlenderDefaultCube")
         if(_cna_xnb_conformance_files)
             add_test(NAME CnaXnbSpecificationConformance
                 COMMAND "${Python3_EXECUTABLE}"

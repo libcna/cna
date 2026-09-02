@@ -5,9 +5,11 @@
 #include <string>
 #include <vector>
 
+#include "CNA/Content/Cnb/CnbModelV2Data.hpp"
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
 #include "CNA/Content/Xnb/XnbFileOptions.hpp"
 #include "CNA/Content/Xnb/XnbTypeWriter.hpp"
+#include "CNA/Internal/Xnb/XnbCanonicalData.hpp"
 
 namespace CNA::Content::Pipeline
 {
@@ -128,9 +130,56 @@ namespace CNA::Content::Pipeline
     void RegisterBuiltInXnbAssetWriters(ContentPipelineRegistry& registry);
 
     /**
+     * @brief Registers the `Model` `.xnb` asset writer.
+     *
+     * Separate from RegisterBuiltInXnbAssetWriters() only so the Model graph's conversion stays in
+     * its own translation unit; RegisterBuiltInXnbAssetWriters() already calls it.
+     *
+     * @param registry Pipeline registry to configure before builds begin.
+     */
+    void RegisterXnbModelAssetWriter(ContentPipelineRegistry& registry);
+
+    /**
      * @brief Builds the type-writer registry the built-in asset writers need, already frozen.
      *
      * @return A shared, frozen registry safe for concurrent use.
      */
     [[nodiscard]] std::shared_ptr<const Xnb::XnbTypeWriterRegistry> CreateXnbTypeWriterRegistry();
+
+    /**
+     * @brief Converts a lossless schema-2 canonical Model into the XNB Model graph
+     *        (plans/plan_xnapipeline.md `XNAP-022`).
+     *
+     * CNB Model schema 2 exists precisely to hold XNA `Model` semantics exactly -- interned vertex
+     * declarations, shared vertex/index buffers and stock effects -- so this is a structural
+     * inverse of the `.xnb` → schema-2 import, not a reinterpretation. Schema 1 has no vertex
+     * declaration at all and therefore cannot be converted; that route says so rather than
+     * inventing one.
+     *
+     * The three separate schema-2 resource arrays become one flat XNB shared-resource list in a
+     * fixed order -- vertex buffers, then index buffers, then effects -- so the mapping is a pure
+     * function of the input.
+     *
+     * @param model Canonical schema-2 Model document.
+     * @param logicalName Logical name of the Model asset, used to make texture references
+     *        relative to it exactly as XNA's own external references are.
+     * @return The equivalent canonical XNB Model graph.
+     * @throws Xnb::XnbWriteException when the document is internally inconsistent.
+     */
+    [[nodiscard]] CNA::Internal::Xnb::XnbModelData ConvertCnbModelV2ToXnb(
+        const Cnb::CnbModelV2Data& model, const std::string& logicalName);
+
+    /**
+     * @brief Returns @p target expressed relative to the asset at @p from.
+     *
+     * XNA external references are relative to the referring `.xnb`, while CNB logical names are
+     * relative to the content root. A `Model` at `Models/robot` referencing `Textures/wall`
+     * therefore writes `../Textures/wall`.
+     *
+     * @param from Logical name of the referring asset.
+     * @param target Logical name of the referenced asset, or empty for no reference.
+     * @return The relative reference to write, or empty when @p target is empty.
+     */
+    [[nodiscard]] std::string XnbRelativeAssetReference(const std::string& from,
+                                                        const std::string& target);
 }

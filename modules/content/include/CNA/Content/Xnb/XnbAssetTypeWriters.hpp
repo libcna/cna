@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "CNA/Content/Cnb/CnbMediaCodec.hpp"
 #include "CNA/Content/Cnb/CnbSoundEffectCodec.hpp"
@@ -11,6 +12,7 @@
 #include "CNA/Content/Cnb/CnbTextureCodec.hpp"
 #include "CNA/Content/Cnb/CnbTextureFormat.hpp"
 #include "CNA/Content/Xnb/XnbTypeWriter.hpp"
+#include "CNA/Internal/Xnb/XnbCanonicalData.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
 namespace CNA::Content::Xnb
@@ -134,4 +136,72 @@ namespace CNA::Content::Xnb
     /** @brief `Microsoft.Xna.Framework.Media.Video`. */
     template <> struct XnbTypeKey<Cnb::CnbVideoData>
     { static std::string Name() { return "Microsoft.Xna.Framework.Media.Video"; } };
+
+    /** @brief `Microsoft.Xna.Framework.Graphics.VertexDeclaration`. */
+    template <> struct XnbTypeKey<CNA::Internal::Xnb::XnbVertexDeclarationData>
+    { static std::string Name() { return "Microsoft.Xna.Framework.Graphics.VertexDeclaration"; } };
+
+    /** @brief `Microsoft.Xna.Framework.Graphics.VertexBuffer`. */
+    template <> struct XnbTypeKey<CNA::Internal::Xnb::XnbVertexBufferData>
+    { static std::string Name() { return "Microsoft.Xna.Framework.Graphics.VertexBuffer"; } };
+
+    /** @brief `Microsoft.Xna.Framework.Graphics.IndexBuffer`. */
+    template <> struct XnbTypeKey<CNA::Internal::Xnb::XnbIndexBufferData>
+    { static std::string Name() { return "Microsoft.Xna.Framework.Graphics.IndexBuffer"; } };
+
+    /** @brief `Microsoft.Xna.Framework.Graphics.BasicEffect`. */
+    template <> struct XnbTypeKey<CNA::Internal::Xnb::XnbBasicEffectData>
+    { static std::string Name() { return "Microsoft.Xna.Framework.Graphics.BasicEffect"; } };
+
+    /** @brief `Microsoft.Xna.Framework.Graphics.AlphaTestEffect`. */
+    template <> struct XnbTypeKey<CNA::Internal::Xnb::XnbAlphaTestEffectData>
+    { static std::string Name() { return "Microsoft.Xna.Framework.Graphics.AlphaTestEffect"; } };
+
+    /** @brief `Microsoft.Xna.Framework.Graphics.DualTextureEffect`. */
+    template <> struct XnbTypeKey<CNA::Internal::Xnb::XnbDualTextureEffectData>
+    { static std::string Name() { return "Microsoft.Xna.Framework.Graphics.DualTextureEffect"; } };
+
+    /** @brief `Microsoft.Xna.Framework.Graphics.EnvironmentMapEffect`. */
+    template <> struct XnbTypeKey<CNA::Internal::Xnb::XnbEnvironmentMapEffectData>
+    { static std::string Name() { return "Microsoft.Xna.Framework.Graphics.EnvironmentMapEffect"; } };
+
+    /** @brief `Microsoft.Xna.Framework.Graphics.SkinnedEffect`. */
+    template <> struct XnbTypeKey<CNA::Internal::Xnb::XnbSkinnedEffectData>
+    { static std::string Name() { return "Microsoft.Xna.Framework.Graphics.SkinnedEffect"; } };
+
+    /** @brief `Microsoft.Xna.Framework.Graphics.Model`. */
+    template <> struct XnbTypeKey<CNA::Internal::Xnb::XnbModelData>
+    { static std::string Name() { return "Microsoft.Xna.Framework.Graphics.Model"; } };
+
+    /**
+     * @brief A compiled `Effect`'s opaque bytecode payload.
+     *
+     * **Serializing an `Effect` is not compiling one.** The payload is XNA D3D9 Effect Framework
+     * bytecode, which CNA does not produce; this writer stores bytes a caller already has, from a
+     * pre-compiled effect. See `docs/xna-content-pipeline.md` for that boundary
+     * (plans/plan_xnapipeline.md `XNAP-021`).
+     */
+    struct XnbCompiledEffect
+    {
+        /** @brief Complete compiled effect bytecode, exactly as the runtime will receive it. */
+        std::vector<std::uint8_t> bytecode;
+    };
+
+    /** @brief `Microsoft.Xna.Framework.Graphics.Effect`. */
+    template <> struct XnbTypeKey<XnbCompiledEffect>
+    { static std::string Name() { return "Microsoft.Xna.Framework.Graphics.Effect"; } };
+
+    /**
+     * @brief Registers the `Model` graph writers: buffers, stock effects, `Effect` and `Model`.
+     *
+     * Separate from RegisterXnbAssetTypeWriters() because a producer that only writes textures,
+     * fonts and sounds has no use for them, and because the model graph is the one part of the
+     * format that uses shared resources.
+     *
+     * Requires RegisterBuiltInXnbTypeWriters() to have run on the same registry first.
+     *
+     * @param registry Registry to configure before it is frozen.
+     * @throws XnbWriteException when a prerequisite writer is missing or a type is registered twice.
+     */
+    void RegisterXnbModelTypeWriters(XnbTypeWriterRegistry& registry);
 }

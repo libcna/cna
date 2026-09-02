@@ -512,6 +512,160 @@ def check_collection(cursor: Cursor, result: Xnb) -> None:
     result.details.update(elementType=element_type, count=count)
 
 
+def bone_reference(cursor: Cursor, bone_count: int) -> int:
+    """The format sizes this field by the model: a Byte below 255 bones, a UInt32 at or above."""
+    raw = cursor.byte() if bone_count < 255 else cursor.uint32()
+    if raw > bone_count:
+        raise ConformanceError(
+            f"bone reference {raw} exceeds the model's {bone_count} bones")
+    return raw - 1
+
+
+def shared_reference(cursor: Cursor, shared_count: int) -> int:
+    identifier = cursor.seven_bit()
+    if identifier > shared_count:
+        raise ConformanceError(
+            f"shared-resource reference {identifier} exceeds the file's {shared_count} resources")
+    return identifier - 1
+
+
+def check_vertex_declaration(cursor: Cursor) -> int:
+    stride = cursor.uint32()
+    if stride == 0:
+        raise ConformanceError("a vertex declaration cannot have a zero stride")
+    elements = cursor.uint32()
+    for index in range(elements):
+        offset = cursor.uint32()
+        element_format = cursor.int32()
+        usage = cursor.int32()
+        cursor.uint32()
+        if offset >= stride:
+            raise ConformanceError(
+                f"element {index} sits at offset {offset}, outside the {stride}-byte stride")
+        if not 0 <= element_format <= 11:
+            raise ConformanceError(
+                f"element {index} declares format {element_format}, which XNA 4.0 does not define")
+        if not 0 <= usage <= 12:
+            raise ConformanceError(
+                f"element {index} declares usage {usage}, which XNA 4.0 does not define")
+    return stride
+
+
+SHARED_RESOURCE_READERS = {
+    "Microsoft.Xna.Framework.Content.VertexBufferReader": "vertexBuffer",
+    "Microsoft.Xna.Framework.Content.IndexBufferReader": "indexBuffer",
+    "Microsoft.Xna.Framework.Content.BasicEffectReader": "effect",
+    "Microsoft.Xna.Framework.Content.AlphaTestEffectReader": "effect",
+    "Microsoft.Xna.Framework.Content.DualTextureEffectReader": "effect",
+    "Microsoft.Xna.Framework.Content.EnvironmentMapEffectReader": "effect",
+    "Microsoft.Xna.Framework.Content.SkinnedEffectReader": "effect",
+    "Microsoft.Xna.Framework.Content.EffectReader": "effect",
+}
+
+
+def check_shared_resource(cursor: Cursor, reader: str) -> None:
+    if reader == "Microsoft.Xna.Framework.Content.VertexBufferReader":
+        stride = check_vertex_declaration(cursor)
+        vertices = cursor.uint32()
+        cursor.take(stride * vertices)
+        return
+    if reader == "Microsoft.Xna.Framework.Content.IndexBufferReader":
+        sixteen_bit = cursor.boolean()
+        size = cursor.uint32()
+        width = 2 if sixteen_bit else 4
+        if size % width:
+            raise ConformanceError(
+                f"index payload of {size} bytes is not a whole number of {width}-byte indices")
+        cursor.take(size)
+        return
+    if reader == "Microsoft.Xna.Framework.Content.BasicEffectReader":
+        cursor.string()
+        cursor.take(12 * 3 + 4 + 4)
+        cursor.boolean()
+        return
+    if reader == "Microsoft.Xna.Framework.Content.AlphaTestEffectReader":
+        cursor.string()
+        cursor.int32()
+        cursor.uint32()
+        cursor.take(12 + 4)
+        cursor.boolean()
+        return
+    if reader == "Microsoft.Xna.Framework.Content.DualTextureEffectReader":
+        cursor.string()
+        cursor.string()
+        cursor.take(12 + 4)
+        cursor.boolean()
+        return
+    if reader == "Microsoft.Xna.Framework.Content.EnvironmentMapEffectReader":
+        cursor.string()
+        cursor.string()
+        cursor.take(4 + 12 + 4 + 12 + 12 + 4)
+        return
+    if reader == "Microsoft.Xna.Framework.Content.SkinnedEffectReader":
+        cursor.string()
+        weights = cursor.uint32()
+        if weights not in (1, 2, 4):
+            raise ConformanceError(f"skinned effect declares {weights} weights per vertex")
+        cursor.take(12 * 3 + 4 + 4)
+        return
+    if reader == "Microsoft.Xna.Framework.Content.EffectReader":
+        cursor.take(cursor.uint32())
+        return
+    raise ConformanceError(f"this checker does not decode the shared resource '{reader}'")
+
+
+def check_model(cursor: Cursor, result: Xnb) -> None:
+    bone_count = cursor.uint32()
+    if bone_count == 0:
+        raise ConformanceError("a model must declare at least one bone")
+    for _ in range(bone_count):
+        dispatched(cursor, result, "Microsoft.Xna.Framework.Content.StringReader")
+        cursor.string()
+        cursor.take(64)   # a raw 4x4 matrix
+    for _ in range(bone_count):
+        bone_reference(cursor, bone_count)
+        for _ in range(cursor.uint32()):
+            bone_reference(cursor, bone_count)
+
+    meshes = cursor.uint32()
+    parts = 0
+    for _ in range(meshes):
+        dispatched(cursor, result, "Microsoft.Xna.Framework.Content.StringReader")
+        cursor.string()
+        bone_reference(cursor, bone_count)
+        cursor.take(16)   # a raw bounding sphere
+        if cursor.seven_bit() != 0:
+            raise ConformanceError("this checker does not decode a non-null mesh Tag")
+        part_count = cursor.uint32()
+        parts += part_count
+        for _ in range(part_count):
+            cursor.uint32()
+            cursor.uint32()
+            cursor.uint32()
+            cursor.uint32()
+            if cursor.seven_bit() != 0:
+                raise ConformanceError("this checker does not decode a non-null mesh part Tag")
+            for _ in range(3):
+                shared_reference(cursor, result.shared_resource_count)
+
+    root = bone_reference(cursor, bone_count)
+    if cursor.seven_bit() != 0:
+        raise ConformanceError("this checker does not decode a non-null model Tag")
+    result.details.update(boneCount=bone_count, meshCount=meshes, partCount=parts, rootBone=root)
+
+    # The shared resources follow the root, each in polymorphic form.
+    for index in range(result.shared_resource_count):
+        type_id = cursor.seven_bit()
+        if type_id == 0 or type_id > len(result.readers):
+            raise ConformanceError(
+                f"shared resource {index} names type identifier {type_id}")
+        reader = result.readers[type_id - 1][0]
+        if reader not in SHARED_RESOURCE_READERS:
+            raise ConformanceError(
+                f"shared resource {index} uses reader '{reader}', which a Model does not hold")
+        check_shared_resource(cursor, reader)
+
+
 ROOT_CHECKS = {
     "Microsoft.Xna.Framework.Content.Texture2DReader":
         lambda c, r: check_texture2d(c, r),
@@ -524,6 +678,7 @@ ROOT_CHECKS = {
     "Microsoft.Xna.Framework.Content.SpriteFontReader": check_sprite_font,
     "Microsoft.Xna.Framework.Content.SongReader": check_song,
     "Microsoft.Xna.Framework.Content.VideoReader": check_video,
+    "Microsoft.Xna.Framework.Content.ModelReader": check_model,
 }
 
 
@@ -584,7 +739,7 @@ def check_file(path: str, expect_reader: str | None) -> Xnb:
     check(cursor, result)
 
     result.body_consumed = cursor.offset
-    if result.shared_resource_count == 0 and cursor.offset != len(body):
+    if cursor.offset != len(body):
         raise ConformanceError(
             f"the root payload consumed {cursor.offset} of {len(body)} body bytes; "
             f"{len(body) - cursor.offset} are unaccounted for")

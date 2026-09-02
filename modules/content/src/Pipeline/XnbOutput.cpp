@@ -160,6 +160,7 @@ namespace CNA::Content::Pipeline
         auto registry = std::make_shared<XnbTypeWriterRegistry>();
         Xnb::RegisterBuiltInXnbTypeWriters(*registry);
         Xnb::RegisterXnbAssetTypeWriters(*registry);
+        Xnb::RegisterXnbModelTypeWriters(*registry);
         registry->Freeze();
         return registry;
     }
@@ -216,5 +217,7 @@ namespace CNA::Content::Pipeline
                 "CNA.Xnb.VideoWriter", ProcessedVideoType,
                 Xnb::XnbTypeKey<Cnb::CnbVideoData>::Name(),
                 "Microsoft.Xna.Framework.Content.VideoReader", &Identity<Cnb::CnbVideoData>));
+
+        RegisterXnbModelAssetWriter(registry);
     }
 }
