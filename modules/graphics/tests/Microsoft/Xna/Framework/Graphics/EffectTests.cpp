@@ -69,6 +69,62 @@ namespace
         return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
     }
 
+    std::vector<SharpRuntime::bytecs> LoadAuthenticRacingCompiledEffectFixture()
+    {
+        const std::filesystem::path path =
+            CNA::TestSupport::CompiledEffectFixtureDirectory() /
+            "racing-shadow-map-xna4.fxb";
+        std::ifstream input(path, std::ios::binary);
+        return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+    }
+
+    std::size_t FindFirstPassRenderStateOffset(
+        const std::vector<SharpRuntime::bytecs>& bytes)
+    {
+        if (bytes.size() < 24u) return bytes.size();
+
+        std::size_t tokenOffset = 0;
+        if (ReadUInt32LittleEndian(bytes, 0) == 0xBCF00BCFu)
+            tokenOffset = ReadUInt32LittleEndian(bytes, 4);
+        if (tokenOffset > bytes.size() - 8u) return bytes.size();
+
+        const std::size_t base = tokenOffset + 8u;
+        const std::size_t structure = base + ReadUInt32LittleEndian(bytes, tokenOffset + 4u);
+        if (structure > bytes.size() - 16u) return bytes.size();
+
+        const std::uint32_t parameterCount = ReadUInt32LittleEndian(bytes, structure);
+        const std::uint32_t techniqueCount = ReadUInt32LittleEndian(bytes, structure + 4u);
+        if (techniqueCount == 0) return bytes.size();
+
+        std::size_t cursor = structure + 16u;
+        for (std::uint32_t i = 0; i < parameterCount; ++i)
+        {
+            if (cursor > bytes.size() - 16u) return bytes.size();
+            const std::uint32_t annotationCount = ReadUInt32LittleEndian(bytes, cursor + 12u);
+            cursor += 16u;
+            if (annotationCount > (bytes.size() - cursor) / 8u) return bytes.size();
+            cursor += static_cast<std::size_t>(annotationCount) * 8u;
+        }
+
+        if (cursor > bytes.size() - 12u) return bytes.size();
+        const std::uint32_t techniqueAnnotationCount =
+            ReadUInt32LittleEndian(bytes, cursor + 4u);
+        const std::uint32_t passCount = ReadUInt32LittleEndian(bytes, cursor + 8u);
+        cursor += 12u;
+        if (passCount == 0 || techniqueAnnotationCount > (bytes.size() - cursor) / 8u)
+            return bytes.size();
+        cursor += static_cast<std::size_t>(techniqueAnnotationCount) * 8u;
+
+        if (cursor > bytes.size() - 12u) return bytes.size();
+        const std::uint32_t passAnnotationCount = ReadUInt32LittleEndian(bytes, cursor + 4u);
+        const std::uint32_t stateCount = ReadUInt32LittleEndian(bytes, cursor + 8u);
+        cursor += 12u;
+        if (stateCount == 0 || passAnnotationCount > (bytes.size() - cursor) / 8u)
+            return bytes.size();
+        cursor += static_cast<std::size_t>(passAnnotationCount) * 8u;
+        return cursor <= bytes.size() - 4u ? cursor : bytes.size();
+    }
+
     // Minimal derived Effect used to observe OnApply dispatch on the stock-style path.
     class TestEffect : public Effect
     {
@@ -188,6 +244,46 @@ TEST(EffectTest, StructurallyValidFxReachesRendererCapabilityGate)
     {
         EXPECT_NO_THROW(TestEffect(gd, validEffect));
     }
+}
+
+TEST(EffectTest, AuthenticXna4EffectAcceptsRepeatedAndAuxiliaryObjectRecords)
+{
+    GraphicsDevice gd;
+    const auto racingEffect = LoadAuthenticRacingCompiledEffectFixture();
+    ASSERT_EQ(racingEffect.size(), 17404u);
+
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+    {
+        EXPECT_THROW(TestEffect(gd, racingEffect), System::NotSupportedException);
+        return;
+    }
+
+    TestEffect effect(gd, racingEffect);
+    // MojoShader reports 19 raw parameters; XNA's public EffectParameterCollection
+    // omits the three internal sampler objects and exposes 16.
+    EXPECT_EQ(effect.getParametersProperty().getCountProperty(), 16);
+    EXPECT_EQ(effect.getTechniquesProperty().getCountProperty(), 4);
+    for (int techniqueIndex = 0;
+         techniqueIndex < effect.getTechniquesProperty().getCountProperty();
+         ++techniqueIndex)
+    {
+        EXPECT_EQ(effect.getTechniquesProperty()[techniqueIndex]
+                      .getPassesProperty().getCountProperty(),
+                  1);
+    }
+}
+
+TEST(EffectTest, RejectsInvalidRenderStateIdentifierBeforeEnumConversion)
+{
+    GraphicsDevice gd;
+    auto bytes = LoadAuthenticRacingCompiledEffectFixture();
+    ASSERT_FALSE(bytes.empty());
+    const std::size_t stateTypeOffset = FindFirstPassRenderStateOffset(bytes);
+    ASSERT_LT(stateTypeOffset, bytes.size());
+    ASSERT_EQ(ReadUInt32LittleEndian(bytes, stateTypeOffset), 8u);
+
+    WriteUInt32LittleEndian(bytes, stateTypeOffset, 0xFFFFFFFFu);
+    EXPECT_THROW(TestEffect(gd, bytes), System::ArgumentException);
 }
 
 TEST(EffectTest, RejectsUnsafeXna4WrapperOffsetBeforeNativeParser)

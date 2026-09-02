@@ -1,0 +1,40 @@
+diff --git a/profiles/mojoshader_profile_glsl.c b/profiles/mojoshader_profile_glsl.c
+--- a/profiles/mojoshader_profile_glsl.c
++++ b/profiles/mojoshader_profile_glsl.c
+@@ -1845,7 +1845,35 @@ void emit_GLSL_DEFI(Context *ctx)
+     pop_output(ctx);
+ } // emit_GLSL_DEFI
+ 
+-EMIT_GLSL_OPCODE_UNIMPLEMENTED_FUNC(TEXCRD)
++void emit_GLSL_TEXCRD(Context *ctx)
++{
++    char source[64];
++    if (shader_version_atleast(ctx, 1, 4))
++    {
++        make_GLSL_srcarg_string_masked(ctx, 0, source, sizeof (source));
++    } // if
++    else
++    {
++        /* ps_1_1 through ps_1_3's texcoord t# reloads the interpolated
++         * TEXCOORD# into the mutable texture register. This is the same
++         * source emit_GLSL_global() uses to initialise that register. */
++        const int regnum = ctx->dest_arg.regnum;
++#if SUPPORT_PROFILE_GLSLES
++        const int use_varying = support_glsles(ctx) || (regnum >= 4);
++#else
++        const int use_varying = (regnum >= 4);
++#endif
++        if (use_varying)
++            snprintf(source, sizeof (source), "io_%i_%i",
++                     MOJOSHADER_USAGE_TEXCOORD, regnum);
++        else
++            snprintf(source, sizeof (source), "gl_TexCoord[%d]", regnum);
++    } // else
++
++    char code[128];
++    make_GLSL_destarg_assign(ctx, code, sizeof (code), "%s", source);
++    output_line(ctx, "%s", code);
++} // emit_GLSL_TEXCRD
+ 
+ void emit_GLSL_TEXKILL(Context *ctx)
+ {

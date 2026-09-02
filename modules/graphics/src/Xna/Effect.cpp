@@ -23,6 +23,18 @@ namespace
     constexpr std::size_t kMaximumReflectionDepth = 32u;
     constexpr std::size_t kMaximumReflectedItems = 64u * 1024u;
 
+    std::uint32_t NormalizeRenderStateType(std::uint32_t value)
+    {
+        return value & ~0xA0u;
+    }
+
+    bool IsValidRenderStateType(std::uint32_t value)
+    {
+        // MojoShader's Effect ABI numbers the ordinary D3D9 render states contiguously from
+        // ZENABLE through BLENDOPALPHA, then reserves a gap before its two shader pseudo-states.
+        return value <= 102u || value == 146u || value == 147u;
+    }
+
     std::uint32_t ReadUInt32LittleEndian(
         const std::vector<SharpRuntime::bytecs>& bytes, std::size_t offset)
     {
@@ -90,7 +102,6 @@ namespace
                 return false;
             }
             objectTypes_.assign(objectCount, -1);
-            objectRecordsSeen_.assign(objectCount, false);
 
             parameters_.reserve(parameterCount);
             for (std::uint32_t i = 0; i < parameterCount; ++i)
@@ -145,11 +156,13 @@ namespace
                     pass.stateObjectReferences.reserve(stateCount);
                     for (std::uint32_t stateIndex = 0; stateIndex < stateCount; ++stateIndex)
                     {
-                        std::uint32_t stateType = 0;
+                        std::uint32_t rawStateType = 0;
                         std::uint32_t legacy = 0;
                         std::uint32_t stateTypeOffset = 0;
                         std::uint32_t stateValueOffset = 0;
-                        if (!Read(cursor, stateType) || !Read(cursor, legacy) ||
+                        if (!Read(cursor, rawStateType) ||
+                            !IsValidRenderStateType(NormalizeRenderStateType(rawStateType)) ||
+                            !Read(cursor, legacy) ||
                             !Read(cursor, stateTypeOffset) ||
                             !Read(cursor, stateValueOffset))
                         {
@@ -170,8 +183,7 @@ namespace
             if (!Read(cursor, smallObjectCount) || !Read(cursor, largeObjectCount) ||
                 smallObjectCount > kMaximumEffectObjects ||
                 largeObjectCount > kMaximumEffectObjects ||
-                smallObjectCount > objectTypes_.size() ||
-                largeObjectCount > objectTypes_.size() - smallObjectCount)
+                smallObjectCount > (bytes_.size() - cursor) / 8u)
             {
                 return false;
             }
@@ -181,12 +193,16 @@ namespace
                 std::uint32_t length = 0;
                 if (!Read(cursor, objectIndex) || !Read(cursor, length) ||
                     objectIndex >= objectTypes_.size() || objectTypes_[objectIndex] < kStringType ||
-                    objectTypes_[objectIndex] > kVertexShaderType || !MarkObjectRecord(objectIndex) ||
+                    objectTypes_[objectIndex] > kVertexShaderType ||
                     !ValidateObjectBlob(cursor, length,
                         objectTypes_[objectIndex] <= kSamplerCubeType))
                 {
                     return false;
                 }
+            }
+            if (largeObjectCount > (bytes_.size() - cursor) / 24u)
+            {
+                return false;
             }
             for (std::uint32_t i = 0; i < largeObjectCount; ++i)
             {
@@ -223,17 +239,19 @@ namespace
                     objectIndex = techniques_[techniqueIndex].passes[index]
                         .stateObjectReferences[stateIndex];
                 }
-                if (!objectIndex || *objectIndex >= objectTypes_.size())
+                if (objectIndex && *objectIndex >= objectTypes_.size())
                 {
                     return false;
                 }
-                const int objectType = objectTypes_[*objectIndex];
-                if (objectType < static_cast<int>(kTextureType) ||
-                    objectType > static_cast<int>(kVertexShaderType) ||
-                    !MarkObjectRecord(*objectIndex) ||
-                    (objectEncoding == 2 && objectType >= static_cast<int>(kPixelShaderType) &&
+                const int objectType = objectIndex ? objectTypes_[*objectIndex] : -1;
+                if (objectType > static_cast<int>(kVertexShaderType) ||
+                    (objectType >= 0 && objectType < static_cast<int>(kTextureType)) ||
+                    (objectEncoding == 2 &&
+                     objectType >= static_cast<int>(kPixelShaderType) &&
                      !ValidateStandalonePreshaderHeader(cursor, length)) ||
-                    !ValidateObjectBlob(cursor, length,
+                    !ValidateObjectBlob(
+                        cursor, length,
+                        objectType >= static_cast<int>(kTextureType) &&
                         objectType <= static_cast<int>(kSamplerCubeType)))
                 {
                     return false;
@@ -317,14 +335,6 @@ namespace
             return true;
         }
 
-        bool MarkObjectRecord(std::uint32_t objectIndex)
-        {
-            if (objectIndex >= objectRecordsSeen_.size() || objectRecordsSeen_[objectIndex])
-                return false;
-            objectRecordsSeen_[objectIndex] = true;
-            return true;
-        }
-
         bool ValidateAnnotations(std::size_t& cursor, std::uint32_t count)
         {
             if (count > kMaximumReflectedItems ||
@@ -398,9 +408,15 @@ namespace
                 const std::size_t elements = std::max<std::uint32_t>(elementCount, 1);
                 const std::size_t cells = static_cast<std::size_t>(columnCount) * rowCount * elements;
                 const std::size_t reflectedStorageBytes = 16u * rowCount * elements;
-                return cells <= kMaximumCompiledEffectBytes / 4 &&
-                       cells * 4 <= bytes_.size() - valueCursor &&
-                       ConsumeAllocation(reflectedStorageBytes);
+                if (cells > kMaximumCompiledEffectBytes / 4 ||
+                    cells * 4 > bytes_.size() - valueCursor ||
+                    !ConsumeAllocation(reflectedStorageBytes))
+                {
+                    return false;
+                }
+                result.firstObjectReference =
+                    ReadUInt32LittleEndian(bytes_, valueCursor);
+                return true;
             }
 
             if (parameterClass == kObjectClass)
@@ -431,6 +447,7 @@ namespace
                         }
                         const std::uint32_t stateType = rawStateType & ~0xA0u;
                         if (stateType > 17) return false;
+                        if (i == 0) result.firstObjectReference = stateType;
                         ValueInfo stateValue;
                         if (!ValidateValue(stateTypeOffset, stateValueOffset,
                                            depth + 1, stateValue))
@@ -546,7 +563,6 @@ namespace
         std::size_t reflectedAllocationBytes_ = 0;
         std::size_t graphItemCount_ = 0;
         std::vector<int> objectTypes_;
-        std::vector<bool> objectRecordsSeen_;
         std::vector<ValueInfo> parameters_;
         std::vector<TechniqueInfo> techniques_;
     };

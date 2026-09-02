@@ -19,13 +19,78 @@
 
 #include "mojoshader.h"
 
+#include <array>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace
 {
+    std::uint32_t ReadUInt32LittleEndian(
+        const std::vector<unsigned char>& bytes, std::size_t offset)
+    {
+        return static_cast<std::uint32_t>(bytes[offset]) |
+            (static_cast<std::uint32_t>(bytes[offset + 1]) << 8) |
+            (static_cast<std::uint32_t>(bytes[offset + 2]) << 16) |
+            (static_cast<std::uint32_t>(bytes[offset + 3]) << 24);
+    }
+
+    void WriteUInt32LittleEndian(
+        std::vector<unsigned char>& bytes, std::size_t offset, std::uint32_t value)
+    {
+        for (std::size_t i = 0; i < 4; ++i)
+            bytes[offset + i] = static_cast<unsigned char>(value >> (i * 8));
+    }
+
+    std::size_t FindFirstPassRenderStateOffset(const std::vector<unsigned char>& bytes)
+    {
+        if (bytes.size() < 24u) return bytes.size();
+
+        std::size_t tokenOffset = 0;
+        if (ReadUInt32LittleEndian(bytes, 0) == 0xBCF00BCFu)
+            tokenOffset = ReadUInt32LittleEndian(bytes, 4);
+        if (tokenOffset > bytes.size() - 8u) return bytes.size();
+
+        const std::size_t base = tokenOffset + 8u;
+        const std::size_t structure = base + ReadUInt32LittleEndian(bytes, tokenOffset + 4u);
+        if (structure > bytes.size() - 16u) return bytes.size();
+
+        const std::uint32_t parameterCount = ReadUInt32LittleEndian(bytes, structure);
+        const std::uint32_t techniqueCount = ReadUInt32LittleEndian(bytes, structure + 4u);
+        if (techniqueCount == 0) return bytes.size();
+
+        std::size_t cursor = structure + 16u;
+        for (std::uint32_t i = 0; i < parameterCount; ++i)
+        {
+            if (cursor > bytes.size() - 16u) return bytes.size();
+            const std::uint32_t annotationCount = ReadUInt32LittleEndian(bytes, cursor + 12u);
+            cursor += 16u;
+            if (annotationCount > (bytes.size() - cursor) / 8u) return bytes.size();
+            cursor += static_cast<std::size_t>(annotationCount) * 8u;
+        }
+
+        if (cursor > bytes.size() - 12u) return bytes.size();
+        const std::uint32_t techniqueAnnotationCount =
+            ReadUInt32LittleEndian(bytes, cursor + 4u);
+        const std::uint32_t passCount = ReadUInt32LittleEndian(bytes, cursor + 8u);
+        cursor += 12u;
+        if (passCount == 0 || techniqueAnnotationCount > (bytes.size() - cursor) / 8u)
+            return bytes.size();
+        cursor += static_cast<std::size_t>(techniqueAnnotationCount) * 8u;
+
+        if (cursor > bytes.size() - 12u) return bytes.size();
+        const std::uint32_t passAnnotationCount = ReadUInt32LittleEndian(bytes, cursor + 4u);
+        const std::uint32_t stateCount = ReadUInt32LittleEndian(bytes, cursor + 8u);
+        cursor += 12u;
+        if (stateCount == 0 || passAnnotationCount > (bytes.size() - cursor) / 8u)
+            return bytes.size();
+        cursor += static_cast<std::size_t>(passAnnotationCount) * 8u;
+        return cursor <= bytes.size() - 4u ? cursor : bytes.size();
+    }
+
     std::vector<unsigned char> ReadFile(const char* path)
     {
         std::FILE* file = std::fopen(path, "rb");
@@ -122,6 +187,99 @@ namespace
         return backend;
     }
 
+    int VerifyInvalidRenderStateRejected(
+        const char* path, const std::vector<unsigned char>& source,
+        const MOJOSHADER_effectShaderContext& backend)
+    {
+        std::vector<unsigned char> malformed = source;
+        const std::size_t stateTypeOffset = FindFirstPassRenderStateOffset(malformed);
+        if (stateTypeOffset >= malformed.size())
+        {
+            std::printf("%s: could not locate a pass render state for mutation\n", path);
+            return 1;
+        }
+        WriteUInt32LittleEndian(malformed, stateTypeOffset, 0xFFFFFFFFu);
+
+        const MOJOSHADER_effect* effect = MOJOSHADER_compileEffect(
+            malformed.data(), static_cast<unsigned int>(malformed.size()),
+            nullptr, 0, nullptr, 0, &backend);
+        const bool rejected = effect != nullptr && effect->error_count > 0;
+        if (!rejected)
+        {
+            MOJOSHADER_deleteEffect(effect);
+            std::printf("%s: invalid pass render-state identifier was accepted\n", path);
+            return 1;
+        }
+        std::printf("%s: invalid pass render-state identifier rejected\n", path);
+        return 0;
+    }
+
+    int VerifyLegacyTexcrdTranslationForProfile(
+        const char* profile, std::string_view expectedAssignment)
+    {
+        // ps_1_1: texcoord t0; mov r0, t0; end. The official XNA 4 EffectProcessor
+        // emits TEXCRD for legacy techniques still carried alongside their ps_2_0
+        // counterparts. MojoShader used to reject the entire Effect before a game
+        // could select the modern technique.
+        constexpr std::array<unsigned char, 28> shader = {
+            0x01, 0x01, 0xff, 0xff,
+            0x40, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x0f, 0xb0,
+            0x01, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x0f, 0x80,
+            0x00, 0x00, 0xe4, 0xb0,
+            0xff, 0xff, 0x00, 0x00,
+        };
+        const MOJOSHADER_parseData* parsed = MOJOSHADER_parse(
+            profile, "LegacyTexcrdProbe", shader.data(),
+            static_cast<unsigned int>(shader.size()), nullptr, 0, nullptr, 0,
+            nullptr, nullptr, nullptr);
+        if (parsed == nullptr)
+        {
+            std::printf("legacy TEXCRD probe: parse returned nothing\n");
+            return 1;
+        }
+
+        int failure = 0;
+        if (parsed->error_count > 0)
+        {
+            for (int i = 0; i < parsed->error_count; ++i)
+            {
+                std::printf("legacy TEXCRD probe: error: %s\n",
+                            parsed->errors[i].error != nullptr
+                                ? parsed->errors[i].error : "<null>");
+            }
+            failure = 1;
+        }
+        else
+        {
+            const std::string_view output(
+                parsed->output != nullptr ? parsed->output : "",
+                parsed->output_len > 0 ? static_cast<std::size_t>(parsed->output_len) : 0u);
+            if (output.find(expectedAssignment) == std::string_view::npos)
+            {
+                std::printf(
+                    "legacy TEXCRD probe (%s): translated GLSL does not reload "
+                    "TEXCOORD0\n",
+                    profile);
+                failure = 1;
+            }
+        }
+        MOJOSHADER_freeParseData(parsed);
+        if (failure == 0)
+            std::printf("legacy TEXCRD probe (%s): ps_1_1 TEXCOORD reload translated\n",
+                        profile);
+        return failure;
+    }
+
+    int VerifyLegacyTexcrdTranslation()
+    {
+        return VerifyLegacyTexcrdTranslationForProfile(
+                   MOJOSHADER_PROFILE_GLSL120, "ps_t0 = gl_TexCoord[0]") +
+               VerifyLegacyTexcrdTranslationForProfile(
+                   MOJOSHADER_PROFILE_GLSLES, "ps_t0 = io_5_0");
+    }
+
     /// Reports what the parser found, so a silently empty parse cannot read as success.
     int Describe(const char* path, const MOJOSHADER_effect* effect)
     {
@@ -169,7 +327,7 @@ int main(int argc, char** argv)
         return 2;
     }
 
-    int failures = 0;
+    int failures = VerifyLegacyTexcrdTranslation();
     for (int i = 1; i < argc; ++i)
     {
         const std::vector<unsigned char> bytes = ReadFile(argv[i]);
@@ -188,6 +346,7 @@ int main(int argc, char** argv)
             &backend);
         failures += Describe(argv[i], effect);
         MOJOSHADER_deleteEffect(effect);
+        failures += VerifyInvalidRenderStateRejected(argv[i], bytes, backend);
     }
 
     std::printf("%u shader objects, %u bytes of Shader Model bytecode handed to the backend\n",
