@@ -393,6 +393,31 @@ namespace CNA::Internal::Renderers
         [[nodiscard]] virtual bool SetData(int face, int level, int x, int y, int w, int h,
                                            const void* data, int dataLength) = 0;
         /**
+         * @brief Uploads exact block-compressed bytes into a cube face.
+         *
+         * Coordinates remain in texel space; the source holds the complete padded block payload
+         * for the requested region. The default refuses because most cube renderers currently
+         * accept only RGBA8 pixels.
+         *
+         * @param face       Cube face index.
+         * @param level      Mip level.
+         * @param x          Left edge in texels, block aligned.
+         * @param y          Top edge in texels, block aligned.
+         * @param w          Width in texels, block aligned or reaching the mip edge.
+         * @param h          Height in texels, block aligned or reaching the mip edge.
+         * @param data       Exact compressed block payload.
+         * @param dataLength Payload size in bytes.
+         * @return True only when the complete payload was stored.
+         */
+        [[nodiscard]] virtual bool SetCompressedDataEXT(
+            int face, int level, int x, int y, int w, int h,
+            const void* data, int dataLength)
+        {
+            (void)face; (void)level; (void)x; (void)y; (void)w; (void)h;
+            (void)data; (void)dataLength;
+            return false;
+        }
+        /**
          * @brief Reads back raw RGBA8 pixels from a sub-rectangle of a single cube face.
          *
          * REMED-GFX-130, extending REMED-GFX-127's contract to this interface. Returns **true only
@@ -2076,6 +2101,22 @@ namespace CNA::Internal::Renderers
          * @return true when the format transfers as compressed blocks rather than pixels.
          */
         [[nodiscard]] virtual bool IsCompressedTransferFormatEXT(int surfaceFormat) const
+        {
+            (void)surfaceFormat;
+            return false;
+        }
+
+        /**
+         * @brief Whether a cube texture accepts a format's exact block-compressed payload.
+         *
+         * This is separate from @ref IsCompressedTransferFormatEXT because a backend may have
+         * implemented compressed 2D textures without implementing the corresponding cube-map
+         * allocation and upload path.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return true when compressed cube faces transfer as blocks rather than RGBA pixels.
+         */
+        [[nodiscard]] virtual bool IsCompressedCubeTransferFormatEXT(int surfaceFormat) const
         {
             (void)surfaceFormat;
             return false;

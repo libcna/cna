@@ -102,6 +102,32 @@ namespace Microsoft::Xna::Framework::Graphics
                      const Color* data, int startIndex, int elementCount);
 
         /**
+         * @brief Uploads exact block-compressed bytes to an entire cube face.
+         *
+         * This represents XNA's generic byte-array SetData route for Dxt1, Dxt3 and Dxt5 cube
+         * textures. The byte count is the padded 4x4 block payload, not a texel count.
+         *
+         * @param face         The cube face to update.
+         * @param data         Source block bytes.
+         * @param elementCount Number of available bytes.
+         */
+        CNAEXT void SetData(CubeMapFace face, const std::uint8_t* data, int elementCount);
+
+        /**
+         * @brief Uploads exact block-compressed bytes to a cube-face mip or block-aligned region.
+         *
+         * @param face         The cube face to update.
+         * @param level        Mip level to update.
+         * @param rect         Region in texel coordinates, or null for the whole mip.
+         * @param data         Source block bytes.
+         * @param startIndex   First source byte.
+         * @param elementCount Number of available source bytes from @p startIndex.
+         */
+        CNAEXT void SetData(CubeMapFace face, int level,
+                            const Microsoft::Xna::Framework::Rectangle* rect,
+                            const std::uint8_t* data, int startIndex, int elementCount);
+
+        /**
          * @brief Reads all data from the specified cube face into the provided array.
          *
          * @param face         The cube map face to read from.

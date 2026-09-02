@@ -23,6 +23,8 @@
 
 #include <gtest/gtest.h>
 
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+
 #include "CNA/DdsCubeFixtureEXT.hpp"
 #include "CNA/RendererTestGate.hpp"
 
@@ -245,7 +247,8 @@ TEST_F(TextureCubeTest, CopyAssignmentSharesTheUnderlyingRenderer)
 TEST_F(TextureCubeTest, SetDataSimpleNullDataThrowsInvalidArgument)
 {
     TextureCube tex(gd, 2, false, SurfaceFormat::Color);
-    EXPECT_THROW(tex.SetData(CubeMapFace::PositiveX, nullptr, 4), std::invalid_argument);
+    EXPECT_THROW(tex.SetData(CubeMapFace::PositiveX, static_cast<const Color*>(nullptr), 4),
+                 std::invalid_argument);
 }
 
 TEST_F(TextureCubeTest, SetDataSimpleZeroElementCountThrowsOutOfRange)
@@ -297,7 +300,43 @@ TEST_F(TextureCubeTest, SetDataExactElementCountStoresOrRefusesDeterministically
 TEST_F(TextureCubeTest, SetDataRectNullDataThrowsInvalidArgument)
 {
     TextureCube tex(gd, 2, false, SurfaceFormat::Color);
-    EXPECT_THROW(tex.SetData(CubeMapFace::PositiveX, 0, nullptr, nullptr, 0, 4), std::invalid_argument);
+    EXPECT_THROW(tex.SetData(CubeMapFace::PositiveX, 0, nullptr,
+                             static_cast<const Color*>(nullptr), 0, 4),
+                 std::invalid_argument);
+}
+
+TEST_F(TextureCubeTest, SetDataCompressedBytesUploadsAnEntireDxt1Face)
+{
+    if (!gd.GetRenderer().IsCompressedCubeTransferFormatEXT(
+            static_cast<int>(SurfaceFormat::Dxt1)))
+        GTEST_SKIP() << "The active renderer has no compressed cube transfer route.";
+
+    TextureCube tex(gd, 4, false, SurfaceFormat::Dxt1);
+    const std::uint8_t solidRedDxt1[8] = {0x00, 0xF8, 0x00, 0xF8, 0, 0, 0, 0};
+    ASSERT_NO_THROW(tex.SetData(CubeMapFace::PositiveX, solidRedDxt1, 8));
+
+    std::vector<Color> pixels(16);
+    ASSERT_NO_THROW(tex.GetData(CubeMapFace::PositiveX, pixels.data(), 16));
+    for (const Color& pixel : pixels)
+        EXPECT_EQ(pixel, Color(255, 0, 0, 255));
+}
+
+TEST_F(TextureCubeTest, SetDataCompressedBytesUploadsRequestedFaceMip)
+{
+    if (!gd.GetRenderer().IsCompressedCubeTransferFormatEXT(
+            static_cast<int>(SurfaceFormat::Dxt1)))
+        GTEST_SKIP() << "The active renderer has no compressed cube transfer route.";
+
+    TextureCube tex(gd, 8, true, SurfaceFormat::Dxt1);
+    const std::uint8_t solidGreenDxt1[8] = {0xE0, 0x07, 0xE0, 0x07, 0, 0, 0, 0};
+    ASSERT_NO_THROW(tex.SetData(CubeMapFace::NegativeZ, 1, nullptr,
+                                solidGreenDxt1, 0, 8));
+
+    std::vector<Color> pixels(16);
+    ASSERT_NO_THROW(tex.GetData(CubeMapFace::NegativeZ, 1, nullptr,
+                                pixels.data(), 0, 16));
+    for (const Color& pixel : pixels)
+        EXPECT_EQ(pixel, Color(0, 255, 0, 255));
 }
 
 TEST_F(TextureCubeTest, SetDataRectZeroElementCountThrowsOutOfRange)

@@ -139,7 +139,11 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderLoadsRealMono
     TextureCube cube = cm.Load<TextureCube>("SampleCube64DXT1Mips");
 
     EXPECT_EQ(cube.getSizeProperty(), 64);
-    EXPECT_EQ(cube.getFormatProperty(), SurfaceFormat::Color); // always decompressed to Color, matching Texture2DReader
+    const bool preservesDxt1 = gd.GetRenderer().LoadsCompressedContentNativelyEXT()
+        && gd.GetRenderer().IsCompressedCubeTransferFormatEXT(
+            static_cast<int>(SurfaceFormat::Dxt1));
+    EXPECT_EQ(cube.getFormatProperty(),
+              preservesDxt1 ? SurfaceFormat::Dxt1 : SurfaceFormat::Color);
     EXPECT_EQ(cube.getLevelCountProperty(), 7);
 
     // Every face/level combination decoded without throwing and produced real pixel data

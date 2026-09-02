@@ -14,6 +14,7 @@
 #include "CNA/Internal/Xnb/PrimitiveContentTypeReaders.hpp"
 #include "CNA/Internal/Xnb/SpriteFontContentTypeReader.hpp"
 #include "CNA/Internal/Xnb/Texture2DContentTypeReader.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -23,6 +24,7 @@ using Microsoft::Xna::Framework::Content::ContentManager;
 using Microsoft::Xna::Framework::Content::ContentTypeReaderManager;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::SpriteFont;
+using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 
 namespace
 {
@@ -61,6 +63,11 @@ TEST_F(ContentManagerSpriteFontXnbTest, LoadRealUncompressedMonoGameFixtureEndTo
     EXPECT_EQ(font.getCharactersProperty().front(), u' ');
     EXPECT_EQ(font.getCharactersProperty().back(), u'~');
     EXPECT_FALSE(font.getDefaultCharacterProperty().has_value());
+    const bool preservesDxt3 = gd.GetRenderer().LoadsCompressedContentNativelyEXT()
+        && gd.GetRenderer().IsCompressedTransferFormatEXT(
+            static_cast<int>(SurfaceFormat::Dxt3));
+    EXPECT_EQ(font.getTextureEXT().getFormatProperty(),
+              preservesDxt3 ? SurfaceFormat::Dxt3 : SurfaceFormat::Color);
 }
 
 TEST_F(ContentManagerSpriteFontXnbTest, LoadRealLzxCompressedFixtureEndToEnd)

@@ -1743,27 +1743,89 @@ if (ProfileIsEs2ApiGeneration())
         return levels;
     }
 
-    EasyGLTextureCubeRenderer::EasyGLTextureCubeRenderer(int size, bool mipMap, int /*surfaceFormat*/)
+    /// Whether this context can store S3TC blocks natively. A missing extension selects the
+    /// renderer-local RGBA decode path; it never changes the logical XNA SurfaceFormat.
+    static bool ContextHasS3tcEXT()
+    {
+        static const bool present =
+            ::metagl::HasExtension("GL_EXT_texture_compression_s3tc") ||
+            ::metagl::HasExtension("GL_WEBGL_compressed_texture_s3tc") ||
+            ::metagl::HasExtension("WEBGL_compressed_texture_s3tc") ||
+            ::metagl::HasExtension("GL_ANGLE_texture_compression_dxt5");
+        return present;
+    }
+
+    /// Bytes per 4x4 block: DXT1 carries colour only, DXT3 and DXT5 add an alpha block.
+    static constexpr std::size_t DxtBlockBytesEXT(
+        Microsoft::Xna::Framework::Graphics::SurfaceFormat format)
+    {
+        return format == Microsoft::Xna::Framework::Graphics::SurfaceFormat::Dxt1 ? 8u : 16u;
+    }
+
+    static ::metagl::CompressedInternalFormat ToDxtInternalFormatEXT(
+        Microsoft::Xna::Framework::Graphics::SurfaceFormat format)
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        return format == SurfaceFormat::Dxt1
+            ? ::metagl::CompressedInternalFormat::RgbaS3tcDxt1
+            : (format == SurfaceFormat::Dxt3
+                   ? ::metagl::CompressedInternalFormat::RgbaS3tcDxt3
+                   : ::metagl::CompressedInternalFormat::RgbaS3tcDxt5);
+    }
+
+    EasyGLTextureCubeRenderer::EasyGLTextureCubeRenderer(int size, bool mipMap, int surfaceFormat)
         : size_(size)
+        , surfaceFormat_(surfaceFormat)
         , levelCount_(mipMap ? CalculateCubeMipLevels(size) : 1)
     {
         tex_.create();
         tex_.bind(::easygl::TextureTarget::TextureCubeMap);
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
+        const bool dxt = format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+                         format == SurfaceFormat::Dxt5;
+        if (dxt)
+            compressedLevels_.resize(static_cast<std::size_t>(6 * levelCount_));
         // Pre-allocate GPU storage for every mip level (not just level 0): SetData's box writes
         // use glTexSubImage2D, which requires the target level to already have a defined image —
         // without this loop, SetData(level>0,...) would silently fail (Task 276 finding).
         const int levelCount = levelCount_;
-        for (auto faceTarget : kCubeFaceTargets)
+        for (int face = 0; face < 6; ++face)
         {
+            const auto faceTarget = kCubeFaceTargets[face];
             int levelSize = size;
             for (int level = 0; level < levelCount; ++level)
             {
-                tex_.set_image_2d(faceTarget, level,
-                                  RgbaTexImageInternalFormat(),
-                                  levelSize, levelSize,
-                                  ::metagl::PixelFormat::Rgba,
-                                  ::metagl::PixelType::UnsignedByte,
-                                  nullptr);
+                if (dxt && ContextHasS3tcEXT())
+                {
+                    const std::size_t imageBytes =
+                        static_cast<std::size_t>((levelSize + 3) / 4) *
+                        static_cast<std::size_t>((levelSize + 3) / 4) * DxtBlockBytesEXT(format);
+                    auto& zeroBlocks = compressedLevels_[
+                        static_cast<std::size_t>(face * levelCount_ + level)];
+                    zeroBlocks.assign(imageBytes, 0u);
+                    tex_.set_compressed_image_2d(faceTarget, level, ToDxtInternalFormatEXT(format),
+                                                 levelSize, levelSize, imageBytes,
+                                                 zeroBlocks.data());
+                }
+                else
+                {
+                    if (dxt)
+                    {
+                        const std::size_t imageBytes =
+                            static_cast<std::size_t>((levelSize + 3) / 4) *
+                            static_cast<std::size_t>((levelSize + 3) / 4) *
+                            DxtBlockBytesEXT(format);
+                        compressedLevels_[static_cast<std::size_t>(
+                            face * levelCount_ + level)].assign(imageBytes, 0u);
+                    }
+                    tex_.set_image_2d(faceTarget, level,
+                                      RgbaTexImageInternalFormat(),
+                                      levelSize, levelSize,
+                                      ::metagl::PixelFormat::Rgba,
+                                      ::metagl::PixelType::UnsignedByte,
+                                      nullptr);
+                }
                 levelSize = std::max(1, levelSize / 2);
             }
         }
@@ -1860,6 +1922,75 @@ if (ProfileIsEs2ApiGeneration())
         return GlUploadSucceeded();
     }
 
+    bool EasyGLTextureCubeRenderer::SetCompressedDataEXT(
+        int face, int level, int x, int y, int w, int h,
+        const void* data, int dataLength)
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
+        if (format != SurfaceFormat::Dxt1 && format != SurfaceFormat::Dxt3 &&
+            format != SurfaceFormat::Dxt5)
+            return false;
+        if (face < 0 || face >= 6 || data == nullptr || w <= 0 || h <= 0)
+            return false;
+        if (level < 0 || level >= levelCount_)
+            return false;
+        const int levelSize = std::max(1, size_ >> level);
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize)
+            return false;
+        if ((x % 4) != 0 || (y % 4) != 0 ||
+            ((w % 4) != 0 && x + w != levelSize) ||
+            ((h % 4) != 0 && y + h != levelSize))
+            return false;
+        const std::size_t imageBytes = static_cast<std::size_t>((w + 3) / 4) *
+            static_cast<std::size_t>((h + 3) / 4) * DxtBlockBytesEXT(format);
+        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < imageBytes)
+            return false;
+
+        const int levelBlockCols = (levelSize + 3) / 4;
+        const int rectBlockCols = (w + 3) / 4;
+        const int rectBlockRows = (h + 3) / 4;
+        const std::size_t blockBytes = DxtBlockBytesEXT(format);
+        auto replacement = compressedLevels_[
+            static_cast<std::size_t>(face * levelCount_ + level)];
+        for (int row = 0; row < rectBlockRows; ++row)
+        {
+            const std::size_t destination =
+                (static_cast<std::size_t>(y / 4 + row) * levelBlockCols + x / 4) * blockBytes;
+            const std::size_t source = static_cast<std::size_t>(row * rectBlockCols) * blockBytes;
+            std::memcpy(replacement.data() + destination,
+                        static_cast<const std::uint8_t*>(data) + source,
+                        static_cast<std::size_t>(rectBlockCols) * blockBytes);
+        }
+
+        DrainGlErrors();
+        tex_.bind(::easygl::TextureTarget::TextureCubeMap);
+        if (ContextHasS3tcEXT())
+        {
+            tex_.set_compressed_sub_image_2d(
+                kCubeFaceTargets[face], level, x, y, w, h, ToDxtInternalFormatEXT(format),
+                imageBytes, data);
+        }
+        else
+        {
+            const auto* blocks = static_cast<const std::uint8_t*>(data);
+            using CNA::Internal::Graphics::DxtUtil;
+            const std::vector<std::uint8_t> rgba = format == SurfaceFormat::Dxt1
+                ? DxtUtil::DecompressDxt1(blocks, imageBytes, w, h)
+                : (format == SurfaceFormat::Dxt3
+                       ? DxtUtil::DecompressDxt3(blocks, imageBytes, w, h)
+                       : DxtUtil::DecompressDxt5(blocks, imageBytes, w, h));
+            tex_.set_sub_image_2d(kCubeFaceTargets[face], level, x, y, w, h,
+                                  ::metagl::PixelFormat::Rgba,
+                                  ::metagl::PixelType::UnsignedByte, rgba.data());
+        }
+        if (!GlUploadSucceeded())
+            return false;
+        compressedLevels_[static_cast<std::size_t>(face * levelCount_ + level)] =
+            std::move(replacement);
+        return true;
+    }
+
     bool EasyGLTextureCubeRenderer::GetData(int face, int level, int x, int y, int w, int h,
                                             void* data, int dataLength) const
     {
@@ -1867,6 +1998,33 @@ if (ProfileIsEs2ApiGeneration())
         // into a complete transparent-black face rather than a refusal.
         if (face < 0 || face >= 6 || data == nullptr || level < 0 || w <= 0 || h <= 0) return false;
         if (dataLength < w * h * 4) return false;
+        if (level >= levelCount_) return false;
+        const int levelSize = std::max(1, size_ >> level);
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
+
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
+        if (format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+            format == SurfaceFormat::Dxt5)
+        {
+            const auto& blocks = compressedLevels_[
+                static_cast<std::size_t>(face * levelCount_ + level)];
+            using CNA::Internal::Graphics::DxtUtil;
+            const std::vector<std::uint8_t> rgba = format == SurfaceFormat::Dxt1
+                ? DxtUtil::DecompressDxt1(blocks.data(), blocks.size(), levelSize, levelSize)
+                : (format == SurfaceFormat::Dxt3
+                       ? DxtUtil::DecompressDxt3(blocks.data(), blocks.size(), levelSize, levelSize)
+                       : DxtUtil::DecompressDxt5(blocks.data(), blocks.size(), levelSize, levelSize));
+            auto* destination = static_cast<std::uint8_t*>(data);
+            for (int row = 0; row < h; ++row)
+            {
+                std::memcpy(destination + static_cast<std::size_t>(row) * w * 4,
+                            rgba.data() +
+                                (static_cast<std::size_t>(y + row) * levelSize + x) * 4,
+                            static_cast<std::size_t>(w) * 4);
+            }
+            return true;
+        }
 
         ::easygl::Framebuffer fbo;
         fbo.create();
@@ -2415,28 +2573,6 @@ else
         if (auto reg = registry_.lock()) reg->add(this);
     }
 
-
-namespace
-{
-    /// Whether this context can store S3TC blocks natively. Probed once: an XNA Reach game may use
-    /// Dxt1/3/5 whatever the driver offers, so this decides between keeping the blocks compressed
-    /// and decoding them, never between working and refusing.
-    bool ContextHasS3tcEXT()
-    {
-        static const bool present =
-            ::metagl::HasExtension("GL_EXT_texture_compression_s3tc") ||
-            ::metagl::HasExtension("GL_WEBGL_compressed_texture_s3tc") ||
-            ::metagl::HasExtension("WEBGL_compressed_texture_s3tc") ||
-            ::metagl::HasExtension("GL_ANGLE_texture_compression_dxt5");
-        return present;
-    }
-
-    /// Bytes per 4x4 block: DXT1 carries colour only, DXT3 and DXT5 add an alpha block.
-    constexpr std::size_t DxtBlockBytesEXT(Microsoft::Xna::Framework::Graphics::SurfaceFormat f)
-    {
-        return f == Microsoft::Xna::Framework::Graphics::SurfaceFormat::Dxt1 ? 8u : 16u;
-    }
-}
 
     void EasyGLTextureRenderer::UploadLevel(int level, int levelWidth, int levelHeight,
                                             const void* pixels)
@@ -5200,6 +5336,11 @@ if (!ProfileIsEs2ApiGeneration())
         // than making the framework transfer pixels it would have to compress again.
         return format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
                format == SurfaceFormat::Dxt5;
+    }
+
+    bool EasyGLRenderer::IsCompressedCubeTransferFormatEXT(int surfaceFormat) const
+    {
+        return IsCompressedTransferFormatEXT(surfaceFormat);
     }
 
     RendererFormatVerdict EasyGLRenderer::ClassifyColorTransferFormatEXT(int surfaceFormat) const

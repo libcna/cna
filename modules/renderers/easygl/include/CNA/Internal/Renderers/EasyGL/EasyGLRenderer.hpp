@@ -328,6 +328,7 @@ namespace CNA::Internal::Renderers::EasyGL
          */
         [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
                                    const void* data, int dataLength) override;
+
         /**
          * @brief Reads a RENDERED cube face's mip level back to the CPU.
          *
@@ -448,6 +449,11 @@ namespace CNA::Internal::Renderers::EasyGL
         [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
                                    const void* data, int dataLength) override;
 
+        /** @brief Uploads exact DXT blocks into one cube face or decodes them when S3TC is absent. */
+        [[nodiscard]] bool SetCompressedDataEXT(
+            int face, int level, int x, int y, int w, int h,
+            const void* data, int dataLength) override;
+
         /// REMED-GFX-130: true only once the requested face/mip rectangle has been read back
         /// through the temporary FBO below; false for an out-of-range face or an incomplete
         /// framebuffer, so the shared layer rejects the read instead of fabricating a face.
@@ -460,8 +466,11 @@ namespace CNA::Internal::Renderers::EasyGL
     private:
         ::easygl::Texture tex_;
         int size_ = 0;
+        int surfaceFormat_ = 0;
         /// Mip levels this cube really allocated storage for (REMED-GFX-135).
         int levelCount_ = 1;
+        /// Exact face-major DXT blocks, retained because compressed GL images are not FBO-readable.
+        std::vector<std::vector<std::uint8_t>> compressedLevels_;
     };
 
     /// EasyGL implementation of IEffectRenderer — wraps an easygl::Program.
@@ -1485,6 +1494,10 @@ namespace CNA::Internal::Renderers::EasyGL
          * @return true when the format transfers as compressed blocks rather than pixels.
          */
         [[nodiscard]] bool IsCompressedTransferFormatEXT(int surfaceFormat) const override;
+        /** @brief Returns true for DXT1/3/5 cube-map block uploads. */
+        [[nodiscard]] bool IsCompressedCubeTransferFormatEXT(int surfaceFormat) const override;
+        /** @brief Keeps DXT payloads compressed until the EasyGL resource upload boundary. */
+        [[nodiscard]] bool LoadsCompressedContentNativelyEXT() const override { return true; }
         void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         void GetViewportSize(int& width, int& height) override;
         void GetDefaultViewportRect(int& x, int& y, int& width, int& height) override;

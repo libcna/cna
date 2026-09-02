@@ -5,10 +5,12 @@
 #include <cstdint>
 
 #include "CNA/Internal/Xnb/XnbCanonicalData.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
 namespace CNA::Internal::Xnb
 {
@@ -22,6 +24,12 @@ namespace CNA::Internal::Xnb
 
     namespace
     {
+        bool IsCompressed(SurfaceFormat format)
+        {
+            return format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+                   format == SurfaceFormat::Dxt5;
+        }
+
         GraphicsDevice& RequireGraphicsDevice(ContentReader& input)
         {
             if (!input.getContentManagerProperty())
@@ -37,23 +45,49 @@ namespace CNA::Internal::Xnb
     TextureCube TextureCubeReader::Read(ContentReader& input, std::optional<TextureCube> existingInstance)
     {
         const XnbTextureData decoded = DecodeTextureCubeXnbData(input);
-        const CNA::Content::Cnb::CnbTextureData rgba =
-            ConvertXnbTextureToCnbRgba8(decoded, true);
         const int32_t size = static_cast<int32_t>(decoded.width);
         const int32_t levels = static_cast<int32_t>(decoded.mipCount);
+        GraphicsDevice& device = RequireGraphicsDevice(input);
+        const bool keepCompressed = IsCompressed(decoded.surfaceFormat)
+            && device.GetRenderer().LoadsCompressedContentNativelyEXT()
+            && device.GetRenderer().IsCompressedCubeTransferFormatEXT(
+                static_cast<int>(decoded.surfaceFormat));
+        const SurfaceFormat uploadFormat = keepCompressed
+            ? decoded.surfaceFormat
+            : (IsCompressed(decoded.surfaceFormat) ? SurfaceFormat::Color : decoded.surfaceFormat);
+        if (existingInstance.has_value()
+            && (existingInstance->getSizeProperty() != size
+                || existingInstance->getFormatProperty() != uploadFormat
+                || existingInstance->getLevelCountProperty() != levels))
+        {
+            throw ContentLoadException(
+                "TextureCubeReader: existing texture size, format, or mip count does not match "
+                "the serialized asset.");
+        }
+
+        std::vector<std::vector<uint8_t>> uploadLevels = keepCompressed
+            ? decoded.levels
+            : ConvertXnbTextureToCnbRgba8(decoded, true).representations.front().levels;
 
         TextureCube textureCube = existingInstance.has_value()
             ? std::move(*existingInstance)
-            : TextureCube(RequireGraphicsDevice(input), size, levels > 1, SurfaceFormat::Color);
+            : TextureCube(device, size, levels > 1, uploadFormat);
 
         for (int32_t face = 0; face < 6; ++face)
         {
             int32_t faceSize = size;
             for (int32_t level = 0; level < levels; ++level)
             {
-                const std::vector<uint8_t>& bytes = rgba.representations.front().levels[
+                const std::vector<uint8_t>& bytes = uploadLevels[
                     static_cast<std::size_t>(face) * decoded.mipCount +
                     static_cast<std::size_t>(level)];
+                if (keepCompressed)
+                {
+                    textureCube.SetData(static_cast<CubeMapFace>(face), level, nullptr,
+                                        bytes.data(), 0, static_cast<int>(bytes.size()));
+                    faceSize = std::max(faceSize >> 1, 1);
+                    continue;
+                }
                 const int32_t pixelCount = faceSize * faceSize;
                 std::vector<Color> colors;
                 colors.reserve(static_cast<std::size_t>(pixelCount));
