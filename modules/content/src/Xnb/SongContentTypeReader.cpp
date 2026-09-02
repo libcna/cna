@@ -7,6 +7,7 @@
 #include "CNA/Internal/CaseInsensitivePath.hpp"
 #include "CNA/Internal/PathContainment.hpp"
 #include "CNA/Internal/Xnb/XnbCanonicalData.hpp"
+#include "XnbCanonicalReaderAccess.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
@@ -62,7 +63,12 @@ namespace CNA::Internal::Xnb
     Song SongReader::Read(ContentReader& input, std::optional<Song> existingInstance)
     {
         (void)existingInstance; // never provided: CanDeserializeIntoExistingObject defaults false, matching FNA
-        const XnbSongData decoded = DecodeSongXnbData(input);
+        // The published XNB format writes the duration as `Object: Int32`; a real file therefore
+        // carries an Int32Reader entry in its type table. A CNA synthetic fixture read straight
+        // through ReadUntyped() has no table at all, so the reader count distinguishes the two,
+        // exactly as VideoReader already does for the same reason.
+        const XnbSongData decoded = DecodeSongXnbData(
+            input, XnbCanonicalReaderAccess::ReaderCount(input) > 1u);
 
         auto* contentManager = input.getContentManagerProperty();
         if (!contentManager)

@@ -555,13 +555,13 @@ migrating XNA developer can find the concept they know.
 Where the canonical type is genuinely missing information the XNB format needs, the gap is closed
 in the smallest possible way:
 
-- [ ] **XNAP-G1** `CnbTextureData` carries `CnbTextureFormat`, not XNA `SurfaceFormat`. The writer
+- [x] **XNAP-G1** `CnbTextureData` carries `CnbTextureFormat`, not XNA `SurfaceFormat`. The writer
       needs a total, explicit, well-diagnosed mapping (`Rgba8` → `Color`, `Bc1/2/3` → `Dxt1/3/5`,
       everything else → refuse with a named reason). Recorded as a writer-owned mapping table.
-- [ ] **XNAP-G2** XNB `Texture2D` stores level bytes in a **BGRA-independent, XNA `Color`** layout,
+- [x] **XNAP-G2** XNB `Texture2D` stores level bytes in a **BGRA-independent, XNA `Color`** layout,
       which is R,G,B,A byte order — identical to `Rgba8`. Verified against the reader
       (`Texture2DReader` builds `Color(bytes[o+0..3])`). No swizzle needed; assert it in a test.
-- [ ] **XNAP-G3** `SpriteFont`'s XNB payload requires an ascending character map; `CnbSpriteFontData`
+- [x] **XNAP-G3** `SpriteFont`'s XNB payload requires an ascending character map; `CnbSpriteFontData`
       already guarantees this. Re-validate at write time rather than trusting the invariant.
 
 ---
@@ -738,6 +738,21 @@ test, otherwise implement the smallest reasonable independent behaviour and docu
 resolve it by consulting a prohibited implementation.
 
 **Open provenance items:**
+- [x] **XNAP-G6** *(resolved)* The published format writes a `Song`'s duration as `Object: Int32`,
+      and a real MonoGame fixture confirms it: the dispatched reading yields 3005 ms and consumes
+      the file exactly, while a bare `Int32` yields an implausible 769282 ms, leaves one byte
+      unread, and never dispatches to the `Int32Reader` the file's own type table declares. CNA's
+      `SongReader` was fixed rather than encoded around; the historical field-only form CNA's
+      synthetic fixtures use is still accepted, distinguished by the reader count exactly as
+      `VideoReader` already does.
+- [x] **XNAP-G7** *(resolved)* Reader names in the type-reader table are assembly-qualified for
+      readers outside `Microsoft.Xna.Framework` and unqualified for readers inside it, and generic
+      type arguments are always qualified. Derived from real fixtures (`Texture2DReader` and
+      `SpriteFontReader` carry `Microsoft.Xna.Framework.Graphics`; `StringReader`, `Int32Reader`,
+      `SoundEffectReader` and `SongReader` do not; `ListReader\`1[[…]]`'s argument carries
+      `Microsoft.Xna.Framework` or `mscorlib`) and explained by `Type.GetType()` searching only
+      mscorlib and the calling assembly. The writer emits the same spelling; without it a real XNA
+      runtime could not resolve a texture reader at all.
 - [ ] **XNAP-G4** LZX *compression* — Phase 8. Only from public specification; otherwise the
       feature stays unimplemented and uncompressed output remains the supported mode.
 - [ ] **XNAP-G5** Any font source used in a `SpriteFont` test must have an explicit redistributable
@@ -766,23 +781,23 @@ resolve it by consulting a prohibited implementation.
 - [x] **XNAP-009** `TimeSpan`, `DateTime`, `Decimal`, `Curve`.
 
 ### Phase 4 — Texture2D end to end
-- [ ] **XNAP-010** `SurfaceFormat` ↔ `CnbTextureFormat` mapping table with total, diagnosed
+- [x] **XNAP-010** `SurfaceFormat` ↔ `CnbTextureFormat` mapping table with total, diagnosed
       coverage (`XNAP-G1`).
-- [ ] **XNAP-011** `Texture2D`/`Texture3D`/`TextureCube` XNB type writers.
-- [ ] **XNAP-012** Pipeline layer: `ContentOutputFormat`, `XnbWriteResult`, `XnbAssetWriter`,
+- [x] **XNAP-011** `Texture2D`/`Texture3D`/`TextureCube` XNB type writers.
+- [x] **XNAP-012** Pipeline layer: `ContentOutputFormat`, `XnbWriteResult`, `XnbAssetWriter`,
       registry and `ContentPipeline::Build()` route.
-- [ ] **XNAP-013** `Texture2DXnbAssetWriter` + registration; PNG → `.xnb` → `ContentManager::Load`
+- [x] **XNAP-013** `Texture2DXnbAssetWriter` + registration; PNG → `.xnb` → `ContentManager::Load`
       end-to-end test.
 
 ### Phase 5 — SpriteFont
-- [ ] **XNAP-014** `SpriteFont` XNB type writer (nested `Texture2D` object, three `List` objects,
+- [x] **XNAP-014** `SpriteFont` XNB type writer (nested `Texture2D` object, three `List` objects,
       `Nullable<Char>`), round trip against the canonical decoder.
-- [ ] **XNAP-015** `SpriteFontXnbAssetWriter` + `.cnj` sprite-font source end-to-end test.
+- [x] **XNAP-015** `SpriteFontXnbAssetWriter` + `.cnj` sprite-font source end-to-end test.
 
 ### Phase 6 — Audio and media
-- [ ] **XNAP-016** `SoundEffect` XNB type writer (`WAVEFORMATEX` block, samples, loop points,
+- [x] **XNAP-016** `SoundEffect` XNB type writer (`WAVEFORMATEX` block, samples, loop points,
       duration) + asset writer + WAV → `.xnb` end-to-end test.
-- [ ] **XNAP-017** `Song` and `Video` writers (external streaming filename + metadata).
+- [x] **XNAP-017** `Song` and `Video` writers (external streaming filename + metadata).
 
 ### Phase 7 — Model and effects
 - [ ] **XNAP-018** `VertexDeclaration`, `VertexBuffer`, `IndexBuffer` writers.
@@ -799,13 +814,13 @@ resolve it by consulting a prohibited implementation.
       output remains supported regardless.
 
 ### Phase 9 — Tooling and documentation
-- [ ] **XNAP-024** `cna-content build … --format xnb` (+ `--xnb-platform/--xnb-version/
+- [x] **XNAP-024** `cna-content build … --format xnb` (+ `--xnb-platform/--xnb-version/
       --xnb-profile`), manifest format awareness, CLI tests.
-- [ ] **XNAP-025** `docs/xna-content-pipeline.md` (architecture, concept mapping, extension
+- [x] **XNAP-025** `docs/xna-content-pipeline.md` (architecture, concept mapping, extension
       points, capability matrix); update `docs/xnb-content-pipeline-support.md`'s permanent-scope
       statement (`F5`); update `docs/content-pipeline.md`, `README.md`, `xnb.md`,
       `plans/plan_xnb.md` cross-references.
-- [ ] **XNAP-026** `docs/xnb-interoperability.md` + generated fixture corpus + validation script.
+- [x] **XNAP-026** `docs/xnb-interoperability.md` + generated fixture corpus + validation script.
 
 ### Phase 10 — Evaluated, decided later
 - [ ] **XNAP-027** Custom-type writer support (an explicit field-list builder mirroring
@@ -876,3 +891,16 @@ Status legend: `[ ]` open · `[x]` complete · `[~]` partial (scope recorded) ·
 | XNAP-007 | [x] | 13 math writers (`Vector2/3/4`, `Matrix`, `Quaternion`, `Color`, `Plane`, `Point`, `Rectangle`, `BoundingBox`, `BoundingSphere`, `BoundingFrustum`, `Ray`). |
 | XNAP-008 | [x] | Closed generic `List<T>`, `T[]`, `Dictionary<K,V>`, `Nullable<T>`, `Enum<T>` writers, registered per combination exactly as the reader side is. |
 | XNAP-009 | [x] | `TimeSpan`, `DateTime`, `Decimal`, `Curve`. Written from the sharp-runtime types the readers produce, so the two sides are exact inverses; `DateTimeKind` is emitted as `Unspecified` because CNA's `System::DateTime` does not carry one and the reader already discards it. |
+| XNAP-G6 | [x] | `SongReader` read the duration as a bare `Int32` where the format writes `Object: Int32`. Fixed, with the fixture manifest and its expectations corrected from 769282 ms to the real 3005 ms. |
+| XNAP-G7 | [x] | Reader names are now assembly-qualified exactly as real XNA content spells them; without this a real XNA runtime's `Type.GetType()` could not resolve `Texture2DReader` or `SpriteFontReader`. |
+| XNAP-010 | [x] | `SurfaceFormat` ↔ `CnbTextureFormat` mapping, total and diagnosed: a CNB-only format (`Bc7`, `Rgba8Srgb`, `R8`, …) and a CNA `SurfaceFormat` extension are both refused by name rather than approximated. |
+| XNAP-011 | [x] | `Texture2D`, `Texture3D` and `TextureCube` writers, with per-level byte counts validated against each level's own dimensions before emission. |
+| XNAP-012 | [x] | `ContentOutputFormat`, `XnbWriteResult`, `XnbAssetWriter`, registry registration/resolution and the `ContentPipeline::Build()` route. Additive: `Cnb` remains the default and every pre-existing caller is unchanged. |
+| XNAP-013 | [x] | `Texture2DXnbAssetWriter` plus the end-to-end milestone: PNG → `ImageImporter` → `TextureProcessor` → `.xnb` → `ContentManager::Load<Texture2D>()` with exact pixel equality. |
+| XNAP-014 | [x] | `SpriteFont` writer: nested `Texture2D` object, three closed generic lists, raw `Nullable<Char>`, and refusals for mismatched list lengths, a non-ascending character map and an absent default character. |
+| XNAP-015 | [x] | `SpriteFontXnbAssetWriter` registered on the processed sprite-font type. |
+| XNAP-016 | [x] | `SoundEffect` writer: `WAVEFORMATEX` block, sample payload, byte-denominated loop region, duration; PCM16 only, with a named refusal for anything else. |
+| XNAP-017 | [x] | `Song` and `Video` writers, both in the specification's dispatched-object form. |
+| XNAP-024 | [x] | `cna-content --format cnb\|xnb` with `--xnb-platform/--xnb-version/--xnb-profile`, a format-aware build manifest (schema 9: `outputFormat` per node, `rootReaderName` per output), format-aware incremental skipping, and a format switch that retires the previous artifact. |
+| XNAP-025 | [x] | `docs/xna-content-pipeline.md`; corrected the permanent-out-of-scope statements in `docs/xnb-content-pipeline-support.md` and `xnb.md`, and the CNB-only framing in `docs/content-pipeline.md`. |
+| XNAP-026 | [x] | `scripts/xnb_conformance.py` (an independent Python implementation of the reader side, written from the specification), the CNA fixture corpus and its generator, `docs/xnb-interoperability.md`, and the `CnaXnbSpecificationConformance` ctest. |

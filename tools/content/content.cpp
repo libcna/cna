@@ -29,6 +29,7 @@
 #include "CNA/Content/Pipeline/Texture2DContentPipeline.hpp"
 #include "CNA/Content/Pipeline/VideoContentPipeline.hpp"
 #include "CNA/Content/Pipeline/XnbContentPipeline.hpp"
+#include "CNA/Content/Pipeline/XnbOutput.hpp"
 #include "CNA/Internal/ContentPath.hpp"
 #include "CNA/Internal/Json.hpp"
 #include "CnaContentStaging.hpp"
@@ -53,6 +54,8 @@ namespace
         std::size_t workers = 1u;
         bool quiet = false;
         bool explain = false;
+        Pipeline::ContentOutputFormat format = Pipeline::ContentOutputFormat::Cnb;
+        CNA::Content::Xnb::XnbFileOptions xnbOptions{};
     };
 
     constexpr std::size_t MaxContentCompilerWorkers = 64u;
@@ -214,15 +217,26 @@ namespace
     {
         std::cerr
             << "Usage: cna-content build <source-file-or-directory> -o <output> "
-               "[--config <file>] [--workers <1..64>] [--explain] [--quiet]\n"
+               "[--format cnb|xnb]\n"
+            << "                         [--xnb-platform <name>] [--xnb-version 4|5] "
+               "[--xnb-profile reach|hidef]\n"
+            << "                         [--config <file>] [--workers <1..64>] [--explain] "
+               "[--quiet]\n"
             << "       cna-content clean <output-directory> [--quiet]\n\n"
-            << "Builds source content through Importer -> Processor -> Content Type Writer -> "
-               "CNB.\n"
-            << "A source file requires an output .cnb path. A source directory requires an "
-               "output\n"
-            << "directory; relative paths and logical content names are preserved. Clean removes "
-               "only\n"
-            << "unchanged files proven to be pipeline-owned by a valid output manifest.\n";
+            << "Builds source content through Importer -> Processor -> a format-specific writer.\n"
+            << "--format selects the compiled format: cnb (CNA's own, the default) or xnb (the\n"
+            << "XNA 4.0 format). The importer and the processor are the same either way; only "
+               "the\n"
+            << "serializer differs. The --xnb-* options describe the .xnb container and are "
+               "ignored\n"
+            << "for cnb output; they default to windows, version 5 and the reach profile.\n\n"
+            << "A source file requires an output path ending in the selected format's extension. "
+               "A\n"
+            << "source directory requires an output directory; relative paths and logical content "
+               "\n"
+            << "names are preserved. Clean removes only unchanged files proven to be "
+               "pipeline-owned\n"
+            << "by a valid output manifest.\n";
     }
 
     std::size_t ParseWorkerCount(const std::filesystem::path& argument)
@@ -311,6 +325,57 @@ namespace
             else if (IsOption(argument, "--explain"))
             {
                 command.explain = true;
+            }
+            else if (IsOption(argument, "--format"))
+            {
+                if (++index >= arguments.size())
+                {
+                    throw std::invalid_argument("--format requires cnb or xnb.");
+                }
+                command.format = Pipeline::ParseContentOutputFormat(
+                    CNA::Internal::ContentPathToUtf8(arguments[index]));
+            }
+            else if (IsOption(argument, "--xnb-platform"))
+            {
+                if (++index >= arguments.size())
+                {
+                    throw std::invalid_argument("--xnb-platform requires a platform name.");
+                }
+                command.xnbOptions.platform = CNA::Content::Xnb::ParseXnbTargetPlatform(
+                    CNA::Internal::ContentPathToUtf8(arguments[index]));
+            }
+            else if (IsOption(argument, "--xnb-version"))
+            {
+                if (++index >= arguments.size())
+                {
+                    throw std::invalid_argument("--xnb-version requires 4 or 5.");
+                }
+                const std::string text = CNA::Internal::ContentPathToUtf8(arguments[index]);
+                if (text != "4" && text != "5")
+                {
+                    throw std::invalid_argument("--xnb-version must be 4 or 5.");
+                }
+                command.xnbOptions.version = text == "4" ? 4 : 5;
+            }
+            else if (IsOption(argument, "--xnb-profile"))
+            {
+                if (++index >= arguments.size())
+                {
+                    throw std::invalid_argument("--xnb-profile requires reach or hidef.");
+                }
+                const std::string text = CNA::Internal::ContentPathToUtf8(arguments[index]);
+                if (text == "reach")
+                {
+                    command.xnbOptions.profile = CNA::Content::Xnb::XnbGraphicsProfile::Reach;
+                }
+                else if (text == "hidef")
+                {
+                    command.xnbOptions.profile = CNA::Content::Xnb::XnbGraphicsProfile::HiDef;
+                }
+                else
+                {
+                    throw std::invalid_argument("--xnb-profile must be reach or hidef.");
+                }
             }
             else if (IsOption(argument, "--config"))
             {
@@ -454,14 +519,16 @@ namespace
                                           std::filesystem::path& outputRoot,
                                           bool& directoryBuild)
     {
+        const std::string extension = Pipeline::ContentOutputFormatExtension(command.format);
         const std::filesystem::path source = WeaklyCanonical(command.source);
         if (std::filesystem::is_regular_file(source))
         {
             directoryBuild = false;
-            if (command.output.extension() != ".cnb")
+            if (command.output.extension() != std::filesystem::path(extension))
             {
                 throw std::invalid_argument(
-                    "a single source file requires an output path ending in '.cnb'.");
+                    "a single source file requires an output path ending in '" + extension +
+                    "'.");
             }
             const std::filesystem::path output = WeaklyCanonical(command.output);
             if (output == source)
@@ -498,7 +565,7 @@ namespace
             const std::filesystem::path relative =
                 std::filesystem::relative(entry.path(), sourceRoot);
             std::filesystem::path output = outputRoot / relative;
-            output.replace_extension(".cnb");
+            output.replace_extension(extension);
             builds.push_back({entry.path(), std::move(output),
                               CNA::Internal::ContentPathToUtf8(relative), LogicalName(relative)});
         }
@@ -951,10 +1018,14 @@ namespace
 
     bool IsCurrentRoute(const Pipeline::ContentBuildManifestEntry& entry,
                         const Pipeline::ContentPipelineRegistry& registry,
-                        const BuildItem& item)
+                        const BuildItem& item, const Pipeline::ContentOutputFormat format)
     {
         try
         {
+            if (entry.outputFormat != Pipeline::ContentOutputFormatName(format))
+            {
+                return false;
+            }
             const std::shared_ptr<const Pipeline::ContentImporter> importer =
                 registry.ResolveImporter(item.source, item.importer);
             if (entry.importer != importer->Identity() || entry.parameters != item.parameters)
@@ -970,12 +1041,26 @@ namespace
                             outputType,
                             item.processor.empty() ? entry.processor.name : item.processor);
                     processor->ValidateParameters(item.parameters);
+                    if (entry.processor != processor->Identity()) { continue; }
+                    if (format == Pipeline::ContentOutputFormat::Xnb)
+                    {
+                        // An .xnb node declares no CNB writer schemas at all; its route is current
+                        // when the same asset writer still serves the same processed type.
+                        const std::shared_ptr<const Pipeline::XnbAssetWriter> writer =
+                            registry.ResolveXnbWriter(
+                                processor->OutputType(),
+                                item.writer.empty() ? entry.writer.name : item.writer);
+                        if (entry.writer == writer->Identity() && entry.writerSchemas.empty())
+                        {
+                            return true;
+                        }
+                        continue;
+                    }
                     const std::shared_ptr<const Pipeline::ContentTypeWriter> writer =
                         registry.ResolveWriter(
                             processor->OutputType(),
                             item.writer.empty() ? entry.writer.name : item.writer);
-                    if (entry.processor == processor->Identity() &&
-                        entry.writer == writer->Identity() &&
+                    if (entry.writer == writer->Identity() &&
                         entry.writerSchemas == writer->OutputSchemaIdentities())
                     {
                         return true;
@@ -999,7 +1084,8 @@ namespace
                                 const std::filesystem::path& sourceRoot,
                                 const std::filesystem::path& outputRoot,
                                 const Pipeline::ContentSourceRootCapabilities&
-                                    externalSourceRoots)
+                                    externalSourceRoots,
+                                const Pipeline::ContentOutputFormat format)
     {
         try
         {
@@ -1018,7 +1104,7 @@ namespace
                 WeaklyCanonical(outputRoot /
                                 CNA::Internal::ContentPathFromUtf8(primaryOutput->path)) !=
                     WeaklyCanonical(item.output) ||
-                !IsCurrentRoute(entry, registry, item))
+                !IsCurrentRoute(entry, registry, item, format))
             {
                 return false;
             }
@@ -1399,6 +1485,27 @@ namespace
         const Pipeline::ContentBuildResult& result,
         const Pipeline::ContentBuildManifestOutput& output)
     {
+        if (result.outputFormat == Pipeline::ContentOutputFormat::Xnb)
+        {
+            if (result.xnbOutput == nullptr)
+            {
+                throw std::logic_error("xnb build result carries no .xnb output.");
+            }
+            if (output.logicalName == result.logicalName) { return result.xnbOutput->bytes; }
+            const auto additional = std::find_if(
+                result.xnbOutput->additionalOutputs.begin(),
+                result.xnbOutput->additionalOutputs.end(),
+                [&](const Pipeline::XnbAdditionalWriteOutput& candidate)
+            {
+                return candidate.logicalName == output.logicalName;
+            });
+            if (additional == result.xnbOutput->additionalOutputs.end())
+            {
+                throw std::logic_error("manifest output '" + output.logicalName +
+                                       "' has no matching writer result.");
+            }
+            return additional->bytes;
+        }
         if (output.logicalName == result.logicalName) { return result.output.bytes; }
         const auto found = std::find_if(
             result.output.additionalOutputs.begin(), result.output.additionalOutputs.end(),
@@ -1610,6 +1717,27 @@ namespace
         return status.str();
     }
 
+    /** @brief Everything about the selected compiled format one build node needs. */
+    struct OutputSettings
+    {
+        /** @brief Compiled format the whole build produces. */
+        Pipeline::ContentOutputFormat format = Pipeline::ContentOutputFormat::Cnb;
+
+        /** @brief Container description for `.xnb` output; ignored for CNB. */
+        CNA::Content::Xnb::XnbFileOptions xnbOptions{};
+
+        /** @brief One frozen type-writer registry shared by every node, or null for CNB. */
+        std::shared_ptr<const CNA::Content::Xnb::XnbTypeWriterRegistry> xnbTypeWriters;
+    };
+
+    void ApplyOutputSettings(Pipeline::ContentBuildRequest& request,
+                             const OutputSettings& settings)
+    {
+        request.outputFormat = settings.format;
+        request.xnbOptions = &settings.xnbOptions;
+        request.xnbTypeWriters = settings.xnbTypeWriters;
+    }
+
     BuildNodePlan PrepareBuildNode(
         const BuildItem& item, std::size_t index, const Pipeline::ContentPipeline& pipeline,
         const Pipeline::ContentPipelineRegistry& registry,
@@ -1617,7 +1745,7 @@ namespace
         ManifestLoadState manifestState,
         const std::filesystem::path& sourceRoot, const std::filesystem::path& outputRoot,
         const Pipeline::ContentSourceRootCapabilities& externalSourceRoots,
-        const std::filesystem::path& stagingRoot)
+        const std::filesystem::path& stagingRoot, const OutputSettings& settings)
     {
         BuildNodePlan plan;
         plan.item = &item;
@@ -1629,7 +1757,7 @@ namespace
                 FindPreviousEntryForReason(previousManifest, item);
             if (previous != nullptr &&
                 IsPreviousGraphCurrent(*previous, registry, item, sourceRoot, outputRoot,
-                                       externalSourceRoots))
+                                       externalSourceRoots, settings.format))
             {
                 plan.manifest = *previous;
                 plan.hasManifest = true;
@@ -1645,6 +1773,7 @@ namespace
             request.processor = item.processor;
             request.writer = item.writer;
             request.parameters = item.parameters;
+            ApplyOutputSettings(request, settings);
             Pipeline::ContentBuildResult result = pipeline.Build(request);
 
             plan.manifest = Pipeline::MakeContentBuildManifestEntry(
@@ -1664,7 +1793,8 @@ namespace
                         plan.manifest.outputs[outputIndex];
                     const std::vector<std::uint8_t>& bytes = OutputBytes(result, output);
                     const std::filesystem::path staged =
-                        nodeStage / (std::to_string(outputIndex) + ".cnb");
+                        nodeStage / (std::to_string(outputIndex) +
+                                     Pipeline::ContentOutputFormatExtension(settings.format));
                     CNA::Tools::WriteFileAtomically(staged, bytes);
                     plan.stagedOutputs.emplace(output.logicalName,
                                                StagedOutput{staged, bytes.size()});
@@ -1709,7 +1839,8 @@ namespace
         const BuildNodePlan& plan, const Pipeline::ContentPipeline& pipeline,
         const std::filesystem::path& sourceRoot, const std::filesystem::path& outputRoot,
         const Pipeline::ContentSourceRootCapabilities& externalSourceRoots,
-        const std::map<std::string, std::string>& effectiveFingerprints)
+        const std::map<std::string, std::string>& effectiveFingerprints,
+        const OutputSettings& settings)
     {
         BuildNodeOutcome outcome;
         const BuildItem& item = *plan.item;
@@ -1764,6 +1895,7 @@ namespace
             request.processor = item.processor;
             request.writer = item.writer;
             request.parameters = item.parameters;
+            ApplyOutputSettings(request, settings);
             Pipeline::ContentBuildResult result = pipeline.Build(request);
             outcome.manifest = Pipeline::MakeContentBuildManifestEntry(
                 result, sourceRoot, outputRoot, item.output, externalSourceRoots);
@@ -1886,6 +2018,16 @@ namespace
                                item.logicalName);
         }
 
+        OutputSettings outputSettings;
+        outputSettings.format = command.format;
+        outputSettings.xnbOptions = command.xnbOptions;
+        if (command.format == Pipeline::ContentOutputFormat::Xnb)
+        {
+            // One frozen type-writer registry serves every node, including the parallel ones:
+            // building it per asset would repeat the same registration work for no benefit.
+            outputSettings.xnbTypeWriters = Pipeline::CreateXnbTypeWriterRegistry();
+        }
+
         std::unique_ptr<CNA::Tools::ContentBuildStagingDirectory> staging;
         try
         {
@@ -1923,7 +2065,7 @@ namespace
                     plans[offset] = PrepareBuildNode(
                         builds[offset], offset, pipeline, *registry, previousManifest,
                         loadedManifest.state, sourceRoot, outputRoot, externalSourceRoots,
-                        staging->Path());
+                        staging->Path(), outputSettings);
                     continue;
                 }
 
@@ -1938,7 +2080,7 @@ namespace
                             return PrepareBuildNode(
                                 builds[index], index, pipeline, *registry, previousManifest,
                                 loadedManifest.state, sourceRoot, outputRoot,
-                                externalSourceRoots, staging->Path());
+                                externalSourceRoots, staging->Path(), outputSettings);
                         }));
                 }
                 for (std::size_t index = offset; index < end; ++index)
@@ -2188,7 +2330,7 @@ namespace
             {
                 outcomes.push_back(ExecuteBuildNode(
                     plans[ready.front()], pipeline, sourceRoot, outputRoot,
-                    externalSourceRoots, effectiveFingerprints));
+                    externalSourceRoots, effectiveFingerprints, outputSettings));
             }
             else
             {
@@ -2204,7 +2346,7 @@ namespace
                             {
                                 return ExecuteBuildNode(
                                     plans[index], pipeline, sourceRoot, outputRoot,
-                                    externalSourceRoots, effectiveFingerprints);
+                                    externalSourceRoots, effectiveFingerprints, outputSettings);
                             }));
                     }
                     for (std::future<BuildNodeOutcome>& future : futures)
@@ -2332,6 +2474,7 @@ namespace CNA::Content::Pipeline
         RegisterModelContentPipeline(registry);
         RegisterCnjContentPipeline(registry);
         RegisterXnbContentPipeline(registry);
+        RegisterBuiltInXnbAssetWriters(registry);
     }
 
     int RunContentCompiler(const std::vector<std::filesystem::path>& arguments,

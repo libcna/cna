@@ -1328,9 +1328,11 @@ TEST(ContentPipelineCliTest, VersionSevenManifestRebuildsWithoutAuthorizingOldOu
 
     const std::vector<std::uint8_t> oldManifestBytes = ReadBytes(manifest);
     std::string oldManifest(oldManifestBytes.begin(), oldManifestBytes.end());
-    const std::size_t version = oldManifest.find("\"version\":8");
+    const std::string currentVersion =
+        "\"version\":" + std::to_string(Pipeline::ContentBuildManifestVersion);
+    const std::size_t version = oldManifest.find(currentVersion);
     ASSERT_NE(version, std::string::npos);
-    oldManifest.replace(version, std::string("\"version\":8").size(), "\"version\":7");
+    oldManifest.replace(version, currentVersion.size(), "\"version\":7");
     WriteText(manifest, oldManifest);
     ASSERT_TRUE(std::filesystem::remove(source / "legacy.png"));
 
@@ -3000,4 +3002,139 @@ TEST(ContentPipelineCliTest, MultiOutputFailureLeavesTheOldManifestAndRecoversSa
         << skipLog;
     EXPECT_NE(skipLog.find("[SKIP] welcome"), std::string::npos) << skipLog;
 }
+// plans/plan_xnapipeline.md XNAP-024: the compiled-format option, end to end through the real
+// command-line tool -- output extension, container description, deterministic rebuild skipping,
+// and the format switch that must retire the previous format's artifact rather than leave it.
+
+TEST(ContentPipelineCliTest, XnbFormatBuildsRealContainersAndSkipsAnUnchangedRebuild)
+{
+    ScratchDirectory scratch("xnb_format");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    WriteBytes(source / "Textures" / "wall.png", MakePng(4, 3));
+
+    std::string log;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--format", "xnb"}, log),
+              0)
+        << log;
+    EXPECT_NE(log.find("CNA.Xnb.Texture2DWriter"), std::string::npos) << log;
+
+    const std::filesystem::path artifact = output / "Textures" / "wall.xnb";
+    ASSERT_TRUE(std::filesystem::is_regular_file(artifact)) << log;
+    EXPECT_FALSE(std::filesystem::exists(output / "Textures" / "wall.cnb"));
+
+    const std::vector<std::uint8_t> bytes = ReadBytes(artifact);
+    ASSERT_GE(bytes.size(), 10u);
+    EXPECT_EQ(bytes[0], 'X');
+    EXPECT_EQ(bytes[1], 'N');
+    EXPECT_EQ(bytes[2], 'B');
+    EXPECT_EQ(bytes[3], 'w');
+    EXPECT_EQ(bytes[4], 5);
+    const std::uint32_t declared = static_cast<std::uint32_t>(bytes[6]) |
+                                   (static_cast<std::uint32_t>(bytes[7]) << 8u) |
+                                   (static_cast<std::uint32_t>(bytes[8]) << 16u) |
+                                   (static_cast<std::uint32_t>(bytes[9]) << 24u);
+    EXPECT_EQ(declared, bytes.size());
+
+    const std::filesystem::path manifestPath =
+        output / Pipeline::ContentBuildManifestFileName;
+    const std::vector<std::uint8_t> manifestBytes = ReadBytes(manifestPath);
+    const Pipeline::ContentBuildManifest manifest = Pipeline::ContentBuildManifest::Parse(
+        std::string(manifestBytes.begin(), manifestBytes.end()));
+    const Pipeline::ContentBuildManifestEntry* entry = manifest.Find("Textures/wall");
+    ASSERT_NE(entry, nullptr);
+    EXPECT_EQ(entry->outputFormat, "xnb");
+    EXPECT_TRUE(entry->writerSchemas.empty());
+    ASSERT_EQ(entry->outputs.size(), 1u);
+    EXPECT_EQ(entry->outputs[0].rootReaderName,
+              "Microsoft.Xna.Framework.Content.Texture2DReader, "
+              "Microsoft.Xna.Framework.Graphics, Version=4.0.0.0, Culture=neutral, "
+              "PublicKeyToken=842cf8be1de50553");
+    EXPECT_EQ(entry->outputs[0].assetTypeId, 0u);
+
+    std::string skipLog;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--format", "xnb"},
+                      skipLog),
+              0)
+        << skipLog;
+    EXPECT_NE(skipLog.find("[SKIP] Textures/wall"), std::string::npos) << skipLog;
+    EXPECT_EQ(ReadBytes(artifact), bytes) << "an unchanged rebuild must be byte-identical";
+}
+
+TEST(ContentPipelineCliTest, SwitchingTheOutputFormatRetiresThePreviousArtifact)
+{
+    ScratchDirectory scratch("xnb_switch");
+    const std::filesystem::path source = scratch.Path() / "ContentSource";
+    const std::filesystem::path output = scratch.Path() / "Content";
+    WriteBytes(source / "wall.png", MakePng(2, 2));
+
+    std::string cnbLog;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, cnbLog), 0) << cnbLog;
+    ASSERT_TRUE(std::filesystem::is_regular_file(output / "wall.cnb"));
+
+    std::string xnbLog;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--format", "xnb"},
+                      xnbLog),
+              0)
+        << xnbLog;
+    EXPECT_TRUE(std::filesystem::is_regular_file(output / "wall.xnb")) << xnbLog;
+    EXPECT_FALSE(std::filesystem::exists(output / "wall.cnb"))
+        << "the retired format's artifact must not be left behind: " << xnbLog;
+
+    std::string backLog;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, backLog), 0) << backLog;
+    EXPECT_TRUE(std::filesystem::is_regular_file(output / "wall.cnb")) << backLog;
+    EXPECT_FALSE(std::filesystem::exists(output / "wall.xnb")) << backLog;
+}
+
+TEST(ContentPipelineCliTest, TheXnbContainerDescriptionIsSelectable)
+{
+    ScratchDirectory scratch("xnb_container");
+    const std::filesystem::path source = scratch.Path() / "wall.png";
+    const std::filesystem::path output = scratch.Path() / "wall.xnb";
+    WriteBytes(source, MakePng(2, 2));
+
+    std::string log;
+    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--format", "xnb",
+                       "--xnb-platform", "desktopgl", "--xnb-version", "4",
+                       "--xnb-profile", "hidef"},
+                      log),
+              0)
+        << log;
+    const std::vector<std::uint8_t> bytes = ReadBytes(output);
+    ASSERT_GE(bytes.size(), 10u);
+    EXPECT_EQ(bytes[3], 'd');
+    EXPECT_EQ(bytes[4], 4);
+    EXPECT_EQ(bytes[5] & 0x01u, 0x01u);
+}
+
+TEST(ContentPipelineCliTest, InvalidFormatSelectionsFailWithANonZeroExitCode)
+{
+    ScratchDirectory scratch("xnb_invalid");
+    const std::filesystem::path source = scratch.Path() / "wall.png";
+    WriteBytes(source, MakePng(2, 2));
+
+    for (const std::vector<std::string>& suffix : std::vector<std::vector<std::string>>{
+             {"--format", "cnj"},
+             {"--format"},
+             {"--format", "xnb", "--xnb-platform", "xbox360"},
+             {"--format", "xnb", "--xnb-version", "3"},
+             {"--format", "xnb", "--xnb-profile", "ultra"}})
+    {
+        std::vector<std::string> arguments{
+            "build", source.string(), "-o", (scratch.Path() / "wall.xnb").string()};
+        arguments.insert(arguments.end(), suffix.begin(), suffix.end());
+        std::string log;
+        EXPECT_NE(RunTool(arguments, log), 0) << log;
+    }
+
+    // The output extension must agree with the selected format.
+    std::string mismatchLog;
+    EXPECT_NE(RunTool({"build", source.string(), "-o", (scratch.Path() / "wall.cnb").string(),
+                       "--format", "xnb"},
+                      mismatchLog),
+              0)
+        << mismatchLog;
+}
+
 #endif

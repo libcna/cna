@@ -11,6 +11,7 @@
 #include <type_traits>
 
 #include "CNA/Content/Cnb/CnbFormat.hpp"
+#include "CNA/Content/Pipeline/XnbOutput.hpp"
 #include "CNA/Internal/ContentPath.hpp"
 
 namespace CNA::Content::Pipeline
@@ -912,6 +913,30 @@ namespace CNA::Content::Pipeline
         writers_.emplace(identity.name, std::move(writer));
     }
 
+    void ContentPipelineRegistry::RegisterXnbWriter(std::shared_ptr<const XnbAssetWriter> writer)
+    {
+        const std::unique_lock lock(configurationMutex_);
+        RequireMutable();
+        if (writer == nullptr)
+        {
+            throw std::invalid_argument("RegisterXnbWriter(): writer must not be null.");
+        }
+        const ContentComponentIdentity identity = writer->Identity();
+        ValidateIdentity(identity, "xnb writer");
+        ValidateStableType(writer->InputType(), identity.name, "input");
+        if (writer->RootReaderName().empty())
+        {
+            throw std::invalid_argument("xnb writer '" + identity.name +
+                                        "' declares an empty root reader name.");
+        }
+        if (xnbWriters_.contains(identity.name))
+        {
+            throw std::logic_error("xnb writer '" + identity.name + "' is already registered.");
+        }
+        xnbWritersByInputType_[writer->InputType()].insert(identity.name);
+        xnbWriters_.emplace(identity.name, std::move(writer));
+    }
+
     std::shared_ptr<const ContentImporter> ContentPipelineRegistry::ResolveImporter(
         const std::filesystem::path& source, const std::string& explicitName) const
     {
@@ -942,6 +967,14 @@ namespace CNA::Content::Pipeline
         const std::shared_lock lock(configurationMutex_);
         return ResolveByRoute(writers_, writersByInputType_, inputType, explicitName, "writer",
                               "processed type");
+    }
+
+    std::shared_ptr<const XnbAssetWriter> ContentPipelineRegistry::ResolveXnbWriter(
+        const std::string& inputType, const std::string& explicitName) const
+    {
+        const std::shared_lock lock(configurationMutex_);
+        return ResolveByRoute(xnbWriters_, xnbWritersByInputType_, inputType, explicitName,
+                              "xnb writer", "processed type");
     }
 
     namespace
@@ -1114,6 +1147,93 @@ namespace CNA::Content::Pipeline
                                processorIdentity.name);
         }
 
+        if (request.outputFormat == ContentOutputFormat::Xnb)
+        {
+            // The .xnb route shares every stage above verbatim and differs only from here on:
+            // the same imported value, the same processor and the same canonical processed value
+            // are handed to a format-specific serializer.
+            std::shared_ptr<const XnbAssetWriter> xnbWriter;
+            try
+            {
+                xnbWriter = registry_->ResolveXnbWriter(processed.StableType(), request.writer);
+            }
+            catch (...)
+            {
+                RethrowWithContext(source, logicalName, ContentPipelineStage::Selection, {});
+            }
+
+            const ContentComponentIdentity xnbWriterIdentity = xnbWriter->Identity();
+            auto xnbOutput = std::make_shared<XnbWriteResult>();
+            try
+            {
+                std::shared_ptr<const Xnb::XnbTypeWriterRegistry> typeWriters =
+                    request.xnbTypeWriters;
+                if (!typeWriters) { typeWriters = CreateXnbTypeWriterRegistry(); }
+                const Xnb::XnbFileOptions options =
+                    request.xnbOptions == nullptr ? Xnb::XnbFileOptions{} : *request.xnbOptions;
+                *xnbOutput =
+                    xnbWriter->Write(processed, *typeWriters, options, logicalName);
+                if (xnbOutput->bytes.empty())
+                {
+                    throw std::logic_error("xnb writer returned an empty file image.");
+                }
+                if (xnbOutput->rootReaderName.empty())
+                {
+                    throw std::logic_error("xnb writer returned an empty root reader name.");
+                }
+                if (xnbOutput->additionalOutputs.size() >= MaxContentBuildOutputs)
+                {
+                    throw std::logic_error(
+                        "xnb writer returned more than the maximum of " +
+                        std::to_string(MaxContentBuildOutputs) + " outputs.");
+                }
+                std::set<std::string> outputNames{logicalName};
+                for (const XnbAdditionalWriteOutput& additional : xnbOutput->additionalOutputs)
+                {
+                    const std::string problem =
+                        Cnb::CnbLogicalNameProblem(additional.logicalName);
+                    if (!problem.empty())
+                    {
+                        throw std::logic_error(
+                            "xnb writer returned invalid additional logical name '" +
+                            additional.logicalName + "': " + problem + ".");
+                    }
+                    if (!outputNames.insert(additional.logicalName).second)
+                    {
+                        throw std::logic_error(
+                            "xnb writer returned duplicate output logical name '" +
+                            additional.logicalName + "'.");
+                    }
+                    if (additional.bytes.empty())
+                    {
+                        throw std::logic_error(
+                            "xnb writer returned an empty file image for additional output '" +
+                            additional.logicalName + "'.");
+                    }
+                }
+            }
+            catch (...)
+            {
+                RethrowWithContext(source, logicalName, ContentPipelineStage::Write,
+                                   xnbWriterIdentity.name);
+            }
+
+            ContentBuildResult xnbResult;
+            xnbResult.source = std::move(source);
+            xnbResult.logicalName = logicalName;
+            xnbResult.importer = importerIdentity;
+            xnbResult.processor = processorIdentity;
+            xnbResult.writer = xnbWriterIdentity;
+            xnbResult.parameters = request.parameters;
+            xnbResult.dependencies = dependencies.Dependencies();
+            xnbResult.runtimeReferences = dependencies.RuntimeReferences();
+            xnbResult.deploymentFiles = dependencies.DeploymentFiles();
+            xnbResult.messages = logger.TakeMessages();
+            xnbResult.outputFormat = ContentOutputFormat::Xnb;
+            xnbResult.xnbOutput = std::move(xnbOutput);
+            return xnbResult;
+        }
+
         std::shared_ptr<const ContentTypeWriter> writer;
         try
         {
@@ -1209,6 +1329,7 @@ namespace CNA::Content::Pipeline
         result.runtimeReferences = dependencies.RuntimeReferences();
         result.deploymentFiles = dependencies.DeploymentFiles();
         result.messages = logger.TakeMessages();
+        result.outputFormat = ContentOutputFormat::Cnb;
         result.output = std::move(output);
         return result;
     }

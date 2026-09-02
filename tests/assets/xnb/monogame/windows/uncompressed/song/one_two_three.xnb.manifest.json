@@ -12,8 +12,9 @@
   "sharedResourceCount": 0,
   "expectedFields": {
     "referenceString": "one_two_three.ogg",
-    "durationMs": 769282
+    "durationMs": 3005
   },
   "companionFile": "one_two_three.ogg (72796 bytes, vendored alongside for a real Normalize()/File::exists() round trip, not just a path-string check)",
+  "durationNote": "The duration is written as `Object: Int32`, per the published XNB format: the file names Int32Reader in its type table and prefixes the value with that reader index. Reading it as a bare Int32 yields 769282 ms and leaves one byte of the file unread; reading the dispatched form yields 3005 ms and consumes the file exactly (plans/plan_xnapipeline.md XNAP-G6).",
   "notes": "plans/plan_xnb.md XNB-34: real MonoGame-produced Song fixture. Its reference string already names the real '.ogg' extension directly (MonoGame's own content pipeline behavior) rather than XNA's always-'.wma' convention, but SongReader's unconditional strip-last-4-characters-then-reprobe logic (ported from FNA verbatim) handles both cases identically since both extensions happen to be exactly 4 characters -- verified by this fixture actually round-tripping correctly, not just by reasoning about it."
 }

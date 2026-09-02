@@ -453,11 +453,18 @@ namespace CNA::Internal::Xnb
     /**
      * @brief Reads Song path and duration fields without resolving or opening media.
      *
+     * The published XNB format writes a Song's duration as `Object: Int32`, so a real file names
+     * `Int32Reader` in its type table and prefixes the value with that reader's index. The
+     * `false` compatibility mode reads the historical field-only form CNA's own synthetic
+     * fixtures use, which has no type table to dispatch through.
+     *
      * @param input Content reader positioned at the first Song field.
+     * @param objectReferences Whether the duration uses the real ReadObject reader reference.
      * @return Authored media path and duration.
      */
     [[nodiscard]] XnbSongData DecodeSongXnbData(
-        Microsoft::Xna::Framework::Content::ContentReader& input);
+        Microsoft::Xna::Framework::Content::ContentReader& input,
+        bool objectReferences = false);
 
     /**
      * @brief Reads Video path and metadata fields without constructing playback objects.

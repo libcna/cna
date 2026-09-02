@@ -17,6 +17,56 @@ namespace CNA::Content::Xnb
     class XnbWriter;
 
     /**
+     * @brief Assembly identity of `Microsoft.Xna.Framework.dll` in XNA 4.0.
+     *
+     * A `.xnb` file's type-reader table stores .NET type names the loading runtime resolves with
+     * `Type.GetType()`, which searches only mscorlib and the calling assembly. XNA resolves them
+     * from inside `Microsoft.Xna.Framework`, so a reader living there is written unqualified and
+     * a reader living anywhere else must carry its assembly, or a real XNA runtime cannot find it.
+     * Verified against real, externally produced fixtures rather than assumed -- see
+     * plans/plan_xnapipeline.md `XNAP-G7`.
+     */
+    inline constexpr const char* XnaFrameworkAssembly =
+        "Microsoft.Xna.Framework, Version=4.0.0.0, Culture=neutral, "
+        "PublicKeyToken=842cf8be1de50553";
+
+    /** @brief Assembly identity of `Microsoft.Xna.Framework.Graphics.dll` in XNA 4.0. */
+    inline constexpr const char* XnaGraphicsAssembly =
+        "Microsoft.Xna.Framework.Graphics, Version=4.0.0.0, Culture=neutral, "
+        "PublicKeyToken=842cf8be1de50553";
+
+    /** @brief Assembly identity of `mscorlib.dll` in the .NET Framework 4.0. */
+    inline constexpr const char* MscorlibAssembly =
+        "mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089";
+
+    /**
+     * @brief Returns the assembly-qualified spelling a `.xnb` type-reader table uses for a type.
+     *
+     * `System.*` types are qualified with mscorlib and everything under
+     * `Microsoft.Xna.Framework.Graphics` with the graphics assembly; every other
+     * `Microsoft.Xna.Framework` type is left unqualified, because that is the assembly a real XNA
+     * runtime resolves from. A name that already carries a qualifier is returned unchanged.
+     *
+     * @param typeName Serialized .NET type name.
+     * @return The spelling to write into the file.
+     */
+    [[nodiscard]] std::string XnbQualifiedTypeName(const std::string& typeName);
+
+    /**
+     * @brief Returns the spelling a reader name takes in the type-reader table.
+     *
+     * The same rule as XnbQualifiedTypeName(), applied to the reader rather than the target type:
+     * a reader for a `Microsoft.Xna.Framework.Graphics` type lives in the graphics assembly and is
+     * qualified; every other built-in reader lives in `Microsoft.Xna.Framework` and is not.
+     *
+     * @param readerName Bare reader name, e.g. `"Microsoft.Xna.Framework.Content.Texture2DReader"`.
+     * @param assembly Assembly the reader lives in, or empty for `Microsoft.Xna.Framework`.
+     * @return The spelling to write into the file.
+     */
+    [[nodiscard]] std::string XnbQualifiedReaderName(const std::string& readerName,
+                                                     const std::string& assembly = {});
+
+    /**
      * @brief Serializes one .NET type into an `.xnb` object graph
      *        (plans/plan_xnapipeline.md `XNAP-004`).
      *

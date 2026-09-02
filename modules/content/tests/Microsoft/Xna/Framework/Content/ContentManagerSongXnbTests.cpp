@@ -108,8 +108,11 @@ TEST_F(ContentManagerSongXnbTest, LoadRealMonoGameFixtureEndToEnd)
     Song song = cm.Load<Song>("one_two_three");
 
     EXPECT_EQ(song.getHandle(), "tests/assets/xnb/monogame/windows/uncompressed/song/one_two_three.ogg");
+    // The duration is `Object: Int32` on the wire: the file names Int32Reader in its type table
+    // and prefixes the value with that reader index. Reading a bare Int32 instead yields
+    // 769282 ms and leaves the file's last byte unread (plans/plan_xnapipeline.md XNAP-G6).
     EXPECT_EQ(song.getDurationProperty().getTicksProperty(),
-              System::TimeSpan::FromMilliseconds(769282).getTicksProperty());
+              System::TimeSpan::FromMilliseconds(3005).getTicksProperty());
 }
 
 TEST_F(ContentManagerSongXnbTest, LoadNestedRealFixtureWithXnaBackslashPathEndToEnd)

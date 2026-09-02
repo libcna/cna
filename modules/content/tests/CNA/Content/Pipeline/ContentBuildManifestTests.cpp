@@ -81,11 +81,20 @@ namespace
         };
         entry.runtimeReferences = {{"Textures/reference", 1u}};
         entry.outputs = {
-            {"Data/asset", "Data/asset.cnb", 42u, 1u, "Test.Asset",
-             Pipeline::ContentSha256({7u, 8u, 9u})},
-            {"Generated/asset-index", "Generated/asset-index.cnb", 43u, 2u,
-             "Test.AssetIndex",
-             Pipeline::ContentSha256({10u, 11u})},
+            Pipeline::ContentBuildManifestOutput{
+                .logicalName = "Data/asset",
+                .path = "Data/asset.cnb",
+                .assetTypeId = 42u,
+                .assetSchemaVersion = 1u,
+                .assetTypeName = "Test.Asset",
+                .sha256 = Pipeline::ContentSha256({7u, 8u, 9u})},
+            Pipeline::ContentBuildManifestOutput{
+                .logicalName = "Generated/asset-index",
+                .path = "Generated/asset-index.cnb",
+                .assetTypeId = 43u,
+                .assetSchemaVersion = 2u,
+                .assetTypeName = "Test.AssetIndex",
+                .sha256 = Pipeline::ContentSha256({10u, 11u})},
         };
         entry.deploymentFiles = {
             {{}, "shared/table.bin", "Support/table.bin",
@@ -171,7 +180,9 @@ TEST(ContentBuildManifestTest, RoundTripsEveryStableFieldDeterministically)
     EXPECT_NE(first.find("runtimeReferences"), std::string::npos);
     EXPECT_NE(first.find("Generated/asset-index.cnb"), std::string::npos);
     EXPECT_NE(first.find("Support/table.bin"), std::string::npos);
-    EXPECT_NE(first.find("\"version\":8"), std::string::npos);
+    EXPECT_NE(first.find("\"version\":" +
+                          std::to_string(Pipeline::ContentBuildManifestVersion)),
+              std::string::npos);
     EXPECT_NE(first.find("fingerprintState"), std::string::npos);
     EXPECT_NE(first.find("contentDependencyFingerprints"), std::string::npos);
     EXPECT_NE(first.find("writerSchemas"), std::string::npos);

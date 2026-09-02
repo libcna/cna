@@ -297,29 +297,34 @@ namespace CNA::Content::Xnb
 
     std::string XnbListReaderName(const std::string& elementTypeName)
     {
-        return "Microsoft.Xna.Framework.Content.ListReader`1[[" + elementTypeName + "]]";
+        return "Microsoft.Xna.Framework.Content.ListReader`1[[" +
+               XnbQualifiedTypeName(elementTypeName) + "]]";
     }
 
     std::string XnbArrayReaderName(const std::string& elementTypeName)
     {
-        return "Microsoft.Xna.Framework.Content.ArrayReader`1[[" + elementTypeName + "]]";
+        return "Microsoft.Xna.Framework.Content.ArrayReader`1[[" +
+               XnbQualifiedTypeName(elementTypeName) + "]]";
     }
 
     std::string XnbDictionaryReaderName(const std::string& keyTypeName,
                                         const std::string& valueTypeName)
     {
-        return "Microsoft.Xna.Framework.Content.DictionaryReader`2[[" + keyTypeName + "],[" +
-               valueTypeName + "]]";
+        return "Microsoft.Xna.Framework.Content.DictionaryReader`2[[" +
+               XnbQualifiedTypeName(keyTypeName) + "],[" + XnbQualifiedTypeName(valueTypeName) +
+               "]]";
     }
 
     std::string XnbNullableReaderName(const std::string& valueTypeName)
     {
-        return "Microsoft.Xna.Framework.Content.NullableReader`1[[" + valueTypeName + "]]";
+        return "Microsoft.Xna.Framework.Content.NullableReader`1[[" +
+               XnbQualifiedTypeName(valueTypeName) + "]]";
     }
 
     std::string XnbEnumReaderName(const std::string& enumTypeName)
     {
-        return "Microsoft.Xna.Framework.Content.EnumReader`1[[" + enumTypeName + "]]";
+        return "Microsoft.Xna.Framework.Content.EnumReader`1[[" +
+               XnbQualifiedTypeName(enumTypeName) + "]]";
     }
 
     void WriteXnbListPayload(XnbWriter& output, const std::string& elementTypeName,

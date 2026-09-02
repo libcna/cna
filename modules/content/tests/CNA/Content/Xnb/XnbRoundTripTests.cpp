@@ -251,8 +251,10 @@ TEST_F(XnbRoundTripTest, CurveKeepsItsLoopModesAndEveryKeyField)
 
 TEST_F(XnbRoundTripTest, AListOfValueTypesRoundTrips)
 {
+    // The reader registry is keyed by the *normalized* name -- assembly qualifiers stripped --
+    // which is exactly what the file's own qualified name resolves to on load.
     ContentTypeReaderManager::AddTypeCreator(
-        XnbListReaderName("Microsoft.Xna.Framework.Rectangle"),
+        "Microsoft.Xna.Framework.Content.ListReader`1[[Microsoft.Xna.Framework.Rectangle]]",
         []
         {
             return std::make_unique<CNA::Internal::Xnb::ListReader<Rectangle>>(
@@ -275,7 +277,7 @@ TEST_F(XnbRoundTripTest, AListOfValueTypesRoundTrips)
 TEST_F(XnbRoundTripTest, AListOfReferenceTypesCarriesAPerElementTypeIdentifier)
 {
     ContentTypeReaderManager::AddTypeCreator(
-        XnbListReaderName("System.String"),
+        "Microsoft.Xna.Framework.Content.ListReader`1[[System.String]]",
         []
         {
             return std::make_unique<CNA::Internal::Xnb::ListReader<std::string>>(
@@ -298,7 +300,7 @@ TEST_F(XnbRoundTripTest, AListOfReferenceTypesCarriesAPerElementTypeIdentifier)
 TEST_F(XnbRoundTripTest, AnArrayRoundTripsThroughItsOwnReaderName)
 {
     ContentTypeReaderManager::AddTypeCreator(
-        XnbArrayReaderName("Microsoft.Xna.Framework.Vector3"),
+        "Microsoft.Xna.Framework.Content.ArrayReader`1[[Microsoft.Xna.Framework.Vector3]]",
         []
         {
             return std::make_unique<CNA::Internal::Xnb::ArrayReader<Vector3>>(
@@ -321,7 +323,7 @@ TEST_F(XnbRoundTripTest, AnArrayRoundTripsThroughItsOwnReaderName)
 TEST_F(XnbRoundTripTest, ADictionaryRoundTripsEveryEntry)
 {
     ContentTypeReaderManager::AddTypeCreator(
-        XnbDictionaryReaderName("System.String", "System.Int32"),
+        "Microsoft.Xna.Framework.Content.DictionaryReader`2[[System.String],[System.Int32]]",
         []
         {
             return std::make_unique<CNA::Internal::Xnb::DictionaryReader<std::string, std::int32_t>>(
@@ -349,7 +351,7 @@ TEST_F(XnbRoundTripTest, ADictionaryRoundTripsEveryEntry)
 TEST_F(XnbRoundTripTest, ANullableRoundTripsBothStates)
 {
     ContentTypeReaderManager::AddTypeCreator(
-        XnbNullableReaderName("System.Char"),
+        "Microsoft.Xna.Framework.Content.NullableReader`1[[System.Char]]",
         []
         {
             return std::make_unique<CNA::Internal::Xnb::NullableReader<char16_t>>(
@@ -396,6 +398,10 @@ TEST_F(XnbRoundTripTest, AnEnumIsWrittenAsItsThirtyTwoBitUnderlyingValue)
     EXPECT_EQ(reader.Read7BitEncodedInt(), 1);
     EXPECT_EQ(reader.ReadString(),
               XnbEnumReaderName("Microsoft.Xna.Framework.Graphics.SurfaceFormat"));
+    // The enum's own type argument carries the graphics assembly, exactly as real XNA content does.
+    EXPECT_NE(XnbEnumReaderName("Microsoft.Xna.Framework.Graphics.SurfaceFormat")
+                  .find("Microsoft.Xna.Framework.Graphics, Version=4.0.0.0"),
+              std::string::npos);
     EXPECT_EQ(reader.ReadInt32(), 0);          // reader version
     EXPECT_EQ(reader.Read7BitEncodedInt(), 0); // shared-resource count
     EXPECT_EQ(reader.Read7BitEncodedInt(), 1); // the root's type identifier

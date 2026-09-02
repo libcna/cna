@@ -87,7 +87,7 @@ TEST_F(SongContentTypeReaderTest, ReferenceEndingInFourCharacterRealExtensionRes
     // string arithmetic looks right.
     ContentManager cm(nullptr, "tests/assets/xnb/monogame/windows/uncompressed/song");
 
-    Song song = ReadSongFields(cm, "one_two_three", "one_two_three.ogg", 769282);
+    Song song = ReadSongFields(cm, "one_two_three", "one_two_three.ogg", 3005);
 
     EXPECT_EQ(song.getHandle(), "tests/assets/xnb/monogame/windows/uncompressed/song/one_two_three.ogg");
     EXPECT_TRUE(std::filesystem::exists(song.getHandle()));
@@ -98,7 +98,7 @@ TEST_F(SongContentTypeReaderTest, WindowsStyleNestedAssetNameResolvesMediaBeside
     ContentManager cm(nullptr, "tests/assets/xnb/monogame/windows/uncompressed");
 
     Song song = ReadSongFields(
-        cm, R"(song\one_two_three)", "one_two_three.ogg", 769282);
+        cm, R"(song\one_two_three)", "one_two_three.ogg", 3005);
 
     EXPECT_EQ(
         song.getHandle(),

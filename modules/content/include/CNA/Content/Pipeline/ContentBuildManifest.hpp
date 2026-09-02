@@ -12,7 +12,7 @@
 namespace CNA::Content::Pipeline
 {
     /** @brief Current on-disk CNA Content Pipeline manifest format version. */
-    inline constexpr std::uint32_t ContentBuildManifestVersion = 8u;
+    inline constexpr std::uint32_t ContentBuildManifestVersion = 9u;
 
     /** @brief File name used for the inspectable manifest below a content output
      * root. */
@@ -36,7 +36,16 @@ namespace CNA::Content::Pipeline
         /** @brief Canonical runtime type name declared by the selected writer. */
         std::string assetTypeName;
 
-        /** @brief SHA-256 of the published CNB bytes, used to detect deletion or tampering. */
+        /**
+         * @brief Root `ContentTypeReader` name, for an `.xnb` output; empty for CNB.
+         *
+         * The `.xnb` counterpart of the three CNB asset fields above: a compiled `.xnb` file has
+         * no asset type id or schema version, and its compatibility identity is the reader its
+         * root object dispatches to (plans/plan_xnapipeline.md `XNAP-024`).
+         */
+        std::string rootReaderName;
+
+        /** @brief SHA-256 of the published bytes, used to detect deletion or tampering. */
         std::string sha256;
 
         /** @brief Compares every stable output field. */
@@ -101,6 +110,14 @@ namespace CNA::Content::Pipeline
     {
         /** @brief Stable logical build-node identity and manifest key. */
         std::string nodeId;
+
+        /**
+         * @brief Compiled format this node produced: `"cnb"` or `"xnb"`.
+         *
+         * Part of the node's identity, so switching a build's output format invalidates its
+         * cached artifacts rather than leaving the previous format's files in place.
+         */
+        std::string outputFormat = "cnb";
 
         /** @brief Primary source path relative to the source root, using `/`. */
         std::string source;

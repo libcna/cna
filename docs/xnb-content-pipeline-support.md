@@ -19,10 +19,14 @@ or a `.cnj` sidecar/file.
 **In scope**: loading (deserializing) an already-built, real `.xnb` file at runtime — matching
 FNA's own `ContentManager`/`ContentReader`/`ContentTypeReaderManager` read-side API and protocol.
 
-**Out of scope, permanently**: anything that *produces* `.xnb` files (`ContentCompiler`,
-`ContentImporter`, `ContentProcessor`, `ContentTypeWriter`, MSBuild/XNA project build-tool
-integration). CNA only ever consumes `.xnb` files produced by real external tooling (XNA, MonoGame,
-FNA); it has no need to generate them itself.
+**Out of scope here, but no longer out of scope for CNA**: anything that *produces* `.xnb` files.
+An earlier revision of this document called `.xnb` production permanently out of scope; that is no
+longer true. CNA now writes `.xnb` natively through its own content pipeline — see
+[`docs/xna-content-pipeline.md`](xna-content-pipeline.md) for the writer architecture, the
+supported asset types and the compatibility level, and
+[`plans/plan_xnapipeline.md`](../plans/plan_xnapipeline.md) for the engineering record. This
+document stays the read-side reference; the two sides are deliberately separate subsystems that
+share only the format they agree on.
 
 ## Getting started: registering the built-in readers
 
@@ -54,7 +58,7 @@ below) — both need their own explicit registration.
 | `TextureCubeReader` | ✅ `SurfaceFormat.Color`/`Dxt1`/`Dxt3`/`Dxt5` | Verified against a real MonoGame fixture covering all 6 faces and a full DXT1 mip chain (including the sub-4×4 block-rounding edge cases) |
 | `SpriteFontReader` | ✅ Full | Depends on `Texture2DReader` and 3 closed generic-collection readers (see below) |
 | `SoundEffectReader` | ✅ PCM8/16, IEEE float, MS-ADPCM, IMA-ADPCM | Non-PCM formats are decoded through the shared WAV-import path into the PCM16 representation CNA's runtime owns. XMA2 is recognized but explicitly rejected because no decoder exists. See the support matrix below |
-| `SongReader` | ✅ Full | `Song` is always an external audio file reference (`.ogg`/etc, matching FNA), never embedded PCM |
+| `SongReader` | ✅ Full | `Song` is always an external audio file reference (`.ogg`/etc, matching FNA), never embedded PCM. The duration is `Object: Int32` on the wire -- dispatched through the file's own type table, which is why a real `Song` `.xnb` names `Int32Reader` there. A CNA-synthesised field-only stream (no type table) is still accepted, distinguished by the reader count exactly as `VideoReader` already does (plans/plan_xnapipeline.md `XNAP-G6`) |
 | `AlphaTestEffectReader`, `BasicEffectReader`, `DualTextureEffectReader`, `EnvironmentMapEffectReader`, `SkinnedEffectReader` (the 5 stock effects) | ✅ Full | Each targets the common `shared_ptr<Effect>` base so `ModelReader`'s polymorphic `Effect` slot dispatches correctly regardless of which concrete stock effect a model references |
 | `EffectMaterialReader`, `ExternalReferenceReader`, `DictionaryReader<String,Object>` | ✅ Full | A parameter dictionary's type-erased external reference is loaded according to the referenced XNB's concrete root reader, so `Texture2D`, `Texture3D`, and `TextureCube` parameters retain their real type and lifetime |
 | `VertexDeclarationReader`, `VertexBufferReader`, `IndexBufferReader` | ✅ Full | |

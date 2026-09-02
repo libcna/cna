@@ -6,6 +6,46 @@
 
 namespace CNA::Content::Xnb
 {
+    namespace
+    {
+        [[nodiscard]] bool StartsWith(const std::string& text, const std::string& prefix)
+        {
+            return text.size() >= prefix.size() && text.compare(0, prefix.size(), prefix) == 0;
+        }
+    }
+
+    std::string XnbQualifiedTypeName(const std::string& typeName)
+    {
+        if (typeName.find(", Version=") != std::string::npos)
+        {
+            return typeName;   // already qualified by its author
+        }
+        if (StartsWith(typeName, "System."))
+        {
+            return typeName + ", " + MscorlibAssembly;
+        }
+        if (StartsWith(typeName, "Microsoft.Xna.Framework.Graphics."))
+        {
+            return typeName + ", " + XnaGraphicsAssembly;
+        }
+        if (StartsWith(typeName, "Microsoft.Xna.Framework."))
+        {
+            // Every other framework type lives in the assembly XNA resolves reader names from, so
+            // .NET's own minimal spelling omits the qualifier -- and a real fixture confirms it.
+            return typeName;
+        }
+        // A game's own type: only the game's assembly can resolve it, and only the game knows its
+        // identity, so the name is written exactly as declared.
+        return typeName;
+    }
+
+    std::string XnbQualifiedReaderName(const std::string& readerName, const std::string& assembly)
+    {
+        if (readerName.find(", Version=") != std::string::npos) { return readerName; }
+        if (assembly.empty()) { return readerName; }
+        return readerName + ", " + assembly;
+    }
+
     void XnbTypeWriterRegistry::Register(std::shared_ptr<const XnbTypeWriter> writer)
     {
         if (!writer)

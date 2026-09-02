@@ -2,6 +2,8 @@
 
 #include "CNA/Content/Pipeline/ContentBuildManifest.hpp"
 
+#include "CNA/Content/Pipeline/XnbOutput.hpp"
+
 #include <algorithm>
 #include <array>
 #include <bit>
@@ -584,6 +586,7 @@ namespace CNA::Content::Pipeline
             CanonicalFingerprint schemas;
             schemas.AddString("CNA.ContentPipeline.WriterSchemas");
             schemas.AddU64(ContentBuildManifestVersion);
+            schemas.AddString(entry.outputFormat);
             schemas.AddU64(writerSchemas.size());
             for (const ContentWriterSchemaIdentity& schema : writerSchemas)
             {
@@ -614,6 +617,7 @@ namespace CNA::Content::Pipeline
                 outputDefinitions.AddU64(output.assetTypeId);
                 outputDefinitions.AddU64(output.assetSchemaVersion);
                 outputDefinitions.AddString(output.assetTypeName);
+                outputDefinitions.AddString(output.rootReaderName);
             }
             outputDefinitions.AddU64(runtimeReferences.size());
             for (const RuntimeContentReference& reference : runtimeReferences)
@@ -751,6 +755,7 @@ namespace CNA::Content::Pipeline
             }
             ContentBuildManifestEntry entry;
             entry.nodeId = RequireString(value, "nodeId");
+            entry.outputFormat = RequireString(value, "outputFormat");
             entry.source = RequireString(value, "source");
             entry.importer = ParseComponent(value, "importer");
             entry.processor = ParseComponent(value, "processor");
@@ -780,12 +785,14 @@ namespace CNA::Content::Pipeline
                 {
                     throw std::runtime_error("content manifest output must be an object.");
                 }
-                entry.outputs.push_back({RequireString(output, "logicalName"),
-                                         RequireString(output, "path"),
-                                         RequireUInt32(output, "assetTypeId"),
-                                         RequireUInt32(output, "assetSchemaVersion"),
-                                         RequireString(output, "assetTypeName"),
-                                         RequireString(output, "sha256")});
+                entry.outputs.push_back(ContentBuildManifestOutput{
+                    .logicalName = RequireString(output, "logicalName"),
+                    .path = RequireString(output, "path"),
+                    .assetTypeId = RequireUInt32(output, "assetTypeId"),
+                    .assetSchemaVersion = RequireUInt32(output, "assetSchemaVersion"),
+                    .assetTypeName = RequireString(output, "assetTypeName"),
+                    .rootReaderName = RequireString(output, "rootReaderName"),
+                    .sha256 = RequireString(output, "sha256")});
             }
 
             for (const JsonValue& deployment :
@@ -868,6 +875,7 @@ namespace CNA::Content::Pipeline
             static_cast<void>(logicalName);
             JsonValue value = JsonValue::MakeObject();
             value.Set("nodeId", StringValue(entry.nodeId));
+            value.Set("outputFormat", StringValue(entry.outputFormat));
             value.Set("source", StringValue(entry.source));
             value.Set("importer", ComponentValue(entry.importer));
             value.Set("processor", ComponentValue(entry.processor));
@@ -896,6 +904,7 @@ namespace CNA::Content::Pipeline
                 item.Set("assetSchemaVersion",
                          JsonValue::MakeNumber(output.assetSchemaVersion));
                 item.Set("assetTypeName", StringValue(output.assetTypeName));
+                item.Set("rootReaderName", StringValue(output.rootReaderName));
                 item.Set("sha256", StringValue(output.sha256));
                 outputs.arrayValue.push_back(std::move(item));
             }
@@ -977,8 +986,24 @@ namespace CNA::Content::Pipeline
         {
             throw std::invalid_argument("content manifest component identities must not be empty.");
         }
-        if (entry.writerSchemas.empty() ||
-            entry.writerSchemas.size() > MaxContentBuildOutputs)
+        if (entry.outputFormat != "cnb" && entry.outputFormat != "xnb")
+        {
+            throw std::invalid_argument("content manifest output format '" + entry.outputFormat +
+                                        "' is not 'cnb' or 'xnb'.");
+        }
+        const bool xnbEntry = entry.outputFormat == "xnb";
+        if (xnbEntry)
+        {
+            // An .xnb file has no asset type id, schema version or codec identity; its
+            // compatibility identity is the root reader each output declares, checked below.
+            if (!entry.writerSchemas.empty())
+            {
+                throw std::invalid_argument(
+                    "content manifest xnb node must not declare CNB writer schema identities.");
+            }
+        }
+        else if (entry.writerSchemas.empty() ||
+                 entry.writerSchemas.size() > MaxContentBuildOutputs)
         {
             throw std::invalid_argument(
                 "content manifest writer must declare between one and " +
@@ -1076,6 +1101,32 @@ namespace CNA::Content::Pipeline
             {
                 throw std::invalid_argument("content manifest repeats output path '" +
                                             output.path + "'.");
+            }
+            if (xnbEntry)
+            {
+                if (output.assetTypeId != 0u || output.assetSchemaVersion != 0u ||
+                    !output.assetTypeName.empty())
+                {
+                    throw std::invalid_argument(
+                        "content manifest xnb output must not carry CNB asset identities.");
+                }
+                if (output.rootReaderName.empty())
+                {
+                    throw std::invalid_argument(
+                        "content manifest xnb output '" + output.logicalName +
+                        "' must declare the root ContentTypeReader it dispatches to.");
+                }
+                if (!IsLowerHexDigest(output.sha256))
+                {
+                    throw std::invalid_argument(
+                        "content manifest output digest must be a lowercase SHA-256 value.");
+                }
+                continue;
+            }
+            if (!output.rootReaderName.empty())
+            {
+                throw std::invalid_argument(
+                    "content manifest cnb output must not declare a root ContentTypeReader.");
             }
             if (output.assetTypeId == 0u)
             {
@@ -1297,63 +1348,21 @@ namespace CNA::Content::Pipeline
         return current.fingerprint;
     }
 
-    ContentBuildManifestEntry MakeContentBuildManifestEntry(const ContentBuildResult& result,
-                                                            const std::filesystem::path& sourceRoot,
-                                                            const std::filesystem::path& outputRoot,
-                                                            const std::filesystem::path& outputPath,
-                                                            const ContentSourceRootCapabilities&
-                                                                externalSourceRoots)
+    namespace
     {
-        ContentBuildManifestEntry entry;
-        entry.nodeId = result.logicalName;
-        entry.source = RelativeContained(sourceRoot, result.source, "primary source");
-        entry.importer = result.importer;
-        entry.processor = result.processor;
-        entry.writer = result.writer;
-        entry.writerSchemas = result.writerSchemas;
-        entry.parameters = result.parameters;
-        entry.runtimeReferences = result.runtimeReferences;
-        const auto schemaFor = [&](std::uint32_t assetTypeId,
-                                   const std::string& assetTypeName,
-                                   const std::uint32_t assetSchemaVersion)
-            -> const ContentWriterSchemaIdentity&
+        /**
+         * @brief Records a build result's deployment files and dependencies on a manifest entry.
+         *
+         * Shared by both output formats, because neither is a property of the compiled container:
+         * a streaming `.ogg` beside a `Song` and the source files a build read are the same
+         * whichever serializer produced the asset.
+         */
+        void AppendDeploymentFiles(ContentBuildManifestEntry& entry,
+                                   const ContentBuildResult& result,
+                                   const std::filesystem::path& sourceRoot,
+                                   const std::filesystem::path& outputRoot,
+                                   const ContentSourceRootCapabilities& externalSourceRoots)
         {
-            const auto found = std::find_if(
-                result.writerSchemas.begin(), result.writerSchemas.end(),
-                [&](const ContentWriterSchemaIdentity& schema)
-            {
-                return schema.assetTypeId == assetTypeId &&
-                       schema.assetTypeName == assetTypeName &&
-                       schema.assetSchemaVersion == assetSchemaVersion;
-            });
-            if (found == result.writerSchemas.end())
-            {
-                throw std::invalid_argument(
-                    "build result output has no matching writer schema identity.");
-            }
-            return *found;
-        };
-        entry.outputs.reserve(1u + result.output.additionalOutputs.size());
-        const ContentWriterSchemaIdentity& primarySchema =
-            schemaFor(result.output.assetTypeId, result.output.assetTypeName,
-                      result.output.assetSchemaVersion);
-        entry.outputs.push_back(
-            {result.logicalName, RelativeContained(outputRoot, outputPath, "primary output"),
-             result.output.assetTypeId, primarySchema.assetSchemaVersion,
-             result.output.assetTypeName, ContentSha256(result.output.bytes)});
-        for (const ContentAdditionalWriteOutput& output : result.output.additionalOutputs)
-        {
-            std::filesystem::path path =
-                outputRoot / CNA::Internal::ContentPathFromUtf8(output.logicalName);
-            path += ".cnb";
-            const ContentWriterSchemaIdentity& schema =
-                schemaFor(output.assetTypeId, output.assetTypeName,
-                          output.assetSchemaVersion);
-            entry.outputs.push_back(
-                {output.logicalName, RelativeContained(outputRoot, path, "additional output"),
-                 output.assetTypeId, schema.assetSchemaVersion, output.assetTypeName,
-                 ContentSha256(output.bytes)});
-        }
         entry.deploymentFiles.reserve(result.deploymentFiles.size());
         for (const ContentDeploymentFile& deployment : result.deploymentFiles)
         {
@@ -1410,6 +1419,100 @@ namespace CNA::Content::Pipeline
             entry.dependencies.push_back(std::move(normalized));
         }
         std::sort(entry.dependencies.begin(), entry.dependencies.end());
+        }
+    }
+
+    ContentBuildManifestEntry MakeContentBuildManifestEntry(const ContentBuildResult& result,
+                                                            const std::filesystem::path& sourceRoot,
+                                                            const std::filesystem::path& outputRoot,
+                                                            const std::filesystem::path& outputPath,
+                                                            const ContentSourceRootCapabilities&
+                                                                externalSourceRoots)
+    {
+        ContentBuildManifestEntry entry;
+        entry.nodeId = result.logicalName;
+        entry.outputFormat = result.outputFormat == ContentOutputFormat::Xnb ? "xnb" : "cnb";
+        entry.source = RelativeContained(sourceRoot, result.source, "primary source");
+        entry.importer = result.importer;
+        entry.processor = result.processor;
+        entry.writer = result.writer;
+        entry.writerSchemas = result.writerSchemas;
+        entry.parameters = result.parameters;
+        entry.runtimeReferences = result.runtimeReferences;
+        if (result.outputFormat == ContentOutputFormat::Xnb)
+        {
+            if (result.xnbOutput == nullptr)
+            {
+                throw std::invalid_argument("xnb build result carries no .xnb output.");
+            }
+            entry.outputs.reserve(1u + result.xnbOutput->additionalOutputs.size());
+            entry.outputs.push_back(ContentBuildManifestOutput{
+                .logicalName = result.logicalName,
+                .path = RelativeContained(outputRoot, outputPath, "primary output"),
+                .rootReaderName = result.xnbOutput->rootReaderName,
+                .sha256 = ContentSha256(result.xnbOutput->bytes)});
+            for (const XnbAdditionalWriteOutput& output : result.xnbOutput->additionalOutputs)
+            {
+                std::filesystem::path path =
+                    outputRoot / CNA::Internal::ContentPathFromUtf8(output.logicalName);
+                path += ".xnb";
+                entry.outputs.push_back(ContentBuildManifestOutput{
+                    .logicalName = output.logicalName,
+                    .path = RelativeContained(outputRoot, path, "additional output"),
+                    .rootReaderName = output.rootReaderName,
+                    .sha256 = ContentSha256(output.bytes)});
+            }
+            AppendDeploymentFiles(entry, result, sourceRoot, outputRoot, externalSourceRoots);
+            return entry;
+        }
+        const auto schemaFor = [&](std::uint32_t assetTypeId,
+                                   const std::string& assetTypeName,
+                                   const std::uint32_t assetSchemaVersion)
+            -> const ContentWriterSchemaIdentity&
+        {
+            const auto found = std::find_if(
+                result.writerSchemas.begin(), result.writerSchemas.end(),
+                [&](const ContentWriterSchemaIdentity& schema)
+            {
+                return schema.assetTypeId == assetTypeId &&
+                       schema.assetTypeName == assetTypeName &&
+                       schema.assetSchemaVersion == assetSchemaVersion;
+            });
+            if (found == result.writerSchemas.end())
+            {
+                throw std::invalid_argument(
+                    "build result output has no matching writer schema identity.");
+            }
+            return *found;
+        };
+        entry.outputs.reserve(1u + result.output.additionalOutputs.size());
+        const ContentWriterSchemaIdentity& primarySchema =
+            schemaFor(result.output.assetTypeId, result.output.assetTypeName,
+                      result.output.assetSchemaVersion);
+        entry.outputs.push_back(ContentBuildManifestOutput{
+            .logicalName = result.logicalName,
+            .path = RelativeContained(outputRoot, outputPath, "primary output"),
+            .assetTypeId = result.output.assetTypeId,
+            .assetSchemaVersion = primarySchema.assetSchemaVersion,
+            .assetTypeName = result.output.assetTypeName,
+            .sha256 = ContentSha256(result.output.bytes)});
+        for (const ContentAdditionalWriteOutput& output : result.output.additionalOutputs)
+        {
+            std::filesystem::path path =
+                outputRoot / CNA::Internal::ContentPathFromUtf8(output.logicalName);
+            path += ".cnb";
+            const ContentWriterSchemaIdentity& schema =
+                schemaFor(output.assetTypeId, output.assetTypeName,
+                          output.assetSchemaVersion);
+            entry.outputs.push_back(ContentBuildManifestOutput{
+                .logicalName = output.logicalName,
+                .path = RelativeContained(outputRoot, path, "additional output"),
+                .assetTypeId = output.assetTypeId,
+                .assetSchemaVersion = schema.assetSchemaVersion,
+                .assetTypeName = output.assetTypeName,
+                .sha256 = ContentSha256(output.bytes)});
+        }
+        AppendDeploymentFiles(entry, result, sourceRoot, outputRoot, externalSourceRoots);
         return entry;
     }
 } // namespace CNA::Content::Pipeline

@@ -16,8 +16,34 @@
 #include <variant>
 #include <vector>
 
+namespace CNA::Content::Xnb
+{
+    class XnbTypeWriterRegistry;
+    struct XnbFileOptions;
+}
+
 namespace CNA::Content::Pipeline
 {
+    class XnbAssetWriter;
+    struct XnbWriteResult;
+
+    /**
+     * @brief Compiled-content format one build request produces
+     *        (plans/plan_xnapipeline.md `XNAP-012`).
+     *
+     * The pipeline's importers, processors and canonical content values are shared by both
+     * formats; only the serializer differs. Selecting a format therefore never changes how a
+     * source asset is imported or processed, only what it is written as.
+     */
+    enum class ContentOutputFormat
+    {
+        /** @brief CNA's own compiled format, `.cnb`. The default, and unchanged by this option. */
+        Cnb,
+
+        /** @brief The XNA 4.0 compiled format, `.xnb`. */
+        Xnb,
+    };
+
     /** @brief Maximum number of named read-only external source roots in one build request. */
     inline constexpr std::size_t MaxContentSourceRoots = 32u;
 
@@ -846,6 +872,18 @@ namespace CNA::Content::Pipeline
         void RegisterWriter(std::shared_ptr<const ContentTypeWriter> writer);
 
         /**
+         * @brief Registers one `.xnb` asset writer owned by this registry.
+         *
+         * `.xnb` writers live in their own selection space: a processed type may have a CNB
+         * writer, an `.xnb` writer, both, or neither, and selecting one never shadows the other.
+         *
+         * @param writer Non-null component.
+         * @throws std::invalid_argument for malformed identity/type declarations.
+         * @throws std::logic_error when the stable writer name is already registered.
+         */
+        void RegisterXnbWriter(std::shared_ptr<const XnbAssetWriter> writer);
+
+        /**
          * @brief Resolves an importer by source extension and optional explicit stable name.
          *
          * @param source Source path whose extension drives default selection.
@@ -890,6 +928,17 @@ namespace CNA::Content::Pipeline
         [[nodiscard]] std::shared_ptr<const ContentTypeWriter> ResolveWriter(
             const std::string& inputType, const std::string& explicitName = {}) const;
 
+        /**
+         * @brief Resolves an `.xnb` asset writer by stable processed type and optional name.
+         *
+         * @param inputType Stable processed type identity.
+         * @param explicitName Stable writer override, or empty for default selection.
+         * @return Selected writer.
+         * @throws std::logic_error for unknown, incompatible or ambiguous selection.
+         */
+        [[nodiscard]] std::shared_ptr<const XnbAssetWriter> ResolveXnbWriter(
+            const std::string& inputType, const std::string& explicitName = {}) const;
+
     private:
         void RequireMutable() const;
 
@@ -898,9 +947,11 @@ namespace CNA::Content::Pipeline
         std::map<std::string, std::shared_ptr<const ContentImporter>> importers_;
         std::map<std::string, std::shared_ptr<const ContentProcessor>> processors_;
         std::map<std::string, std::shared_ptr<const ContentTypeWriter>> writers_;
+        std::map<std::string, std::shared_ptr<const XnbAssetWriter>> xnbWriters_;
         std::map<std::string, std::set<std::string>> importersByExtension_;
         std::map<std::string, std::set<std::string>> processorsByInputType_;
         std::map<std::string, std::set<std::string>> writersByInputType_;
+        std::map<std::string, std::set<std::string>> xnbWritersByInputType_;
     };
 
     /** @brief One request to run Importer -> Processor -> Writer without publishing a file. */
@@ -932,6 +983,29 @@ namespace CNA::Content::Pipeline
 
         /** @brief Optional scoped logger; null selects a no-op logger. */
         ContentBuildLogger* logger = nullptr;
+
+        /**
+         * @brief Compiled format to produce. `Cnb` keeps every pre-existing caller unchanged.
+         *
+         * Importer and processor selection is identical for both formats; only the serializer
+         * differs (plans/plan_xnapipeline.md `XNAP-012`).
+         */
+        ContentOutputFormat outputFormat{};
+
+        /**
+         * @brief Container description for `.xnb` output, ignored for `Cnb`.
+         *
+         * Null selects the writer's defaults (Windows, version 5, Reach, uncompressed).
+         */
+        const Xnb::XnbFileOptions* xnbOptions = nullptr;
+
+        /**
+         * @brief Frozen `.xnb` type-writer registry, ignored for `Cnb`.
+         *
+         * Null builds the stock registry for this call. Sharing one frozen registry across build
+         * nodes avoids rebuilding it per asset.
+         */
+        std::shared_ptr<const Xnb::XnbTypeWriterRegistry> xnbTypeWriters;
     };
 
     /** @brief Complete observable result of one in-memory content build. */
@@ -970,8 +1044,14 @@ namespace CNA::Content::Pipeline
         /** @brief Ordered informational and warning messages emitted by the successful build. */
         std::vector<ContentLogMessage> messages;
 
+        /** @brief Selected compiled format; decides which of the two outputs below is populated. */
+        ContentOutputFormat outputFormat{};
+
         /** @brief Complete primary and additional compiled CNB bytes, not yet published. */
         ContentWriteResult output;
+
+        /** @brief Complete primary and additional compiled `.xnb` bytes, for `Xnb` builds. */
+        std::shared_ptr<const XnbWriteResult> xnbOutput;
 
         /** @brief True for the current non-incremental coordinator; future manifests may skip. */
         bool built = true;
