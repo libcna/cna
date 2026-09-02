@@ -9,6 +9,7 @@
 #include <stdexcept>
 
 #include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/MathHelper.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
 
 namespace Microsoft::Xna::Framework
@@ -36,18 +37,6 @@ namespace Microsoft::Xna::Framework
         float BarycentricScalar(float value1, float value2, float value3, float amount1, float amount2)
         {
             return value1 + ((value2 - value1) * amount1) + ((value3 - value1) * amount2);
-        }
-
-        float CatmullRomScalar(float value1, float value2, float value3, float value4, float amount)
-        {
-            const float amountSquared = amount * amount;
-            const float amountCubed = amountSquared * amount;
-            return 0.5f * (
-                (2.0f * value2) +
-                ((-value1 + value3) * amount) +
-                (((2.0f * value1) - (5.0f * value2) + (4.0f * value3) - value4) * amountSquared) +
-                ((-value1 + (3.0f * value2) - (3.0f * value3) + value4) * amountCubed)
-            );
         }
 
         float HermiteScalar(float value1, float tangent1, float value2, float tangent2, float amount)
@@ -226,9 +215,9 @@ namespace Microsoft::Xna::Framework
 
     Vector3 Vector3::CatmullRom(Vector3 value1, Vector3 value2, Vector3 value3, Vector3 value4, float amount)
     {
-        return Vector3(CatmullRomScalar(value1.X, value2.X, value3.X, value4.X, amount),
-                       CatmullRomScalar(value1.Y, value2.Y, value3.Y, value4.Y, amount),
-                       CatmullRomScalar(value1.Z, value2.Z, value3.Z, value4.Z, amount));
+        return Vector3(MathHelper::CatmullRom(value1.X, value2.X, value3.X, value4.X, amount),
+                       MathHelper::CatmullRom(value1.Y, value2.Y, value3.Y, value4.Y, amount),
+                       MathHelper::CatmullRom(value1.Z, value2.Z, value3.Z, value4.Z, amount));
     }
 
     void Vector3::CatmullRom(const Vector3& value1, const Vector3& value2, const Vector3& value3, const Vector3& value4,

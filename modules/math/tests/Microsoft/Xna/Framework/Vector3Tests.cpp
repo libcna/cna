@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <gtest/gtest.h>
+#include <bit>
 #include <cmath>
+#include <cstdint>
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
@@ -530,6 +532,19 @@ TEST(Vector3Test, CatmullRomOutRef)
         Vector3(-1.0f, 0.0f, 0.0f), Vector3(0.0f, 0.0f, 0.0f),
         Vector3(1.0f, 0.0f, 0.0f), Vector3(2.0f, 0.0f, 0.0f), 0.0f, result);
     EXPECT_NEAR(result.X, 0.0f, 1e-5f);
+}
+
+TEST(Vector3Test, CatmullRomMatchesXnaComponentPrecision)
+{
+    const Vector3 result = Vector3::CatmullRom(
+        Vector3(1732.28723f, 0.0f, 0.0f),
+        Vector3(1593.86609f, 943.755737f, 102.217514f),
+        Vector3(1325.83545f, 832.348f, 53.6925468f),
+        Vector3(1195.86243f, 693.090454f, 32.3657455f),
+        0.01f);
+    EXPECT_EQ(std::bit_cast<std::uint32_t>(result.X), UINT32_C(0x44c6fa0d));
+    EXPECT_EQ(std::bit_cast<std::uint32_t>(result.Y), UINT32_C(0x446cf416));
+    EXPECT_EQ(std::bit_cast<std::uint32_t>(result.Z), UINT32_C(0x42ccf074));
 }
 
 // --- Hermite ---

@@ -30,7 +30,7 @@ namespace Microsoft::Xna::Framework
         /* Using formula from http://www.mvps.org/directx/articles/catmull/
          * Internally using doubles not to lose precision.
          */
-        const double amountSquared = static_cast<double>(amount) * amount;
+        const double amountSquared = static_cast<double>(amount * amount);
         const double amountCubed = amountSquared * amount;
 
         return static_cast<float>(

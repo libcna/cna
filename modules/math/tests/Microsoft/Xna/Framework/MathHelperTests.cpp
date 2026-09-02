@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <gtest/gtest.h>
+#include <bit>
 #include <cmath>
+#include <cstdint>
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
 
 using Microsoft::Xna::Framework::MathHelper;
@@ -281,6 +283,13 @@ TEST(MathHelperTest, CatmullRomAtHalfIsMidpoint)
 {
     // Symmetric uniform points 0,1,2,3 → midpoint at 0.5 is 1.5
     EXPECT_NEAR(MathHelper::CatmullRom(0.0f, 1.0f, 2.0f, 3.0f, 0.5f), 1.5f, 1e-4f);
+}
+
+TEST(MathHelperTest, CatmullRomMatchesXnaIntermediatePrecision)
+{
+    const float result = MathHelper::CatmullRom(
+        1732.28723f, 1593.86609f, 1325.83545f, 1195.86243f, 0.01f);
+    EXPECT_EQ(std::bit_cast<std::uint32_t>(result), UINT32_C(0x44c6fa0d));
 }
 
 // --- Hermite ---
