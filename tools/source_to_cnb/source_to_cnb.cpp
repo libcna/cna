@@ -58,7 +58,7 @@ namespace
             << "Input is chosen by extension:\n"
             << "  .png .jpg .jpeg .bmp .tga .gif .psd .hdr .pic .pnm  -> Texture2D\n"
             << "  .wav                                                -> SoundEffect\n"
-            << "  .dds  (DXT1/DXT3/DXT5 cube map)                     -> TextureCube\n"
+            << "  .dds  (DXT1/3/5 or RGB888/BGR888 cube map)           -> TextureCube\n"
             << "  anything else, with --as song|video                 -> Song/Video metadata\n\n"
             << "Options:\n"
             << "  --name <logical>       Logical asset name recorded in CMET.\n"

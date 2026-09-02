@@ -26,6 +26,7 @@ namespace CNA::Internal::Graphics
         constexpr std::uint32_t kDdscapsTexture  = 0x1000;
         constexpr std::uint32_t kDdscaps2Cubemap = 0x200;
         constexpr std::uint32_t kDdpfFourCC      = 0x4;
+        constexpr std::uint32_t kDdpfRgb         = 0x40;
         constexpr std::uint32_t kFourCcDxt1      = 0x31545844;
         constexpr std::uint32_t kFourCcDxt3      = 0x33545844;
         constexpr std::uint32_t kFourCcDxt5      = 0x35545844;
@@ -56,10 +57,18 @@ namespace CNA::Internal::Graphics
                  | (static_cast<std::uint32_t>(p[3]) << 24);
         }
 
-        // Compressed block size in bytes for one mip level -- mirrors FNA's
-        // Texture.CalculateDDSLevelSize (Dxt1/3/5-only subset; CNA doesn't support the
-        // uncompressed/HDR DDS variants FNA also handles, matching Texture2D::FromStream's own
-        // established DXT1/3/5-only scope for this exact class of problem).
+        enum class DdsEncoding
+        {
+            Dxt1,
+            Dxt3,
+            Dxt5,
+            Rgb24,
+            Bgr24,
+        };
+
+        // Source payload size in bytes for one mip level. Compressed sizes mirror FNA's
+        // Texture.CalculateDDSLevelSize. RGB888 DDS levels are tightly packed pixels; their masks,
+        // rather than a guessed platform byte order, choose Rgb24 or Bgr24.
         //
         // Computed in std::uint64_t rather than int (plans/plan_cnb.md CNBF-116). The block-count
         // rounding `(w + 3) / 4` overflows a signed int for a width near INT32_MAX -- which is
@@ -68,11 +77,15 @@ namespace CNA::Internal::Graphics
         // in the file?" check. Widening removes the whole class; the dimension ceiling above
         // guarantees the result also fits a std::size_t.
         std::uint64_t CalculateDDSLevelSize(std::uint64_t width, std::uint64_t height,
-                                            std::uint32_t fourCC)
+                                            DdsEncoding encoding)
         {
-            const std::uint64_t blockSize = (fourCC == kFourCcDxt1) ? 8u : 16u;
             width  = std::max<std::uint64_t>(width, 1u);
             height = std::max<std::uint64_t>(height, 1u);
+            if (encoding == DdsEncoding::Rgb24 || encoding == DdsEncoding::Bgr24)
+            {
+                return width * height * 3u;
+            }
+            const std::uint64_t blockSize = (encoding == DdsEncoding::Dxt1) ? 8u : 16u;
             return ((width + 3u) / 4u) * ((height + 3u) / 4u) * blockSize;
         }
 
@@ -131,6 +144,11 @@ namespace CNA::Internal::Graphics
         }
         const std::uint32_t formatFlags  = ReadU32LE(data + 80);
         const std::uint32_t formatFourCC = ReadU32LE(data + 84);
+        const std::uint32_t formatRgbBitCount = ReadU32LE(data + 88);
+        const std::uint32_t formatRBitMask = ReadU32LE(data + 92);
+        const std::uint32_t formatGBitMask = ReadU32LE(data + 96);
+        const std::uint32_t formatBBitMask = ReadU32LE(data + 100);
+        const std::uint32_t formatABitMask = ReadU32LE(data + 104);
 
         const std::uint32_t caps = ReadU32LE(data + 108);
         if ((caps & kDdscapsTexture) == 0)
@@ -166,13 +184,42 @@ namespace CNA::Internal::Graphics
         if ((caps & kDdscapsMipmap) != kDdscapsMipmap) { levels = 1; }
         if (levels < 1) { levels = 1; }
 
-        if ((formatFlags & kDdpfFourCC) == 0 ||
-            (formatFourCC != kFourCcDxt1 && formatFourCC != kFourCcDxt3 &&
-             formatFourCC != kFourCcDxt5))
+        DdsEncoding encoding;
+        if ((formatFlags & kDdpfFourCC) != 0)
+        {
+            if (formatFourCC == kFourCcDxt1) { encoding = DdsEncoding::Dxt1; }
+            else if (formatFourCC == kFourCcDxt3) { encoding = DdsEncoding::Dxt3; }
+            else if (formatFourCC == kFourCcDxt5) { encoding = DdsEncoding::Dxt5; }
+            else
+            {
+                throw System::NotSupportedException(
+                    where + "unsupported DDS pixel format "
+                            "(supported cube formats are DXT1/DXT3/DXT5 and RGB888/BGR888)");
+            }
+        }
+        else if ((formatFlags & kDdpfRgb) != 0 && formatRgbBitCount == 24u &&
+                 formatABitMask == 0u && formatGBitMask == 0x0000FF00u)
+        {
+            if (formatRBitMask == 0x000000FFu && formatBBitMask == 0x00FF0000u)
+            {
+                encoding = DdsEncoding::Rgb24;
+            }
+            else if (formatRBitMask == 0x00FF0000u && formatBBitMask == 0x000000FFu)
+            {
+                encoding = DdsEncoding::Bgr24;
+            }
+            else
+            {
+                throw System::NotSupportedException(
+                    where + "unsupported 24-bit DDS channel masks "
+                            "(only byte-aligned RGB888 and BGR888 are supported)");
+            }
+        }
+        else
         {
             throw System::NotSupportedException(
                 where + "unsupported DDS pixel format "
-                        "(only DXT1/DXT3/DXT5-compressed cube maps are supported)");
+                        "(supported cube formats are DXT1/DXT3/DXT5 and RGB888/BGR888)");
         }
         if (width != height)
         {
@@ -258,7 +305,7 @@ namespace CNA::Internal::Graphics
             for (std::uint32_t level = 0; level < levels; ++level)
             {
                 const std::uint64_t blockBytes =
-                    CalculateDDSLevelSize(levelSize, levelSize, formatFourCC);
+                    CalculateDDSLevelSize(levelSize, levelSize, encoding);
                 // Checked against the remaining bytes rather than by adding to `offset` first,
                 // so a hostile size cannot wrap the addition past the end and look in range.
                 if (offset > size || blockBytes > static_cast<std::uint64_t>(size - offset))
@@ -270,17 +317,31 @@ namespace CNA::Internal::Graphics
                 const auto* block = data + offset;
                 const auto blockLength = static_cast<std::size_t>(blockBytes);
                 const int levelExtent = static_cast<int>(levelSize);
-                if (formatFourCC == kFourCcDxt1)
+                if (encoding == DdsEncoding::Dxt1)
                 {
                     rgba = DxtUtil::DecompressDxt1(block, blockLength, levelExtent, levelExtent);
                 }
-                else if (formatFourCC == kFourCcDxt3)
+                else if (encoding == DdsEncoding::Dxt3)
                 {
                     rgba = DxtUtil::DecompressDxt3(block, blockLength, levelExtent, levelExtent);
                 }
-                else
+                else if (encoding == DdsEncoding::Dxt5)
                 {
                     rgba = DxtUtil::DecompressDxt5(block, blockLength, levelExtent, levelExtent);
+                }
+                else
+                {
+                    rgba.resize(static_cast<std::size_t>(levelExtent) *
+                                static_cast<std::size_t>(levelExtent) * 4u);
+                    const bool sourceIsRgb = encoding == DdsEncoding::Rgb24;
+                    for (std::size_t source = 0u, target = 0u; source < blockLength;
+                         source += 3u, target += 4u)
+                    {
+                        rgba[target] = block[source + (sourceIsRgb ? 0u : 2u)];
+                        rgba[target + 1u] = block[source + 1u];
+                        rgba[target + 2u] = block[source + (sourceIsRgb ? 2u : 0u)];
+                        rgba[target + 3u] = 0xFFu;
+                    }
                 }
 
                 decoded.faces[static_cast<std::size_t>(face)].push_back(std::move(rgba));

@@ -61,18 +61,18 @@ namespace CNA::Internal::Graphics
     inline constexpr std::uint64_t DefaultDdsCubeDecodedByteBudget = 2ull * 1024ull * 1024ull * 1024ull;
 
     /**
-     * @brief Decodes a DXT1/DXT3/DXT5 cube-map DDS image into RGBA8, entirely on the CPU
-     *        (plans/plan_cnb.md `CNBF-113`).
+     * @brief Decodes a supported cube-map DDS image into RGBA8, entirely on the CPU
+     *        (plans/plan_cnb.md `CNBF-113`, samples `SAMPLE-152`).
      *
      * **Needs no `GraphicsDevice`, no renderer, no window and no GPU readback.** That is the whole
      * reason it exists as a separate component: this logic used to sit inside
      * `TextureCube::DDSFromStreamEXT`, where it was reachable only by code that could create a GPU
      * texture — so a headless content compiler could not use it and CNB had no way to produce a
-     * cube map. The parsing and decompression are unchanged; only their location is.
+     * cube map.
      *
-     * The supported scope is deliberately **not** widened by the move: DXT1, DXT3 and DXT5
-     * cube maps with square faces, and nothing else. DX10 headers, uncompressed and HDR DDS
-     * variants are refused exactly as before.
+     * Supported payloads are DXT1, DXT3, DXT5, and byte-aligned 24-bit RGB888/BGR888 with no alpha
+     * channel. The 24-bit forms are expanded to RGBA8 with opaque alpha; their DDS channel masks
+     * determine the byte order. DX10 headers, other packed layouts, and HDR variants are refused.
      *
      * **Every header number is bounded before it is used** (plans/plan_cnb.md `CNBF-116`). The
      * dimension ceiling is 16384 texels, which is what `DecodedDdsCube::width` and the RGBA output

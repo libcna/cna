@@ -146,14 +146,16 @@ to see that it went.
 It is implemented once, in the shared XNA-layer `TextureCube.cpp`, not per-renderer. It parses the
 DDS header mirroring FNA's `Texture.ParseDDS`, refuses a non-cube file with
 `System::FormatException("This file does not contain cube data!")` and malformed or out-of-scope
-input with `System::NotSupportedException`, and decodes every face and mip level of a DXT1/DXT3/DXT5
-cube map to RGBA8. Scope is deliberately DXT1/3/5 only — no DX10 extended header, uncompressed or
-HDR variants — matching `Texture2D::FromStream`'s own DDS scope.
+input with `System::NotSupportedException`, and decodes every face and mip level of a
+DXT1/DXT3/DXT5 or byte-aligned 24-bit RGB888/BGR888 cube map to RGBA8. The 24-bit channel masks
+select the byte order and alpha is filled with 255. DX10 extended headers, other packed layouts,
+and HDR variants remain unsupported.
 
-CNA decompresses to RGBA8 on the CPU and uploads `SurfaceFormat::Color`, where FNA uploads the
+CNA converts to RGBA8 on the CPU and uploads `SurfaceFormat::Color`, where FNA uploads the
 compressed blocks to a real compressed GPU format. That is a deliberate deviation matching
-`Texture2D::FromStream`'s already-accepted choice, because CNA implements no compressed GPU texture
-format end-to-end on any renderer.
+`Texture2D::FromStream`'s stream-decoding contract. Some CNA renderers now accept explicit native
+compressed-texture transfers, but this portable stream route still normalizes its supported source
+encodings before upload.
 
 Since `plans/plan_cnb.md` `CNBF-113`, the parsing and decompression live in
 `CNA::Internal::Graphics::DecodeDdsCube` — a pure-CPU component needing no `GraphicsDevice` — and

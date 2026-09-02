@@ -438,9 +438,10 @@ Two behaviours worth knowing before you rely on them:
 - **A colour key is applied only when you ask for one.** The `.cnj` route applies one when the
   document says so; a direct image compile has no document to ask, and silently rewriting someone's
   pixels would be worse than making them say so. Matching pixels keep their RGB and get alpha 0.
-- **A DDS cube arrives as `RGBA8`, not as DXT blocks.** The runtime DDS path already decompresses on
-  the CPU, and texture schema 1's contract is the portable baseline — storing the blocks would
-  produce a file this build could not upload.
+- **A DDS cube arrives as `RGBA8`, not as its source payload.** DXT1/3/5 blocks are decompressed on
+  the CPU; byte-aligned RGB888/BGR888 is expanded with opaque alpha according to the DDS masks.
+  Texture schema 1's contract is the portable baseline — storing the source bytes would produce a
+  file this build could not upload uniformly.
 - **The WAV importer is deliberately narrow.** It accepts what converts to `PCM16` exactly — 16-bit
   PCM and 8-bit unsigned PCM — and refuses 24-bit, 32-bit, float and ADPCM **by name**. Each of
   those is a lossy conversion, which is an authoring decision rather than a compiler's.

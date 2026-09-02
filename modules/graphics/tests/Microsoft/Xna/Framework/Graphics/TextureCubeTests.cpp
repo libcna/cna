@@ -23,6 +23,7 @@
 
 #include <gtest/gtest.h>
 
+#include "CNA/DdsCubeFixtureEXT.hpp"
 #include "CNA/RendererTestGate.hpp"
 
 // Lets CNA_RENDERER_IS name identities bare, matching the compile-time guards it replaced.
@@ -746,10 +747,8 @@ TEST_F(TextureCubeTest, DisposeUnbindsFromGraphicsDeviceVertexTextures)
 // Previously a silent stub — ignored `stream` entirely and always returned a blank 1x1 cube map.
 // Real implementation: parses the DDS header (magic/size/flags/width/height/mipCount/caps/caps2,
 // mirroring FNA's Texture.ParseDDS), rejects non-cube-map DDS files with FormatException (matching
-// FNA exactly), and decodes each of the 6 faces' DXT1/3/5-compressed levels to RGBA8 via DxtUtil
-// (CNA's established, already-accepted deviation from FNA for this exact class of problem — see
-// Texture2D::FromStream's identical TryDecodeDds/DxtUtil precedent), uploaded as SurfaceFormat::
-// Color.
+// FNA exactly), and converts each of the 6 faces' supported levels to RGBA8 (DXT1/3/5 via DxtUtil,
+// RGB888/BGR888 by channel-mask-aware expansion), uploaded as SurfaceFormat::Color.
 //
 // Test fixture: a minimal, hand-built, valid DDS cube map (4x4 faces, single mip level, DXT1) is
 // constructed byte-for-byte in BuildSolidColorCubeDds() below — one solid, exactly-RGB565-
@@ -954,6 +953,47 @@ TEST_F(TextureCubeTest, DDSFromStreamEXTDecodesAllSixFacesWithDistinctColours)
                 << "face " << i;
             EXPECT_EQ(got[0].getPackedValueProperty(), sentinel.getPackedValueProperty())
                 << "face " << i;
+        }
+    }
+}
+
+TEST_F(TextureCubeTest, DDSFromStreamEXTUploadsRgb24CubeWithoutChangingItsChannels)
+{
+    const Color expected[6] = {
+        Color(255, 0, 0, 255),   Color(0, 255, 0, 255),   Color(0, 0, 255, 255),
+        Color(255, 255, 0, 255), Color(255, 0, 255, 255), Color(0, 255, 255, 255),
+    };
+    const std::vector<std::uint8_t> dds = CNA::TestSupport::BuildSolidColorCubeDds(
+        4, expected, 1, CNA::TestSupport::DdsBlockFormat::Bgr24);
+    System::IO::MemoryStream stream(dds.data(), static_cast<System::IO::intcs>(dds.size()));
+
+    if (!CubeStorageSupported())
+    {
+        EXPECT_THROW((void)TextureCube::DDSFromStreamEXT(gd, stream),
+                     System::NotSupportedException);
+        return;
+    }
+
+    TextureCube texture = TextureCube::DDSFromStreamEXT(gd, stream);
+    EXPECT_EQ(texture.getSizeProperty(), 4);
+    EXPECT_EQ(texture.getFormatProperty(), SurfaceFormat::Color);
+    EXPECT_EQ(texture.getLevelCountProperty(), 1);
+
+    if (!CubeLevel0ReadbackSupported()) { return; }
+
+    const CubeMapFace faces[6] = {
+        CubeMapFace::PositiveX, CubeMapFace::NegativeX,
+        CubeMapFace::PositiveY, CubeMapFace::NegativeY,
+        CubeMapFace::PositiveZ, CubeMapFace::NegativeZ,
+    };
+    for (int face = 0; face < 6; ++face)
+    {
+        std::vector<Color> actual(16, Color::Transparent);
+        texture.GetData(faces[face], actual.data(), static_cast<int>(actual.size()));
+        for (const Color& pixel : actual)
+        {
+            EXPECT_EQ(pixel.getPackedValueProperty(), expected[face].getPackedValueProperty())
+                << "face " << face;
         }
     }
 }

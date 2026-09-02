@@ -95,12 +95,16 @@ namespace CNA::TestSupport
         PushSolidDxt1Block(v, c);
     }
 
-    /** @brief Which block codec BuildSolidColorCubeDds() should write. */
+    /** @brief Which DDS pixel encoding BuildSolidColorCubeDds() should write. */
     enum class DdsBlockFormat
     {
         Dxt1,
         Dxt3,
         Dxt5,
+        /** @brief Three bytes per texel in R, G, B order. */
+        Rgb24,
+        /** @brief Three bytes per texel in B, G, R order (the Racing Game Kit fixture). */
+        Bgr24,
         /** @brief A FourCC outside the supported set, for negative tests. */
         UnsupportedFourCc,
         /** @brief No FourCC flag at all, for negative tests. */
@@ -114,11 +118,11 @@ namespace CNA::TestSupport
      * DDS face layout. Every mip level of a face repeats that face's colour, so a test can assert
      * on any level without a second expectation table.
      *
-     * @param size       Face width and height at level 0; must be a multiple of 4 for the block
-     *                   maths to stay exact.
+     * @param size       Face width and height at level 0. DXT fixtures should use a multiple of 4
+     *                   when exact block coverage matters.
      * @param faceColors Six colours, each channel already 0 or 255.
      * @param mipCount   Number of mip levels to write; 1 writes no mip chain at all.
-     * @param format     Block codec, or one of the deliberately-invalid variants.
+     * @param format     Pixel encoding, or one of the deliberately-invalid variants.
      * @param asCubeMap  False writes a non-cube DDS, for negative tests.
      * @return The complete DDS file bytes.
      */
@@ -139,17 +143,30 @@ namespace CNA::TestSupport
         for (int i = 0; i < 11; ++i) { PushU32LE(d, 0); }    // reserved1
 
         PushU32LE(d, 32);                                    // pixel format size
-        const bool haveFourCc = format != DdsBlockFormat::NoFourCc;
-        PushU32LE(d, haveFourCc ? 0x4u : 0u);                // DDPF_FOURCC
+        const bool isRgb24 = format == DdsBlockFormat::Rgb24 ||
+                             format == DdsBlockFormat::Bgr24;
+        const bool haveFourCc = !isRgb24 && format != DdsBlockFormat::NoFourCc;
+        PushU32LE(d, isRgb24 ? 0x40u : (haveFourCc ? 0x4u : 0u)); // DDPF_RGB / DDPF_FOURCC
         switch (format)
         {
             case DdsBlockFormat::Dxt1: PushAscii4(d, "DXT1"); break;
             case DdsBlockFormat::Dxt3: PushAscii4(d, "DXT3"); break;
             case DdsBlockFormat::Dxt5: PushAscii4(d, "DXT5"); break;
             case DdsBlockFormat::UnsupportedFourCc: PushAscii4(d, "DX10"); break;
-            case DdsBlockFormat::NoFourCc: PushU32LE(d, 0); break;
+            default: PushU32LE(d, 0); break;
         }
-        for (int i = 0; i < 5; ++i) { PushU32LE(d, 0); }     // bit count and masks
+        if (isRgb24)
+        {
+            PushU32LE(d, 24u);
+            PushU32LE(d, format == DdsBlockFormat::Rgb24 ? 0x000000FFu : 0x00FF0000u);
+            PushU32LE(d, 0x0000FF00u);
+            PushU32LE(d, format == DdsBlockFormat::Rgb24 ? 0x00FF0000u : 0x000000FFu);
+            PushU32LE(d, 0u);
+        }
+        else
+        {
+            for (int i = 0; i < 5; ++i) { PushU32LE(d, 0); } // bit count and masks
+        }
 
         PushU32LE(d, kDdsCapsTexture | (mipCount > 1 ? kDdsCapsMipmap : 0u));
         PushU32LE(d, asCubeMap ? (kDdsCaps2Cubemap | kDdsCaps2AllFaces) : 0u);
@@ -162,14 +179,29 @@ namespace CNA::TestSupport
             int levelSize = size;
             for (int level = 0; level < mipCount; ++level)
             {
-                const int blocks = ((levelSize + 3) / 4) * ((levelSize + 3) / 4);
-                for (int b = 0; b < blocks; ++b)
+                if (isRgb24)
                 {
-                    switch (format)
+                    for (int texel = 0; texel < levelSize * levelSize; ++texel)
                     {
-                        case DdsBlockFormat::Dxt3: PushSolidDxt3Block(d, faceColors[face]); break;
-                        case DdsBlockFormat::Dxt5: PushSolidDxt5Block(d, faceColors[face]); break;
-                        default: PushSolidDxt1Block(d, faceColors[face]); break;
+                        const auto red = faceColors[face].getRProperty();
+                        const auto green = faceColors[face].getGProperty();
+                        const auto blue = faceColors[face].getBProperty();
+                        d.push_back(format == DdsBlockFormat::Rgb24 ? red : blue);
+                        d.push_back(green);
+                        d.push_back(format == DdsBlockFormat::Rgb24 ? blue : red);
+                    }
+                }
+                else
+                {
+                    const int blocks = ((levelSize + 3) / 4) * ((levelSize + 3) / 4);
+                    for (int b = 0; b < blocks; ++b)
+                    {
+                        switch (format)
+                        {
+                            case DdsBlockFormat::Dxt3: PushSolidDxt3Block(d, faceColors[face]); break;
+                            case DdsBlockFormat::Dxt5: PushSolidDxt5Block(d, faceColors[face]); break;
+                            default: PushSolidDxt1Block(d, faceColors[face]); break;
+                        }
                     }
                 }
                 levelSize = levelSize > 1 ? levelSize / 2 : 1;

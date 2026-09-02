@@ -113,11 +113,13 @@ TEST(CnbDdsCubeDecoderTest, EverySixFaceColourDecodesExactlyWithNoDeviceInSight)
     }
 }
 
-TEST(CnbDdsCubeDecoderTest, Dxt1Dxt3AndDxt5AllDecodeToTheSameColours)
+TEST(CnbDdsCubeDecoderTest, EverySupportedEncodingDecodesToTheSameColours)
 {
-    // The three codecs differ only in how they carry alpha; the fixture's blocks are opaque in all
-    // three, so a decoder that mixed up the alpha block and the colour block would show up here.
-    for (const auto format : {DdsBlockFormat::Dxt1, DdsBlockFormat::Dxt3, DdsBlockFormat::Dxt5})
+    // The compressed codecs carry alpha differently, while RGB888 carries none and must acquire
+    // opaque alpha. Both byte orders are included so masks, not host endianness, choose channels.
+    for (const auto format : {DdsBlockFormat::Dxt1, DdsBlockFormat::Dxt3,
+                              DdsBlockFormat::Dxt5, DdsBlockFormat::Rgb24,
+                              DdsBlockFormat::Bgr24})
     {
         const std::vector<std::uint8_t> dds =
             BuildSolidColorCubeDds(4, SixDistinctFaces(), 1, format);

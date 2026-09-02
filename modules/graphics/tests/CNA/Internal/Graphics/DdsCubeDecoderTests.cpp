@@ -11,6 +11,7 @@
 // Every fixture is a real DDS built by the shared builder and then edited in exactly one field, so
 // "the decoder refused it" can never be confused with "the fixture was never valid".
 
+#include <array>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -33,6 +34,8 @@ namespace
     constexpr std::size_t kOffHeight = 12;
     constexpr std::size_t kOffWidth = 16;
     constexpr std::size_t kOffMipCount = 28;
+    constexpr std::size_t kOffRgbBitCount = 88;
+    constexpr std::size_t kOffRBitMask = 92;
     constexpr std::size_t kOffCaps = 108;
     constexpr std::size_t kOffCaps2 = 112;
 
@@ -72,6 +75,50 @@ TEST(DdsCubeDecoderTest, TheUnmodifiedFixtureDecodes)
         ASSERT_EQ(cube.faces[static_cast<std::size_t>(face)].size(), 4u);
         EXPECT_EQ(cube.faces[static_cast<std::size_t>(face)][0].size(), 8u * 8u * 4u);
     }
+}
+
+TEST(DdsCubeDecoderTest, Rgb24AndBgr24DecodeEveryFaceAndMipToOpaqueRgba)
+{
+    for (const auto format : {CNA::TestSupport::DdsBlockFormat::Rgb24,
+                              CNA::TestSupport::DdsBlockFormat::Bgr24})
+    {
+        const std::vector<std::uint8_t> dds =
+            CNA::TestSupport::BuildSolidColorCubeDds(5, kFaceColors, 3, format);
+        const DecodedDdsCube cube = Decode(dds);
+        ASSERT_EQ(cube.width, 5);
+        ASSERT_EQ(cube.mipCount, 3);
+
+        const std::array<std::size_t, 3> extents{5u, 2u, 1u};
+        for (std::size_t face = 0; face < 6u; ++face)
+        {
+            ASSERT_EQ(cube.faces[face].size(), extents.size());
+            for (std::size_t level = 0; level < extents.size(); ++level)
+            {
+                const std::vector<std::uint8_t>& rgba = cube.faces[face][level];
+                ASSERT_EQ(rgba.size(), extents[level] * extents[level] * 4u);
+                for (std::size_t texel = 0; texel < extents[level] * extents[level]; ++texel)
+                {
+                    EXPECT_EQ(rgba[texel * 4u], kFaceColors[face].getRProperty());
+                    EXPECT_EQ(rgba[texel * 4u + 1u], kFaceColors[face].getGProperty());
+                    EXPECT_EQ(rgba[texel * 4u + 2u], kFaceColors[face].getBProperty());
+                    EXPECT_EQ(rgba[texel * 4u + 3u], 255u);
+                }
+            }
+        }
+    }
+}
+
+TEST(DdsCubeDecoderTest, OtherUncompressedLayoutsRemainHonestRefusals)
+{
+    std::vector<std::uint8_t> wrongBitCount = CNA::TestSupport::BuildSolidColorCubeDds(
+        4, kFaceColors, 1, CNA::TestSupport::DdsBlockFormat::Bgr24);
+    PatchU32(wrongBitCount, kOffRgbBitCount, 32u);
+    EXPECT_THROW((void)Decode(wrongBitCount), System::NotSupportedException);
+
+    std::vector<std::uint8_t> overlappingMasks = CNA::TestSupport::BuildSolidColorCubeDds(
+        4, kFaceColors, 1, CNA::TestSupport::DdsBlockFormat::Bgr24);
+    PatchU32(overlappingMasks, kOffRBitMask, 0x0000FF00u);
+    EXPECT_THROW((void)Decode(overlappingMasks), System::NotSupportedException);
 }
 
 TEST(DdsCubeDecoderTest, DimensionsAtTheTopOfTheUnsignedRangeAreRefused)

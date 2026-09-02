@@ -356,21 +356,18 @@ namespace Microsoft::Xna::Framework::Graphics
         const auto* raw = reinterpret_cast<const uint8_t*>(buf.data());
         const auto rawLen = static_cast<std::size_t>(len);
 
-        // plans/plan_cnb.md CNBF-113: the parsing and DXT decompression that used to live here are
-        // now CNA::Internal::Graphics::DecodeDdsCube, a pure-CPU component with no GraphicsDevice
-        // in sight. Nothing about the format handling changed -- the code moved so that a headless
-        // content compiler could reach it too, which is what let CNB finally produce a cube map.
-        // The prefix keeps every diagnostic naming this API rather than the helper.
+        // plans/plan_cnb.md CNBF-113: parsing and conversion live in the pure-CPU
+        // CNA::Internal::Graphics::DecodeDdsCube component so both this run-time route and the
+        // headless CNB compiler share one implementation. The prefix keeps every diagnostic naming
+        // this API rather than the helper.
         const CNA::Internal::Graphics::DecodedDdsCube decoded =
             CNA::Internal::Graphics::DecodeDdsCube(raw, rawLen,
                                                     "TextureCube::DDSFromStreamEXT");
 
         // CNA deviation from FNA (documented, matches Texture2D::FromStream's own established
-        // precedent for the identical DDS/DXT problem): every face/level is fully decompressed to
-        // RGBA8 on the CPU via DxtUtil and uploaded as SurfaceFormat::Color, rather than uploading
-        // the compressed blocks directly to a real compressed GPU format -- CNA doesn't implement
-        // compressed GPU texture formats end-to-end on any renderer (NEXT.md's documented
-        // "SurfaceFormat support is Color-only for real GPU formats" limitation).
+        // precedent for the identical DDS problem): every face/level is converted to RGBA8 on the
+        // CPU (DXT is decompressed; RGB24 gains opaque alpha) and uploaded as SurfaceFormat::Color,
+        // rather than uploading the source representation directly to a native GPU format.
         TextureCube result(device, decoded.width, decoded.mipCount > 1, SurfaceFormat::Color);
 
         for (int face = 0; face < 6; ++face)
