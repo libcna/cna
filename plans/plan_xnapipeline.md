@@ -751,19 +751,19 @@ resolve it by consulting a prohibited implementation.
 - [x] **XNAP-001** Audit the tree; write this plan.
 
 ### Phase 2 — XNB write infrastructure
-- [ ] **XNAP-002** `XnbByteWriter` + `XnbWriteLimits` + checked arithmetic; unit tests.
-- [ ] **XNAP-003** `XnbFileOptions`, `XnbTargetPlatform`, `XnbGraphicsProfile`, header emission
+- [x] **XNAP-002** `XnbByteWriter` + `XnbWriteLimits` + checked arithmetic; unit tests.
+- [x] **XNAP-003** `XnbFileOptions`, `XnbTargetPlatform`, `XnbGraphicsProfile`, header emission
       with exact `totalLength`; unit tests.
-- [ ] **XNAP-004** `XnbTypeWriter`, `XnbTypeWriterT<T>`, `XnbTypeKey<T>`, `XnbTypeWriterRegistry`.
-- [ ] **XNAP-005** `XnbWriter`: two-pass body/table emission, object dispatch, null, shared
+- [x] **XNAP-004** `XnbTypeWriter`, `XnbTypeWriterT<T>`, `XnbTypeKey<T>`, `XnbTypeWriterRegistry`.
+- [x] **XNAP-005** `XnbWriter`: two-pass body/table emission, object dispatch, null, shared
       resources and fixup ordering, `ExternalReference`, bounded recursion; unit tests.
 
 ### Phase 3 — Basic content
-- [ ] **XNAP-006** Primitive and `String`/`Char` writers; round-trip tests.
-- [ ] **XNAP-007** Math value-type writers (`Vector2/3/4`, `Matrix`, `Quaternion`, `Color`,
+- [x] **XNAP-006** Primitive and `String`/`Char` writers; round-trip tests.
+- [x] **XNAP-007** Math value-type writers (`Vector2/3/4`, `Matrix`, `Quaternion`, `Color`,
       `Plane`, `Point`, `Rectangle`, `BoundingBox`, `BoundingSphere`, `BoundingFrustum`, `Ray`).
-- [ ] **XNAP-008** `Array<T>`, `List<T>`, `Dictionary<K,V>`, `Nullable<T>`, `Enum<T>`.
-- [ ] **XNAP-009** `TimeSpan`, `DateTime`, `Decimal`, `Curve`.
+- [x] **XNAP-008** `Array<T>`, `List<T>`, `Dictionary<K,V>`, `Nullable<T>`, `Enum<T>`.
+- [x] **XNAP-009** `TimeSpan`, `DateTime`, `Decimal`, `Curve`.
 
 ### Phase 4 — Texture2D end to end
 - [ ] **XNAP-010** `SurfaceFormat` ↔ `CnbTextureFormat` mapping table with total, diagnosed
@@ -868,3 +868,11 @@ Status legend: `[ ]` open · `[x]` complete · `[~]` partial (scope recorded) ·
 | Task | Status | Notes |
 |---|---|---|
 | XNAP-001 | [x] | Audit + this plan. |
+| XNAP-002 | [x] | `XnbByteWriter`, `XnbWriteLimits`, `XnbWriteException`, checked add/multiply. |
+| XNAP-003 | [x] | `XnbFileOptions`, `XnbTargetPlatform` (7 writable identifiers; Xbox 360 excluded because its `SoundEffect` block is big-endian and unverifiable here), `XnbGraphicsProfile`, header emission with a patched total size. |
+| XNAP-004 | [x] | `XnbTypeWriter`, `XnbTypeWriterT<T>`, `XnbTypeKey<T>`, `XnbTypeWriterRegistry` (configure → freeze → lock-free lookup). |
+| XNAP-005 | [x] | `XnbWriter`: two-pass table/body emission, polymorphic/raw/`Object? T` forms, an empty `std::any` as .NET null, shared resources with caller-supplied identity keys, `ExternalReference`, bounded depth. |
+| XNAP-006 | [x] | 13 primitive writers, round-tripped through the runtime readers at their extremes. |
+| XNAP-007 | [x] | 13 math writers (`Vector2/3/4`, `Matrix`, `Quaternion`, `Color`, `Plane`, `Point`, `Rectangle`, `BoundingBox`, `BoundingSphere`, `BoundingFrustum`, `Ray`). |
+| XNAP-008 | [x] | Closed generic `List<T>`, `T[]`, `Dictionary<K,V>`, `Nullable<T>`, `Enum<T>` writers, registered per combination exactly as the reader side is. |
+| XNAP-009 | [x] | `TimeSpan`, `DateTime`, `Decimal`, `Curve`. Written from the sharp-runtime types the readers produce, so the two sides are exact inverses; `DateTimeKind` is emitted as `Unspecified` because CNA's `System::DateTime` does not carry one and the reader already discards it. |
