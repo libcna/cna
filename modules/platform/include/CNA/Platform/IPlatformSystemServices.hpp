@@ -421,6 +421,20 @@ namespace CNA::Platform {
                                                std::vector<std::uint8_t>& data) const = 0;
 
         /**
+         * @brief Loads a whole file while matching path components without ASCII case.
+         *
+         * XNA content names originate on a case-insensitive Windows filesystem, while packaged
+         * assets on Android and other targets can be case-sensitive. Ambiguous matches must fail
+         * rather than selecting an arbitrary file.
+         *
+         * @param path The file to read.
+         * @param data Receives the contents; untouched when this returns false.
+         * @return True if exactly one matching file was read.
+         */
+        [[nodiscard]] virtual bool TryLoadFileIgnoringCase(
+            const std::string& path, std::vector<std::uint8_t>& data) const = 0;
+
+        /**
          * @brief Creates a directory, including missing parents.
          *
          * @param path The directory to create.

@@ -4,9 +4,12 @@
 
 #include "CNA/Platform/PlatformException.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <cstdlib>
+#include <optional>
 #include <utility>
 
 namespace CNA::Platform::Common {
@@ -43,6 +46,69 @@ namespace CNA::Platform::Common {
                 return WithTrailingSeparator(std::move(value));
             }
             return {};
+        }
+
+        std::optional<std::filesystem::path> ResolvePathIgnoringCase(
+            const std::filesystem::path& requested)
+        {
+            namespace fs = std::filesystem;
+
+            std::error_code code;
+            if (fs::exists(requested, code) && !code)
+            {
+                return requested;
+            }
+
+            fs::path resolved = requested.is_absolute() ? requested.root_path() : fs::path{};
+            for (const fs::path& component : requested.relative_path())
+            {
+                const fs::path exact = resolved / component;
+                code.clear();
+                if (fs::exists(exact, code) && !code)
+                {
+                    resolved = exact;
+                    continue;
+                }
+
+                const fs::path parent = resolved.empty() ? fs::path(".") : resolved;
+                code.clear();
+                fs::directory_iterator entry(parent, code);
+                if (code)
+                {
+                    return std::nullopt;
+                }
+
+                std::string wanted = component.string();
+                std::transform(wanted.begin(), wanted.end(), wanted.begin(),
+                    [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+                fs::path match;
+                const fs::directory_iterator end;
+                for (; entry != end; entry.increment(code))
+                {
+                    if (code)
+                    {
+                        return std::nullopt;
+                    }
+                    std::string candidate = entry->path().filename().string();
+                    std::transform(candidate.begin(), candidate.end(), candidate.begin(),
+                        [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                    if (candidate == wanted)
+                    {
+                        if (!match.empty())
+                        {
+                            return std::nullopt;
+                        }
+                        match = entry->path().filename();
+                    }
+                }
+                if (match.empty())
+                {
+                    return std::nullopt;
+                }
+                resolved /= match;
+            }
+            return resolved;
         }
 
     }
@@ -84,6 +150,39 @@ namespace CNA::Platform::Common {
     bool StandardFileSystem::TryLoadFile(const std::string& path, std::vector<std::uint8_t>& data) const
     {
         std::ifstream input(path, std::ios::binary | std::ios::ate);
+        if (!input.good())
+        {
+            return false;
+        }
+        const std::streamsize size = input.tellg();
+        input.seekg(0);
+
+        std::vector<std::uint8_t> contents(static_cast<std::size_t>(size));
+        if (size > 0 && !input.read(reinterpret_cast<char*>(contents.data()), size))
+        {
+            return false;
+        }
+        data = std::move(contents);
+        return true;
+    }
+
+    bool StandardFileSystem::TryLoadFileIgnoringCase(
+        const std::string& path, std::vector<std::uint8_t>& data) const
+    {
+        return TryLoadStandardFileIgnoringCase(path, data);
+    }
+
+    bool TryLoadStandardFileIgnoringCase(
+        const std::string& path, std::vector<std::uint8_t>& data)
+    {
+        const std::optional<std::filesystem::path> resolved =
+            ResolvePathIgnoringCase(std::filesystem::path(path));
+        if (!resolved.has_value())
+        {
+            return false;
+        }
+
+        std::ifstream input(*resolved, std::ios::binary | std::ios::ate);
         if (!input.good())
         {
             return false;

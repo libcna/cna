@@ -5,6 +5,8 @@
 // propagation, and Unload() behavior, proven end-to-end through ContentManager::Load<T>()
 // using only a test-only reader (a real Texture2DReader is Phase C/XNB-23).
 
+#include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -100,6 +102,36 @@ namespace
                 return false;
             }
             data = asset->second;
+            return true;
+        }
+        [[nodiscard]] bool TryLoadFileIgnoringCase(
+            const std::string& path, std::vector<std::uint8_t>& data) const override
+        {
+            std::string wanted = path;
+            std::transform(wanted.begin(), wanted.end(), wanted.begin(),
+                [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+            const std::vector<std::uint8_t>* match = nullptr;
+            for (const auto& [candidatePath, candidateBytes] : assets)
+            {
+                std::string candidate = candidatePath;
+                std::transform(candidate.begin(), candidate.end(), candidate.begin(),
+                    [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                if (candidate != wanted)
+                {
+                    continue;
+                }
+                if (match != nullptr)
+                {
+                    return false;
+                }
+                match = &candidateBytes;
+            }
+            if (match == nullptr)
+            {
+                return false;
+            }
+            data = *match;
             return true;
         }
         void CreateDirectory(const std::string&) override {}
@@ -210,6 +242,32 @@ TEST_F(ContentManagerXnbTest, LoadReadsXnbFromPlatformPackagedAssets)
     const TestValue result = cm.Load<TestValue>("fixture");
 
     EXPECT_EQ(result.value, 789);
+}
+
+TEST_F(ContentManagerXnbTest, LoadMatchesPackagedXnbPathCaseLikeWindows)
+{
+    PackagedAssetPlatform platform;
+    platform.fileSystem.assets.emplace(
+        "PackagedContent/Textures/ingame.xnb", BuildTestXnbFile(790));
+    const CNA::Platform::Testing::ScopedCurrentPlatform current(platform);
+
+    ContentManager cm(nullptr, "PackagedContent");
+    const TestValue result = cm.Load<TestValue>("textures\\Ingame");
+
+    EXPECT_EQ(result.value, 790);
+}
+
+TEST_F(ContentManagerXnbTest, AmbiguousPackagedPathCaseIsRejected)
+{
+    PackagedAssetPlatform platform;
+    platform.fileSystem.assets.emplace(
+        "PackagedContent/Textures/ingame.xnb", BuildTestXnbFile(790));
+    platform.fileSystem.assets.emplace(
+        "PackagedContent/Textures/InGame.xnb", BuildTestXnbFile(791));
+    const CNA::Platform::Testing::ScopedCurrentPlatform current(platform);
+
+    ContentManager cm(nullptr, "PackagedContent");
+    EXPECT_THROW((void)cm.Load<TestValue>("textures\\INGAME"), ContentLoadException);
 }
 
 TEST_F(ContentManagerXnbTest, LoadAcceptsWindowsSeparatorsAndXnaCaseInsensitiveAssetNames)

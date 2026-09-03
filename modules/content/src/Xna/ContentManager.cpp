@@ -523,7 +523,8 @@ namespace Microsoft::Xna::Framework::Content
             return true;
         }
 
-        return CNA::Platform::GetCurrentPlatform().GetFileSystem()->TryLoadFile(path, bytes);
+        return CNA::Platform::GetCurrentPlatform().GetFileSystem()
+            ->TryLoadFileIgnoringCase(path, bytes);
     }
 
     std::string ContentManager::NormalizeKey(const std::string& assetName) const

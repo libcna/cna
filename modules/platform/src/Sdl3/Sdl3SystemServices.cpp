@@ -3,11 +3,18 @@
 #include "Sdl3SystemServices.hpp"
 
 #include "CNA/Platform/PlatformException.hpp"
+#include "../Common/StandardFileSystem.hpp"
 #include "Sdl3Window.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <memory>
 
 #include <SDL3/SDL.h>
+
+#if defined(__ANDROID__)
+#include <jni.h>
+#endif
 
 namespace CNA::Platform::Sdl3 {
 
@@ -56,6 +63,135 @@ namespace CNA::Platform::Sdl3 {
 
             return info;
         }
+
+#if defined(__ANDROID__)
+        bool EqualsIgnoringAsciiCase(const std::string& left, const std::string& right)
+        {
+            return left.size() == right.size() &&
+                std::equal(left.begin(), left.end(), right.begin(),
+                    [](const unsigned char a, const unsigned char b)
+                    {
+                        return std::tolower(a) == std::tolower(b);
+                    });
+        }
+
+        std::string ResolveAndroidAssetPathIgnoringCase(const std::string& requested)
+        {
+            if (requested.empty() || requested.front() == '/')
+            {
+                return {};
+            }
+
+            auto* environment = static_cast<JNIEnv*>(SDL_GetAndroidJNIEnv());
+            if (environment == nullptr || environment->PushLocalFrame(32) < 0)
+            {
+                return {};
+            }
+
+            const auto fail = [&]() -> std::string
+            {
+                if (environment->ExceptionCheck())
+                {
+                    environment->ExceptionClear();
+                }
+                environment->PopLocalFrame(nullptr);
+                return {};
+            };
+
+            const jobject activity = static_cast<jobject>(SDL_GetAndroidActivity());
+            if (activity == nullptr)
+            {
+                return fail();
+            }
+            const jclass activityClass = environment->GetObjectClass(activity);
+            const jmethodID getAssets = activityClass == nullptr ? nullptr :
+                environment->GetMethodID(
+                    activityClass, "getAssets", "()Landroid/content/res/AssetManager;");
+            const jobject assetManager = getAssets == nullptr ? nullptr :
+                environment->CallObjectMethod(activity, getAssets);
+            const jclass assetManagerClass = assetManager == nullptr ? nullptr :
+                environment->GetObjectClass(assetManager);
+            const jmethodID list = assetManagerClass == nullptr ? nullptr :
+                environment->GetMethodID(
+                    assetManagerClass, "list", "(Ljava/lang/String;)[Ljava/lang/String;");
+            if (environment->ExceptionCheck() || list == nullptr)
+            {
+                return fail();
+            }
+
+            std::string resolved;
+            std::size_t componentStart = 0;
+            while (componentStart < requested.size())
+            {
+                const std::size_t componentEnd = requested.find('/', componentStart);
+                const std::string component = requested.substr(
+                    componentStart,
+                    componentEnd == std::string::npos
+                        ? std::string::npos : componentEnd - componentStart);
+                componentStart = componentEnd == std::string::npos
+                    ? requested.size() : componentEnd + 1;
+                if (component.empty() || component == ".")
+                {
+                    continue;
+                }
+                if (component == "..")
+                {
+                    return fail();
+                }
+
+                const jstring directory = environment->NewStringUTF(resolved.c_str());
+                const auto entries = static_cast<jobjectArray>(
+                    environment->CallObjectMethod(assetManager, list, directory));
+                if (environment->ExceptionCheck() || entries == nullptr)
+                {
+                    return fail();
+                }
+
+                std::string matched;
+                const jsize count = environment->GetArrayLength(entries);
+                for (jsize index = 0; index < count; ++index)
+                {
+                    const auto entry = static_cast<jstring>(
+                        environment->GetObjectArrayElement(entries, index));
+                    if (entry == nullptr)
+                    {
+                        continue;
+                    }
+                    const char* characters = environment->GetStringUTFChars(entry, nullptr);
+                    if (characters == nullptr)
+                    {
+                        environment->DeleteLocalRef(entry);
+                        return fail();
+                    }
+                    const std::string candidate(characters);
+                    environment->ReleaseStringUTFChars(entry, characters);
+                    environment->DeleteLocalRef(entry);
+                    if (EqualsIgnoringAsciiCase(candidate, component))
+                    {
+                        if (!matched.empty())
+                        {
+                            return fail();
+                        }
+                        matched = candidate;
+                    }
+                }
+                environment->DeleteLocalRef(entries);
+                environment->DeleteLocalRef(directory);
+                if (matched.empty())
+                {
+                    return fail();
+                }
+                if (!resolved.empty())
+                {
+                    resolved.push_back('/');
+                }
+                resolved += matched;
+            }
+
+            environment->PopLocalFrame(nullptr);
+            return resolved;
+        }
+#endif
 
     } // namespace
 
@@ -240,6 +376,22 @@ namespace CNA::Platform::Sdl3 {
         data.assign(bytes, bytes + size);
         SDL_free(contents);
         return true;
+    }
+
+    bool Sdl3FileSystem::TryLoadFileIgnoringCase(
+        const std::string& path, std::vector<std::uint8_t>& data) const
+    {
+        if (TryLoadFile(path, data) ||
+            Common::TryLoadStandardFileIgnoringCase(path, data))
+        {
+            return true;
+        }
+#if defined(__ANDROID__)
+        const std::string resolved = ResolveAndroidAssetPathIgnoringCase(path);
+        return !resolved.empty() && TryLoadFile(resolved, data);
+#else
+        return false;
+#endif
     }
 
     void Sdl3FileSystem::CreateDirectory(const std::string& path)

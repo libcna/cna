@@ -28,6 +28,8 @@ namespace
         }
         [[nodiscard]] bool TryLoadFile(
             const std::string&, std::vector<std::uint8_t>&) const override { return false; }
+        [[nodiscard]] bool TryLoadFileIgnoringCase(
+            const std::string&, std::vector<std::uint8_t>&) const override { return false; }
         void CreateDirectory(const std::string&) override {}
     };
 

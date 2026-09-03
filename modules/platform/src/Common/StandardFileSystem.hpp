@@ -8,6 +8,10 @@
 
 namespace CNA::Platform::Common {
 
+    /** Reads one uniquely matched ASCII-case-insensitive native filesystem path. */
+    [[nodiscard]] bool TryLoadStandardFileIgnoringCase(
+        const std::string& path, std::vector<std::uint8_t>& data);
+
     /**
      * @brief Path resolution and file loading on the C++ standard library alone.
      *
@@ -57,6 +61,15 @@ namespace CNA::Platform::Common {
          */
         [[nodiscard]] bool TryLoadFile(const std::string& path,
                                        std::vector<std::uint8_t>& data) const override;
+
+        /**
+         * @brief Reads a whole file while matching path components without ASCII case.
+         * @param path The file to read.
+         * @param data Receives the file's bytes; left untouched when no unique match exists.
+         * @return True if exactly one matching file was read.
+         */
+        [[nodiscard]] bool TryLoadFileIgnoringCase(
+            const std::string& path, std::vector<std::uint8_t>& data) const override;
 
         /**
          * @brief Creates a directory and any missing parents.

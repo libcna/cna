@@ -83,6 +83,14 @@ namespace CNA::Platform::Sdl3 {
          */
         [[nodiscard]] bool TryLoadFile(const std::string& path,
                                        std::vector<std::uint8_t>& data) const override;
+        /**
+         * @brief Loads a whole file while matching path components without ASCII case.
+         * @param path The file to read.
+         * @param data Receives the contents; untouched when no unique match exists.
+         * @return True if exactly one matching file was read.
+         */
+        [[nodiscard]] bool TryLoadFileIgnoringCase(
+            const std::string& path, std::vector<std::uint8_t>& data) const override;
         /** @brief Creates a directory and any missing parents. @param path The directory to create. */
         void CreateDirectory(const std::string& path) override;
     };
