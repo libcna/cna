@@ -1,0 +1,382 @@
+# plan_xnapipeline.md — CNA native XNB content-build pipeline (XNB **output**)
+
+> **Scope of this plan.** This plan owns the **XNB writer** side of CNA's content system: turning
+> ordinary source assets into `.xnb` files that an XNA-4.0-compatible runtime can load, using only
+> native C++ and without XNA Game Studio, MonoGame, FNA build tools or MSBuild.
+>
+> **Boundary with the existing plans.**
+> * [`plan_xnb.md`](plan_xnb.md) owns the **runtime XNB reader** (`ContentManager::Load<T>()` from
+>   `.xnb`). That work is complete for its declared scope and is **not** reopened here.
+> * [`plan_content_pipeline.md`](plan_content_pipeline.md) owns the build-time pipeline
+>   (importer → processor → writer → **CNB**), including the CLI, incremental manifests and the
+>   `.cna-content.json` project format. This plan **extends** that pipeline with a second output
+>   format; it does not fork it.
+> * [`plan_cnb.md`](plan_cnb.md) owns the frozen native CNB format. XNB compatibility must never
+>   weaken or constrain CNB.
+> * [`plan_fx.md`](plan_fx.md) owns CNA's FX/effect infrastructure. Effect **bytecode
+>   serialization** belongs here; **shader compilation** stays there.
+>
+> **Task IDs.** `XNAP-###`. Never reuse an ID; never renumber.
+
+---
+
+## 0. Session-start audit (2026-09-03) — what actually exists at HEAD
+
+The task that opened this plan described a large pre-existing XNB **writer** implementation
+(`XnbByteWriter`, `XnbWriteLimits`, `XnbFileOptions`, `XnbTypeWriter`, `XnbTypeKey<T>`,
+`XnbTypeWriterRegistry`, `XnbWriter`, `XnbAssetWriter`, a `--format cnb|xnb` CLI switch, an
+independent Python XNB conformance parser, CNA-generated XNB fixtures, `docs/xnb-interoperability.md`
+and this plan file). **None of that existed at HEAD `756096626`.** The audit below is the verified
+state; it is recorded because the rest of this plan is written against it, not against the report.
+
+### 0.1 Verified absent
+
+| Claimed | Verified state at `756096626` |
+|---|---|
+| `XnbByteWriter`, `XnbWriteLimits`, `XnbFileOptions`, `XnbTypeWriter`, `XnbTypeKey<T>`, `XnbTypeWriterRegistry`, `XnbWriter`, `XnbAssetWriter` | Zero occurrences anywhere in the tree (source, tests, docs). |
+| `ContentPipeline::Build()` XNB route | `Build()` produces CNB only. `ContentTypeWriter` returns a CNB asset type/schema. |
+| `cna-content --format cnb|xnb` | No `--format` option exists. Usage is `build <src> -o <out> [--config] [--workers] [--explain] [--quiet]`. |
+| Independent Python XNB conformance parser | No Python file in the tree mentions XNB. |
+| CNA-generated XNB fixtures | Every `.xnb` in `tests/assets/` is externally produced (1 genuine XNA 4.0, 14 MonoGame). |
+| `docs/xnb-interoperability.md`, `xnb.md` XNB-writer content, `plans/plan_xnapipeline.md` | `docs/xnb-interoperability.md` and this plan did not exist. `xnb.md` documents the reader. |
+| Primitive/collection/graphics/media **writers** | No XNB writer of any kind. The only XNB-emitting code was hand-rolled `MakeTexture2DXnb()`-style helpers **inside test files**. |
+
+### 0.2 Verified present (and reused by this plan)
+
+| Component | Location | Role for XNB output |
+|---|---|---|
+| XNB container reader | `modules/content/include/CNA/Internal/Xnb/XnbHeader.hpp` | Authoritative in-repo header spec; the writer's counterpart. |
+| Canonical XNB data model | `CNA/Internal/Xnb/XnbCanonicalData.hpp` (+ 1913-line `.cpp`) | `XnbTextureData`, `XnbSpriteFontData`, `XnbSoundEffectData`, `XnbSongData`, `XnbVideoData`, `XnbVertexDeclarationData`, `XnbVertexBufferData`, `XnbIndexBufferData`, `Xnb{Basic,AlphaTest,DualTexture,EnvironmentMap,Skinned}EffectData`, `XnbModelData`. **This is the XNB-side canonical intermediate representation the writer serializes from.** |
+| Model graph wire order | `modules/content/src/Xnb/XnbModelGraphReader.hpp` | Exact bone/mesh/part/tag/shared-reference order, sink-templated so a writer can mirror it. |
+| Built-in reader family | `modules/content/src/Xnb/*.cpp` | The round-trip oracle every writer is tested against. |
+| `ContentReader` | `Microsoft/Xna/Framework/Content/ContentReader.hpp` | 1-based type-reader dispatch, shared-resource fixups, `ReadExternalReference` (plain 7-bit-prefixed string). |
+| Content pipeline core | `CNA/Content/Pipeline/ContentPipeline.hpp` | Importer/processor/writer registry, `ContentValue`, dependency collector, diagnostics, limits. |
+| Source routes | `Texture2DContentPipeline`, `SoundEffectContentPipeline`, `SongContentPipeline`, `VideoContentPipeline`, `ModelContentPipeline`, `CnjContentPipeline`, `XnbContentPipeline` | Importers/processors are format-neutral and are reused verbatim for XNB output. |
+| `XnbContentPipeline` | `CNA/Content/Pipeline/XnbContentPipeline.hpp` | **XNB as a source** (`.xnb` → CNB transcode). Not an XNB writer. |
+| CLI + incremental manifest | `tools/content/content.cpp`, `ContentBuildManifest` | Fingerprints, atomic publication, `--explain`, parallel workers, manifest-proven clean. |
+| Image decode | `CNA/Internal/Graphics/ImageLoader` (stb) | `.png .jpg .jpeg .bmp .tga .gif .psd .hdr .pic .pnm`. |
+| BC/DXT | `CNA/Internal/Graphics/DxtUtil` | **Decompress only** — no encoder. |
+| Model canonical data | `CNA/Content/Cnb/CnbModelV2Data.hpp` | Exact vertex declarations, shared vertex/index buffers, stock effects, bones, meshes, parts, bounds, root. Sufficient for XNA `Model` output. |
+
+### 0.3 Environment capability audit
+
+| Capability | State | Consequence |
+|---|---|---|
+| Microsoft XNA 4.0 runtime | **Absent** — no `wine`, `mono`, `dotnet`, `msbuild`, `xbuild` on `PATH`. | `XNAP-30`–`XNAP-34` build a ready-to-run harness and expected-value manifests; they **cannot** be executed here. No task in this plan may claim "tested against Microsoft XNA 4.0" from this environment. |
+| FNA reference tree (`/rv/data/library/github.com/FNA-XNA/FNA`) | **Absent** (`/rv` does not exist). | Every wire-format decision in this plan is derived from CNA's own reader, the committed fixtures, or public format documentation. This is a provenance improvement, not a loss. |
+| Genuine XNA 4.0 XNB fixture | **Present**: `tests/assets/xnb/xna40/windows/uncompressed/ContentManifestListStrings.xnb` | Enables a **byte-exact** golden test: CNA writes the same `List<string>` and must reproduce Microsoft's own file byte for byte (`XNAP-14`). |
+| MonoGame XNB fixtures | 14 files, provenance-manifested | Reader-name evidence and second-source byte checks. |
+| FreeType 2 | Installed system-wide (`/usr/include/freetype2`), **not yet used by CNA** | Enables the SpriteFont source route (`XNAP-50`+). New optional build-time dependency; license audit required. |
+| Audio device | **Absent** (ALSA fails) | Pre-existing test failures; see §0.4. |
+| Renderer | `STUB` in `cmake-build-unit` | Pre-existing test failures; see §0.4. |
+
+### 0.4 Recorded test baseline (before any change in this plan)
+
+Build dir `cmake-build-unit` (`Debug`, `CNA_PLATFORM=SDL3`, `CNA_GRAPHICS_RENDERER=STUB`).
+
+```text
+CnaContentTests:  1585 run   1487 passed   68 skipped   30 failed
+```
+
+All 30 failures are environmental and reproduce on the unmodified tree:
+
+| Failure group | Count | Cause |
+|---|---|---|
+| `SoundEffectContentTypeReaderTest.*`, `CnbSoundEffectCodecTest.*`, `ContentManagerSoundEffectXnbTest.*`, `XnbContentPipelineTest.SoundEffectRuntime…`, `CnjCapabilityMatrixTest.SoundEffectDelegatesViaSourceFile`, `XnbBuiltInReaderRegistrationTest.FreshContentManagerLoadsASoundEffectFixture…` | 20 | `SDL_OpenAudioDeviceStream failed: ALSA: Couldn't open audio device`. No sound card in the container. |
+| `CnbTextureContentManagerTest.*`, `CnbTextureCubeProducerTest.*`, `Texture3DTextureCubeContentTypeReaderTest.*`, `XnbBuiltInReaderRegistrationTest.FreshContentManagerLoadsATextureCubeFixture…`, `CnjTexture3DTest.LoadsRealCnjFixture`, `EffectMaterialContentTypeReaderTest.ExternalReferenceReaderPreservesReferencedTextureCubeConcreteType` | 9 | `STUB` renderer has no `TextureCube`/`Texture3D` support. |
+| `ContentPipelineCliTest.MultiOutputFailureLeavesTheOldManifestAndRecoversSafely` | 1 | The test induces a publish failure by removing owner-write permission; the container runs as **uid 0**, which bypasses it, so the expected failure never happens. |
+
+`XNAP-04` owns keeping this baseline current. **Any new failure outside these 30 is a regression.**
+
+---
+
+## 1. Target architecture
+
+```text
+                       source assets (.png .wav .gltf .glb .spritefont .fx …)
+                                        |
+                                        v
+                              Content Importer          (format-neutral, shared)
+                                        |
+                                        v
+                     imported / source-oriented value    (ImportedImage, ImportedSound, …)
+                                        |
+                                        v
+                              Content Processor          (format-neutral, shared)
+                                        |
+                                        v
+                  processed canonical value  (Cnb*Data / CnbModelV2Data / Curve / …)
+                                        |
+                        +---------------+----------------+
+                        |                                |
+                        v                                v
+              ContentTypeWriter                 ContentTypeWriter
+              (OutputFormat::Cnb)               (OutputFormat::Xnb)
+                        |                                |
+                        |                          Xnb*Data adapter
+                        |                                |
+                        |                          XnbAssetWriter
+                        v                                v
+                      .cnb                             .xnb
+```
+
+Design commitments:
+
+1. **Importers and processors are never duplicated.** The output format is chosen at the writer
+   boundary only. A new source format therefore reaches both outputs at once.
+2. **`Xnb*Data` (already in the tree, reader-owned) is the XNB-side canonical representation.**
+   Writers serialize `Xnb*Data`; thin adapters map `Cnb*Data` → `Xnb*Data`. This makes every writer
+   directly round-trip-testable against CNA's own reader and keeps provenance clean.
+3. **CNB is never degraded for XNB.** Where XNA cannot represent something (glTF PBR, morph
+   targets, animation clips, richer materials) CNB keeps it and the XNB route emits a documented,
+   diagnosed downgrade — never a silent loss.
+4. **Runtime users never link build-time dependencies.** FreeType, BC encoders and model importers
+   stay out of the runtime link closure (`XNAP-90`).
+
+---
+
+## 2. XNB container facts — verified, and how
+
+Everything in this section is either (a) read out of a committed fixture, or (b) derived from CNA's
+own reader. Nothing is taken from MonoGame or FNA implementation source, and no Microsoft binary was
+decompiled.
+
+### 2.1 Header
+
+```text
+offset size  field
+0      3     'X' 'N' 'B'
+3      1     target platform byte
+4      1     format version  (5 = XNA 4.0 era; 4 = earlier)
+5      1     flags
+6      4     int32 little-endian total file length, *including* these 10 bytes
+```
+
+Flags bits, as read by CNA's `ParseXnbHeader()` plus the published format description:
+
+| Bit | Meaning | CNA reader | CNA writer (this plan) |
+|---|---|---|---|
+| `0x01` | Graphics profile: set = HiDef, clear = Reach | ignored | written from `XnbFileOptions::graphicsProfile`; **default Reach** because a Reach asset loads under both profiles |
+| `0x40` | Single raw LZ4 block (later-ecosystem only, **not** XNA 4.0) | supported | `XNAP-80` |
+| `0x80` | LZX | supported | `XNAP-81` |
+
+Evidence for `0x01`: the genuine XNA 4.0 fixture has flags `0x01`; every MonoGame fixture has `0x00`
+or `0x40`/`0x80`. Both load under CNA's reader, which ignores the bit.
+
+### 2.2 Platform bytes — XNA-4.0-era vs extended ecosystem
+
+CNA's reader accepts 16 bytes (`XnbAcceptedPlatforms()`). **They are not all XNA 4.0 targets.**
+This plan fixes the documentation to say so.
+
+| Byte | Identity | Category |
+|---|---|---|
+| `w` | Windows | **Microsoft XNA 4.0 target** |
+| `m` | Windows Phone 7 | **Microsoft XNA 4.0 target** |
+| `x` | Xbox 360 | **Microsoft XNA 4.0 target** |
+| `i`, `a`, `d`, `X`, `W`, `n`, `u`, `p`, `M`, `r`, `P`, `g`, `l` | iOS, Android, DesktopGL, Xbox One, Windows Store/UWP, NativeClient, Ouya, PlayStation Mobile, Windows Phone 8, RaspberryPi, PlayStation 4, legacy Windows-GL, legacy Linux | **extended XNB ecosystem** — introduced by post-XNA implementations. Writing one of these produces a file no Microsoft XNA 4.0 runtime ever consumed. |
+
+`XnbFileOptions` therefore exposes `XnbTargetPlatform` with `Windows`/`WindowsPhone`/`Xbox360`
+marked as XNA-4.0 targets and everything else marked extended, and the CLI/documentation must not
+present the second group as XNA 4.0 compatibility.
+
+### 2.3 Version
+
+* **Version 5 is the XNA 4.0-era container version** and is CNA's writer default.
+* Version 4 is *earlier* XNB (XNA 3.x era). CNA's reader accepts it and applies a legacy
+  `SurfaceFormat` mapping in `Texture2DReader`. The writer may emit version 4 only under an explicit
+  opt-in and must apply the inverse legacy mapping (`XNAP-13`).
+* Describing version 4 as "the normal XNA 4.0 version" is wrong; `XNAP-06` removes any such wording.
+
+### 2.4 Payload
+
+```text
+7BitEncodedInt   typeReaderCount
+  repeat:
+    String       readerName          (7-bit-encoded UTF-8 byte length, then the bytes)
+    Int32        readerVersion
+7BitEncodedInt   sharedResourceCount
+<root object>                        (via the ReadObject protocol)
+<shared resource 1..sharedResourceCount>
+```
+
+`ReadObject` protocol: a `7BitEncodedInt` **1-based** index into the type-reader table; `0` means
+null. A value type's reader is invoked without a null option only because the writer always emits a
+non-zero index for it. `ReadRawObject` consumes no index.
+
+Shared resources are referenced by a `7BitEncodedInt` **1-based** index into the shared-resource
+list; `0` means "no reference".
+
+### 2.5 Reader type names — verified table
+
+Extracted directly from the committed fixtures (see `XNAP-02` for the extraction tool):
+
+| Reader | Name as written | Source of evidence |
+|---|---|---|
+| `StringReader` | `Microsoft.Xna.Framework.Content.StringReader` (bare) | **genuine XNA 4.0** fixture, and MonoGame |
+| `ListReader\`1` | `Microsoft.Xna.Framework.Content.ListReader\`1[[<arg, assembly-qualified>]]` (outer bare) | **genuine XNA 4.0** fixture |
+| `Int32Reader`, `CharReader`, `RectangleReader`, `Vector3Reader`, `SoundEffectReader`, `SongReader` | bare | MonoGame fixtures |
+| `Texture2DReader`, `TextureCubeReader`, `SpriteFontReader`, `ModelReader`, `VertexBufferReader`, `VertexDeclarationReader`, `IndexBufferReader`, `BasicEffectReader` | `…<Reader>, Microsoft.Xna.Framework.Graphics, Version=4.0.0.0, Culture=neutral, PublicKeyToken=842cf8be1de50553` | MonoGame fixtures |
+
+Generic **arguments** are always fully assembly-qualified:
+`System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089`,
+`Microsoft.Xna.Framework.Vector3, Microsoft.Xna.Framework, Version=4.0.0.0, Culture=neutral, PublicKeyToken=842cf8be1de50553`.
+
+Derived rule, consistent with every observed file: **the reader type itself is assembly-qualified
+exactly when it does not live in `Microsoft.Xna.Framework`**; generic arguments always are. CNA
+keeps this in one data table (`XnbReaderIdentity`) with a per-entry confidence field, so a
+correction is a one-line data change rather than a code hunt.
+
+`XnbFileOptions::readerNameStyle` selects:
+* `Xna40` (default) — the table above; maximally XNA-4.0-compatible.
+* `Portable` — bare names only. CNA, FNA and MonoGame all normalize away the assembly qualifier
+  before lookup, so these load there; **a Microsoft XNA 4.0 runtime is not known to accept them.**
+
+---
+
+## 3. Confidence vocabulary (used by every table in this plan and in `docs/`)
+
+| Label | Meaning |
+|---|---|
+| `impl` | Code exists and is exercised by a test. |
+| `cna-rt` | CNA writes it and CNA's own independent reader loads it back with the expected values. |
+| `spec` | An independent, specification-based parser that shares no code with CNA validates the bytes. |
+| `golden` | The bytes match an externally produced fixture exactly. |
+| `xna40` | Loaded by a genuine Microsoft XNA 4.0 runtime with values asserted. **Unreachable in this environment.** |
+| `none` | Not verified. |
+
+"Supported" is never written without at least `cna-rt`.
+
+---
+
+## 4. Task log
+
+Legend: `[ ]` open · `[x]` complete · `[~]` partially complete (detail in the row) ·
+`[!]` blocked (blocker named in the row).
+
+### Phase A — audit, plan, baseline
+
+| ID | Task | State |
+|---|---|---|
+| `XNAP-01` | Audit HEAD against the reported baseline; record what exists and what does not (§0). | [x] |
+| `XNAP-02` | Extract and record the verified reader-name/type-table evidence from every committed fixture (§2.5). | [x] |
+| `XNAP-03` | Create this plan as the authoritative living record, with explicit boundaries against `plan_xnb.md`, `plan_content_pipeline.md`, `plan_cnb.md`, `plan_fx.md`. | [x] |
+| `XNAP-04` | Record and maintain the exact test baseline (§0.4), separating pre-existing environmental failures from regressions. | [x] |
+| `XNAP-05` | Audit the environment for an XNA 4.0 oracle; record the negative result honestly (§0.3). | [x] |
+
+### Phase B — XNB serializer core
+
+| ID | Task | State |
+|---|---|---|
+| `XNAP-10` | `XnbByteWriter`: deterministic little-endian primitives, `Write7BitEncodedInt`, `.NET BinaryWriter`-compatible strings, UTF-8 `charcs`, raw bytes, bounded growth. | [x] |
+| `XNAP-11` | `XnbWriteLimits`: output ceilings mirroring `XnbReadLimits` (file size, type-table size, collection counts, nesting depth, string bytes, shared-resource count). | [x] |
+| `XNAP-12` | `XnbFileOptions`: target platform (with XNA-era vs extended classification), container version, graphics profile, compression, reader-name style. | [x] |
+| `XNAP-13` | Legacy version-4 output: inverse `SurfaceFormat` mapping, explicit opt-in, rejection of formats version 4 cannot express. | [ ] |
+| `XNAP-14` | `XnbWriter`: type-manifest interning, 1-based `WriteObject` dispatch, `WriteRawObject`, shared-resource queue + 1-based references, nesting-depth guard, single-pass body then header prepend. | [x] |
+| `XNAP-15` | `XnbTypeKey<T>` + `XnbTypeWriterRegistry`: RTTI-free typed registry keyed by a per-`T` unique address; deterministic, freezable, no central switch. | [x] |
+| `XNAP-16` | `XnbAssetWriter`: root-object entry point producing complete `.xnb` bytes with a correct total-length field. | [x] |
+| `XNAP-17` | `XnbReaderIdentity` table with per-entry confidence, plus `Xna40`/`Portable` name styles (§2.5). | [x] |
+
+### Phase C — built-in type writers
+
+| ID | Task | State |
+|---|---|---|
+| `XNAP-20` | Primitives: `Byte`, `SByte`, `Int16`, `UInt16`, `Int32`, `UInt32`, `Int64`, `UInt64`, `Single`, `Double`, `Boolean`, `Char`, `String`, `TimeSpan`, `DateTime`, `Decimal`. | [~] all but `Decimal`, which needs `System::Decimal` and is only available where sharp-runtime reports `SHARP_RUNTIME_HAS_NATIVE_INT128`; the reader has the same conditional. |
+| `XNAP-21` | Framework value types: `Vector2/3/4`, `Matrix`, `Quaternion`, `Color`, `Point`, `Rectangle`, `Plane`, `BoundingBox`, `BoundingSphere`, `Ray`, `CurveKey`, `Curve`. | [x] |
+| `XNAP-22` | Collections: `T[]`, `List<T>`, `Dictionary<K,V>`, `Nullable<T>`, arbitrary nesting, element-count limits. | [~] `XnbListTypeWriter`, `XnbArrayTypeWriter`, `XnbDictionaryTypeWriter` and `XnbNullableTypeWriter` all exist and the list/dictionary instantiations CNA's runtime reader registry resolves are registered and tested. No `T[]` or `Nullable<T>` instantiation is registered by default, because no built-in CNA reader resolves one; registering one is the documented extension path. |
+| `XNAP-23` | `Texture2D`, `Texture3D`, `TextureCube` from `XnbTextureData`. | [ ] |
+| `XNAP-24` | `SpriteFont` from `XnbSpriteFontData`, including the nested `Texture2D` and the four nested list readers. | [ ] |
+| `XNAP-25` | `SoundEffect` from `XnbSoundEffectData`, including WAVEFORMATEX extension bytes and loop metadata. | [ ] |
+| `XNAP-26` | `Song`, `Video` from `XnbSongData`/`XnbVideoData`, including the object-referenced Video field form. | [ ] |
+| `XNAP-27` | `VertexDeclaration`, `VertexBuffer`, `IndexBuffer`. | [ ] |
+| `XNAP-28` | Stock effects: `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`, each with its external texture references. | [ ] |
+| `XNAP-29` | `Effect` (already-compiled bytecode) and `EffectMaterial`. | [ ] |
+| `XNAP-2A` | `Model` from `XnbModelData`: bones, hierarchy, meshes, parts, tags, shared vertex/index/effect resources, root reference, byte/uint32 bone-reference width rule. | [ ] |
+| `XNAP-2B` | `ExternalReference<T>`. | [ ] |
+
+### Phase D — round-trip, golden and conformance validation
+
+| ID | Task | State |
+|---|---|---|
+| `XNAP-40` | Round-trip every writer through CNA's own reader with value assertions (`cna-rt`). | [ ] |
+| `XNAP-41` | **Byte-exact golden test against the genuine XNA 4.0 fixture**: write the same `List<string>` and compare to `ContentManifestListStrings.xnb` byte for byte (`golden`). | [x] |
+| `XNAP-42` | Byte-exact golden tests against MonoGame fixtures where CNA's canonical data is lossless for them. | [ ] |
+| `XNAP-43` | Independent specification-based XNB parser (Python), sharing no code or assumptions with CNA (`spec`). | [ ] |
+| `XNAP-44` | Deterministic-output tests: same inputs ⇒ byte-identical files, across process runs and worker counts. | [~] byte-identical repeat writes and dictionary key ordering are covered; the multi-worker CLI case waits on `XNAP-62`. |
+| `XNAP-45` | Malformed/limit tests: oversized collections, oversized strings, deep nesting, overflowing sizes, cyclic shared resources. | [ ] |
+
+### Phase E — pipeline and tooling integration
+
+| ID | Task | State |
+|---|---|---|
+| `XNAP-60` | `ContentOutputFormat` axis: `ContentTypeWriter::OutputFormat()` (defaulting to `Cnb`, non-breaking), format-aware writer resolution, format in the build request/result. | [ ] |
+| `XNAP-61` | Register XNB writers for every existing processed type, reusing the existing importers/processors unchanged. | [ ] |
+| `XNAP-62` | `cna-content --format xnb|cnb`, `--xnb-platform`, `--xnb-version`, `--xnb-profile`, `--xnb-compress`; `.xnb` output extension; help/validation/exit codes. | [ ] |
+| `XNAP-63` | `.cna-content.json` v2: project-wide and per-asset `format`, target platform, graphics profile. | [ ] |
+| `XNAP-64` | Incremental build correctness for XNB: writer identity/schema fingerprints, format changes invalidating output. | [ ] |
+| `XNAP-65` | Diagnostics: every XNB failure names source, importer, processor, output format, field and reason. | [ ] |
+
+### Phase F — source-asset routes
+
+| ID | Task | State |
+|---|---|---|
+| `XNAP-50` | `.spritefont` XML description importer (FontName, Size, Spacing, UseKerning, Style, CharacterRegions, DefaultCharacter). | [ ] |
+| `XNAP-51` | FreeType-backed glyph rasterization + deterministic atlas packing → `CnbSpriteFontData`/`XnbSpriteFontData`. | [ ] |
+| `XNAP-52` | FreeType dependency + test-font license audit; build-time-only isolation. | [ ] |
+| `XNAP-53` | Independent BC1/BC2/BC3 encoder + `TextureProcessor` format parameter. | [ ] |
+| `XNAP-54` | Mip generation, premultiply-alpha, colour-key, resize policy parameters shared by both outputs. | [ ] |
+| `XNAP-55` | Audio: broaden accepted WAV PCM variants; deterministic duration; loop metadata. | [ ] |
+| `XNAP-56` | Canonical pipeline model IR sufficient for XNA `Model` (declarations, streams, materials, bounds, shared resources) without overloading a frozen CNB carrier. | [ ] |
+| `XNAP-57` | glTF/GLB → canonical model IR → `Model` XNB, with vertex-declaration synthesis and validation. | [ ] |
+| `XNAP-58` | Material downgrade: glTF PBR → BasicEffect-family, deterministic and diagnosed; CNB keeps the full material. | [ ] |
+| `XNAP-59` | Model test matrix: triangle, cube, multi-mesh, multi-material, hierarchy, transforms, indexed/non-indexed, multi-attribute, textured, skinned, malformed, limits. | [ ] |
+
+### Phase G — real-XNA interoperability harness (cannot execute here)
+
+| ID | Task | State |
+|---|---|---|
+| `XNAP-30` | CNA-generated fixture corpus for XNA loading (`Texture2D`, `SoundEffect`, `SpriteFont`, `Curve`, `List<String>`, `Dictionary<,>`, `Model`, `Song`, `Effect`). | [ ] |
+| `XNAP-31` | Expected-value manifests per fixture (dimensions, mip counts, exact pixels, formats, glyph metrics, bone/mesh graphs). | [ ] |
+| `XNAP-32` | XNA 4.0 harness project + build/run instructions for an XNA-capable Windows installation. | [ ] |
+| `XNAP-33` | Harness asserts values, not just successful `Load<T>()`. | [ ] |
+| `XNAP-34` | Result-recording protocol so a future session with a real runtime can fill in the `xna40` column. | [!] blocked: no XNA 4.0 runtime, Wine, Mono or .NET in this environment (§0.3). |
+
+### Phase H — compression, exotic targets, effects, hardening
+
+| ID | Task | State |
+|---|---|---|
+| `XNAP-80` | LZ4 (`0x40`) output — extended-ecosystem only, never presented as XNA 4.0. | [ ] |
+| `XNAP-81` | XNA-compatible LZX (`0x80`) output: bounded encoder, correct decompressed-size field, block framing, round-trip against CNA's existing decoder. | [ ] |
+| `XNAP-82` | Xbox 360 (`x`) output audit: endianness, WAVEFORMATEX byte order, texture swizzling. Document as unsupported/experimental unless provable. | [ ] |
+| `XNAP-83` | Windows Phone (`m`) output audit: distinguish "header can be emitted" from "semantics verified". | [ ] |
+| `XNAP-84` | Audit CNA's FX infrastructure for genuine XNA-compatible effect-bytecode generation; scope a sub-plan or record the blocker. Never fake it by embedding source text. | [ ] |
+| `XNAP-85` | Untrusted-input hardening sweep of the writer path: checked arithmetic, narrowing, offsets, counts, allocation ceilings, UTF-8 validity, deterministic failure. | [ ] |
+
+### Phase I — API, boundaries, documentation, finalization
+
+| ID | Task | State |
+|---|---|---|
+| `XNAP-06` | Correct all XNB platform/version wording in `xnb.md`, `docs/xnb-content-pipeline-support.md` and elsewhere: XNA-era `w`/`m`/`x` vs extended ecosystem; version 5 = XNA 4.0 era, version 4 = legacy. | [ ] |
+| `XNAP-07` | `docs/xnb-interoperability.md`: per-type capability matrix using the §3 confidence vocabulary. | [ ] |
+| `XNAP-90` | Runtime-vs-build-time dependency boundary audit; keep FreeType/encoders/importers out of the runtime link closure. | [ ] |
+| `XNAP-91` | Public API audit of the writer surface: ownership, const-correctness, error handling, extension points, no accidental implementation exposure. | [ ] |
+| `XNAP-92` | Custom-writer extension model + documented example. | [ ] |
+| `XNAP-93` | Performance pass on large textures, mip generation, BC encoding, large models, atlas generation, compression. | [ ] |
+| `XNAP-94` | Provenance audit: no MonoGame/FNA/Microsoft implementation derivation; every fixture and dependency licensed and manifested. | [ ] |
+| `XNAP-95` | Final reconciliation: every checkbox true, exact test totals everywhere, no contradictory numbers, no placeholder shells. | [ ] |
+
+---
+
+## 5. Deviations and decisions
+
+* **`XnbByteWriter` rather than `System::IO::BinaryWriter`.** `BinaryWriter` already provides
+  little-endian primitives, `Write7BitEncodedInt` and 7-bit-length-prefixed strings, but it has no
+  UTF-8 `charcs` overload and is stream-shaped, while XNB writing needs an in-memory body buffer
+  that a header is prepended to. `CnbByteWriter` sets exactly this precedent (CNA owns its own
+  deterministic byte writer next to the sharp-runtime reader). Adding `Write(charcs)` to
+  sharp-runtime is the right long-term fix but that is a **separate repository** and outside this
+  branch's authorization.
+* **Reader-name table with confidence, not hard-coded strings.** Two entries (`SoundEffectReader`,
+  `SongReader` as bare names) are MonoGame-verified but XNA-unverified. Keeping them as data with a
+  confidence field is honest and makes correction cheap.
+* **Reach is the default graphics profile** even though the one genuine XNA 4.0 fixture available
+  here has the HiDef bit set: a Reach asset is loadable under both profiles, a HiDef asset is not.
