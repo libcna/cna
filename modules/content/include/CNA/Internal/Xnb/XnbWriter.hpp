@@ -307,6 +307,23 @@ namespace CNA::Internal::Xnb
          */
         [[nodiscard]] std::vector<std::uint8_t> Finish();
 
+        /**
+         * @brief Returns the canonical reader name the root object dispatched to
+         *        (plans/plan_xnapipeline.md `XNAP-99`).
+         *
+         * An `.xnb` has no asset type id or schema version; the reader its root object dispatches
+         * to *is* its compatibility identity, which is what a build manifest has to record. This
+         * is observed from the write rather than declared alongside it, so the manifest cannot
+         * disagree with the bytes. Assembly-free, so it is the same string under either
+         * @ref XnbReaderNameStyle and matches what CNA's own reader registry is keyed by.
+         *
+         * @return The root reader name, or an empty string before the root object is written.
+         */
+        [[nodiscard]] const std::string& RootReaderName() const noexcept
+        {
+            return rootReaderName_;
+        }
+
     private:
         struct SharedResourceEntry
         {
@@ -344,6 +361,7 @@ namespace CNA::Internal::Xnb
         std::map<std::string, std::int32_t> typeTableIndices_;
         std::vector<SharedResourceEntry> sharedResources_;
         std::string currentContext_ = "the root object";
+        std::string rootReaderName_;
         std::int32_t nestingDepth_ = 0;
         bool finished_ = false;
     };

@@ -81,10 +81,10 @@ namespace
         };
         entry.runtimeReferences = {{"Textures/reference", 1u}};
         entry.outputs = {
-            {"Data/asset", "Data/asset.cnb", 42u, 1u, "Test.Asset",
+            {"Data/asset", "Data/asset.cnb", 42u, 1u, "Test.Asset", {},
              Pipeline::ContentSha256({7u, 8u, 9u})},
             {"Generated/asset-index", "Generated/asset-index.cnb", 43u, 2u,
-             "Test.AssetIndex",
+             "Test.AssetIndex", {},
              Pipeline::ContentSha256({10u, 11u})},
         };
         entry.deploymentFiles = {
@@ -171,7 +171,7 @@ TEST(ContentBuildManifestTest, RoundTripsEveryStableFieldDeterministically)
     EXPECT_NE(first.find("runtimeReferences"), std::string::npos);
     EXPECT_NE(first.find("Generated/asset-index.cnb"), std::string::npos);
     EXPECT_NE(first.find("Support/table.bin"), std::string::npos);
-    EXPECT_NE(first.find("\"version\":8"), std::string::npos);
+    EXPECT_NE(first.find("\"version\":9"), std::string::npos);
     EXPECT_NE(first.find("fingerprintState"), std::string::npos);
     EXPECT_NE(first.find("contentDependencyFingerprints"), std::string::npos);
     EXPECT_NE(first.find("writerSchemas"), std::string::npos);
@@ -180,13 +180,54 @@ TEST(ContentBuildManifestTest, RoundTripsEveryStableFieldDeterministically)
 
 TEST(ContentBuildManifestTest, EarlierVersionsAreRejectedSoTheCliCanRebuildSafely)
 {
-    for (const std::uint32_t version : {1u, 2u, 3u, 4u, 5u, 6u, 7u})
+    for (const std::uint32_t version : {1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u})
     {
         EXPECT_THROW((void)Pipeline::ContentBuildManifest::Parse(
                          "{\"format\":\"CNA.ContentPipeline.Manifest\",\"version\":" +
                          std::to_string(version) + ",\"assets\":[]}"),
                      std::runtime_error);
     }
+}
+
+TEST(ContentBuildManifestTest, AnXnbOutputPersistsAndFingerprintsItsRootReaderName)
+{
+    // XNAP-99. An .xnb's compatibility identity is the reader its root object dispatches to, so
+    // the field has to survive the round trip *and* take part in the fingerprint -- otherwise a
+    // build that changed which reader an asset dispatches to would be skipped as unchanged.
+    ScratchDirectory scratch("root_reader");
+    Pipeline::ContentBuildManifestEntry entry = MakeEntry(scratch.Path());
+    entry.outputs.front().rootReaderName =
+        "Microsoft.Xna.Framework.Content.Texture2DReader";
+    Pipeline::RefreshContentBuildDirectFingerprint(entry, scratch.Path());
+    Pipeline::RefreshContentBuildEffectiveFingerprint(entry);
+
+    Pipeline::ContentBuildManifest manifest;
+    manifest.Set(entry);
+    const std::string text = manifest.Serialize();
+    EXPECT_NE(text.find("Microsoft.Xna.Framework.Content.Texture2DReader"), std::string::npos);
+
+    const Pipeline::ContentBuildManifest parsed = Pipeline::ContentBuildManifest::Parse(text);
+    ASSERT_NE(parsed.Find("Data/asset"), nullptr);
+    EXPECT_EQ(*parsed.Find("Data/asset"), entry);
+    EXPECT_EQ(parsed.Find("Data/asset")->outputs.front().rootReaderName,
+              "Microsoft.Xna.Framework.Content.Texture2DReader");
+
+    Pipeline::ContentBuildManifestEntry other = MakeEntry(scratch.Path());
+    other.outputs.front().rootReaderName = "Microsoft.Xna.Framework.Content.Texture3DReader";
+    Pipeline::RefreshContentBuildDirectFingerprint(other, scratch.Path());
+    Pipeline::RefreshContentBuildEffectiveFingerprint(other);
+    EXPECT_NE(other.fingerprint, entry.fingerprint)
+        << "a changed root reader must invalidate the artifact";
+
+    // A CNB output leaves the field empty; anything blank or unprintable is refused rather than
+    // persisted as a reader name no runtime could resolve.
+    Pipeline::ContentBuildManifestEntry blank = MakeEntry(scratch.Path());
+    blank.outputs.front().rootReaderName = "   ";
+    EXPECT_THROW(manifest.Set(blank), std::invalid_argument);
+
+    Pipeline::ContentBuildManifestEntry control = MakeEntry(scratch.Path());
+    control.outputs.front().rootReaderName = std::string("Texture2D\0Reader", 17u);
+    EXPECT_THROW(manifest.Set(control), std::invalid_argument);
 }
 
 TEST(ContentBuildManifestTest, ExternalRootsPersistAliasRelativeIdentityWithoutPhysicalPaths)

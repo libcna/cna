@@ -786,6 +786,15 @@ namespace CNA::Content::Pipeline
 
         /** @brief Asset schema version emitted in the CNB header. */
         std::uint32_t assetSchemaVersion = 0u;
+
+        /**
+         * @brief Root `ContentTypeReader` name for an `.xnb` output; empty for a CNB one.
+         *
+         * A compiled `.xnb` carries no asset type id and no schema version, so the reader its root
+         * object dispatches to is its compatibility identity and what the build manifest records
+         * (plans/plan_xnapipeline.md `XNAP-99`). A CNB writer leaves this empty.
+         */
+        std::string rootReaderName;
     };
 
     /** @brief Primary CNB output and any bounded, explicitly named additional outputs. */
@@ -802,6 +811,15 @@ namespace CNA::Content::Pipeline
 
         /** @brief Primary asset schema version emitted in the CNB header. */
         std::uint32_t assetSchemaVersion = 0u;
+
+        /**
+         * @brief Root `ContentTypeReader` name for an `.xnb` output; empty for a CNB one.
+         *
+         * A compiled `.xnb` carries no asset type id and no schema version, so the reader its root
+         * object dispatches to is its compatibility identity and what the build manifest records
+         * (plans/plan_xnapipeline.md `XNAP-99`). A CNB writer leaves this empty.
+         */
+        std::string rootReaderName;
 
         /** @brief Additional outputs whose logical names are distinct from the primary asset. */
         std::vector<ContentAdditionalWriteOutput> additionalOutputs;

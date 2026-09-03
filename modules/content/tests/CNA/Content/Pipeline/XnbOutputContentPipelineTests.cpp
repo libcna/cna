@@ -190,6 +190,38 @@ TEST(XnbOutputContentPipelineTest, AnImageSourceBuildsToTexture2DXnbThroughTheSa
     EXPECT_EQ(texture.levels[0], pixels);
 }
 
+TEST(XnbOutputContentPipelineTest, EveryXnbWriterReportsTheRootReaderTheFileActuallyDispatchesTo)
+{
+    // XNAP-99: an .xnb has no asset type id and no schema version, so the root reader is its
+    // compatibility identity and is what the build manifest records. It is observed from the write
+    // rather than declared beside it, which is what this asserts: the reported name and the name
+    // in the file's own type table are read from two independent places and must agree.
+    ScratchDirectory scratch("root_reader");
+    const std::vector<std::uint8_t> pixels(2u * 2u * 4u, 0x7Fu);
+    WriteBytes(scratch.Path() / "flat.png", MakePng(pixels, 2, 2));
+    WriteBytes(scratch.Path() / "tone.wav",
+               MakeWav(1u, 22050u, std::vector<std::uint8_t>(64u, 0x10u)));
+
+    const Pipeline::ContentBuildResult texture =
+        Build(scratch.Path(), "flat.png", "flat", Pipeline::ContentOutputFormat::Xnb);
+    EXPECT_EQ(texture.output.rootReaderName,
+              "Microsoft.Xna.Framework.Content.Texture2DReader");
+    EXPECT_EQ(texture.output.rootReaderName,
+              DecodeResult(scratch, texture, "flat").rootReader);
+
+    const Pipeline::ContentBuildResult sound =
+        Build(scratch.Path(), "tone.wav", "tone", Pipeline::ContentOutputFormat::Xnb);
+    EXPECT_EQ(sound.output.rootReaderName,
+              "Microsoft.Xna.Framework.Content.SoundEffectReader");
+    EXPECT_EQ(sound.output.rootReaderName, DecodeResult(scratch, sound, "tone").rootReader);
+
+    // A CNB build of the same source declares no reader at all -- the field is the .xnb's
+    // counterpart of the three CNB identity fields, not an extra one both formats carry.
+    const Pipeline::ContentBuildResult cnb =
+        Build(scratch.Path(), "flat.png", "flat", Pipeline::ContentOutputFormat::Cnb);
+    EXPECT_TRUE(cnb.output.rootReaderName.empty());
+}
+
 TEST(XnbOutputContentPipelineTest, TheSameSourceBuildsToBothContainersFromOneRegistry)
 {
     ScratchDirectory scratch("both");

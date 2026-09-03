@@ -318,7 +318,12 @@ namespace CNA::Internal::Xnb
                 "of " + std::to_string(options_.limits.maxObjectNestingDepth) + " levels.");
         }
         std::string previousContext = std::move(currentContext_);
-        currentContext_ = XnbCanonicalReaderName(writer.ReaderIdentity()) + " wrote a value that";
+        const std::string canonicalName = XnbCanonicalReaderName(writer.ReaderIdentity());
+        // Depth zero is the outermost object. The *first* one is the root; the shared resources
+        // Finish() writes afterwards are at depth zero too, hence the emptiness check. Recorded
+        // from the write itself, so the manifest identity cannot drift from the file's dispatch.
+        if (nestingDepth_ == 0 && rootReaderName_.empty()) { rootReaderName_ = canonicalName; }
+        currentContext_ = canonicalName + " wrote a value that";
         ++nestingDepth_;
         try
         {

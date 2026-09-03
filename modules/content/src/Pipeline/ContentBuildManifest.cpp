@@ -283,6 +283,20 @@ namespace CNA::Content::Pipeline
                                });
         }
 
+        /** @brief Whether a recorded identifier is non-blank and free of control characters. */
+        bool IsPrintableIdentifier(const std::string& value)
+        {
+            return std::any_of(value.begin(), value.end(),
+                               [](char character)
+                               { return static_cast<unsigned char>(character) > ' '; }) &&
+                   std::none_of(value.begin(), value.end(),
+                                [](char character)
+                                {
+                                    const auto byte = static_cast<unsigned char>(character);
+                                    return byte < 0x20u || byte == 0x7Fu;
+                                });
+        }
+
         void RequireSafeRelativePath(const std::string& value, const char* field)
         {
             const std::filesystem::path path = CNA::Internal::ContentPathFromUtf8(value);
@@ -614,6 +628,7 @@ namespace CNA::Content::Pipeline
                 outputDefinitions.AddU64(output.assetTypeId);
                 outputDefinitions.AddU64(output.assetSchemaVersion);
                 outputDefinitions.AddString(output.assetTypeName);
+                outputDefinitions.AddString(output.rootReaderName);
             }
             outputDefinitions.AddU64(runtimeReferences.size());
             for (const RuntimeContentReference& reference : runtimeReferences)
@@ -785,6 +800,7 @@ namespace CNA::Content::Pipeline
                                          RequireUInt32(output, "assetTypeId"),
                                          RequireUInt32(output, "assetSchemaVersion"),
                                          RequireString(output, "assetTypeName"),
+                                         RequireString(output, "rootReaderName"),
                                          RequireString(output, "sha256")});
             }
 
@@ -896,6 +912,7 @@ namespace CNA::Content::Pipeline
                 item.Set("assetSchemaVersion",
                          JsonValue::MakeNumber(output.assetSchemaVersion));
                 item.Set("assetTypeName", StringValue(output.assetTypeName));
+                item.Set("rootReaderName", StringValue(output.rootReaderName));
                 item.Set("sha256", StringValue(output.sha256));
                 outputs.arrayValue.push_back(std::move(item));
             }
@@ -1100,6 +1117,16 @@ namespace CNA::Content::Pipeline
                 throw std::invalid_argument(
                     "content manifest output '" + output.logicalName +
                     "' does not match a declared writer asset/schema identity.");
+            }
+            // The manifest does not record an output's container format, so "an .xnb has a root
+            // reader and a CNB output has none" cannot be checked here; what can be checked is
+            // that a recorded name is a usable one rather than blank or unprintable.
+            if (!output.rootReaderName.empty() && !IsPrintableIdentifier(output.rootReaderName))
+            {
+                throw std::invalid_argument(
+                    "content manifest output '" + output.logicalName +
+                    "' declares a root ContentTypeReader name that is blank or contains control "
+                    "characters.");
             }
             if (!IsLowerHexDigest(output.sha256))
             {
@@ -1340,7 +1367,8 @@ namespace CNA::Content::Pipeline
         entry.outputs.push_back(
             {result.logicalName, RelativeContained(outputRoot, outputPath, "primary output"),
              result.output.assetTypeId, primarySchema.assetSchemaVersion,
-             result.output.assetTypeName, ContentSha256(result.output.bytes)});
+             result.output.assetTypeName, result.output.rootReaderName,
+             ContentSha256(result.output.bytes)});
         for (const ContentAdditionalWriteOutput& output : result.output.additionalOutputs)
         {
             std::filesystem::path path =
@@ -1352,7 +1380,7 @@ namespace CNA::Content::Pipeline
             entry.outputs.push_back(
                 {output.logicalName, RelativeContained(outputRoot, path, "additional output"),
                  output.assetTypeId, schema.assetSchemaVersion, output.assetTypeName,
-                 ContentSha256(output.bytes)});
+                 output.rootReaderName, ContentSha256(output.bytes)});
         }
         entry.deploymentFiles.reserve(result.deploymentFiles.size());
         for (const ContentDeploymentFile& deployment : result.deploymentFiles)

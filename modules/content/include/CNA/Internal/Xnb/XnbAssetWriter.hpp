@@ -65,6 +65,48 @@ namespace CNA::Internal::Xnb
      * @param registry Frozen registry to resolve type writers from.
      * @throws XnbWriteException for a serialization refusal or a filesystem failure.
      */
+    /** @brief A complete `.xnb` image together with the reader its root object dispatched to. */
+    struct XnbAssetWriteResult
+    {
+        /** @brief The complete `.xnb` file image. */
+        std::vector<std::uint8_t> bytes;
+
+        /**
+         * @brief Canonical, assembly-free reader name the root object dispatched to.
+         *
+         * An `.xnb`'s compatibility identity, recorded from the write itself
+         * (plans/plan_xnapipeline.md `XNAP-99`).
+         */
+        std::string rootReaderName;
+    };
+
+    /**
+     * @brief Produces a complete `.xnb` file image and reports its root reader name.
+     *
+     * Identical to @ref WriteXnbAsset in every respect but the return type; a caller that has to
+     * record the file's identity — a build manifest, an incremental check — needs the reader name
+     * observed from the write rather than a second, hand-maintained copy of it.
+     *
+     * @tparam T The root type; a writer for it must be registered.
+     * @param root The root value to serialize.
+     * @param options Container-level configuration.
+     * @param assetName Logical asset name used in diagnostics only; never serialized.
+     * @param registry Frozen registry to resolve type writers from.
+     * @return The file image and the root reader name.
+     * @throws XnbWriteException under exactly the conditions @ref WriteXnbAsset throws.
+     */
+    template<typename T>
+    [[nodiscard]] XnbAssetWriteResult WriteXnbAssetWithIdentity(
+        const T& root, const XnbFileOptions& options = {}, const std::string& assetName = {},
+        const XnbTypeWriterRegistry& registry = BuiltInXnbWriterRegistry())
+    {
+        XnbWriter writer(registry, options, assetName);
+        XnbAssetWriteResult result;
+        result.bytes = writer.WriteAsset(root);
+        result.rootReaderName = writer.RootReaderName();
+        return result;
+    }
+
     template<typename T>
     void WriteXnbAssetFile(
         const std::filesystem::path& path, const T& root, const XnbFileOptions& options = {},

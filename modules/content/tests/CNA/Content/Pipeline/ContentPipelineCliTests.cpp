@@ -1328,9 +1328,11 @@ TEST(ContentPipelineCliTest, VersionSevenManifestRebuildsWithoutAuthorizingOldOu
 
     const std::vector<std::uint8_t> oldManifestBytes = ReadBytes(manifest);
     std::string oldManifest(oldManifestBytes.begin(), oldManifestBytes.end());
-    const std::size_t version = oldManifest.find("\"version\":8");
+    const std::string currentVersionText =
+        "\"version\":" + std::to_string(Pipeline::ContentBuildManifestVersion);
+    const std::size_t version = oldManifest.find(currentVersionText);
     ASSERT_NE(version, std::string::npos);
-    oldManifest.replace(version, std::string("\"version\":8").size(), "\"version\":7");
+    oldManifest.replace(version, currentVersionText.size(), "\"version\":1");
     WriteText(manifest, oldManifest);
     ASSERT_TRUE(std::filesystem::remove(source / "legacy.png"));
 

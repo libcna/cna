@@ -120,16 +120,21 @@ namespace CNA::Content::Pipeline
             /**
              * @brief Fills in the primary output identity shared by every XNB writer.
              *
-             * @param bytes The complete file image.
+             * The root reader name comes from the write itself rather than from a per-writer
+             * constant, so the identity the build manifest records is the one the file's own type
+             * table dispatches through (plans/plan_xnapipeline.md `XNAP-99`).
+             *
+             * @param written The complete file image and the reader its root dispatched to.
              * @return A populated primary write result.
              */
-            [[nodiscard]] ContentWriteResult MakeResult(std::vector<std::uint8_t> bytes) const
+            [[nodiscard]] ContentWriteResult MakeResult(Xnb::XnbAssetWriteResult written) const
             {
                 ContentWriteResult result;
-                result.bytes = std::move(bytes);
+                result.bytes = std::move(written.bytes);
                 result.assetTypeId = static_cast<std::uint32_t>(asset_);
                 result.assetSchemaVersion = Xnb::XnbContainerVersionByte(options_.version);
                 result.assetTypeName = XnbOutputAssetTypeName(asset_);
+                result.rootReaderName = std::move(written.rootReaderName);
                 return result;
             }
 
@@ -163,14 +168,14 @@ namespace CNA::Content::Pipeline
                 switch (kind_)
                 {
                     case Xnb::XnbTextureKind::Texture3D:
-                        return MakeResult(Xnb::WriteXnbAsset(
+                        return MakeResult(Xnb::WriteXnbAssetWithIdentity(
                             Xnb::XnbTexture3DContent{converted}, Options(), logicalName));
                     case Xnb::XnbTextureKind::TextureCube:
-                        return MakeResult(Xnb::WriteXnbAsset(
+                        return MakeResult(Xnb::WriteXnbAssetWithIdentity(
                             Xnb::XnbTextureCubeContent{converted}, Options(), logicalName));
                     case Xnb::XnbTextureKind::Texture2D:
                     default:
-                        return MakeResult(Xnb::WriteXnbAsset(
+                        return MakeResult(Xnb::WriteXnbAssetWithIdentity(
                             Xnb::XnbTexture2DContent{converted}, Options(), logicalName));
                 }
             }
@@ -210,7 +215,8 @@ namespace CNA::Content::Pipeline
                 converted.spacing = font.spacing;
                 converted.kerning = font.kerning;
                 converted.defaultCharacter = font.defaultCharacter;
-                return MakeResult(Xnb::WriteXnbAsset(converted, Options(), logicalName));
+                return MakeResult(
+                    Xnb::WriteXnbAssetWithIdentity(converted, Options(), logicalName));
             }
         };
 
@@ -265,7 +271,8 @@ namespace CNA::Content::Pipeline
                         : static_cast<std::uint32_t>(
                               (static_cast<std::uint64_t>(sound.frameCount) * 1000ull) /
                               sound.sampleRate);
-                return MakeResult(Xnb::WriteXnbAsset(converted, Options(), logicalName));
+                return MakeResult(
+                    Xnb::WriteXnbAssetWithIdentity(converted, Options(), logicalName));
             }
         };
 
@@ -288,7 +295,8 @@ namespace CNA::Content::Pipeline
                 Xnb::XnbSongData converted;
                 converted.mediaPath = song.streamReference;
                 converted.durationMs = static_cast<std::int32_t>(song.durationMs);
-                return MakeResult(Xnb::WriteXnbAsset(converted, Options(), logicalName));
+                return MakeResult(
+                    Xnb::WriteXnbAssetWithIdentity(converted, Options(), logicalName));
             }
         };
 
@@ -315,7 +323,8 @@ namespace CNA::Content::Pipeline
                 converted.height = static_cast<std::int32_t>(video.height);
                 converted.framesPerSecond = video.framesPerSecond;
                 converted.soundtrackType = static_cast<std::int32_t>(video.soundtrackType);
-                return MakeResult(Xnb::WriteXnbAsset(converted, Options(), logicalName));
+                return MakeResult(
+                    Xnb::WriteXnbAssetWithIdentity(converted, Options(), logicalName));
             }
         };
 
@@ -346,7 +355,7 @@ namespace CNA::Content::Pipeline
                 const ContentValue& input, const std::string& logicalName) const override
             {
                 const ImportedCompiledEffect& effect = input.Get<ImportedCompiledEffect>();
-                return MakeResult(Xnb::WriteXnbAsset(
+                return MakeResult(Xnb::WriteXnbAssetWithIdentity(
                     Xnb::XnbCompiledEffectContent{effect.bytecode}, Options(), logicalName));
             }
         };
@@ -367,7 +376,8 @@ namespace CNA::Content::Pipeline
                 const ContentValue& input, const std::string& logicalName) const override
             {
                 const ProcessedCurve& curve = input.Get<ProcessedCurve>();
-                return MakeResult(Xnb::WriteXnbAsset(curve.value, Options(), logicalName));
+                return MakeResult(
+                    Xnb::WriteXnbAssetWithIdentity(curve.value, Options(), logicalName));
             }
         };
 
@@ -402,7 +412,7 @@ namespace CNA::Content::Pipeline
                         : ConvertModelSchema1ToXnb(std::get<Cnb::CnbModelData>(bundle.primary),
                                                    logicalName, warnings);
                 ContentWriteResult result =
-                    MakeResult(Xnb::WriteXnbAsset(model, Options(), logicalName));
+                    MakeResult(Xnb::WriteXnbAssetWithIdentity(model, Options(), logicalName));
                 result.warnings = std::move(warnings);
                 return result;
             }

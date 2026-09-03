@@ -202,6 +202,12 @@ Arbitrary nesting works: the writer interns readers by formatted name on first u
 | `EffectMaterial` | `EffectMaterialReader` | ✅ | ✅ | An inline effect reference plus a `Dictionary<String,Object>` whose values each carry their own dispatch index. `Boolean`, `Int32`, `Single`, `Vector2`, `Vector3`, `Vector4`, `Matrix`, `Quaternion` and a boxed external reference are written; **array-valued parameters are not** — see below. |
 | `ExternalReference<T>` | `ExternalReferenceReader`, and the inline form | ✅ | ✅ | Both forms: inline in a known field (no dispatch index, what every stock effect uses) and boxed where the static type is `object`. Absolute and escaping references are refused in both. |
 
+Every one of these is recorded in the build manifest by the reader its root object dispatches to,
+observed from the write rather than declared beside it (`rootReaderName`, manifest schema 9). An
+`.xnb` has no asset type id and no schema version, so that reader name is its compatibility
+identity: a build that changes which reader an asset dispatches to invalidates the artifact instead
+of being skipped as unchanged.
+
 ---
 
 ## 4. The strongest results: byte-identical to two other producers' output
