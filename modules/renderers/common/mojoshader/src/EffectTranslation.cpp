@@ -161,13 +161,15 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
                 ReadEnumStorage(value.type.parameter_class));
             result.parameterType = ToParameterType(
                 ReadEnumStorage(value.type.parameter_type));
-            if (value.value_count > kMaximumReflectedValueBytes / 4 ||
-                value.value_count > std::numeric_limits<std::size_t>::max() / 4)
+            const std::size_t valueCount =
+                static_cast<std::size_t>(value.value_count);
+            if (valueCount > kMaximumReflectedValueBytes / 4 ||
+                valueCount > std::numeric_limits<std::size_t>::max() / 4)
             {
                 throw std::runtime_error(
                     "Compiled effect: reflected value exceeds the safety limit.");
             }
-            const std::size_t byteCount = static_cast<std::size_t>(value.value_count) * 4;
+            const std::size_t byteCount = valueCount * 4;
             if (byteCount > kMaximumReflectedValueBytes - reflectedValueBytes)
             {
                 throw std::runtime_error(
