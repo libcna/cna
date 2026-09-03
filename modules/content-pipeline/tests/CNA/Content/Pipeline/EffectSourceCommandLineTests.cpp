@@ -26,6 +26,7 @@
 #include <fstream>
 #include <iterator>
 #include <memory>
+#include <optional>
 #include <set>
 #include <sstream>
 #include <string>
@@ -37,6 +38,7 @@
 #include "CNA/Content/Pipeline/EffectCompilerService.hpp"
 #include "CNA/Content/Pipeline/EffectContentPipeline.hpp"
 #include "CNA/Content/Pipeline/EffectSourceContentPipeline.hpp"
+#include "System/Environment.hpp"
 
 namespace Pipeline = CNA::Content::Pipeline;
 
@@ -168,33 +170,29 @@ namespace
         return invocation;
     }
 
-    /** @brief Sets one environment variable for the duration of a scope, then restores it. */
+    /**
+     * @brief Sets one environment variable for the duration of a scope, then restores it.
+     *
+     * Through `System::Environment` rather than POSIX `setenv`, which MinGW-w64 does not have and
+     * which ctest `CNAEXT_NoPosixSetenv` refuses for that reason. An empty value unsets.
+     *
+     * This is a *test* mutating its own process, to prove the environment tier of the option
+     * precedence exists at all. The pipeline itself never writes an environment variable: the
+     * command line reaches registration through a typed structure, which is the whole point of
+     * XNAP-A5's shape.
+     */
     class ScopedEnvironment
     {
     public:
         ScopedEnvironment(std::string name, const std::string& value) : name_(std::move(name))
         {
-            const char* const previous = std::getenv(name_.c_str());
-            if (previous != nullptr)
-            {
-                had_ = true;
-                previous_ = previous;
-            }
-#if defined(_WIN32)
-            static_cast<void>(_putenv_s(name_.c_str(), value.c_str()));
-#else
-            static_cast<void>(::setenv(name_.c_str(), value.c_str(), 1));
-#endif
+            previous_ = System::Environment::GetEnvironmentVariable(name_);
+            System::Environment::SetEnvironmentVariable(name_, value);
         }
 
         ~ScopedEnvironment()
         {
-#if defined(_WIN32)
-            static_cast<void>(_putenv_s(name_.c_str(), had_ ? previous_.c_str() : ""));
-#else
-            if (had_) { static_cast<void>(::setenv(name_.c_str(), previous_.c_str(), 1)); }
-            else { static_cast<void>(::unsetenv(name_.c_str())); }
-#endif
+            System::Environment::SetEnvironmentVariable(name_, previous_.value_or(std::string{}));
         }
 
         ScopedEnvironment(const ScopedEnvironment&) = delete;
@@ -202,8 +200,7 @@ namespace
 
     private:
         std::string name_;
-        std::string previous_;
-        bool had_ = false;
+        std::optional<std::string> previous_;
     };
 
     /** @brief Copies the fake compiler to @p destination and makes it executable. */
