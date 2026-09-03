@@ -19,10 +19,18 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <string>
 #include <vector>
 
 #include <gtest/gtest.h>
+
+#include "CNA/Internal/Xnb/XnbAssetTypeWriters.hpp"
+#include "CNA/Internal/Xnb/XnbAssetWriter.hpp"
+#include "CNA/Internal/Xnb/XnbCanonicalData.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
 
 #if !defined(_WIN32)
 #include <fcntl.h>
@@ -230,6 +238,181 @@ TEST(XnbConformanceTest, TheIndependentParserAcceptsEveryExternallyProducedFixtu
               std::string::npos)
         << output;
     EXPECT_EQ(output.find("FAIL"), std::string::npos) << output;
+}
+
+TEST(XnbConformanceTest, TheIndependentParserReadsBackEveryPrimitiveAndCollectionRoot)
+{
+    if (!ConformanceParserAvailable())
+    {
+        GTEST_SKIP() << "python3 or tools/xnb/xnb_conformance.py is unavailable";
+    }
+    using namespace CNA::Internal::Xnb;
+    using namespace Microsoft::Xna::Framework;
+
+    ScratchDirectory scratch("roots");
+    // Each root is written by CNA and then read by a parser that shares no code with it, so the
+    // value coming back out is evidence about the bytes rather than about CNA's own reader
+    // agreeing with CNA's own writer. The expected text is the parser's JSON rendering.
+    const std::vector<std::pair<std::string, std::vector<std::uint8_t>>> roots{
+        {"true", WriteXnbAsset(true)},
+        {"200", WriteXnbAsset(std::uint8_t{200})},
+        {"-42", WriteXnbAsset(std::int8_t{-42})},
+        {"-1234", WriteXnbAsset(std::int16_t{-1234})},
+        {"60000", WriteXnbAsset(std::uint16_t{60000})},
+        {"-70000", WriteXnbAsset(std::int32_t{-70000})},
+        {"4000000000", WriteXnbAsset(std::uint32_t{4000000000u})},
+        {"-9000000000", WriteXnbAsset(std::int64_t{-9000000000LL})},
+        {"18000000000", WriteXnbAsset(std::uint64_t{18000000000ull})},
+        {"1.5", WriteXnbAsset(1.5f)},
+        {"2.25", WriteXnbAsset(2.25)},
+        {"\"hello\"", WriteXnbAsset(std::string("hello"))},
+        {"\"Z\"", WriteXnbAsset(SharpRuntime::charcs{u'Z'})},
+        {"\"one\"", WriteXnbAsset(std::vector<std::string>{"one", "two"})},
+        {"7", WriteXnbAsset(std::vector<std::int32_t>{7, 8, 9})},
+        {"\"q\"", WriteXnbAsset(std::vector<SharpRuntime::charcs>{u'q', u'r'})},
+    };
+
+    for (std::size_t index = 0; index < roots.size(); ++index)
+    {
+        const std::filesystem::path path =
+            scratch.Path() / ("root_" + std::to_string(index) + ".xnb");
+        {
+            std::ofstream stream(path, std::ios::binary);
+            stream.write(reinterpret_cast<const char*>(roots[index].second.data()),
+                         static_cast<std::streamsize>(roots[index].second.size()));
+        }
+        std::string output;
+        ASSERT_EQ(RunProgram("python3",
+                             {kConformanceParser.string(), "--json", path.string()}, output),
+                  0)
+            << output;
+        EXPECT_NE(output.find(roots[index].first), std::string::npos)
+            << "root " << index << " rendered as " << output;
+    }
+}
+
+TEST(XnbConformanceTest, TheIndependentParserReadsBackTheFrameworkValueTypesItKnows)
+{
+    if (!ConformanceParserAvailable())
+    {
+        GTEST_SKIP() << "python3 or tools/xnb/xnb_conformance.py is unavailable";
+    }
+    using namespace CNA::Internal::Xnb;
+    using namespace Microsoft::Xna::Framework;
+
+    ScratchDirectory scratch("values");
+    const std::vector<std::pair<std::string, std::vector<std::uint8_t>>> roots{
+        {"3.5", WriteXnbAsset(Vector3{1.0f, -2.0f, 3.5f})},
+        {"[3,4,5,6]", WriteXnbAsset(Rectangle{3, 4, 5, 6})},
+        {"7.0", WriteXnbAsset(Matrix::CreateTranslation(Vector3{7.0f, 8.0f, 9.0f}))},
+        {"[[1,2,3,4],[5,6,7,8]]",
+         WriteXnbAsset(std::vector<Rectangle>{Rectangle{1, 2, 3, 4}, Rectangle{5, 6, 7, 8}})},
+        {"[[1.0,2.0,3.0]]", WriteXnbAsset(std::vector<Vector3>{Vector3{1.0f, 2.0f, 3.0f}})},
+    };
+
+    for (std::size_t index = 0; index < roots.size(); ++index)
+    {
+        const std::filesystem::path path =
+            scratch.Path() / ("value_" + std::to_string(index) + ".xnb");
+        {
+            std::ofstream stream(path, std::ios::binary);
+            stream.write(reinterpret_cast<const char*>(roots[index].second.data()),
+                         static_cast<std::streamsize>(roots[index].second.size()));
+        }
+        std::string output;
+        ASSERT_EQ(RunProgram("python3",
+                             {kConformanceParser.string(), "--json", path.string()}, output),
+                  0)
+            << output;
+        // The parser pretty-prints, so the expectation is matched against the whitespace-free
+        // rendering rather than against one particular indentation.
+        std::string compact;
+        std::copy_if(output.begin(), output.end(), std::back_inserter(compact),
+                     [](const char character)
+                     { return character != ' ' && character != '\n' && character != '\r'; });
+        EXPECT_NE(compact.find(roots[index].first), std::string::npos)
+            << "value " << index << " rendered as " << output;
+    }
+}
+
+TEST(XnbConformanceTest, TheIndependentParserReadsBackTheAssetRootsOutsideTheCommittedCorpus)
+{
+    if (!ConformanceParserAvailable())
+    {
+        GTEST_SKIP() << "python3 or tools/xnb/xnb_conformance.py is unavailable";
+    }
+    using namespace CNA::Internal::Xnb;
+    using namespace Microsoft::Xna::Framework::Graphics;
+
+    // The committed interop corpus carries the six assets an XNA harness would load. These four
+    // are not in it -- a volume texture and a cube map need a device to be interesting, and Song
+    // and Video name external media a harness cannot ship -- but their bytes can still be put in
+    // front of the independent parser, which is what this test does.
+    ScratchDirectory scratch("assets");
+
+    XnbTextureData volume;
+    volume.kind = XnbTextureKind::Texture3D;
+    volume.width = 2u;
+    volume.height = 2u;
+    volume.depth = 2u;
+    volume.faceCount = 1u;
+    volume.mipCount = 1u;
+    volume.surfaceFormat = SurfaceFormat::Color;
+    volume.levels = {std::vector<std::uint8_t>(2u * 2u * 2u * 4u, 0x40u)};
+
+    XnbTextureData cube;
+    cube.kind = XnbTextureKind::TextureCube;
+    cube.width = 2u;
+    cube.height = 2u;
+    cube.depth = 1u;
+    cube.faceCount = 6u;
+    cube.mipCount = 1u;
+    cube.surfaceFormat = SurfaceFormat::Color;
+    for (std::uint8_t face = 0; face < 6u; ++face)
+    {
+        cube.levels.push_back(std::vector<std::uint8_t>(2u * 2u * 4u,
+                                                        static_cast<std::uint8_t>(face + 1u)));
+    }
+
+    XnbSongData song;
+    song.mediaPath = "Music/theme.wma";
+    song.durationMs = 3005;
+
+    XnbVideoData video;
+    video.mediaPath = "Movies/intro.wmv";
+    video.durationMs = 12000;
+    video.width = 320;
+    video.height = 240;
+    video.framesPerSecond = 30.0f;
+    video.soundtrackType = 0;
+
+    const std::vector<std::pair<std::string, std::vector<std::uint8_t>>> roots{
+        {"\"kind\": \"Texture3D\"", WriteXnbAsset(XnbTexture3DContent{volume})},
+        {"\"faceCount\": 6", WriteXnbAsset(XnbTextureCubeContent{cube})},
+        {"Music/theme.wma", WriteXnbAsset(song)},
+        {"Movies/intro.wmv", WriteXnbAsset(video)},
+        {"\"bytecodeByteCount\": 8",
+         WriteXnbAsset(XnbCompiledEffectContent{
+             std::vector<std::uint8_t>{0x01u, 0x02u, 0x03u, 0x04u, 0x05u, 0x06u, 0x07u, 0x08u}})},
+    };
+
+    for (std::size_t index = 0; index < roots.size(); ++index)
+    {
+        const std::filesystem::path path =
+            scratch.Path() / ("asset_" + std::to_string(index) + ".xnb");
+        {
+            std::ofstream stream(path, std::ios::binary);
+            stream.write(reinterpret_cast<const char*>(roots[index].second.data()),
+                         static_cast<std::streamsize>(roots[index].second.size()));
+        }
+        std::string output;
+        ASSERT_EQ(RunProgram("python3",
+                             {kConformanceParser.string(), "--json", path.string()}, output),
+                  0)
+            << output;
+        EXPECT_NE(output.find(roots[index].first), std::string::npos)
+            << "asset " << index << " rendered as " << output;
+    }
 }
 
 TEST(XnbConformanceTest, TheIndependentParserRefusesAMalformedContainer)

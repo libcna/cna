@@ -115,9 +115,12 @@ Texture2D::FromStream(device, stream);    // player.png (existing path, unchange
 ## File layout (confirmed from FNA's `ContentManager`/`ContentReader`)
 
 ```text
-4-byte magic + platform char   'X' 'N' 'B' <platform: 'w'/'d'/'g'/'l'/...>
-1-byte version                 4 or 5 (FNA rejects anything else)
-1-byte flags                   bit 0x80 = LZX-compressed payload
+4-byte magic + platform char   'X' 'N' 'B' <platform byte, see below>
+1-byte version                 5 = the XNA 4.0-era container; 4 = earlier, XNA 3.x-era
+                               (FNA rejects anything else)
+1-byte flags                   bit 0x01 = HiDef graphics profile (clear = Reach)
+                               bit 0x40 = single raw LZ4 block (later ecosystem, not XNA 4.0)
+                               bit 0x80 = LZX-compressed payload
 4-byte int32                   total file length
 [if compressed] 4-byte int32   decompressed size, then the LZX-compressed payload
 type-reader table               7-bit-encoded count, then per entry: 7-bit-encoded string
@@ -126,6 +129,13 @@ shared-resource count           7-bit-encoded int
 root object                     read via the table's first-referenced reader, recursively
 shared resources                read last, each fixed up into earlier placeholder references
 ```
+
+Only three platform bytes are Microsoft XNA 4.0 targets: `w` (Windows), `m` (Windows Phone 7) and
+`x` (Xbox 360). The other thirteen bytes CNA accepts -- `i`, `a`, `d`, `X`, `W`, `n`, `u`, `p`, `M`,
+`r`, `P`, `g`, `l` -- were introduced by later, non-Microsoft implementations of the format. Reading
+them is useful; describing them as XNA 4.0 compatibility is not, and this document does not.
+Likewise, version **5** is the XNA 4.0-era container version; version 4 is *earlier*, not a variant
+of 4.0. `docs/xnb-interoperability.md` carries the full table and what CNA's writer does with each.
 
 Primitives needed to read any of the above: 7-bit-encoded int (`BinaryReader.Read7BitEncodedInt`
 equivalent), 7-bit-length-prefixed strings, little-endian fixed-width integers/floats. Shared

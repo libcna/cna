@@ -27,6 +27,7 @@
 #include "CNA/Internal/Xnb/XnbTypeWriter.hpp"
 #include "CNA/Internal/Xnb/CollectionContentTypeReaders.hpp"
 #include "CNA/Internal/Xnb/CurveContentTypeReader.hpp"
+#include "CNA/Internal/Xnb/DecimalDateTimeContentTypeReaders.hpp"
 #include "CNA/Internal/Xnb/XnbAssetTypeWriters.hpp"
 #include "CNA/Internal/Xnb/MathContentTypeReaders.hpp"
 #include "CNA/Internal/Xnb/PrimitiveContentTypeReaders.hpp"
@@ -98,6 +99,7 @@ namespace
             ContentTypeReaderManager::ClearTypeCreators();
             RegisterPrimitiveXnbReaders();
             RegisterMathXnbReaders();
+            RegisterDecimalDateTimeXnbReaders();
         }
 
         void TearDown() override { ContentTypeReaderManager::ClearTypeCreators(); }
@@ -399,6 +401,69 @@ TEST_F(XnbWriterTest, FrameworkValueTypesRoundTripThroughTheReader)
     const Color color(10, 20, 30, 40);
     const Color readColor = LoadedXnb(WriteXnbAsset(color)).ReadAsset<Color>();
     EXPECT_EQ(readColor, color);
+}
+
+TEST_F(XnbWriterTest, EveryRemainingFrameworkValueTypeRoundTripsThroughTheReader)
+{
+    // The types above cover the shapes the asset writers themselves use. These are the rest of
+    // the registered value-type writers, each with its own reader on the other side, so that
+    // "registered" and "verified" mean the same thing for all of them.
+    using namespace Microsoft::Xna::Framework;
+
+    const Vector2 vector2{1.5f, -2.5f};
+    const Vector2 readVector2 = LoadedXnb(WriteXnbAsset(vector2)).ReadAsset<Vector2>();
+    EXPECT_FLOAT_EQ(readVector2.X, vector2.X);
+    EXPECT_FLOAT_EQ(readVector2.Y, vector2.Y);
+
+    const Vector4 vector4{1.0f, 2.0f, 3.0f, 4.0f};
+    const Vector4 readVector4 = LoadedXnb(WriteXnbAsset(vector4)).ReadAsset<Vector4>();
+    EXPECT_FLOAT_EQ(readVector4.W, 4.0f);
+    EXPECT_FLOAT_EQ(readVector4.Z, 3.0f);
+
+    const Quaternion quaternion{0.1f, 0.2f, 0.3f, 0.4f};
+    const Quaternion readQuaternion =
+        LoadedXnb(WriteXnbAsset(quaternion)).ReadAsset<Quaternion>();
+    EXPECT_FLOAT_EQ(readQuaternion.X, 0.1f);
+    EXPECT_FLOAT_EQ(readQuaternion.W, 0.4f);
+
+    const Point point{11, -22};
+    const Point readPoint = LoadedXnb(WriteXnbAsset(point)).ReadAsset<Point>();
+    EXPECT_EQ(readPoint.X, 11);
+    EXPECT_EQ(readPoint.Y, -22);
+
+    const Plane plane{Vector3{0.0f, 1.0f, 0.0f}, -5.0f};
+    const Plane readPlane = LoadedXnb(WriteXnbAsset(plane)).ReadAsset<Plane>();
+    EXPECT_FLOAT_EQ(readPlane.Normal.Y, 1.0f);
+    EXPECT_FLOAT_EQ(readPlane.D, -5.0f);
+
+    const BoundingBox box{Vector3{-1.0f, -2.0f, -3.0f}, Vector3{4.0f, 5.0f, 6.0f}};
+    const BoundingBox readBox = LoadedXnb(WriteXnbAsset(box)).ReadAsset<BoundingBox>();
+    EXPECT_FLOAT_EQ(readBox.Min.X, -1.0f);
+    EXPECT_FLOAT_EQ(readBox.Max.Z, 6.0f);
+
+    const BoundingSphere sphere{Vector3{1.0f, 2.0f, 3.0f}, 7.5f};
+    const BoundingSphere readSphere =
+        LoadedXnb(WriteXnbAsset(sphere)).ReadAsset<BoundingSphere>();
+    EXPECT_FLOAT_EQ(readSphere.Center.Y, 2.0f);
+    EXPECT_FLOAT_EQ(readSphere.Radius, 7.5f);
+
+    const Ray ray{Vector3{1.0f, 0.0f, 0.0f}, Vector3{0.0f, 0.0f, 1.0f}};
+    const Ray readRay = LoadedXnb(WriteXnbAsset(ray)).ReadAsset<Ray>();
+    EXPECT_FLOAT_EQ(readRay.Position.X, 1.0f);
+    EXPECT_FLOAT_EQ(readRay.Direction.Z, 1.0f);
+}
+
+TEST_F(XnbWriterTest, TimeSpanAndDateTimeRoundTripThroughTheReader)
+{
+    // Both are stored as a single Int64 of 100-nanosecond ticks. DateTime's top two bits carry
+    // .NET's DateTimeKind, which System::DateTime does not model, so the writer emits Unspecified
+    // and the reader must read back exactly the tick count that went in.
+    const System::TimeSpan span = System::TimeSpan::FromSeconds(1.5);
+    EXPECT_EQ(LoadedXnb(WriteXnbAsset(span)).ReadAsset<System::TimeSpan>().getTicksProperty(), span.getTicksProperty());
+
+    const System::DateTime moment(630822816000000000LL);
+    EXPECT_EQ(LoadedXnb(WriteXnbAsset(moment)).ReadAsset<System::DateTime>().getTicksProperty(),
+              moment.getTicksProperty());
 }
 
 TEST_F(XnbWriterTest, ACurveRoundTripsWithEveryKeyField)

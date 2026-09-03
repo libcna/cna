@@ -91,13 +91,13 @@ All 30 failures are environmental and reproduce on the unmodified tree:
 **Current (2026-09-03, after Phases B–F except the open rows):**
 
 ```text
-CnaContentTests:          1688 run   1590 passed   68 skipped   30 failed
+CnaContentTests:          1693 run   1595 passed   68 skipped   30 failed
 CnaContentPipelineTests:    37 run     37 passed    0 skipped    0 failed
-CnaTests (whole suite):   7820 run   7279 passed  512 skipped   29 failed
+CnaTests (whole suite):   7825 run   7284 passed  512 skipped   29 failed
 ```
 
 `CnaContentTests` shows the same 30 environmental failures as the recorded baseline, +96 tests,
-+103 passing, **zero new failures**. `CnaContentPipelineTests` is the new build-time module's own
++108 passing, **zero new failures**. `CnaContentPipelineTests` is the new build-time module's own
 focused executable and is entirely new. The whole-suite figure is recorded here for completeness;
 its 29 failures are the STUB-renderer `TextureCube`/`Texture3D`/capability group, the uid-0
 permission case and the two audio-device `MediaLibrary` cases — none of them content-pipeline
@@ -379,8 +379,8 @@ Building a writer against the reader exposes disagreements the reader alone coul
 
 | ID | Task | State |
 |---|---|---|
-| `XNAP-06` | Correct all XNB platform/version wording in `xnb.md`, `docs/xnb-content-pipeline-support.md` and elsewhere: XNA-era `w`/`m`/`x` vs extended ecosystem; version 5 = XNA 4.0 era, version 4 = legacy. | [ ] |
-| `XNAP-07` | `docs/xnb-interoperability.md`: per-type capability matrix using the §3 confidence vocabulary. | [ ] |
+| `XNAP-06` | Correct all XNB platform/version wording in `xnb.md`, `docs/xnb-content-pipeline-support.md` and elsewhere: XNA-era `w`/`m`/`x` vs extended ecosystem; version 5 = XNA 4.0 era, version 4 = legacy. | [x] Also corrected a larger error in `docs/xnb-content-pipeline-support.md`: it declared producing `.xnb` files "out of scope, permanently" and said CNA "has no need to generate them itself". That is no longer true, and the document now says so and points at the writer's own document rather than leaving a confident false statement in the tree. |
+| `XNAP-07` | `docs/xnb-interoperability.md`: per-type capability matrix using the §3 confidence vocabulary. | [x] Written, and **the tables were made true rather than the claims rounded up**. Writing it surfaced four overclaims, each closed by a test rather than by softer wording: nine framework value types and both `System` time types had writers and readers but no round trip; the primitive and collection roots had never been put in front of the independent parser; `Texture3D`, `TextureCube`, `Song`, `Video` and `Effect` were `cna-rt` only. Three new conformance tests now write each of those and validate the bytes with `tools/xnb/xnb_conformance.py`. What remains uncovered is stated as uncovered. |
 | `XNAP-90` | Runtime-vs-build-time dependency boundary audit; keep FreeType/encoders/importers out of the runtime link closure. | [~] The boundary now exists and FreeType is on the correct side of it (`XNAP-52`). The full audit — every build-time dependency, and a test that fails if one reaches the runtime umbrella — is still open. |
 | `XNAP-91` | Public API audit of the writer surface: ownership, const-correctness, error handling, extension points, no accidental implementation exposure. | [ ] |
 | `XNAP-92` | Custom-writer extension model + documented example. | [ ] |
