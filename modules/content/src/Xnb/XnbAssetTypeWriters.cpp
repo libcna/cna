@@ -2,8 +2,11 @@
 #include "CNA/Internal/Xnb/XnbAssetTypeWriters.hpp"
 
 #include <algorithm>
+
+#include <algorithm>
 #include <variant>
 
+#include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 
 #include <limits>
@@ -276,6 +279,26 @@ namespace CNA::Internal::Xnb
             }
             output.RequireCollectionCount(declaration.elements.size(),
                                           "VertexDeclarationWriter");
+            for (const auto& element : declaration.elements)
+            {
+                // XNA's own VertexDeclaration constructor rejects this, so writing it produces a
+                // file that throws on load, and a GPU that accepted it would read past the
+                // vertex. Found by the writer-input fuzz corpus
+                // (plans/plan_xnapipeline.md XNAP-45).
+                const std::int64_t end =
+                    static_cast<std::int64_t>(element.getOffsetProperty()) +
+                    CNA::Internal::Graphics::VertexDeclarationFidelityDetail::FormatSize(
+                        element.getVertexElementFormatProperty());
+                if (element.getOffsetProperty() < 0 || end > declaration.stride)
+                {
+                    throw XnbWriteException(
+                        "'" + output.AssetName() +
+                        "': VertexDeclarationWriter element at offset " +
+                        std::to_string(element.getOffsetProperty()) + " ends at " +
+                        std::to_string(end) + ", past the " + std::to_string(declaration.stride) +
+                        "-byte vertex stride.");
+                }
+            }
             output.WriteInt32(declaration.stride);
             output.WriteInt32(static_cast<std::int32_t>(declaration.elements.size()));
             for (const auto& element : declaration.elements)
@@ -305,6 +328,144 @@ namespace CNA::Internal::Xnb
                 resource.value);
         }
 
+        /** @brief Renders a code point as `U+XXXX`, so U+003F is not read as decimal 63. */
+        [[nodiscard]] std::string CodePoint(const SharpRuntime::charcs character)
+        {
+            static const char* digits = "0123456789ABCDEF";
+            const auto value = static_cast<std::uint32_t>(character);
+            std::string text = "U+";
+            for (int shift = 12; shift >= 0; shift -= 4)
+            {
+                text.push_back(digits[(value >> shift) & 0xFu]);
+            }
+            return text;
+        }
+
+        /**
+         * @brief Refuses a bone hierarchy that contains a cycle
+         *        (plans/plan_xnapipeline.md `XNAP-45`).
+         *
+         * Every bone reference is individually in range, so nothing below notices that following
+         * `parent` never reaches a root. An XNA `Model` walks that chain to compute absolute bone
+         * transforms; a cycle there is not a bad value, it is a program that does not stop. Found
+         * by the writer-input fuzz corpus, which wrote a self-parented bone without complaint.
+         *
+         * @param output The file being written, for the asset name in the diagnostic.
+         * @param model The canonical Model graph.
+         * @throws XnbWriteException naming the bone the cycle was found at.
+         */
+        void RequireAcyclicBoneHierarchy(XnbWriter& output, const XnbModelData& model)
+        {
+            const std::size_t boneCount = model.bones.size();
+            for (std::size_t start = 0u; start < boneCount; ++start)
+            {
+                std::size_t current = start;
+                for (std::size_t steps = 0u; steps <= boneCount; ++steps)
+                {
+                    const std::int32_t parent = model.bones[current].parent;
+                    if (parent < 0 || static_cast<std::size_t>(parent) >= boneCount) { break; }
+                    current = static_cast<std::size_t>(parent);
+                    if (steps == boneCount)
+                    {
+                        throw XnbWriteException(
+                            "'" + output.AssetName() + "': ModelWriter bone " +
+                            std::to_string(start) + " ('" + model.bones[start].name +
+                            "') is its own ancestor. An XNA Model walks the parent chain to "
+                            "compute absolute bone transforms, so a cycle there does not "
+                            "terminate.");
+                    }
+                }
+            }
+        }
+
+        /**
+         * @brief Refuses a mesh part whose ranges fall outside the buffers it names
+         *        (plans/plan_xnapipeline.md `XNAP-45`).
+         *
+         * `DrawIndexedPrimitives` reads `primitiveCount * 3` indices from `startIndex`, and each
+         * index addresses a vertex at `vertexOffset`. XNA validates none of it at load: the part
+         * is four integers, and the first draw call reads past the buffer. The writer has both
+         * the part and the buffers in hand, so it is the last place this can be caught before it
+         * becomes a runtime read out of range.
+         *
+         * @param output The file being written, for the asset name in the diagnostic.
+         * @param model The canonical Model graph.
+         * @throws XnbWriteException naming the part and the buffer it overruns.
+         */
+        void RequireMeshPartsWithinTheirBuffers(XnbWriter& output, const XnbModelData& model)
+        {
+            const auto resource = [&model](const std::int32_t index)
+                -> const XnbModelSharedResourceData*
+            {
+                if (index < 0 || static_cast<std::size_t>(index) >= model.sharedResources.size())
+                {
+                    return nullptr;
+                }
+                return &model.sharedResources[static_cast<std::size_t>(index)];
+            };
+
+            for (std::size_t meshIndex = 0u; meshIndex < model.meshes.size(); ++meshIndex)
+            {
+                const XnbModelMeshData& mesh = model.meshes[meshIndex];
+                for (std::size_t partIndex = 0u; partIndex < mesh.parts.size(); ++partIndex)
+                {
+                    const XnbModelPartData& part = mesh.parts[partIndex];
+                    const std::string where =
+                        "'" + output.AssetName() + "': ModelWriter mesh " +
+                        std::to_string(meshIndex) + " ('" + mesh.name + "') part " +
+                        std::to_string(partIndex);
+                    if (part.vertexOffset < 0 || part.vertexCount < 0 || part.startIndex < 0 ||
+                        part.primitiveCount < 0)
+                    {
+                        throw XnbWriteException(
+                            where + " has a negative vertex offset, vertex count, start index or "
+                                    "primitive count.");
+                    }
+
+                    if (const XnbModelSharedResourceData* const vertices =
+                            resource(part.vertexBufferResource))
+                    {
+                        if (const auto* buffer =
+                                std::get_if<XnbVertexBufferData>(&vertices->value))
+                        {
+                            const std::uint64_t last =
+                                static_cast<std::uint64_t>(part.vertexOffset) +
+                                static_cast<std::uint64_t>(part.vertexCount);
+                            if (last > buffer->vertexCount)
+                            {
+                                throw XnbWriteException(
+                                    where + " covers vertices " +
+                                    std::to_string(part.vertexOffset) + " to " +
+                                    std::to_string(last) + " of a " +
+                                    std::to_string(buffer->vertexCount) + "-vertex buffer.");
+                            }
+                        }
+                    }
+
+                    const XnbModelSharedResourceData* const indices =
+                        resource(part.indexBufferResource);
+                    if (indices == nullptr) { continue; }
+                    const auto* buffer = std::get_if<XnbIndexBufferData>(&indices->value);
+                    if (buffer == nullptr) { continue; }
+                    const std::uint32_t elementSize =
+                        buffer->indexElementSize == 0u ? 2u : buffer->indexElementSize;
+                    const std::uint64_t indexCount = buffer->bytes.size() / elementSize;
+                    const std::uint64_t last =
+                        static_cast<std::uint64_t>(part.startIndex) +
+                        static_cast<std::uint64_t>(part.primitiveCount) * 3u;
+                    if (last > indexCount)
+                    {
+                        throw XnbWriteException(
+                            where + " draws " + std::to_string(part.primitiveCount) +
+                            " triangles from index " + std::to_string(part.startIndex) +
+                            ", reaching index " + std::to_string(last) + " of a " +
+                            std::to_string(indexCount) +
+                            "-index buffer. DrawIndexedPrimitives would read past it.");
+                    }
+                }
+            }
+        }
+
         /**
          * @brief Writes a complete Model object graph, mirroring ReadXnbModelGraph() field for
          *        field.
@@ -324,6 +485,8 @@ namespace CNA::Internal::Xnb
             output.RequireCollectionCount(model.meshes.size(), "ModelWriter meshes");
             output.RequireCollectionCount(model.sharedResources.size(),
                                           "ModelWriter shared resources");
+            RequireAcyclicBoneHierarchy(output, model);
+            RequireMeshPartsWithinTheirBuffers(output, model);
 
             std::vector<std::int32_t> sharedIds;
             sharedIds.reserve(model.sharedResources.size());
@@ -544,6 +707,33 @@ namespace CNA::Internal::Xnb
                         "/" + std::to_string(value.cropping.size()) + "/" +
                         std::to_string(value.characters.size()) + "/" +
                         std::to_string(value.kerning.size()) + ".");
+                }
+                // XNA's SpriteFont binary-searches its character table, so an unsorted one does
+                // not fail: it silently returns the wrong glyph, or none. And CNA's own
+                // SpriteFont rejects a default character the font cannot render
+                // (REMED-GFX-002), so writing one produces an .xnb its own runtime refuses.
+                // Both are cheap here and impossible to diagnose from rendered output
+                // (plans/plan_xnapipeline.md XNAP-45).
+                for (std::size_t index = 1u; index < value.characters.size(); ++index)
+                {
+                    if (value.characters[index - 1u] < value.characters[index]) { continue; }
+                    throw XnbWriteException(
+                        "'" + output.AssetName() + "': SpriteFontWriter character table is not "
+                        "strictly ascending at index " + std::to_string(index) + " (" +
+                        CodePoint(value.characters[index - 1u]) + " then " +
+                        CodePoint(value.characters[index]) +
+                        "). SpriteFont binary-searches this table, so an unsorted one returns "
+                        "the wrong glyph rather than failing.");
+                }
+                if (value.defaultCharacter.has_value() &&
+                    std::find(value.characters.begin(), value.characters.end(),
+                              *value.defaultCharacter) == value.characters.end())
+                {
+                    throw XnbWriteException(
+                        "'" + output.AssetName() + "': SpriteFontWriter default character " +
+                        CodePoint(*value.defaultCharacter) +
+                        " is not in the font's character table, which SpriteFont's own "
+                        "constructor rejects.");
                 }
                 output.WriteObject(XnbTexture2DContent{value.atlas});
                 output.WriteObject(value.glyphs);

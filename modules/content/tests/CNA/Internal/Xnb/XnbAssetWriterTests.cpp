@@ -279,7 +279,11 @@ TEST(XnbAssetWriterTest, ASpriteFontRoundTripsWithEveryGlyphList)
     source.lineSpacing = 14;
     source.spacing = 1.5f;
     source.kerning = {Vector3{0.0f, 2.0f, 0.5f}, Vector3{-1.0f, 2.0f, 1.0f}};
-    source.defaultCharacter = u'?';
+    // In the character table on purpose: SpriteFont::setDefaultCharacterProperty rejects a
+    // fallback the font cannot render (REMED-GFX-002), so U+003F here would have produced an
+    // .xnb that CNA's own runtime refuses to load. The writer now refuses it instead
+    // (plans/plan_xnapipeline.md XNAP-45).
+    source.defaultCharacter = u'A';
 
     const XnbCanonicalAsset asset = RoundTrip(scratch, "font", source);
     EXPECT_EQ(asset.rootReader, "Microsoft.Xna.Framework.Content.SpriteFontReader");
@@ -294,7 +298,7 @@ TEST(XnbAssetWriterTest, ASpriteFontRoundTripsWithEveryGlyphList)
     EXPECT_FLOAT_EQ(read.kerning[1].Y, 2.0f);
     EXPECT_FLOAT_EQ(read.kerning[1].Z, 1.0f);
     ASSERT_TRUE(read.defaultCharacter.has_value());
-    EXPECT_EQ(*read.defaultCharacter, u'?');
+    EXPECT_EQ(*read.defaultCharacter, u'A');
     EXPECT_EQ(read.atlas.levels, source.atlas.levels);
 }
 

@@ -43,7 +43,10 @@ from pathlib import Path
 
 REPOSITORY = Path(__file__).resolve().parents[2]
 CORPUS = REPOSITORY / "tests" / "assets" / "gltf"
-MANIFEST = CORPUS / "model-xnb-corpus.json"
+# Beside the tool rather than in the fixture tree: tests/assets/gltf/ has its own
+# byte-exact manifest gate over everything committed there, and this file is not a
+# fixture, it is this tool's expectation about them.
+MANIFEST = REPOSITORY / "tools" / "xnb" / "model-xnb-corpus.json"
 CONFORMANCE = REPOSITORY / "tools" / "xnb" / "xnb_conformance.py"
 
 # One recognizable phrase per refusal category. The phrase is the part of the diagnostic that
