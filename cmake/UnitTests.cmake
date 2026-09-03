@@ -733,6 +733,14 @@ if(CNA_BUILD_TESTS)
             CNA_CONTENT_TOOL_PATH="$<TARGET_FILE:cna_content_tool>"
         )
 
+        # plans/plan_xnapipeline.md XNAP-44: the multi-worker determinism suite needs the same
+        # real executable, in separate OS processes, and the `.fx` route's stand-in compiler with
+        # it -- an effect build must take part in a parallel build like any other asset.
+        add_dependencies(${CNA_TEST_OBJECT_TARGET_content_pipeline} cna_content_tool)
+        target_compile_definitions(${CNA_TEST_OBJECT_TARGET_content_pipeline} PRIVATE
+            CNA_CONTENT_TOOL_PATH="$<TARGET_FILE:cna_content_tool>"
+        )
+
         # plans/plan_content_pipeline.md CP-014: prove the public CMake helper itself delegates to
         # the real CLI and preserves its logical/output tree and manifest. A target-platform tool
         # cannot execute on the host, so cross configurations compile the guarded test but do not
@@ -1097,6 +1105,21 @@ if(CNA_BUILD_TESTS)
                 PROPERTIES LABELS "content;xnb;conformance")
         endif()
         unset(_cna_xnb_conformance_files)
+
+        # plans/plan_xnapipeline.md XNAP-59: every committed glTF fixture is built to Model XNB
+        # and checked against its recorded outcome, with the independent specification parser
+        # accepting every generated file. The sweep existed as a sentence somebody wrote after
+        # running it once; a sweep nobody can re-run cannot notice a fixture that stopped
+        # building, a refusal that started saying something else, or a fixture added later.
+        if(TARGET cna_content_tool)
+            add_test(NAME CnaXnbModelCorpusSweep
+                COMMAND "${Python3_EXECUTABLE}"
+                    "${CMAKE_SOURCE_DIR}/tools/xnb/model_corpus_sweep.py"
+                    --content-tool "$<TARGET_FILE:cna_content_tool>"
+                    --python "${Python3_EXECUTABLE}")
+            set_tests_properties(CnaXnbModelCorpusSweep
+                PROPERTIES LABELS "content;xnb;conformance;model" TIMEOUT 900)
+        endif()
 
         # plans/plan_xnapipeline.md XNAP-9B: the plan's stated task totals must agree with its own
         # task table. They disagreed once, in a way no reader could be expected to catch.
