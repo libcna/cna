@@ -18,12 +18,20 @@
 >
 > **Task IDs.** `XNAP-###`. Never reuse an ID; never renumber.
 
-> **⚠ Read §0's correction first.** This plan was written against a wrong premise: the
-> implementation its opening audit called absent exists on the `pipeline` branch, and most of
-> Phases B–E and G duplicate it. §0.5 records what is duplicate and what is new.
+> **⚠ One writer, and a history worth reading.** This plan's opening audit was wrong in a way
+> that mattered: a second, independently developed XNB writer already existed on the `pipeline`
+> branch when Phases B–E and G were written here, so for a while the repository contained two
+> implementations of the same subsystem. **That is history, not architecture.** The two branch
+> histories were reconciled, one implementation survives — `CNA::Internal::Xnb`, in
+> `modules/content/{include/CNA/Internal/Xnb,src/Xnb}` — and the useful parts of the superseded
+> one were ported into it (`XNAP-97`–`XNAP-9A`). §0 keeps the mistake on the record; §0.5 says
+> which features were ported and which paths no longer exist. Nothing below describes a second
+> writer, and nothing may reintroduce one.
 
-> **Status (2026-09-03).** 69 tasks: **57 done**, 8 partial (remaining scope named in the row),
-> 2 blocked with the blocker named, 1 open owner decision. Exact test totals live in §0.4 and
+> **Status (2026-09-03).** **74 tasks: 63 done, 8 partial, 2 blocked, 1 open.** Every partial row
+> names its remaining scope and every blocked row names its blocker, in the row itself.
+> `tools/xnb/check_plan_status.py` (ctest `CnaXnbPlanStatusConsistency`) recounts the table and
+> fails if this sentence disagrees with it, because it did once. Exact test totals live in §0.4 and
 > nowhere else. **Nothing here has been verified against a genuine Microsoft XNA 4.0 runtime**,
 > because none exists in this environment; `docs/xnb-interoperability.md` is the capability matrix
 > and it says so in its second paragraph. Three assets are byte-identical to output produced by
@@ -34,21 +42,27 @@
 
 ## 0. Session-start audit (2026-09-03) — corrected 2026-09-03
 
-> ### ⚠ Correction: the audit below was wrong, and this plan was written against a wrong premise
+> ### ⚠ Correction: this audit was wrong, and a duplicate implementation was written because of it
 >
 > §0 originally read: *"The task that opened this plan described a large pre-existing XNB writer
 > implementation … **None of that existed at HEAD `756096626`.**"*
 >
 > That sentence was true of `next` and false of the repository. **The implementation the task
-> described exists on the `pipeline` branch**, in five commits dated 2026-09-02
+> described already existed on the `pipeline` branch**, in five commits dated 2026-09-02
 > (`07cac247a`…`6549d8032`), built on the same base commit `756096626` this plan started from. The
 > session-start audit checked HEAD and did not check any other branch, which is the whole of the
 > mistake: `git ls-remote --heads origin` would have found it in one command.
 >
-> The consequence is not cosmetic. **Most of Phases B, C, D, E and G below re-implemented work that
-> was already finished**, in a second location, under a colliding set of task IDs. §0.5 records
-> exactly which parts are duplicates and which are genuinely new, so that whoever reconciles the two
-> branches does not have to re-derive it.
+> The consequence was not cosmetic. **Most of Phases B, C, D, E and G below re-implemented work
+> that was already finished**, in a second location, under a colliding set of task IDs — a second
+> writer architecture that briefly existed in the repository by accident.
+>
+> **That duplication has since been resolved and no longer exists.** The two branch histories were
+> merged (`ff2fbca42`), the second architecture's paths were removed, and the features worth
+> keeping from it were ported into the surviving one (`XNAP-97`–`XNAP-9A`). §0.5 records what was
+> ported, what was dropped, and which paths must never come back. Read §0.1–§0.4 as what they are:
+> a dated audit of one branch, kept because the mistake in it is instructive, not as a description
+> of the repository today.
 >
 > Nothing else in this plan is retracted: the code, tests and measurements it records are real, and
 > the environment audit in §0.3 and the test baseline in §0.4 stand. What is retracted is the claim
@@ -138,29 +152,53 @@ code, and none of them introduced by this plan.
 
 ---
 
-### 0.5 Relationship to the `pipeline` branch (added by the correction)
+### 0.5 Reconciliation with the `pipeline` branch — resolved
 
-Both branches start at `756096626`. `pipeline` carries 5 commits and 55 changed files; this branch
-carries 20 commits and 97 changed files. They are siblings, not a sequence, and they place the same
-subsystem in different directories:
+> **Read this section as a record of a resolved duplication, not of a live one.** The
+> reconciliation is done. Exactly one XNB writer architecture exists in the tree, and this section
+> exists so that nobody has to re-derive which half of the work came from where.
 
-| | `pipeline` | this branch |
-|---|---|---|
-| Public headers | `modules/content/include/CNA/Content/Xnb/` | `modules/content/include/CNA/Internal/Xnb/` |
-| Writer sources | `modules/content/src/XnbWrite/` | `modules/content/src/Xnb/` |
-| Pipeline adapter | `XnbOutput.hpp`, `XnbModelOutput.cpp` | `XnbOutputContentPipeline.hpp` |
-| Conformance parser | `scripts/xnb_conformance.py` | `tools/xnb/xnb_conformance.py` |
-| Task IDs | `XNAP-001`…`XNAP-029` | `XNAP-01`…`XNAP-96` |
+#### 0.5.1 The final architecture (what is true now)
 
-15 files are touched by both, including this plan file, `docs/xnb-interoperability.md`,
-`ContentPipeline.hpp/.cpp`, `tools/content/content.cpp` and `SongContentTypeReader.cpp` — where both
-branches independently found and fixed the same `SongReader` duration defect.
+| Concern | Surviving location |
+|---|---|
+| XNB serializer core, type writers, registry, container options | `modules/content/include/CNA/Internal/Xnb/`, `modules/content/src/Xnb/` |
+| XNB **output** as a content-pipeline format | `CNA/Content/Pipeline/XnbOutputContentPipeline.hpp` |
+| XNB **input** (`.xnb` as a *source*, transcoded) | `CNA/Content/Pipeline/XnbContentPipeline.hpp` |
+| Independent conformance parser | `tools/xnb/xnb_conformance.py` |
+| Task IDs | `XNAP-01`…`XNAP-9A`, two hex digits |
 
-**The task IDs collide.** `pipeline` uses three-digit IDs and this branch uses two-digit ones, so
-`XNAP-01` and `XNAP-001` are different tasks with similar names. This plan's own rule is *never
-reuse an ID*; whichever branch survives, one numbering has to be retired rather than merged.
+`XnbContentPipeline` and `XnbOutputContentPipeline` are **not** two writers and must not be merged:
+the first reads `.xnb` and the second writes it. Both are correct and both stay.
 
-#### Already delivered on `pipeline` — re-implemented here for nothing
+The superseded architecture's paths are gone and must not reappear as a second writer:
+
+| Removed path | Replaced by |
+|---|---|
+| `modules/content/include/CNA/Content/Xnb/` | `modules/content/include/CNA/Internal/Xnb/` |
+| `modules/content/src/XnbWrite/` | `modules/content/src/Xnb/` |
+| `XnbOutput.hpp`, `XnbOutput.cpp`, `XnbModelOutput.cpp` | `XnbOutputContentPipeline.hpp/.cpp` |
+| `scripts/xnb_conformance.py` | `tools/xnb/xnb_conformance.py` |
+| Task IDs `XNAP-001`…`XNAP-029` | retired; never reused, never renumbered |
+
+`XnbArchitectureUniquenessTest` in
+`modules/content/tests/CNA/Internal/Xnb/XnbArchitectureUniquenessTests.cpp` fails if any of those
+paths comes back, so this is enforced rather than only written down.
+
+#### 0.5.2 How the two histories related (historical)
+
+Both branches started at `756096626`. `pipeline` carried 5 commits and 55 changed files; this
+branch carried 20 commits and 97 changed files at the point they met. They were siblings, not a
+sequence, and 15 files were touched by both — including this plan file,
+`docs/xnb-interoperability.md`, `ContentPipeline.hpp/.cpp`, `tools/content/content.cpp` and
+`SongContentTypeReader.cpp`, where both branches independently found and fixed the same
+`SongReader` duration defect.
+
+The task IDs collided: `pipeline` used three-digit IDs and this branch two-digit ones, so
+`XNAP-01` and `XNAP-001` were different tasks with similar names. The `XNAP-0##` numbering was
+retired with the implementation it described; this plan's two-digit numbering is the live one.
+
+#### 0.5.3 Delivered on `pipeline` and re-implemented here — the cost of the mistake
 
 Every one of these was `[x]` on `pipeline` before this session began:
 
@@ -179,18 +217,19 @@ corpus · `docs/xnb-interoperability.md` · the custom-type writer extension poi
 
 That is Phases B, C, most of D, E and G of this plan.
 
-#### Present on `pipeline` and **missing** here
+#### 0.5.4 Present on `pipeline`, absent here — and what happened to each
 
-- `Decimal`, `Enum<T>`, `T[]` and `Nullable<T>` are registered writers there. Here `Decimal` is
-  recorded as absent (`XNAP-20`) and the array/nullable templates exist unregistered (`XNAP-22`).
-  *(`Decimal` ported — `XNAP-97`. `Enum<T>` — `XNAP-98`.)*
-- `BoundingFrustum` has a writer there and none here. *(Ported — `XNAP-97`.)*
-- The build manifest carries `rootReaderName` per output there (schema 9); here it does not.
-  *(`XNAP-99`.)*
-- Xbox 360 is simply **excluded from the writable platform set** there. Here it is writable and
-  refused at write time with an opt-in (`XNAP-82`). Theirs is the smaller surface.
+| Feature `pipeline` had | Outcome |
+|---|---|
+| `Decimal` writer | **Ported** (`XNAP-97`), behind the same `SHARP_RUNTIME_HAS_NATIVE_INT128` guard the reader carries. |
+| `BoundingFrustum` writer | **Ported** (`XNAP-97`). |
+| `Enum<T>` writer | **Ported** (`XNAP-98`) — and porting it exposed a real defect in the reader-identity model, fixed by `XnbReaderIdentity::targetSharesGenericArguments`. |
+| `T[]` and `Nullable<T>` registered writers | **Ported as far as CNA's reader supports** (`XNAP-22`): every instantiation CNA's own runtime reader registry resolves is registered, and the rest stays an explicit extension point rather than a writer with no reader. |
+| Manifest `rootReaderName` (schema 9) | **Ported** (`XNAP-99`), recorded from the actual write rather than declared per writer, and fingerprinted so a changed root reader invalidates the artifact. |
+| Xbox 360 excluded from the writable platform set | **Not ported, deliberately.** Here `x` is writable but refused at write time unless `allowUnverifiedXboxPayloads` is set (`XNAP-82`). `pipeline`'s surface was smaller; this one lets somebody with real hardware produce candidate files, which is the only way the gap ever closes. |
+| Architecture/usage documentation (`docs/xna-content-pipeline.md`) | **Folded in** (`XNAP-9A`) as `docs/xnb-interoperability.md` §0. |
 
-#### Genuinely new here, and open or absent on `pipeline`
+#### 0.5.5 Genuinely new here, and open or absent on `pipeline`
 
 - **glTF/GLB → `Model`** (`XNAP-56`–`XNAP-59`). `pipeline`'s `XNAP-022` left this open for exactly
   the reason this branch resolved: CNB schema 1 stores a vertex stride and no `VertexDeclaration`.
@@ -211,8 +250,10 @@ That is Phases B, C, most of D, E and G of this plan.
   a comparison against another producer.
 - The untrusted-input hardening sweep (`XNAP-85`) and the recorded performance numbers (`XNAP-93`).
 
-Roughly two thirds of this branch duplicates `pipeline`; roughly one third is new and would be
-worth carrying across regardless of which implementation survives.
+Roughly two thirds of this branch duplicated `pipeline`; roughly one third was new. The
+reconciliation kept this branch's architecture and carried `pipeline`'s remaining features across
+one at a time, each with its own task ID and test — which is why the duplication is now a closed
+chapter with a paper trail rather than a fork somebody has to choose between.
 
 ---
 
@@ -515,6 +556,7 @@ arrives with its own tests.
 | `XNAP-98` | Port `pipeline`'s `Enum<T>` writer support. | [x] `XnbEnumTypeWriter<TEnum>` writes the underlying `Int32` — the exact inverse of `EnumTypeReader<T>`, which this repository already had on the reading side — and `RegisterXnbEnumWriter<T>(registry, name, assembly)` registers one. `pipeline` keyed its registry by .NET **name** and therefore had to re-check at write time that a boxed value matched its writer; here the key is the C++ type, so that class of mismatch does not exist. Not registered by default, for the reason the row above gives: a C++ enum does not carry its .NET name. **One real defect found and fixed on the way**: `XnbReaderIdentity` conflated the reader's generic arguments with the target type's own. `EnumReader\`1[[SurfaceFormat]]` produces the *non-generic* `SurfaceFormat`, so the argument list was being appended to the target name a second time — and the array writer had the same latent bug (`System.Int32[][[System.Int32]]`), which would have surfaced the first time an array appeared as a nested generic argument. `targetSharesGenericArguments` now records the distinction, and both cases are pinned by `XnbEnumReaderIdentityTest`. |
 | `XNAP-99` | Port `pipeline`'s manifest `rootReaderName` field (schema version 9). | [x] `ContentBuildManifestOutput::rootReaderName`, serialized, parsed, compared and — the part that matters — fingerprinted into the `outputDefinitions` domain, so a build that changes which reader an asset dispatches to invalidates the artifact instead of being skipped as unchanged (asserted directly). Manifest version 8 → 9; the earlier-versions-rejected test now covers 8, and the CLI's stale-manifest test reads the constant rather than a literal so the next bump does not silently pass. **Deviation from `pipeline`, deliberate**: there an `.xnb` output carries *no* CNB identity and `rootReaderName` instead, enforced by the validator. Here the XNB pipeline writers declare a synthetic `assetTypeId`/schema/type name because this branch's whole incremental machinery (`writerSchemas`, the `schemaFor` lookups) is built on them; removing that is a far larger change than porting a field, so both identities coexist and the validator checks what it still can — a recorded reader name must be non-blank and free of control characters. It cannot check "`.xnb` has one, CNB has none", because a manifest entry does not record its output's container format; that is stated in the code rather than left implied. **Improvement over `pipeline`**: the name is not a per-writer constant. `XnbWriter` records the canonical reader of the first object written at depth zero and `WriteXnbAssetWithIdentity()` returns it, so the manifest identity and the file's own type-table dispatch are read from one source and cannot drift — `XnbOutputContentPipelineTest.EveryXnbWriterReportsTheRootReaderTheFileActuallyDispatchesTo` compares the reported name against the decoded file. |
 | `XNAP-9A` | Reconcile the two `docs/` sets: fold `pipeline`'s `docs/xna-content-pipeline.md` architecture and usage material into the surviving documents. | [x] Compared section by section. Everything that document carried already had a home here except its architecture orientation, which is now `docs/xnb-interoperability.md` §0: the three-layer table with the real paths on this branch, the writer-boundary diagram, and the design commitment that a processor never learns which container it is feeding. Its tool usage is already §7 *Using it*; its extension points are §8 and `docs/content-pipeline.md`'s **Custom extensions**; its CNB relationship is that document's **CNJ, CNB, and XNB**; its provenance, limitations and verification sections are §9, §6 and §10 here, in more detail. Nothing was carried over verbatim where the surviving text was already the better one. |
+| `XNAP-9B` | Make the reconciliation checkable rather than only described: a script that recounts this plan's task table against its own stated totals, and a test that fails if the superseded writer architecture's paths reappear. | [x] The stated totals were wrong on two counts at once -- "69 tasks" against a 73-row table, and "57 + 8 + 2 + 1" against its own "69" -- which is exactly the class of error a reader cannot catch and five lines of Python catch every time. `tools/xnb/check_plan_status.py` recounts the table, compares it with *every* "N tasks: ..." sentence in the file, rejects a duplicate task ID, and rejects a `[~]`/`[!]` row with no explanation after the marker; ctest `CnaXnbPlanStatusConsistency` runs it. `XnbArchitectureUniquenessTest` asserts the surviving paths exist, the six superseded ones do not, and no file under the content modules, tools, cmake or interop harness references them -- because a removed architecture comes back when somebody restores a header to fix a stale include. |
 
 ---
 

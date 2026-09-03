@@ -9,11 +9,22 @@ The read side is a separate document: `docs/xnb-content-pipeline-support.md` cov
 already-built `.xnb` files. The task history and the per-decision record are in
 `plans/plan_xnapipeline.md`.
 
-> **Provenance note (2026-09-03).** This document, and the plan behind it, were written believing
-> no XNB writer existed in the repository. That was true of `next` and false of the repository: a
-> parallel implementation exists on the `pipeline` branch, and much of what is described here
-> duplicates it. See `plans/plan_xnapipeline.md` §0.5 for exactly which parts are duplicates and
-> which are new. The capability claims below are about **this** implementation and are unaffected.
+> **Provenance note (2026-09-03) — one implementation, and why the history mentions two.** This
+> document, and the plan behind it, were written believing no XNB writer existed in the repository.
+> That was true of the `next` branch and false of the repository: a second implementation of the
+> same subsystem had already been developed on the `pipeline` branch, and the duplication was only
+> discovered *after* the implementation described here had been written. Both histories were then
+> reconciled: **one implementation survives** — `CNA::Internal::Xnb`, described in §0 — and the
+> features worth keeping from the superseded one (the `Decimal`, `BoundingFrustum` and `Enum<T>`
+> writers, the manifest's `rootReaderName` identity, and its architecture documentation) were
+> ported into it rather than left behind. The superseded paths were removed and a test fails if
+> they reappear.
+>
+> So the duplicate implementation is **historical provenance, not a current second architecture**.
+> The mistake stays on the record — `plans/plan_xnapipeline.md` §0 and §0.5 give the full account,
+> including what it cost — because an audit that checks one branch and concludes something about a
+> repository is a mistake worth being able to find again. Every capability claim below is about the
+> single surviving implementation.
 
 > **The single most important sentence in this document.** No table below claims verification
 > against a genuine Microsoft XNA 4.0 runtime, because no XNA 4.0 runtime — and no Windows, Wine,
@@ -50,6 +61,14 @@ Three layers, separated so that source decoding never leaks into serialization:
         ▼                                   ▼
       .cnb                                .xnb
 ```
+
+**`XnbContentPipeline` and `XnbOutputContentPipeline` are not two writers.** The names are close
+enough to invite the mistake, so plainly: `XnbContentPipeline` treats `.xnb` as a **source** and
+transcodes it into `.cnb`; `XnbOutputContentPipeline` is the **output** side that serializes a
+processed value into `.xnb`. One reads the format, one writes it. There is exactly one XNB writer
+implementation in the tree — `CNA::Internal::Xnb` — and
+`XnbArchitectureUniquenessTest` fails if a second one is reintroduced under the paths a superseded
+implementation once used.
 
 The **importer and the processor are identical for both formats**; only the serializer differs.
 Forking processors per output format is the one mistake this design exists to prevent, so a

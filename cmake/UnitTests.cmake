@@ -1076,6 +1076,15 @@ if(CNA_BUILD_TESTS)
                 PROPERTIES LABELS "content;xnb;conformance")
         endif()
         unset(_cna_xnb_conformance_files)
+
+        # plans/plan_xnapipeline.md XNAP-9B: the plan's stated task totals must agree with its own
+        # task table. They disagreed once, in a way no reader could be expected to catch.
+        add_test(NAME CnaXnbPlanStatusConsistency
+            COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/tools/xnb/check_plan_status.py"
+                "${CMAKE_SOURCE_DIR}/plans/plan_xnapipeline.md")
+        set_tests_properties(CnaXnbPlanStatusConsistency
+            PROPERTIES LABELS "content;xnb;documentation")
     endif()
 
     add_test(NAME CnaSdl2OnlyRendererGate
