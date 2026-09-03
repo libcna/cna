@@ -53,11 +53,20 @@ offset size  field
 | Flag bit | Meaning | CNA writer |
 |---|---|---|
 | `0x01` | Graphics profile: set = HiDef, clear = Reach | written from `XnbFileOptions::graphicsProfile`; **default Reach**, because a Reach asset loads under both profiles and a HiDef one does not |
-| `0x40` | A single raw LZ4 block — a later-ecosystem extension, **never** part of XNA 4.0 | not implemented (`XNAP-80`); requesting it fails with a message naming the task |
-| `0x80` | LZX | not implemented (`XNAP-81`); requesting it fails with a message naming the task |
+| `0x40` | A single raw LZ4 block — a later-ecosystem extension, **never** part of XNA 4.0 | **written**, and refused outright on an XNA 4.0 target platform because that pairing describes a file that cannot exist |
+| `0x80` | LZX | **not implemented** (`XNAP-81`); requesting it fails with a message naming the task |
 
-CNA's writer never writes a compressed file and never claims to. Asking for compression is refused
-rather than silently producing raw bytes under a compressed header.
+LZX is the compression Microsoft XNA 4.0 itself produced, and it is the one CNA cannot write. CNA
+*reads* it. Writing it needs an LZX encoder — Huffman trees for three alphabets, delta-encoded tree
+transmission, block-type selection, the sliding window's position-slot encoding — which is a
+different program from the decoder CNA has. **An uncompressed file loads in every XNA 4.0 runtime**,
+so nothing is blocked by this; only file size is affected.
+
+There is a shortcut that is deliberately not taken: LZX's uncompressed block type would produce a
+conforming stream with no entropy coding at all, so CNA could set the `0x80` flag today and
+compress nothing. That would be honest only if documented so precisely that nobody would want it,
+and it would still risk an interoperability failure this environment cannot test for. Asking for
+LZX is refused instead.
 
 ### 2.2 Target platforms — three are XNA 4.0, thirteen are not
 
@@ -223,7 +232,7 @@ Stated plainly, because a gap named is worth more than a gap rounded up.
 | Not supported | Detail |
 |---|---|
 | **Compiling `.fx` to shader bytecode** | CNA does not host an HLSL compiler, and that is a standing decision rather than an oversight (`plans/plan_fx.md`: "Out of scope; CNA will not embed an HLSL source compiler"). It will not fake it by embedding source text in an `Effect` asset. What it *does* do is build an already-compiled `.fxb` into an `Effect` `.xnb` with the bytecode byte for byte — see §7. Compile the `.fx` with `fxc` at profile `fx_2_0`, which is what XNA's own Content Pipeline used. |
-| **Compressed output** | Neither LZX (`0x80`) nor LZ4 (`0x40`) is written. Both are refused with a message naming the task. CNA *reads* both. |
+| **LZX compressed output** | The scheme XNA 4.0 itself produced. CNA reads it and cannot write it; see §2.1. An uncompressed file loads everywhere LZX does, so this costs file size and nothing else. |
 | **Xbox 360 semantics** | Beyond the `SoundEffect` WAVEFORMATEX byte swap, nothing is endian-corrected or tiled — and the writer refuses an `x` target rather than emitting Windows bytes under an Xbox header. `--xnb-allow-unverified-xbox` overrides it for hardware testing. |
 | **Windows Phone semantics** | The header byte is written and the payloads are Windows's, which is very likely correct for a little-endian ARM target and is nonetheless **unverified**: no `m` fixture and no Windows Phone runtime exist here. |
 | **Array-valued effect parameters** | An `EffectMaterial` parameter that is `float[]`, `int[]` or `Matrix[]` is not written. Which reader instantiation XNA writes for one — `ArrayReader` or `ListReader`, over which element type — is not established by any fixture available here, and a guess would produce a file that loads into the wrong shape rather than one that fails to load. CNA's **reader** applies them if some other producer writes them. |

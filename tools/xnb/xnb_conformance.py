@@ -47,6 +47,9 @@ MAX_SHARED_RESOURCES = 1_000_000
 MAX_COLLECTION_ELEMENTS = 10_000_000
 MAX_STRING_BYTES = 1 * 1024 * 1024
 MAX_BLOB_BYTES = 256 * 1024 * 1024
+# Ceiling on a decompressed payload, so a hostile length field cannot exhaust memory here
+# either -- the same reasoning the C++ side's XnbReadLimits applies.
+MAX_PAYLOAD_BYTES = 256 * 1024 * 1024
 
 HEADER_BYTES = 10
 
@@ -199,6 +202,71 @@ class Cursor:
 
     def rectangle(self):
         return [self.i32(), self.i32(), self.i32(), self.i32()]
+
+
+def lz4_block_decompress(block: bytes, expected: int, path: str) -> bytes:
+    """Decodes one raw LZ4 block.
+
+    An independent implementation of the published block grammar: a token byte whose high nibble
+    is a literal length and whose low nibble is a match length minus four, then any 255-chained
+    length extensions, the literals, a two-byte little-endian offset, and any match-length
+    extension. The final sequence carries literals and stops.
+    """
+    out = bytearray()
+    index = 0
+    size = len(block)
+    while index < size:
+        token = block[index]
+        index += 1
+
+        literal_length = token >> 4
+        if literal_length == 15:
+            while True:
+                if index >= size:
+                    raise XnbError(f"{path}: literal-length extension runs past the block")
+                step = block[index]
+                index += 1
+                literal_length += step
+                if literal_length > MAX_PAYLOAD_BYTES:
+                    raise XnbError(f"{path}: literal length is implausibly large")
+                if step != 255:
+                    break
+        if index + literal_length > size:
+            raise XnbError(f"{path}: literals run past the end of the block")
+        out += block[index:index + literal_length]
+        index += literal_length
+
+        if index == size:
+            break  # the final sequence is literals only
+        if index + 2 > size:
+            raise XnbError(f"{path}: match offset runs past the end of the block")
+        offset = block[index] | (block[index + 1] << 8)
+        index += 2
+        if offset == 0 or offset > len(out):
+            raise XnbError(f"{path}: match offset {offset} points outside the output so far")
+
+        match_length = (token & 0x0F) + 4
+        if (token & 0x0F) == 15:
+            while True:
+                if index >= size:
+                    raise XnbError(f"{path}: match-length extension runs past the block")
+                step = block[index]
+                index += 1
+                match_length += step
+                if match_length > MAX_PAYLOAD_BYTES:
+                    raise XnbError(f"{path}: match length is implausibly large")
+                if step != 255:
+                    break
+        start = len(out) - offset
+        for position in range(match_length):
+            out.append(out[start + position])
+        if len(out) > MAX_PAYLOAD_BYTES:
+            raise XnbError(f"{path}: decompressed output exceeded the parser's ceiling")
+
+    if len(out) != expected:
+        raise XnbError(
+            f"{path}: decompressed to {len(out)} bytes but the container declares {expected}")
+    return bytes(out)
 
 
 def strip_assembly(name: str) -> str:
@@ -738,13 +806,25 @@ def parse(path: str) -> dict:
         "compression": "lzx" if flags & 0x80 else ("lz4" if flags & 0x40 else "none"),
         "totalLength": total,
     }
-    if report["compression"] != "none":
+    body = data[HEADER_BYTES:]
+    if report["compression"] == "lz4":
+        # Decompressed by this parser's own LZ4 block decoder, written from the published block
+        # format and sharing nothing with CNA's encoder or its decoder. A compressed file that
+        # only ever gets its header checked is a compressed file nobody has validated.
+        if len(body) < 4:
+            raise XnbError(f"{path}: truncated before its decompressed-size field")
+        expected = struct.unpack_from("<i", body, 0)[0]
+        if expected < 0 or expected > MAX_PAYLOAD_BYTES:
+            raise XnbError(f"{path}: declares a decompressed size of {expected} bytes")
+        body = lz4_block_decompress(body[4:], expected, path)
+        report["decompressedLength"] = expected
+    elif report["compression"] != "none":
         report["status"] = "container-only"
-        report["note"] = ("compressed payloads are not decompressed by this parser; the "
-                          "container header was validated")
+        report["note"] = ("LZX payloads are not decompressed by this parser; the container "
+                          "header was validated")
         return report
 
-    cursor = Cursor(data[HEADER_BYTES:], path)
+    cursor = Cursor(body, path)
     reader_count = cursor.seven_bit_int()
     if reader_count < 0 or reader_count > MAX_TYPE_READERS:
         raise XnbError(f"{path}: type-reader count {reader_count} is out of range")

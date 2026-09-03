@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Xnb/XnbWriter.hpp"
 
+#include "CNA/Internal/Xnb/XnbCompressionWriter.hpp"
+
 #include <algorithm>
 #include <limits>
 #include <utility>
@@ -393,15 +395,34 @@ namespace CNA::Internal::Xnb
         const std::vector<std::uint8_t> body = body_.Take();
         payload.insert(payload.end(), body.begin(), body.end());
 
-        if (options_.compression != XnbOutputCompression::None)
+        if (options_.compression == XnbOutputCompression::Lzx)
         {
             throw XnbWriteException(
                 "'" + assetName_ +
-                "': compressed XNB output is not implemented yet (plans/plan_xnapipeline.md "
-                "XNAP-80 for LZ4, XNAP-81 for LZX). Write an uncompressed file instead.");
+                "': LZX output is not implemented (plans/plan_xnapipeline.md XNAP-81). LZX is the "
+                "scheme Microsoft XNA 4.0 itself produced, and writing one needs a bounded LZX "
+                "*encoder*, which CNA does not have -- it has only the decoder. Write an "
+                "uncompressed file, which every XNA 4.0 runtime also loads.");
         }
 
         constexpr std::size_t kHeaderBytes = 10u;
+        const std::size_t decompressedSize = payload.size();
+        if (options_.compression == XnbOutputCompression::Lz4)
+        {
+            // The container's own four-byte decompressed-size field takes the place of an LZ4
+            // frame header, which is why this is a single raw block rather than a frame.
+            std::vector<std::uint8_t> block = CompressXnbLz4Block(payload);
+            std::vector<std::uint8_t> framed;
+            framed.reserve(4u + block.size());
+            for (int shift = 0; shift < 32; shift += 8)
+            {
+                framed.push_back(
+                    static_cast<std::uint8_t>((decompressedSize >> shift) & 0xFFu));
+            }
+            framed.insert(framed.end(), block.begin(), block.end());
+            payload = std::move(framed);
+        }
+
         const std::size_t totalLength = kHeaderBytes + payload.size();
         if (totalLength > static_cast<std::size_t>(options_.limits.maxFileSize))
         {

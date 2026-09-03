@@ -32,6 +32,9 @@
 #include "CNA/Internal/Xnb/DecimalDateTimeContentTypeReaders.hpp"
 #include "CNA/Internal/Xnb/EffectMaterialContentTypeReaders.hpp"
 #include "CNA/Internal/Xnb/XnbAssetTypeWriters.hpp"
+#include "CNA/Internal/Xnb/XnbCompressionWriter.hpp"
+#include "CNA/Internal/Xnb/XnbCanonicalData.hpp"
+#include "CNA/Internal/Xnb/XnbDecompression.hpp"
 #include "CNA/Internal/Xnb/MathContentTypeReaders.hpp"
 #include "CNA/Internal/Xnb/PrimitiveContentTypeReaders.hpp"
 #include "CNA/Internal/Xnb/XnbHeader.hpp"
@@ -47,6 +50,33 @@ using Microsoft::Xna::Framework::Content::ContentTypeReaderManager;
 
 namespace
 {
+    /** @brief A self-cleaning temporary directory for tests that need a real file. */
+    class ScratchDirectory
+    {
+    public:
+        explicit ScratchDirectory(const std::string& tag)
+            : path_(std::filesystem::temp_directory_path() /
+                    ("cna_xnb_writer_file_" + tag + "_" +
+                     std::to_string(reinterpret_cast<std::uintptr_t>(this))))
+        {
+            std::filesystem::create_directories(path_);
+        }
+
+        ~ScratchDirectory()
+        {
+            std::error_code error;
+            std::filesystem::remove_all(path_, error);
+        }
+
+        ScratchDirectory(const ScratchDirectory&) = delete;
+        ScratchDirectory& operator=(const ScratchDirectory&) = delete;
+
+        [[nodiscard]] const std::filesystem::path& Path() const { return path_; }
+
+    private:
+        std::filesystem::path path_;
+    };
+
     /** @brief Reads a committed fixture, failing the test when it is missing. */
     std::vector<std::uint8_t> ReadFixture(const std::filesystem::path& path)
     {
@@ -319,14 +349,110 @@ TEST_F(XnbWriterTest, Lz4CompressionIsRefusedForAnXna40TargetPlatform)
     EXPECT_THROW(ValidateXnbFileOptions(options), XnbWriteException);
 }
 
-TEST_F(XnbWriterTest, CompressedOutputFailsWithAPlanReferenceRatherThanSilentlyWritingRawBytes)
+// -- LZ4 output (XNAP-80) ----------------------------------------------------------------------
+
+TEST(XnbLz4BlockTest, EveryBlockThisEncoderProducesDecodesBackToItsInput)
 {
+    // Round-tripped through CNA's own LZ4 *decoder*, which was written from the same published
+    // block format but shares no code with the encoder. The cases below are chosen to walk the
+    // format's own boundaries rather than to look plausible: an empty payload, one shorter than a
+    // legal match can exist in, one exactly at the twelve-byte search margin, a highly repetitive
+    // payload that exercises long matches and match-length extension bytes, and an incompressible
+    // one that exercises literal-length extension bytes.
+    std::vector<std::vector<std::uint8_t>> payloads;
+    payloads.push_back({});
+    payloads.push_back({1u});
+    payloads.push_back(std::vector<std::uint8_t>(12u, 0x5Au));
+    payloads.push_back(std::vector<std::uint8_t>(13u, 0x5Au));
+    payloads.push_back(std::vector<std::uint8_t>(4096u, 0xA5u));
+
+    std::vector<std::uint8_t> repetitive;
+    for (int index = 0; index < 2000; ++index)
+    {
+        const char* word = "the quick brown fox ";
+        repetitive.insert(repetitive.end(), word, word + 20);
+    }
+    payloads.push_back(repetitive);
+
+    std::vector<std::uint8_t> noisy(8192u);
+    std::uint32_t state = 0xDEADBEEFu;
+    for (std::uint8_t& byte : noisy)
+    {
+        state = state * 1664525u + 1013904223u;
+        byte = static_cast<std::uint8_t>(state >> 24);
+    }
+    payloads.push_back(noisy);
+
+    for (std::size_t index = 0; index < payloads.size(); ++index)
+    {
+        const std::vector<std::uint8_t>& payload = payloads[index];
+        const std::vector<std::uint8_t> block = CompressXnbLz4Block(payload);
+        ASSERT_FALSE(block.empty()) << "payload " << index;
+        const std::vector<std::uint8_t> restored = DecompressXnbLz4Payload(
+            block.data(), static_cast<std::int32_t>(block.size()),
+            static_cast<std::int32_t>(payload.size()), "block");
+        EXPECT_EQ(restored, payload) << "payload " << index;
+    }
+
+    // The repetitive payload has to actually get smaller, or the encoder is emitting literals and
+    // calling it compression.
+    EXPECT_LT(CompressXnbLz4Block(repetitive).size(), repetitive.size() / 4u);
+    EXPECT_EQ(CompressXnbLz4Block(repetitive), CompressXnbLz4Block(repetitive));
+}
+
+TEST_F(XnbWriterTest, AnLz4CompressedFileRoundTripsThroughTheReader)
+{
+    ScratchDirectory scratch("lz4");
+    XnbFileOptions options;
+    // LZ4 is an extended-ecosystem format, so an XNA 4.0 target platform refuses it outright and
+    // this file has to name one of the others.
+    options.platform = XnbTargetPlatform::DesktopGL;
+    options.compression = XnbOutputCompression::Lz4;
+
+    XnbTextureData texture;
+    texture.kind = XnbTextureKind::Texture2D;
+    texture.surfaceFormat = Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color;
+    texture.width = 32u;
+    texture.height = 32u;
+    texture.mipCount = 1u;
+    texture.levels = {std::vector<std::uint8_t>(32u * 32u * 4u, 0x7Fu)};
+
+    const std::vector<std::uint8_t> compressed =
+        WriteXnbAsset(XnbTexture2DContent{texture}, options, "tile");
+    ASSERT_GE(compressed.size(), 14u);
+    EXPECT_EQ(compressed[5] & 0x40u, 0x40u) << "the LZ4 flag bit must be set";
+
+    XnbFileOptions plain = options;
+    plain.compression = XnbOutputCompression::None;
+    const std::vector<std::uint8_t> uncompressed =
+        WriteXnbAsset(XnbTexture2DContent{texture}, plain, "tile");
+    EXPECT_LT(compressed.size(), uncompressed.size() / 4u)
+        << "a flat texture must actually get much smaller";
+
+    const std::filesystem::path path = scratch.Path() / "tile.xnb";
+    {
+        std::ofstream stream(path, std::ios::binary);
+        stream.write(reinterpret_cast<const char*>(compressed.data()),
+                     static_cast<std::streamsize>(compressed.size()));
+    }
+    // The whole point: CNA's reader takes the compressed file apart without being told anything
+    // beyond the flag byte, and gets the same pixels back.
+    const XnbCanonicalAsset asset = DecodeXnbCanonicalAsset(path);
+    EXPECT_EQ(asset.rootReader, "Microsoft.Xna.Framework.Content.Texture2DReader");
+    EXPECT_EQ(std::get<XnbTextureData>(asset.value).levels, texture.levels);
+}
+
+TEST_F(XnbWriterTest, LzxOutputFailsWithAPlanReferenceRatherThanSilentlyWritingRawBytes)
+{
+    // LZX is the one Microsoft XNA 4.0 itself produced, and CNA has only the decoder for it.
+    // Setting the flag and writing raw bytes under it would produce a file that no LZX decoder
+    // can read, so the refusal names the task instead.
     XnbFileOptions options;
     options.compression = XnbOutputCompression::Lzx;
     try
     {
         (void)WriteXnbAsset(std::int32_t{1}, options, "one");
-        FAIL() << "compressed output is not implemented and must not silently succeed";
+        FAIL() << "LZX output is not implemented and must not silently succeed";
     }
     catch (const XnbWriteException& error)
     {

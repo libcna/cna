@@ -32,6 +32,7 @@
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 
@@ -435,6 +436,54 @@ TEST(XnbConformanceTest, TheIndependentParserReadsBackTheAssetRootsOutsideTheCom
         EXPECT_NE(output.find(roots[index].first), std::string::npos)
             << "asset " << index << " rendered as " << output;
     }
+}
+
+TEST(XnbConformanceTest, TheIndependentParserDecompressesAndValidatesAnLz4File)
+{
+    if (!ConformanceParserAvailable())
+    {
+        GTEST_SKIP() << "python3 or tools/xnb/xnb_conformance.py is unavailable";
+    }
+    using namespace CNA::Internal::Xnb;
+    using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+
+    // plans/plan_xnapipeline.md XNAP-80. The parser has its own LZ4 block decoder, written from
+    // the published grammar and sharing nothing with CNA's encoder or CNA's decoder, so a
+    // compressed file this writer produces is validated by a genuinely second implementation
+    // rather than only by the one that made it.
+    ScratchDirectory scratch("lz4");
+    XnbTextureData texture;
+    texture.kind = XnbTextureKind::Texture2D;
+    texture.surfaceFormat = SurfaceFormat::Color;
+    texture.width = 16u;
+    texture.height = 16u;
+    texture.mipCount = 1u;
+    texture.levels = {std::vector<std::uint8_t>(16u * 16u * 4u, 0x33u)};
+
+    XnbFileOptions options;
+    options.platform = XnbTargetPlatform::DesktopGL;
+    options.compression = XnbOutputCompression::Lz4;
+
+    const std::filesystem::path path = scratch.Path() / "flat.xnb";
+    {
+        const std::vector<std::uint8_t> file =
+            WriteXnbAsset(XnbTexture2DContent{texture}, options, "flat");
+        std::ofstream stream(path, std::ios::binary);
+        stream.write(reinterpret_cast<const char*>(file.data()),
+                     static_cast<std::streamsize>(file.size()));
+    }
+
+    std::string output;
+    ASSERT_EQ(RunProgram("python3", {kConformanceParser.string(), "--json", path.string()},
+                         output),
+              0)
+        << output;
+    EXPECT_NE(output.find("\"compression\": \"lz4\""), std::string::npos) << output;
+    EXPECT_NE(output.find("\"surfaceFormat\": \"Color\""), std::string::npos) << output;
+    // "container-only" is what the parser reports for a payload it did not decompress; seeing it
+    // here would mean the whole point of this test quietly did not happen.
+    EXPECT_EQ(output.find("container-only"), std::string::npos) << output;
+    EXPECT_NE(output.find("\"status\": \"ok\""), std::string::npos) << output;
 }
 
 TEST(XnbConformanceTest, TheIndependentParserRefusesAMalformedContainer)
