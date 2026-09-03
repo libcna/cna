@@ -215,7 +215,8 @@ namespace
     }
 
     int VerifyLegacyTexcrdTranslationForProfile(
-        const char* profile, std::string_view expectedAssignment)
+        const char* profile, std::string_view expectedAssignment,
+        std::string_view expectedInputDeclaration)
     {
         // ps_1_1: texcoord t0; mov r0, t0; end. The official XNA 4 EffectProcessor
         // emits TEXCRD for legacy techniques still carried alongside their ps_2_0
@@ -264,6 +265,35 @@ namespace
                     profile);
                 failure = 1;
             }
+            if (!expectedInputDeclaration.empty() &&
+                output.find(expectedInputDeclaration) == std::string_view::npos)
+            {
+                std::printf(
+                    "legacy TEXCRD probe (%s): translated GLSL does not declare "
+                    "the implicit TEXCOORD0 input\n",
+                    profile);
+                failure = 1;
+            }
+            if (output.find("#define ps_t0") != std::string_view::npos)
+            {
+                std::printf(
+                    "legacy TEXCRD probe (%s): translated GLSL aliases the "
+                    "mutable texture register to a read-only input\n",
+                    profile);
+                failure = 1;
+            }
+            const std::size_t mainOffset = output.find("void main()");
+            const std::size_t assignmentOffset = output.find(expectedAssignment);
+            if (mainOffset == std::string_view::npos ||
+                assignmentOffset == std::string_view::npos ||
+                assignmentOffset < mainOffset)
+            {
+                std::printf(
+                    "legacy TEXCRD probe (%s): translated GLSL initializes a "
+                    "mutable texture register outside main\n",
+                    profile);
+                failure = 1;
+            }
         }
         MOJOSHADER_freeParseData(parsed);
         if (failure == 0)
@@ -275,9 +305,13 @@ namespace
     int VerifyLegacyTexcrdTranslation()
     {
         return VerifyLegacyTexcrdTranslationForProfile(
-                   MOJOSHADER_PROFILE_GLSL120, "ps_t0 = gl_TexCoord[0]") +
+                   MOJOSHADER_PROFILE_GLSL120, "ps_t0 = gl_TexCoord[0]", "") +
                VerifyLegacyTexcrdTranslationForProfile(
-                   MOJOSHADER_PROFILE_GLSLES, "ps_t0 = io_5_0");
+                   MOJOSHADER_PROFILE_GLSLES, "ps_t0 = io_5_0",
+                   "varying highp vec4 io_5_0;") +
+               VerifyLegacyTexcrdTranslationForProfile(
+                   MOJOSHADER_PROFILE_GLSLES3, "ps_t0 = io_5_0",
+                   "in highp vec4 io_5_0;");
     }
 
     /// Reports what the parser found, so a silently empty parse cannot read as success.
