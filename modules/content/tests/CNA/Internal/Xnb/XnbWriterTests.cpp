@@ -572,6 +572,70 @@ TEST_F(XnbWriterTest, GoldenXna40ListOfStringsIsByteIdentical)
     EXPECT_EQ(written, expected);
 }
 
+TEST_F(XnbWriterTest, GoldenMonoGameTexture2DIsByteIdentical)
+{
+    // plans/plan_xnapipeline.md XNAP-42. The golden test above proves the container and the
+    // collection protocol against Microsoft's own output; this one proves an *asset* writer's
+    // field layout against a second, independently produced file -- MonoGame's smallest real
+    // Texture2D fixture, a single opaque white pixel, from its own test corpus.
+    XnbTextureData texture;
+    texture.kind = XnbTextureKind::Texture2D;
+    texture.surfaceFormat = Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color;
+    texture.width = 1u;
+    texture.height = 1u;
+    texture.depth = 1u;
+    texture.faceCount = 1u;
+    texture.mipCount = 1u;
+    texture.levels = {{0xFFu, 0xFFu, 0xFFu, 0xFFu}};
+
+    XnbFileOptions options;
+    options.platform = XnbTargetPlatform::Windows;
+    options.version = XnbContainerVersion::Xna40;
+    options.graphicsProfile = XnbGraphicsProfile::Reach;
+    options.readerNameStyle = XnbReaderNameStyle::Xna40;
+
+    const std::vector<std::uint8_t> written =
+        WriteXnbAsset(XnbTexture2DContent{texture}, options, "white-1");
+    const std::vector<std::uint8_t> expected = ReadFixture(
+        "tests/assets/xnb/monogame/windows/uncompressed/white-1.xnb");
+    ASSERT_EQ(written.size(), expected.size());
+    EXPECT_EQ(written, expected);
+}
+
+TEST_F(XnbWriterTest, GoldenMonoGameSoundEffectIsByteIdentical)
+{
+    // plans/plan_xnapipeline.md XNAP-42, third golden. A SoundEffect exercises a different part of
+    // the format from a texture: a length-prefixed WAVEFORMATEX block whose fields are written
+    // individually, then the samples, then the loop region and duration. The sample bytes are
+    // taken from the fixture itself -- the claim under test is the *framing*, not that CNA can
+    // regenerate somebody else's sine wave.
+    const std::vector<std::uint8_t> expected = ReadFixture(
+        "tests/assets/xnb/monogame/windows/uncompressed/audio/tone_mono_44khz_16bit.xnb");
+    ASSERT_GT(expected.size(), 44100u);
+
+    XnbSoundEffectData sound;
+    sound.formatTag = 1u;
+    sound.channels = 1u;
+    sound.sampleRate = 44100u;
+    sound.averageBytesPerSecond = 88200u;
+    sound.blockAlign = 2u;
+    sound.bitsPerSample = 16u;
+    sound.samples.assign(expected.end() - 44100 - 12, expected.end() - 12);
+    sound.loopStart = 0;
+    sound.loopLength = 22050;
+    sound.storedDurationMs = 500u;
+
+    XnbFileOptions options;
+    options.platform = XnbTargetPlatform::DesktopGL;
+    options.version = XnbContainerVersion::Xna40;
+    options.graphicsProfile = XnbGraphicsProfile::Reach;
+    options.readerNameStyle = XnbReaderNameStyle::Xna40;
+
+    const std::vector<std::uint8_t> written = WriteXnbAsset(sound, options, "tone");
+    ASSERT_EQ(written.size(), expected.size());
+    EXPECT_EQ(written, expected);
+}
+
 // -- round-trips through CNA's own reader (XNAP-40) --------------------------------------------
 
 TEST_F(XnbWriterTest, PrimitiveRootsRoundTripThroughTheReader)

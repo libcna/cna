@@ -91,13 +91,13 @@ All 30 failures are environmental and reproduce on the unmodified tree:
 **Current (2026-09-03, after Phases B–F except the open rows):**
 
 ```text
-CnaContentTests:          1712 run   1614 passed   68 skipped   30 failed
+CnaContentTests:          1714 run   1616 passed   68 skipped   30 failed
 CnaContentPipelineTests:    37 run     37 passed    0 skipped    0 failed
-CnaTests (whole suite):   7844 run   7303 passed  512 skipped   29 failed
+CnaTests (whole suite):   7846 run   7305 passed  512 skipped   29 failed
 ```
 
 `CnaContentTests` shows the same 30 environmental failures as the recorded baseline, +96 tests,
-+127 passing, **zero new failures**. `CnaContentPipelineTests` is the new build-time module's own
++129 passing, **zero new failures**. `CnaContentPipelineTests` is the new build-time module's own
 focused executable and is entirely new. The whole-suite figure is recorded here for completeness;
 its 29 failures are the STUB-renderer `TextureCube`/`Texture3D`/capability group, the uid-0
 permission case and the two audio-device `MediaLibrary` cases — none of them content-pipeline
@@ -314,7 +314,7 @@ Legend: `[ ]` open · `[x]` complete · `[~]` partially complete (detail in the 
 |---|---|---|
 | `XNAP-40` | Round-trip every writer through CNA's own reader with value assertions (`cna-rt`). | [x] |
 | `XNAP-41` | **Byte-exact golden test against the genuine XNA 4.0 fixture**: write the same `List<string>` and compare to `ContentManifestListStrings.xnb` byte for byte (`golden`). | [x] |
-| `XNAP-42` | Byte-exact golden tests against MonoGame fixtures where CNA's canonical data is lossless for them. | [ ] |
+| `XNAP-42` | Byte-exact golden tests against MonoGame fixtures where CNA's canonical data is lossless for them. | [x] Two more golden matches, so three in total across two independent producers. **`Texture2D`**: CNA reproduces MonoGame's smallest real texture fixture (`white-1.xnb`, one opaque white pixel) byte for byte — the field layout, the reader-name spelling and the container all agree with a second producer, not only with CNA's own reader. **`SoundEffect`**: matching `tone_mono_44khz_16bit.xnb` required a real change, recorded in §5 — CNA wrote the 16-byte `PCMWAVEFORMAT` block that omits `cbSize`, and the only observed producer writes the full 18-byte `WAVEFORMATEX` with `cbSize` present and zero. Both load in CNA, both occur in the wild, and matching an observed producer beats matching none, so the writer now emits 18. The committed interop corpus was regenerated accordingly (`soundeffect_pcm16_mono_22050.xnb`, 4513 → 4515 bytes). Not attempted: `SpriteFont` and `Model`, whose MonoGame fixtures carry atlas pixels and mesh data CNA has no way to regenerate — a golden test there would be testing whether CNA can reproduce somebody else's art, not whether it can frame it. |
 | `XNAP-43` | Independent specification-based XNB parser (Python), sharing no code or assumptions with CNA (`spec`). | [x] |
 | `XNAP-44` | Deterministic-output tests: same inputs ⇒ byte-identical files, across process runs and worker counts. | [~] byte-identical repeat writes and dictionary key ordering are covered; the multi-worker CLI case waits on `XNAP-62`. |
 | `XNAP-45` | Malformed/limit tests: oversized collections, oversized strings, deep nesting, overflowing sizes, cyclic shared resources. | [~] collection, string and file-size ceilings, escaping external references, unissued shared-resource references, double-finish, and the independent parser refusing a bad total length and trailing bytes are covered. A dedicated fuzz corpus over the writer's inputs is still open. |
@@ -440,3 +440,11 @@ Building a writer against the reader exposes disagreements the reader alone coul
   format the other container would have accepted. `ContentProcessorContext::OutputFormat()` was
   added so a processor can see the difference and take a documented fallback rather than failing
   late inside a codec.
+* **`SoundEffect` writes the full 18-byte `WAVEFORMATEX`, not the 16-byte `PCMWAVEFORMAT`.**
+  The format block is length-prefixed, so both forms are legal and CNA's reader accepts both; the
+  writer originally emitted 16 bytes when there was no extension, omitting `cbSize` entirely. The
+  only real producer whose output is committed here writes 18 with `cbSize` present and zero, and
+  matching an observed producer beats matching none — so the writer changed, and the change is
+  proven by a byte-exact golden test against that file (`XNAP-42`). This is a real output change:
+  every `SoundEffect` CNA writes is two bytes longer than before, and the committed interop corpus
+  was regenerated for it.

@@ -568,8 +568,13 @@ namespace CNA::Internal::Xnb
             {
                 output.RequireVerifiedPlatformPayload("SoundEffectWriter", true);
                 const bool swap = output.Platform() == 'x';
-                const std::size_t formatLength =
-                    value.extensionData.empty() ? 16u : 18u + value.extensionData.size();
+                // Always the full 18-byte WAVEFORMATEX, with cbSize present and zero when there
+                // is no extension -- not the 16-byte PCMWAVEFORMAT that omits cbSize entirely.
+                // CNA's reader accepts both, and both occur in the wild, but the only real
+                // producer whose output is committed here writes 18, and matching an observed
+                // producer beats matching none (plans/plan_xnapipeline.md XNAP-42, which is a
+                // byte-exact golden test against exactly that file).
+                const std::size_t formatLength = 18u + value.extensionData.size();
                 if (formatLength > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max()))
                 {
                     throw XnbWriteException(
@@ -583,12 +588,9 @@ namespace CNA::Internal::Xnb
                 output.WriteUInt32(Swap32(swap, value.averageBytesPerSecond));
                 output.WriteUInt16(Swap16(swap, value.blockAlign));
                 output.WriteUInt16(Swap16(swap, value.bitsPerSample));
-                if (!value.extensionData.empty())
-                {
-                    output.WriteUInt16(
-                        Swap16(swap, static_cast<std::uint16_t>(value.extensionData.size())));
-                    output.WriteBytes(value.extensionData);
-                }
+                output.WriteUInt16(
+                    Swap16(swap, static_cast<std::uint16_t>(value.extensionData.size())));
+                if (!value.extensionData.empty()) { output.WriteBytes(value.extensionData); }
                 output.WriteLengthPrefixedBytes(value.samples);
                 output.WriteInt32(value.loopStart);
                 output.WriteInt32(value.loopLength);

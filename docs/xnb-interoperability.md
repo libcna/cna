@@ -195,17 +195,26 @@ Arbitrary nesting works: the writer interns readers by formatted name on first u
 
 ---
 
-## 4. The strongest single result: byte-identical to Microsoft's own output
+## 4. The strongest results: byte-identical to two other producers' output
 
-`tests/assets/xnb/xna40/windows/uncompressed/ContentManifestListStrings.xnb` was produced by the
-official **XNA 4.0** `BuildContent` task. CNA writes the same `List<String>` and the bytes are
-**identical** — all 10 header bytes, the type-reader table spelling, the 7-bit encodings, the object
-dispatch protocol and the string encoding.
+Three assets in this repository are written by CNA and compared, byte for byte, against files
+produced by somebody else. That is the strongest verification available without running a real
+runtime, because it compares output to output rather than output to a description.
 
-That is one asset type, and it is not a substitute for running a real runtime. But it is the one
-place where CNA's output has been compared against Microsoft's own Content Pipeline rather than
-against a description of it, and everything the container itself does is exercised by it. The test
-is `XnbWriterTest.GoldenXna40ListOfStringsIsByteIdentical`.
+| Fixture | Producer | What it proves |
+|---|---|---|
+| `ContentManifestListStrings.xnb` | official **XNA 4.0** `BuildContent` | All 10 header bytes, the type-reader table spelling, the 7-bit encodings, the object-dispatch protocol and the string encoding, against Microsoft's own Content Pipeline. |
+| `white-1.xnb` | MonoGame (`mgcb`) | The `Texture2D` writer's field layout and its reader name, against a second independent producer. One opaque white pixel — the smallest thing that can carry the whole shape. |
+| `audio/tone_mono_44khz_16bit.xnb` | MonoGame (`mgcb`) | The `SoundEffect` framing: a length-prefixed WAVEFORMATEX block written field by field, then the samples, then loop region and duration. |
+
+The tests are `XnbWriterTest.GoldenXna40ListOfStringsIsByteIdentical`,
+`.GoldenMonoGameTexture2DIsByteIdentical` and `.GoldenMonoGameSoundEffectIsByteIdentical`.
+
+The third one changed the writer. CNA emitted the 16-byte `PCMWAVEFORMAT` block, which omits
+`cbSize`; the observed producer emits the full 18-byte `WAVEFORMATEX` with `cbSize` present and
+zero. The field is length-prefixed so both are legal and CNA's reader accepts both — but matching
+an observed producer beats matching none, so the writer now emits 18. Every `SoundEffect` CNA
+writes is two bytes longer than it was.
 
 ---
 
