@@ -13,6 +13,7 @@
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/GraphicsRendererType.hpp"
 #include "CNA/Internal/Renderers/EasyGL/GlProfile.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
 
 #include <cstdint>
@@ -47,6 +48,31 @@ namespace CNA::Internal::Renderers::EasyGL
 
     namespace
     {
+        bool IsGuaranteedGlesRenderTargetFormat(
+            [[maybe_unused]] const int graphicsProfile,
+            const int surfaceFormat)
+        {
+            using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+
+            // An adapter query runs before there is a context whose extensions can be probed.
+            // RGBA8 Color is the only format in XNA's preferred render-target set that every
+            // EasyGL GLES/Web profile can promise. In particular, RGBA16 UNORM (Rgba64) needs
+            // EXT_texture_norm16 and is absent on conforming GLES 3/WebGL 2 implementations.
+            return surfaceFormat == static_cast<int>(SurfaceFormat::Color);
+        }
+
+        template <CNA::GraphicsRendererType Identity>
+        RendererAdapterQueries AdapterQueriesFor()
+        {
+            if constexpr (Identity == CNA::GraphicsRendererType::OpenGL33)
+                return {};
+
+            return {
+                .isRenderTargetFormatSupported =
+                    &IsGuaranteedGlesRenderTargetFormat,
+            };
+        }
+
         /// plans/plan_runtimerenderer.md P11: one descriptor per public GL identity, all served by the
         /// same EasyGL archive. Each pins its own GlProfile, which the renderer publishes as the
         /// thread's active profile on construction -- that is what lets several of the five be
@@ -67,6 +93,7 @@ namespace CNA::Internal::Renderers::EasyGL
                 {
                     return CreateGraphicsRendererForProfile(args, ToGlProfile(Identity));
                 },
+                .adapterQueries           = AdapterQueriesFor<Identity>(),
             };
             return descriptor;
         }

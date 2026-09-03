@@ -7,6 +7,7 @@
 
 #include <gtest/gtest.h>
 
+#include "CNA/GraphicsRendererType.hpp"
 #include "CNA/Platform/PlatformTestDecorator.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
@@ -404,6 +405,34 @@ TEST_F(GraphicsAdapterTest, QueryRenderTargetFormatSubstitutesUnsupportedFormat)
 
     EXPECT_FALSE(accepted);
     EXPECT_EQ(selectedFormat, SurfaceFormat::Color);
+}
+
+TEST_F(GraphicsAdapterTest, QueryRenderTargetFormatDoesNotPromiseRgba64OnGles)
+{
+    const CNA::GraphicsRendererType renderer =
+        CNA::getCurrentGraphicsRendererType();
+    if (renderer != CNA::GraphicsRendererType::OpenGLES2 &&
+        renderer != CNA::GraphicsRendererType::OpenGLES3 &&
+        renderer != CNA::GraphicsRendererType::WebGL1 &&
+        renderer != CNA::GraphicsRendererType::WebGL2)
+    {
+        GTEST_SKIP() << "this regression applies to GLES/WebGL adapter contracts";
+    }
+
+    GraphicsAdapter& def = GraphicsAdapter::getDefaultAdapterProperty();
+    SurfaceFormat selectedFormat;
+    DepthFormat selectedDepthFormat;
+    SharpRuntime::intcs selectedMultiSampleCount;
+
+    const bool accepted = def.QueryRenderTargetFormat(
+        GraphicsProfile::HiDef, SurfaceFormat::Rgba64,
+        DepthFormat::Depth24Stencil8, 0, selectedFormat,
+        selectedDepthFormat, selectedMultiSampleCount);
+
+    EXPECT_FALSE(accepted);
+    EXPECT_EQ(selectedFormat, SurfaceFormat::Color);
+    EXPECT_EQ(selectedDepthFormat, DepthFormat::Depth24Stencil8);
+    EXPECT_EQ(selectedMultiSampleCount, 0);
 }
 
 // --- QueryBackBufferFormat ---
