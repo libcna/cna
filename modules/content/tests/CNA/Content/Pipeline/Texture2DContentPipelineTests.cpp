@@ -150,7 +150,7 @@ TEST(Texture2DContentPipelineTest, BuildsHeadlesslyThroughDistinctImporterProces
     const Pipeline::ContentBuildResult result = BuildTexture(scratch.Path());
     EXPECT_EQ(result.importer, (Pipeline::ContentComponentIdentity{"CNA.ImageImporter", "1"}));
     EXPECT_EQ(result.processor,
-              (Pipeline::ContentComponentIdentity{"CNA.TextureProcessor", "2"}));
+              (Pipeline::ContentComponentIdentity{"CNA.TextureProcessor", "3"}));
     EXPECT_EQ(result.writer,
               (Pipeline::ContentComponentIdentity{"CNA.Texture2DContentWriter", "1"}));
     EXPECT_EQ(result.output.assetTypeId, Cnb::CnbAssetTypeId::Texture2D);
@@ -238,8 +238,13 @@ TEST(Texture2DContentPipelineTest, ColorKeyPolicyMatchesTheUnchangedProducerExac
     const std::filesystem::path source = scratch.Path() / "wall.png";
     WriteBytes(source, MakePng(sourcePixels, 4, 4));
 
+    // premultiplyAlpha is pinned off here on purpose: this contract is about the colour-key
+    // policy converging with the unchanged producer, and the unchanged producer has no
+    // premultiplication step at all (XNAP-96). The default's own effect on a keyed texel --
+    // transparent black, which is what XNA 4.0 produces -- is asserted separately below.
     Pipeline::ContentProcessorParameters parameters;
     parameters.Set(Pipeline::TextureColorKeyParameter, std::string("200,100,50"));
+    parameters.Set(Pipeline::TexturePremultiplyAlphaParameter, false);
     const Pipeline::ContentBuildResult result = BuildTexture(scratch.Path(), parameters);
 
     Cnb::CnbImageImportOptions oldOptions;
@@ -419,31 +424,167 @@ TEST(TextureImageOperationsTest, AMipChainHalvesUntilOneByOne)
     EXPECT_TRUE(Pipeline::GenerateRgbaMipChain(std::vector<std::uint8_t>(4u, 0u), 1u, 1u).empty());
 }
 
-TEST(Texture2DContentPipelineTest, PremultiplyAlphaIsOffByDefaultAndOnWhenAsked)
+namespace
 {
-    ScratchDirectory scratch("premultiply");
-    std::vector<std::uint8_t> pixels{200u, 100u, 50u, 128u, 10u, 20u, 30u, 255u};
-    WriteBytes(scratch.Path() / "wall.png", MakePng(pixels, 2, 1));
+    // plans/plan_xnapipeline.md XNAP-96. Four texels, chosen so that every rule the premultiply
+    // policy has is visible in one image:
+    //   0: partial alpha 128 -- the rounding case
+    //   1: opaque         255 -- must be untouched
+    //   2: transparent      0 -- must become zero RGB
+    //   3: partial alpha  16  -- a second rounding case, with a value that rounds down
+    const std::vector<std::uint8_t> kAlphaPolicyPixels{
+        200u, 100u, 50u, 128u,
+        10u, 20u, 30u, 255u,
+        90u, 180u, 240u, 0u,
+        255u, 128u, 1u, 16u,
+    };
 
-    const auto firstTexel = [](const Pipeline::ContentBuildResult& result)
+    std::vector<std::uint8_t> BuildAlphaPolicyTexels(
+        const std::filesystem::path& root,
+        const Pipeline::ContentProcessorParameters& parameters = {})
     {
+        const Pipeline::ContentBuildResult result = BuildTexture(root, parameters);
         return Cnb::DecodeTexture2DFromCnb(
                    Cnb::CnbDocument::Parse(result.output.bytes, "premultiply.cnb"))
             .representations[0]
             .levels[0];
-    };
+    }
 
-    // XNA 4.0's own default is the opposite; see the parameter's documentation for why CNA's
-    // differs and what a project targeting XNA's appearance should set.
-    EXPECT_EQ(firstTexel(BuildTexture(scratch.Path()))[0], 200u);
+    /** @brief The exact rule the processor applies: round-half-up on `channel * alpha / 255`. */
+    [[nodiscard]] std::uint8_t Premultiplied(std::uint32_t channel, std::uint32_t alpha)
+    {
+        return static_cast<std::uint8_t>((channel * alpha + 127u) / 255u);
+    }
+}
+
+TEST(Texture2DContentPipelineTest, PremultiplyAlphaDefaultsToTrueLikeXna40)
+{
+    ScratchDirectory scratch("premultiply_default");
+    WriteBytes(scratch.Path() / "wall.png", MakePng(kAlphaPolicyPixels, 4, 1));
+
+    // The parameter is omitted entirely: XNA 4.0's TextureProcessor.PremultiplyAlpha defaults to
+    // true, and so does CNA's.
+    const std::vector<std::uint8_t> texels = BuildAlphaPolicyTexels(scratch.Path());
+    ASSERT_GE(texels.size(), 16u);
+
+    EXPECT_EQ(texels[0], Premultiplied(200u, 128u));
+    EXPECT_EQ(texels[1], Premultiplied(100u, 128u));
+    EXPECT_EQ(texels[2], Premultiplied(50u, 128u));
+    EXPECT_EQ(texels[3], 128u);
+}
+
+TEST(Texture2DContentPipelineTest, PremultiplyAlphaExplicitTrueMatchesTheDefault)
+{
+    ScratchDirectory scratch("premultiply_explicit_true");
+    WriteBytes(scratch.Path() / "wall.png", MakePng(kAlphaPolicyPixels, 4, 1));
 
     Pipeline::ContentProcessorParameters parameters;
     parameters.Set(Pipeline::TexturePremultiplyAlphaParameter, true);
-    const std::vector<std::uint8_t> premultiplied =
-        firstTexel(BuildTexture(scratch.Path(), parameters));
-    EXPECT_EQ(premultiplied[0], 100u);
-    EXPECT_EQ(premultiplied[3], 128u);
-    EXPECT_EQ(premultiplied[4], 10u);
+    EXPECT_EQ(BuildAlphaPolicyTexels(scratch.Path(), parameters),
+              BuildAlphaPolicyTexels(scratch.Path()));
+}
+
+TEST(Texture2DContentPipelineTest, PremultiplyAlphaExplicitFalseKeepsStraightAlpha)
+{
+    ScratchDirectory scratch("premultiply_explicit_false");
+    WriteBytes(scratch.Path() / "wall.png", MakePng(kAlphaPolicyPixels, 4, 1));
+
+    Pipeline::ContentProcessorParameters parameters;
+    parameters.Set(Pipeline::TexturePremultiplyAlphaParameter, false);
+    EXPECT_EQ(BuildAlphaPolicyTexels(scratch.Path(), parameters), kAlphaPolicyPixels);
+}
+
+TEST(Texture2DContentPipelineTest, PremultiplyAlphaLeavesOpaqueTexelsExactlyAsAuthored)
+{
+    ScratchDirectory scratch("premultiply_opaque");
+    WriteBytes(scratch.Path() / "wall.png", MakePng(kAlphaPolicyPixels, 4, 1));
+
+    const std::vector<std::uint8_t> texels = BuildAlphaPolicyTexels(scratch.Path());
+    ASSERT_GE(texels.size(), 16u);
+    EXPECT_EQ(texels[4], 10u);
+    EXPECT_EQ(texels[5], 20u);
+    EXPECT_EQ(texels[6], 30u);
+    EXPECT_EQ(texels[7], 255u);
+}
+
+TEST(Texture2DContentPipelineTest, PremultiplyAlphaZeroesTheColourOfAFullyTransparentTexel)
+{
+    ScratchDirectory scratch("premultiply_transparent");
+    WriteBytes(scratch.Path() / "wall.png", MakePng(kAlphaPolicyPixels, 4, 1));
+
+    const std::vector<std::uint8_t> texels = BuildAlphaPolicyTexels(scratch.Path());
+    ASSERT_GE(texels.size(), 16u);
+    EXPECT_EQ(texels[8], 0u);
+    EXPECT_EQ(texels[9], 0u);
+    EXPECT_EQ(texels[10], 0u);
+    EXPECT_EQ(texels[11], 0u);
+}
+
+TEST(Texture2DContentPipelineTest, PremultiplyAlphaRoundsPartialAlphaHalfUp)
+{
+    ScratchDirectory scratch("premultiply_rounding");
+    WriteBytes(scratch.Path() / "wall.png", MakePng(kAlphaPolicyPixels, 4, 1));
+
+    const std::vector<std::uint8_t> texels = BuildAlphaPolicyTexels(scratch.Path());
+    ASSERT_GE(texels.size(), 16u);
+
+    // The rule is (channel * alpha + 127) / 255 in integers: 255*16 -> 16 exactly,
+    // 128*16 -> 8 (8.03 rounds to 8), 1*16 -> 0 (0.06 rounds to 0). Alpha itself never changes.
+    EXPECT_EQ(texels[12], 16u);
+    EXPECT_EQ(texels[13], 8u);
+    EXPECT_EQ(texels[14], 0u);
+    EXPECT_EQ(texels[15], 16u);
+    EXPECT_EQ(texels[12], Premultiplied(255u, 16u));
+    EXPECT_EQ(texels[13], Premultiplied(128u, 16u));
+    EXPECT_EQ(texels[14], Premultiplied(1u, 16u));
+}
+
+TEST(Texture2DContentPipelineTest, ColourKeyedTexelsBecomeTransparentBlackUnderTheDefault)
+{
+    // The documented order is colour key -> resize -> premultiply -> mips -> block compression,
+    // so a keyed texel is transparent *before* premultiplication runs and its colour is therefore
+    // zeroed. That is what XNA 4.0 produces for a colour-keyed texel, and it is the observable
+    // consequence of the two policies composing in that order.
+    ScratchDirectory scratch("premultiply_color_key");
+    std::vector<std::uint8_t> pixels{200u, 100u, 50u, 255u, 10u, 20u, 30u, 255u};
+    WriteBytes(scratch.Path() / "wall.png", MakePng(pixels, 2, 1));
+
+    Pipeline::ContentProcessorParameters parameters;
+    parameters.Set(Pipeline::TextureColorKeyParameter, std::string("200,100,50"));
+    const std::vector<std::uint8_t> texels = BuildAlphaPolicyTexels(scratch.Path(), parameters);
+    ASSERT_GE(texels.size(), 8u);
+    EXPECT_EQ(texels[0], 0u);
+    EXPECT_EQ(texels[1], 0u);
+    EXPECT_EQ(texels[2], 0u);
+    EXPECT_EQ(texels[3], 0u);
+    EXPECT_EQ(texels[4], 10u);
+    EXPECT_EQ(texels[7], 255u);
+}
+
+TEST(Texture2DContentPipelineTest, PremultiplicationRunsBeforeMipGeneration)
+{
+    // A 2x2 source with one opaque white texel and three transparent white ones. Averaging
+    // straight alpha would give the 1x1 mip white at quarter alpha -- a bright halo. Premultiplied
+    // first, the average is (64,64,64,64), which is the same colour the top level shows.
+    ScratchDirectory scratch("premultiply_mip_order");
+    const std::vector<std::uint8_t> pixels{
+        255u, 255u, 255u, 255u, 255u, 255u, 255u, 0u,
+        255u, 255u, 255u, 0u, 255u, 255u, 255u, 0u,
+    };
+    WriteBytes(scratch.Path() / "wall.png", MakePng(pixels, 2, 2));
+
+    Pipeline::ContentProcessorParameters parameters;
+    parameters.Set(Pipeline::TextureGenerateMipmapsParameter, true);
+    const Pipeline::ContentBuildResult result = BuildTexture(scratch.Path(), parameters);
+    const Cnb::CnbTextureData texture = Cnb::DecodeTexture2DFromCnb(
+        Cnb::CnbDocument::Parse(result.output.bytes, "premultiply_mip_order.cnb"));
+    ASSERT_EQ(texture.representations[0].levels.size(), 2u);
+    const std::vector<std::uint8_t>& smallest = texture.representations[0].levels[1];
+    ASSERT_EQ(smallest.size(), 4u);
+    EXPECT_EQ(smallest[0], 64u);
+    EXPECT_EQ(smallest[1], 64u);
+    EXPECT_EQ(smallest[2], 64u);
+    EXPECT_EQ(smallest[3], 64u);
 }
 
 TEST(Texture2DContentPipelineTest, GenerateMipmapsProducesEveryLevelDownToOneByOne)

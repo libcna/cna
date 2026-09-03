@@ -487,10 +487,12 @@ namespace CNA::Content::Pipeline
 
     ContentComponentIdentity TextureProcessor::Identity() const
     {
-        // Build version 2: the processor gained the textureFormat, generateMipmaps,
-        // premultiplyAlpha and resizeToPowerOfTwo parameters, and premultiplication is on by
-        // default, so previously built outputs must not be treated as current.
-        return {kTextureProcessorName, "2"};
+        // Build version 3: premultiplyAlpha now defaults to true, matching XNA 4.0's own
+        // TextureProcessor (plans/plan_xnapipeline.md XNAP-96). That changes the bytes of every
+        // alpha-bearing texture, so the version must move or an incremental build would skip
+        // artifacts that are no longer current. (Version 2 was the textureFormat/generateMipmaps/
+        // premultiplyAlpha/resizeToPowerOfTwo parameter set arriving.)
+        return {kTextureProcessorName, "3"};
     }
 
     std::string TextureProcessor::InputType() const
@@ -523,7 +525,7 @@ namespace CNA::Content::Pipeline
         static_cast<void>(ReadBooleanParameter(parameters, TextureGenerateMipmapsParameter,
                                                false));
         static_cast<void>(ReadBooleanParameter(parameters, TexturePremultiplyAlphaParameter,
-                                               false));
+                                               true));
         static_cast<void>(ReadBooleanParameter(parameters, TextureResizeToPowerOfTwoParameter,
                                                false));
 
@@ -603,14 +605,16 @@ namespace CNA::Content::Pipeline
             }
         }
 
-        // XNA 4.0's TextureProcessor defaults PremultiplyAlpha to true, and CNA's own
-        // BlendState::AlphaBlend -- SpriteBatch's default -- is the premultiplied blend that
-        // expects it. CNA's default is nevertheless false, because flipping it would silently
-        // change the bytes of every texture every existing CNA project has already built, and
-        // three separate equivalence contracts in this repository pin the current output. The
-        // divergence is recorded in plans/plan_xnapipeline.md rather than hidden; a project that
-        // wants XNA's appearance sets the parameter.
-        if (ReadBooleanParameter(parameters, TexturePremultiplyAlphaParameter, false))
+        // XNAP-96: premultiplication defaults to on, exactly as XNA 4.0's TextureProcessor does,
+        // because BlendState::AlphaBlend -- what SpriteBatch::Begin() selects when given no blend
+        // state, in XNA and in CNA alike -- is the premultiplied blend. Content built without it
+        // renders with dark fringes under the default blend state, which is a bug the author did
+        // not write. A source that defines its own answer says so through
+        // ImportedImage::authoredPremultiplyAlpha; an explicit parameter beats both.
+        const bool premultiply = ReadBooleanParameter(
+            parameters, TexturePremultiplyAlphaParameter,
+            image.authoredPremultiplyAlpha.value_or(true));
+        if (premultiply)
         {
             PremultiplyRgbaAlpha(image.rgbaPixels);
             for (std::vector<std::uint8_t>& pixels : image.additionalRgbaMipLevels)

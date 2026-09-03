@@ -140,7 +140,8 @@ namespace
     Pipeline::ContentBuildResult Build(
         const std::filesystem::path& root, const std::string& source,
         const std::string& logicalName, const Pipeline::ContentOutputFormat format,
-        const Xnb::XnbFileOptions& options = {})
+        const Xnb::XnbFileOptions& options = {},
+        const Pipeline::ContentProcessorParameters& parameters = {})
     {
         const Pipeline::ContentPipeline pipeline(MakeDualFormatRegistry(options));
         Pipeline::ContentBuildRequest request;
@@ -148,6 +149,7 @@ namespace
         request.source = source;
         request.logicalName = logicalName;
         request.outputFormat = format;
+        request.parameters = parameters;
         return pipeline.Build(request);
     }
 
@@ -171,9 +173,14 @@ TEST(XnbOutputContentPipelineTest, AnImageSourceBuildsToTexture2DXnbThroughTheSa
     }
     WriteBytes(scratch.Path() / "wall.png", MakePng(pixels, 4, 3));
 
+    // premultiplyAlpha is pinned off so that the assertion below is exact pixel equality with the
+    // source, which is what this test is about: the same importer and processor reach the XNB
+    // writer. The default's own effect on this route is XNAP-96's own test, below.
+    Pipeline::ContentProcessorParameters straightAlpha;
+    straightAlpha.Set(Pipeline::TexturePremultiplyAlphaParameter, false);
     const Pipeline::ContentBuildResult result =
         Build(scratch.Path(), "wall.png", "Textures/wall",
-              Pipeline::ContentOutputFormat::Xnb);
+              Pipeline::ContentOutputFormat::Xnb, {}, straightAlpha);
 
     EXPECT_EQ(result.importer.name, "CNA.ImageImporter");
     EXPECT_EQ(result.processor.name, "CNA.TextureProcessor");
@@ -188,6 +195,40 @@ TEST(XnbOutputContentPipelineTest, AnImageSourceBuildsToTexture2DXnbThroughTheSa
     EXPECT_EQ(texture.height, 3u);
     ASSERT_EQ(texture.levels.size(), 1u);
     EXPECT_EQ(texture.levels[0], pixels);
+}
+
+TEST(XnbOutputContentPipelineTest, PremultipliedAlphaDefaultReachesBothContainersIdentically)
+{
+    // plans/plan_xnapipeline.md XNAP-96. The premultiply policy lives in the processor, which is
+    // shared, so the same source must produce the same texels through the CNB writer and through
+    // the XNB writer. If it ever did not, the processor would have been forked -- which is the one
+    // mistake the two-writer/one-processor architecture exists to prevent.
+    ScratchDirectory scratch("premultiply_both_formats");
+    const std::vector<std::uint8_t> pixels{
+        200u, 100u, 50u, 128u, 10u, 20u, 30u, 255u,
+        90u, 180u, 240u, 0u, 255u, 128u, 1u, 16u,
+    };
+    WriteBytes(scratch.Path() / "wall.png", MakePng(pixels, 4, 1));
+
+    const Pipeline::ContentBuildResult xnb =
+        Build(scratch.Path(), "wall.png", "Textures/wall", Pipeline::ContentOutputFormat::Xnb);
+    const Xnb::XnbCanonicalAsset asset = DecodeResult(scratch, xnb, "wall");
+    const auto& texture = std::get<Xnb::XnbTextureData>(asset.value);
+    ASSERT_EQ(texture.levels.size(), 1u);
+
+    const std::vector<std::uint8_t> expected{
+        100u, 50u, 25u, 128u, 10u, 20u, 30u, 255u,
+        0u, 0u, 0u, 0u, 16u, 8u, 0u, 16u,
+    };
+    EXPECT_EQ(texture.levels[0], expected);
+
+    const Pipeline::ContentBuildResult cnb =
+        Build(scratch.Path(), "wall.png", "Textures/wall", Pipeline::ContentOutputFormat::Cnb);
+    const Cnb::CnbTextureData native = Cnb::DecodeTexture2DFromCnb(
+        Cnb::CnbDocument::Parse(cnb.output.bytes, "premultiply_both_formats.cnb"));
+    ASSERT_FALSE(native.representations.empty());
+    ASSERT_FALSE(native.representations[0].levels.empty());
+    EXPECT_EQ(native.representations[0].levels[0], expected);
 }
 
 TEST(XnbOutputContentPipelineTest, EveryXnbWriterReportsTheRootReaderTheFileActuallyDispatchesTo)

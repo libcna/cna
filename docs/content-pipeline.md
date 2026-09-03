@@ -264,7 +264,16 @@ bool, signed 64-bit integer, unsigned 64-bit integer, double, UTF-8 string
 Unknown, mistyped, non-finite, or invalid values are rejected by the selected processor. Every
 effective parameter participates in the build fingerprint. Library callers set parameters on
 `ContentBuildRequest`; the optional strict `.cna-content.json` maps the same typed values into CLI
-builds. `TextureProcessor` accepts the string parameter `colorKey` in `R,G,B` decimal form.
+builds. `TextureProcessor` accepts the string parameter `colorKey` in `R,G,B` decimal form, the
+string parameter `textureFormat`, and the booleans `generateMipmaps`, `premultiplyAlpha` and
+`resizeToPowerOfTwo`. They apply in one documented order -- **colour key, resize, premultiply, mip
+chain, block compression** -- and `premultiplyAlpha` **defaults to `true`**, exactly as XNA 4.0's
+`TextureProcessor.PremultiplyAlpha` does: `BlendState::AlphaBlend`, which `SpriteBatch::Begin()`
+selects when given no blend state, is the premultiplied blend, so straight-alpha content renders
+with dark fringes under the default state. Two importers override that default because their source
+defines its own answer -- a `.cnj` document (CNJ v1 compiles to straight alpha) and an already-built
+`.xnb` being transcoded (its pixels have already had one alpha policy applied, and applying a second
+would corrupt them). An explicit parameter beats both.
 `SongProcessor` accepts `streamReference` and `name` strings plus a `durationMs` u64. `ModelProcessor`
 accepts the opt-in boolean `generateChildAssets` for glTF only. Texture2D CNJ
 can also author its existing color-key field. `VideoProcessor` requires u64 `width`/`height` and

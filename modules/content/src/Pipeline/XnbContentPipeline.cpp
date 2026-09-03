@@ -58,6 +58,11 @@ namespace CNA::Content::Pipeline
             image.additionalRgbaMipLevels.assign(
                 texture.representations.front().levels.begin() + 1,
                 texture.representations.front().levels.end());
+            // plans/plan_xnapipeline.md XNAP-96: these pixels came out of an already-built .xnb,
+            // so whatever alpha policy produced them has been applied once already. The
+            // processor's XNA-compatible default would apply it a second time, which is not a
+            // policy choice but a corruption -- so this source declares its own answer.
+            image.authoredPremultiplyAlpha = false;
             return image;
         }
 

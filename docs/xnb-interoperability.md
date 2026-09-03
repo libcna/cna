@@ -339,13 +339,31 @@ containers and no importer or processor is duplicated.
 | `.fxb` (already-compiled effect) | `CompiledEffectImporter` → `CompiledEffectProcessor` → Effect writer | — | ✅ `Effect` |
 | `.xnb` | XNB importer (transcode to `.cnb`) | ✅ | — |
 
-Texture policy parameters (`textureFormat`, `generateMipmaps`, `premultiplyAlpha`,
-`resizeToPowerOfTwo`, `colorKey`) apply in that documented order. **`premultiplyAlpha` defaults to
-`false` here where XNA 4.0's `TextureProcessor` defaults it to `true`** — CNA's default is
-conservative because flipping it changes the bytes of every alpha-bearing texture already built by
-this pipeline. `BlendState::AlphaBlend`, which `SpriteBatch::Begin()` selects by default in both
-frameworks, is the premultiplied blend, so a project reproducing XNA's appearance should set the
-parameter. This is tracked as `XNAP-96`.
+Texture policy parameters apply in one documented, deterministic order: **colour key → resize →
+premultiply → mip chain → block compression.** `colorKey` matches on RGB and sets alpha to zero;
+`resizeToPowerOfTwo` rounds level zero up; `premultiplyAlpha` multiplies colour by alpha;
+`generateMipmaps` builds the chain from whatever level zero then is; `textureFormat` selects the
+final representation.
+
+**`premultiplyAlpha` defaults to `true`, matching XNA 4.0's own
+`TextureProcessor.PremultiplyAlpha`** (`XNAP-96`). `BlendState::AlphaBlend` — what
+`SpriteBatch::Begin()` selects when given no blend state, in XNA and in CNA alike — is the
+premultiplied blend, so a texture that is *not* premultiplied renders with dark fringes under the
+default blend state. A game that wants straight alpha sets `premultiplyAlpha` to `false` and selects
+`BlendState::NonPremultiplied` itself.
+
+Because premultiplication runs *before* mip generation, a distant mip never averages the colour of
+invisible texels into visible ones; and because it runs *after* the colour key, a keyed texel comes
+out transparent **black**, which is what XNA 4.0 produces for one.
+
+Two importers override the default, because their source already defines the answer: a `.cnj`
+document (CNJ version 1 has no `premultiplyAlpha` member and its compiled result is defined as
+straight alpha, which `CompileCnjToCnb` pins) and an already-built `.xnb` being transcoded (its
+pixels have had one alpha policy applied already; applying a second is corruption, not policy). An
+explicit parameter beats both. The processor itself has exactly one behaviour per parameter set and
+is **not** forked per output container: `TextureProcessor`'s build identity moved to version 3 with
+this change, so every incremental build that used the old default rebuilds instead of being skipped
+as unchanged.
 
 A `.fxb` has no `.cnb` route, deliberately: the CNB container reserves an `Effect` identifier and
 has no schema for it, because CNA has many renderers and a `.cnb` carrying one API's shader

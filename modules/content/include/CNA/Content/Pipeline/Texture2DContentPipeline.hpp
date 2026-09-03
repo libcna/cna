@@ -40,11 +40,17 @@ namespace CNA::Content::Pipeline
     /**
      * @brief TextureProcessor parameter (`true`/`false`) multiplying colour by alpha.
      *
-     * **CNA defaults this to false; XNA 4.0 defaults it to true.** `BlendState::AlphaBlend`,
-     * which is what `SpriteBatch::Begin()` uses when given no blend state, is the premultiplied
-     * blend in both frameworks, so content authored for XNA's appearance wants this on. CNA
-     * keeps it off by default only so that turning it on stays an explicit decision rather than
-     * a silent change to the bytes of every texture already built by this pipeline.
+     * **Defaults to `true`, exactly as XNA 4.0's `TextureProcessor.PremultiplyAlpha` does**
+     * (plans/plan_xnapipeline.md `XNAP-96`). `BlendState::AlphaBlend` -- what
+     * `SpriteBatch::Begin()` selects when given no blend state -- is the premultiplied blend in
+     * both frameworks, so a texture that is *not* premultiplied renders with dark fringes under
+     * the default blend state. Setting this to `false` keeps straight alpha, for a game that
+     * selects `BlendState::NonPremultiplied` itself.
+     *
+     * Two importers override the default because their sources carry their own policy: a `.cnj`
+     * document (CNJ v1 has no such member and its compiled result is defined as straight alpha)
+     * and an already-built `.xnb` being transcoded (its pixels are already whatever produced them,
+     * and premultiplying a second time would corrupt them).
      */
     inline constexpr const char* TexturePremultiplyAlphaParameter = "premultiplyAlpha";
 
@@ -176,6 +182,19 @@ namespace CNA::Content::Pipeline
 
         /** @brief Source-authored colour-key policy, or absent for ordinary image sources. */
         std::optional<std::array<std::uint8_t, 3>> authoredColorKey;
+
+        /**
+         * @brief Source-authored premultiplied-alpha policy, or absent to use the processor default.
+         *
+         * Absent for an ordinary image source, where the XNA-compatible default (`true`) applies.
+         * Set to `false` by the two importers whose sources define their own answer: a `.cnj`
+         * document, whose v1 compiled result is straight alpha, and an already-built `.xnb`, whose
+         * pixels have already had whatever alpha policy produced them applied once.
+         *
+         * An explicit `premultiplyAlpha` processor parameter always wins over this, so a build can
+         * still ask either way; this only decides what happens when nobody asked.
+         */
+        std::optional<bool> authoredPremultiplyAlpha;
     };
 
     /**

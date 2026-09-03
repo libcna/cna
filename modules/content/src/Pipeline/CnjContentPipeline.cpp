@@ -178,6 +178,12 @@ namespace CNA::Content::Pipeline
             imported.authoredColorKey = CNA::Internal::ReadCnjColorKey(
                 root, "Texture2D .cnj '" +
                           CNA::Internal::ContentPathToUtf8(context.SourcePath()) + "'");
+            // plans/plan_xnapipeline.md XNAP-96: the processor premultiplies by default now,
+            // matching XNA 4.0. CNJ version 1 has no premultiplyAlpha member, so what a v1
+            // document compiles to is already defined -- straight alpha -- and CompileCnjToCnb
+            // pins it. Say so here rather than changing what an existing .cnj means. A build that
+            // wants premultiplication still gets it by setting the processor parameter.
+            imported.authoredPremultiplyAlpha = false;
             context.LogInfo("imported Texture2D CNJ through the shared image front end.");
             return ContentValue::Create(ImportedImageType, std::move(imported));
         }
