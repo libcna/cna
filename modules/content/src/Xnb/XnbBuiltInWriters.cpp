@@ -463,9 +463,21 @@ namespace CNA::Internal::Xnb
             std::make_shared<const XnbListTypeWriter<Microsoft::Xna::Framework::Vector3>>(
                 XnbBuiltInReaderIdentity<Microsoft::Xna::Framework::Vector3>()));
         registry.Register(
+            std::make_shared<const XnbListTypeWriter<Microsoft::Xna::Framework::Matrix>>(
+                XnbBuiltInReaderIdentity<Microsoft::Xna::Framework::Matrix>()));
+        registry.Register(
             std::make_shared<const XnbDictionaryTypeWriter<std::string, std::int32_t>>(
                 XnbBuiltInReaderIdentity<std::string>(),
                 XnbBuiltInReaderIdentity<std::int32_t>()));
+
+        // The one array instantiation CNA's runtime reader registry resolves: a real XNA `Model`
+        // carries `ArrayReader<Vector3>` in its type table, which is why the reader exists
+        // (plans/plan_xnapipeline.md XNAP-9D). Registered through the XnbArray<T> carrier, because
+        // a registry keyed by C++ type cannot otherwise tell `Vector3[]` from `List<Vector3>` --
+        // both are std::vector<Vector3>.
+        registry.Register(
+            std::make_shared<const XnbArrayTypeWriter<Microsoft::Xna::Framework::Vector3>>(
+                XnbBuiltInReaderIdentity<Microsoft::Xna::Framework::Vector3>()));
     }
 
     void RegisterBuiltInXnbWriters(XnbTypeWriterRegistry& registry)

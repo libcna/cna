@@ -29,15 +29,27 @@ namespace CNA::Internal::Xnb
         std::vector<XnbTypeName> genericArguments;
 
         /**
+         * @brief Array-rank suffixes exactly as .NET spells them, or empty for a non-array type.
+         *
+         * .NET writes the rank specifiers *after* the generic-argument list --
+         * `List\`1[[System.Int32, mscorlib, …]][], mscorlib, …` is `List<int>[]` -- so they cannot
+         * simply be part of @ref baseName without reordering the canonical form. A rank specifier
+         * is `[]`, or `[,]`, `[,,]`… for a multidimensional array, and several may follow each
+         * other for a jagged array (`[][]`). Held verbatim so the canonical key of an array type
+         * is the one .NET itself would produce (plans/plan_xnapipeline.md `XNAP-9C`).
+         */
+        std::string arraySuffix;
+
+        /**
          * @brief Reconstructs the canonical registry key: @ref baseName, plus
          *        `[[arg1],[arg2],...]` (each arg itself canonicalized the same way) if this is
-         *        a generic type.
+         *        a generic type, plus any @ref arraySuffix.
          */
         [[nodiscard]] std::string ToCanonicalString() const
         {
             if (genericArguments.empty())
             {
-                return baseName;
+                return baseName + arraySuffix;
             }
 
             std::string result = baseName;
@@ -50,6 +62,7 @@ namespace CNA::Internal::Xnb
                 result += ']';
             }
             result += ']';
+            result += arraySuffix;
             return result;
         }
     };
@@ -59,6 +72,42 @@ namespace CNA::Internal::Xnb
         inline void SkipSpaces(std::string_view s, std::size_t& pos)
         {
             while (pos < s.size() && s[pos] == ' ') ++pos;
+        }
+
+        /**
+         * @brief Whether an array-rank specifier -- `[]`, `[,]`, `[,,]`, … -- starts at @p pos.
+         *
+         * .NET uses the same bracket for a generic-argument list and for an array rank, and the
+         * two are told apart by what is inside: a rank specifier contains only commas and spaces,
+         * while an argument list opens with a second `[`. Without this distinction the parser
+         * reads `System.Int32[]` as `System.Int32` followed by a malformed argument list, which is
+         * exactly what it did before `XNAP-9C` -- so a genuine `List<int[]>` in a real `.xnb`
+         * type-reader table failed to parse at all.
+         *
+         * @param s Full text being parsed.
+         * @param pos Offset of a candidate `[`.
+         * @return True when @p pos starts a rank specifier rather than a generic-argument list.
+         */
+        [[nodiscard]] inline bool IsArrayRankAt(std::string_view s, std::size_t pos)
+        {
+            if (pos >= s.size() || s[pos] != '[') { return false; }
+            ++pos;
+            while (pos < s.size() && (s[pos] == ',' || s[pos] == ' ')) { ++pos; }
+            return pos < s.size() && s[pos] == ']';
+        }
+
+        /** @brief Consumes every array-rank specifier at @p pos, returning them verbatim. */
+        [[nodiscard]] inline std::string ConsumeArrayRanks(std::string_view s, std::size_t& pos)
+        {
+            std::string suffix;
+            while (IsArrayRankAt(s, pos))
+            {
+                const std::size_t start = pos;
+                while (pos < s.size() && s[pos] != ']') { ++pos; }
+                ++pos; // the ']' itself
+                suffix.append(s.substr(start, pos - start));
+            }
+            return suffix;
         }
 
         /**
@@ -94,6 +143,9 @@ namespace CNA::Internal::Xnb
                 ++pos;
             }
             result.baseName = std::string(s.substr(nameStart, pos - nameStart));
+
+            // An array of a non-generic type: the rank specifier follows the name directly.
+            result.arraySuffix = ConsumeArrayRanks(s, pos);
 
             if (pos < s.size() && s[pos] == '[')
             {
@@ -144,6 +196,10 @@ namespace CNA::Internal::Xnb
                         "XnbTypeName: expected ',' or ']' after a generic argument.");
                 }
             }
+
+            // An array of a generic type: .NET puts the rank after the argument list, so
+            // `List`1[[Int32, …]][]` is `List<int>[]`.
+            result.arraySuffix += ConsumeArrayRanks(s, pos);
 
             // Whatever remains (a top-level ',' followed by this type's own assembly/version/
             // culture/publicKeyToken qualifier, or nothing) is deliberately not consumed here --

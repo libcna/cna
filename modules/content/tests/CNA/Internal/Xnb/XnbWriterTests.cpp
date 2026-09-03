@@ -14,6 +14,7 @@
 #include <map>
 #include <fstream>
 #include <memory>
+#include <optional>
 #include <unordered_map>
 #include <string>
 #include <vector>
@@ -1194,6 +1195,119 @@ TEST(XnbEnumReaderIdentityTest, AnArrayNamesItsElementOnceRatherThanTwice)
     EXPECT_EQ(XnbTargetTypeName(writer.ReaderIdentity()), "System.Int32[]");
     EXPECT_EQ(XnbCanonicalReaderName(writer.ReaderIdentity()),
               "Microsoft.Xna.Framework.Content.ArrayReader`1[[System.Int32]]");
+}
+
+TEST_F(XnbWriterTest, ListOfMatrixAndArrayOfVector3RoundTripThroughTheBuiltInRegistry)
+{
+    using namespace Microsoft::Xna::Framework;
+
+    // plans/plan_xnapipeline.md XNAP-9D. Both of these instantiations already had readers in
+    // CNA's runtime registry -- a real XNA `Model` names ArrayReader<Vector3> in its own type
+    // table -- and neither had a writer, so the writer side was narrower than the reader side for
+    // no reason. `XnbArray<T>` is how a registry keyed by C++ type tells `Vector3[]` apart from
+    // `List<Vector3>`: both are std::vector<Vector3>.
+    const std::vector<Matrix> matrices{
+        Matrix::CreateTranslation(1.0f, 2.0f, 3.0f), Matrix::getIdentityProperty()};
+    const std::vector<Matrix> readMatrices =
+        LoadedXnb(WriteXnbAsset(matrices, {}, "transforms")).ReadAsset<std::vector<Matrix>>();
+    ASSERT_EQ(readMatrices.size(), 2u);
+    EXPECT_FLOAT_EQ(readMatrices[0].M41, 1.0f);
+    EXPECT_FLOAT_EQ(readMatrices[0].M43, 3.0f);
+    EXPECT_EQ(readMatrices[1], Matrix::getIdentityProperty());
+
+    const XnbArray<Vector3> points{{Vector3{1.0f, 2.0f, 3.0f}, Vector3{-4.0f, 5.0f, 6.0f}}};
+    const std::vector<std::uint8_t> file = WriteXnbAsset(points, {}, "points");
+    const std::string text(file.begin(), file.end());
+    EXPECT_NE(text.find("Microsoft.Xna.Framework.Content.ArrayReader`1"), std::string::npos);
+    EXPECT_EQ(text.find("Microsoft.Xna.Framework.Content.ListReader`1"), std::string::npos);
+    const std::vector<Vector3> readPoints = LoadedXnb(file).ReadAsset<std::vector<Vector3>>();
+    ASSERT_EQ(readPoints.size(), 2u);
+    EXPECT_FLOAT_EQ(readPoints[0].Z, 3.0f);
+    EXPECT_FLOAT_EQ(readPoints[1].X, -4.0f);
+}
+
+TEST_F(XnbWriterTest, ANullableInstantiationRoundTripsThroughTheDocumentedExtensionPath)
+{
+    using namespace Microsoft::Xna::Framework;
+
+    // XNAP-22/XNAP-9D: no `Nullable<T>` instantiation is registered by default, because no
+    // built-in CNA reader resolves one -- a writer with no reader produces a file CNA itself
+    // cannot load. Registering one is the documented extension point, and this is that path run
+    // end to end rather than described: both halves registered by the consumer, both states of
+    // the flag, and a real file between them.
+    XnbTypeWriterRegistry registry;
+    RegisterBuiltInXnbWriters(registry);
+    registry.Register(std::make_shared<const XnbNullableTypeWriter<Vector3>>(
+        XnbBuiltInReaderIdentity<Vector3>()));
+
+    ContentTypeReaderManager::AddTypeCreator(
+        "Microsoft.Xna.Framework.Content.NullableReader`1[[Microsoft.Xna.Framework.Vector3]]",
+        []
+        {
+            return std::make_unique<NullableReader<Vector3>>(
+                "System.Nullable`1[[Microsoft.Xna.Framework.Vector3]]",
+                "Microsoft.Xna.Framework.Content.Vector3Reader");
+        });
+
+    const std::optional<Vector3> present = Vector3{7.0f, 8.0f, 9.0f};
+    const std::optional<Vector3> read =
+        LoadedXnb(WriteXnbAsset(present, {}, "spawn", registry))
+            .ReadAsset<std::optional<Vector3>>();
+    ASSERT_TRUE(read.has_value());
+    EXPECT_FLOAT_EQ(read->Y, 8.0f);
+
+    const std::optional<Vector3> absent;
+    EXPECT_FALSE(LoadedXnb(WriteXnbAsset(absent, {}, "spawn", registry))
+                     .ReadAsset<std::optional<Vector3>>()
+                     .has_value());
+}
+
+TEST_F(XnbWriterTest, AnArrayTypedGenericArgumentSurvivesTheWholeRoundTrip)
+{
+    using namespace Microsoft::Xna::Framework;
+
+    // XNAP-9C: `List<Int32[]>` is the shape that produced `System.Int32[][[System.Int32]]` before
+    // targetSharesGenericArguments, and whose *reader* name -- which legitimately contains
+    // `System.Int32[]` as a generic argument -- CNA's own type-name parser could not parse. Both
+    // ends are exercised here at once: the writer spells the name, and the reader resolves it.
+    XnbTypeWriterRegistry registry;
+    RegisterBuiltInXnbWriters(registry);
+    const XnbReaderIdentity arrayOfInt32 =
+        XnbArrayTypeWriter<std::int32_t>(XnbBuiltInReaderIdentity<std::int32_t>()).ReaderIdentity();
+    registry.Register(std::make_shared<const XnbArrayTypeWriter<std::int32_t>>(
+        XnbBuiltInReaderIdentity<std::int32_t>()));
+    registry.Register(
+        std::make_shared<const XnbListTypeWriter<XnbArray<std::int32_t>>>(arrayOfInt32));
+
+    ContentTypeReaderManager::AddTypeCreator(
+        "Microsoft.Xna.Framework.Content.ArrayReader`1[[System.Int32]]",
+        []
+        {
+            return std::make_unique<ArrayReader<std::int32_t>>(
+                "System.Int32[]", "Microsoft.Xna.Framework.Content.Int32Reader");
+        });
+    ContentTypeReaderManager::AddTypeCreator(
+        "Microsoft.Xna.Framework.Content.ListReader`1[[System.Int32[]]]",
+        []
+        {
+            return std::make_unique<ListReader<std::vector<std::int32_t>>>(
+                "System.Collections.Generic.List`1[[System.Int32[]]]",
+                "Microsoft.Xna.Framework.Content.ArrayReader`1[[System.Int32]]");
+        });
+
+    const std::vector<XnbArray<std::int32_t>> rows{{{1, 2, 3}}, {{}}, {{-9}}};
+    const std::vector<std::uint8_t> file = WriteXnbAsset(rows, {}, "rows", registry);
+    const std::string text(file.begin(), file.end());
+    EXPECT_NE(text.find("Microsoft.Xna.Framework.Content.ListReader`1[[System.Int32[], mscorlib"),
+              std::string::npos);
+    EXPECT_EQ(text.find("System.Int32[][["), std::string::npos);
+
+    const std::vector<std::vector<std::int32_t>> read =
+        LoadedXnb(file).ReadAsset<std::vector<std::vector<std::int32_t>>>();
+    ASSERT_EQ(read.size(), 3u);
+    EXPECT_EQ(read[0], (std::vector<std::int32_t>{1, 2, 3}));
+    EXPECT_TRUE(read[1].empty());
+    EXPECT_EQ(read[2], (std::vector<std::int32_t>{-9}));
 }
 
 TEST_F(XnbWriterTest, AGameCanRegisterItsOwnTypeWriterAndReaderAndRoundTripThroughThem)

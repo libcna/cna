@@ -116,6 +116,25 @@ namespace CNA::Internal::Xnb
         /** @brief Compares the complete element sequence. */
         bool operator==(const XnbArray& other) const = default;
     };
+}
+
+namespace CNA::Internal::Xnb::Detail
+{
+    /**
+     * @brief A managed array is a .NET reference type, so a nested one carries a dispatch index.
+     *
+     * The reading side already says this for `std::vector<T>`, which is how it represents both
+     * `T[]` and `List<T>`. `XnbArray<T>` is the writing side's separate carrier for the array
+     * case, and without this specialization the default (`false`) applied: a `List<Int32[]>`
+     * wrote its elements with no dispatch index while `ListReader<Int32[]>` read one, and every
+     * following field in the file shifted (plans/plan_xnapipeline.md `XNAP-9C`).
+     */
+    template<typename T>
+    struct IsSerializedReferenceType<XnbArray<T>> : std::true_type {};
+}
+
+namespace CNA::Internal::Xnb
+{
 
     /**
      * @brief Writer for `List<T>`, serialized as an `Int32` count followed by the elements.

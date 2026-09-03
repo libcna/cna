@@ -233,13 +233,30 @@ written at all — the type is absent rather than silently degraded.
 | Type | cna-rt | spec | Notes |
 |---|---|---|---|
 | `List<String>` | ✅ | ✅ | Also **`golden`**: see §4. |
-| `List<Int32>`, `List<Char>`, `List<Rectangle>`, `List<Vector3>` | ✅ | ✅ | The instantiations CNA's own runtime reader registry resolves. |
+| `List<Int32>`, `List<Char>`, `List<Rectangle>`, `List<Vector3>`, `List<Matrix>` | ✅ | ✅ | The instantiations CNA's own runtime reader registry resolves. A test asserts that *every* built-in writer's reader name resolves there, so the two registries cannot drift. |
 | `Dictionary<String, Int32>` | ✅ | — | Written in deterministic key order. The independent parser has no dictionary decoder yet. |
-| `Nullable<T>`, `T[]` | ⚠️ `impl` | — | The writer templates exist and work; no instantiation is registered by default, because no built-in CNA **reader** resolves one. Registering one is the documented extension point. |
+| `Vector3[]` | ✅ | — | The one array instantiation with a built-in reader — a real XNA `Model` names `ArrayReader<Vector3>` in its own type table. Written through the `XnbArray<T>` carrier, which is how a registry keyed by C++ type tells `Vector3[]` from `List<Vector3>`: both are `std::vector<Vector3>`. |
+| `Nullable<T>`, other `T[]` | ⚠️ `impl` | — | The writer templates exist and work, and the documented extension path is exercised end to end (`ANullableInstantiationRoundTripsThroughTheDocumentedExtensionPath`, `AnArrayTypedGenericArgumentSurvivesTheWholeRoundTrip`). No further instantiation is registered *by default*, because no built-in CNA **reader** resolves one and a writer with no reader produces a file CNA itself could not load. |
 | `Enum<T>` | ✅ | — | Written as the underlying `Int32`, under `EnumReader\`1[[<enum>]]`, read back by `EnumTypeReader<T>`. Not registered by default: the enum's .NET name cannot be recovered from a C++ enum, so it is supplied at registration — `RegisterXnbEnumWriter<T>(registry, "Namespace.Enum", assembly)`. A value can never reach the wrong enum's writer, because the registry is keyed by the C++ type. |
 
 Arbitrary nesting works: the writer interns readers by formatted name on first use, so
 `List<Dictionary<String,Int32>>` needs only its own registration, not a new mechanism.
+
+**A reader's generic arguments are not always its target type's.** `ListReader<T>` produces
+`List<T>`, `DictionaryReader<K,V>` produces `Dictionary<K,V>` and `NullableReader<T>` produces
+`Nullable<T>` — reader and target share one argument list. `EnumReader<TEnum>` produces the plain,
+non-generic `TEnum`, and `ArrayReader<T>` produces `T[]`, whose element type is already spelled in
+the target name. `XnbReaderIdentity::targetSharesGenericArguments` records the difference; without
+it a nested identity spelled `SurfaceFormat[[SurfaceFormat]]` or
+`System.Int32[][[System.Int32]]` — names no runtime resolves. `XnbReaderIdentityTest` covers the two
+direct cases, ten nested combinations, and a structural invariant walked over every built-in
+identity, and asserts those two malformed spellings absent.
+
+Auditing that model found two defects on the *reading* side, both fixed: `XnbTypeName` could not
+parse a .NET array type name at all (`System.Int32[]` read as `System.Int32` plus a malformed
+argument list), so a genuine `.xnb` naming `List<int[]>` failed while parsing its type table; and
+the writer's `XnbArray<T>` carrier was not marked as a .NET reference type, so a nested array was
+written without the dispatch index its reader consumes.
 
 ### 3.3 Assets
 
@@ -438,9 +455,10 @@ have.
 
 The same mechanism is how you register a generic instantiation CNA does not ship. Only the closed
 instantiations CNA's own runtime reader registry resolves are registered by default —
-`List<String>`, `List<Int32>`, `List<Char>`, `List<Rectangle>`, `List<Vector3>` and
-`Dictionary<String,Int32>` — so that a file this writer produces always has a reader on the other
-side. `List<Single>` is not a gap; it is one `registry.Register(...)` call plus its reader.
+`List<String>`, `List<Int32>`, `List<Char>`, `List<Rectangle>`, `List<Vector3>`, `List<Matrix>`,
+`Dictionary<String,Int32>` and `Vector3[]` — so that a file this writer produces always has a reader
+on the other side, and a test asserts exactly that for every built-in writer. `List<Single>` is not
+a gap; it is one `registry.Register(...)` call plus its reader.
 
 At the pipeline level, a custom `ContentTypeWriter` reaches `.xnb` by returning
 `ContentOutputFormat::Xnb` from `OutputFormat()`. `docs/content-pipeline.md`'s **Custom
