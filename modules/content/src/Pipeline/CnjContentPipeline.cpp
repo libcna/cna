@@ -570,6 +570,13 @@ namespace CNA::Content::Pipeline
         registry.RegisterWriter(std::make_shared<CurveContentWriter>());
         registry.RegisterProcessor(std::make_shared<AnimationClipProcessor>());
         registry.RegisterWriter(std::make_shared<AnimationClipContentWriter>());
+        registry.DocumentAbsentWriter(
+            ContentOutputFormat::Xnb, ProcessedAnimationClipType,
+            "XNA 4.0 has no AnimationClip content type and no reader for one; "
+            "AnimationClipEXT is CNA's own extension. An .xnb naming a CNA-only reader would "
+            "fail to load in the XNA-compatible runtime the XNB container exists for, so this "
+            "type is CNB-only by design rather than by omission. A Model's clips still reach "
+            "XNB, embedded in the Model the way XNA itself carried them.");
         registry.RegisterProcessor(std::make_shared<SpriteFontProcessor>());
         registry.RegisterWriter(std::make_shared<SpriteFontContentWriter>());
     }

@@ -996,6 +996,32 @@ namespace CNA::Content::Pipeline
             ContentOutputFormat format = ContentOutputFormat::Cnb) const;
 
         /**
+         * @brief Returns every registered importer, ordered by stable name.
+         *
+         * The pipeline's own routing never needs this: it resolves by extension. It exists so
+         * that the *inventory* of what a configuration can build can be derived from the registry
+         * rather than restated by hand somewhere it can go stale
+         * (plans/plan_xnapipeline.md `XNAP-61`).
+         *
+         * @return Every importer, ordered by identity name.
+         */
+        [[nodiscard]] std::vector<std::shared_ptr<const ContentImporter>> Importers() const;
+
+        /**
+         * @brief Returns every registered processor, ordered by stable name.
+         *
+         * @return Every processor, ordered by identity name.
+         */
+        [[nodiscard]] std::vector<std::shared_ptr<const ContentProcessor>> Processors() const;
+
+        /**
+         * @brief Returns every registered writer, ordered by stable name.
+         *
+         * @return Every writer, ordered by identity name.
+         */
+        [[nodiscard]] std::vector<std::shared_ptr<const ContentTypeWriter>> Writers() const;
+
+        /**
          * @brief Records why one container deliberately has no writer for a processed type
          *        (plans/plan_xnapipeline.md `XNAP-61`).
          *

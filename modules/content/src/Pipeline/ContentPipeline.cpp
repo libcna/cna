@@ -985,6 +985,36 @@ namespace CNA::Content::Pipeline
         }
     }
 
+    std::vector<std::shared_ptr<const ContentImporter>>
+    ContentPipelineRegistry::Importers() const
+    {
+        const std::shared_lock lock(configurationMutex_);
+        std::vector<std::shared_ptr<const ContentImporter>> components;
+        components.reserve(importers_.size());
+        for (const auto& [name, component] : importers_) { components.push_back(component); }
+        return components;
+    }
+
+    std::vector<std::shared_ptr<const ContentProcessor>>
+    ContentPipelineRegistry::Processors() const
+    {
+        const std::shared_lock lock(configurationMutex_);
+        std::vector<std::shared_ptr<const ContentProcessor>> components;
+        components.reserve(processors_.size());
+        for (const auto& [name, component] : processors_) { components.push_back(component); }
+        return components;
+    }
+
+    std::vector<std::shared_ptr<const ContentTypeWriter>>
+    ContentPipelineRegistry::Writers() const
+    {
+        const std::shared_lock lock(configurationMutex_);
+        std::vector<std::shared_ptr<const ContentTypeWriter>> components;
+        components.reserve(writers_.size());
+        for (const auto& [name, component] : writers_) { components.push_back(component); }
+        return components;
+    }
+
     void ContentPipelineRegistry::DocumentAbsentWriter(const ContentOutputFormat format,
                                                        const std::string& inputType,
                                                        const std::string& reason)
