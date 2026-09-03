@@ -787,3 +787,51 @@ TEST(EffectSourceCommandLineTest, EveryOptionTheParserAcceptsAppearsInTheUsageTe
                "pointing the other way.";
     }
 }
+
+TEST(EffectSourceCommandLineTest, TheCompilerAndTheLauncherResolveIndependently)
+{
+    ScratchDirectory scratch("axes");
+    const std::filesystem::path record = scratch.Path() / "argv.txt";
+    WriteEffectProject(scratch, "//FAKE: record=" + record.string() + "\n");
+
+    // Two axes, not one setting: naming a launcher on the command line must not also decide the
+    // compiler, and vice versa. The failure this pins is subtle -- a build that supplies only
+    // --fx-compiler on a machine whose CMake baked in a launcher still runs *through* that
+    // launcher, and a reader who thought one option overrode both would be surprised by which
+    // program actually failed to start.
+    const ScopedEnvironment compiler("CNA_FXC", "/nonexistent/from-the-environment");
+    const Invocation run = RunCli({"build", scratch.Source(), "-o", scratch.Output(),
+                                   "--format", "xnb",
+                                   "--fx-compiler", FakeCompiler(),
+                                   "--fx-compiler-launcher", FakeCompiler()});
+
+    ASSERT_EQ(run.exitCode, 0) << run.output;
+    // The launcher was handed the compiler path, which is what running one *through* the other
+    // means, and neither came from the environment.
+    EXPECT_NE(ReadText(record).find("launcher\t" + FakeCompiler().string() + "\n"),
+              std::string::npos)
+        << ReadText(record);
+    EXPECT_EQ(ReadText(record).find("from-the-environment"), std::string::npos);
+}
+
+TEST(EffectSourceCommandLineTest, NoConfigureTimeCompilerDefaultIsBakedIntoThisBuild)
+{
+    // Almost every test above supplies --fx-compiler and expects the build to succeed. A build
+    // configured with -DCNA_FXC_LAUNCHER=wine defeats that: the launcher axis resolves
+    // independently (see TheCompilerAndTheLauncherResolveIndependently), so the stand-in compiler
+    // is correctly run *through* a launcher that is not there, and sixteen tests fail for one
+    // reason none of them names. This test names it once, first, so the cause is legible rather
+    // than inferred.
+    ScratchDirectory scratch("no-default");
+    WriteEffectProject(scratch);
+
+    const Invocation run = RunCli({"build", scratch.Source(), "-o", scratch.Output(),
+                                   "--format", "xnb", "--fx-compiler", FakeCompiler()});
+
+    EXPECT_EQ(run.exitCode, 0)
+        << "the stand-in compiler did not run, which usually means this build was configured with "
+           "-DCNA_FXC_EXECUTABLE or -DCNA_FXC_LAUNCHER. Those are legitimate settings and the "
+           "route honours them; they are simply incompatible with a suite that supplies its own "
+           "compiler. Re-configure with both empty to run these tests.\n"
+        << run.output;
+}

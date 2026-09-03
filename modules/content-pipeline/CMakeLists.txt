@@ -43,3 +43,25 @@ else()
         "build reports that this configuration has no font rasterizer")
 endif()
 set(CNA_FREETYPE_AVAILABLE ${CNA_FREETYPE_AVAILABLE} PARENT_SCOPE)
+
+# plans/plan_xnapipeline.md XNAP-A5: the effect compiler's configure-time tier.
+#
+# EffectCompilerService reads CNA_FXC_EXECUTABLE / CNA_FXC_LAUNCHER as compile definitions, and
+# its own "no usable effect compiler" diagnostic tells users to pass them with -D. Until this
+# block existed nothing turned the cache variable into a definition, so `-DCNA_FXC_EXECUTABLE=...`
+# was accepted by CMake and silently ignored -- the same defect as an option a service documents
+# and a parser does not implement, one tier down. Declared as cache entries so `cmake -LH` lists
+# them, and defined only when set, because an empty definition is not the same as no definition.
+set(CNA_FXC_EXECUTABLE "" CACHE STRING
+    "Path to an fxc-compatible effect compiler, baked in as the .fx route's configure-time default")
+set(CNA_FXC_LAUNCHER "" CACHE STRING
+    "Program to run the effect compiler through (typically 'wine'), as the configure-time default")
+
+foreach(_cna_fxc_setting IN ITEMS CNA_FXC_EXECUTABLE CNA_FXC_LAUNCHER)
+    if(${_cna_fxc_setting})
+        target_compile_definitions(cna_content_pipeline PRIVATE
+            ${_cna_fxc_setting}="${${_cna_fxc_setting}}")
+        message(STATUS "CNA: ${_cna_fxc_setting}=${${_cna_fxc_setting}}")
+    endif()
+endforeach()
+unset(_cna_fxc_setting)

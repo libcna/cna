@@ -423,6 +423,10 @@ choice on a non-Windows build machine. Each option has the highest precedence in
 | 3 | `-DCNA_FXC_EXECUTABLE` at configure time | `-DCNA_FXC_LAUNCHER` at configure time |
 | 4 | `fxc` / `fxc.exe` on `PATH` | none |
 
+The two are **independent axes**, each resolved through its own order: naming a compiler on the
+command line does not also decide the launcher, so a build that passes only `--fx-compiler` on a
+machine whose CMake baked in `CNA_FXC_LAUNCHER` still runs that compiler *through* that launcher.
+
 The compiler is probed once per invocation, and the identity it reports enters the build
 fingerprint, so switching compilers rebuilds rather than reusing artifacts a different one
 produced. A build with no usable compiler fails at the first `.fx` with one complete explanation —
