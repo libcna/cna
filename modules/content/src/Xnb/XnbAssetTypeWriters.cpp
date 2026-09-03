@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Xnb/XnbAssetTypeWriters.hpp"
 
+#include <algorithm>
 #include <variant>
+
+#include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 
 #include <limits>
 #include <variant>
@@ -110,6 +113,30 @@ namespace CNA::Internal::Xnb
          * @param readerName Reader name used in the failure message.
          * @throws XnbWriteException when the level count disagrees with the declared shape.
          */
+        /**
+         * @brief The exact byte count one mip level of a texture occupies.
+         *
+         * Block-compressed formats round each dimension up to a whole 4x4 block, which is why a
+         * 1x1 DXT5 level still costs sixteen bytes.
+         */
+        [[nodiscard]] std::uint64_t TextureLevelByteSize(const SurfaceFormat format,
+                                                         const std::uint32_t width,
+                                                         const std::uint32_t height,
+                                                         const std::uint32_t depth)
+        {
+            const auto unit = static_cast<std::uint64_t>(
+                Microsoft::Xna::Framework::Graphics::Texture::GetFormatSizeEXT(format));
+            const bool blockCompressed =
+                Microsoft::Xna::Framework::Graphics::Texture::GetBlockSizeSquaredEXT(format) > 1;
+            if (blockCompressed)
+            {
+                const std::uint64_t blocksX = (static_cast<std::uint64_t>(width) + 3u) / 4u;
+                const std::uint64_t blocksY = (static_cast<std::uint64_t>(height) + 3u) / 4u;
+                return blocksX * blocksY * depth * unit;
+            }
+            return static_cast<std::uint64_t>(width) * height * depth * unit;
+        }
+
         void WriteTextureLevels(XnbWriter& output, const XnbTextureData& texture,
                                 const char* readerName)
         {
@@ -124,9 +151,31 @@ namespace CNA::Internal::Xnb
                     std::to_string(texture.mipCount) + " mip level(s) = " +
                     std::to_string(expected) + ".");
             }
-            for (const std::vector<std::uint8_t>& level : texture.levels)
+            for (std::size_t index = 0u; index < texture.levels.size(); ++index)
             {
-                output.WriteLengthPrefixedBytes(level);
+                // plans/plan_xnapipeline.md XNAP-85: a level whose byte count disagrees with the
+                // dimensions and format the same file declares is refused here rather than
+                // written. The reader would refuse it later, but by then the producer that still
+                // held the mismatched data is long gone and the message can only name a file.
+                const std::uint32_t mip =
+                    static_cast<std::uint32_t>(index % texture.mipCount);
+                const std::uint32_t width = std::max(1u, texture.width >> mip);
+                const std::uint32_t height = std::max(1u, texture.height >> mip);
+                const std::uint32_t depth = std::max(1u, texture.depth >> mip);
+                const std::uint64_t needed =
+                    TextureLevelByteSize(texture.surfaceFormat, width, height, depth);
+                if (texture.levels[index].size() != needed)
+                {
+                    throw XnbWriteException(
+                        std::string("'") + output.AssetName() + "': " + readerName +
+                        " level " + std::to_string(index) + " carries " +
+                        std::to_string(texture.levels[index].size()) + " bytes, but " +
+                        std::to_string(width) + "x" + std::to_string(height) + "x" +
+                        std::to_string(depth) + " SurfaceFormat " +
+                        std::to_string(static_cast<int>(texture.surfaceFormat)) + " needs " +
+                        std::to_string(needed) + ".");
+                }
+                output.WriteLengthPrefixedBytes(texture.levels[index]);
             }
         }
 

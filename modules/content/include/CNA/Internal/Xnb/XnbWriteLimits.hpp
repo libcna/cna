@@ -45,4 +45,31 @@ namespace CNA::Internal::Xnb
         static const XnbWriteLimits limits;
         return limits;
     }
+
+    /**
+     * @brief Rejects a limit set that would disable the ceilings it is supposed to impose
+     *        (plans/plan_xnapipeline.md `XNAP-85`).
+     *
+     * Every field is signed, and every check that consults one casts it to `std::size_t`. A zero
+     * or negative value therefore does not mean "small" -- it means "effectively unbounded",
+     * which is the opposite of what a limit is for. Validating once at construction is what makes
+     * every later check trustworthy, and is cheaper than repeating a sign test at each of them.
+     *
+     * @param limits The limits to validate.
+     * @throws XnbWriteException naming the first field that is not positive.
+     */
+    void ValidateXnbWriteLimits(const XnbWriteLimits& limits);
+
+    /**
+     * @brief Returns the payload ceiling the writer actually applies.
+     *
+     * An uncompressed file is its ten-byte header plus its payload, so a payload larger than the
+     * file ceiling can never be emitted. Capping the assembly buffer at that point means an
+     * oversized asset fails while it is being written rather than after several hundred megabytes
+     * have been allocated to hold something that was always going to be refused.
+     *
+     * @param limits The validated limits.
+     * @return The smaller of the payload ceiling and what the file ceiling leaves for a payload.
+     */
+    [[nodiscard]] std::int32_t EffectiveXnbPayloadCeiling(const XnbWriteLimits& limits);
 }

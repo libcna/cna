@@ -2,6 +2,7 @@
 #include "CNA/Internal/Xnb/XnbByteWriter.hpp"
 
 #include <bit>
+#include <limits>
 #include <utility>
 
 #include "CNA/Content/Cnb/CnbByteReader.hpp"
@@ -122,6 +123,15 @@ namespace CNA::Internal::Xnb
 
     void XnbByteWriter::WriteString(const std::string& value)
     {
+        // The length prefix is a 7-bit-encoded Int32, so a longer string cannot be described at
+        // all -- checked before the configured ceiling, because this one is a property of the
+        // format rather than a policy a caller may relax.
+        if (value.size() > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max()))
+        {
+            throw XnbWriteException(
+                "XNB: a " + std::to_string(value.size()) +
+                "-byte string is longer than the format's Int32 length prefix can describe.");
+        }
         if (value.size() > static_cast<std::size_t>(limits_.maxStringBytes))
         {
             throw XnbWriteException(

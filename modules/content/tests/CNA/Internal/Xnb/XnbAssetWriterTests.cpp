@@ -608,3 +608,53 @@ TEST(XnbAssetWriterTest, AFormatVersion4CannotExpressIsRefused)
     EXPECT_THROW((void)WriteXnbAsset(XnbTexture2DContent{source}, options, "legacy"),
                  XnbWriteException);
 }
+
+// -- untrusted-input hardening (XNAP-85) -------------------------------------------------------
+
+TEST(XnbAssetWriterTest, ATextureLevelWhoseByteCountDisagreesWithItsDimensionsIsRefused)
+{
+    XnbTextureData source;
+    source.kind = XnbTextureKind::Texture2D;
+    source.surfaceFormat = SurfaceFormat::Color;
+    source.width = 4u;
+    source.height = 4u;
+    source.mipCount = 1u;
+    source.levels = {std::vector<std::uint8_t>(4u * 4u * 4u - 1u, 0u)};
+
+    try
+    {
+        (void)WriteXnbAsset(XnbTexture2DContent{source}, {}, "short");
+        FAIL() << "a level shorter than its own declared dimensions must be refused";
+    }
+    catch (const XnbWriteException& error)
+    {
+        const std::string message = error.what();
+        EXPECT_NE(message.find("carries 63 bytes"), std::string::npos) << message;
+        EXPECT_NE(message.find("needs 64"), std::string::npos) << message;
+    }
+
+    // The same check has to follow the mip chain down, or only level zero is ever validated.
+    XnbTextureData chain;
+    chain.kind = XnbTextureKind::Texture2D;
+    chain.surfaceFormat = SurfaceFormat::Color;
+    chain.width = 4u;
+    chain.height = 4u;
+    chain.mipCount = 3u;
+    chain.levels = {std::vector<std::uint8_t>(4u * 4u * 4u, 0u),
+                    std::vector<std::uint8_t>(2u * 2u * 4u, 0u),
+                    std::vector<std::uint8_t>(9u, 0u)};
+    EXPECT_THROW((void)WriteXnbAsset(XnbTexture2DContent{chain}, {}, "chain"), XnbWriteException);
+
+    // A block-compressed level rounds each dimension up to a whole 4x4 block, so a 2x2 DXT1
+    // level is eight bytes rather than one.
+    XnbTextureData block;
+    block.kind = XnbTextureKind::Texture2D;
+    block.surfaceFormat = SurfaceFormat::Dxt1;
+    block.width = 2u;
+    block.height = 2u;
+    block.mipCount = 1u;
+    block.levels = {std::vector<std::uint8_t>(8u, 0u)};
+    EXPECT_NO_THROW((void)WriteXnbAsset(XnbTexture2DContent{block}, {}, "block"));
+    block.levels = {std::vector<std::uint8_t>(4u, 0u)};
+    EXPECT_THROW((void)WriteXnbAsset(XnbTexture2DContent{block}, {}, "block"), XnbWriteException);
+}

@@ -30,6 +30,17 @@ namespace CNA::Internal::Xnb
         [[nodiscard]] std::string ExternalReferenceProblem(const std::string& reference)
         {
             if (reference.empty()) { return {}; }
+            // A NUL or a control character in a path is never authored on purpose. It survives
+            // this format's length-prefixed strings intact, and then truncates or misbehaves in
+            // whatever consumes the path as a C string on the other side.
+            for (const char character : reference)
+            {
+                if (static_cast<unsigned char>(character) < 0x20u ||
+                    static_cast<unsigned char>(character) == 0x7Fu)
+                {
+                    return "it contains a control character";
+                }
+            }
             if (reference.front() == '/' || reference.front() == '\\')
             {
                 return "it is an absolute path";
@@ -61,12 +72,30 @@ namespace CNA::Internal::Xnb
         }
     }
 
+    namespace
+    {
+        /**
+         * @brief Validates a file's limits and returns the set the body buffer should enforce.
+         *
+         * Validation happens here rather than at each check because the checks widen a signed
+         * limit to `std::size_t`: a negative limit would silently become an enormous one, which
+         * is exactly the failure a limit exists to prevent.
+         */
+        [[nodiscard]] XnbWriteLimits EffectiveWriteLimits(const XnbWriteLimits& limits)
+        {
+            ValidateXnbWriteLimits(limits);
+            XnbWriteLimits effective = limits;
+            effective.maxPayloadSize = EffectiveXnbPayloadCeiling(limits);
+            return effective;
+        }
+    }
+
     XnbWriter::XnbWriter(const XnbTypeWriterRegistry& registry, XnbFileOptions options,
                          std::string assetName)
         : registry_(&registry)
         , options_(std::move(options))
         , assetName_(std::move(assetName))
-        , body_(options_.limits)
+        , body_(EffectiveWriteLimits(options_.limits))
     {
         ValidateXnbFileOptions(options_);
         registry_->Freeze();
@@ -209,6 +238,14 @@ namespace CNA::Internal::Xnb
     void XnbWriter::RequireCollectionCount(const std::size_t count,
                                             const std::string& readerName) const
     {
+        // The format describes a collection's length with an Int32, so a count above that is not
+        // merely large -- it is unrepresentable, and casting it would write a negative length.
+        if (count > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max()))
+        {
+            throw XnbWriteException(
+                "'" + assetName_ + "': " + readerName + " was given " + std::to_string(count) +
+                " elements, more than the format's Int32 length field can describe.");
+        }
         if (count > static_cast<std::size_t>(options_.limits.maxCollectionElementCount))
         {
             throw XnbWriteException(

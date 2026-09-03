@@ -684,3 +684,75 @@ TEST_F(XnbWriterTest, FinishingTwiceIsRefusedRatherThanProducingASecondTruncated
     EXPECT_NO_THROW((void)writer.Finish());
     EXPECT_THROW((void)writer.Finish(), XnbWriteException);
 }
+
+// -- untrusted-input hardening (XNAP-85) -------------------------------------------------------
+
+TEST_F(XnbWriterTest, ANonPositiveWriteLimitIsRefusedRatherThanSilentlyDisablingTheCeiling)
+{
+    // Every limit is signed and every check that consults one widens it to std::size_t, so a
+    // negative limit does not mean "small" -- it means "no limit at all". That is the opposite of
+    // what a limit is for, and it has to fail loudly at the one place it enters the system.
+    for (const auto& [name, mutate] :
+         std::vector<std::pair<const char*, void (*)(XnbWriteLimits&)>>{
+             {"maxFileSize", [](XnbWriteLimits& limits) { limits.maxFileSize = -1; }},
+             {"maxPayloadSize", [](XnbWriteLimits& limits) { limits.maxPayloadSize = 0; }},
+             {"maxStringBytes", [](XnbWriteLimits& limits) { limits.maxStringBytes = -5; }},
+             {"maxTypeWriterCount", [](XnbWriteLimits& limits) { limits.maxTypeWriterCount = 0; }},
+             {"maxSharedResourceCount",
+              [](XnbWriteLimits& limits) { limits.maxSharedResourceCount = -1; }},
+             {"maxCollectionElementCount",
+              [](XnbWriteLimits& limits) { limits.maxCollectionElementCount = 0; }},
+             {"maxObjectNestingDepth",
+              [](XnbWriteLimits& limits) { limits.maxObjectNestingDepth = -3; }}})
+    {
+        XnbFileOptions options;
+        mutate(options.limits);
+        try
+        {
+            (void)WriteXnbAsset(std::int32_t{1}, options, "limits");
+            FAIL() << name << " was accepted as a limit";
+        }
+        catch (const XnbWriteException& error)
+        {
+            EXPECT_NE(std::string(error.what()).find(name), std::string::npos) << error.what();
+        }
+    }
+
+    // A file ceiling below its own header describes something that cannot exist.
+    XnbFileOptions tiny;
+    tiny.limits.maxFileSize = 8;
+    EXPECT_THROW((void)WriteXnbAsset(std::int32_t{1}, tiny, "tiny"), XnbWriteException);
+}
+
+TEST_F(XnbWriterTest, TheAssemblyBufferIsCappedByTheFileCeilingRatherThanThePayloadCeiling)
+{
+    // The default payload ceiling is four times the file ceiling, so without this cap the writer
+    // would allocate up to 256 MB assembling something the file ceiling was always going to
+    // refuse. Failing while writing rather than after assembling is the whole point.
+    XnbFileOptions options;
+    options.limits.maxFileSize = 4096;
+    options.limits.maxPayloadSize = 64 * 1024 * 1024;
+
+    std::vector<std::string> many;
+    for (int index = 0; index < 4096; ++index) { many.push_back("entry-" + std::to_string(index)); }
+    try
+    {
+        (void)WriteXnbAsset(many, options, "oversized");
+        FAIL() << "an asset larger than the file ceiling must be refused";
+    }
+    catch (const XnbWriteException& error)
+    {
+        EXPECT_NE(std::string(error.what()).find("payload"), std::string::npos) << error.what();
+    }
+}
+
+TEST_F(XnbWriterTest, AnExternalReferenceCarryingAControlCharacterIsRefused)
+{
+    // A NUL in a path survives this format's length-prefixed strings intact and then truncates in
+    // whatever consumes the path as a C string on the other side.
+    EXPECT_THROW((void)WriteXnbAsset(XnbExternalAssetReference{std::string("Textures/a\0b", 12)},
+                                     {}, "nul"),
+                 XnbWriteException);
+    EXPECT_THROW((void)WriteXnbAsset(XnbExternalAssetReference{"Textures/a\nb"}, {}, "newline"),
+                 XnbWriteException);
+}
