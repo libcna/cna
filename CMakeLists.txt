@@ -66,6 +66,13 @@ cna_configure_linker()
 # on every compile invocation, allowing ccache to normalize source paths shared by CNA and the
 # sibling Sharp Runtime checkout. Disable with -DCNA_USE_CCACHE=OFF when diagnosing launcher issues.
 option(CNA_USE_CCACHE "Use ccache for CNA and sharp-runtime builds when available" ON)
+
+# plans/plan_xnapipeline.md XNAP-51/XNAP-52: FreeType powers the .spritefont source route, and is
+# a build-time dependency only -- it is linked by cna_content_pipeline, which no runtime game
+# links. OFF/AUTO/ON have the same meaning as CNA_ENABLE_VIDEO's.
+set(CNA_ENABLE_FONT_PIPELINE "AUTO" CACHE STRING
+    "SpriteFont source pipeline: OFF, AUTO or ON (requires FreeType)")
+set_property(CACHE CNA_ENABLE_FONT_PIPELINE PROPERTY STRINGS OFF AUTO ON)
 set(CNA_CCACHE_BASEDIR "${CMAKE_CURRENT_SOURCE_DIR}/.." CACHE PATH
     "Stable source parent supplied to ccache for path normalization")
 if(CNA_USE_CCACHE)

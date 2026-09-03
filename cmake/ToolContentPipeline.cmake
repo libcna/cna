@@ -8,7 +8,10 @@ add_library(CNA::ContentCompiler ALIAS cna_content_compiler)
 target_include_directories(cna_content_compiler PRIVATE
     ${CNA_SOURCE_DIR}/tools/common
 )
-target_link_libraries(cna_content_compiler PUBLIC cna_content)
+# cna_content_pipeline carries the build-time-only components (the FreeType-backed .spritefont
+# route). Linking it here and nowhere else is what keeps FreeType out of a runtime game's closure
+# while still giving the CLI, custom compilers and the tests the complete source-route set.
+target_link_libraries(cna_content_compiler PUBLIC cna_content cna_content_pipeline)
 cna_link_sharp_runtime(cna_content_compiler PRIVATE)
 
 add_executable(cna_content_tool

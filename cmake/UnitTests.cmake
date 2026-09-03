@@ -288,6 +288,10 @@ if(CNA_BUILD_TESTS)
     # crosses into the engine-layer material bridge implemented by cna_graphics_ext. Compile-only
     # include visibility is insufficient: the focused executable must link that implementation.
     set(CNA_TEST_GROUP_DEPENDENCY_content cna_content cna_graphics_ext)
+    # plans/plan_xnapipeline.md XNAP-90: cna_content_pipeline is the build-time-only module (the
+    # FreeType-backed .spritefont route). It is deliberately absent from the CNA runtime umbrella,
+    # so this group names it explicitly and CnaTests links it separately below.
+    set(CNA_TEST_GROUP_DEPENDENCY_content_pipeline cna_content_pipeline)
     set(CNA_TEST_GROUP_DEPENDENCY_core cna_core)
     set(CNA_TEST_GROUP_DEPENDENCY_devices cna_devices)
     set(CNA_TEST_GROUP_DEPENDENCY_devices_ext cna_devices_ext)
@@ -306,6 +310,7 @@ if(CNA_BUILD_TESTS)
 
     set(CNA_TEST_FOCUSED_TARGET_audio CnaAudioTests)
     set(CNA_TEST_FOCUSED_TARGET_content CnaContentTests)
+    set(CNA_TEST_FOCUSED_TARGET_content_pipeline CnaContentPipelineTests)
     set(CNA_TEST_FOCUSED_TARGET_core CnaCoreTests)
     set(CNA_TEST_FOCUSED_TARGET_devices CnaDevicesTests)
     set(CNA_TEST_FOCUSED_TARGET_devices_ext CnaDevicesExtTests)
@@ -409,6 +414,13 @@ if(CNA_BUILD_TESTS)
         cna_test_build_config
         CNA
         gtest_main)
+
+    # The build-time-only content-pipeline module is not part of the CNA runtime umbrella by
+    # design (a game must not link FreeType because the content pipeline exists). CnaTests
+    # consumes every group's objects, so it needs that one library named explicitly.
+    if(TARGET cna_content_pipeline)
+        target_link_libraries(CnaTests PRIVATE cna_content_pipeline)
+    endif()
 
     # mingw-w64's <cmath> only exposes M_PI when _USE_MATH_DEFINES is set (unlike glibc, which
     # defines it unconditionally) — a handful of test files use M_PI directly as a reference value.

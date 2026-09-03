@@ -88,13 +88,20 @@ All 30 failures are environmental and reproduce on the unmodified tree:
 
 `XNAP-04` owns keeping this baseline current. **Any new failure outside these 30 is a regression.**
 
-**Current (2026-09-03, after Phase B and most of Phase C):**
+**Current (2026-09-03, after Phases B–F except the open rows):**
 
 ```text
-CnaContentTests:  1670 run   1572 passed   68 skipped   30 failed
+CnaContentTests:          1670 run   1572 passed   68 skipped   30 failed
+CnaContentPipelineTests:    16 run     16 passed    0 skipped    0 failed
+CnaTests (whole suite):   7781 run   7240 passed  512 skipped   29 failed
 ```
 
-The same 30 environmental failures, +85 tests, +85 passing, zero new failures.
+`CnaContentTests` shows the same 30 environmental failures as the recorded baseline, +85 tests,
++85 passing, **zero new failures**. `CnaContentPipelineTests` is the new build-time module's own
+focused executable and is entirely new. The whole-suite figure is recorded here for completeness;
+its 29 failures are the STUB-renderer `TextureCube`/`Texture3D`/capability group, the uid-0
+permission case and the two audio-device `MediaLibrary` cases — none of them content-pipeline
+code, and none of them introduced by this plan.
 
 ---
 
@@ -318,7 +325,7 @@ Legend: `[ ]` open · `[x]` complete · `[~]` partially complete (detail in the 
 |---|---|---|
 | `XNAP-60` | `ContentOutputFormat` axis: `ContentTypeWriter::OutputFormat()` (defaulting to `Cnb`, non-breaking), format-aware writer resolution, format in the build request/result. | [x] |
 | `XNAP-61` | Register XNB writers for every existing processed type, reusing the existing importers/processors unchanged. | [~] `Texture2D`, `Texture3D`, `TextureCube`, `SpriteFont`, `SoundEffect`, `Song`, `Video`, `Curve` and `Model` are registered. `Model` accepts only the exact schema-2 canonical form; a schema-1 Model is refused with a diagnostic naming `XNAP-56`. `AnimationClip` has no XNA equivalent and deliberately has no XNB writer. |
-| `XNAP-62` | `cna-content --format xnb|cnb`, `--xnb-platform`, `--xnb-version`, `--xnb-profile`, `--xnb-compress`; `.xnb` output extension; help/validation/exit codes. | [ ] |
+| `XNAP-62` | `cna-content --format xnb|cnb`, `--xnb-platform`, `--xnb-version`, `--xnb-profile`, `--xnb-compress`; `.xnb` output extension; help/validation/exit codes. | [x] `--xnb-compress` accepts only `none` today; `lzx`/`lz4` are refused with a message naming `XNAP-80`/`XNAP-81` rather than silently writing an uncompressed file under a compressed header. |
 | `XNAP-63` | `.cna-content.json` v2: project-wide and per-asset `format`, target platform, graphics profile. | [x] |
 | `XNAP-64` | Incremental build correctness for XNB: writer identity/schema fingerprints, format changes invalidating output. | [x] |
 | `XNAP-65` | Diagnostics: every XNB failure names source, importer, processor, output format, field and reason. | [x] Also fixes a pre-existing gap: `cna-content` collected the pipeline's log messages and never printed any of them, so a warning about a documented loss reached nobody. |
@@ -327,9 +334,9 @@ Legend: `[ ]` open · `[x]` complete · `[~]` partially complete (detail in the 
 
 | ID | Task | State |
 |---|---|---|
-| `XNAP-50` | `.spritefont` XML description importer (FontName, Size, Spacing, UseKerning, Style, CharacterRegions, DefaultCharacter). | [ ] |
-| `XNAP-51` | FreeType-backed glyph rasterization + deterministic atlas packing → `CnbSpriteFontData`/`XnbSpriteFontData`. | [ ] |
-| `XNAP-52` | FreeType dependency + test-font license audit; build-time-only isolation. | [ ] |
+| `XNAP-50` | `.spritefont` XML description importer (FontName, Size, Spacing, UseKerning, Style, CharacterRegions, DefaultCharacter). | [x] Includes `CNA::Internal::ParseXml`, a deliberately strict XML subset (no DOCTYPE, no internal subset, no external entities) with line/column diagnostics. A field declared twice is refused rather than silently resolved to the first occurrence. `<FontName>` resolves to a **file beside the description**, not a Windows font family — see §5. |
+| `XNAP-51` | FreeType-backed glyph rasterization + deterministic atlas packing → `CnbSpriteFontData`/`XnbSpriteFontData`. | [x] Deterministic shelf packer (character order, 1px padding, power-of-two sides to 2048), premultiplied white glyphs, ABC kerning from FreeType's own bearings, `UseKerning=false` folding the bearings into the advance, a 1×1 transparent texel for a blank glyph, and a warning — not silence — when a style has to be synthesized. Both output formats come off the same rasterization. |
+| `XNAP-52` | FreeType dependency + test-font license audit; build-time-only isolation. | [x] New module `modules/content-pipeline/`, linked only by `cna_content_compiler`, so FreeType is absent from every runtime game's link closure. `CNA_ENABLE_FONT_PIPELINE` is three-state (`OFF`/`AUTO`/`ON`) like `CNA_ENABLE_VIDEO`; `OFF` reports "no font rasterizer" rather than emitting an empty font. FreeType (FreeType License) and the vendored OFL `LiberationMono-Regular.ttf` are both recorded in `THIRD_PARTY_NOTICES.md`, with `tests/assets/fonts/PROVENANCE.json` carrying the upstream, distributor, SHA-256 and redistribution reasoning. |
 | `XNAP-53` | Independent BC1/BC2/BC3 encoder + `TextureProcessor` format parameter. | [ ] |
 | `XNAP-54` | Mip generation, premultiply-alpha, colour-key, resize policy parameters shared by both outputs. | [ ] |
 | `XNAP-55` | Audio: broaden accepted WAV PCM variants; deterministic duration; loop metadata. | [ ] |
@@ -374,7 +381,7 @@ Building a writer against the reader exposes disagreements the reader alone coul
 |---|---|---|
 | `XNAP-06` | Correct all XNB platform/version wording in `xnb.md`, `docs/xnb-content-pipeline-support.md` and elsewhere: XNA-era `w`/`m`/`x` vs extended ecosystem; version 5 = XNA 4.0 era, version 4 = legacy. | [ ] |
 | `XNAP-07` | `docs/xnb-interoperability.md`: per-type capability matrix using the §3 confidence vocabulary. | [ ] |
-| `XNAP-90` | Runtime-vs-build-time dependency boundary audit; keep FreeType/encoders/importers out of the runtime link closure. | [ ] |
+| `XNAP-90` | Runtime-vs-build-time dependency boundary audit; keep FreeType/encoders/importers out of the runtime link closure. | [~] The boundary now exists and FreeType is on the correct side of it (`XNAP-52`). The full audit — every build-time dependency, and a test that fails if one reaches the runtime umbrella — is still open. |
 | `XNAP-91` | Public API audit of the writer surface: ownership, const-correctness, error handling, extension points, no accidental implementation exposure. | [ ] |
 | `XNAP-92` | Custom-writer extension model + documented example. | [ ] |
 | `XNAP-93` | Performance pass on large textures, mip generation, BC encoding, large models, atlas generation, compression. | [ ] |
@@ -397,3 +404,17 @@ Building a writer against the reader exposes disagreements the reader alone coul
   confidence field is honest and makes correction cheap.
 * **Reach is the default graphics profile** even though the one genuine XNA 4.0 fixture available
   here has the HiDef bit set: a Reach asset is loadable under both profiles, a HiDef asset is not.
+* **`<FontName>` names a file, not a Windows font family.** XNA's `FontDescriptionProcessor` asks
+  Windows to resolve a family name (`"Segoe UI"`) through GDI+, which means the same
+  `.spritefont` produces different bytes on different machines, and no bytes at all on a machine
+  without that font. CNA resolves `<FontName>` against the description's own directory first
+  (`Console`, `Console.ttf`, `Console.otf`, `Console.ttc`), so a content build is reproducible and
+  the font travels with the project. Installed system fonts are searched only as a **fallback**,
+  and using one emits a warning saying the build is no longer reproducible. This is a deliberate
+  divergence from XNA behavior; the XNA spelling still works wherever the font file is present.
+* **A separate module for build-time-only pipeline components.** `modules/content-pipeline/`
+  exists to keep FreeType — and any future encoder or importer — out of the link closure of games
+  that merely *load* content. `cna_content_pipeline` is linked by `cna_content_compiler` and by
+  nothing else, so the boundary is enforced by the dependency graph rather than by convention.
+  Its test group is named explicitly in `cmake/UnitTests.cmake` for the same reason: it is
+  deliberately absent from the `CNA` runtime umbrella that `CnaTests` otherwise links.

@@ -305,6 +305,9 @@ if(CNA_FFMPEG_AVAILABLE)
     target_link_libraries(cna_media PRIVATE cna_video_ffmpeg)
 endif()
 add_subdirectory(content)
+# plans/plan_xnapipeline.md XNAP-90: build-time-only pipeline components, kept out of every
+# runtime game's link closure by living in their own module that only the content compiler links.
+add_subdirectory(content-pipeline)
 add_subdirectory(storage)
 add_subdirectory(runtime)
 add_subdirectory(devices)
@@ -366,7 +369,8 @@ endif()
 # moved into their owning modules (module-examples campaign): a module may own
 # modules/<name>/examples/, and example TUs outside every declared module still fail.
 set(_cna_framework_modules
-    c-api core math platform runtime graphics input audio media video-ffmpeg content storage
+    c-api core math platform runtime graphics input audio media video-ffmpeg content
+    content-pipeline storage
     devices devices-ext graphics-ext gamer-services net)
 set(_cna_renderer_modules
     bgfx  canvas  direct2d directx1 directx2 directx3 directx5 directx6

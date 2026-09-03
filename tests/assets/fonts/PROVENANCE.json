@@ -1,0 +1,12 @@
+{
+  "file": "LiberationMono-Regular.ttf",
+  "upstream": "https://github.com/liberationfonts/liberation-fonts",
+  "distributedBy": "Debian package fonts-liberation, /usr/share/fonts/truetype/liberation/",
+  "license": "SIL Open Font License 1.1",
+  "licenseFile": "LiberationMono-Regular.LICENSE.txt",
+  "copyright": "Digitized data copyright (c) 2010 Google Corporation with Reserved Font Arimo, Tinos and Cousine. Copyright (c) 2012 Red Hat, Inc. with Reserved Font Name Liberation.",
+  "sha256": "395fa5ab8d40c8eba390ced528744ea75a7f69aabf3e68b6f925ca0e39a27370",
+  "byteCount": 319624,
+  "whyItIsHere": "plans/plan_xnapipeline.md XNAP-52: the .spritefont source route needs a real font file to rasterize, and a test that only runs where the right font happens to be installed is not a test. The OFL explicitly permits bundling and redistribution with any software, which an MS-PL project can do; the font is not modified here and its reserved name is not reused.",
+  "notFor": "Only tests read this file. It is not part of any CNA library, is not installed, and no CNA runtime links or embeds it."
+}
