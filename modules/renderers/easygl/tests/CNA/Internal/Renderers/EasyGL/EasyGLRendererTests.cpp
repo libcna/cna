@@ -292,6 +292,23 @@ TEST(EasyGLSurfaceState, StretchAndNativeBackBufferAlsoCoverTheWholeDrawable)
     }
 }
 
+TEST(EasyGLSurfaceState, NativeBackBufferInputUsesIndependentAxisScales)
+{
+    EasyGLSurfaceState state(
+        Surface(83, 2400, 1080, 3.0f), 800, 480,
+        CnaPresentationMode::NativeBackBuffer);
+
+    float x = 0.0f;
+    float y = 0.0f;
+    ASSERT_TRUE(state.WindowToLogical(600.0f, 270.0f, x, y));
+    EXPECT_FLOAT_EQ(x, 600.0f);
+    EXPECT_FLOAT_EQ(y, 360.0f);
+
+    ASSERT_TRUE(state.LogicalToWindow(x, y, x, y));
+    EXPECT_FLOAT_EQ(x, 600.0f);
+    EXPECT_FLOAT_EQ(y, 270.0f);
+}
+
 // Letterbox shrinks to fit and centres (bars); Overscan grows to cover and centres (cropping).
 // Virtual 100x50 is 2:1 inside a square 400x400 drawable, so the two scales are 4 and 8.
 TEST(EasyGLSurfaceState, LetterboxAndOverscanScaleUniformlyAndCentre)
@@ -312,6 +329,17 @@ TEST(EasyGLSurfaceState, LetterboxAndOverscanScaleUniformlyAndCentre)
     EXPECT_EQ(height, 400);
     EXPECT_EQ(x, -200);
     EXPECT_EQ(y, 0);
+
+    float logicalX = 0.0f;
+    float logicalY = 0.0f;
+    ASSERT_TRUE(letterbox.WindowToLogical(
+        200.0f, 100.0f, logicalX, logicalY));
+    EXPECT_FLOAT_EQ(logicalX, 50.0f);
+    EXPECT_FLOAT_EQ(logicalY, 0.0f);
+    ASSERT_TRUE(letterbox.LogicalToWindow(
+        logicalX, logicalY, logicalX, logicalY));
+    EXPECT_FLOAT_EQ(logicalX, 200.0f);
+    EXPECT_FLOAT_EQ(logicalY, 100.0f);
 }
 
 TEST(EasyGLSurfaceState, DegenerateDrawableYieldsAnEmptyViewportRect)

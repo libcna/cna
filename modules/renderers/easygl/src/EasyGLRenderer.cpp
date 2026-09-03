@@ -746,30 +746,70 @@ namespace CNA::Internal::Renderers::EasyGL
     bool EasyGLSurfaceState::WindowToLogical(const float windowX, const float windowY,
                                              float& logicalX, float& logicalY) const
     {
-        if (virtualHeight_ <= 0) return false;
-        int clientWidth = 0;
-        int clientHeight = 0;
-        GetClientSize(clientWidth, clientHeight);
-        if (clientHeight <= 0) return false;
-        const float scale = static_cast<float>(virtualHeight_) /
-                            static_cast<float>(clientHeight);
-        logicalX = windowX * scale;
-        logicalY = windowY * scale;
+        int logicalWidth = 0;
+        int logicalHeight = 0;
+        GetLogicalSize(logicalWidth, logicalHeight);
+
+        int viewportX = 0;
+        int viewportY = 0;
+        int viewportWidth = 0;
+        int viewportHeight = 0;
+        GetDefaultViewportRect(
+            viewportX, viewportY, viewportWidth, viewportHeight);
+        if (logicalWidth <= 0 || logicalHeight <= 0 ||
+            viewportWidth <= 0 || viewportHeight <= 0)
+        {
+            return false;
+        }
+
+        const float inverseDisplayScale = 1.0f / surface_.displayScale;
+        const float clientViewportX =
+            static_cast<float>(viewportX) * inverseDisplayScale;
+        const float clientViewportY =
+            static_cast<float>(viewportY) * inverseDisplayScale;
+        const float clientViewportWidth =
+            static_cast<float>(viewportWidth) * inverseDisplayScale;
+        const float clientViewportHeight =
+            static_cast<float>(viewportHeight) * inverseDisplayScale;
+        logicalX = (windowX - clientViewportX) *
+            static_cast<float>(logicalWidth) / clientViewportWidth;
+        logicalY = (windowY - clientViewportY) *
+            static_cast<float>(logicalHeight) / clientViewportHeight;
         return true;
     }
 
     bool EasyGLSurfaceState::LogicalToWindow(const float logicalX, const float logicalY,
                                              float& windowX, float& windowY) const
     {
-        if (virtualHeight_ <= 0) return false;
-        int clientWidth = 0;
-        int clientHeight = 0;
-        GetClientSize(clientWidth, clientHeight);
-        if (clientHeight <= 0) return false;
-        const float scale = static_cast<float>(clientHeight) /
-                            static_cast<float>(virtualHeight_);
-        windowX = logicalX * scale;
-        windowY = logicalY * scale;
+        int logicalWidth = 0;
+        int logicalHeight = 0;
+        GetLogicalSize(logicalWidth, logicalHeight);
+
+        int viewportX = 0;
+        int viewportY = 0;
+        int viewportWidth = 0;
+        int viewportHeight = 0;
+        GetDefaultViewportRect(
+            viewportX, viewportY, viewportWidth, viewportHeight);
+        if (logicalWidth <= 0 || logicalHeight <= 0 ||
+            viewportWidth <= 0 || viewportHeight <= 0)
+        {
+            return false;
+        }
+
+        const float inverseDisplayScale = 1.0f / surface_.displayScale;
+        const float clientViewportX =
+            static_cast<float>(viewportX) * inverseDisplayScale;
+        const float clientViewportY =
+            static_cast<float>(viewportY) * inverseDisplayScale;
+        const float clientViewportWidth =
+            static_cast<float>(viewportWidth) * inverseDisplayScale;
+        const float clientViewportHeight =
+            static_cast<float>(viewportHeight) * inverseDisplayScale;
+        windowX = clientViewportX + logicalX * clientViewportWidth /
+            static_cast<float>(logicalWidth);
+        windowY = clientViewportY + logicalY * clientViewportHeight /
+            static_cast<float>(logicalHeight);
         return true;
     }
 
