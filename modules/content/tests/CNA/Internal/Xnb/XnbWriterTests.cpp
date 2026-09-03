@@ -445,22 +445,37 @@ TEST_F(XnbWriterTest, AnLz4CompressedFileRoundTripsThroughTheReader)
     EXPECT_EQ(std::get<XnbTextureData>(asset.value).levels, texture.levels);
 }
 
-TEST_F(XnbWriterTest, LzxOutputFailsWithAPlanReferenceRatherThanSilentlyWritingRawBytes)
+TEST_F(XnbWriterTest, LzxOutputWritesARealCompressedFileRatherThanRawBytesUnderTheFlag)
 {
-    // LZX is the one Microsoft XNA 4.0 itself produced, and CNA has only the decoder for it.
-    // Setting the flag and writing raw bytes under it would produce a file that no LZX decoder
-    // can read, so the refusal names the task instead.
+    // This test used to assert the opposite: LZX output was refused with a message naming
+    // XNAP-81, because CNA had the decoder and not the encoder. It has the encoder now
+    // (src/Xnb/LzxEncoder.cpp), so the contract flips -- and the thing that must never happen is
+    // still asserted: setting the 0x80 flag over unchanged bytes. The file's payload is a real
+    // LZX stream, and the proof is that the decoder written years earlier reproduces the exact
+    // uncompressed body from it. `LzxEncoderTests` covers the encoder itself.
     XnbFileOptions options;
     options.compression = XnbOutputCompression::Lzx;
-    try
-    {
-        (void)WriteXnbAsset(std::int32_t{1}, options, "one");
-        FAIL() << "LZX output is not implemented and must not silently succeed";
-    }
-    catch (const XnbWriteException& error)
-    {
-        EXPECT_NE(std::string(error.what()).find("XNAP-81"), std::string::npos) << error.what();
-    }
+
+    std::vector<std::string> strings(200, std::string("Content/Textures/repeated_name.xnb"));
+    const std::vector<std::uint8_t> compressed = WriteXnbAsset(strings, options, "manifest");
+    const std::vector<std::uint8_t> plain = WriteXnbAsset(strings, {}, "manifest");
+
+    ASSERT_GT(compressed.size(), 14u);
+    EXPECT_EQ(compressed[5] & 0x80u, 0x80u);
+    EXPECT_LT(compressed.size(), plain.size());
+    // Not the uncompressed body under a compressed flag.
+    EXPECT_NE(std::vector<std::uint8_t>(compressed.begin() + 14, compressed.end()),
+              std::vector<std::uint8_t>(plain.begin() + 10, plain.end()));
+
+    const std::int32_t declared =
+        static_cast<std::int32_t>(compressed[10]) |
+        (static_cast<std::int32_t>(compressed[11]) << 8) |
+        (static_cast<std::int32_t>(compressed[12]) << 16) |
+        (static_cast<std::int32_t>(compressed[13]) << 24);
+    const std::vector<std::uint8_t> body = DecompressXnbPayload(
+        compressed.data() + 14, static_cast<std::int32_t>(compressed.size() - 14u), declared,
+        "lzx");
+    EXPECT_EQ(body, std::vector<std::uint8_t>(plain.begin() + 10, plain.end()));
 }
 
 // -- EffectMaterial and its polymorphic parameter table (XNAP-29/XNAP-2B) ---------------------

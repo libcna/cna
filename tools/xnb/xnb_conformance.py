@@ -204,6 +204,321 @@ class Cursor:
         return [self.i32(), self.i32(), self.i32(), self.i32()]
 
 
+# --- LZX ----------------------------------------------------------------------
+# plans/plan_xnapipeline.md ``XNAP-81``/``XNAP-9E``. An independent LZX decoder,
+# written from the published format description -- the same description CNA's
+# encoder was written against, but by a different program in a different
+# language with no shared code, constants or tables. Its whole purpose is to be
+# able to disagree with CNA's own decoder: a round trip between CNA's encoder and
+# CNA's decoder cannot detect a mistake both make.
+#
+# It decodes verbatim and aligned-offset blocks. Uncompressed blocks are refused
+# with a named error rather than guessed at: nothing in this repository emits one,
+# and a wrong implementation of a path no fixture exercises is worse than an
+# honest refusal.
+
+LZX_MIN_MATCH = 2
+LZX_NUM_CHARS = 256
+LZX_PRETREE_ELEMENTS = 20
+LZX_ALIGNED_ELEMENTS = 8
+LZX_NUM_PRIMARY_LENGTHS = 7
+LZX_NUM_SECONDARY_LENGTHS = 249
+LZX_MAIN_TREE_SYMBOLS = LZX_NUM_CHARS + 50 * 8
+
+
+def _lzx_slot_tables() -> tuple[list[int], list[int]]:
+    """Returns the extra-bit count and formatted-offset base for each position slot."""
+    extra = [0] * 52
+    value = 0
+    for index in range(0, 51, 2):
+        extra[index] = extra[index + 1] = value
+        if index != 0 and value < 17:
+            value += 1
+    base = [0] * 52
+    accumulated = 0
+    for index in range(52):
+        base[index] = accumulated
+        if index <= 50:
+            accumulated += 1 << extra[index]
+    return extra, base
+
+
+LZX_EXTRA_BITS, LZX_POSITION_BASE = _lzx_slot_tables()
+
+
+class _LzxBits:
+    """Reads bits MSB-first out of little-endian 16-bit words.
+
+    Past the end of the input every byte reads as 0xFF, which is what a stream
+    positioned at end-of-file yields in the reference framing loop. Only padding
+    bits are ever affected.
+    """
+
+    def __init__(self, data: bytes, position: int) -> None:
+        self.data = data
+        self.position = position
+        self.buffer = 0
+        self.count = 0
+
+    def read(self, bits: int) -> int:
+        if bits == 0:
+            return 0
+        while self.count < bits:
+            low = self.data[self.position] if self.position < len(self.data) else 0xFF
+            high = (self.data[self.position + 1]
+                    if self.position + 1 < len(self.data) else 0xFF)
+            self.position += 2
+            self.buffer = (self.buffer << 16) | ((high << 8) | low)
+            self.count += 16
+        self.count -= bits
+        return (self.buffer >> self.count) & ((1 << bits) - 1)
+
+
+class _LzxHuffman:
+    """Canonical Huffman decoder built from code lengths.
+
+    Codes are assigned in (length, symbol) order, shortest first, which is the
+    canonical assignment LZX uses. A tree with no code lengths at all is legal
+    and means the tree is unused; decoding from one is an error.
+    """
+
+    def __init__(self, lengths: list[int], name: str) -> None:
+        self.name = name
+        self.codes: dict[tuple[int, int], int] = {}
+        code = 0
+        for bits in range(1, 17):
+            for symbol, length in enumerate(lengths):
+                if length == bits:
+                    self.codes[(bits, code)] = symbol
+                    code += 1
+            code <<= 1
+        # Kraft check: a complete code fills its space exactly. An incomplete one
+        # leaves decodable bit patterns with no symbol, which is a writer defect.
+        total = sum((1 << (16 - length)) for length in lengths if length > 0)
+        self.empty = not self.codes
+        self.complete = self.empty or total == (1 << 16)
+        self.oversubscribed = total > (1 << 16)
+
+    def decode(self, bits: _LzxBits, path: str) -> int:
+        if self.empty:
+            raise XnbError(f"{path}: LZX stream decodes a symbol from an empty {self.name} tree")
+        code = 0
+        for length in range(1, 17):
+            code = (code << 1) | bits.read(1)
+            symbol = self.codes.get((length, code))
+            if symbol is not None:
+                return symbol
+        raise XnbError(f"{path}: LZX {self.name} tree has no code for the next 16 bits")
+
+
+def _lzx_read_lengths(bits: _LzxBits, lengths: list[int], first: int, last: int,
+                      path: str) -> None:
+    """Reads pretree-coded code lengths for ``[first, last)`` in place."""
+    pretree_lengths = [bits.read(4) for _ in range(LZX_PRETREE_ELEMENTS)]
+    pretree = _LzxHuffman(pretree_lengths, "pretree")
+    if pretree.oversubscribed:
+        raise XnbError(f"{path}: LZX pretree is over-subscribed")
+    if not pretree.complete:
+        raise XnbError(f"{path}: LZX pretree is incomplete")
+
+    index = first
+    while index < last:
+        symbol = pretree.decode(bits, path)
+        if symbol == 17:
+            run = bits.read(4) + 4
+            if index + run > last:
+                raise XnbError(f"{path}: LZX zero run overruns the tree it describes")
+            for _ in range(run):
+                lengths[index] = 0
+                index += 1
+        elif symbol == 18:
+            run = bits.read(5) + 20
+            if index + run > last:
+                raise XnbError(f"{path}: LZX zero run overruns the tree it describes")
+            for _ in range(run):
+                lengths[index] = 0
+                index += 1
+        elif symbol == 19:
+            run = bits.read(1) + 4
+            delta = pretree.decode(bits, path)
+            value = (lengths[index] - delta) % 17
+            if index + run > last:
+                raise XnbError(f"{path}: LZX repeat run overruns the tree it describes")
+            for _ in range(run):
+                lengths[index] = value
+                index += 1
+        else:
+            lengths[index] = (lengths[index] - symbol) % 17
+            index += 1
+
+
+def lzx_decompress(payload: bytes, expected: int, path: str,
+                   window_bits: int = 16) -> bytes:
+    """Decodes an ``.xnb`` LZX block stream.
+
+    ``payload`` is everything after the container header and the four-byte
+    decompressed-size field: framed LZX blocks, each preceded by the container's
+    own big-endian block-size header. A full-size frame produces 0x8000 bytes and
+    carries a two-byte header; any other frame size is announced by a five-byte
+    header beginning 0xFF.
+
+    :param payload: The framed block stream.
+    :param expected: Decompressed size the container declares.
+    :param path: File path, for diagnostics only.
+    :param window_bits: Sliding-window exponent; ``.xnb`` always uses 16.
+    :returns: A pair of exactly ``expected`` decompressed bytes and the parsed frame headers.
+    """
+    if expected < 0 or expected > MAX_PAYLOAD_BYTES:
+        raise XnbError(f"{path}: declares a decompressed size of {expected} bytes")
+
+    window_size = 1 << window_bits
+    slot_count = 42 if window_bits == 20 else (50 if window_bits == 21 else window_bits * 2)
+    main_symbols = LZX_NUM_CHARS + (slot_count << 3)
+
+    window = bytearray(window_size)
+    window_position = 0
+    repeated = [1, 1, 1]
+    main_lengths = [0] * LZX_MAIN_TREE_SYMBOLS
+    secondary_lengths = [0] * LZX_NUM_SECONDARY_LENGTHS
+    main_tree: _LzxHuffman | None = None
+    length_tree: _LzxHuffman | None = None
+    aligned_tree: _LzxHuffman | None = None
+    block_type = 0
+    block_remaining = 0
+    header_read = False
+
+    out = bytearray()
+    cursor = 0
+    frames = []
+    while cursor < len(payload):
+        if cursor + 2 > len(payload):
+            raise XnbError(f"{path}: truncated LZX block header")
+        if payload[cursor] == 0xFF:
+            if cursor + 5 > len(payload):
+                raise XnbError(f"{path}: truncated explicit LZX block header")
+            frame_size = (payload[cursor + 1] << 8) | payload[cursor + 2]
+            block_size = (payload[cursor + 3] << 8) | payload[cursor + 4]
+            cursor += 5
+            explicit = True
+        else:
+            block_size = (payload[cursor] << 8) | payload[cursor + 1]
+            frame_size = 0x8000
+            cursor += 2
+            explicit = False
+        if block_size == 0 or frame_size == 0:
+            break
+        if cursor + block_size > len(payload):
+            raise XnbError(f"{path}: LZX block claims {block_size} bytes past the payload")
+        frames.append({"frameSize": frame_size, "blockSize": block_size,
+                       "explicitFrameSize": explicit})
+
+        bits = _LzxBits(payload, cursor)
+        remaining = frame_size
+        if not header_read:
+            if bits.read(1) != 0:
+                raise XnbError(
+                    f"{path}: LZX stream requests Intel E8 call translation, which no .xnb uses "
+                    "and which the reference decoder refuses")
+            header_read = True
+
+        while remaining > 0:
+            if block_remaining == 0:
+                if block_type == 3:
+                    raise XnbError(f"{path}: uncompressed LZX blocks are not decoded here")
+                block_type = bits.read(3)
+                block_remaining = (bits.read(16) << 8) | bits.read(8)
+                if block_type == 2:
+                    aligned_tree = _LzxHuffman([bits.read(3) for _ in range(
+                        LZX_ALIGNED_ELEMENTS)], "aligned")
+                    if not aligned_tree.complete:
+                        raise XnbError(f"{path}: LZX aligned tree is incomplete")
+                if block_type in (1, 2):
+                    _lzx_read_lengths(bits, main_lengths, 0, LZX_NUM_CHARS, path)
+                    _lzx_read_lengths(bits, main_lengths, LZX_NUM_CHARS, main_symbols, path)
+                    main_tree = _LzxHuffman(main_lengths[:main_symbols], "main")
+                    if not main_tree.complete:
+                        raise XnbError(f"{path}: LZX main tree is incomplete")
+                    _lzx_read_lengths(bits, secondary_lengths, 0,
+                                      LZX_NUM_SECONDARY_LENGTHS, path)
+                    length_tree = _LzxHuffman(secondary_lengths, "length")
+                    if not length_tree.complete:
+                        raise XnbError(f"{path}: LZX length tree is incomplete")
+                elif block_type == 3:
+                    raise XnbError(f"{path}: uncompressed LZX blocks are not decoded here")
+                else:
+                    raise XnbError(f"{path}: LZX block type {block_type} is undefined")
+
+            run = min(block_remaining, remaining)
+            remaining -= run
+            block_remaining -= run
+            window_position &= window_size - 1
+            if window_position + run > window_size:
+                raise XnbError(f"{path}: an LZX run straddles the window wraparound")
+
+            while run > 0:
+                assert main_tree is not None
+                element = main_tree.decode(bits, path)
+                if element < LZX_NUM_CHARS:
+                    window[window_position] = element
+                    window_position += 1
+                    run -= 1
+                    continue
+
+                element -= LZX_NUM_CHARS
+                match_length = element & LZX_NUM_PRIMARY_LENGTHS
+                if match_length == LZX_NUM_PRIMARY_LENGTHS:
+                    assert length_tree is not None
+                    match_length += length_tree.decode(bits, path)
+                match_length += LZX_MIN_MATCH
+                slot = element >> 3
+
+                if slot > 2:
+                    extra = LZX_EXTRA_BITS[slot]
+                    offset = LZX_POSITION_BASE[slot] - 2
+                    if block_type == 2 and extra >= 3:
+                        if extra > 3:
+                            offset += bits.read(extra - 3) << 3
+                        assert aligned_tree is not None
+                        offset += aligned_tree.decode(bits, path)
+                    else:
+                        offset += bits.read(extra)
+                    repeated = [offset, repeated[0], repeated[1]]
+                elif slot == 0:
+                    offset = repeated[0]
+                else:
+                    offset = repeated[slot]
+                    repeated[slot] = repeated[0]
+                    repeated[0] = offset
+
+                if offset <= 0 or offset > window_size:
+                    raise XnbError(f"{path}: LZX match offset {offset} is outside the window")
+                if match_length > run:
+                    raise XnbError(
+                        f"{path}: an LZX match of {match_length} bytes overruns its own "
+                        f"{run}-byte run")
+                run -= match_length
+                source = window_position - offset
+                for _ in range(match_length):
+                    window[window_position] = window[source & (window_size - 1)]
+                    window_position += 1
+                    source += 1
+
+            if block_remaining == 0 and block_type in (1, 2):
+                block_type = 0
+
+        start = window_position if window_position != 0 else window_size
+        start -= frame_size
+        if start < 0:
+            raise XnbError(f"{path}: LZX frame output crosses the window start")
+        out += window[start:start + frame_size]
+        cursor += block_size
+
+    if len(out) != expected:
+        raise XnbError(
+            f"{path}: LZX decompressed to {len(out)} bytes but the container declares {expected}")
+    return bytes(out), frames
+
+
 def lz4_block_decompress(block: bytes, expected: int, path: str) -> bytes:
     """Decodes one raw LZ4 block.
 
@@ -818,11 +1133,17 @@ def parse(path: str) -> dict:
             raise XnbError(f"{path}: declares a decompressed size of {expected} bytes")
         body = lz4_block_decompress(body[4:], expected, path)
         report["decompressedLength"] = expected
-    elif report["compression"] != "none":
-        report["status"] = "container-only"
-        report["note"] = ("LZX payloads are not decompressed by this parser; the container "
-                          "header was validated")
-        return report
+    elif report["compression"] == "lzx":
+        # Decompressed by this parser's own LZX decoder, written from the published format
+        # description and sharing no code with CNA's encoder or its decoder -- which is the
+        # point: a round trip between two halves of one implementation cannot catch a shared
+        # misunderstanding of the bitstream.
+        if len(body) < 4:
+            raise XnbError(f"{path}: truncated before its decompressed-size field")
+        expected = struct.unpack_from("<i", body, 0)[0]
+        body, frames = lzx_decompress(body[4:], expected, path)
+        report["decompressedLength"] = expected
+        report["lzxFrames"] = frames
 
     cursor = Cursor(body, path)
     reader_count = cursor.seven_bit_int()

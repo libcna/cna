@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <variant>
@@ -74,6 +75,13 @@ namespace
         std::ofstream stream(path, std::ios::binary);
         stream.write(reinterpret_cast<const char*>(bytes.data()),
                      static_cast<std::streamsize>(bytes.size()));
+    }
+
+    std::vector<std::uint8_t> ReadBytes(const std::filesystem::path& path)
+    {
+        std::ifstream stream(path, std::ios::binary);
+        return std::vector<std::uint8_t>(std::istreambuf_iterator<char>(stream),
+                                         std::istreambuf_iterator<char>());
     }
 
     std::vector<std::uint8_t> MakePng(const std::vector<std::uint8_t>& pixels, const int width,
@@ -598,6 +606,74 @@ TEST(XnbOutputCliTest, ChangingTheTargetPlatformRebuildsRatherThanReusingStaleBy
         << second;
     EXPECT_NE(second.find("Built: 1"), std::string::npos) << second;
     EXPECT_EQ(Xnb::DecodeXnbCanonicalAsset(output / "flat.xnb").platform, 'd');
+}
+
+TEST(XnbOutputCliTest, LzxCompressionProducesASmallerFileAndInvalidatesTheOldOne)
+{
+    // plans/plan_xnapipeline.md XNAP-81. `--xnb-compress lzx` used to be refused with a message
+    // naming the task; it now produces a real LZX-compressed file. Three things are asserted: the
+    // header announces LZX, the file is smaller, and the values survive -- read back through
+    // CNA's own reader, which decompresses the payload as part of loading it.
+    ScratchDirectory scratch("cli_lzx");
+    const std::filesystem::path source = scratch.Path() / "Source";
+    const std::filesystem::path output = scratch.Path() / "Content";
+
+    // A 64x64 gradient: big enough that compression has something to work with, and small enough
+    // that the whole payload is one LZX frame.
+    std::vector<std::uint8_t> pixels(64u * 64u * 4u);
+    for (std::uint32_t y = 0u; y < 64u; ++y)
+    {
+        for (std::uint32_t x = 0u; x < 64u; ++x)
+        {
+            const std::size_t offset = (static_cast<std::size_t>(y) * 64u + x) * 4u;
+            pixels[offset] = static_cast<std::uint8_t>(x * 4u);
+            pixels[offset + 1u] = static_cast<std::uint8_t>(y * 4u);
+            pixels[offset + 2u] = static_cast<std::uint8_t>((x + y) * 2u);
+            pixels[offset + 3u] = 0xFFu;
+        }
+    }
+    WriteBytes(source / "tile.png", MakePng(pixels, 64, 64));
+
+    std::string plainLog;
+    ASSERT_EQ(RunContentTool({"build", source.string(), "-o", output.string(),
+                              "--format", "xnb"}, plainLog), 0)
+        << plainLog;
+    const std::uintmax_t plainSize = std::filesystem::file_size(output / "tile.xnb");
+
+    std::string lzxLog;
+    ASSERT_EQ(RunContentTool({"build", source.string(), "-o", output.string(), "--format", "xnb",
+                              "--xnb-compress", "lzx"}, lzxLog), 0)
+        << lzxLog;
+    // The compression selection is part of the build fingerprint, so the previously built
+    // artifact must be rebuilt rather than reported as unchanged.
+    EXPECT_NE(lzxLog.find("Built: 1"), std::string::npos) << lzxLog;
+
+    const std::uintmax_t compressedSize = std::filesystem::file_size(output / "tile.xnb");
+    EXPECT_LT(compressedSize, plainSize) << compressedSize << " vs " << plainSize;
+
+    const std::vector<std::uint8_t> file = ReadBytes(output / "tile.xnb");
+    ASSERT_GT(file.size(), 14u);
+    EXPECT_EQ(file[5] & 0x80u, 0x80u) << "the header must announce LZX";
+
+    // DecodeXnbCanonicalAsset decompresses as part of reading, so this is the round trip through
+    // the container the reader actually takes.
+    const Xnb::XnbCanonicalAsset asset = Xnb::DecodeXnbCanonicalAsset(output / "tile.xnb");
+    EXPECT_EQ(asset.compression, Xnb::XnbCompression::Lzx);
+    EXPECT_EQ(asset.rootReader, "Microsoft.Xna.Framework.Content.Texture2DReader");
+    const auto& texture = std::get<Xnb::XnbTextureData>(asset.value);
+    EXPECT_EQ(texture.width, 64u);
+    EXPECT_EQ(texture.height, 64u);
+    ASSERT_EQ(texture.levels.size(), 1u);
+    EXPECT_EQ(texture.levels[0], pixels);
+
+    // And switching back to uncompressed must invalidate again rather than keep the compressed
+    // artifact.
+    std::string backLog;
+    ASSERT_EQ(RunContentTool({"build", source.string(), "-o", output.string(),
+                              "--format", "xnb"}, backLog), 0)
+        << backLog;
+    EXPECT_NE(backLog.find("Built: 1"), std::string::npos) << backLog;
+    EXPECT_EQ(std::filesystem::file_size(output / "tile.xnb"), plainSize);
 }
 
 TEST(XnbOutputCliTest, ASingleFileBuildRequiresAnExtensionMatchingTheSelectedFormat)

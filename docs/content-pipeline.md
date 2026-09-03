@@ -21,6 +21,14 @@ dependencies, the manifest, incremental builds and publication applies to both f
 tables are consulted at the compatibility-source boundary and produced by the XNB writer; they
 never enter native CNB.
 
+XNB output has its own container options: `--xnb-platform`, `--xnb-version`, `--xnb-profile`,
+`--xnb-reader-names` and `--xnb-compress none|lzx|lz4`. **`lzx` is the compression Microsoft XNA
+4.0 itself produced** and the only compressed form an XNA 4.0 runtime loads; `lz4` is a
+later-ecosystem extension and is refused on an XNA 4.0 target platform. Every one of these options
+is part of the build fingerprint, so changing one rebuilds the affected artifacts instead of
+reporting them unchanged. `docs/xnb-interoperability.md` §2.1.1 records exactly what the LZX
+encoder emits and what it does not.
+
 These three terms describe separate layers:
 
 - **CNA Content Pipeline** imports source data, processes it, records dependencies, chooses

@@ -248,7 +248,15 @@ namespace
                "this build has one piece of Xbox byte-order handling (the SoundEffect\n"
                "WAVEFORMATEX fields), so writing the 'x' header byte over the other payloads\n"
                "would claim a compatibility it cannot deliver. --xnb-allow-unverified-xbox\n"
-               "produces one anyway, for testing on real hardware.\n";
+               "produces one anyway, for testing on real hardware.\n\n"
+            << "--xnb-compress lzx is the compression Microsoft XNA 4.0 itself produced and is\n"
+               "the only compressed form an XNA 4.0 runtime loads. CNA emits real LZX: one\n"
+               "verbatim block per 32 KiB frame, with Huffman-coded literals and matches,\n"
+               "repeated-offset matching and position-slot offsets. Aligned-offset and\n"
+               "uncompressed LZX blocks are not emitted; neither is needed for a conforming\n"
+               "stream. --xnb-compress lz4 is a later-ecosystem extension that XNA 4.0 never\n"
+               "produced, and is refused on an XNA 4.0 target platform for that reason.\n"
+               "Compression is deterministic: the same payload always produces the same bytes.\n";
     }
 
     std::size_t ParseWorkerCount(const std::filesystem::path& argument)

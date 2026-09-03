@@ -48,6 +48,10 @@ namespace
 {
     const std::filesystem::path kCorpus =
         "tests/assets/xnb/cna/windows/uncompressed";
+    // plans/plan_xnapipeline.md XNAP-81: the same six assets, LZX-compressed. Committed beside
+    // the uncompressed corpus rather than instead of it, because an XNA-capable machine should
+    // test both container forms and their expectation manifests are identical by design.
+    const std::filesystem::path kLzxCorpus = "tests/assets/xnb/cna/windows/lzx";
     const std::filesystem::path kConformanceParser = "tools/xnb/xnb_conformance.py";
 
     class ScratchDirectory
@@ -139,33 +143,43 @@ TEST(XnbInteropCorpusTest, TheCommittedCorpusIsExactlyWhatTheGeneratorProducesTo
     ASSERT_TRUE(std::filesystem::is_directory(kCorpus))
         << "the committed corpus is missing; run cna_tool_xnb_interop_fixtures";
 
+    ASSERT_TRUE(std::filesystem::is_directory(kLzxCorpus))
+        << "the committed LZX corpus is missing; run cna_tool_xnb_interop_fixtures with two "
+           "output directories";
+
     ScratchDirectory scratch("regenerate");
+    ScratchDirectory scratchLzx("regenerate_lzx");
     std::string log;
-    ASSERT_EQ(RunProgram(CNA_XNB_INTEROP_FIXTURE_TOOL_PATH, {scratch.Path().string()}, log), 0) << log;
+    ASSERT_EQ(RunProgram(CNA_XNB_INTEROP_FIXTURE_TOOL_PATH,
+                         {scratch.Path().string(), scratchLzx.Path().string()}, log),
+              0)
+        << log;
 
-    std::vector<std::string> committed;
-    for (const std::filesystem::directory_entry& entry :
-         std::filesystem::directory_iterator(kCorpus))
+    const auto fileNames = [](const std::filesystem::path& directory)
     {
-        if (entry.is_regular_file()) { committed.push_back(entry.path().filename().string()); }
-    }
-    std::sort(committed.begin(), committed.end());
-    ASSERT_FALSE(committed.empty());
+        std::vector<std::string> names;
+        for (const std::filesystem::directory_entry& entry :
+             std::filesystem::directory_iterator(directory))
+        {
+            if (entry.is_regular_file()) { names.push_back(entry.path().filename().string()); }
+        }
+        std::sort(names.begin(), names.end());
+        return names;
+    };
 
-    std::vector<std::string> regenerated;
-    for (const std::filesystem::directory_entry& entry :
-         std::filesystem::directory_iterator(scratch.Path()))
+    for (const auto& [corpus, regenerated] :
+         {std::pair{kCorpus, scratch.Path()}, std::pair{kLzxCorpus, scratchLzx.Path()}})
     {
-        if (entry.is_regular_file()) { regenerated.push_back(entry.path().filename().string()); }
-    }
-    std::sort(regenerated.begin(), regenerated.end());
-    EXPECT_EQ(committed, regenerated);
-
-    for (const std::string& name : committed)
-    {
-        EXPECT_EQ(ReadBytes(kCorpus / name), ReadBytes(scratch.Path() / name))
-            << name << " differs from the committed corpus; if the writer's output changed on "
-               "purpose, regenerate the corpus and re-run the XNA interoperability harness";
+        const std::vector<std::string> committed = fileNames(corpus);
+        ASSERT_FALSE(committed.empty()) << corpus.string();
+        EXPECT_EQ(committed, fileNames(regenerated)) << corpus.string();
+        for (const std::string& name : committed)
+        {
+            EXPECT_EQ(ReadBytes(corpus / name), ReadBytes(regenerated / name))
+                << (corpus / name).string()
+                << " differs from the committed corpus; if the writer's output changed on "
+                   "purpose, regenerate the corpus and re-run the XNA interoperability harness";
+        }
     }
 }
 
@@ -174,14 +188,29 @@ TEST(XnbInteropCorpusTest, RegeneratingTwiceProducesIdenticalBytes)
     ScratchDirectory first("determinism_a");
     ScratchDirectory second("determinism_b");
     std::string log;
-    ASSERT_EQ(RunProgram(CNA_XNB_INTEROP_FIXTURE_TOOL_PATH, {first.Path().string()}, log), 0) << log;
-    ASSERT_EQ(RunProgram(CNA_XNB_INTEROP_FIXTURE_TOOL_PATH, {second.Path().string()}, log), 0) << log;
+    ScratchDirectory firstLzx("determinism_a_lzx");
+    ScratchDirectory secondLzx("determinism_b_lzx");
+    ASSERT_EQ(RunProgram(CNA_XNB_INTEROP_FIXTURE_TOOL_PATH,
+                         {first.Path().string(), firstLzx.Path().string()}, log),
+              0)
+        << log;
+    ASSERT_EQ(RunProgram(CNA_XNB_INTEROP_FIXTURE_TOOL_PATH,
+                         {second.Path().string(), secondLzx.Path().string()}, log),
+              0)
+        << log;
 
-    for (const std::filesystem::directory_entry& entry :
-         std::filesystem::directory_iterator(first.Path()))
+    // The LZX pair matters as much as the uncompressed one: an encoder whose output depended on
+    // anything but its input would make every incremental build rewrite every compressed asset.
+    for (const auto& [left, right] :
+         {std::pair{first.Path(), second.Path()}, std::pair{firstLzx.Path(), secondLzx.Path()}})
     {
-        const std::filesystem::path name = entry.path().filename();
-        EXPECT_EQ(ReadBytes(entry.path()), ReadBytes(second.Path() / name)) << name.string();
+        for (const std::filesystem::directory_entry& entry :
+             std::filesystem::directory_iterator(left))
+        {
+            const std::filesystem::path name = entry.path().filename();
+            EXPECT_EQ(ReadBytes(entry.path()), ReadBytes(right / name))
+                << (left / name).string();
+        }
     }
 }
 
@@ -195,10 +224,51 @@ TEST(XnbConformanceTest, TheIndependentParserAcceptsEveryCnaGeneratedFixture)
     {
         GTEST_SKIP() << "python3 or tools/xnb/xnb_conformance.py is unavailable";
     }
-    std::string output;
-    EXPECT_EQ(RunProgram("python3", {kConformanceParser.string(), kCorpus.string()}, output), 0)
-        << output;
-    EXPECT_EQ(output.find("FAIL"), std::string::npos) << output;
+    for (const std::filesystem::path& corpus : {kCorpus, kLzxCorpus})
+    {
+        std::string output;
+        EXPECT_EQ(RunProgram("python3", {kConformanceParser.string(), corpus.string()}, output), 0)
+            << output;
+        EXPECT_EQ(output.find("FAIL"), std::string::npos) << output;
+    }
+}
+
+TEST(XnbConformanceTest, TheIndependentLzxDecoderAcceptsEveryCnaCompressedFixture)
+{
+    // plans/plan_xnapipeline.md XNAP-81/XNAP-9E. This is the verification that a round trip
+    // between CNA's own encoder and CNA's own decoder cannot provide: the conformance parser has
+    // its own LZX decoder, written from the format description in a different language, and it
+    // reproduces the *values* of every compressed fixture -- not merely its header. The same
+    // decoder reproduces both externally produced LZX fixtures byte for byte against FNA's own
+    // reference output, which is what earns it the right to judge CNA's encoder.
+    if (!ConformanceParserAvailable())
+    {
+        GTEST_SKIP() << "python3 or tools/xnb/xnb_conformance.py is unavailable";
+    }
+    ASSERT_TRUE(std::filesystem::is_directory(kLzxCorpus));
+    std::size_t checked = 0u;
+    for (const std::filesystem::directory_entry& entry :
+         std::filesystem::directory_iterator(kLzxCorpus))
+    {
+        if (entry.path().extension() != ".xnb") { continue; }
+        std::filesystem::path expectation = entry.path();
+        expectation.replace_extension(".expected.json");
+        ASSERT_TRUE(std::filesystem::exists(expectation))
+            << entry.path().filename().string() << " has no expectation manifest";
+        std::string output;
+        EXPECT_EQ(RunProgram("python3", {kConformanceParser.string(), "--expect",
+                                  expectation.string(), entry.path().string()}, output),
+                  0)
+            << output;
+        // The uncompressed and compressed corpora describe the same assets, so their expectation
+        // manifests must be identical: compression is a container concern and may not change one
+        // observed value.
+        EXPECT_EQ(ReadBytes(expectation), ReadBytes(kCorpus / expectation.filename()))
+            << expectation.filename().string()
+            << " differs between the compressed and uncompressed corpora";
+        ++checked;
+    }
+    EXPECT_GE(checked, 6u);
 }
 
 TEST(XnbConformanceTest, EveryCnaFixtureMatchesItsOwnExpectationManifest)

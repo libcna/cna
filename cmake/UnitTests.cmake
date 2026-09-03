@@ -1063,6 +1063,8 @@ if(CNA_BUILD_TESTS)
     if(Python3_Interpreter_FOUND)
         file(GLOB _cna_xnb_conformance_files
             "${CMAKE_SOURCE_DIR}/tests/assets/xnb/cna/windows/uncompressed/*.xnb"
+            "${CMAKE_SOURCE_DIR}/tests/assets/xnb/cna/windows/lzx/*.xnb"
+            "${CMAKE_SOURCE_DIR}/tests/assets/xnb/monogame/windows/lzx/*.xnb"
             "${CMAKE_SOURCE_DIR}/tests/assets/xnb/monogame/windows/uncompressed/*.xnb"
             "${CMAKE_SOURCE_DIR}/tests/assets/xnb/monogame/windows/uncompressed/audio/*.xnb"
             "${CMAKE_SOURCE_DIR}/tests/assets/xnb/monogame/windows/uncompressed/song/*.xnb"

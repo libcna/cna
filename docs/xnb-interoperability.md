@@ -119,19 +119,62 @@ offset size  field
 |---|---|---|
 | `0x01` | Graphics profile: set = HiDef, clear = Reach | written from `XnbFileOptions::graphicsProfile`; **default Reach**, because a Reach asset loads under both profiles and a HiDef one does not |
 | `0x40` | A single raw LZ4 block — a later-ecosystem extension, **never** part of XNA 4.0 | **written**, and refused outright on an XNA 4.0 target platform because that pairing describes a file that cannot exist |
-| `0x80` | LZX | **not implemented** (`XNAP-81`); requesting it fails with a message naming the task |
+| `0x80` | LZX — the compression Microsoft XNA 4.0 itself produced | **written** (`XNAP-81`), and the only compressed form an XNA 4.0 target may carry |
 
-LZX is the compression Microsoft XNA 4.0 itself produced, and it is the one CNA cannot write. CNA
-*reads* it. Writing it needs an LZX encoder — Huffman trees for three alphabets, delta-encoded tree
-transmission, block-type selection, the sliding window's position-slot encoding — which is a
-different program from the decoder CNA has. **An uncompressed file loads in every XNA 4.0 runtime**,
-so nothing is blocked by this; only file size is affected.
+### 2.1.1 What CNA's LZX encoder emits
 
-There is a shortcut that is deliberately not taken: LZX's uncompressed block type would produce a
-conforming stream with no entropy coding at all, so CNA could set the `0x80` flag today and
-compress nothing. That would be honest only if documented so precisely that nobody would want it,
-and it would still risk an interoperability failure this environment cannot test for. Asking for
-LZX is refused instead.
+`--xnb-compress lzx` produces a genuinely compressed LZX stream, not a compressed flag around
+unchanged bytes. Per output frame it emits **one LZX verbatim block** carrying:
+
+* freshly transmitted **main and length Huffman trees**, delta-coded against the previous block's
+  and length-limited to the decoder's own table width (12 bits), so every code resolves in the
+  direct-lookup path and every transmitted tree is complete;
+* **repeated-offset matching** through the real `R0`/`R1`/`R2` LRU queue, preferred over an
+  explicit slot at equal match length because it costs no offset bits at all;
+* **position-slot offset encoding** over the full 64 KiB window;
+* greedy longest-match search over a bounded hash chain, with matches up to LZX's own 257-byte
+  ceiling.
+
+Three things it deliberately does **not** emit, each stated so nobody has to read the code to find
+out:
+
+| Not emitted | Why |
+|---|---|
+| Aligned-offset blocks | A fourth Huffman tree that saves a few bits on offset-heavy data. Verbatim-only is a conforming subset; CNA's reader and the independent parser both decode aligned blocks, so a file from another producer that uses them still loads. |
+| Uncompressed LZX blocks | They would save nothing and need the bitstream-realignment dance around them. This is also the shortcut that is **not** taken: setting `0x80` over unentropy-coded bytes would be technically conforming and worthless. |
+| Intel `E8` call translation | The header bit is always zero. No `.xnb` uses it, and CNA's decoder — like FNA's, which never finished that transform — refuses a non-zero file size there. |
+
+An LZX block and an output frame coincide, one block per frame. That costs a little ratio (trees
+are retransmitted every 32 KiB, and a match may not reach across a frame boundary) and buys
+correctness against the reference framing loop, whose run accounting has no guard for a match that
+overshoots its own frame.
+
+**Compression is deterministic**: the hash function, the search depth, the Huffman tie-breaking and
+the block partitioning are all fixed, so the same payload always compresses to the same bytes and
+an incremental build never rewrites an unchanged compressed asset. The compression selection is
+part of the build fingerprint, so changing it rebuilds rather than reusing stale bytes.
+
+Compression is a **container** concern and changes no observed value: the LZX and uncompressed
+fixture corpora share their expectation manifests byte for byte, and a test asserts it.
+
+Measured on the committed corpus and on a 64×64 RGBA texture: a 16 571-byte uncompressed texture
+`.xnb` becomes 12 181 bytes; 200 KB of repetitive text compresses below 2 %; uniform random bytes
+**grow** by roughly 0.4 % plus the trees, which is what incompressible data costs in any format —
+build such an asset uncompressed.
+
+**Verification.** Three independent oracles, deliberately not one: CNA's own LZX decoder (a port
+predating this encoder by years, shipped against real Microsoft-produced files) round-trips every
+case; `tools/xnb/xnb_conformance.py` carries **its own LZX decoder**, written from the format
+description in another language sharing no code, constants or tables, and it decodes every
+CNA-produced LZX fixture down to asset values — the same decoder reproduces both externally
+produced LZX fixtures byte for byte against FNA's own reference output, which is what earns it the
+right to judge CNA's encoder; and the container framing is asserted field by field against the
+layout those two external fixtures demonstrate.
+
+**What LZX does not give you** is integrity checking: neither LZX nor the XNB container carries a
+checksum, so a truncated or corrupted stream can decode to the declared byte count and be wrong.
+That is a property of the format. The tested contract is that such a stream either refuses or
+produces different bytes — it never quietly passes for the original.
 
 ### 2.2 Target platforms — three are XNA 4.0, thirteen are not
 
@@ -332,7 +375,7 @@ Stated plainly, because a gap named is worth more than a gap rounded up.
 | Not supported | Detail |
 |---|---|
 | **Compiling `.fx` to shader bytecode** | CNA does not host an HLSL compiler, and that is a standing decision rather than an oversight (`plans/plan_fx.md`: "Out of scope; CNA will not embed an HLSL source compiler"). It will not fake it by embedding source text in an `Effect` asset. What it *does* do is build an already-compiled `.fxb` into an `Effect` `.xnb` with the bytecode byte for byte — see §7. Compile the `.fx` with `fxc` at profile `fx_2_0`, which is what XNA's own Content Pipeline used. |
-| **LZX compressed output** | The scheme XNA 4.0 itself produced. CNA reads it and cannot write it; see §2.1. An uncompressed file loads everywhere LZX does, so this costs file size and nothing else. |
+| **Aligned-offset and uncompressed LZX blocks** | CNA *reads* both and emits neither: verbatim blocks are a conforming subset and the other two buy nothing here. See §2.1.1. |
 | **Xbox 360 semantics** | Beyond the `SoundEffect` WAVEFORMATEX byte swap, nothing is endian-corrected or tiled — and the writer refuses an `x` target rather than emitting Windows bytes under an Xbox header. `--xnb-allow-unverified-xbox` overrides it for hardware testing. |
 | **Windows Phone semantics** | The header byte is written and the payloads are Windows's, which is very likely correct for a little-endian ARM target and is nonetheless **unverified**: no `m` fixture and no Windows Phone runtime exist here. |
 | **Array-valued effect parameters** | An `EffectMaterial` parameter that is `float[]`, `int[]` or `Matrix[]` is not written. Which reader instantiation XNA writes for one — `ArrayReader` or `ListReader`, over which element type — is not established by any fixture available here, and a guess would produce a file that loads into the wrong shape rather than one that fails to load. CNA's **reader** applies them if some other producer writes them. |
