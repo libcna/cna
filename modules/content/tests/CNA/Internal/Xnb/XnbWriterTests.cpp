@@ -9,7 +9,9 @@
 // CNA's own independent reader, which shares no code with the writer.
 
 #include <cstdint>
+#include <any>
 #include <filesystem>
+#include <map>
 #include <fstream>
 #include <memory>
 #include <unordered_map>
@@ -28,6 +30,7 @@
 #include "CNA/Internal/Xnb/CollectionContentTypeReaders.hpp"
 #include "CNA/Internal/Xnb/CurveContentTypeReader.hpp"
 #include "CNA/Internal/Xnb/DecimalDateTimeContentTypeReaders.hpp"
+#include "CNA/Internal/Xnb/EffectMaterialContentTypeReaders.hpp"
 #include "CNA/Internal/Xnb/XnbAssetTypeWriters.hpp"
 #include "CNA/Internal/Xnb/MathContentTypeReaders.hpp"
 #include "CNA/Internal/Xnb/PrimitiveContentTypeReaders.hpp"
@@ -329,6 +332,87 @@ TEST_F(XnbWriterTest, CompressedOutputFailsWithAPlanReferenceRatherThanSilentlyW
     {
         EXPECT_NE(std::string(error.what()).find("XNAP-81"), std::string::npos) << error.what();
     }
+}
+
+// -- EffectMaterial and its polymorphic parameter table (XNAP-29/XNAP-2B) ---------------------
+
+TEST_F(XnbWriterTest, AnEffectParameterTableRoundTripsEveryValueTypeItCanHold)
+{
+    using namespace Microsoft::Xna::Framework;
+
+    // The table is Dictionary<String, Object>: every value carries its own dispatch index, so a
+    // reader that has never seen this file still knows what each entry is. Reading it back as
+    // std::any and checking the concrete type of each entry is what proves the index is right --
+    // a wrong index would decode as some other type rather than fail.
+    RegisterEffectMaterialXnbReaders();
+
+    XnbEffectParameterTable table;
+    table.values.emplace("Alpha", 0.75f);
+    table.values.emplace("Enabled", true);
+    table.values.emplace("Passes", std::int32_t{3});
+    table.values.emplace("Offset", Vector2{1.0f, 2.0f});
+    table.values.emplace("Diffuse", Vector3{0.25f, 0.5f, 0.75f});
+    table.values.emplace("Tint", Vector4{1.0f, 2.0f, 3.0f, 4.0f});
+    table.values.emplace("World", Matrix::CreateTranslation(Vector3{5.0f, 6.0f, 7.0f}));
+    table.values.emplace("Spin", Quaternion{0.1f, 0.2f, 0.3f, 0.4f});
+
+    const std::map<std::string, std::any> read =
+        LoadedXnb(WriteXnbAsset(table)).ReadAsset<std::map<std::string, std::any>>();
+    ASSERT_EQ(read.size(), table.values.size());
+
+    EXPECT_FLOAT_EQ(std::any_cast<float>(read.at("Alpha")), 0.75f);
+    EXPECT_TRUE(std::any_cast<bool>(read.at("Enabled")));
+    EXPECT_EQ(std::any_cast<std::int32_t>(read.at("Passes")), 3);
+    EXPECT_FLOAT_EQ(std::any_cast<Vector2>(read.at("Offset")).Y, 2.0f);
+    EXPECT_FLOAT_EQ(std::any_cast<Vector3>(read.at("Diffuse")).Z, 0.75f);
+    EXPECT_FLOAT_EQ(std::any_cast<Vector4>(read.at("Tint")).W, 4.0f);
+    EXPECT_FLOAT_EQ(std::any_cast<Matrix>(read.at("World")).M43, 7.0f);
+    EXPECT_FLOAT_EQ(std::any_cast<Quaternion>(read.at("Spin")).X, 0.1f);
+}
+
+TEST_F(XnbWriterTest, AnEffectMaterialInternsBothItsOwnReaderAndItsParameterReaders)
+{
+    using namespace Microsoft::Xna::Framework;
+
+    XnbEffectMaterialData material;
+    material.effectReference = "Effects/Water";
+    material.parameters.values.emplace("Alpha", 0.5f);
+    material.parameters.values.emplace("NormalMap",
+                                       XnbExternalAssetReference{"Textures/WaterNormal"});
+
+    // The material's own effect reference is inline and carries no dispatch index; the parameter
+    // table and every value in it do. A reader that resolves external references needs a
+    // ContentManager and a device, so this test asserts on the type-reader table rather than
+    // loading the graph -- which is precisely the part a wrong identity would break.
+    const std::vector<std::uint8_t> written = WriteXnbAsset(material, {}, "water");
+    const std::string text(written.begin(), written.end());
+    for (const char* expected : {"EffectMaterialReader",
+                                 "DictionaryReader`2[[System.String",
+                                 "System.Object",
+                                 "ExternalReferenceReader",
+                                 "SingleReader"})
+    {
+        EXPECT_NE(text.find(expected), std::string::npos) << expected << " is not in the table";
+    }
+    EXPECT_NE(text.find("Effects/Water"), std::string::npos);
+    EXPECT_NE(text.find("Textures/WaterNormal"), std::string::npos);
+}
+
+TEST_F(XnbWriterTest, AnEffectMaterialWithNoEffectReferenceIsRefused)
+{
+    XnbEffectMaterialData material;
+    material.parameters.values.emplace("Alpha", 0.5f);
+    EXPECT_THROW((void)WriteXnbAsset(material, {}, "broken"), XnbWriteException);
+}
+
+TEST_F(XnbWriterTest, AnExternalReferenceThatEscapesTheContentRootIsRefusedAsAnObject)
+{
+    // The inline form already refuses these; the boxed form has to refuse them for the same
+    // reason, or the check is only as strong as the field the reference happens to sit in.
+    EXPECT_THROW((void)WriteXnbAsset(XnbExternalAssetReference{"../outside"}, {}, "escape"),
+                 XnbWriteException);
+    EXPECT_THROW((void)WriteXnbAsset(XnbExternalAssetReference{"/absolute"}, {}, "absolute"),
+                 XnbWriteException);
 }
 
 // -- golden byte equality against genuine Microsoft XNA 4.0 output (XNAP-41) --------------------

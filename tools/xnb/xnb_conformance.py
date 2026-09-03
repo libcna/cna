@@ -512,6 +512,50 @@ class Reader:
             self.cursor.fail("this parser does not decode a non-null Model Tag")
         return {"bones": bones, "meshes": meshes, "rootBone": root}
 
+    def effect_material(self):
+        """EffectMaterial: an inline effect reference, then a dispatched parameter table."""
+        reference = self.cursor.string()
+        entry = self.reader_reference(
+            "Microsoft.Xna.Framework.Content.DictionaryReader`2"
+            "[[System.String],[System.Object]]")
+        return {"effect": reference, "parameters": self.string_object_dictionary(entry)}
+
+    def string_object_dictionary(self, entry=None):
+        """Dictionary<String, Object>: both the key and each value carry a dispatch index."""
+        del entry
+        count = self.cursor.collection_count("Dictionary`2")
+        values = {}
+        for _ in range(count):
+            self.reader_reference("Microsoft.Xna.Framework.Content.StringReader")
+            key = self.cursor.string()
+            values[key] = self.dispatched_object()
+        return values
+
+    def dispatched_object(self):
+        """One value whose static type is `object`, decoded by whatever reader it names."""
+        entry = self.reader_reference()
+        name = entry["canonical"]
+        boxed = {
+            "Microsoft.Xna.Framework.Content.BooleanReader": self.cursor.boolean,
+            "Microsoft.Xna.Framework.Content.Int32Reader": self.cursor.i32,
+            "Microsoft.Xna.Framework.Content.SingleReader": self.cursor.f32,
+            "Microsoft.Xna.Framework.Content.StringReader": self.cursor.string,
+            "Microsoft.Xna.Framework.Content.Vector2Reader":
+                lambda: [self.cursor.f32() for _ in range(2)],
+            "Microsoft.Xna.Framework.Content.Vector3Reader": self.cursor.vector3,
+            "Microsoft.Xna.Framework.Content.Vector4Reader":
+                lambda: [self.cursor.f32() for _ in range(4)],
+            "Microsoft.Xna.Framework.Content.QuaternionReader":
+                lambda: [self.cursor.f32() for _ in range(4)],
+            "Microsoft.Xna.Framework.Content.MatrixReader": self.cursor.matrix,
+            # An external reference stored where the static type is object: the reference string
+            # sits inline after the dispatch index, exactly as ExternalReferenceReader reads it.
+            "Microsoft.Xna.Framework.Content.ExternalReferenceReader": self.cursor.string,
+        }
+        if name not in boxed:
+            self.cursor.fail(f"no decoder for boxed value reader '{name}'")
+        return boxed[name]()
+
     def shared_resource(self, entry):
         name = entry["canonical"]
         if name == "Microsoft.Xna.Framework.Content.VertexBufferReader":
@@ -557,6 +601,8 @@ class Reader:
                     "diffuse": self.cursor.vector3(), "emissive": self.cursor.vector3(),
                     "specular": self.cursor.vector3(),
                     "specularPower": self.cursor.f32(), "alpha": self.cursor.f32()}
+        if name == "Microsoft.Xna.Framework.Content.EffectMaterialReader":
+            return {"reader": name, **self.effect_material()}
         raise XnbError(f"{self.cursor.origin}: no decoder for shared resource '{name}'")
 
     def root(self, entry):
@@ -599,6 +645,13 @@ class Reader:
             return self.curve()
         if name == "Microsoft.Xna.Framework.Content.ModelReader":
             return self.model()
+        if name == "Microsoft.Xna.Framework.Content.EffectMaterialReader":
+            return self.effect_material()
+        if name == ("Microsoft.Xna.Framework.Content.DictionaryReader`2"
+                    "[[System.String],[System.Object]]"):
+            return self.string_object_dictionary()
+        if name == "Microsoft.Xna.Framework.Content.ExternalReferenceReader":
+            return {"externalReference": self.cursor.string()}
         if name == "Microsoft.Xna.Framework.Content.EffectReader":
             payload = self.cursor.blob()
             return {"bytecodeByteCount": len(payload), "digest": _digest(payload)}

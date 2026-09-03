@@ -170,8 +170,8 @@ Arbitrary nesting works: the writer interns readers by formatted name on first u
 | `BasicEffect` | `BasicEffectReader` | ✅ | ✅ | Verified through the `Model` fixture. |
 | `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect` | matching `…Reader` | ✅ | — | Including each one's external texture reference. The independent parser can decode all four; no committed fixture exercises them yet. |
 | `Effect` (already-compiled bytecode) | `EffectReader` | ✅ | ✅ | The bytecode is written verbatim; an empty payload is refused rather than written as a loadable asset. **CNA does not compile `.fx` — see §6.** |
-| `EffectMaterial` | — | ❌ | ❌ | Its payload is a `Dictionary<String,Object>` of heterogeneous values, which needs polymorphic-object support (`XNAP-2B`). |
-| `ExternalReference<T>` | — | ⚠️ | — | The reference string every stock effect uses is written and validated (absolute and escaping paths are refused). A standalone `ExternalReferenceReader`-rooted asset is not covered. |
+| `EffectMaterial` | `EffectMaterialReader` | ✅ | ✅ | An inline effect reference plus a `Dictionary<String,Object>` whose values each carry their own dispatch index. `Boolean`, `Int32`, `Single`, `Vector2`, `Vector3`, `Vector4`, `Matrix`, `Quaternion` and a boxed external reference are written; **array-valued parameters are not** — see below. |
+| `ExternalReference<T>` | `ExternalReferenceReader`, and the inline form | ✅ | ✅ | Both forms: inline in a known field (no dispatch index, what every stock effect uses) and boxed where the static type is `object`. Absolute and escaping references are refused in both. |
 
 ---
 
@@ -215,7 +215,7 @@ Stated plainly, because a gap named is worth more than a gap rounded up.
 | **Compressed output** | Neither LZX (`0x80`) nor LZ4 (`0x40`) is written. Both are refused with a message naming the task. CNA *reads* both. |
 | **Xbox 360 semantics** | Beyond the `SoundEffect` WAVEFORMATEX byte swap, nothing is endian-corrected or tiled. The header byte can be written; that is not the same claim. |
 | **Windows Phone semantics** | The header byte can be written; nothing beyond that is verified. |
-| **`EffectMaterial`** | Needs heterogeneous boxed values. |
+| **Array-valued effect parameters** | An `EffectMaterial` parameter that is `float[]`, `int[]` or `Matrix[]` is not written. Which reader instantiation XNA writes for one — `ArrayReader` or `ListReader`, over which element type — is not established by any fixture available here, and a guess would produce a file that loads into the wrong shape rather than one that fails to load. CNA's **reader** applies them if some other producer writes them. |
 | **`Decimal`** | Conditional on sharp-runtime's 128-bit integer support, on the read side too. |
 | **A block-compressed `.cnb`** | CNB texture schema 1 is frozen to `Rgba8`. A `.cnb` build that asks for DXT keeps the uncompressed pixels and warns; the `.xnb` build gets the compressed texture. |
 

@@ -91,13 +91,13 @@ All 30 failures are environmental and reproduce on the unmodified tree:
 **Current (2026-09-03, after Phases B–F except the open rows):**
 
 ```text
-CnaContentTests:          1693 run   1595 passed   68 skipped   30 failed
+CnaContentTests:          1697 run   1599 passed   68 skipped   30 failed
 CnaContentPipelineTests:    37 run     37 passed    0 skipped    0 failed
-CnaTests (whole suite):   7825 run   7284 passed  512 skipped   29 failed
+CnaTests (whole suite):   7829 run   7288 passed  512 skipped   29 failed
 ```
 
 `CnaContentTests` shows the same 30 environmental failures as the recorded baseline, +96 tests,
-+108 passing, **zero new failures**. `CnaContentPipelineTests` is the new build-time module's own
++112 passing, **zero new failures**. `CnaContentPipelineTests` is the new build-time module's own
 focused executable and is entirely new. The whole-suite figure is recorded here for completeness;
 its 29 failures are the STUB-renderer `TextureCube`/`Texture3D`/capability group, the uid-0
 permission case and the two audio-device `MediaLibrary` cases — none of them content-pipeline
@@ -304,9 +304,9 @@ Legend: `[ ]` open · `[x]` complete · `[~]` partially complete (detail in the 
 | `XNAP-26` | `Song`, `Video` from `XnbSongData`/`XnbVideoData`, including the object-referenced Video field form. | [x] |
 | `XNAP-27` | `VertexDeclaration`, `VertexBuffer`, `IndexBuffer`. | [x] |
 | `XNAP-28` | Stock effects: `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`, each with its external texture references. | [x] |
-| `XNAP-29` | `Effect` (already-compiled bytecode) and `EffectMaterial`. | [~] `Effect` bytecode is written and refuses an empty payload. `EffectMaterial` has no writer yet: its payload is a `Dictionary<String,Object>` of heterogeneous parameter values, which needs the polymorphic-object work in `XNAP-2B`. |
+| `XNAP-29` | `Effect` (already-compiled bytecode) and `EffectMaterial`. | [x] `Effect` bytecode is written verbatim and an empty payload is refused. `EffectMaterial` writes its inline effect reference and a `Dictionary<String,Object>` whose values each carry their own dispatch index -- `Boolean`, `Int32`, `Single`, `Vector2/3/4`, `Matrix`, `Quaternion` and a boxed external reference. **Array-valued parameters are deliberately absent**: which reader instantiation XNA writes for `float[]`/`int[]`/`Matrix[]` is not established by any fixture available here, and a guess would produce a file that loads into the wrong shape rather than one that fails to load. |
 | `XNAP-2A` | `Model` from `XnbModelData`: bones, hierarchy, meshes, parts, tags, shared vertex/index/effect resources, root reference, byte/uint32 bone-reference width rule. | [x] |
-| `XNAP-2B` | `ExternalReference<T>`. | [~] `XnbWriter::WriteExternalReference()` writes and validates the reference string every stock effect uses. A standalone `ExternalReferenceReader`-rooted asset and heterogeneous `Object` values are not covered. |
+| `XNAP-2B` | `ExternalReference<T>`. | [x] Both forms. The inline one (`WriteExternalReference()`, no dispatch index) is what every stock effect and every `EffectMaterial` uses; the boxed one (`XnbExternalAssetReference`, its own reader in the table) is what a texture-valued effect parameter needs, and it is also writable as a standalone root. Absolute and escaping references are refused in both. |
 
 ### Phase D — round-trip, golden and conformance validation
 

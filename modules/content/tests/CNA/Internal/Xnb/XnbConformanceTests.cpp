@@ -29,6 +29,9 @@
 #include "CNA/Internal/Xnb/XnbAssetWriter.hpp"
 #include "CNA/Internal/Xnb/XnbCanonicalData.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Quaternion.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 
@@ -335,6 +338,24 @@ TEST(XnbConformanceTest, TheIndependentParserReadsBackTheFrameworkValueTypesItKn
     }
 }
 
+namespace
+{
+    /** @brief An EffectMaterial with one of every parameter shape the writer can emit. */
+    CNA::Internal::Xnb::XnbEffectMaterialData MakeEffectMaterial()
+    {
+        using namespace Microsoft::Xna::Framework;
+        CNA::Internal::Xnb::XnbEffectMaterialData material;
+        material.effectReference = "Effects/Water";
+        material.parameters.values.emplace("Alpha", 0.5f);
+        material.parameters.values.emplace("Enabled", true);
+        material.parameters.values.emplace("Passes", std::int32_t{2});
+        material.parameters.values.emplace("Diffuse", Vector3{0.25f, 0.5f, 0.75f});
+        material.parameters.values.emplace(
+            "NormalMap", CNA::Internal::Xnb::XnbExternalAssetReference{"Textures/WaterNormal"});
+        return material;
+    }
+}
+
 TEST(XnbConformanceTest, TheIndependentParserReadsBackTheAssetRootsOutsideTheCommittedCorpus)
 {
     if (!ConformanceParserAvailable())
@@ -394,6 +415,7 @@ TEST(XnbConformanceTest, TheIndependentParserReadsBackTheAssetRootsOutsideTheCom
         {"\"bytecodeByteCount\": 8",
          WriteXnbAsset(XnbCompiledEffectContent{
              std::vector<std::uint8_t>{0x01u, 0x02u, 0x03u, 0x04u, 0x05u, 0x06u, 0x07u, 0x08u}})},
+        {"Effects/Water", WriteXnbAsset(MakeEffectMaterial())},
     };
 
     for (std::size_t index = 0; index < roots.size(); ++index)

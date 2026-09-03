@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Xnb/XnbAssetTypeWriters.hpp"
 
+#include <variant>
+
 #include <limits>
 #include <variant>
 #include <memory>
@@ -723,6 +725,73 @@ namespace CNA::Internal::Xnb
                         "no compiled program cannot be loaded.");
                 }
                 output.WriteLengthPrefixedBytes(value.bytecode);
+            });
+
+        // XNAP-2B: an external reference stored where the static type is `object`. The reader
+        // side is ExternalReferenceReader, whose target type is System.Object, so this entry has
+        // to be interned under that name for the dictionary below to resolve it.
+        AddWriter<XnbExternalAssetReference>(registry,
+            CoreIdentity("Microsoft.Xna.Framework.Content.ExternalReferenceReader",
+                         "System.Object", XnbAssembly::Mscorlib, XnbNameEvidence::DerivedRule),
+            true,
+            [](XnbWriter& output, const XnbExternalAssetReference& value)
+            {
+                output.WriteExternalReference(value.reference);
+            });
+
+        // XNAP-29: Dictionary<String, Object>. Its values are polymorphic -- each carries its own
+        // dispatch index -- which is exactly what the homogeneous dictionary writer cannot do.
+        AddWriter<XnbEffectParameterTable>(registry,
+            [] {
+                XnbReaderIdentity key;
+                key.targetBaseName = "System.String";
+                key.targetAssembly = XnbAssembly::Mscorlib;
+                key.evidence = XnbNameEvidence::Xna40Fixture;
+                XnbReaderIdentity value;
+                value.targetBaseName = "System.Object";
+                value.targetAssembly = XnbAssembly::Mscorlib;
+                value.evidence = XnbNameEvidence::DerivedRule;
+                XnbReaderIdentity identity;
+                identity.readerBaseName = "Microsoft.Xna.Framework.Content.DictionaryReader`2";
+                identity.readerAssembly = XnbAssembly::None;
+                identity.targetBaseName = "System.Collections.Generic.Dictionary`2";
+                identity.targetAssembly = XnbAssembly::Mscorlib;
+                identity.genericArguments = {key, value};
+                identity.evidence = XnbNameEvidence::DerivedRule;
+                return identity;
+            }(),
+            true,
+            [](XnbWriter& output, const XnbEffectParameterTable& value)
+            {
+                output.RequireCollectionCount(value.values.size(), "EffectParameterTableWriter");
+                output.WriteInt32(static_cast<std::int32_t>(value.values.size()));
+                // std::map already orders by key, which is what makes this deterministic.
+                for (const auto& [name, parameter] : value.values)
+                {
+                    output.WriteObject(name);
+                    std::visit([&output](const auto& stored) { output.WriteObject(stored); },
+                               parameter);
+                }
+            });
+
+        AddWriter<XnbEffectMaterialData>(registry,
+            GraphicsIdentity("Microsoft.Xna.Framework.Content.EffectMaterialReader",
+                             "Microsoft.Xna.Framework.Graphics.EffectMaterial",
+                             XnbNameEvidence::DerivedRule),
+            true,
+            [](XnbWriter& output, const XnbEffectMaterialData& value)
+            {
+                if (value.effectReference.empty())
+                {
+                    throw XnbWriteException(
+                        "'" + output.AssetName() +
+                        "': EffectMaterialWriter needs the effect asset the material clones; a "
+                        "material with no effect reference cannot be loaded.");
+                }
+                // The effect reference sits inline in a field whose type the reader already
+                // knows, so it carries no dispatch index. The parameter table does.
+                output.WriteExternalReference(value.effectReference);
+                output.WriteObject(value.parameters);
             });
 
         AddWriter<XnbModelData>(registry,
