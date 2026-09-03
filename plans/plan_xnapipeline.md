@@ -308,9 +308,9 @@ Legend: `[ ]` open · `[x]` complete · `[~]` partially complete (detail in the 
 | `XNAP-40` | Round-trip every writer through CNA's own reader with value assertions (`cna-rt`). | [x] |
 | `XNAP-41` | **Byte-exact golden test against the genuine XNA 4.0 fixture**: write the same `List<string>` and compare to `ContentManifestListStrings.xnb` byte for byte (`golden`). | [x] |
 | `XNAP-42` | Byte-exact golden tests against MonoGame fixtures where CNA's canonical data is lossless for them. | [ ] |
-| `XNAP-43` | Independent specification-based XNB parser (Python), sharing no code or assumptions with CNA (`spec`). | [ ] |
+| `XNAP-43` | Independent specification-based XNB parser (Python), sharing no code or assumptions with CNA (`spec`). | [x] |
 | `XNAP-44` | Deterministic-output tests: same inputs ⇒ byte-identical files, across process runs and worker counts. | [~] byte-identical repeat writes and dictionary key ordering are covered; the multi-worker CLI case waits on `XNAP-62`. |
-| `XNAP-45` | Malformed/limit tests: oversized collections, oversized strings, deep nesting, overflowing sizes, cyclic shared resources. | [ ] |
+| `XNAP-45` | Malformed/limit tests: oversized collections, oversized strings, deep nesting, overflowing sizes, cyclic shared resources. | [~] collection, string and file-size ceilings, escaping external references, unissued shared-resource references, double-finish, and the independent parser refusing a bad total length and trailing bytes are covered. A dedicated fuzz corpus over the writer's inputs is still open. |
 
 ### Phase E — pipeline and tooling integration
 
@@ -342,11 +342,11 @@ Legend: `[ ]` open · `[x]` complete · `[~]` partially complete (detail in the 
 
 | ID | Task | State |
 |---|---|---|
-| `XNAP-30` | CNA-generated fixture corpus for XNA loading (`Texture2D`, `SoundEffect`, `SpriteFont`, `Curve`, `List<String>`, `Dictionary<,>`, `Model`, `Song`, `Effect`). | [ ] |
-| `XNAP-31` | Expected-value manifests per fixture (dimensions, mip counts, exact pixels, formats, glyph metrics, bone/mesh graphs). | [ ] |
-| `XNAP-32` | XNA 4.0 harness project + build/run instructions for an XNA-capable Windows installation. | [ ] |
-| `XNAP-33` | Harness asserts values, not just successful `Load<T>()`. | [ ] |
-| `XNAP-34` | Result-recording protocol so a future session with a real runtime can fill in the `xna40` column. | [!] blocked: no XNA 4.0 runtime, Wine, Mono or .NET in this environment (§0.3). |
+| `XNAP-30` | CNA-generated fixture corpus for XNA loading (`Texture2D`, `SoundEffect`, `SpriteFont`, `Curve`, `List<String>`, `Dictionary<,>`, `Model`, `Song`, `Effect`). | [x] |
+| `XNAP-31` | Expected-value manifests per fixture (dimensions, mip counts, exact pixels, formats, glyph metrics, bone/mesh graphs). | [x] |
+| `XNAP-32` | XNA 4.0 harness project + build/run instructions for an XNA-capable Windows installation. | [x] |
+| `XNAP-33` | Harness asserts values, not just successful `Load<T>()`. | [x] |
+| `XNAP-34` | Result-recording protocol so a future session with a real runtime can fill in the `xna40` column. | [!] The protocol is written (`tests/interop/xna40/README.md`, "Recording the result"). **Execution is blocked**: no XNA 4.0 runtime, Windows, Wine, Mono or .NET exists in this environment (§0.3). No row of any capability table may read `xna40` until this runs. |
 
 ### Phase J — interoperability defects found by the writer
 

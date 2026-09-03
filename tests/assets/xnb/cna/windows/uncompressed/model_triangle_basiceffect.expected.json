@@ -1,0 +1,1 @@
+{"rootReader":"Microsoft.Xna.Framework.Content.ModelReader","sharedResourceCount":3,"root":{"rootBone":0,"bones":[{"name":"RootNode","parent":-1,"children":[1]},{"name":"Triangle","parent":0,"children":[]}],"meshes":[{"name":"Triangle","parentBone":1,"parts":[{"vertexOffset":0,"numVertices":3,"startIndex":0,"primitiveCount":1,"vertexBuffer":1,"indexBuffer":2,"effect":3}]}]}}
