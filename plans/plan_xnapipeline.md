@@ -91,10 +91,10 @@ All 30 failures are environmental and reproduce on the unmodified tree:
 **Current (2026-09-03, after Phase B and most of Phase C):**
 
 ```text
-CnaContentTests:  1641 run   1543 passed   68 skipped   30 failed
+CnaContentTests:  1656 run   1558 passed   68 skipped   30 failed
 ```
 
-The same 30 environmental failures, +56 tests, +56 passing, zero new failures.
+The same 30 environmental failures, +71 tests, +71 passing, zero new failures.
 
 ---
 
@@ -316,12 +316,12 @@ Legend: `[ ]` open · `[x]` complete · `[~]` partially complete (detail in the 
 
 | ID | Task | State |
 |---|---|---|
-| `XNAP-60` | `ContentOutputFormat` axis: `ContentTypeWriter::OutputFormat()` (defaulting to `Cnb`, non-breaking), format-aware writer resolution, format in the build request/result. | [ ] |
-| `XNAP-61` | Register XNB writers for every existing processed type, reusing the existing importers/processors unchanged. | [ ] |
+| `XNAP-60` | `ContentOutputFormat` axis: `ContentTypeWriter::OutputFormat()` (defaulting to `Cnb`, non-breaking), format-aware writer resolution, format in the build request/result. | [x] |
+| `XNAP-61` | Register XNB writers for every existing processed type, reusing the existing importers/processors unchanged. | [~] `Texture2D`, `Texture3D`, `TextureCube`, `SpriteFont`, `SoundEffect`, `Song`, `Video`, `Curve` and `Model` are registered. `Model` accepts only the exact schema-2 canonical form; a schema-1 Model is refused with a diagnostic naming `XNAP-56`. `AnimationClip` has no XNA equivalent and deliberately has no XNB writer. |
 | `XNAP-62` | `cna-content --format xnb|cnb`, `--xnb-platform`, `--xnb-version`, `--xnb-profile`, `--xnb-compress`; `.xnb` output extension; help/validation/exit codes. | [ ] |
-| `XNAP-63` | `.cna-content.json` v2: project-wide and per-asset `format`, target platform, graphics profile. | [ ] |
-| `XNAP-64` | Incremental build correctness for XNB: writer identity/schema fingerprints, format changes invalidating output. | [ ] |
-| `XNAP-65` | Diagnostics: every XNB failure names source, importer, processor, output format, field and reason. | [ ] |
+| `XNAP-63` | `.cna-content.json` v2: project-wide and per-asset `format`, target platform, graphics profile. | [x] |
+| `XNAP-64` | Incremental build correctness for XNB: writer identity/schema fingerprints, format changes invalidating output. | [x] |
+| `XNAP-65` | Diagnostics: every XNB failure names source, importer, processor, output format, field and reason. | [x] |
 
 ### Phase F — source-asset routes
 

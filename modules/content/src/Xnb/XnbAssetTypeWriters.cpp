@@ -75,52 +75,29 @@ namespace CNA::Internal::Xnb
         [[nodiscard]] std::int32_t EncodeSurfaceFormat(
             const XnbWriter& output, const SurfaceFormat format, const char* readerName)
         {
-            if (output.Version() >= 5)
+            const XnbContainerVersion version = output.Version() >= 5
+                                                    ? XnbContainerVersion::Xna40
+                                                    : XnbContainerVersion::Legacy4;
+            if (!IsXnbWritableSurfaceFormat(format, version))
             {
-                switch (format)
-                {
-                    case SurfaceFormat::Color:
-                    case SurfaceFormat::Bgr565:
-                    case SurfaceFormat::Bgra5551:
-                    case SurfaceFormat::Bgra4444:
-                    case SurfaceFormat::Dxt1:
-                    case SurfaceFormat::Dxt3:
-                    case SurfaceFormat::Dxt5:
-                    case SurfaceFormat::NormalizedByte2:
-                    case SurfaceFormat::NormalizedByte4:
-                    case SurfaceFormat::Rgba1010102:
-                    case SurfaceFormat::Rg32:
-                    case SurfaceFormat::Rgba64:
-                    case SurfaceFormat::Alpha8:
-                    case SurfaceFormat::Single:
-                    case SurfaceFormat::Vector2:
-                    case SurfaceFormat::Vector4:
-                    case SurfaceFormat::HalfSingle:
-                    case SurfaceFormat::HalfVector2:
-                    case SurfaceFormat::HalfVector4:
-                    case SurfaceFormat::HdrBlendable:
-                        return static_cast<std::int32_t>(format);
-                    default:
-                        throw XnbWriteException(
-                            std::string("'") + output.AssetName() + "': " + readerName +
-                            " cannot write SurfaceFormat ordinal " +
-                            std::to_string(static_cast<int>(format)) +
-                            "; it is a CNA extension with no XNA 4.0 SurfaceFormat value.");
-                }
+                throw XnbWriteException(
+                    std::string("'") + output.AssetName() + "': " + readerName +
+                    " cannot write SurfaceFormat ordinal " +
+                    std::to_string(static_cast<int>(format)) +
+                    " into a container-version-" + std::to_string(output.Version()) +
+                    " file. Version 5 expresses every XNA 4.0 SurfaceFormat but no CNA extension "
+                    "format; version 4 expresses only ColorBgraEXT, Dxt1, Dxt3 and Dxt5.");
             }
-
+            if (version == XnbContainerVersion::Xna40) { return static_cast<std::int32_t>(format); }
             switch (format)
             {
                 case SurfaceFormat::ColorBgraEXT: return 1;
                 case SurfaceFormat::Dxt1: return 28;
                 case SurfaceFormat::Dxt3: return 30;
                 case SurfaceFormat::Dxt5: return 32;
-                default:
-                    throw XnbWriteException(
-                        std::string("'") + output.AssetName() + "': " + readerName +
-                        " cannot write this SurfaceFormat into a container-version-4 file; only "
-                        "ColorBgraEXT, Dxt1, Dxt3 and Dxt5 have a legacy encoding.");
+                default: break;
             }
+            throw XnbWriteException("unreachable: legacy surface-format encoding");
         }
 
         /**
@@ -373,6 +350,42 @@ namespace CNA::Internal::Xnb
         {
             registry.Register(std::make_shared<const XnbFunctionTypeWriter<T>>(
                 std::move(identity), serializedByReference, payload));
+        }
+    }
+
+    bool IsXnbWritableSurfaceFormat(const SurfaceFormat format,
+                                    const XnbContainerVersion version) noexcept
+    {
+        if (version == XnbContainerVersion::Legacy4)
+        {
+            return format == SurfaceFormat::ColorBgraEXT || format == SurfaceFormat::Dxt1 ||
+                   format == SurfaceFormat::Dxt3 || format == SurfaceFormat::Dxt5;
+        }
+        switch (format)
+        {
+            case SurfaceFormat::Color:
+            case SurfaceFormat::Bgr565:
+            case SurfaceFormat::Bgra5551:
+            case SurfaceFormat::Bgra4444:
+            case SurfaceFormat::Dxt1:
+            case SurfaceFormat::Dxt3:
+            case SurfaceFormat::Dxt5:
+            case SurfaceFormat::NormalizedByte2:
+            case SurfaceFormat::NormalizedByte4:
+            case SurfaceFormat::Rgba1010102:
+            case SurfaceFormat::Rg32:
+            case SurfaceFormat::Rgba64:
+            case SurfaceFormat::Alpha8:
+            case SurfaceFormat::Single:
+            case SurfaceFormat::Vector2:
+            case SurfaceFormat::Vector4:
+            case SurfaceFormat::HalfSingle:
+            case SurfaceFormat::HalfVector2:
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+                return true;
+            default:
+                return false;
         }
     }
 

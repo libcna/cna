@@ -303,7 +303,8 @@ namespace CNA::Content::Pipeline
      * @param outputRoot Canonical output root.
      * @param outputPath Published artifact path.
      * @param externalSourceRoots Explicit alias-to-native-root mappings.
-     * Additional outputs use their logical names below @p outputRoot with a `.cnb` suffix. The
+     * Additional outputs use their logical names below @p outputRoot with the extension of the
+     * result's own output format. The
      * primary output keeps the caller-selected path, which matters for single-file builds.
      *
      * @return Record with normalized output identities/digests and empty direct/effective

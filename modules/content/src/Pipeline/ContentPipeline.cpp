@@ -296,10 +296,11 @@ namespace CNA::Content::Pipeline
             return result;
         }
 
-        template<typename Component>
+        template<typename Component, typename RouteKey>
         std::shared_ptr<const Component> ResolveByRoute(
             const std::map<std::string, std::shared_ptr<const Component>>& components,
-            const std::map<std::string, std::set<std::string>>& routes, const std::string& route,
+            const std::map<RouteKey, std::set<std::string>>& routes, const RouteKey& route,
+            const std::string& routeText,
             const std::string& explicitName, const char* kind, const char* routeLabel)
         {
             if (!explicitName.empty())
@@ -314,7 +315,7 @@ namespace CNA::Content::Pipeline
                 if (routeIt == routes.end() || !routeIt->second.contains(explicitName))
                 {
                     throw std::logic_error(std::string(kind) + " '" + explicitName +
-                                           "' does not accept " + routeLabel + " '" + route +
+                                           "' does not accept " + routeLabel + " '" + routeText +
                                            "'.");
                 }
                 return component->second;
@@ -324,12 +325,12 @@ namespace CNA::Content::Pipeline
             if (routeIt == routes.end() || routeIt->second.empty())
             {
                 throw std::logic_error("no " + std::string(kind) + " is registered for " +
-                                       routeLabel + " '" + route + "'.");
+                                       routeLabel + " '" + routeText + "'.");
             }
             if (routeIt->second.size() != 1u)
             {
                 throw std::logic_error("ambiguous " + std::string(kind) + " for " + routeLabel +
-                                       " '" + route + "': " + JoinCandidates(routeIt->second) +
+                                       " '" + routeText + "': " + JoinCandidates(routeIt->second) +
                                        ". Select one explicitly.");
             }
             return components.at(*routeIt->second.begin());
@@ -367,6 +368,23 @@ namespace CNA::Content::Pipeline
                     source, logicalName, stage, component, "non-standard exception"));
             }
         }
+    }
+
+    const char* ContentOutputFormatName(const ContentOutputFormat format) noexcept
+    {
+        return format == ContentOutputFormat::Xnb ? "xnb" : "cnb";
+    }
+
+    const char* ContentOutputFormatExtension(const ContentOutputFormat format) noexcept
+    {
+        return format == ContentOutputFormat::Xnb ? ".xnb" : ".cnb";
+    }
+
+    bool TryParseContentOutputFormat(const std::string& name, ContentOutputFormat& format)
+    {
+        if (name == "cnb") { format = ContentOutputFormat::Cnb; return true; }
+        if (name == "xnb") { format = ContentOutputFormat::Xnb; return true; }
+        return false;
     }
 
     const char* ContentPipelineStageName(ContentPipelineStage stage) noexcept
@@ -908,7 +926,7 @@ namespace CNA::Content::Pipeline
         {
             throw std::logic_error("writer '" + identity.name + "' is already registered.");
         }
-        writersByInputType_[writer->InputType()].insert(identity.name);
+        writersByInputType_[{writer->OutputFormat(), writer->InputType()}].insert(identity.name);
         writers_.emplace(identity.name, std::move(writer));
     }
 
@@ -916,7 +934,8 @@ namespace CNA::Content::Pipeline
         const std::filesystem::path& source, const std::string& explicitName) const
     {
         const std::shared_lock lock(configurationMutex_);
-        return ResolveByRoute(importers_, importersByExtension_, LowerExtension(source),
+        const std::string extension = LowerExtension(source);
+        return ResolveByRoute(importers_, importersByExtension_, extension, extension,
                               explicitName, "importer", "source extension");
     }
 
@@ -932,16 +951,21 @@ namespace CNA::Content::Pipeline
         const std::string& inputType, const std::string& explicitName) const
     {
         const std::shared_lock lock(configurationMutex_);
-        return ResolveByRoute(processors_, processorsByInputType_, inputType, explicitName,
-                              "processor", "imported type");
+        return ResolveByRoute(processors_, processorsByInputType_, inputType, inputType,
+                              explicitName, "processor", "imported type");
     }
 
     std::shared_ptr<const ContentTypeWriter> ContentPipelineRegistry::ResolveWriter(
-        const std::string& inputType, const std::string& explicitName) const
+        const std::string& inputType, const std::string& explicitName,
+        const ContentOutputFormat format) const
     {
         const std::shared_lock lock(configurationMutex_);
-        return ResolveByRoute(writers_, writersByInputType_, inputType, explicitName, "writer",
-                              "processed type");
+        const std::pair<ContentOutputFormat, std::string> route{format, inputType};
+        const std::string routeText =
+            std::string(ContentOutputFormatName(format)) + " output of processed type '" +
+            inputType + "'";
+        return ResolveByRoute(writers_, writersByInputType_, route, routeText, explicitName,
+                              "writer", "the");
     }
 
     namespace
@@ -1117,7 +1141,8 @@ namespace CNA::Content::Pipeline
         std::shared_ptr<const ContentTypeWriter> writer;
         try
         {
-            writer = registry_->ResolveWriter(processed.StableType(), request.writer);
+            writer = registry_->ResolveWriter(processed.StableType(), request.writer,
+                                              request.outputFormat);
         }
         catch (...)
         {
@@ -1203,6 +1228,7 @@ namespace CNA::Content::Pipeline
         result.importer = importerIdentity;
         result.processor = processorIdentity;
         result.writer = writerIdentity;
+        result.outputFormat = writer->OutputFormat();
         result.writerSchemas = std::move(writerSchemas);
         result.parameters = request.parameters;
         result.dependencies = dependencies.Dependencies();

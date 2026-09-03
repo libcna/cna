@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "CNA/Internal/Xnb/XnbCanonicalData.hpp"
+#include "CNA/Internal/Xnb/XnbFileOptions.hpp"
 #include "CNA/Internal/Xnb/XnbTypeWriter.hpp"
 
 namespace CNA::Internal::Xnb
@@ -64,6 +65,22 @@ namespace CNA::Internal::Xnb
         /** @brief Compares the complete bytecode. */
         bool operator==(const XnbCompiledEffectContent& other) const = default;
     };
+
+    /**
+     * @brief Returns whether a surface format can be written into a given container version.
+     *
+     * Container version 5 stores the `SurfaceFormat` ordinal directly, so every XNA 4.0
+     * `SurfaceFormat` is expressible and every CNA-only extension format is not. Version 4 has an
+     * earlier, sparser numbering that reaches only four formats. This is the single authority for
+     * the rule; both the texture writers and the pipeline's format selection consult it.
+     *
+     * @param format The surface format to test.
+     * @param version The container version being written.
+     * @return True when the format has an encoding in that container version.
+     */
+    [[nodiscard]] bool IsXnbWritableSurfaceFormat(
+        Microsoft::Xna::Framework::Graphics::SurfaceFormat format, XnbContainerVersion version)
+        noexcept;
 
     /**
      * @brief Returns the reader identity CNA writes for `Texture2D`.

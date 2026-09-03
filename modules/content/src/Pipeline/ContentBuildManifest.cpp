@@ -1345,7 +1345,7 @@ namespace CNA::Content::Pipeline
         {
             std::filesystem::path path =
                 outputRoot / CNA::Internal::ContentPathFromUtf8(output.logicalName);
-            path += ".cnb";
+            path += ContentOutputFormatExtension(result.outputFormat);
             const ContentWriterSchemaIdentity& schema =
                 schemaFor(output.assetTypeId, output.assetTypeName,
                           output.assetSchemaVersion);

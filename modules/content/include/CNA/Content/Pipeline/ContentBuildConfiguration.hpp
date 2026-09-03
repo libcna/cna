@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <filesystem>
 #include <map>
 #include <string>
@@ -33,6 +34,14 @@ namespace CNA::Content::Pipeline
 
         /** @brief Optional stable writer-name override. */
         std::string writer;
+
+        /**
+         * @brief Optional compiled-container override for this one asset.
+         *
+         * Absent means the project-wide default applies, and that in turn falls back to the
+         * command line's `--format`.
+         */
+        std::optional<ContentOutputFormat> outputFormat;
 
         /** @brief Explicitly typed processor parameters. */
         ContentProcessorParameters parameters;
@@ -75,6 +84,13 @@ namespace CNA::Content::Pipeline
             const noexcept;
 
         /**
+         * @brief Returns the project-wide compiled-container default, when one is configured.
+         *
+         * @return The configured default, or no value when the command line's `--format` decides.
+         */
+        [[nodiscard]] const std::optional<ContentOutputFormat>& OutputFormat() const noexcept;
+
+        /**
          * @brief Returns explicitly configured read-only external source roots.
          *
          * Paths retain their authored native spelling until a build resolves them against its
@@ -87,5 +103,6 @@ namespace CNA::Content::Pipeline
     private:
         std::map<std::string, ContentAssetBuildConfiguration> entries_;
         ContentSourceRootCapabilities sourceRoots_;
+        std::optional<ContentOutputFormat> outputFormat_;
     };
 } // namespace CNA::Content::Pipeline

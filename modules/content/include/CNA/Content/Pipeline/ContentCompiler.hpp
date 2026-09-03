@@ -25,10 +25,15 @@ namespace CNA::Content::Pipeline
      *
      * The coordinator owns source discovery, configuration, fingerprints, incremental manifests,
      * diagnostics, atomic publication, and manifest-proven cleanup. A user-built compiler should
-     * finish all registration before calling this function. The coordinator permanently freezes
-     * @p registry before source discovery, and later registration through any retained mutable
-     * alias fails. This C++ embedding surface has the same experimental source/ABI status as the
-     * component API.
+     * finish all registration before calling this function.
+     *
+     * The registry is taken mutably, and briefly stays mutable, for exactly one reason: when the
+     * command line selects `--format xnb` the coordinator registers the XNB output writers bound
+     * to the container options that same command line chose. Those options change the emitted
+     * bytes, so they belong in each writer's own build version and therefore in the incremental
+     * manifest. The registry is permanently frozen immediately afterwards, before source discovery
+     * begins, and later registration through any retained alias fails. This C++ embedding surface
+     * has the same experimental source/ABI status as the component API.
      *
      * @param arguments Native command-line arguments excluding the executable name.
      * @param registry Non-null, fully configured registry retained for the complete invocation.
@@ -37,5 +42,5 @@ namespace CNA::Content::Pipeline
      */
     [[nodiscard]] int RunContentCompiler(
         const std::vector<std::filesystem::path>& arguments,
-        std::shared_ptr<const ContentPipelineRegistry> registry);
+        std::shared_ptr<ContentPipelineRegistry> registry);
 } // namespace CNA::Content::Pipeline

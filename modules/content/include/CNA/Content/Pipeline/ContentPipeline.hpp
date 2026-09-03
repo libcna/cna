@@ -89,6 +89,48 @@ namespace CNA::Content::Pipeline
     /** @brief Stability marker for the initial custom C++ pipeline component API. */
     inline constexpr bool ContentPipelineExtensionApiIsExperimental = true;
 
+    /**
+     * @brief The compiled container one build node emits
+     *        (plans/plan_xnapipeline.md `XNAP-60`).
+     *
+     * The format is chosen at the writer boundary and nowhere else: importers, processors and the
+     * canonical values between them are format-neutral, so a new source route reaches both outputs
+     * at once and neither container constrains the other.
+     */
+    enum class ContentOutputFormat
+    {
+        /** @brief CNA's own native compiled container. The default. */
+        Cnb,
+        /** @brief The XNA-compatible `.xnb` container. */
+        Xnb,
+    };
+
+    /**
+     * @brief Returns the stable lowercase configuration/CLI spelling of an output format.
+     *
+     * @param format The output format.
+     * @return A process-lifetime string literal, `"cnb"` or `"xnb"`.
+     */
+    [[nodiscard]] const char* ContentOutputFormatName(ContentOutputFormat format) noexcept;
+
+    /**
+     * @brief Returns the published artifact extension for an output format.
+     *
+     * @param format The output format.
+     * @return A process-lifetime string literal including the leading dot.
+     */
+    [[nodiscard]] const char* ContentOutputFormatExtension(ContentOutputFormat format) noexcept;
+
+    /**
+     * @brief Parses the stable lowercase spelling of an output format.
+     *
+     * @param name Configuration or command-line spelling.
+     * @param format Receives the parsed format when parsing succeeds.
+     * @return True when @p name named a supported format.
+     */
+    [[nodiscard]] bool TryParseContentOutputFormat(const std::string& name,
+                                                   ContentOutputFormat& format);
+
     /** @brief Stable, author-controlled identity used for diagnostics and build invalidation. */
     struct ContentComponentIdentity
     {
@@ -765,6 +807,21 @@ namespace CNA::Content::Pipeline
         [[nodiscard]] virtual ContentComponentIdentity Identity() const = 0;
 
         /**
+         * @brief Returns the compiled container this writer emits.
+         *
+         * Defaulted to @ref ContentOutputFormat::Cnb so an existing custom writer keeps working
+         * unchanged; a writer that emits `.xnb` overrides it. Writer selection is keyed by the
+         * pair (format, input type), so one processed type may legitimately have one writer per
+         * format.
+         *
+         * @return The container this writer produces.
+         */
+        [[nodiscard]] virtual ContentOutputFormat OutputFormat() const
+        {
+            return ContentOutputFormat::Cnb;
+        }
+
+        /**
          * @brief Declares every stable asset/schema/codec identity this writer can emit.
          *
          * The result must be nonempty, strictly ordered by asset type ID, canonical type name,
@@ -880,15 +937,17 @@ namespace CNA::Content::Pipeline
             const std::string& inputType, const std::string& explicitName = {}) const;
 
         /**
-         * @brief Resolves a writer by stable processed type and optional explicit name.
+         * @brief Resolves a writer by output format, stable processed type and optional name.
          *
          * @param inputType Stable processed type identity.
          * @param explicitName Stable writer override, or empty for default selection.
+         * @param format Compiled container the selected writer must emit.
          * @return Selected writer.
          * @throws std::logic_error for unknown, incompatible or ambiguous selection.
          */
         [[nodiscard]] std::shared_ptr<const ContentTypeWriter> ResolveWriter(
-            const std::string& inputType, const std::string& explicitName = {}) const;
+            const std::string& inputType, const std::string& explicitName = {},
+            ContentOutputFormat format = ContentOutputFormat::Cnb) const;
 
     private:
         void RequireMutable() const;
@@ -900,7 +959,8 @@ namespace CNA::Content::Pipeline
         std::map<std::string, std::shared_ptr<const ContentTypeWriter>> writers_;
         std::map<std::string, std::set<std::string>> importersByExtension_;
         std::map<std::string, std::set<std::string>> processorsByInputType_;
-        std::map<std::string, std::set<std::string>> writersByInputType_;
+        std::map<std::pair<ContentOutputFormat, std::string>, std::set<std::string>>
+            writersByInputType_;
     };
 
     /** @brief One request to run Importer -> Processor -> Writer without publishing a file. */
@@ -927,6 +987,9 @@ namespace CNA::Content::Pipeline
         /** @brief Optional stable writer override. */
         std::string writer;
 
+        /** @brief Compiled container this build node must emit. */
+        ContentOutputFormat outputFormat = ContentOutputFormat::Cnb;
+
         /** @brief Processor parameters included in the effective build identity. */
         ContentProcessorParameters parameters;
 
@@ -951,6 +1014,9 @@ namespace CNA::Content::Pipeline
 
         /** @brief Writer identity used for this build. */
         ContentComponentIdentity writer;
+
+        /** @brief Compiled container the selected writer emitted. */
+        ContentOutputFormat outputFormat = ContentOutputFormat::Cnb;
 
         /** @brief Stable asset/schema/codec declarations selected before writing. */
         std::vector<ContentWriterSchemaIdentity> writerSchemas;
