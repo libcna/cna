@@ -176,13 +176,17 @@ TEST_F(Sdl3WindowTest, FullscreenModeStartsWindowed)
 
 TEST_F(Sdl3WindowTest, ExclusiveFullscreenUsesThePlatformFaithfulMode)
 {
-#if defined(__EMSCRIPTEN__)
+#if defined(__EMSCRIPTEN__) || defined(__ANDROID__)
     EXPECT_NO_THROW(window_->SetFullscreenMode(WindowFullscreenMode::ExclusiveFullscreen));
-    // Browser fullscreen is asynchronous and waits for a user gesture, so the observable state
-    // may still be windowed here or may already be the mapped borderless browser mode.
+    // Web and Android have no desktop-style exclusive display-mode switch. Web may still be
+    // waiting for a user gesture; Android maps the request to its native full-surface mode.
     const WindowFullscreenMode currentMode = window_->GetFullscreenMode();
+#if defined(__EMSCRIPTEN__)
     EXPECT_TRUE(currentMode == WindowFullscreenMode::Windowed ||
                 currentMode == WindowFullscreenMode::BorderlessFullscreen);
+#else
+    EXPECT_EQ(currentMode, WindowFullscreenMode::BorderlessFullscreen);
+#endif
     EXPECT_NO_THROW(window_->SetFullscreenMode(WindowFullscreenMode::Windowed));
 #else
     try

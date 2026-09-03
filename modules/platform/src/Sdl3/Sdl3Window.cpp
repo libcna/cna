@@ -309,6 +309,20 @@ namespace CNA::Platform::Sdl3 {
                     break;
                 }
 
+                // Android exposes one application surface at the device's native display mode;
+                // it has no desktop-style list of switchable exclusive video modes. Preserve
+                // XNA's IsFullScreen=true contract by occupying that surface in SDL's desktop /
+                // borderless mode. Asking SDL_GetClosestFullscreenDisplayMode on Android fails
+                // even though fullscreen itself is supported.
+                if (DetectSystem() == NativeWindowSystem::Android)
+                {
+                    RequireSdlSuccess(SDL_SetWindowFullscreenMode(window_, nullptr),
+                                      "Window::SetFullscreenMode(ExclusiveFullscreen/Android)");
+                    RequireSdlSuccess(SDL_SetWindowFullscreen(window_, true),
+                                      "Window::SetFullscreenMode(ExclusiveFullscreen/Android)");
+                    break;
+                }
+
                 const WindowBounds bounds = GetClientBounds();
                 SetExclusiveMode(window_, bounds.width, bounds.height,
                                  "Window::SetFullscreenMode(ExclusiveFullscreen)");
