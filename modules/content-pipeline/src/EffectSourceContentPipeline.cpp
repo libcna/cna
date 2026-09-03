@@ -341,7 +341,11 @@ namespace CNA::Content::Pipeline
 
                 if (seen.insert(resolved).second)
                 {
-                    if (seen.size() > kMaxIncludeFiles)
+                    // `seen` also holds the root source, which is not an include, so the
+                    // ceiling has to be measured against the rest. Without the correction the
+                    // limit bites one file early and the message says "more than 256" about a
+                    // tree that included exactly 256.
+                    if (seen.size() - 1u > kMaxIncludeFiles)
                     {
                         throw ContentLoadException(
                             "effect source '" + context.SourcePath().filename().string() +

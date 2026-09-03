@@ -10,7 +10,11 @@
 // verified here is that real `fxc` output loads in a real XNA runtime -- see XNAP-A4.
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
+#include <cstdlib>
+#include <future>
+#include <iostream>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -479,9 +483,24 @@ TEST(HostProcessTest, AnArgumentContainingSpacesIsNotResplit)
 TEST(HostProcessTest, OutputLargerThanAPipeBufferIsNotTruncatedOrDeadlocked)
 {
     // Both streams have to be drained concurrently. Writing more than a pipe buffer to each is
-    // what catches a runner that reads one to completion before starting on the other.
-    const CNA::Internal::HostProcessResult result = CNA::Internal::RunHostProcess(
-        "/bin/sh", {"-c", "yes abcdefghij | head -c 200000; yes klmnopqrst | head -c 200000 1>&2"});
+    // what catches a runner that reads one to completion before starting on the other. Under a
+    // deadline, because the failure mode is a hang: without one this reports "timeout" minutes
+    // later and takes the whole run with it.
+    CNA::Internal::HostProcessResult result;
+    std::future<void> pending = std::async(std::launch::async, [&]
+    {
+        result = CNA::Internal::RunHostProcess(
+            "/bin/sh",
+            {"-c", "yes abcdefghij | head -c 200000; yes klmnopqrst | head -c 200000 1>&2"});
+    });
+    if (pending.wait_for(std::chrono::seconds(60)) == std::future_status::timeout)
+    {
+        ADD_FAILURE() << "RunHostProcess did not return within 60 seconds; the two output "
+                         "streams are not being drained concurrently.";
+        std::cerr.flush();
+        std::quick_exit(1);
+    }
+    pending.get();
     ASSERT_TRUE(result.started) << result.failure;
     EXPECT_EQ(result.exitCode, 0);
     EXPECT_EQ(result.standardOutput.size(), 200000u);

@@ -17,7 +17,10 @@
 // nothing about Microsoft `fxc` compatibility, which is XNAP-A4 and remains blocked.
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
+#include <cstdlib>
+#include <future>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -216,6 +219,34 @@ namespace
         return destination;
     }
 
+    /**
+     * @brief Runs @p work with a deadline, failing the test rather than hanging past it.
+     *
+     * A drain regression in RunHostProcess does not make a test slow, it makes it stop: the parent
+     * waits on one pipe while the child waits on the other. A test that only fails after CTest's
+     * own multi-minute timeout reports "timeout", not "deadlock", and takes the whole run with it.
+     * There is no safe recovery once a thread is stuck in that read, so the process exits after
+     * the failure has been recorded.
+     *
+     * @param seconds How long the work may take.
+     * @param work The callable to run.
+     */
+    template<typename Work>
+    void WithDeadline(const int seconds, Work work)
+    {
+        std::future<void> pending = std::async(std::launch::async, std::move(work));
+        if (pending.wait_for(std::chrono::seconds(seconds)) == std::future_status::timeout)
+        {
+            ADD_FAILURE() << "the build did not finish within " << seconds
+                          << " seconds; a child process's output streams are not being drained "
+                             "concurrently.";
+            std::cerr.flush();
+            std::cout.flush();
+            std::quick_exit(1);
+        }
+        pending.get();
+    }
+
     /** @brief A minimal `.fx` carrying the fake compiler's directives. */
     [[nodiscard]] std::string EffectSource(const std::string& directives = {})
     {
@@ -398,9 +429,11 @@ TEST(EffectSourceCommandLineTest, MoreThanAPipeBufferOnBothStreamsDoesNotDeadloc
     WriteEffectProject(scratch, "//FAKE: flood\n");
 
     // A sequential drain of the child's two pipes blocks forever here: 200 KiB on each stream is
-    // far past the usual 64 KiB buffer. The build completing at all is the assertion.
-    const Invocation run = RunCli({"build", scratch.Source(), "-o", scratch.Output(),
-                                   "--format", "xnb", "--fx-compiler", FakeCompiler()});
+    // far past the usual 64 KiB buffer. The build completing at all is the assertion, so it is
+    // made under a deadline -- a deadlock must fail, not hang.
+    Invocation run;
+    WithDeadline(60, [&] { run = RunCli({"build", scratch.Source(), "-o", scratch.Output(),
+                                         "--format", "xnb", "--fx-compiler", FakeCompiler()}); });
 
     EXPECT_EQ(run.exitCode, 0) << run.output.substr(0u, 400u);
     EXPECT_TRUE(std::filesystem::exists(scratch.Output() / "shader.xnb"));
@@ -647,4 +680,73 @@ TEST(EffectSourceCommandLineTest, ChangingTheCompilerIdentityRebuilds)
     const Invocation back = RunCli({"build", scratch.Source(), "-o", scratch.Output(),
                                     "--format", "xnb", "--fx-compiler", first});
     EXPECT_TRUE(back.Says("Built: 1")) << back.output;
+}
+
+// -- Processor parameters through the ordinary project file ------------------------------------
+
+TEST(EffectSourceCommandLineTest, ProfileDefinesAndDebugAreAuthoredInTheProjectFileLikeAnyOthers)
+{
+    ScratchDirectory scratch("parameters");
+    const std::filesystem::path record = scratch.Path() / "argv.txt";
+    WriteEffectProject(scratch, "//FAKE: record=" + record.string() + "\n");
+
+    // The `.fx` route invents no configuration syntax of its own: these are the generic processor
+    // parameters every other route uses, in the file every other route reads.
+    const std::filesystem::path configuration = scratch.Source() / "pipeline-config.json";
+    WriteText(configuration,
+              R"({"format":"CNA.ContentPipeline.Config","version":1,"assets":{)"
+              R"("shader.fx":{"parameters":{)"
+              R"("profile":{"type":"string","value":"hidef"},)"
+              R"("defines":{"type":"string","value":"ALPHA=1;BETA"},)"
+              R"("debug":{"type":"bool","value":true}}}}})");
+
+    const Invocation run = RunCli({"build", scratch.Source(), "-o", scratch.Output(),
+                                   "--format", "xnb", "--config", configuration,
+                                   "--fx-compiler", FakeCompiler()});
+
+    ASSERT_EQ(run.exitCode, 0) << run.output;
+    const std::string argv = ReadText(record);
+    EXPECT_NE(argv.find("arg\t/D\narg\tCNA_HIDEF=1\n"), std::string::npos) << argv;
+    EXPECT_NE(argv.find("arg\t/D\narg\tALPHA=1\n"), std::string::npos) << argv;
+    EXPECT_NE(argv.find("arg\t/D\narg\tBETA\n"), std::string::npos) << argv;
+    // Debug information was asked for, so the strip-debug switch is not there.
+    EXPECT_NE(argv.find("arg\t/Zi\n"), std::string::npos) << argv;
+    EXPECT_EQ(argv.find("arg\t/Qstrip_debug\n"), std::string::npos) << argv;
+}
+
+TEST(EffectSourceCommandLineTest, ChangingAParameterRebuildsTheEffect)
+{
+    ScratchDirectory scratch("parameter-rebuild");
+    WriteEffectProject(scratch);
+    const std::filesystem::path configuration = scratch.Source() / "pipeline-config.json";
+
+    const auto configure = [&configuration](const std::string& parameters)
+    {
+        WriteText(configuration,
+                  R"({"format":"CNA.ContentPipeline.Config","version":1,"assets":{)"
+                  R"("shader.fx":{"parameters":{)" + parameters + R"(}}}})");
+    };
+    const std::vector<std::filesystem::path> arguments = {
+        "build", scratch.Source(), "-o", scratch.Output(), "--format", "xnb",
+        "--config", configuration, "--fx-compiler", FakeCompiler()};
+
+    configure(R"("profile":{"type":"string","value":"reach"})");
+    ASSERT_EQ(RunCli(arguments).exitCode, 0);
+    ASSERT_TRUE(RunCli(arguments).Says("Skipped: 1"));
+
+    // Each of the three changes the bytes a real compiler would produce, so each must rebuild.
+    configure(R"("profile":{"type":"string","value":"hidef"})");
+    EXPECT_TRUE(RunCli(arguments).Says("Built: 1")) << "profile";
+    ASSERT_TRUE(RunCli(arguments).Says("Skipped: 1"));
+
+    configure(R"("profile":{"type":"string","value":"hidef"},)"
+              R"("defines":{"type":"string","value":"GAMMA=2"})");
+    EXPECT_TRUE(RunCli(arguments).Says("Built: 1")) << "defines";
+    ASSERT_TRUE(RunCli(arguments).Says("Skipped: 1"));
+
+    configure(R"("profile":{"type":"string","value":"hidef"},)"
+              R"("defines":{"type":"string","value":"GAMMA=2"},)"
+              R"("debug":{"type":"bool","value":true})");
+    EXPECT_TRUE(RunCli(arguments).Says("Built: 1")) << "debug";
+    EXPECT_TRUE(RunCli(arguments).Says("Skipped: 1"));
 }
