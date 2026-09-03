@@ -317,7 +317,7 @@ written without the dispatch index its reader consumes.
 | `VertexDeclaration`, `VertexBuffer`, `IndexBuffer` | matching `…Reader` | ✅ | ✅ | Verified through the `Model` fixture, which carries all three as shared resources. |
 | `BasicEffect` | `BasicEffectReader` | ✅ | ✅ | Verified through the `Model` fixture. |
 | `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect` | matching `…Reader` | ✅ | — | Including each one's external texture reference. The independent parser can decode all four; no committed fixture exercises them yet. |
-| `Effect` (already-compiled bytecode) | `EffectReader` | ✅ | ✅ | The bytecode is written verbatim; an empty payload is refused rather than written as a loadable asset. **CNA does not compile `.fx` — see §6.** |
+| `Effect` (already-compiled bytecode) | `EffectReader` | ✅ | ✅ | The bytecode is written verbatim; an empty payload is refused rather than written as a loadable asset. CNA does not *embed* an HLSL compiler, but can drive an external one — see §6. |
 | `EffectMaterial` | `EffectMaterialReader` | ✅ | ✅ | An inline effect reference plus a `Dictionary<String,Object>` whose values each carry their own dispatch index. `Boolean`, `Int32`, `Single`, `Vector2`, `Vector3`, `Vector4`, `Matrix`, `Quaternion` and a boxed external reference are written; **array-valued parameters are not** — see below. |
 | `ExternalReference<T>` | `ExternalReferenceReader`, and the inline form | ✅ | ✅ | Both forms: inline in a known field (no dispatch index, what every stock effect uses) and boxed where the static type is `object`. Absolute and escaping references are refused in both. |
 
@@ -374,7 +374,7 @@ Stated plainly, because a gap named is worth more than a gap rounded up.
 
 | Not supported | Detail |
 |---|---|
-| **Compiling `.fx` to shader bytecode** | CNA does not host an HLSL compiler, and that is a standing decision rather than an oversight (`plans/plan_fx.md`: "Out of scope; CNA will not embed an HLSL source compiler"). It will not fake it by embedding source text in an `Effect` asset. What it *does* do is build an already-compiled `.fxb` into an `Effect` `.xnb` with the bytecode byte for byte — see §7. Compile the `.fx` with `fxc` at profile `fx_2_0`, which is what XNA's own Content Pipeline used. |
+| **Compiling `.fx` to shader bytecode** | CNA does not *embed* an HLSL compiler, and that remains a standing decision (`plans/plan_fx.md`: "Out of scope; CNA will not embed an HLSL source compiler"). What it now does instead is **drive an external one**: the `.fx` route resolves the include tree, records every included file as a build dependency, invokes a compiler behind the `EffectCompilerService` interface, and refuses anything that comes back that is not an Effect Framework 9.1 container. The only compiler known to produce that container is Microsoft's own legacy `fxc` at profile `fx_2_0`, which cannot be vendored; supply it with `CNA_FXC` (and `CNA_FXC_LAUNCHER=wine` on a non-Windows build machine). **Not verified against a real `fxc`** — none exists in the environment this was written in, so every test substitutes the compiler (`XNAP-A4`). It will still never fake a compile by embedding source text in an `Effect` asset. |
 | **Aligned-offset and uncompressed LZX blocks** | CNA *reads* both and emits neither: verbatim blocks are a conforming subset and the other two buy nothing here. See §2.1.1. |
 | **Xbox 360 semantics** | Beyond the `SoundEffect` WAVEFORMATEX byte swap, nothing is endian-corrected or tiled — and the writer refuses an `x` target rather than emitting Windows bytes under an Xbox header. `--xnb-allow-unverified-xbox` overrides it for hardware testing. |
 | **Windows Phone semantics** | The header byte is written and the payloads are Windows's, which is very likely correct for a little-endian ARM target and is nonetheless **unverified**: no `m` fixture and no Windows Phone runtime exist here. |
@@ -397,6 +397,7 @@ containers and no importer or processor is duplicated.
 | `.gltf`, `.glb` | glTF importer → model processor → model writer | ✅ | ✅ `Model` |
 | `.cnj` | CNJ importer, then the matching processor | ✅ | ✅ |
 | `.fxb` (already-compiled effect) | `CompiledEffectImporter` → `CompiledEffectProcessor` → Effect writer | — | ✅ `Effect` |
+| `.fx` (HLSL effect source) | `EffectSourceImporter` → `EffectSourceProcessor` → Effect writer | — | ⚠️ `impl` `Effect`, and only with an external `fxc` — see §6 |
 | `.xnb` | XNB importer (transcode to `.cnb`) | ✅ | — |
 
 Texture policy parameters apply in one documented, deterministic order: **colour key → resize →
@@ -425,10 +426,11 @@ is **not** forked per output container: `TextureProcessor`'s build identity move
 this change, so every incremental build that used the old default rebuilds instead of being skipped
 as unchanged.
 
-A `.fxb` has no `.cnb` route, deliberately: the CNB container reserves an `Effect` identifier and
-has no schema for it, because CNA has many renderers and a `.cnb` carrying one API's shader
-bytecode would be useless on the others. A `.fx` has no importer at all, so a build tree containing
-one reports that nothing imports it — which is the honest answer when there is no compiler.
+Neither `.fxb` nor `.fx` has a `.cnb` route, deliberately: the CNB container reserves an `Effect`
+identifier and has no schema for it, because CNA has many renderers and a `.cnb` carrying one API's
+shader bytecode would be useless on the others. A `.fx` build with no compiler configured fails at
+the first effect with one complete explanation — naming the discovery order it tried — rather than
+once per asset or with a misleading shader error.
 
 Audio sources may be 8-bit unsigned, 16-bit, 24-bit or 32-bit PCM, or 32-bit IEEE float. Everything
 wider than 16 bits is narrowed to the Pcm16 both containers store, deterministically, **with a

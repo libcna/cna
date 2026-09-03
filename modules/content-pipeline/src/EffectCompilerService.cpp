@@ -1,0 +1,485 @@
+// SPDX-License-Identifier: MS-PL
+//
+// plans/plan_xnapipeline.md XNAP-A2: the build-time effect compiler backend.
+//
+// **What XNA 4.0's Effect XNB payload actually contains**, established from this repository's own
+// evidence rather than from memory:
+//
+//   * The payload is a **legacy Direct3D 9 Effect Framework binary**, magic `0xFEFF0901`. That is
+//     what `CNA::Content::Pipeline::IsCompiledEffectBinary` accepts, what CNA's runtime `Effect`
+//     preflight parses, and what the six committed stock `.fxb` blobs begin with -- files FNA
+//     ships and loads through the same code path. XNA 4.0's own Content Pipeline additionally
+//     wraps it in a `0xBCF00BCF` header carrying the offset of the inner token, which the same
+//     function accepts.
+//   * The compiler that produces it is **`fxc` at profile `fx_2_0`**, and specifically the legacy
+//     one: `modules/renderers/fna3d/effects/README.md` records the exact identity used to build
+//     this repository's own conformance binary -- Microsoft (R) Direct3D Shader Compiler
+//     9.29.952.3111 from the June 2010 DirectX SDK -- and records the reason a modern compiler is
+//     not a substitute. `fxc` delegates the `fx_2_0` path to `d3dx9`, and without the d3dx9/
+//     D3DCompiler redistributables beside it the compile fails with *"E5017: Aborting due to not
+//     yet implemented feature: Write pass assignments"*. A standalone `d3dcompiler_47` therefore
+//     cannot write a legacy effect at all. That is decisive: there is no modern or portable
+//     compiler that produces this container, which is why this backend runs an external process
+//     rather than linking a library.
+//   * The shader model inside it comes from the source's own `compile vs_2_0 …` statements. CNA
+//     does not rewrite them, so Reach versus HiDef is the author's decision expressed in the
+//     source; see `EffectSourceProfile` for exactly what CNA's profile selection does and does
+//     not claim.
+//   * **Windows only.** The Xbox 360's shader bytecode is a different instruction set produced by
+//     a different compiler, and no evidence in this repository describes a Windows Phone Effect
+//     payload; the extended XNB ecosystem uses its own effect container entirely. The XNB Effect
+//     writer refuses a non-Windows target rather than writing Direct3D 9 bytes under one.
+//
+// Nothing here is derived from Microsoft, MonoGame or FNA source. The command-line shape is the
+// documented public interface of a compiler this repository already invokes (see
+// `modules/renderers/directx9/src/shaders/compile_shaders_sm2.py` and that README's reproduction
+// command), and no compiler binary is committed or redistributed.
+
+#include "CNA/Content/Pipeline/EffectCompilerService.hpp"
+
+#include <algorithm>
+#include <cctype>
+#include <cstdlib>
+#include <fstream>
+#include <iterator>
+#include <atomic>
+#include <random>
+#include <sstream>
+#include <system_error>
+
+#include "CNA/Internal/HostProcess.hpp"
+
+namespace CNA::Content::Pipeline
+{
+    namespace
+    {
+        /** @brief The profile the legacy Effect compiler must be asked for. */
+        constexpr const char* kTargetProfile = "fx_2_0";
+
+        [[nodiscard]] std::string EnvironmentValue(const char* name)
+        {
+            const char* value = std::getenv(name);
+            return value == nullptr ? std::string{} : std::string(value);
+        }
+
+        /** @brief The compiler path CMake baked in, or an empty string. */
+        [[nodiscard]] std::string ConfiguredExecutable()
+        {
+#if defined(CNA_FXC_EXECUTABLE)
+            return CNA_FXC_EXECUTABLE;
+#else
+            return {};
+#endif
+        }
+
+        /** @brief The launcher CMake baked in, or an empty string. */
+        [[nodiscard]] std::string ConfiguredLauncher()
+        {
+#if defined(CNA_FXC_LAUNCHER)
+            return CNA_FXC_LAUNCHER;
+#else
+            return {};
+#endif
+        }
+
+        [[nodiscard]] std::string Trim(const std::string& text)
+        {
+            const auto begin = text.find_first_not_of(" \t\r\n");
+            if (begin == std::string::npos) { return {}; }
+            const auto end = text.find_last_not_of(" \t\r\n");
+            return text.substr(begin, end - begin + 1u);
+        }
+
+        /**
+         * @brief Extracts a version from a compiler banner.
+         *
+         * `fxc` announces itself as `Microsoft (R) Direct3D Shader Compiler 9.29.952.3111`. Any
+         * dotted numeric run of three or more components is taken as the version, which keeps this
+         * working for a compiler that words its banner differently without pretending to know the
+         * wording.
+         */
+        [[nodiscard]] std::string ExtractVersion(const std::string& banner)
+        {
+            std::size_t index = 0u;
+            while (index < banner.size())
+            {
+                if (std::isdigit(static_cast<unsigned char>(banner[index])) == 0)
+                {
+                    ++index;
+                    continue;
+                }
+                const std::size_t start = index;
+                std::size_t dots = 0u;
+                while (index < banner.size() &&
+                       (std::isdigit(static_cast<unsigned char>(banner[index])) != 0 ||
+                        banner[index] == '.'))
+                {
+                    if (banner[index] == '.') { ++dots; }
+                    ++index;
+                }
+                if (dots >= 2u) { return banner.substr(start, index - start); }
+            }
+            return {};
+        }
+
+        /** @brief A scratch directory that removes itself, for the compiler's output file. */
+        class ScratchDirectory
+        {
+        public:
+            ScratchDirectory()
+            {
+                std::error_code error;
+                // The counter makes concurrent workers independent without a clock or a random
+                // source, so the pipeline stays deterministic.
+                static std::atomic<unsigned long long> counter{0u};
+                path_ = std::filesystem::temp_directory_path(error) /
+                        ("cna-fx-" + std::to_string(counter.fetch_add(1u)) + "-" +
+                         std::to_string(reinterpret_cast<std::uintptr_t>(this)));
+                std::filesystem::create_directories(path_, error);
+            }
+
+            ~ScratchDirectory()
+            {
+                std::error_code error;
+                std::filesystem::remove_all(path_, error);
+            }
+
+            ScratchDirectory(const ScratchDirectory&) = delete;
+            ScratchDirectory& operator=(const ScratchDirectory&) = delete;
+
+            [[nodiscard]] const std::filesystem::path& Path() const { return path_; }
+
+        private:
+            std::filesystem::path path_;
+        };
+
+        /** @brief The external-process backend. */
+        class ExternalEffectCompiler final : public EffectCompilerService
+        {
+        public:
+            explicit ExternalEffectCompiler(const ExternalEffectCompilerOptions& options)
+            {
+                Resolve(options);
+            }
+
+            [[nodiscard]] EffectCompilerIdentity Identity() const override { return identity_; }
+
+            [[nodiscard]] bool Available() const override { return available_; }
+
+            [[nodiscard]] std::string UnavailableReason() const override { return reason_; }
+
+            [[nodiscard]] EffectCompileResult Compile(
+                const EffectCompileRequest& request) const override
+            {
+                EffectCompileResult result;
+                if (!available_)
+                {
+                    EffectCompilerDiagnostic diagnostic;
+                    diagnostic.file = request.source.string();
+                    diagnostic.message = reason_;
+                    result.diagnostics.push_back(diagnostic);
+                    return result;
+                }
+
+                const ScratchDirectory scratch;
+                const std::filesystem::path output = scratch.Path() / "effect.fxb";
+
+                std::vector<std::string> arguments;
+                if (!launcher_.empty()) { arguments.push_back(executable_.string()); }
+                arguments.push_back("/nologo");
+                arguments.push_back("/T");
+                arguments.push_back(kTargetProfile);
+                arguments.push_back("/Fo");
+                arguments.push_back(output.string());
+                arguments.push_back(request.debugInformation ? "/Zi" : "/Qstrip_debug");
+                arguments.push_back("/D");
+                arguments.push_back(request.profile == EffectSourceProfile::HiDef
+                                        ? "CNA_HIDEF=1"
+                                        : "CNA_REACH=1");
+                for (const auto& [name, value] : request.defines)
+                {
+                    arguments.push_back("/D");
+                    arguments.push_back(value.empty() ? name : name + "=" + value);
+                }
+                for (const std::filesystem::path& directory : request.includeDirectories)
+                {
+                    arguments.push_back("/I");
+                    arguments.push_back(directory.string());
+                }
+                arguments.push_back(request.source.string());
+
+                const CNA::Internal::HostProcessResult process = CNA::Internal::RunHostProcess(
+                    launcher_.empty() ? executable_ : launcher_, arguments);
+                if (!process.started)
+                {
+                    EffectCompilerDiagnostic diagnostic;
+                    diagnostic.file = request.source.string();
+                    diagnostic.message = "the effect compiler could not be run: " +
+                                         process.failure;
+                    result.diagnostics.push_back(diagnostic);
+                    return result;
+                }
+
+                result.diagnostics = ParseEffectCompilerDiagnostics(process.standardError);
+                for (const EffectCompilerDiagnostic& diagnostic :
+                     ParseEffectCompilerDiagnostics(process.standardOutput))
+                {
+                    result.diagnostics.push_back(diagnostic);
+                }
+
+                if (process.exitCode != 0)
+                {
+                    if (result.diagnostics.empty())
+                    {
+                        EffectCompilerDiagnostic diagnostic;
+                        diagnostic.file = request.source.string();
+                        diagnostic.message = "the effect compiler exited with status " +
+                                             std::to_string(process.exitCode) +
+                                             " and said nothing";
+                        result.diagnostics.push_back(diagnostic);
+                    }
+                    return result;
+                }
+
+                std::ifstream stream(output, std::ios::binary);
+                if (!stream)
+                {
+                    EffectCompilerDiagnostic diagnostic;
+                    diagnostic.file = request.source.string();
+                    diagnostic.message =
+                        "the effect compiler reported success and wrote no output file";
+                    result.diagnostics.push_back(diagnostic);
+                    return result;
+                }
+                result.bytecode.assign(std::istreambuf_iterator<char>(stream),
+                                       std::istreambuf_iterator<char>());
+                result.succeeded = !result.bytecode.empty();
+                if (!result.succeeded)
+                {
+                    EffectCompilerDiagnostic diagnostic;
+                    diagnostic.file = request.source.string();
+                    diagnostic.message =
+                        "the effect compiler reported success and wrote an empty output file";
+                    result.diagnostics.push_back(diagnostic);
+                }
+                return result;
+            }
+
+        private:
+            void Resolve(const ExternalEffectCompilerOptions& options)
+            {
+                identity_.targetProfile = kTargetProfile;
+
+                launcher_ = options.launcher;
+                if (launcher_.empty())
+                {
+                    const std::string fromEnvironment = EnvironmentValue("CNA_FXC_LAUNCHER");
+                    launcher_ = fromEnvironment.empty()
+                                    ? std::filesystem::path(ConfiguredLauncher())
+                                    : std::filesystem::path(fromEnvironment);
+                }
+
+                executable_ = options.executable;
+                if (executable_.empty())
+                {
+                    const std::string fromEnvironment = EnvironmentValue("CNA_FXC");
+                    executable_ = fromEnvironment.empty()
+                                      ? std::filesystem::path(ConfiguredExecutable())
+                                      : std::filesystem::path(fromEnvironment);
+                }
+                if (executable_.empty())
+                {
+                    // No configured path: try the ordinary name and let the launcher, or PATH,
+                    // resolve it.
+                    executable_ = launcher_.empty() ? "fxc" : "fxc.exe";
+                }
+
+                // A version probe doubles as an availability probe: it proves the executable can
+                // be started, and it is what the fingerprint records.
+                std::vector<std::string> arguments;
+                if (!launcher_.empty()) { arguments.push_back(executable_.string()); }
+                arguments.push_back("/?");
+                const CNA::Internal::HostProcessResult process = CNA::Internal::RunHostProcess(
+                    launcher_.empty() ? executable_ : launcher_, arguments);
+                if (!process.started)
+                {
+                    reason_ = Explain("it could not be started (" + process.failure + ")");
+                    return;
+                }
+
+                const std::string banner =
+                    process.standardOutput.empty() ? process.standardError
+                                                   : process.standardOutput;
+                identity_.backend = "fxc";
+                identity_.version = ExtractVersion(banner);
+                if (identity_.version.empty())
+                {
+                    // A tool that answers but does not announce a version is still usable; record
+                    // the trimmed first line so the fingerprint changes when the tool does.
+                    const std::size_t newline = banner.find('\n');
+                    identity_.version =
+                        Trim(newline == std::string::npos ? banner : banner.substr(0u, newline));
+                }
+                if (identity_.version.empty()) { identity_.version = "unknown"; }
+                available_ = true;
+            }
+
+            /** @brief Builds the complete "no compiler" diagnostic, once, in one place. */
+            [[nodiscard]] std::string Explain(const std::string& what) const
+            {
+                std::ostringstream text;
+                text << "no usable effect compiler: "
+                     << (launcher_.empty() ? executable_.string()
+                                           : launcher_.string() + " " + executable_.string())
+                     << " -- " << what << ".\n"
+                     << "Compiling .fx source to an XNA 4.0 Effect needs Microsoft's legacy "
+                        "'fxc' at profile "
+                     << kTargetProfile
+                     << ", which is the compiler XNA's own Content Pipeline used. It is not "
+                        "vendored here and no portable substitute exists: a standalone modern "
+                        "d3dcompiler cannot write a legacy effect at all (it fails with 'E5017: "
+                        "Aborting due to not yet implemented feature: Write pass assignments'), "
+                        "because fxc delegates the "
+                     << kTargetProfile
+                     << " path to d3dx9.\n"
+                     << "Point CNA at one of:\n"
+                     << "  --fx-compiler <path>            explicit path, highest precedence\n"
+                     << "  CNA_FXC=<path>                  environment variable\n"
+                     << "  -DCNA_FXC_EXECUTABLE=<path>     baked in at configure time\n"
+                     << "  fxc / fxc.exe on PATH           the fallback\n"
+                     << "On a non-Windows build machine add a launcher, which runs the compiler "
+                        "through another program:\n"
+                     << "  --fx-compiler-launcher wine     (or CNA_FXC_LAUNCHER, or "
+                        "-DCNA_FXC_LAUNCHER)\n"
+                     << "The DirectX SDK (June 2010) fxc needs d3dx9_43.dll and "
+                        "D3DCompiler_43.dll beside it; see "
+                        "modules/renderers/fna3d/effects/README.md for the exact extraction "
+                        "commands and the recorded compiler identity.\n"
+                     << "Already have compiled effect bytes? Build the .fxb directly: that route "
+                        "needs no compiler at all.";
+                return text.str();
+            }
+
+            std::filesystem::path executable_;
+            std::filesystem::path launcher_;
+            EffectCompilerIdentity identity_;
+            bool available_ = false;
+            std::string reason_;
+        };
+    }
+
+    const char* EffectSourceProfileName(const EffectSourceProfile profile) noexcept
+    {
+        return profile == EffectSourceProfile::HiDef ? "hidef" : "reach";
+    }
+
+    bool TryParseEffectSourceProfile(const std::string& name, EffectSourceProfile& profile)
+    {
+        if (name == "reach") { profile = EffectSourceProfile::Reach; return true; }
+        if (name == "hidef") { profile = EffectSourceProfile::HiDef; return true; }
+        return false;
+    }
+
+    std::string EffectCompilerDiagnostic::ToString() const
+    {
+        std::ostringstream text;
+        if (!file.empty())
+        {
+            text << file;
+            if (line > 0)
+            {
+                text << '(' << line;
+                if (column > 0) { text << ',' << column; }
+                text << ')';
+            }
+            text << ": ";
+        }
+        text << (isError ? "error" : "warning");
+        if (!code.empty()) { text << ' ' << code; }
+        text << ": " << message;
+        return text.str();
+    }
+
+    std::string EffectCompilerIdentity::ToString() const
+    {
+        if (backend.empty()) { return "none"; }
+        return backend + "-" + version + "-" + targetProfile;
+    }
+
+    std::vector<EffectCompilerDiagnostic> ParseEffectCompilerDiagnostics(const std::string& text)
+    {
+        std::vector<EffectCompilerDiagnostic> diagnostics;
+        std::istringstream stream(text);
+        std::string line;
+        while (std::getline(stream, line))
+        {
+            if (!line.empty() && line.back() == '\r') { line.pop_back(); }
+            const std::string trimmed = Trim(line);
+            if (trimmed.empty()) { continue; }
+
+            EffectCompilerDiagnostic diagnostic;
+            // `path(line,column): severity CODE: message`. The path may itself contain a colon
+            // (a Windows drive letter) and parentheses are the only reliable anchor, so the scan
+            // is for the *last* `(` before the first `):` rather than the first colon.
+            const std::size_t close = trimmed.find("): ");
+            const std::size_t open = close == std::string::npos
+                                         ? std::string::npos
+                                         : trimmed.rfind('(', close);
+            std::string remainder = trimmed;
+            if (open != std::string::npos && close != std::string::npos && open < close)
+            {
+                const std::string location = trimmed.substr(open + 1u, close - open - 1u);
+                const std::size_t comma = location.find(',');
+                const std::string lineText =
+                    comma == std::string::npos ? location : location.substr(0u, comma);
+                const std::string columnText =
+                    comma == std::string::npos ? std::string{} : location.substr(comma + 1u);
+                const auto isNumber = [](const std::string& candidate)
+                {
+                    return !candidate.empty() &&
+                           std::all_of(candidate.begin(), candidate.end(), [](const char value)
+                                       { return std::isdigit(static_cast<unsigned char>(value)) != 0; });
+                };
+                if (isNumber(lineText) && (columnText.empty() || isNumber(columnText)))
+                {
+                    diagnostic.file = trimmed.substr(0u, open);
+                    diagnostic.line = std::stoi(lineText);
+                    diagnostic.column = columnText.empty() ? 0 : std::stoi(columnText);
+                    remainder = trimmed.substr(close + 3u);
+                }
+            }
+
+            // `severity CODE: message`, where the code is optional.
+            const std::size_t severityEnd = remainder.find(' ');
+            const std::string severity =
+                severityEnd == std::string::npos ? remainder : remainder.substr(0u, severityEnd);
+            if (severity == "error" || severity == "warning" || severity == "fatal")
+            {
+                diagnostic.isError = severity != "warning";
+                std::string tail = Trim(remainder.substr(severity.size()));
+                const std::size_t codeEnd = tail.find(':');
+                if (codeEnd != std::string::npos && tail.find(' ') > codeEnd)
+                {
+                    diagnostic.code = Trim(tail.substr(0u, codeEnd));
+                    tail = Trim(tail.substr(codeEnd + 1u));
+                }
+                diagnostic.message = tail;
+            }
+            else
+            {
+                // Something the compiler said that does not fit the pattern. Kept rather than
+                // dropped: a tool that talks about a missing DLL says it exactly here.
+                diagnostic.message = trimmed;
+                diagnostic.file.clear();
+            }
+            diagnostics.push_back(diagnostic);
+        }
+        return diagnostics;
+    }
+
+    std::shared_ptr<const EffectCompilerService> MakeExternalEffectCompiler(
+        const ExternalEffectCompilerOptions& options)
+    {
+        return std::make_shared<const ExternalEffectCompiler>(options);
+    }
+}
