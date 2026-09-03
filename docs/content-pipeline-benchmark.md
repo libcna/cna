@@ -105,9 +105,55 @@ What the differences say:
 FreeType rasterization, shelf packing and serialization together cost well under a tenth of a
 second for a full Latin-1 font, so a project's font count is not a build-time concern.
 
+### Large models
+
+The committed glTF corpus exists to cover *shapes*, not sizes -- its largest fixture is a few
+hundred kilobytes -- so this row was honestly absent until a source existed to measure.
+`tools/xnb/generate_large_model.py` authors one deterministically rather than downloading one,
+which would be neither reproducible nor licensable. It stresses what a Model build spends time on:
+vertex and index counts, mesh and primitive counts (a part is three shared-resource references),
+material count, and hierarchy depth.
+
+| Scale | Vertices | Triangles | Parts | Nodes | Source | XNB | CNB | XNB time | CNB time |
+|---|---|---|---|---|---|---|---|---|---|
+| `small` | 1 352 | 2 304 | 8 | 16 | 63 848 B | 82 050 B | 82 864 B | 0.03 s | 0.02 s |
+| `medium` | 60 000 | 110 592 | 96 | 168 | 2 659 384 B | 3 569 930 B | 3 578 592 B | 0.66 s | 0.62 s |
+| `large` | 968 256 | 1 843 200 | 576 | 1 056 | 42 509 644 B | 57 697 840 B | 57 737 568 B | 10.01 s | 10.04 s |
+
+Regenerate and re-measure with:
+
+```bash
+python3 tools/xnb/generate_large_model.py --scale large --out /tmp/large/src/model.glb
+cna-content build /tmp/large/src -o /tmp/large/out --format xnb --quiet
+```
+
+What the three sizes say:
+
+- **The Model route is linear in vertex count.** 60 000 vertices in 0.66 s and 968 256 in 10.01 s
+  is 91 000 and 97 000 vertices per second -- the same rate at sixteen times the size. A Model
+  writer that interned shared resources by identity rather than by value, or that rebuilt the bone
+  table per part, would show a rate that fell as the model grew; this one does not. The committed
+  `LargeModelScalingTest` asserts the same property on the output-size axis, which is the half a
+  timing run on one machine cannot be trusted for.
+- **XNB and CNB cost the same to within noise** (0.66 vs 0.62 s, 10.01 vs 10.04 s). Both are fed
+  by one importer and one processor, and serialization is not where the time goes -- glTF decoding
+  and canonical-model construction are.
+- **Peak memory is roughly 6x the source**: 33 MiB for the 2.6 MB medium source, 346 MiB for the
+  42.5 MB large one. The decoded glTF document, the canonical model and the output buffer are all
+  live at once. A build machine sizing itself for content should budget from the largest single
+  asset, not from the total.
+- **The warm rebuild of the large model is 1.72 s**, all of it hashing the 42.5 MB source to prove
+  it has not changed. Incremental correctness is not free on a large asset, but it is six times
+  cheaper than rebuilding.
+
+Not measured: nothing on this page has been run on anything but the container described above, and
+none of it is a threshold. A build that got twice as slow would still pass every test in the
+repository; these numbers exist so that somebody notices.
+
 ### What this means for a real build
 
 The pipeline parallelizes across assets (`--workers`), not within one, so these are per-asset
 costs on one core. A project whose textures are all `DxtCompressed` should expect block
 compression to dominate its content build, and should expect the incremental manifest to make that
-cost appear once rather than every build.
+cost appear once rather than every build. A project with one very large model should expect that
+model to set its wall clock, because no worker count divides a single asset.
