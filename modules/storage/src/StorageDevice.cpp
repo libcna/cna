@@ -2,6 +2,7 @@
 // Copyright (c) Robert Vokac and contributors
 #include "Microsoft/Xna/Framework/Storage/StorageDevice.hpp"
 #include "Microsoft/Xna/Framework/Storage/StorageDeviceNotConnectedException.hpp"
+#include "SharpRuntime/Storage/StoragePaths.hpp"
 #include "System/Threading/EventWaitHandle.hpp"
 
 #include <any>
@@ -275,6 +276,9 @@ namespace Microsoft::Xna::Framework::Storage
         appName_               = appName;
         storageRootInitialized_ = false; // force re-evaluation next access
         storageRoot_.clear();
+
+        SharpRuntime::Storage::StoragePaths::SetIsolatedStorageRootOverride(
+            fs::path(EnsureStorageRoot()) / ".cna_isolated_storage");
     }
 
     std::string StorageDevice::GetStorageRootEXT()

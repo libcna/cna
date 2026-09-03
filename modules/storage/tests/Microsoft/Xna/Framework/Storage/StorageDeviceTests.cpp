@@ -10,6 +10,7 @@
 #include <fstream>
 
 #include "Microsoft/Xna/Framework/Storage/StorageDevice.hpp"
+#include "SharpRuntime/Storage/StoragePaths.hpp"
 
 using Microsoft::Xna::Framework::Storage::StorageDevice;
 
@@ -71,6 +72,13 @@ namespace
 TEST_F(StorageDeviceDeleteContainerTest, EmptyTitleNameThrowsInvalidArgument)
 {
     EXPECT_THROW(device_->DeleteContainer(""), std::invalid_argument);
+}
+
+TEST_F(StorageDeviceDeleteContainerTest, AppNameAlsoScopesSharpRuntimeIsolatedStorage)
+{
+    EXPECT_EQ(
+        SharpRuntime::Storage::StoragePaths::GetIsolatedStorageRoot(),
+        fs::path(root_) / ".cna_isolated_storage");
 }
 
 TEST_F(StorageDeviceDeleteContainerTest, AbsoluteTitleNameThrowsAndDeletesNothing)
