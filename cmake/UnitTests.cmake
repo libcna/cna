@@ -1121,6 +1121,20 @@ if(CNA_BUILD_TESTS)
                 PROPERTIES LABELS "content;xnb;conformance;model" TIMEOUT 900)
         endif()
 
+        # plans/plan_xnapipeline.md XNAP-90: nothing a game links may reach a build-time-only
+        # dependency. Two layers: CMake's own target graph (what CMake was told) and `nm` over the
+        # built archives (what is actually in them), because a translation unit moved across the
+        # boundary leaves the graph looking correct.
+        if(TARGET cna_content_pipeline AND TARGET cna_content_compiler)
+            add_test(NAME CnaXnbDependencyBoundary
+                COMMAND "${Python3_EXECUTABLE}"
+                    "${CMAKE_SOURCE_DIR}/tools/xnb/dependency_boundary.py"
+                    --build-dir "${CMAKE_BINARY_DIR}"
+                    --cmake "${CMAKE_COMMAND}")
+            set_tests_properties(CnaXnbDependencyBoundary
+                PROPERTIES LABELS "content;xnb;architecture" TIMEOUT 300)
+        endif()
+
         # plans/plan_xnapipeline.md XNAP-9B: the plan's stated task totals must agree with its own
         # task table. They disagreed once, in a way no reader could be expected to catch.
         add_test(NAME CnaXnbPlanStatusConsistency
