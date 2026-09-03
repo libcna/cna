@@ -78,6 +78,15 @@ namespace Microsoft::Xna::Framework::Storage
         // conventional per-user data root directly, then ensure it exists before returning it.
         // This also makes saved games follow the same policy under SDL3, HEADLESS and TERMINAL.
         fs::path root;
+#if defined(__ANDROID__)
+        // Android does not define HOME and its working directory is not writable. Ask the
+        // System-layer storage policy for the current package's private files directory, then
+        // retain StorageDevice's normal per-game identity beneath it. Clear the host override
+        // first so changing SetAppNameEXT from one game identity to another cannot nest the new
+        // root below the old game.
+        SharpRuntime::Storage::StoragePaths::SetIsolatedStorageRootOverride({});
+        root = SharpRuntime::Storage::StoragePaths::GetIsolatedStorageRoot().parent_path() / app;
+#else
         if (const char* xdg = std::getenv("XDG_DATA_HOME"); xdg != nullptr && *xdg != '\0')
         {
             root = fs::path(xdg) / app;
@@ -99,6 +108,7 @@ namespace Microsoft::Xna::Framework::Storage
         {
             root = fs::current_path() / app;
         }
+#endif
 
         std::error_code code;
         fs::create_directories(root, code);
