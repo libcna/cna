@@ -702,6 +702,112 @@ TEST(EasyGLCompiledEffectDrawTest, SharedRenderTargetSourceContract)
     CNA::TestSupport::RunCompiledEffectRenderTargetSourceContract(device);
 }
 
+TEST(EasyGLCompiledEffectDrawTest, MultipleRenderTargetSamplersKeepTheirOwnTextureUnits)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+
+    constexpr int size = 32;
+    constexpr int blockSize = 4;
+    const Color black(0, 0, 0, 255);
+    const Color white(255, 255, 255, 255);
+    Texture2D pixel(device, 1, 1);
+    pixel.SetData(&white, 1);
+
+    RenderTarget2D patterned(device, size, size);
+    device.SetRenderTarget(&patterned);
+    device.Clear(black);
+    SpriteBatch batch(device);
+    batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque);
+    for (int blockY = 0; blockY < size / blockSize; ++blockY)
+    {
+        for (int blockX = 0; blockX < size / blockSize; ++blockX)
+        {
+            if ((blockX + blockY) % 2 == 0)
+            {
+                batch.Draw(pixel,
+                           Rectangle(blockX * blockSize, blockY * blockSize,
+                                     blockSize, blockSize),
+                           white);
+            }
+        }
+    }
+    batch.End();
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+    RenderTarget2D neutral(device, size, size);
+    device.SetRenderTarget(&neutral);
+    device.Clear(white);
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+    const std::vector<std::uint8_t> bytes = LoadEffect("DualTextureEffect.fxb");
+    ASSERT_FALSE(bytes.empty());
+    Effect effect(device, bytes);
+    auto& parameters = effect.getParametersProperty();
+    parameters["Texture"]->SetValue(&patterned);
+    parameters["Texture2"]->SetValue(&neutral);
+    parameters["DiffuseColor"]->SetValue(
+        Microsoft::Xna::Framework::Vector4::One);
+    parameters["WorldViewProj"]->SetValue(Matrix::getIdentityProperty());
+    parameters["ShaderIndex"]->SetValue(1);
+
+    struct DualTextureVertex
+    {
+        float x, y, z;
+        float u0, v0;
+        float u1, v1;
+    };
+    const DualTextureVertex vertices[6] = {
+        {-1.0f,  1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
+        {-1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f},
+        { 1.0f, -1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f},
+        {-1.0f,  1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
+        { 1.0f, -1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f},
+        { 1.0f,  1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f},
+    };
+    const VertexDeclaration declaration(static_cast<int>(sizeof(DualTextureVertex)), {
+        VertexElement(0, VertexElementFormat::Vector3,
+                      VertexElementUsage::Position, 0),
+        VertexElement(12, VertexElementFormat::Vector2,
+                      VertexElementUsage::TextureCoordinate, 0),
+        VertexElement(20, VertexElementFormat::Vector2,
+                      VertexElementUsage::TextureCoordinate, 1),
+    });
+    VertexBuffer vertexBuffer(device, declaration, 6, BufferUsage::WriteOnly);
+    vertexBuffer.SetData(vertices, 6);
+
+    RenderTarget2D result(device, size, size);
+    device.SetRenderTarget(&result);
+    device.Clear(Color::Magenta);
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    device.setDepthStencilStateProperty(DepthStencilState::None);
+    device.setBlendStateProperty(BlendState::Opaque);
+    effect.getTechniquesProperty()[0].getPassesProperty()[0].Apply();
+    device.SetVertexBuffer(&vertexBuffer);
+    device.setIndicesProperty(nullptr);
+    device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+    std::vector<Color> pixels(static_cast<std::size_t>(size * size));
+    result.GetData(pixels.data(), static_cast<int>(pixels.size()));
+    for (int blockY = 0; blockY < size / blockSize; ++blockY)
+    {
+        for (int blockX = 0; blockX < size / blockSize; ++blockX)
+        {
+            SCOPED_TRACE("block " + std::to_string(blockX) + "," +
+                         std::to_string(blockY));
+            const int x = blockX * blockSize + blockSize / 2;
+            const int y = blockY * blockSize + blockSize / 2;
+            const Color expected = (blockX + blockY) % 2 == 0 ? white : black;
+            const Color actual = pixels[static_cast<std::size_t>(y * size + x)];
+            EXPECT_NEAR(actual.getRProperty(), expected.getRProperty(), 3);
+            EXPECT_NEAR(actual.getGProperty(), expected.getGProperty(), 3);
+            EXPECT_NEAR(actual.getBProperty(), expected.getBProperty(), 3);
+        }
+    }
+}
+
 TEST(EasyGLCompiledEffectDrawTest, SharedSpriteBatchRenderTargetSourceContract)
 {
     GraphicsDevice device;

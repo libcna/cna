@@ -6594,7 +6594,14 @@ else
         if (!copy.created)
         {
             copy.texture.create();
-            copy.texture.bind(::easygl::TextureTarget::Texture2D);
+            // Creating a later sampler's copy must not replace an earlier sampler's binding on
+            // whichever texture unit happened to be active. Bind the storage on its own unit;
+            // the compiled-effect loop may prepare several render-target samplers before drawing.
+            copy.texture.active_bind(
+                static_cast<::easygl::TextureUnit>(
+                    static_cast<unsigned int>(::easygl::TextureUnit::Texture0) +
+                    static_cast<unsigned int>(slot)),
+                ::easygl::TextureTarget::Texture2D);
             int levelW = width, levelH = height;
             for (int level = 0; level < levelCount; ++level)
             {
