@@ -213,6 +213,8 @@ namespace CNA::Internal::Xnb
             identity.targetBaseName = XnbTargetTypeName(elementIdentity_) + "[]";
             identity.targetAssembly = elementIdentity_.targetAssembly;
             identity.genericArguments = {elementIdentity_};
+            // `Int32[]` already spells its element type; only the *reader* is generic.
+            identity.targetSharesGenericArguments = false;
             identity.evidence = XnbNameEvidence::DerivedRule;
             return identity;
         }
@@ -387,6 +389,98 @@ namespace CNA::Internal::Xnb
     private:
         XnbReaderIdentity elementIdentity_;
     };
+
+    /**
+     * @brief Builds the reader identity of a 32-bit enum: `EnumReader\`1[[<enum>]]`.
+     *
+     * The reader is generic over the enum; the enum itself is not, so the identity records that
+     * the two do not share an argument list (@ref XnbReaderIdentity::targetSharesGenericArguments).
+     *
+     * @param enumTypeName Assembly-free .NET name of the enum, e.g.
+     *        `Microsoft.Xna.Framework.Graphics.SurfaceFormat`.
+     * @param enumAssembly Assembly hosting the enum, used when this identity is a generic argument.
+     * @param evidence How the enum's spelling was established.
+     * @return The complete `EnumReader` identity.
+     */
+    [[nodiscard]] XnbReaderIdentity XnbEnumReaderIdentity(
+        const std::string& enumTypeName, XnbAssembly enumAssembly,
+        XnbNameEvidence evidence = XnbNameEvidence::DerivedRule);
+
+    /**
+     * @brief Writer for a .NET enum, serialized as its underlying `Int32`
+     *        (plans/plan_xnapipeline.md `XNAP-98`).
+     *
+     * XNA's `EnumReader<T>` reads a single `Int32` and casts, so the writer is its exact inverse.
+     * The enum's .NET name cannot be recovered from the C++ type, so it is supplied at
+     * registration; the C++ type is what the registry is keyed by, which is why a value can never
+     * reach the wrong enum's writer.
+     *
+     * @tparam TEnum The C++ enumeration type.
+     */
+    template<typename TEnum>
+    class XnbEnumTypeWriter final : public XnbTypeWriter<TEnum>
+    {
+        static_assert(std::is_enum_v<TEnum>, "XnbEnumTypeWriter serializes an enumeration.");
+        static_assert(sizeof(std::underlying_type_t<TEnum>) <= sizeof(std::int32_t),
+                      "XNA's EnumReader<T> stores an enum as a 32-bit Int32; a wider underlying "
+                      "type cannot round-trip through it.");
+
+    public:
+        /**
+         * @brief Creates a writer for one enum type.
+         *
+         * @param enumTypeName Assembly-free .NET name of the enum.
+         * @param enumAssembly Assembly hosting the enum.
+         * @param evidence How the enum's spelling was established.
+         */
+        explicit XnbEnumTypeWriter(std::string enumTypeName,
+                                   const XnbAssembly enumAssembly,
+                                   const XnbNameEvidence evidence = XnbNameEvidence::DerivedRule)
+            : identity_(XnbEnumReaderIdentity(enumTypeName, enumAssembly, evidence))
+        {
+        }
+
+        /** @brief Returns `EnumReader\`1[[<enum target type>]]`. */
+        [[nodiscard]] XnbReaderIdentity ReaderIdentity() const override { return identity_; }
+
+        /** @brief A .NET enum is a value type. */
+        [[nodiscard]] bool IsSerializedByReference() const noexcept override { return false; }
+
+    protected:
+        /**
+         * @brief Writes the enum's underlying value as an `Int32`.
+         *
+         * @param output Per-file object-graph writer.
+         * @param value The enumeration value to serialize.
+         */
+        void Write(XnbWriter& output, const TEnum& value) const override
+        {
+            output.WriteInt32(static_cast<std::int32_t>(
+                static_cast<std::underlying_type_t<TEnum>>(value)));
+        }
+
+    private:
+        XnbReaderIdentity identity_;
+    };
+
+    /**
+     * @brief Registers a 32-bit enum writer for `TEnum`.
+     *
+     * @tparam TEnum The C++ enumeration type.
+     * @param registry Mutable registry to configure.
+     * @param enumTypeName Assembly-free .NET name of the enum.
+     * @param enumAssembly Assembly hosting the enum.
+     * @param evidence How the enum's spelling was established.
+     * @throws XnbWriteException if the registry is frozen or `TEnum` is already registered.
+     */
+    template<typename TEnum>
+    void RegisterXnbEnumWriter(XnbTypeWriterRegistry& registry, const std::string& enumTypeName,
+                               const XnbAssembly enumAssembly,
+                               const XnbNameEvidence evidence = XnbNameEvidence::DerivedRule)
+    {
+        registry.Register(std::make_shared<const XnbEnumTypeWriter<TEnum>>(
+            enumTypeName, enumAssembly, evidence));
+    }
 
     /**
      * @brief Returns the reader identity of one built-in type, for use as a generic argument.

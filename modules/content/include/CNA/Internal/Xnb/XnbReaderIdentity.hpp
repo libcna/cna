@@ -69,6 +69,19 @@ namespace CNA::Internal::Xnb
         /** @brief Generic arguments in order, each itself a complete identity. */
         std::vector<XnbReaderIdentity> genericArguments;
 
+        /**
+         * @brief Whether @ref genericArguments are also the *target* type's own arguments.
+         *
+         * True for `List<T>`, `Dictionary<K,V>` and `Nullable<T>`, where the reader and the type
+         * it produces are generic over the same arguments and share one spelling. False where
+         * only the reader is generic: `EnumReader\`1[[SurfaceFormat]]` produces the plain,
+         * non-generic `SurfaceFormat`, and `ArrayReader\`1[[Int32]]` produces `Int32[]`, whose
+         * element type is already spelled inside @ref targetBaseName. Setting it false stops the
+         * argument list being appended a second time when this identity appears as a nested
+         * generic argument or is asked for its target type name.
+         */
+        bool targetSharesGenericArguments = true;
+
         /** @brief How this entry's spelling was established. */
         XnbNameEvidence evidence = XnbNameEvidence::DerivedRule;
 

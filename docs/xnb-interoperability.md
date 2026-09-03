@@ -177,6 +177,7 @@ written at all — the type is absent rather than silently degraded.
 | `List<Int32>`, `List<Char>`, `List<Rectangle>`, `List<Vector3>` | ✅ | ✅ | The instantiations CNA's own runtime reader registry resolves. |
 | `Dictionary<String, Int32>` | ✅ | — | Written in deterministic key order. The independent parser has no dictionary decoder yet. |
 | `Nullable<T>`, `T[]` | ⚠️ `impl` | — | The writer templates exist and work; no instantiation is registered by default, because no built-in CNA **reader** resolves one. Registering one is the documented extension point. |
+| `Enum<T>` | ✅ | — | Written as the underlying `Int32`, under `EnumReader\`1[[<enum>]]`, read back by `EnumTypeReader<T>`. Not registered by default: the enum's .NET name cannot be recovered from a C++ enum, so it is supplied at registration — `RegisterXnbEnumWriter<T>(registry, "Namespace.Enum", assembly)`. A value can never reach the wrong enum's writer, because the registry is keyed by the C++ type. |
 
 Arbitrary nesting works: the writer interns readers by formatted name on first use, so
 `List<Dictionary<String,Int32>>` needs only its own registration, not a new mechanism.

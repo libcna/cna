@@ -289,6 +289,23 @@ namespace CNA::Internal::Xnb
                                  XnbNameEvidence::DerivedRule);
     }
 
+    XnbReaderIdentity XnbEnumReaderIdentity(const std::string& enumTypeName,
+                                            const XnbAssembly enumAssembly,
+                                            const XnbNameEvidence evidence)
+    {
+        XnbReaderIdentity argument;
+        argument.readerBaseName = "Microsoft.Xna.Framework.Content.EnumReader`1";
+        argument.readerAssembly = XnbAssembly::None;
+        argument.targetBaseName = enumTypeName;
+        argument.targetAssembly = enumAssembly;
+        argument.targetSharesGenericArguments = false;
+        argument.evidence = evidence;
+
+        XnbReaderIdentity identity = argument;
+        identity.genericArguments = {argument};
+        return identity;
+    }
+
     void RegisterBuiltInPrimitiveXnbWriters(XnbTypeWriterRegistry& registry)
     {
         AddFunctionWriter<bool>(registry, false,

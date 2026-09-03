@@ -40,6 +40,8 @@
 #include "CNA/Internal/Xnb/XnbHeader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
+#include "Microsoft/Xna/Framework/Content/ReflectiveTypeReader.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Curve.hpp"
 #include "Microsoft/Xna/Framework/CurveKey.hpp"
 #include "System/IO/MemoryStream.hpp"
@@ -1082,6 +1084,116 @@ namespace
             return result;
         }
     };
+}
+
+// -- Enum writer (XNAP-98) ---------------------------------------------------------------------
+
+namespace
+{
+    /** @brief A game's own enum, in no XNA assembly -- the case with no qualifier at all. */
+    enum class QuestState : std::int32_t
+    {
+        Unstarted = 0,
+        Active = 1,
+        Failed = -7,
+    };
+}
+
+TEST_F(XnbWriterTest, AnEnumIsWrittenAsAnInt32AndReadBackByTheEnumReaderTheTableNames)
+{
+    using Microsoft::Xna::Framework::Content::EnumTypeReader;
+    using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+
+    XnbTypeWriterRegistry registry;
+    RegisterBuiltInXnbWriters(registry);
+    RegisterXnbEnumWriter<SurfaceFormat>(registry,
+                                         "Microsoft.Xna.Framework.Graphics.SurfaceFormat",
+                                         XnbAssembly::FrameworkGraphics);
+
+    const std::string readerName = EnumTypeReader<SurfaceFormat>::CanonicalReaderName(
+        "Microsoft.Xna.Framework.Graphics.SurfaceFormat");
+    ContentTypeReaderManager::AddTypeCreator(readerName, [readerName] {
+        return std::make_unique<EnumTypeReader<SurfaceFormat>>(
+            "Microsoft.Xna.Framework.Graphics.SurfaceFormat");
+    });
+
+    const std::vector<std::uint8_t> written =
+        WriteXnbAsset(SurfaceFormat::Dxt5, {}, "format", registry);
+
+    // Four payload bytes: XNA's EnumReader<T> stores the underlying Int32 and nothing else.
+    const std::string text(written.begin(), written.end());
+    EXPECT_NE(text.find("Microsoft.Xna.Framework.Content.EnumReader`1"
+                        "[[Microsoft.Xna.Framework.Graphics.SurfaceFormat, "
+                        "Microsoft.Xna.Framework.Graphics, Version=4.0.0.0"),
+              std::string::npos)
+        << "the enum reader has to reach the type table with its argument assembly-qualified";
+
+    EXPECT_EQ(LoadedXnb(written).ReadAsset<SurfaceFormat>(), SurfaceFormat::Dxt5);
+}
+
+TEST_F(XnbWriterTest, AGameEnumRoundTripsIncludingANegativeValue)
+{
+    using Microsoft::Xna::Framework::Content::EnumTypeReader;
+
+    XnbTypeWriterRegistry registry;
+    RegisterBuiltInXnbWriters(registry);
+    RegisterXnbEnumWriter<QuestState>(registry, "ExampleGame.QuestState", XnbAssembly::None);
+
+    ContentTypeReaderManager::AddTypeCreator(
+        EnumTypeReader<QuestState>::CanonicalReaderName("ExampleGame.QuestState"),
+        [] { return std::make_unique<EnumTypeReader<QuestState>>("ExampleGame.QuestState"); });
+
+    // A negative value proves the underlying type is written signed rather than widened through
+    // an unsigned cast, which a `Failed = -7` would survive only by accident.
+    for (const QuestState value : {QuestState::Unstarted, QuestState::Active, QuestState::Failed})
+    {
+        const std::vector<std::uint8_t> written = WriteXnbAsset(value, {}, "quest", registry);
+        EXPECT_EQ(LoadedXnb(written).ReadAsset<QuestState>(), value);
+    }
+
+    // With no assembly, nothing is qualified -- the same spelling both name styles produce.
+    const std::vector<std::uint8_t> written =
+        WriteXnbAsset(QuestState::Active, {}, "quest", registry);
+    const std::string text(written.begin(), written.end());
+    EXPECT_NE(text.find("Microsoft.Xna.Framework.Content.EnumReader`1[[ExampleGame.QuestState]]"),
+              std::string::npos);
+}
+
+TEST(XnbEnumReaderIdentityTest, TheEnumIsTheReadersArgumentButIsNotItselfGeneric)
+{
+    const XnbReaderIdentity identity = XnbEnumReaderIdentity(
+        "Microsoft.Xna.Framework.Graphics.SurfaceFormat", XnbAssembly::FrameworkGraphics);
+
+    // The target type is the plain enum. Appending the reader's argument list to it a second time
+    // would produce `SurfaceFormat[[SurfaceFormat]]`, which is what targetSharesGenericArguments
+    // exists to prevent -- and what a `List<SurfaceFormat>` would otherwise write into its table.
+    EXPECT_EQ(XnbTargetTypeName(identity), "Microsoft.Xna.Framework.Graphics.SurfaceFormat");
+    EXPECT_EQ(XnbCanonicalReaderName(identity),
+              "Microsoft.Xna.Framework.Content.EnumReader`1"
+              "[[Microsoft.Xna.Framework.Graphics.SurfaceFormat]]");
+    EXPECT_EQ(FormatXnbReaderName(identity, XnbReaderNameStyle::Portable),
+              XnbCanonicalReaderName(identity));
+
+    XnbReaderIdentity list;
+    list.readerBaseName = "Microsoft.Xna.Framework.Content.ListReader`1";
+    list.targetBaseName = "System.Collections.Generic.List`1";
+    list.targetAssembly = XnbAssembly::Mscorlib;
+    list.genericArguments = {identity};
+    EXPECT_EQ(XnbCanonicalReaderName(list),
+              "Microsoft.Xna.Framework.Content.ListReader`1"
+              "[[Microsoft.Xna.Framework.Graphics.SurfaceFormat]]");
+}
+
+TEST(XnbEnumReaderIdentityTest, AnArrayNamesItsElementOnceRatherThanTwice)
+{
+    // The same defect the enum surfaced, in the array writer: `Int32[]` already spells its element
+    // type inside targetBaseName, so appending the reader's argument list again would give
+    // `System.Int32[][[System.Int32]]` wherever an array appears as a nested generic argument.
+    XnbTypeWriterRegistry registry;
+    const XnbArrayTypeWriter<std::int32_t> writer(XnbBuiltInReaderIdentity<std::int32_t>());
+    EXPECT_EQ(XnbTargetTypeName(writer.ReaderIdentity()), "System.Int32[]");
+    EXPECT_EQ(XnbCanonicalReaderName(writer.ReaderIdentity()),
+              "Microsoft.Xna.Framework.Content.ArrayReader`1[[System.Int32]]");
 }
 
 TEST_F(XnbWriterTest, AGameCanRegisterItsOwnTypeWriterAndReaderAndRoundTripThroughThem)

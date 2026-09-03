@@ -29,7 +29,10 @@ namespace CNA::Internal::Xnb
                 if (index > 0u) { text += ','; }
                 text += '[';
                 text += arguments[index].targetBaseName;
-                AppendGenericArgumentList(text, arguments[index].genericArguments, qualify);
+                if (arguments[index].targetSharesGenericArguments)
+                {
+                    AppendGenericArgumentList(text, arguments[index].genericArguments, qualify);
+                }
                 if (qualify) { text += XnbAssemblyQualifier(arguments[index].targetAssembly); }
                 text += ']';
             }
@@ -69,7 +72,10 @@ namespace CNA::Internal::Xnb
     std::string XnbTargetTypeName(const XnbReaderIdentity& identity)
     {
         std::string text = identity.targetBaseName;
-        AppendGenericArgumentList(text, identity.genericArguments, false);
+        if (identity.targetSharesGenericArguments)
+        {
+            AppendGenericArgumentList(text, identity.genericArguments, false);
+        }
         return text;
     }
 }
