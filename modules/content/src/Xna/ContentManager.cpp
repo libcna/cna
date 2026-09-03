@@ -429,6 +429,15 @@ namespace Microsoft::Xna::Framework::Content
 
         std::error_code ec;
         const fs::path requested(path);
+#if defined(__ANDROID__)
+        // Relative content paths belong to SDL's packaged-asset namespace on Android. They are
+        // resolved by TryReadAssetBytes through the platform filesystem; walking the process
+        // working directory here would instead enumerate `/`, which is unrelated and sandboxed.
+        if (requested.is_relative())
+        {
+            return requested.generic_string();
+        }
+#endif
         if (fs::exists(requested, ec) && !ec)
         {
             return requested.string();
@@ -491,6 +500,13 @@ namespace Microsoft::Xna::Framework::Content
     {
         namespace fs = std::filesystem;
 
+#if defined(__ANDROID__)
+        if (fs::path(path).is_relative())
+        {
+            return CNA::Platform::GetCurrentPlatform().GetFileSystem()
+                ->TryLoadFileIgnoringCase(path, bytes);
+        }
+#endif
         std::error_code ec;
         if (fs::exists(path, ec) && !ec)
         {

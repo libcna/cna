@@ -46,10 +46,10 @@ namespace Microsoft::Xna::Framework
         CNA::Platform::IPlatformFileSystem* fileSystem =
             CNA::Platform::GetCurrentPlatform().GetFileSystem();
 
-        bool loaded = fileSystem->TryLoadFile(androidAssetName, assetData);
+        bool loaded = fileSystem->TryLoadFileIgnoringCase(androidAssetName, assetData);
         if (!loaded && androidAssetName != realName)
         {
-            loaded = fileSystem->TryLoadFile(realName, assetData);
+            loaded = fileSystem->TryLoadFileIgnoringCase(realName, assetData);
         }
 
         if (loaded)
@@ -105,10 +105,10 @@ namespace Microsoft::Xna::Framework
         CNA::Platform::IPlatformFileSystem* fileSystem =
             CNA::Platform::GetCurrentPlatform().GetFileSystem();
 
-        bool loaded = fileSystem->TryLoadFile(androidAssetName, assetData);
+        bool loaded = fileSystem->TryLoadFileIgnoringCase(androidAssetName, assetData);
         if (!loaded && androidAssetName != realName)
         {
-            loaded = fileSystem->TryLoadFile(realName, assetData);
+            loaded = fileSystem->TryLoadFileIgnoringCase(realName, assetData);
         }
 
         if (loaded)
@@ -192,6 +192,13 @@ namespace Microsoft::Xna::Framework
                 std::filesystem::path(name).lexically_normal().string());
         }
 
+#if defined(__ANDROID__)
+        // A relative title path names an AssetManager entry on Android, not a child of the
+        // process working directory. Preserve that logical name so the platform loader below
+        // can resolve it; host case-folding would otherwise enumerate the sandboxed `/`.
+        return CNA::Internal::NormalizeXnaPathSeparators(name);
+#else
         return CNA::Internal::ResolveExistingXnaPath(CombineTitlePath(name));
+#endif
     }
 }

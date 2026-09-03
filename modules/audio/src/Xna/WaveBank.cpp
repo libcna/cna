@@ -6,8 +6,8 @@
 #include "CNA/Internal/Audio/WavWrapper.hpp"
 #include "CNA/Internal/Audio/XactTypes.hpp"
 #include "CNA/Internal/CaseInsensitivePath.hpp"
+#include "TitleContentBytes.hpp"
 #include "System/ArgumentNullException.hpp"
-#include "System/IO/FileNotFoundException.hpp"
 
 #include <algorithm>
 #include <exception>
@@ -124,16 +124,8 @@ namespace Microsoft::Xna::Framework::Audio
         // code either. The streaming ctor (InitStreaming) is unaffected: FNA's streaming path
         // never goes through TitleContainer at all, it opens the file with the native
         // FAudio_fopen instead, so a missing streaming file doesn't throw in FNA either.
-        const std::string resolvedFilename = CNA::Internal::ResolveExistingXnaPath(filename);
-        std::ifstream f(resolvedFilename, std::ios::binary | std::ios::ate);
-        if (!f.is_open())
-        {
-            throw System::IO::FileNotFoundException(
-                "Could not find file '" + filename + "'.", filename);
-        }
-        auto sz = f.tellg(); f.seekg(0);
-        std::vector<uint8_t> raw(static_cast<std::size_t>(sz));
-        f.read(reinterpret_cast<char*>(raw.data()), sz);
+        std::vector<uint8_t> raw =
+            CNA::Internal::Audio::ReadTitleContentBytes(filename);
 
         try
         {

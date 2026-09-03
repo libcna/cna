@@ -119,6 +119,30 @@ TEST_F(Sdl3ServiceTest, MissingFileReturnsFalseRatherThanThrowing)
     EXPECT_EQ(data.size(), 3u) << "the output must be untouched on failure";
 }
 
+TEST_F(Sdl3ServiceTest, CaseInsensitiveLoadPreservesTheResolvedFileBytes)
+{
+    const std::filesystem::path root =
+        std::filesystem::temp_directory_path() / "cna_platform_case_probe";
+    const std::filesystem::path actualDirectory = root / "Textures";
+    const std::filesystem::path actual = actualDirectory / "CarPaint.XNB";
+    std::filesystem::remove_all(root);
+    std::filesystem::create_directories(actualDirectory);
+    const std::string contents("xnb\0case", 8);
+    {
+        std::ofstream out(actual, std::ios::binary);
+        out.write(contents.data(), static_cast<std::streamsize>(contents.size()));
+    }
+
+    std::vector<std::uint8_t> data;
+    const std::filesystem::path requested = root / "textures" / "carpaint.xnb";
+    ASSERT_TRUE(platform_->GetFileSystem()->TryLoadFileIgnoringCase(
+        requested.string(), data));
+    ASSERT_EQ(data.size(), contents.size());
+    EXPECT_TRUE(std::equal(data.begin(), data.end(), contents.begin(), contents.end()));
+
+    std::filesystem::remove_all(root);
+}
+
 TEST_F(Sdl3ServiceTest, CreateDirectoryMakesNestedDirectories)
 {
     const std::filesystem::path root =

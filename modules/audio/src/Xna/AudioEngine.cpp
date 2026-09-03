@@ -5,15 +5,13 @@
 #include "Microsoft/Xna/Framework/Audio/SoundBank.hpp"
 #include "Microsoft/Xna/Framework/Audio/WaveBank.hpp"
 #include "CNA/Internal/Audio/XactTypes.hpp"
-#include "CNA/Internal/CaseInsensitivePath.hpp"
+#include "TitleContentBytes.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/InvalidOperationException.hpp"
-#include "System/IO/FileNotFoundException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 #include <algorithm>
 #include <exception>
-#include <fstream>
 #include <iostream>
 #include <utility>
 #include <vector>
@@ -108,19 +106,8 @@ namespace Microsoft::Xna::Framework::Audio
         // TitleContainer.ReadToPointer, which does a File.Exists check and throws
         // FileNotFoundException before ever reaching FACT (TitleContainer.cs) -- match that here
         // (P9-HARDWARE-003) rather than silently continuing as a stub.
-        const std::string resolvedSettingsFile =
-            CNA::Internal::ResolveExistingXnaPath(settingsFile);
-        std::ifstream f(resolvedSettingsFile, std::ios::binary | std::ios::ate);
-        if (!f.is_open())
-        {
-            throw System::IO::FileNotFoundException(
-                "Could not find file '" + settingsFile + "'.", settingsFile);
-        }
-
-        auto sz = f.tellg();
-        f.seekg(0);
-        std::vector<uint8_t> data(static_cast<std::size_t>(sz));
-        f.read(reinterpret_cast<char*>(data.data()), sz);
+        std::vector<uint8_t> data =
+            CNA::Internal::Audio::ReadTitleContentBytes(settingsFile);
 
         // FNA checks FACTAudioEngine_Initialize's return code and throws
         // InvalidOperationException("Engine initialization failed!") on a nonzero result

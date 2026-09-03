@@ -381,17 +381,29 @@ namespace CNA::Platform::Sdl3 {
     bool Sdl3FileSystem::TryLoadFileIgnoringCase(
         const std::string& path, std::vector<std::uint8_t>& data) const
     {
-        if (TryLoadFile(path, data) ||
-            Common::TryLoadStandardFileIgnoringCase(path, data))
+        if (TryLoadFile(path, data))
         {
             return true;
         }
 #if defined(__ANDROID__)
+        // Relative paths name packaged assets on Android. Resolve those before asking the host
+        // filesystem walker: the process working directory can be `/`, which is intentionally
+        // unreadable to an untrusted app and is unrelated to the AssetManager namespace.
         const std::string resolved = ResolveAndroidAssetPathIgnoringCase(path);
-        return !resolved.empty() && TryLoadFile(resolved, data);
-#else
-        return false;
+        if (!resolved.empty() && TryLoadFile(resolved, data))
+        {
+            return true;
+        }
+        if (path.empty() || path.front() != '/')
+        {
+            // SDL and AssetManager have exhausted the two Android namespaces that can own a
+            // relative path. The process working directory is commonly `/`; walking it as a
+            // case-insensitive host fallback is both unrelated to packaged assets and denied by
+            // Android's application sandbox.
+            return false;
+        }
 #endif
+        return Common::TryLoadStandardFileIgnoringCase(path, data);
     }
 
     void Sdl3FileSystem::CreateDirectory(const std::string& path)
