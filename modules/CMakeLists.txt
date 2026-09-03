@@ -96,8 +96,16 @@ if(CNA_CNB_ZSTD STREQUAL "OFF")
     set(CNA_CNB_ZSTD_AVAILABLE OFF)
     message(STATUS "CNA: .cnb Zstandard support disabled -- a compressed chunk will be refused")
 else()
+    set(CNA_ZSTD_FOUND FALSE)
+    set(CNA_ZSTD_INCLUDE_DIRS)
+    set(CNA_ZSTD_LIBRARIES)
     find_package(PkgConfig QUIET)
-    if(PkgConfig_FOUND)
+    # An unconfigured host pkg-config is not a target dependency resolver. In
+    # particular, Android otherwise finds /usr's x86_64 libzstd while compiling
+    # ARM64 objects against the NDK sysroot. find_path/find_library below obey
+    # the selected cross-toolchain root and remain available to packagers that
+    # supply a target-native prefix.
+    if(PkgConfig_FOUND AND NOT CMAKE_CROSSCOMPILING)
         pkg_check_modules(CNA_ZSTD QUIET libzstd)
     endif()
     if(NOT CNA_ZSTD_FOUND)
