@@ -9,6 +9,12 @@ The read side is a separate document: `docs/xnb-content-pipeline-support.md` cov
 already-built `.xnb` files. The task history and the per-decision record are in
 `plans/plan_xnapipeline.md`.
 
+> **Provenance note (2026-09-03).** This document, and the plan behind it, were written believing
+> no XNB writer existed in the repository. That was true of `next` and false of the repository: a
+> parallel implementation exists on the `pipeline` branch, and much of what is described here
+> duplicates it. See `plans/plan_xnapipeline.md` §0.5 for exactly which parts are duplicates and
+> which are new. The capability claims below are about **this** implementation and are unaffected.
+
 > **The single most important sentence in this document.** No table below claims verification
 > against a genuine Microsoft XNA 4.0 runtime, because no XNA 4.0 runtime — and no Windows, Wine,
 > Mono or .NET Framework — exists in the environment this work was done in. A ready-to-run harness

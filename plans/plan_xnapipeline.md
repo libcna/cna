@@ -18,6 +18,10 @@
 >
 > **Task IDs.** `XNAP-###`. Never reuse an ID; never renumber.
 
+> **⚠ Read §0's correction first.** This plan was written against a wrong premise: the
+> implementation its opening audit called absent exists on the `pipeline` branch, and most of
+> Phases B–E and G duplicate it. §0.5 records what is duplicate and what is new.
+
 > **Status (2026-09-03).** 69 tasks: **57 done**, 8 partial (remaining scope named in the row),
 > 2 blocked with the blocker named, 1 open owner decision. Exact test totals live in §0.4 and
 > nowhere else. **Nothing here has been verified against a genuine Microsoft XNA 4.0 runtime**,
@@ -28,14 +32,35 @@
 
 ---
 
-## 0. Session-start audit (2026-09-03) — what actually exists at HEAD
+## 0. Session-start audit (2026-09-03) — corrected 2026-09-03
+
+> ### ⚠ Correction: the audit below was wrong, and this plan was written against a wrong premise
+>
+> §0 originally read: *"The task that opened this plan described a large pre-existing XNB writer
+> implementation … **None of that existed at HEAD `756096626`.**"*
+>
+> That sentence was true of `next` and false of the repository. **The implementation the task
+> described exists on the `pipeline` branch**, in five commits dated 2026-09-02
+> (`07cac247a`…`6549d8032`), built on the same base commit `756096626` this plan started from. The
+> session-start audit checked HEAD and did not check any other branch, which is the whole of the
+> mistake: `git ls-remote --heads origin` would have found it in one command.
+>
+> The consequence is not cosmetic. **Most of Phases B, C, D, E and G below re-implemented work that
+> was already finished**, in a second location, under a colliding set of task IDs. §0.5 records
+> exactly which parts are duplicates and which are genuinely new, so that whoever reconciles the two
+> branches does not have to re-derive it.
+>
+> Nothing else in this plan is retracted: the code, tests and measurements it records are real, and
+> the environment audit in §0.3 and the test baseline in §0.4 stand. What is retracted is the claim
+> that this work started from nothing.
 
 The task that opened this plan described a large pre-existing XNB **writer** implementation
 (`XnbByteWriter`, `XnbWriteLimits`, `XnbFileOptions`, `XnbTypeWriter`, `XnbTypeKey<T>`,
 `XnbTypeWriterRegistry`, `XnbWriter`, `XnbAssetWriter`, a `--format cnb|xnb` CLI switch, an
 independent Python XNB conformance parser, CNA-generated XNB fixtures, `docs/xnb-interoperability.md`
-and this plan file). **None of that existed at HEAD `756096626`.** The audit below is the verified
-state; it is recorded because the rest of this plan is written against it, not against the report.
+and this plan file). None of that existed **on `next`** at HEAD `756096626`; all of it existed on
+`pipeline`. The audit below is the verified state of `next`, and the rest of this plan was written
+against it.
 
 ### 0.1 Verified absent
 
@@ -110,6 +135,82 @@ focused executable and is entirely new. The whole-suite figure is recorded here 
 its 29 failures are the STUB-renderer `TextureCube`/`Texture3D`/capability group, the uid-0
 permission case and the two audio-device `MediaLibrary` cases — none of them content-pipeline
 code, and none of them introduced by this plan.
+
+---
+
+### 0.5 Relationship to the `pipeline` branch (added by the correction)
+
+Both branches start at `756096626`. `pipeline` carries 5 commits and 55 changed files; this branch
+carries 20 commits and 97 changed files. They are siblings, not a sequence, and they place the same
+subsystem in different directories:
+
+| | `pipeline` | this branch |
+|---|---|---|
+| Public headers | `modules/content/include/CNA/Content/Xnb/` | `modules/content/include/CNA/Internal/Xnb/` |
+| Writer sources | `modules/content/src/XnbWrite/` | `modules/content/src/Xnb/` |
+| Pipeline adapter | `XnbOutput.hpp`, `XnbModelOutput.cpp` | `XnbOutputContentPipeline.hpp` |
+| Conformance parser | `scripts/xnb_conformance.py` | `tools/xnb/xnb_conformance.py` |
+| Task IDs | `XNAP-001`…`XNAP-029` | `XNAP-01`…`XNAP-96` |
+
+15 files are touched by both, including this plan file, `docs/xnb-interoperability.md`,
+`ContentPipeline.hpp/.cpp`, `tools/content/content.cpp` and `SongContentTypeReader.cpp` — where both
+branches independently found and fixed the same `SongReader` duration defect.
+
+**The task IDs collide.** `pipeline` uses three-digit IDs and this branch uses two-digit ones, so
+`XNAP-01` and `XNAP-001` are different tasks with similar names. This plan's own rule is *never
+reuse an ID*; whichever branch survives, one numbering has to be retired rather than merged.
+
+#### Already delivered on `pipeline` — re-implemented here for nothing
+
+Every one of these was `[x]` on `pipeline` before this session began:
+
+`XnbByteWriter` and its limits · `XnbFileOptions`, platform and profile, header emission ·
+`XnbTypeWriter`/`XnbTypeKey<T>`/`XnbTypeWriterRegistry` with configure-then-freeze · `XnbWriter`
+object dispatch, shared resources, `ExternalReference`, bounded depth · primitive and
+`String`/`Char` writers · the math value types · the collection writers · `Curve` · the
+`SurfaceFormat` ↔ `CnbTextureFormat` mapping · `Texture2D`/`Texture3D`/`TextureCube` ·
+`ContentOutputFormat` and the pipeline writer layer · PNG → `.xnb` → `ContentManager::Load` with
+exact pixel equality · `SpriteFont` · `SoundEffect` · `Song` and `Video` ·
+`VertexDeclaration`/`VertexBuffer`/`IndexBuffer` · `Model` · all five stock effects · the compiled
+`Effect` blob · `cna-content --format xnb` with its container options and a format-aware manifest ·
+the correction of the permanent-out-of-scope wording in `xnb.md` and
+`docs/xnb-content-pipeline-support.md` · an independent Python conformance parser · a CNA fixture
+corpus · `docs/xnb-interoperability.md` · the custom-type writer extension point.
+
+That is Phases B, C, most of D, E and G of this plan.
+
+#### Present on `pipeline` and **missing** here
+
+- `Decimal`, `Enum<T>`, `T[]` and `Nullable<T>` are registered writers there. Here `Decimal` is
+  recorded as absent (`XNAP-20`) and the array/nullable templates exist unregistered (`XNAP-22`).
+- `BoundingFrustum` has a writer there and none here.
+- The build manifest carries `rootReaderName` per output there (schema 9); here it does not.
+- Xbox 360 is simply **excluded from the writable platform set** there. Here it is writable and
+  refused at write time with an opt-in (`XNAP-82`). Theirs is the smaller surface.
+
+#### Genuinely new here, and open or absent on `pipeline`
+
+- **glTF/GLB → `Model`** (`XNAP-56`–`XNAP-59`). `pipeline`'s `XNAP-022` left this open for exactly
+  the reason this branch resolved: CNB schema 1 stores a vertex stride and no `VertexDeclaration`.
+  The resolution — recovering it from `VertexDeclarationFidelity.hpp`, the table every CNA renderer
+  already interprets those bytes with — is the single most valuable thing on this branch.
+- **`.spritefont` + TrueType source route** with FreeType rasterization and deterministic packing
+  (`XNAP-50`–`XNAP-52`). `pipeline` writes a `SpriteFont` from an already-processed sprite font; it
+  does not rasterize one.
+- **BC1/BC2/BC3 encoder** and the texture policy parameters (`XNAP-53`, `XNAP-54`).
+- **24-bit, 32-bit and IEEE-float WAV** sources (`XNAP-55`).
+- **`.fxb` compiled-effect source route** (`XNAP-84`).
+- **LZ4 output** (`XNAP-80`). `pipeline`'s `XNAP-023` covers LZX only, and is open.
+- **`modules/content-pipeline/`**, the build-time-only module (`XNAP-52`, `XNAP-90`). This is
+  `pipeline`'s open `XNAP-029` — the runtime/pipeline library split.
+- **`EffectMaterial`** and the boxed `ExternalReference` (`XNAP-29`, `XNAP-2B`).
+- **Byte-exact golden tests** against XNA 4.0's own output and two MonoGame files (`XNAP-41`,
+  `XNAP-42`). `pipeline` verifies `Model` by decode-write-decode, which is a round trip rather than
+  a comparison against another producer.
+- The untrusted-input hardening sweep (`XNAP-85`) and the recorded performance numbers (`XNAP-93`).
+
+Roughly two thirds of this branch duplicates `pipeline`; roughly one third is new and would be
+worth carrying across regardless of which implementation survives.
 
 ---
 
