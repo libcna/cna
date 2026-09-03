@@ -2,6 +2,9 @@
 
 #include "CNA/Content/Cnb/CnbSourceImport.hpp"
 
+#include <algorithm>
+#include <bit>
+#include <cmath>
 #include <cstring>
 #include <fstream>
 #include <limits>
@@ -397,18 +400,28 @@ namespace CNA::Content::Cnb
         {
             FailWav(origin, "declares a sample rate of " + std::to_string(sampleRate) + " Hz.");
         }
-        if (formatTag != 0x0001u)
+        // WAVE_FORMAT_PCM (1) and WAVE_FORMAT_IEEE_FLOAT (3) are the two uncompressed families a
+        // recording tool writes. Every compressed tag is refused, because turning ADPCM or a
+        // codec stream into PCM is a decode this compiler does not perform and would have to
+        // guess the parameters of.
+        if (formatTag != 0x0001u && formatTag != 0x0003u)
         {
             FailWav(origin, "is " + FormatTagName(formatTag) +
-                                ". This compiler stores Pcm16 and converts only from 8-bit "
-                                "unsigned PCM, because every other conversion loses information "
-                                "and that is an authoring decision rather than a compiler's.");
+                                ". This compiler reads uncompressed PCM and IEEE float; a "
+                                "compressed source has to be decoded to one of those first.");
         }
-        if (bitsPerSample != 8u && bitsPerSample != 16u)
+        if (formatTag == 0x0001u && bitsPerSample != 8u && bitsPerSample != 16u &&
+            bitsPerSample != 24u && bitsPerSample != 32u)
         {
             FailWav(origin, "is " + std::to_string(bitsPerSample) +
-                                "-bit PCM. Only 8-bit unsigned and 16-bit PCM convert to CNB's "
-                                "Pcm16 exactly.");
+                                "-bit PCM; 8, 16, 24 and 32 are the widths this compiler reads.");
+        }
+        if (formatTag == 0x0003u && bitsPerSample != 32u)
+        {
+            FailWav(origin, "is " + std::to_string(bitsPerSample) +
+                                "-bit IEEE float; only the 32-bit form is read. A 64-bit float "
+                                "master carries far more precision than any of CNA's audio "
+                                "formats store, so converting it is an authoring decision.");
         }
 
         // blockAlign and byteRate are redundant with the three fields above -- which is exactly
@@ -435,9 +448,29 @@ namespace CNA::Content::Cnb
         }
 
         CNA::Content::Import::ImportedSound sound;
-        sound.encoding = bitsPerSample == 16u
-                             ? CNA::Content::Import::ImportedPcmEncoding::Signed16LittleEndian
-                             : CNA::Content::Import::ImportedPcmEncoding::Unsigned8;
+        if (formatTag == 0x0003u)
+        {
+            sound.encoding = CNA::Content::Import::ImportedPcmEncoding::Float32LittleEndian;
+        }
+        else
+        {
+            switch (bitsPerSample)
+            {
+            case 8u:
+                sound.encoding = CNA::Content::Import::ImportedPcmEncoding::Unsigned8;
+                break;
+            case 24u:
+                sound.encoding = CNA::Content::Import::ImportedPcmEncoding::Signed24LittleEndian;
+                break;
+            case 32u:
+                sound.encoding = CNA::Content::Import::ImportedPcmEncoding::Signed32LittleEndian;
+                break;
+            case 16u:
+            default:
+                sound.encoding = CNA::Content::Import::ImportedPcmEncoding::Signed16LittleEndian;
+                break;
+            }
+        }
         sound.sampleRate = sampleRate;
         sound.channels = channels;
 
@@ -471,6 +504,19 @@ namespace CNA::Content::Cnb
         return sound;
     }
 
+    namespace
+    {
+        /** @brief Integer division rounding toward negative infinity for either sign. */
+        [[nodiscard]] std::int64_t FloorDivide(const std::int64_t numerator,
+                                               const std::int64_t denominator)
+        {
+            const std::int64_t quotient = numerator / denominator;
+            return (numerator % denominator != 0 && (numerator < 0) != (denominator < 0))
+                       ? quotient - 1
+                       : quotient;
+        }
+    }
+
     CnbSoundEffectData ProcessImportedSoundEffect(
         const CNA::Content::Import::ImportedSound& imported)
     {
@@ -492,12 +538,7 @@ namespace CNA::Content::Cnb
                 "CNB SoundEffect processing: imported loop region exceeds the frame count.");
         }
         const std::uint64_t sourceBytesPerSample =
-            imported.encoding == CNA::Content::Import::ImportedPcmEncoding::Unsigned8
-                ? 1u
-                : imported.encoding ==
-                          CNA::Content::Import::ImportedPcmEncoding::Signed16LittleEndian
-                      ? 2u
-                      : 0u;
+            CNA::Content::Import::ImportedPcmSampleBytes(imported.encoding);
         if (sourceBytesPerSample == 0u)
         {
             throw ContentLoadException("CNB SoundEffect processing: unknown imported PCM encoding.");
@@ -523,29 +564,90 @@ namespace CNA::Content::Cnb
         sound.loopStart = imported.loopStart;
         sound.loopLength = imported.loopLength;
 
-        if (imported.encoding ==
-            CNA::Content::Import::ImportedPcmEncoding::Signed16LittleEndian)
+        using CNA::Content::Import::ImportedPcmEncoding;
+        if (imported.encoding == ImportedPcmEncoding::Signed16LittleEndian)
         {
             sound.samples = imported.samples;
+            return sound;
         }
-        else
+
+        const std::uint64_t sampleCount =
+            static_cast<std::uint64_t>(imported.frameCount) * imported.channels;
+        if (sampleCount > std::numeric_limits<std::size_t>::max() / 2u)
         {
-            // 8-bit WAV samples are UNSIGNED with a bias of 128; 16-bit are signed. (s - 128) << 8
-            // is the exact widening, and it is exact -- nothing is rounded or clipped.
-            if (imported.samples.size() > std::numeric_limits<std::size_t>::max() / 2u)
+            throw ContentLoadException(
+                "CNB SoundEffect processing: converted PCM exceeds addressable memory.");
+        }
+        sound.samples.resize(static_cast<std::size_t>(sampleCount) * 2u);
+
+        // Every conversion below is a fixed integer (or single-multiply) rule with round-to-
+        // nearest and saturation, chosen so that the same source always produces the same bytes.
+        // The integer narrowings round halves toward positive infinity, which is what adding half
+        // a step and taking the floor does and what a hardware shift would have done. Narrowing
+        // 24-bit, 32-bit or float samples to 16 bits discards information; the pipeline says so
+        // through its warning channel rather than pretending it did not happen.
+        for (std::size_t index = 0; index < static_cast<std::size_t>(sampleCount); ++index)
+        {
+            const std::size_t offset = index * static_cast<std::size_t>(sourceBytesPerSample);
+            std::int64_t value = 0;
+            switch (imported.encoding)
             {
+            case ImportedPcmEncoding::Unsigned8:
+                // 8-bit WAV samples are UNSIGNED with a bias of 128. (s - 128) * 256 is exact:
+                // nothing is rounded or clipped.
+                value = (static_cast<std::int64_t>(imported.samples[offset]) - 128) * 256;
+                break;
+            case ImportedPcmEncoding::Signed24LittleEndian:
+            {
+                std::int32_t packed =
+                    static_cast<std::int32_t>(imported.samples[offset]) |
+                    (static_cast<std::int32_t>(imported.samples[offset + 1u]) << 8) |
+                    (static_cast<std::int32_t>(imported.samples[offset + 2u]) << 16);
+                if ((packed & 0x00800000) != 0) { packed |= static_cast<std::int32_t>(0xFF000000u); }
+                value = FloorDivide(static_cast<std::int64_t>(packed) + 128, 256);
+                break;
+            }
+            case ImportedPcmEncoding::Signed32LittleEndian:
+            {
+                const std::int32_t packed = static_cast<std::int32_t>(
+                    static_cast<std::uint32_t>(imported.samples[offset]) |
+                    (static_cast<std::uint32_t>(imported.samples[offset + 1u]) << 8) |
+                    (static_cast<std::uint32_t>(imported.samples[offset + 2u]) << 16) |
+                    (static_cast<std::uint32_t>(imported.samples[offset + 3u]) << 24));
+                value = FloorDivide(static_cast<std::int64_t>(packed) + 32768, 65536);
+                break;
+            }
+            case ImportedPcmEncoding::Float32LittleEndian:
+            {
+                const std::uint32_t bits =
+                    static_cast<std::uint32_t>(imported.samples[offset]) |
+                    (static_cast<std::uint32_t>(imported.samples[offset + 1u]) << 8) |
+                    (static_cast<std::uint32_t>(imported.samples[offset + 2u]) << 16) |
+                    (static_cast<std::uint32_t>(imported.samples[offset + 3u]) << 24);
+                const float sample = std::bit_cast<float>(bits);
+                if (std::isnan(sample))
+                {
+                    // A NaN sample is not a quiet one and not a loud one; silence is the only
+                    // answer that cannot damage a speaker or a listener.
+                    value = 0;
+                    break;
+                }
+                const double scaled = static_cast<double>(sample) * 32767.0;
+                value = std::llround(std::clamp(scaled, -32768.0, 32767.0));
+                break;
+            }
+            case ImportedPcmEncoding::Signed16LittleEndian:
+            default:
                 throw ContentLoadException(
-                    "CNB SoundEffect processing: widened PCM exceeds addressable memory.");
+                    "CNB SoundEffect processing: unknown imported PCM encoding.");
             }
-            sound.samples.resize(imported.samples.size() * 2u);
-            for (std::size_t i = 0; i < imported.samples.size(); ++i)
-            {
-                const auto widened = static_cast<std::int16_t>(
-                    (static_cast<int>(imported.samples[i]) - 128) * 256);
-                const auto value = static_cast<std::uint16_t>(widened);
-                sound.samples[i * 2u] = static_cast<std::uint8_t>(value & 0xFFu);
-                sound.samples[i * 2u + 1u] = static_cast<std::uint8_t>(value >> 8);
-            }
+
+            const auto clamped = static_cast<std::int16_t>(std::clamp<std::int64_t>(
+                value, std::numeric_limits<std::int16_t>::min(),
+                std::numeric_limits<std::int16_t>::max()));
+            const auto stored = static_cast<std::uint16_t>(clamped);
+            sound.samples[index * 2u] = static_cast<std::uint8_t>(stored & 0xFFu);
+            sound.samples[index * 2u + 1u] = static_cast<std::uint8_t>(stored >> 8);
         }
         return sound;
     }

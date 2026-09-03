@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 
+#include <bit>
 #include <cstdint>
 #include <filesystem>
+#include <limits>
 #include <fstream>
 #include <memory>
 #include <string>
@@ -87,7 +89,8 @@ namespace
                                       const std::vector<std::uint8_t>& samples,
                                       bool includeLoop = false,
                                       std::uint32_t loopStart = 0u,
-                                      std::uint32_t loopEnd = 0u)
+                                      std::uint32_t loopEnd = 0u,
+                                      std::uint16_t formatTag = 1u)
     {
         std::vector<std::uint8_t> output;
         const auto writeU16 = [&](std::uint16_t value)
@@ -137,7 +140,7 @@ namespace
         writeTag("WAVE");
         writeTag("fmt ");
         writeU32(16u);
-        writeU16(1u);
+        writeU16(formatTag);
         writeU16(channels);
         writeU32(sampleRate);
         writeU32(sampleRate * blockAlign);
@@ -231,9 +234,9 @@ TEST(SoundEffectContentPipelineTest, IsDeterministicAndByteIdenticalToTheExistin
     const Pipeline::ContentBuildResult first = BuildSound(scratch.Path());
     const Pipeline::ContentBuildResult second = BuildSound(scratch.Path());
     EXPECT_EQ(first.output.bytes, second.output.bytes);
-    EXPECT_EQ(first.importer, (Pipeline::ContentComponentIdentity{"CNA.WavImporter", "1"}));
+    EXPECT_EQ(first.importer, (Pipeline::ContentComponentIdentity{"CNA.WavImporter", "2"}));
     EXPECT_EQ(first.processor,
-              (Pipeline::ContentComponentIdentity{"CNA.SoundEffectProcessor", "1"}));
+              (Pipeline::ContentComponentIdentity{"CNA.SoundEffectProcessor", "2"}));
     ASSERT_EQ(first.messages.size(), 2u);
     EXPECT_EQ(first.messages[0].stage, Pipeline::ContentPipelineStage::Import);
     EXPECT_EQ(first.messages[0].component, "CNA.WavImporter");
@@ -365,4 +368,187 @@ TEST(SoundEffectContentPipelineTest, MalformedWavReportsTheImporterStageAndCompo
         EXPECT_EQ(error.Component(), "CNA.WavImporter");
         EXPECT_NE(std::string(error.what()).find("too short"), std::string::npos);
     }
+}
+
+// -- wider source PCM (plans/plan_xnapipeline.md XNAP-55) ---------------------------------------
+
+namespace
+{
+    /** @brief Packs signed samples as little-endian 24-bit. */
+    std::vector<std::uint8_t> MakePcm24(const std::vector<std::int32_t>& values)
+    {
+        std::vector<std::uint8_t> bytes(values.size() * 3u);
+        for (std::size_t index = 0; index < values.size(); ++index)
+        {
+            const auto packed = static_cast<std::uint32_t>(values[index]);
+            bytes[index * 3u] = static_cast<std::uint8_t>(packed & 0xFFu);
+            bytes[index * 3u + 1u] = static_cast<std::uint8_t>((packed >> 8) & 0xFFu);
+            bytes[index * 3u + 2u] = static_cast<std::uint8_t>((packed >> 16) & 0xFFu);
+        }
+        return bytes;
+    }
+
+    /** @brief Packs signed samples as little-endian 32-bit. */
+    std::vector<std::uint8_t> MakePcm32(const std::vector<std::int32_t>& values)
+    {
+        std::vector<std::uint8_t> bytes(values.size() * 4u);
+        for (std::size_t index = 0; index < values.size(); ++index)
+        {
+            const auto packed = static_cast<std::uint32_t>(values[index]);
+            for (int byte = 0; byte < 4; ++byte)
+            {
+                bytes[index * 4u + static_cast<std::size_t>(byte)] =
+                    static_cast<std::uint8_t>((packed >> (byte * 8)) & 0xFFu);
+            }
+        }
+        return bytes;
+    }
+
+    /** @brief Packs samples as little-endian 32-bit IEEE floats. */
+    std::vector<std::uint8_t> MakeFloat32(const std::vector<float>& values)
+    {
+        std::vector<std::uint8_t> bytes(values.size() * 4u);
+        for (std::size_t index = 0; index < values.size(); ++index)
+        {
+            const auto packed = std::bit_cast<std::uint32_t>(values[index]);
+            for (int byte = 0; byte < 4; ++byte)
+            {
+                bytes[index * 4u + static_cast<std::size_t>(byte)] =
+                    static_cast<std::uint8_t>((packed >> (byte * 8)) & 0xFFu);
+            }
+        }
+        return bytes;
+    }
+
+    std::vector<std::int16_t> DecodedSamples(const Cnb::CnbSoundEffectData& sound)
+    {
+        std::vector<std::int16_t> values(sound.samples.size() / 2u);
+        for (std::size_t index = 0; index < values.size(); ++index)
+        {
+            values[index] = static_cast<std::int16_t>(
+                static_cast<std::uint16_t>(sound.samples[index * 2u]) |
+                (static_cast<std::uint16_t>(sound.samples[index * 2u + 1u]) << 8));
+        }
+        return values;
+    }
+}
+
+TEST(SoundEffectSourcePcmTest, TwentyFourBitPcmNarrowsWithRoundToNearestAndSaturation)
+{
+    // 0x7FFFFF is full scale and must saturate rather than wrap to -32768; the two small values
+    // straddle a rounding boundary in both directions.
+    const std::vector<std::int32_t> source{0, 0x7FFFFF, -0x800000, 383, -383, 128, -128};
+    const Cnb::CnbSoundEffectData sound = Cnb::DecodeWavAsCnbSoundEffect(
+        MakeWav(1u, 22050u, 24u, MakePcm24(source)), "24-bit.wav");
+
+    EXPECT_EQ(sound.frameCount, source.size());
+    EXPECT_EQ(sound.sampleRate, 22050u);
+    const std::vector<std::int16_t> decoded = DecodedSamples(sound);
+    ASSERT_EQ(decoded.size(), source.size());
+    EXPECT_EQ(decoded[0], 0);
+    EXPECT_EQ(decoded[1], 32767);
+    EXPECT_EQ(decoded[2], -32768);
+    // 383 / 256 is 1.496, so the nearest 16-bit sample is 1 and not the 1.5 a truncating shift
+    // would have produced; -383 lands symmetrically on -1.
+    EXPECT_EQ(decoded[3], 1);
+    EXPECT_EQ(decoded[4], -1);
+    // Exactly half a step rounds toward positive infinity, the same tie-break a hardware
+    // "add half, then shift" would take, in both directions.
+    EXPECT_EQ(decoded[5], 1);
+    EXPECT_EQ(decoded[6], 0);
+}
+
+TEST(SoundEffectSourcePcmTest, ThirtyTwoBitPcmNarrowsTheSameWay)
+{
+    const std::vector<std::int32_t> source{0, 2147483647, -2147483647 - 1, 98303, -98303};
+    const Cnb::CnbSoundEffectData sound = Cnb::DecodeWavAsCnbSoundEffect(
+        MakeWav(1u, 44100u, 32u, MakePcm32(source)), "32-bit.wav");
+
+    const std::vector<std::int16_t> decoded = DecodedSamples(sound);
+    ASSERT_EQ(decoded.size(), source.size());
+    EXPECT_EQ(decoded[0], 0);
+    EXPECT_EQ(decoded[1], 32767);
+    EXPECT_EQ(decoded[2], -32768);
+    // 98303 / 65536 is 1.4999, matching the 24-bit case one scale up.
+    EXPECT_EQ(decoded[3], 1);
+    EXPECT_EQ(decoded[4], -1);
+}
+
+TEST(SoundEffectSourcePcmTest, IeeeFloatIsScaledClampedAndNanBecomesSilence)
+{
+    const std::vector<float> source{0.0f,  1.0f,  -1.0f, 0.5f,
+                                    -0.5f, 4.0f,  -4.0f, std::numeric_limits<float>::quiet_NaN()};
+    const Cnb::CnbSoundEffectData sound = Cnb::DecodeWavAsCnbSoundEffect(
+        MakeWav(1u, 48000u, 32u, MakeFloat32(source), false, 0u, 0u, 3u), "float.wav");
+
+    const std::vector<std::int16_t> decoded = DecodedSamples(sound);
+    ASSERT_EQ(decoded.size(), source.size());
+    EXPECT_EQ(decoded[0], 0);
+    EXPECT_EQ(decoded[1], 32767);
+    EXPECT_EQ(decoded[2], -32767);
+    EXPECT_EQ(decoded[3], 16384);   // 0.5 * 32767 == 16383.5, rounded away from zero.
+    EXPECT_EQ(decoded[4], -16384);
+    // Anything past full scale saturates instead of wrapping, which is the difference between a
+    // clipped peak and a loud click in the opposite direction.
+    EXPECT_EQ(decoded[5], 32767);
+    EXPECT_EQ(decoded[6], -32768);
+    EXPECT_EQ(decoded[7], 0);
+}
+
+TEST(SoundEffectSourcePcmTest, StereoAndLoopMetadataSurviveAWiderSource)
+{
+    const std::vector<std::int32_t> source{100000, -100000, 200000, -200000,
+                                           300000, -300000, 400000, -400000};
+    const Cnb::CnbSoundEffectData sound = Cnb::DecodeWavAsCnbSoundEffect(
+        MakeWav(2u, 32000u, 24u, MakePcm24(source), true, 1u, 3u), "loop24.wav");
+
+    EXPECT_EQ(sound.channels, 2u);
+    EXPECT_EQ(sound.frameCount, 4u);
+    EXPECT_EQ(sound.loopStart, 1u);
+    EXPECT_EQ(sound.loopLength, 2u);
+    EXPECT_EQ(sound.samples.size(), 4u * 2u * 2u);
+}
+
+TEST(SoundEffectSourcePcmTest, ARouteBuildWarnsThatNarrowingDiscardsPrecision)
+{
+    ScratchDirectory scratch("narrow");
+    WriteBytes(scratch.Path() / "explosion.wav",
+               MakeWav(1u, 44100u, 24u, MakePcm24(std::vector<std::int32_t>(64, 12345))));
+
+    const Pipeline::ContentBuildResult result = BuildSound(scratch.Path());
+    bool warned = false;
+    for (const Pipeline::ContentLogMessage& message : result.messages)
+    {
+        if (message.level == Pipeline::ContentLogLevel::Warning &&
+            message.text.find("24-bit PCM") != std::string::npos)
+        {
+            warned = true;
+        }
+    }
+    EXPECT_TRUE(warned) << "narrowing to 16 bits is a real loss and has to be reported";
+
+    // A 16-bit source is exact, so it must not produce the same warning.
+    ScratchDirectory exact("exact");
+    WriteBytes(exact.Path() / "explosion.wav", MakeWav(1u, 44100u, 16u, MakePcm16(64u, 1u)));
+    for (const Pipeline::ContentLogMessage& message : BuildSound(exact.Path()).messages)
+    {
+        EXPECT_NE(message.level, Pipeline::ContentLogLevel::Warning) << message.text;
+    }
+}
+
+TEST(SoundEffectSourcePcmTest, UnsupportedWidthsAndTagsAreRefusedByName)
+{
+    EXPECT_THROW((void)Cnb::DecodeWavAsCnbSoundEffect(
+                     MakeWav(1u, 44100u, 64u, std::vector<std::uint8_t>(64u, 0u), false, 0u, 0u,
+                             3u),
+                     "double.wav"),
+                 Microsoft::Xna::Framework::Content::ContentLoadException);
+    EXPECT_THROW((void)Cnb::DecodeWavAsCnbSoundEffect(
+                     MakeWav(1u, 44100u, 4u, std::vector<std::uint8_t>(64u, 0u)), "nibble.wav"),
+                 Microsoft::Xna::Framework::Content::ContentLoadException);
+    // WAVE_FORMAT_ADPCM is a real tag and a real refusal: decoding it is not this compiler's job.
+    EXPECT_THROW((void)Cnb::DecodeWavAsCnbSoundEffect(
+                     MakeWav(1u, 44100u, 16u, MakePcm16(32u, 1u), false, 0u, 0u, 2u),
+                     "adpcm.wav"),
+                 Microsoft::Xna::Framework::Content::ContentLoadException);
 }

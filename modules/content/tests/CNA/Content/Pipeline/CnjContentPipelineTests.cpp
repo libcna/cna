@@ -238,7 +238,7 @@ TEST(CnjContentPipelineTest, SoundEffectConvergesOnTheExistingSoundProcessorAndW
 
     const Pipeline::ContentBuildResult result = Build(scratch.Path(), "beep.cnj", "Sounds/beep");
     EXPECT_EQ(result.processor,
-              (Pipeline::ContentComponentIdentity{"CNA.SoundEffectProcessor", "1"}));
+              (Pipeline::ContentComponentIdentity{"CNA.SoundEffectProcessor", "2"}));
     EXPECT_EQ(result.writer,
               (Pipeline::ContentComponentIdentity{"CNA.SoundEffectContentWriter", "1"}));
     const Cnb::CnjToCnbResult oracle = Cnb::CompileCnjToCnb(

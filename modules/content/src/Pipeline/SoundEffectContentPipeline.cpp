@@ -20,7 +20,7 @@ namespace CNA::Content::Pipeline
 
     ContentComponentIdentity WavImporter::Identity() const
     {
-        return {kWavImporterName, "1"};
+        return {kWavImporterName, "2"};
     }
 
     std::vector<std::string> WavImporter::SourceExtensions() const
@@ -37,15 +37,20 @@ namespace CNA::Content::Pipeline
     {
         CNA::Content::Import::ImportedSound imported =
             Cnb::ImportWavAsImportedSound(context.SourcePath());
-        context.LogInfo("decoded WAV with " + std::to_string(imported.frameCount) +
-                        " frames, " + std::to_string(imported.channels) + " channel(s), and " +
-                        std::to_string(imported.sampleRate) + " Hz sample rate.");
+        context.LogInfo(
+            std::string("decoded ") +
+            CNA::Content::Import::ImportedPcmEncodingName(imported.encoding) + " with " +
+            std::to_string(imported.frameCount) + " frames, " +
+            std::to_string(imported.channels) + " channel(s), and " +
+            std::to_string(imported.sampleRate) + " Hz sample rate.");
         return ContentValue::Create(ImportedSoundType, std::move(imported));
     }
 
     ContentComponentIdentity SoundEffectProcessor::Identity() const
     {
-        return {kSoundEffectProcessorName, "1"};
+        // Build version 2: the importer accepts 24-bit, 32-bit and IEEE float PCM,
+        // so an output built by version 1 does not describe the same source set.
+        return {kSoundEffectProcessorName, "2"};
     }
 
     std::string SoundEffectProcessor::InputType() const
@@ -74,7 +79,19 @@ namespace CNA::Content::Pipeline
         const CNA::Content::Import::ImportedSound& imported =
             input.Get<CNA::Content::Import::ImportedSound>();
         Cnb::CnbSoundEffectData sound = Cnb::ProcessImportedSoundEffect(imported);
-        context.LogInfo("prepared SoundEffect Pcm16 data for CNB encoding.");
+        if (CNA::Content::Import::ImportedPcmNarrowsToPcm16(imported.encoding))
+        {
+            // Both containers store 16-bit PCM, so this loss is unavoidable rather than a
+            // policy choice -- which is exactly why it is reported instead of assumed obvious.
+            context.LogWarning(
+                std::string("the source is ") +
+                CNA::Content::Import::ImportedPcmEncodingName(imported.encoding) +
+                " and was converted to 16-bit PCM with round-to-nearest and saturation; this "
+                "discards precision the source carried.");
+        }
+        context.LogInfo("prepared SoundEffect Pcm16 data with " +
+                        std::to_string(sound.frameCount) + " frame(s) at " +
+                        std::to_string(sound.sampleRate) + " Hz.");
         return ContentValue::Create(ProcessedSoundEffectType, std::move(sound));
     }
 
