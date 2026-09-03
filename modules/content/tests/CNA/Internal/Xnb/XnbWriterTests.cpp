@@ -882,3 +882,105 @@ TEST_F(XnbWriterTest, AnExternalReferenceCarryingAControlCharacterIsRefused)
     EXPECT_THROW((void)WriteXnbAsset(XnbExternalAssetReference{"Textures/a\nb"}, {}, "newline"),
                  XnbWriteException);
 }
+
+// -- the custom-writer extension point (XNAP-92) -----------------------------------------------
+
+namespace
+{
+    /** @brief A game-defined asset type the built-in registry knows nothing about. */
+    struct WaypointList
+    {
+        std::vector<Microsoft::Xna::Framework::Vector3> points;
+    };
+
+    /** @brief A custom XNB type writer for it, registered the way a game would register one. */
+    class WaypointListXnbWriter final : public XnbTypeWriter<WaypointList>
+    {
+    public:
+        [[nodiscard]] XnbReaderIdentity ReaderIdentity() const override
+        {
+            XnbReaderIdentity identity;
+            identity.readerBaseName = "ExampleGame.Content.WaypointListReader";
+            identity.readerAssembly = XnbAssembly::None;
+            identity.targetBaseName = "ExampleGame.WaypointList";
+            identity.targetAssembly = XnbAssembly::None;
+            identity.evidence = XnbNameEvidence::DerivedRule;
+            return identity;
+        }
+
+        [[nodiscard]] bool IsSerializedByReference() const noexcept override { return true; }
+
+    protected:
+        void Write(XnbWriter& output, const WaypointList& value) const override
+        {
+            output.RequireCollectionCount(value.points.size(), "WaypointListWriter");
+            output.WriteInt32(static_cast<std::int32_t>(value.points.size()));
+            for (const Microsoft::Xna::Framework::Vector3& point : value.points)
+            {
+                output.WriteVector3(point);
+            }
+        }
+    };
+
+    /** @brief The reader half, which is what makes the written file mean anything. */
+    class WaypointListXnbReader final
+        : public Microsoft::Xna::Framework::Content::ContentTypeReader<WaypointList>
+    {
+    public:
+        WaypointListXnbReader()
+            : Microsoft::Xna::Framework::Content::ContentTypeReader<WaypointList>(
+                  "ExampleGame.WaypointList")
+        {
+        }
+
+    protected:
+        WaypointList Read(ContentReader& input,
+                          std::optional<WaypointList> existingInstance) override
+        {
+            static_cast<void>(existingInstance);
+            WaypointList result;
+            const std::int32_t count = input.ReadInt32();
+            input.CheckCollectionElementCount(count, getTargetTypeNameProperty());
+            for (std::int32_t index = 0; index < count; ++index)
+            {
+                result.points.push_back(input.ReadVector3());
+            }
+            return result;
+        }
+    };
+}
+
+TEST_F(XnbWriterTest, AGameCanRegisterItsOwnTypeWriterAndReaderAndRoundTripThroughThem)
+{
+    // This is the documented extension point, exercised rather than described: a type the
+    // built-in registry has never heard of, its own writer, its own reader, and a real file
+    // between them. Nothing in CNA's own registry is touched.
+    XnbTypeWriterRegistry registry;
+    RegisterBuiltInXnbWriters(registry);
+    registry.Register(std::make_shared<const WaypointListXnbWriter>());
+
+    ContentTypeReaderManager::AddTypeCreator(
+        "ExampleGame.Content.WaypointListReader",
+        [] { return std::make_unique<WaypointListXnbReader>(); });
+
+    WaypointList source;
+    source.points = {{1.0f, 2.0f, 3.0f}, {-4.0f, 5.5f, 6.25f}};
+
+    const std::vector<std::uint8_t> written = WriteXnbAsset(source, {}, "waypoints", registry);
+    const std::string text(written.begin(), written.end());
+    EXPECT_NE(text.find("ExampleGame.Content.WaypointListReader"), std::string::npos)
+        << "the custom reader name has to reach the type table";
+
+    const WaypointList read = LoadedXnb(written).ReadAsset<WaypointList>();
+    ASSERT_EQ(read.points.size(), source.points.size());
+    EXPECT_FLOAT_EQ(read.points[0].X, 1.0f);
+    EXPECT_FLOAT_EQ(read.points[1].Z, 6.25f);
+
+    // A custom writer gets the same ceilings and the same refusals the built-ins get, because it
+    // writes through the same XnbWriter rather than around it.
+    WaypointList huge;
+    XnbFileOptions options;
+    options.limits.maxCollectionElementCount = 1;
+    huge.points = {{0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}};
+    EXPECT_THROW((void)WriteXnbAsset(huge, options, "huge", registry), XnbWriteException);
+}

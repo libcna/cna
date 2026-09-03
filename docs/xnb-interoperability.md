@@ -284,7 +284,96 @@ Per-asset overrides, including `--format`, live in `.cna-content.json` beside th
 
 ---
 
-## 8. Reproducing every claim in this document
+## 8. Writing a type CNA does not know about
+
+The type-writer registry is keyed by C++ type and takes registrations from anywhere, so a game can
+put its own asset into an `.xnb` without changing CNA. Two halves are needed, and neither is
+optional: a writer, and a reader that gives the written bytes meaning.
+
+```cpp
+// The writer half. RequireCollectionCount(), the nesting-depth guard, the string ceilings and
+// every other limit apply to it exactly as they do to a built-in, because it writes *through*
+// XnbWriter rather than around it.
+class WaypointListXnbWriter final : public XnbTypeWriter<WaypointList>
+{
+public:
+    [[nodiscard]] XnbReaderIdentity ReaderIdentity() const override
+    {
+        XnbReaderIdentity identity;
+        identity.readerBaseName = "ExampleGame.Content.WaypointListReader";
+        identity.readerAssembly = XnbAssembly::None;   // not an XNA assembly, so unqualified
+        identity.targetBaseName = "ExampleGame.WaypointList";
+        identity.targetAssembly = XnbAssembly::None;
+        identity.evidence = XnbNameEvidence::DerivedRule;
+        return identity;
+    }
+
+    [[nodiscard]] bool IsSerializedByReference() const noexcept override { return true; }
+
+protected:
+    void Write(XnbWriter& output, const WaypointList& value) const override
+    {
+        output.RequireCollectionCount(value.points.size(), "WaypointListWriter");
+        output.WriteInt32(static_cast<std::int32_t>(value.points.size()));
+        for (const Vector3& point : value.points) { output.WriteVector3(point); }
+    }
+};
+
+XnbTypeWriterRegistry registry;
+RegisterBuiltInXnbWriters(registry);
+registry.Register(std::make_shared<const WaypointListXnbWriter>());
+
+// The reader half, registered under exactly the name the writer emits.
+ContentTypeReaderManager::AddTypeCreator(
+    "ExampleGame.Content.WaypointListReader",
+    [] { return std::make_unique<WaypointListXnbReader>(); });
+
+const std::vector<std::uint8_t> file = WriteXnbAsset(waypoints, {}, "waypoints", registry);
+```
+
+`XnbWriterTest.AGameCanRegisterItsOwnTypeWriterAndReaderAndRoundTripThroughThem` is exactly this,
+run end to end, including the check that a custom writer inherits the same ceilings the built-ins
+have.
+
+The same mechanism is how you register a generic instantiation CNA does not ship. Only the closed
+instantiations CNA's own runtime reader registry resolves are registered by default —
+`List<String>`, `List<Int32>`, `List<Char>`, `List<Rectangle>`, `List<Vector3>` and
+`Dictionary<String,Int32>` — so that a file this writer produces always has a reader on the other
+side. `List<Single>` is not a gap; it is one `registry.Register(...)` call plus its reader.
+
+At the pipeline level, a custom `ContentTypeWriter` reaches `.xnb` by returning
+`ContentOutputFormat::Xnb` from `OutputFormat()`. `docs/content-pipeline.md`'s **Custom
+extensions** section covers the rest of that contract — stable component identities, schema and
+codec versioning, and the source/toolchain compatibility model.
+
+---
+
+## 9. Provenance
+
+Every wire-format decision in this writer comes from one of three places, and nothing comes from a
+fourth.
+
+| Source | What came from it |
+|---|---|
+| **Committed fixtures, read as bytes** | Every reader type-name spelling and assembly qualifier, the object-dispatch protocol, the `Song` duration encoding, and the per-type field layouts. Each name carries a `XnbNameEvidence` value recording whether a genuine XNA 4.0 file, a MonoGame file, or the derived rule is behind it. |
+| **CNA's own reader** | The counterpart of every writer: the writer was built against the reader, which was written first and independently, and the round-trip tests are the check that they agree. |
+| **Published format descriptions** | The container header, 7-bit encoding, .NET `BinaryWriter` string encoding, the S3TC block layouts, the LZ4 block grammar, and the RIFF/WAVE chunk rules. |
+
+Nothing in the writer, the block-compression encoder, the LZ4 encoder, the `.spritefont` route or
+the independent conformance parser is derived from MonoGame's or FNA's implementation, and no
+Microsoft binary was decompiled. The MonoGame `.xnb` files in `tests/assets/xnb/` are used as
+**black-box fixtures** — bytes to read and compare against — and each carries a manifest recording
+its origin and licence (they are Ms-PL, the same licence as CNA).
+
+Third-party dependencies the pipeline introduces are recorded in `THIRD_PARTY_NOTICES.md`:
+**FreeType** (FreeType License; system-provided, linked only by the build-time module, and only for
+the `.spritefont` route) and the vendored **Liberation Mono** test font (SIL OFL 1.1, with
+`tests/assets/fonts/PROVENANCE.json` carrying upstream, distributor, SHA-256 and the reason it is
+in the tree). Both are build-time and test-time only; no CNA runtime module links or embeds either.
+
+---
+
+## 10. Reproducing every claim in this document
 
 ```bash
 # The writer's own unit tests, the round trips, and the golden comparison.
@@ -302,7 +391,7 @@ The parser shares no code, no headers and no constants with CNA. It was written 
 description, and it has already earned its keep: it caught a hand-written expectation manifest that
 claimed `CurveLoopType.Linear` was ordinal 1 when the file — correctly — said 4.
 
-## Running the XNA 4.0 harness
+## 11. Running the XNA 4.0 harness
 
 `tests/interop/xna40/` contains a .NET 4.0 console harness that loads every fixture in
 `tests/assets/xnb/cna/windows/uncompressed/` through a real `ContentManager` and asserts field
