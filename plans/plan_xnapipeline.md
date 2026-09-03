@@ -183,8 +183,10 @@ That is Phases B, C, most of D, E and G of this plan.
 
 - `Decimal`, `Enum<T>`, `T[]` and `Nullable<T>` are registered writers there. Here `Decimal` is
   recorded as absent (`XNAP-20`) and the array/nullable templates exist unregistered (`XNAP-22`).
-- `BoundingFrustum` has a writer there and none here.
+  *(`Decimal` ported — `XNAP-97`. `Enum<T>` — `XNAP-98`.)*
+- `BoundingFrustum` has a writer there and none here. *(Ported — `XNAP-97`.)*
 - The build manifest carries `rootReaderName` per output there (schema 9); here it does not.
+  *(`XNAP-99`.)*
 - Xbox 360 is simply **excluded from the writable platform set** there. Here it is writable and
   refused at write time with an opt-in (`XNAP-82`). Theirs is the smaller surface.
 
@@ -404,7 +406,7 @@ Legend: `[ ]` open · `[x]` complete · `[~]` partially complete (detail in the 
 
 | ID | Task | State |
 |---|---|---|
-| `XNAP-20` | Primitives: `Byte`, `SByte`, `Int16`, `UInt16`, `Int32`, `UInt32`, `Int64`, `UInt64`, `Single`, `Double`, `Boolean`, `Char`, `String`, `TimeSpan`, `DateTime`, `Decimal`. | [~] all but `Decimal`, which needs `System::Decimal` and is only available where sharp-runtime reports `SHARP_RUNTIME_HAS_NATIVE_INT128`; the reader has the same conditional. |
+| `XNAP-20` | Primitives: `Byte`, `SByte`, `Int16`, `UInt16`, `Int32`, `UInt32`, `Int64`, `UInt64`, `Single`, `Double`, `Boolean`, `Char`, `String`, `TimeSpan`, `DateTime`, `Decimal`. | [x] All sixteen. `Decimal` landed with `XNAP-97`, behind `SHARP_RUNTIME_HAS_NATIVE_INT128` — the same conditional the reader carries, so the type is absent on both sides together or present on both. |
 | `XNAP-21` | Framework value types: `Vector2/3/4`, `Matrix`, `Quaternion`, `Color`, `Point`, `Rectangle`, `Plane`, `BoundingBox`, `BoundingSphere`, `Ray`, `CurveKey`, `Curve`. | [x] |
 | `XNAP-22` | Collections: `T[]`, `List<T>`, `Dictionary<K,V>`, `Nullable<T>`, arbitrary nesting, element-count limits. | [~] `XnbListTypeWriter`, `XnbArrayTypeWriter`, `XnbDictionaryTypeWriter` and `XnbNullableTypeWriter` all exist and the list/dictionary instantiations CNA's runtime reader registry resolves are registered and tested. No `T[]` or `Nullable<T>` instantiation is registered by default, because no built-in CNA reader resolves one; registering one is the documented extension path. |
 | `XNAP-23` | `Texture2D`, `Texture3D`, `TextureCube` from `XnbTextureData`. | [x] |
@@ -497,6 +499,22 @@ Building a writer against the reader exposes disagreements the reader alone coul
 | `XNAP-94` | Provenance audit: no MonoGame/FNA/Microsoft implementation derivation; every fixture and dependency licensed and manifested. | [x] Audited and recorded in `docs/xnb-interoperability.md` §9. Every wire-format decision traces to one of three sources: committed fixtures read as **bytes**, CNA's own independently written reader, or a published format description. A grep of every file this plan added shows the only occurrences of "MonoGame" or "FNA" are `XnbNameEvidence::MonoGameFixture` values — a record of *which committed file a name was read out of*, which is data provenance rather than implementation derivation. Fixture inventory: 21 `.xnb` files, and all 21 are covered — 15 externally produced ones each carry a `.manifest.json` recording origin and licence (Ms-PL), and the 6 CNA-generated ones carry `.expected.json` manifests plus a corpus-level `fixtures.json`. New third-party dependencies: FreeType (FreeType License, system-provided, build-time module only) and the vendored Liberation Mono test font (SIL OFL 1.1, with a `PROVENANCE.json`), both in `THIRD_PARTY_NOTICES.md`, neither reachable from any runtime module. No Microsoft binary was decompiled. |
 | `XNAP-95` | Final reconciliation: every checkbox true, exact test totals everywhere, no contradictory numbers, no placeholder shells. | [~] Reconciled, and **not** every checkbox is true — which is the honest outcome rather than a failure to finish. Of 69 tasks: 57 `[x]`, 8 `[~]` with the remaining scope named in the row itself, 2 `[!]` blocked with the blocker named (`XNAP-34`, no XNA runtime; `XNAP-81`, no LZX encoder), 1 open owner decision (`XNAP-96`). Test totals appear in exactly one place, §0.4, and every other document points at it rather than restating a number that would go stale. No placeholder shells: every type in every capability table either has a writer with a test or is listed as absent with the reason. The one thing a reader should carry away is at the top of `docs/xnb-interoperability.md`: **nothing in this repository has been verified against a genuine Microsoft XNA 4.0 runtime**, because none exists here, and no table says otherwise. |
 | `XNAP-96` | **Owner decision:** should `premultiplyAlpha` default to `true`, as XNA 4.0's `TextureProcessor` does? CNA's `BlendState::AlphaBlend` -- `SpriteBatch`'s default -- is the premultiplied blend, so content built with CNA's current default renders with dark fringes under CNA's own default blend state unless the game selects `BlendState::NonPremultiplied`. Flipping it changes the bytes of every texture with alpha that any existing CNA project has built, and three equivalence contracts in this repository pin the current output (`Texture2DContentPipelineTest.IsByteIdenticalToTheUnchangedSourceProducer`, `.ColorKeyPolicyMatchesTheUnchangedProducerExactly`, `CnjContentPipelineTest.Texture2DConvergesOnTheExistingTextureProcessorAndWriter`). The capability is implemented and tested either way; only the default is the open question, and it is a project-wide policy call rather than an implementation detail. | [ ] |
+
+### Phase K — merging the two parallel implementations into one
+
+The `pipeline` branch was folded into this one on 2026-09-03 (merge commit with both parents, so
+its history is preserved and its ref can be retired). Where both branches had the same thing, this
+branch's implementation survived, because the surrounding code here — the asset writers, the
+`XnbAssetWriter` API, the golden tests — is written against it. Where `pipeline` had something this
+branch did not, it is ported task by task below rather than swallowed by the merge commit, so each
+arrives with its own tests.
+
+| ID | Task | Status |
+|---|---|---|
+| `XNAP-97` | Port `pipeline`'s `Decimal` and `BoundingFrustum` writers. | [x] `Decimal` writes the four Int32 words `System::IO::BinaryReader::ReadDecimal()` consumes — lo, mid, hi, flags — behind the same `SHARP_RUNTIME_HAS_NATIVE_INT128` guard as `DecimalReader`, so on a toolchain without a native 128-bit integer neither side exists rather than one silently degrading. `BoundingFrustum` is the one .NET **class** in the framework value-type group and is therefore registered `serializedByReference`; its payload is the source `Matrix` alone, with the planes and corners recomputed by the reading side's constructor. Both round-trip through CNA's own readers with the derived state asserted, not just the stored words. |
+| `XNAP-98` | Port `pipeline`'s `Enum<T>` writer support. | [ ] |
+| `XNAP-99` | Port `pipeline`'s manifest `rootReaderName` field (schema version 9). | [ ] |
+| `XNAP-9A` | Reconcile the two `docs/` sets: fold `pipeline`'s `docs/xna-content-pipeline.md` architecture and usage material into the surviving documents. | [ ] |
 
 ---
 

@@ -11,6 +11,7 @@
 
 #include "CNA/Internal/Xnb/CollectionContentTypeReaders.hpp"
 #include "Microsoft/Xna/Framework/BoundingBox.hpp"
+#include "Microsoft/Xna/Framework/BoundingFrustum.hpp"
 #include "Microsoft/Xna/Framework/BoundingSphere.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Curve.hpp"
@@ -28,6 +29,12 @@
 #include "CNA/Internal/Xnb/XnbWriter.hpp"
 #include "System/DateTime.hpp"
 #include "System/TimeSpan.hpp"
+
+// System::Decimal exists only where the compiler provides a native 128-bit integer, so its
+// writer -- like DecimalReader -- lives behind sharp-runtime's own capability macro.
+#if SHARP_RUNTIME_HAS_NATIVE_INT128
+#include "System/Decimal.hpp"
+#endif
 
 namespace CNA::Internal::Xnb
 {
@@ -459,6 +466,13 @@ namespace CNA::Internal::Xnb
     /** @brief Returns the reader identity for `Microsoft.Xna.Framework.Ray`. */
     template<> [[nodiscard]] XnbReaderIdentity
         XnbBuiltInReaderIdentity<Microsoft::Xna::Framework::Ray>();
+    /** @brief Returns the reader identity for `Microsoft.Xna.Framework.BoundingFrustum`. */
+    template<> [[nodiscard]] XnbReaderIdentity
+        XnbBuiltInReaderIdentity<Microsoft::Xna::Framework::BoundingFrustum>();
+#if SHARP_RUNTIME_HAS_NATIVE_INT128
+    /** @brief Returns the reader identity for `System.Decimal`. */
+    template<> [[nodiscard]] XnbReaderIdentity XnbBuiltInReaderIdentity<System::Decimal>();
+#endif
     /** @brief Returns the reader identity for `Microsoft.Xna.Framework.Curve`. */
     template<> [[nodiscard]] XnbReaderIdentity
         XnbBuiltInReaderIdentity<Microsoft::Xna::Framework::Curve>();

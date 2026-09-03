@@ -727,6 +727,76 @@ TEST_F(XnbWriterTest, EveryRemainingFrameworkValueTypeRoundTripsThroughTheReader
     EXPECT_FLOAT_EQ(readRay.Direction.Z, 1.0f);
 }
 
+TEST_F(XnbWriterTest, ABoundingFrustumRoundTripsAsItsMatrix)
+{
+    // BoundingFrustum is the one .NET *class* in the framework value-type group, so it is
+    // serialized by reference: a nested element carries its own dispatch index. The payload is
+    // the source Matrix alone -- the six planes and eight corners are recomputed by the
+    // constructor on the reading side, which is what makes that the whole of the stored state.
+    using Microsoft::Xna::Framework::BoundingFrustum;
+    using Microsoft::Xna::Framework::Matrix;
+    using Microsoft::Xna::Framework::Vector3;
+
+    const Matrix view = Matrix::CreateLookAt(Vector3{0.0f, 0.0f, 5.0f}, Vector3::Zero,
+                                             Vector3::Up);
+    const Matrix projection =
+        Matrix::CreatePerspectiveFieldOfView(1.0f, 1.25f, 1.0f, 100.0f);
+    const BoundingFrustum frustum{view * projection};
+
+    const BoundingFrustum read =
+        LoadedXnb(WriteXnbAsset(frustum)).ReadAsset<BoundingFrustum>();
+
+    const Matrix expected = frustum.getMatrixProperty();
+    const Matrix actual = read.getMatrixProperty();
+    EXPECT_FLOAT_EQ(actual.M11, expected.M11);
+    EXPECT_FLOAT_EQ(actual.M22, expected.M22);
+    EXPECT_FLOAT_EQ(actual.M33, expected.M33);
+    EXPECT_FLOAT_EQ(actual.M34, expected.M34);
+    EXPECT_FLOAT_EQ(actual.M43, expected.M43);
+
+    // The derived state has to come back with it, otherwise "round-trips" would only mean the
+    // matrix survived and not the object.
+    EXPECT_FLOAT_EQ(read.getNearProperty().D, frustum.getNearProperty().D);
+    EXPECT_FLOAT_EQ(read.getFarProperty().D, frustum.getFarProperty().D);
+}
+
+#if SHARP_RUNTIME_HAS_NATIVE_INT128
+TEST_F(XnbWriterTest, ADecimalRoundTripsAllFourWordsIncludingScaleAndSign)
+{
+    // Four Int32 words in the order BinaryWriter.Write(decimal) emits them: lo, mid, hi, flags.
+    // Scale and sign live in flags, so a value that exercises neither would pass while the word
+    // was dropped; -12345.678 has both, and a large hi word proves the third is not truncated.
+    const System::Decimal negativeWithScale(12345678, 0, 0, true, 3);
+    const System::Decimal read =
+        LoadedXnb(WriteXnbAsset(negativeWithScale)).ReadAsset<System::Decimal>();
+
+    SharpRuntime::intcs lo = 0;
+    SharpRuntime::intcs mid = 0;
+    SharpRuntime::intcs hi = 0;
+    SharpRuntime::intcs flags = 0;
+    System::Decimal::GetBits(read, lo, mid, hi, flags);
+    EXPECT_EQ(lo, 12345678);
+    EXPECT_EQ(mid, 0);
+    EXPECT_EQ(hi, 0);
+    EXPECT_EQ((static_cast<std::uint32_t>(flags) >> 16) & 0xFFu, 3u);
+    EXPECT_NE(static_cast<std::uint32_t>(flags) & 0x80000000u, 0u);
+    EXPECT_TRUE(read == negativeWithScale);
+
+    const System::Decimal wide(1, 2, 3, false, 0);
+    const System::Decimal readWide = LoadedXnb(WriteXnbAsset(wide)).ReadAsset<System::Decimal>();
+    System::Decimal::GetBits(readWide, lo, mid, hi, flags);
+    EXPECT_EQ(lo, 1);
+    EXPECT_EQ(mid, 2);
+    EXPECT_EQ(hi, 3);
+    EXPECT_EQ(flags, 0);
+
+    EXPECT_EQ(LoadedXnb(WriteXnbAsset(System::Decimal(0)))
+                  .ReadAsset<System::Decimal>()
+                  .ToString(),
+              System::Decimal(0).ToString());
+}
+#endif
+
 TEST_F(XnbWriterTest, TimeSpanAndDateTimeRoundTripThroughTheReader)
 {
     // Both are stored as a single Int64 of 100-nanosecond ticks. DateTime's top two bits carry

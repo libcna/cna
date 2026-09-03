@@ -158,14 +158,16 @@ which is why they are not the default.
 | `Char` | `CharReader` (UTF-8 encoded; a lone surrogate is refused) | ✅ | ✅ | — |
 | `String` | `StringReader` (7-bit-encoded UTF-8 byte length; invalid UTF-8 is refused) | ✅ | ✅ | — |
 | `TimeSpan`, `DateTime` | matching `…Reader` | ✅ | — | `DateTime`'s top two `Kind` bits are written as Unspecified, because `System::DateTime` does not model a kind; the reader masks them for the same reason. |
-| `Decimal` | — | ❌ | ❌ | — |
+| `Decimal` | `DecimalReader` | ✅ | — | Four Int32 words — lo, mid, hi, flags — behind `SHARP_RUNTIME_HAS_NATIVE_INT128`; see below. |
 | `Vector3`, `Matrix`, `Rectangle` | matching `…Reader` | ✅ | ✅ | — |
 | `Vector2`, `Vector4`, `Quaternion`, `Color`, `Point`, `Plane`, `BoundingBox`, `BoundingSphere`, `Ray` | matching `…Reader` | ✅ | — | The independent parser has no decoder for these yet; that is a gap in the parser, not in the writer. |
+| `BoundingFrustum` | `BoundingFrustumReader` | ✅ | — | The one .NET *class* in this group, so it is serialized by reference. The payload is the source `Matrix` alone; the planes and corners are recomputed on the reading side. |
 | `CurveKey`, `Curve` | `CurveReader` | ✅ | ✅ | — |
 
 `Decimal` needs `System::Decimal`, which sharp-runtime provides only where it reports
-`SHARP_RUNTIME_HAS_NATIVE_INT128`; CNA's **reader** has the same conditional, so this is a shared
-gap rather than a writer-only one.
+`SHARP_RUNTIME_HAS_NATIVE_INT128`. Both the writer and the reader carry that same conditional, so
+on a toolchain without a native 128-bit integer neither side exists and a `Decimal` cannot be
+written at all — the type is absent rather than silently degraded.
 
 ### 3.2 Collections
 

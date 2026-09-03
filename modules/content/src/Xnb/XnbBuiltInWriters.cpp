@@ -8,7 +8,12 @@
 #include <mutex>
 #include <utility>
 
+#include "Microsoft/Xna/Framework/BoundingFrustum.hpp"
 #include "Microsoft/Xna/Framework/CurveKey.hpp"
+
+#if SHARP_RUNTIME_HAS_NATIVE_INT128
+#include "System/Decimal.hpp"
+#endif
 
 namespace CNA::Internal::Xnb
 {
@@ -261,6 +266,22 @@ namespace CNA::Internal::Xnb
                                  XnbNameEvidence::DerivedRule);
     }
 
+    template<> XnbReaderIdentity XnbBuiltInReaderIdentity<
+        Microsoft::Xna::Framework::BoundingFrustum>()
+    {
+        return FrameworkIdentity("Microsoft.Xna.Framework.Content.BoundingFrustumReader",
+                                 "Microsoft.Xna.Framework.BoundingFrustum",
+                                 XnbNameEvidence::DerivedRule);
+    }
+
+#if SHARP_RUNTIME_HAS_NATIVE_INT128
+    template<> XnbReaderIdentity XnbBuiltInReaderIdentity<System::Decimal>()
+    {
+        return SystemIdentity("Microsoft.Xna.Framework.Content.DecimalReader", "System.Decimal",
+                              XnbNameEvidence::DerivedRule);
+    }
+#endif
+
     template<> XnbReaderIdentity XnbBuiltInReaderIdentity<Microsoft::Xna::Framework::Curve>()
     {
         return FrameworkIdentity("Microsoft.Xna.Framework.Content.CurveReader",
@@ -296,6 +317,25 @@ namespace CNA::Internal::Xnb
             [](XnbWriter& output, const SharpRuntime::charcs& value) { output.WriteChar(value); });
         AddFunctionWriter<std::string>(registry, true,
             [](XnbWriter& output, const std::string& value) { output.WriteString(value); });
+#if SHARP_RUNTIME_HAS_NATIVE_INT128
+        // Four Int32 words -- lo, mid, hi, flags -- exactly the layout
+        // System::IO::BinaryReader::ReadDecimal() consumes, so the two are exact inverses. The
+        // guard matches the reader's own: sharp-runtime provides System::Decimal only where it
+        // has native 128-bit integers, and DecimalReader is registered under the same condition.
+        AddFunctionWriter<System::Decimal>(registry, false,
+            [](XnbWriter& output, const System::Decimal& value)
+            {
+                SharpRuntime::intcs lo = 0;
+                SharpRuntime::intcs mid = 0;
+                SharpRuntime::intcs hi = 0;
+                SharpRuntime::intcs flags = 0;
+                System::Decimal::GetBits(value, lo, mid, hi, flags);
+                output.WriteInt32(static_cast<std::int32_t>(lo));
+                output.WriteInt32(static_cast<std::int32_t>(mid));
+                output.WriteInt32(static_cast<std::int32_t>(hi));
+                output.WriteInt32(static_cast<std::int32_t>(flags));
+            });
+#endif
         AddFunctionWriter<System::TimeSpan>(registry, false,
             [](XnbWriter& output, const System::TimeSpan& value)
             {
@@ -357,6 +397,14 @@ namespace CNA::Internal::Xnb
             {
                 output.WriteVector3(value.Position);
                 output.WriteVector3(value.Direction);
+            });
+        // A BoundingFrustum is a .NET *class*, unlike every other type in this group, so it is
+        // written by reference; its payload is the view-projection matrix it was built from,
+        // which is the only state the reader reconstructs it out of.
+        AddFunctionWriter<BoundingFrustum>(registry, true,
+            [](XnbWriter& output, const BoundingFrustum& value)
+            {
+                output.WriteMatrix(value.getMatrixProperty());
             });
         AddFunctionWriter<Curve>(registry, true,
             [](XnbWriter& output, const Curve& value)
