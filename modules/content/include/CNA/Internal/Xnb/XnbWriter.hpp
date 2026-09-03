@@ -51,11 +51,16 @@ namespace CNA::Internal::Xnb
         /**
          * @brief Creates a writer for one file.
          *
-         * @param registry Frozen type-writer registry that must outlive this writer.
-         * @param options Container-level configuration, already validated by the caller or
-         *                validated here.
+         * Constructing a writer **freezes** the registry, permanently and for every later user of
+         * it. That is deliberate and matches `ContentPipelineRegistry`: a registration accepted
+         * while a file is being written would change what later files in the same build contain,
+         * so the boundary is drawn once rather than defended at every lookup. Register everything
+         * first; the registry parameter is `const&` because freezing is the only mutation.
+         *
+         * @param registry Type-writer registry that must outlive this writer. Frozen here.
+         * @param options Container-level configuration, validated here.
          * @param assetName Logical asset name used in diagnostics only; never serialized.
-         * @throws XnbWriteException for an unsupported option combination.
+         * @throws XnbWriteException for an unsupported option combination or an invalid limit.
          */
         XnbWriter(const XnbTypeWriterRegistry& registry, XnbFileOptions options,
                   std::string assetName = {});
