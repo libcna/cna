@@ -23,6 +23,46 @@ already-built `.xnb` files. The task history and the per-decision record are in
 
 ---
 
+## 0. Where the code is
+
+Three layers, separated so that source decoding never leaks into serialization:
+
+| Layer | Namespace | Location | Role |
+|---|---|---|---|
+| Format | `CNA::Internal::Xnb` | `modules/content/{include/CNA/Internal/Xnb,src/Xnb}` | Writes the `.xnb` container and object graph. Knows nothing about PNG, WAV or glTF. |
+| Pipeline | `CNA::Content::Pipeline` | `modules/content/{include,src}/…/Pipeline` | Importers, processors, canonical content values, the build graph. Shared by both output formats. |
+| Build-time only | `CNA::Content::Pipeline` | `modules/content-pipeline/` | Font rasterization, block compression — linked by the compiler, never by the runtime. |
+| Tool | — | `tools/content`, `cmake/ToolContentPipeline.cmake` | `cna-content`, `cna_add_content()`. |
+
+```text
+                     source asset
+                          │
+                    ContentImporter          ← one per source kind, format-agnostic
+                          │
+                   ContentProcessor          ← policy: colour key, mips, resampling, conversion
+                          │
+              canonical content value        ← CnbTextureData, CnbSpriteFontData, Curve, …
+                          │
+        ┌─────────────────┴─────────────────┐
+   ContentTypeWriter                   XNB pipeline writer
+        │                                   │
+   Cnb::CnbWriter                      Xnb::XnbWriter
+        ▼                                   ▼
+      .cnb                                .xnb
+```
+
+The **importer and the processor are identical for both formats**; only the serializer differs.
+Forking processors per output format is the one mistake this design exists to prevent, so a
+format-specific limitation is resolved **in the writer**: the XNB texture writer picks an
+XNA-representable representation out of the canonical value and refuses with a named reason when
+none exists. A processor never learns which container it is feeding.
+
+`docs/content-pipeline.md` documents the build system itself — component selection, parameters,
+dependencies, the manifest, incremental builds, publication — all of which applies to both formats
+unchanged.
+
+---
+
 ## 1. Confidence vocabulary
 
 Every capability table uses these labels, and "supported" is never written without at least
