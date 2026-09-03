@@ -55,6 +55,7 @@ namespace CNA::Internal::Renderers::EasyGL
 #include <cstdlib>
 #include <functional>
 #include <iostream>
+#include <limits>
 #include <span>
 #include <unordered_map>
 
@@ -10831,6 +10832,31 @@ else
             return streams;
         }
 
+        // GLES and WebGL do not have CNA's desktop base-vertex entry point. Fold baseVertex into
+        // each per-vertex stream before its attributes are bound. This deliberately leaves
+        // instance streams at their own VertexOffset.
+        void ApplyCompiledEffectBaseVertex(
+            std::vector<EasyGLRenderer::CompiledEffectStreamEXT>& streams, int baseVertex)
+        {
+            if (baseVertex == 0) return;
+
+            const auto vertexOffset = static_cast<std::size_t>(baseVertex);
+            for (auto& stream : streams)
+            {
+                if (stream.instanceFrequency != 0) continue;
+                if (stream.stride != 0 &&
+                    vertexOffset >
+                        (std::numeric_limits<std::size_t>::max() - stream.baseByteOffset) /
+                            stream.stride)
+                {
+                    throw System::InvalidOperationException(
+                        "EasyGL compiled effect: baseVertex overflows a vertex-stream byte "
+                        "offset.");
+                }
+                stream.baseByteOffset += vertexOffset * stream.stride;
+            }
+        }
+
         /// A compiled effect's vertex shader declares arbitrary semantics, so a stride alone
         /// cannot describe its input. Every bound stream must therefore carry a real declaration.
         void RequireCompiledEffectDeclarations(
@@ -10964,8 +10990,12 @@ else
         {
             const auto& compiledVb = static_cast<const EasyGLVertexBufferRenderer&>(vb_in);
             const auto& compiledIb = static_cast<const EasyGLIndexBufferRenderer&>(ib_in);
-            const auto compiledStreams = CollectCompiledEffectStreams(compiledVb, params);
+            auto compiledStreams = CollectCompiledEffectStreams(compiledVb, params);
             RequireCompiledEffectDeclarations(compiledStreams);
+            const bool rebasePointers = params.baseVertex != 0 &&
+                ProfileRequiresBaseVertexPointerRebase();
+            if (rebasePointers)
+                ApplyCompiledEffectBaseVertex(compiledStreams, params.baseVertex);
             ::easygl::VertexArray& compiledVao = EnsureCompiledEffectVaoEXT();
             compiledVao.bind();
             const CompiledEffectDepthRangeScope compiledDepthRange(*this);
@@ -10979,26 +11009,16 @@ else
             const void* compiledIndexOffset = reinterpret_cast<const void*>(
                 static_cast<std::uintptr_t>(params.startIndex) *
                 static_cast<std::uintptr_t>(compiledIndexSize));
-            if (params.baseVertex == 0)
+            if (params.baseVertex == 0 || rebasePointers)
             {
                 device.draw_elements(ToEasyGl(primitive), compiledIndexCount, compiledIdxType,
                                      compiledIndexOffset);
             }
             else
             {
-if (ProfileRequiresBaseVertexPointerRebase())
-{
-                ShiftEnabledPerVertexAttribPointers(params.baseVertex, +1);
-                device.draw_elements(ToEasyGl(primitive), compiledIndexCount, compiledIdxType,
-                                     compiledIndexOffset);
-                ShiftEnabledPerVertexAttribPointers(params.baseVertex, -1);
-}
-else
-{
                 ::metagl::glDrawElementsBaseVertex(ToEasyGl(primitive), compiledIndexCount,
                                                    compiledIdxType, compiledIndexOffset,
                                                    params.baseVertex);
-}
             }
             compiledVao.unbind();
             return;
@@ -11145,8 +11165,12 @@ else
         {
             const auto& compiledVb = static_cast<const EasyGLVertexBufferRenderer&>(vb_in);
             const auto& compiledIb = static_cast<const EasyGLIndexBufferRenderer&>(ib_in);
-            const auto compiledStreams = CollectCompiledEffectStreams(compiledVb, params);
+            auto compiledStreams = CollectCompiledEffectStreams(compiledVb, params);
             RequireCompiledEffectDeclarations(compiledStreams);
+            const bool rebasePointers = params.baseVertex != 0 &&
+                ProfileRequiresBaseVertexPointerRebase();
+            if (rebasePointers)
+                ApplyCompiledEffectBaseVertex(compiledStreams, params.baseVertex);
             ::easygl::VertexArray& compiledVao = EnsureCompiledEffectVaoEXT();
             compiledVao.bind();
             const CompiledEffectDepthRangeScope compiledDepthRange(*this);
@@ -11160,7 +11184,7 @@ else
             const void* compiledIndexOffset = reinterpret_cast<const void*>(
                 static_cast<std::uintptr_t>(params.startIndex) *
                 static_cast<std::uintptr_t>(compiledIndexSize));
-            if (params.baseVertex == 0)
+            if (params.baseVertex == 0 || rebasePointers)
             {
                 device.draw_elements_instanced(ToEasyGl(primitive), compiledIndexCount,
                                                compiledIdxType, compiledIndexOffset,
@@ -11168,20 +11192,9 @@ else
             }
             else
             {
-if (ProfileRequiresBaseVertexPointerRebase())
-{
-                ShiftEnabledPerVertexAttribPointers(params.baseVertex, +1);
-                device.draw_elements_instanced(ToEasyGl(primitive), compiledIndexCount,
-                                               compiledIdxType, compiledIndexOffset,
-                                               instanceCount);
-                ShiftEnabledPerVertexAttribPointers(params.baseVertex, -1);
-}
-else
-{
                 ::metagl::glDrawElementsInstancedBaseVertex(
                     ToEasyGl(primitive), compiledIndexCount, compiledIdxType,
                     compiledIndexOffset, instanceCount, params.baseVertex);
-}
             }
             compiledVao.unbind();
             return;

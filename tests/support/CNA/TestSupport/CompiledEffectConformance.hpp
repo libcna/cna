@@ -789,24 +789,27 @@ namespace CNA::TestSupport
         // an easy mistake to make in a compiled route that has to rebuild its own binding.
         {
             const Vector4 tint(0.375f, 0.875f, 0.625f, 1.0f);
-            ClipVertex padded[9];
-            for (int i = 0; i < 3; ++i) padded[i] = ClipVertex{0.0f, 0.0f, 0.0f};
-            for (int i = 0; i < 6; ++i) padded[3 + i] = quad[i];
+            constexpr int kVertexPad = 12289;
+            std::vector<ClipVertex> padded(
+                kVertexPad + 6, ClipVertex{0.0f, 0.0f, 0.0f});
+            for (int i = 0; i < 6; ++i) padded[kVertexPad + i] = quad[i];
             const std::uint16_t paddedIndices[12] = {0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5};
 
-            VertexBuffer buffer(device, declaration, 9, BufferUsage::None);
-            buffer.SetDataRaw(padded, 9, static_cast<int>(sizeof(ClipVertex)));
+            VertexBuffer buffer(device, declaration, static_cast<int>(padded.size()),
+                                BufferUsage::None);
+            buffer.SetDataRaw(padded.data(), static_cast<int>(padded.size()),
+                              static_cast<int>(sizeof(ClipVertex)));
             IndexBuffer indexBuffer(device, IndexElementSize::SixteenBits, 12, BufferUsage::None);
             indexBuffer.SetData(paddedIndices, 12);
             const Color pixel = drawAndReadCentre(tint, [&] {
                 device.SetVertexBuffer(&buffer);
                 device.setIndicesProperty(&indexBuffer);
                 device.DrawIndexedPrimitives(PrimitiveType::TriangleList,
-                                             /*baseVertex=*/3, /*minVertexIndex=*/0,
+                                             /*baseVertex=*/kVertexPad, /*minVertexIndex=*/0,
                                              /*numVertices=*/6, /*startIndex=*/6,
                                              /*primitiveCount=*/2);
             });
-            expectPixel(pixel, tint, "buffered indexed, baseVertex 3 / startIndex 6");
+            expectPixel(pixel, tint, "buffered indexed, large baseVertex / startIndex 6");
             device.setIndicesProperty(nullptr);
             device.SetVertexBuffer(nullptr);
         }

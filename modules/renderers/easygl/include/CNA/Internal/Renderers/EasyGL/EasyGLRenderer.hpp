@@ -1307,8 +1307,8 @@ namespace CNA::Internal::Renderers::EasyGL
          *
          * plans/plan_fx.md FX-082: a compiled effect's vertex shader declares arbitrary semantics, and
          * XNA lets any of them come from any bound `VertexBufferBinding`. Each stream therefore
-         * carries its own buffer, its own stride, its own `VertexOffset` in bytes and its own
-         * instance frequency -- never the combined-layout stride the stock programs dispatch on.
+         * carries its own buffer, its own stride, its own starting byte offset and its own instance
+         * frequency -- never the combined-layout stride the stock programs dispatch on.
          */
         struct CompiledEffectStreamEXT
         {
@@ -1316,7 +1316,10 @@ namespace CNA::Internal::Renderers::EasyGL
             const EasyGLVertexBufferRenderer* buffer = nullptr;
             /** @brief Bytes between consecutive records inside this buffer. */
             std::size_t stride = 0;
-            /** @brief `VertexOffset * stride`, the byte offset of this stream's first record. */
+            /**
+             * @brief Byte offset of this stream's first record; base-vertex-less profiles fold the
+             * indexed draw's `baseVertex` into per-vertex streams before binding.
+             */
             std::size_t baseByteOffset = 0;
             /** @brief `InstanceFrequency`; 0 means the stream advances once per vertex. */
             unsigned int instanceFrequency = 0;
