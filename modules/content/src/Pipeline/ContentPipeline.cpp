@@ -970,8 +970,73 @@ namespace CNA::Content::Pipeline
         const std::string routeText =
             std::string(ContentOutputFormatName(format)) + " output of processed type '" +
             inputType + "'";
-        return ResolveByRoute(writers_, writersByInputType_, route, routeText, explicitName,
-                              "writer", "the");
+        try
+        {
+            return ResolveByRoute(writers_, writersByInputType_, route, routeText, explicitName,
+                                  "writer", "the");
+        }
+        catch (const std::logic_error& error)
+        {
+            // A documented absence is a decision, and a user who hits one deserves the decision
+            // rather than the symptom (XNAP-61).
+            const auto absence = absentWriters_.find(route);
+            if (absence == absentWriters_.end()) { throw; }
+            throw std::logic_error(std::string(error.what()) + " " + absence->second);
+        }
+    }
+
+    void ContentPipelineRegistry::DocumentAbsentWriter(const ContentOutputFormat format,
+                                                       const std::string& inputType,
+                                                       const std::string& reason)
+    {
+        const std::unique_lock lock(configurationMutex_);
+        RequireMutable();
+        if (inputType.empty())
+        {
+            throw std::invalid_argument(
+                "DocumentAbsentWriter(): the processed type must not be empty.");
+        }
+        if (reason.empty())
+        {
+            throw std::invalid_argument("DocumentAbsentWriter(): '" + inputType +
+                                        "' needs a reason; an undocumented absence is the thing "
+                                        "this exists to prevent.");
+        }
+        const std::pair<ContentOutputFormat, std::string> route{format, inputType};
+        const auto writer = writersByInputType_.find(route);
+        if (writer != writersByInputType_.end() && !writer->second.empty())
+        {
+            throw std::logic_error(std::string(ContentOutputFormatName(format)) +
+                                   " output of processed type '" + inputType +
+                                   "' has a writer, so its absence cannot be documented.");
+        }
+        if (!absentWriters_.emplace(route, reason).second)
+        {
+            throw std::logic_error(std::string(ContentOutputFormatName(format)) +
+                                   " output of processed type '" + inputType +
+                                   "' already documents why it has no writer.");
+        }
+    }
+
+    std::string ContentPipelineRegistry::AbsentWriterReason(
+        const ContentOutputFormat format, const std::string& inputType) const
+    {
+        const std::shared_lock lock(configurationMutex_);
+        const auto absence = absentWriters_.find({format, inputType});
+        return absence == absentWriters_.end() ? std::string{} : absence->second;
+    }
+
+    std::vector<std::tuple<ContentOutputFormat, std::string, std::string>>
+    ContentPipelineRegistry::AbsentWriters() const
+    {
+        const std::shared_lock lock(configurationMutex_);
+        std::vector<std::tuple<ContentOutputFormat, std::string, std::string>> absences;
+        absences.reserve(absentWriters_.size());
+        for (const auto& [route, reason] : absentWriters_)
+        {
+            absences.emplace_back(route.first, route.second, reason);
+        }
+        return absences;
     }
 
     namespace

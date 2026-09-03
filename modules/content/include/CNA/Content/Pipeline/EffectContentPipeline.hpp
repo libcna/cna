@@ -109,4 +109,15 @@ namespace CNA::Content::Pipeline
      * @param registry Explicit registry to configure before builds begin.
      */
     void RegisterCompiledEffectContentPipeline(ContentPipelineRegistry& registry);
+
+    /**
+     * @brief Returns why a compiled Effect deliberately has no CNB writer.
+     *
+     * Both routes that produce a compiled Effect -- `.fxb` and `.fx` -- document the same absence,
+     * and a user who asks for `--format cnb` sees this sentence rather than only the symptom. One
+     * function so the two routes cannot drift into two explanations of one decision.
+     *
+     * @return The reason, as a complete sentence.
+     */
+    [[nodiscard]] const char* CompiledEffectHasNoCnbSchemaReason();
 }

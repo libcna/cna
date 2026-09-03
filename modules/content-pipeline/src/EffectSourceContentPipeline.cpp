@@ -478,5 +478,13 @@ namespace CNA::Content::Pipeline
         if (compiler == nullptr) { compiler = MakeExternalEffectCompiler(); }
         registry.RegisterImporter(std::make_shared<EffectSourceImporter>());
         registry.RegisterProcessor(std::make_shared<EffectSourceProcessor>(std::move(compiler)));
+        // The same processed type the `.fxb` route produces, so the same documented absence --
+        // registered here too because either route may be the only one a registry has.
+        if (registry.AbsentWriterReason(ContentOutputFormat::Cnb,
+                                        ProcessedCompiledEffectType).empty())
+        {
+            registry.DocumentAbsentWriter(ContentOutputFormat::Cnb, ProcessedCompiledEffectType,
+                                          CompiledEffectHasNoCnbSchemaReason());
+        }
     }
 }

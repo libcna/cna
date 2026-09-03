@@ -132,9 +132,25 @@ namespace CNA::Content::Pipeline
         return ContentValue::Create(ProcessedCompiledEffectType, std::move(imported));
     }
 
+    /** @brief The one sentence every route producing a compiled Effect gives for the CNB refusal. */
+    const char* CompiledEffectHasNoCnbSchemaReason()
+    {
+        return "The CNB container reserves an Effect identifier and deliberately has no schema "
+               "for one: a .cnb carrying Direct3D 9 shader bytecode would be unloadable on every "
+               "CNA renderer that is not Direct3D 9, which is the opposite of what a native "
+               "container is for. Build effects with --format xnb, where the bytecode has a "
+               "runtime that consumes it.";
+    }
+
     void RegisterCompiledEffectContentPipeline(ContentPipelineRegistry& registry)
     {
         registry.RegisterImporter(std::make_shared<CompiledEffectImporter>());
         registry.RegisterProcessor(std::make_shared<CompiledEffectProcessor>());
+        if (registry.AbsentWriterReason(ContentOutputFormat::Cnb,
+                                        ProcessedCompiledEffectType).empty())
+        {
+            registry.DocumentAbsentWriter(ContentOutputFormat::Cnb, ProcessedCompiledEffectType,
+                                          CompiledEffectHasNoCnbSchemaReason());
+        }
     }
 }

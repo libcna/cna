@@ -23,7 +23,9 @@
 #include "CNA/Content/Pipeline/CnjContentPipeline.hpp"
 #include "CNA/Content/Pipeline/ContentCompiler.hpp"
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
+#include "CNA/Content/Pipeline/EffectCompilerService.hpp"
 #include "CNA/Content/Pipeline/EffectContentPipeline.hpp"
+#include "CNA/Content/Pipeline/EffectSourceContentPipeline.hpp"
 #include "CNA/Content/Pipeline/ModelContentPipeline.hpp"
 #include "CNA/Content/Pipeline/SongContentPipeline.hpp"
 #include "CNA/Content/Pipeline/SoundEffectContentPipeline.hpp"
@@ -64,6 +66,16 @@ namespace
 
         /** @brief Container options applied to every `.xnb` this invocation writes. */
         CNA::Internal::Xnb::XnbFileOptions xnbOptions;
+
+        /** @brief Build-tool service selection this invocation registers its routes with. */
+        Pipeline::ContentCompilerOptions services;
+
+        /** @brief Whether the command line named an effect compiler or launcher explicitly. */
+        [[nodiscard]] bool SelectsEffectCompiler() const
+        {
+            return !services.effectCompilerExecutable.empty() ||
+                   !services.effectCompilerLauncher.empty();
+        }
     };
 
     constexpr std::size_t MaxContentCompilerWorkers = 64u;
@@ -230,7 +242,9 @@ namespace
                "         [--xnb-platform <name>] [--xnb-version 4|5]\n"
                "         [--xnb-profile reach|hidef] [--xnb-compress none|lzx|lz4]\n"
                "         [--xnb-reader-names xna40|portable]\n"
-               "         [--xnb-allow-unverified-xbox] [--explain] [--quiet]\n"
+               "         [--xnb-allow-unverified-xbox]\n"
+               "         [--fx-compiler <path>] [--fx-compiler-launcher <program>]\n"
+               "         [--explain] [--quiet]\n"
             << "       cna-content clean <output-directory> [--quiet]\n\n"
             << "Builds source content through Importer -> Processor -> Content Type Writer.\n"
             << "--format selects the compiled container: CNA's native .cnb (the default) or the\n"
@@ -256,7 +270,12 @@ namespace
                "uncompressed LZX blocks are not emitted; neither is needed for a conforming\n"
                "stream. --xnb-compress lz4 is a later-ecosystem extension that XNA 4.0 never\n"
                "produced, and is refused on an XNA 4.0 target platform for that reason.\n"
-               "Compression is deterministic: the same payload always produces the same bytes.\n";
+               "Compression is deterministic: the same payload always produces the same bytes.\n\n"
+            << "A .fx source is compiled by an external fxc-compatible compiler; a .fxb is\n"
+               "already-compiled bytecode and needs none. --fx-compiler names the compiler and\n"
+               "--fx-compiler-launcher a program to run it through, such as wine. Each has the\n"
+               "highest precedence in its own order: the option, then CNA_FXC / CNA_FXC_LAUNCHER\n"
+               "in the environment, then the path baked in by CMake, then fxc on PATH.\n";
     }
 
     std::size_t ParseWorkerCount(const std::filesystem::path& argument)
@@ -490,6 +509,33 @@ namespace
                     throw std::invalid_argument(
                         "--xnb-compress must be 'none', 'lzx' or 'lz4', not '" + name + "'.");
                 }
+            }
+            else if (IsOption(argument, "--fx-compiler"))
+            {
+                if (++index >= arguments.size())
+                {
+                    throw std::invalid_argument(
+                        "--fx-compiler requires a path to an fxc-compatible effect compiler.");
+                }
+                if (arguments[index].empty())
+                {
+                    throw std::invalid_argument("--fx-compiler path must not be empty.");
+                }
+                command.services.effectCompilerExecutable = arguments[index];
+            }
+            else if (IsOption(argument, "--fx-compiler-launcher"))
+            {
+                if (++index >= arguments.size())
+                {
+                    throw std::invalid_argument(
+                        "--fx-compiler-launcher requires a program to run the compiler through, "
+                        "such as 'wine'.");
+                }
+                if (arguments[index].empty())
+                {
+                    throw std::invalid_argument("--fx-compiler-launcher path must not be empty.");
+                }
+                command.services.effectCompilerLauncher = arguments[index];
             }
             else if (IsOption(argument, "--xnb-reader-names"))
             {
@@ -2035,7 +2081,7 @@ namespace
     }
 
     int Run(const std::vector<std::filesystem::path>& arguments,
-            std::shared_ptr<Pipeline::ContentPipelineRegistry> mutableRegistry)
+            const Pipeline::ContentPipelineRegistryFactory& createRegistry)
     {
         CommandLine command;
         try
@@ -2049,6 +2095,26 @@ namespace
             return 2;
         }
         if (command.operation == ContentCommand::Clean) { return RunClean(command); }
+
+        // The registry is built here, after parsing, because a route whose backend is an external
+        // program cannot be registered before that program has been chosen: the backend's identity
+        // enters the incremental fingerprint. Nothing is retained between calls, which is what
+        // makes two invocations in one process with different --fx-compiler paths independent.
+        std::shared_ptr<Pipeline::ContentPipelineRegistry> mutableRegistry;
+        try
+        {
+            mutableRegistry = createRegistry(command.services);
+        }
+        catch (const std::exception& error)
+        {
+            std::cerr << "error: " << error.what() << "\n";
+            return 2;
+        }
+        if (mutableRegistry == nullptr)
+        {
+            std::cerr << "error: the content pipeline registry factory returned null.\n";
+            return 2;
+        }
 
         // The XNB writers are bound to the container options this invocation selected, which is
         // what puts those options into each writer's own build version and therefore into the
@@ -2583,7 +2649,8 @@ namespace
 
 namespace CNA::Content::Pipeline
 {
-    void RegisterBuiltInContentPipeline(ContentPipelineRegistry& registry)
+    void RegisterBuiltInContentPipeline(ContentPipelineRegistry& registry,
+                                        const ContentCompilerOptions& options)
     {
         RegisterTexture2DContentPipeline(registry, MakeBlockCompressionTextureEncoder());
         RegisterSoundEffectContentPipeline(registry);
@@ -2594,6 +2661,11 @@ namespace CNA::Content::Pipeline
         RegisterXnbContentPipeline(registry);
         RegisterSpriteFontSourceContentPipeline(registry);
         RegisterCompiledEffectContentPipeline(registry);
+
+        ExternalEffectCompilerOptions compiler;
+        compiler.executable = options.effectCompilerExecutable;
+        compiler.launcher = options.effectCompilerLauncher;
+        RegisterEffectSourceContentPipeline(registry, MakeExternalEffectCompiler(compiler));
     }
 
     int RunContentCompiler(const std::vector<std::filesystem::path>& arguments,
@@ -2603,6 +2675,31 @@ namespace CNA::Content::Pipeline
         {
             throw std::invalid_argument("RunContentCompiler(): registry must not be null.");
         }
-        return Run(arguments, std::move(registry));
+        return Run(arguments, [&registry](const ContentCompilerOptions& options)
+        {
+            if (options != ContentCompilerOptions{})
+            {
+                // Refusing beats ignoring: the registry was configured before this command line
+                // existed, so the compiler it holds is not the one being asked for.
+                throw std::invalid_argument(
+                    "--fx-compiler and --fx-compiler-launcher select a build-time service, so "
+                    "they can only be applied while the pipeline is being registered. This "
+                    "compiler was handed an already-configured registry. Use the "
+                    "RunContentCompiler() overload that takes a "
+                    "ContentPipelineRegistryFactory, which is called with these options.");
+            }
+            return registry;
+        });
+    }
+
+    int RunContentCompiler(const std::vector<std::filesystem::path>& arguments,
+                           const ContentPipelineRegistryFactory& createRegistry)
+    {
+        if (!createRegistry)
+        {
+            throw std::invalid_argument(
+                "RunContentCompiler(): the registry factory must not be empty.");
+        }
+        return Run(arguments, createRegistry);
     }
 } // namespace CNA::Content::Pipeline

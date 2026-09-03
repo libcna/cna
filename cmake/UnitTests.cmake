@@ -291,7 +291,11 @@ if(CNA_BUILD_TESTS)
     # plans/plan_xnapipeline.md XNAP-90: cna_content_pipeline is the build-time-only module (the
     # FreeType-backed .spritefont route). It is deliberately absent from the CNA runtime umbrella,
     # so this group names it explicitly and CnaTests links it separately below.
-    set(CNA_TEST_GROUP_DEPENDENCY_content_pipeline cna_content_pipeline)
+    # XNAP-A5: cna_content_compiler carries RunContentCompiler(), which the .fx product-route
+    # tests drive directly rather than through a manually assembled registry. Both are build-time
+    # libraries; neither is in a game's link closure, which XnbRuntimeDependencyBoundaryTest
+    # asserts rather than assumes.
+    set(CNA_TEST_GROUP_DEPENDENCY_content_pipeline cna_content_pipeline cna_content_compiler)
     set(CNA_TEST_GROUP_DEPENDENCY_core cna_core)
     set(CNA_TEST_GROUP_DEPENDENCY_devices cna_devices)
     set(CNA_TEST_GROUP_DEPENDENCY_devices_ext cna_devices_ext)
@@ -420,6 +424,9 @@ if(CNA_BUILD_TESTS)
     # consumes every group's objects, so it needs that one library named explicitly.
     if(TARGET cna_content_pipeline)
         target_link_libraries(CnaTests PRIVATE cna_content_pipeline)
+    endif()
+    if(TARGET cna_content_compiler)
+        target_link_libraries(CnaTests PRIVATE cna_content_compiler)
     endif()
 
     # mingw-w64's <cmath> only exposes M_PI when _USE_MATH_DEFINES is set (unlike glibc, which
@@ -635,6 +642,18 @@ if(CNA_BUILD_TESTS)
         add_dependencies(${CNA_TEST_OBJECT_TARGET_net} cna_net_gamerservices_dispatcher_harness)
         target_compile_definitions(${CNA_TEST_OBJECT_TARGET_net} PRIVATE
             CNA_NET_GAMERSERVICES_HANG_HARNESS_PATH="$<TARGET_FILE:cna_net_gamerservices_dispatcher_harness>"
+        )
+    endif()
+
+    if(TARGET cna_fake_effect_compiler)
+        # plans/plan_xnapipeline.md XNAP-A5: EffectSourceCommandLineTests.cpp drives the real
+        # `.fx` product route with this program as the compiler, so it needs its path baked in --
+        # same reasoning as cna_net_two_process_harness above. Baked in unconditionally so the
+        # tests are required rather than silently skipped: a route test that skips when the
+        # repository supplies its own prerequisite proves nothing.
+        add_dependencies(${CNA_TEST_OBJECT_TARGET_content_pipeline} cna_fake_effect_compiler)
+        target_compile_definitions(${CNA_TEST_OBJECT_TARGET_content_pipeline} PRIVATE
+            CNA_FAKE_EFFECT_COMPILER_PATH="$<TARGET_FILE:cna_fake_effect_compiler>"
         )
     endif()
 

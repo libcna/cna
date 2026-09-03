@@ -11,6 +11,7 @@
 #include <shared_mutex>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <typeindex>
 #include <utility>
 #include <variant>
@@ -994,6 +995,43 @@ namespace CNA::Content::Pipeline
             const std::string& inputType, const std::string& explicitName = {},
             ContentOutputFormat format = ContentOutputFormat::Cnb) const;
 
+        /**
+         * @brief Records why one container deliberately has no writer for a processed type
+         *        (plans/plan_xnapipeline.md `XNAP-61`).
+         *
+         * A missing writer and a *deliberately absent* one produce the same failure otherwise --
+         * "no writer is registered" -- which tells a user nothing about whether they hit an
+         * omission or a decision. Registering the reason makes ResolveWriter() say which, and
+         * makes the decision enumerable rather than something a reader has to find in a plan.
+         *
+         * @param format Container that has no writer for @p inputType.
+         * @param inputType Stable processed type identity.
+         * @param reason Why the combination cannot exist. Must not be empty.
+         * @throws std::invalid_argument if @p inputType or @p reason is empty.
+         * @throws std::logic_error if the registry is frozen, if a writer for the same route is
+         *         already registered, or if the same absence is documented twice.
+         */
+        void DocumentAbsentWriter(ContentOutputFormat format, const std::string& inputType,
+                                  const std::string& reason);
+
+        /**
+         * @brief Returns the documented reason a route has no writer, or an empty string.
+         *
+         * @param format Container to ask about.
+         * @param inputType Stable processed type identity.
+         * @return The recorded reason, or an empty string when none was recorded.
+         */
+        [[nodiscard]] std::string AbsentWriterReason(ContentOutputFormat format,
+                                                     const std::string& inputType) const;
+
+        /**
+         * @brief Returns every documented writer absence, ordered by container then type.
+         *
+         * @return One (format, processed type, reason) triple per documented absence.
+         */
+        [[nodiscard]] std::vector<std::tuple<ContentOutputFormat, std::string, std::string>>
+        AbsentWriters() const;
+
     private:
         void RequireMutable() const;
 
@@ -1002,6 +1040,7 @@ namespace CNA::Content::Pipeline
         std::map<std::string, std::shared_ptr<const ContentImporter>> importers_;
         std::map<std::string, std::shared_ptr<const ContentProcessor>> processors_;
         std::map<std::string, std::shared_ptr<const ContentTypeWriter>> writers_;
+        std::map<std::pair<ContentOutputFormat, std::string>, std::string> absentWriters_;
         std::map<std::string, std::set<std::string>> importersByExtension_;
         std::map<std::string, std::set<std::string>> processorsByInputType_;
         std::map<std::pair<ContentOutputFormat, std::string>, std::set<std::string>>

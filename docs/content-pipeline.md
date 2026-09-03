@@ -377,12 +377,70 @@ canonical type name, and loader through `ContentManager::RegisterCnbLoaderEXT<T>
 | `.cnj` Curve | `CNA.CnjImporter/1` | `ImportedCurve` | `CNA.CurveProcessor/1` | `CNA.CurveContentWriter/1` |
 | `.cnj` AnimationClip | `CNA.CnjImporter/1` | `ImportedAnimationClip` | `CNA.AnimationClipProcessor/1` | `CNA.AnimationClipContentWriter/1` |
 | `.xnb` supported built-in root | `CNA.XnbImporter/3` | existing imported type selected by validated root reader | existing type processor (plus metadata/deployment `CNA.XnbVideoProcessor/2`) | existing native built-in writer/codec; Model selects schema 1 or 2 exactly |
+| `.spritefont` | `CNA.FontDescriptionImporter/1` | `ImportedSpriteFont` | `CNA.FontDescriptionProcessor/1` | `CNA.SpriteFontContentWriter/1` |
+| `.fxb` | `CNA.CompiledEffectImporter/1` | `ImportedCompiledEffect` | `CNA.CompiledEffectProcessor/1` | `CNA.XnbEffectWriter/1` (`--format xnb` only) |
+| `.fx` | `CNA.EffectSourceImporter/1` | `ImportedEffectSource` | `CNA.EffectSourceProcessor/1` | `CNA.XnbEffectWriter/1` (`--format xnb` only) |
 
 DDS is currently a contained TextureCube CNJ sidecar, not a direct default route. `.wav` remains
 the unambiguous SoundEffect route; it is not also registered as Song. `.ogg` remains the
 unambiguous Song route even though FNA's legacy Video reader can probe one; ordinary Video formats
-use the non-colliding route above. Effect remains intentionally outside this project until CNA's
-shader/FX architecture is settled.
+use the non-colliding route above.
+
+### Effects: `.fxb` and `.fx`
+
+The two effect routes differ in exactly one thing — whether CNA has to run a compiler — and
+converge on one processed type and one writer, so nothing downstream can tell them apart:
+
+* **`.fxb` is already-compiled bytecode.** The importer checks that the file begins with an Effect
+  Framework 9.1 signature (optionally behind XNA 4.0's own wrapper token) and refuses anything
+  else. **No compiler is involved**, so this route always works.
+* **`.fx` is source**, and needs an external `fxc`-compatible compiler. CNA does not embed an HLSL
+  compiler and will not; the importer resolves and records the `#include` tree (so a changed header
+  rebuilds the effects that include it) and the processor drives the compiler across a process
+  boundary. Output that is not an Effect Framework 9.1 container is refused rather than written
+  into an `.xnb` claiming to be an XNA `Effect`.
+
+Both produce `Effect` **only for `--format xnb`**. The CNB container reserves an `Effect`
+identifier and deliberately has no schema for one: a `.cnb` carrying Direct3D 9 shader bytecode
+would be unloadable on every CNA renderer that is not Direct3D 9. Asking for `--format cnb` says
+so.
+
+#### Selecting the compiler
+
+```
+cna-content build Content -o bin --format xnb \
+    --fx-compiler "C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Utilities\bin\x86\fxc.exe" \
+    --fx-compiler-launcher wine
+```
+
+`--fx-compiler-launcher` names a program to run the compiler *through*; `wine` is the ordinary
+choice on a non-Windows build machine. Each option has the highest precedence in its own order:
+
+| Rank | Compiler | Launcher |
+|---|---|---|
+| 1 | `--fx-compiler` | `--fx-compiler-launcher` |
+| 2 | `CNA_FXC` in the environment | `CNA_FXC_LAUNCHER` in the environment |
+| 3 | `-DCNA_FXC_EXECUTABLE` at configure time | `-DCNA_FXC_LAUNCHER` at configure time |
+| 4 | `fxc` / `fxc.exe` on `PATH` | none |
+
+The compiler is probed once per invocation, and the identity it reports enters the build
+fingerprint, so switching compilers rebuilds rather than reusing artifacts a different one
+produced. A build with no usable compiler fails at the first `.fx` with one complete explanation —
+the discovery order above and how to satisfy it — rather than once per asset.
+
+`--fx-compiler` selects a **build-time service**, so it must reach the pipeline while it is being
+registered. A library embedding `RunContentCompiler()` therefore passes a
+`ContentPipelineRegistryFactory`, which the coordinator calls after parsing; handing it an
+already-configured registry together with `--fx-compiler` is refused rather than silently ignored.
+
+Processor parameters are the ordinary generic ones — `profile` (`reach`/`hidef`), `defines` and
+`debug` — set per asset in `.cna-content.json` like any other processor's. Each participates in
+the fingerprint, so changing one rebuilds.
+
+**Not verified against a genuine Microsoft `fxc`.** None exists in the environment this was
+written in. The route's own tests substitute the compiler, or drive a project-owned stand-in
+across a real process boundary; neither is a claim about `fxc` compatibility
+(`plans/plan_xnapipeline.md` `XNAP-A4`).
 
 ### glTF scenes and generated children
 
