@@ -187,6 +187,24 @@ namespace CNA::Internal::Xnb
         void RequireCollectionCount(std::size_t count, const std::string& readerName) const;
 
         /**
+         * @brief Refuses to write a payload whose byte order this build does not produce
+         *        (plans/plan_xnapipeline.md `XNAP-82`).
+         *
+         * The Xbox 360 is big-endian. CNA has one piece of Xbox-specific payload handling -- the
+         * `SoundEffect` WAVEFORMATEX byte swap -- and nothing else, so an `x`-targeted file is
+         * Windows-layout bytes under an Xbox header unless a writer has explicitly done the work.
+         * Every asset writer calls this, and the one that has done the work says so by passing
+         * `true`. `XnbFileOptions::allowUnverifiedXboxPayloads` overrides it for somebody with
+         * real hardware to test against.
+         *
+         * @param readerName Writer name used in the failure message.
+         * @param handlesXboxByteOrder Whether this writer implements the target's byte order.
+         * @throws XnbWriteException when the target is Xbox 360 and neither condition holds.
+         */
+        void RequireVerifiedPlatformPayload(const std::string& readerName,
+                                            bool handlesXboxByteOrder = false) const;
+
+        /**
          * @brief Interns one reader identity into the type-reader table.
          *
          * @param writer The type writer whose reader must appear in the table.

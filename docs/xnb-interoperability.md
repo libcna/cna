@@ -81,12 +81,23 @@ XNA 4.0 runtime ever produced or consumed, and CNA's API, CLI help and diagnosti
 combinations that are contradictory on their face — LZ4 compression on an XNA 4.0 target platform,
 for instance, because that pairing describes a file that cannot exist.
 
-**Writing `x` into the header is not Xbox 360 support.** The 360 is big-endian and its texture
-memory is tiled; a real Xbox 360 asset differs from a Windows one in more than one byte. What CNA
-currently does for `x` is byte-swap the `SoundEffect` WAVEFORMATEX fields, and that is *all*, so an
-`x`-targeted texture or model is **not** verified and should be treated as unsupported until
-`XNAP-82` says otherwise. Windows Phone (`m`) has the same status pending `XNAP-83`: the header can
-be emitted, the semantics are not verified.
+**Writing `x` into the header is not Xbox 360 support, and the writer now refuses to pretend it
+is.** The 360 is big-endian. CNA has exactly one piece of Xbox-specific payload handling — the
+`SoundEffect` WAVEFORMATEX fields are byte-swapped — and nothing else is: not a texture's `Int32`
+dimension fields, not a model's bone table, not even the sound's own sample bytes, which CNA's
+**reader** already refuses to transcode out of an Xbox file for exactly that reason.
+
+So `--xnb-platform xbox360` is **refused by default**, in code rather than only in documentation,
+with a message naming what is missing. `--xnb-allow-unverified-xbox` (or
+`XnbFileOptions::allowUnverifiedXboxPayloads`) produces one anyway — because somebody with real
+hardware producing candidate files is the only way this gap ever closes, and a refusal with no
+escape hatch would prevent that.
+
+Windows Phone 7 (`m`) is **not** refused. It is a little-endian ARM platform with no known payload
+difference from Windows, so the honest statement is narrower: the header byte can be emitted, the
+payloads are the same ones Windows gets, and **nothing about it is verified** because no
+`m`-platform fixture and no Windows Phone runtime exist here. That is a documentation claim, not a
+byte-order one, which is why it is not enforced in code.
 
 ### 2.3 Version
 
@@ -213,8 +224,8 @@ Stated plainly, because a gap named is worth more than a gap rounded up.
 |---|---|
 | **Compiling `.fx` to shader bytecode** | The writer serializes an *already-compiled* `Effect` payload verbatim. Turning HLSL into D3D bytecode is a separate major subsystem (`XNAP-84`, and `plans/plan_fx.md`). CNA will not fake it by embedding source text in an `Effect` asset. |
 | **Compressed output** | Neither LZX (`0x80`) nor LZ4 (`0x40`) is written. Both are refused with a message naming the task. CNA *reads* both. |
-| **Xbox 360 semantics** | Beyond the `SoundEffect` WAVEFORMATEX byte swap, nothing is endian-corrected or tiled. The header byte can be written; that is not the same claim. |
-| **Windows Phone semantics** | The header byte can be written; nothing beyond that is verified. |
+| **Xbox 360 semantics** | Beyond the `SoundEffect` WAVEFORMATEX byte swap, nothing is endian-corrected or tiled — and the writer refuses an `x` target rather than emitting Windows bytes under an Xbox header. `--xnb-allow-unverified-xbox` overrides it for hardware testing. |
+| **Windows Phone semantics** | The header byte is written and the payloads are Windows's, which is very likely correct for a little-endian ARM target and is nonetheless **unverified**: no `m` fixture and no Windows Phone runtime exist here. |
 | **Array-valued effect parameters** | An `EffectMaterial` parameter that is `float[]`, `int[]` or `Matrix[]` is not written. Which reader instantiation XNA writes for one — `ArrayReader` or `ListReader`, over which element type — is not established by any fixture available here, and a guess would produce a file that loads into the wrong shape rather than one that fails to load. CNA's **reader** applies them if some other producer writes them. |
 | **`Decimal`** | Conditional on sharp-runtime's 128-bit integer support, on the read side too. |
 | **A block-compressed `.cnb`** | CNB texture schema 1 is frozen to `Rgba8`. A `.cnb` build that asks for DXT keeps the uncompressed pixels and warns; the `.xnb` build gets the compressed texture. |

@@ -120,6 +120,23 @@ namespace CNA::Internal::Xnb
         /** @brief Output ceilings applied to every length-driven write. */
         XnbWriteLimits limits{};
 
+        /**
+         * @brief Permits writing an Xbox 360 (`x`) payload whose byte order is not verified
+         *        (plans/plan_xnapipeline.md `XNAP-82`).
+         *
+         * The Xbox 360 is big-endian, and CNA has exactly one piece of Xbox-specific payload
+         * handling: the `SoundEffect` WAVEFORMATEX fields are byte-swapped. Nothing else is --
+         * not a texture's dimension fields, not a model's bone table, not even the sound's own
+         * sample bytes, which CNA's **reader** already refuses to transcode from an Xbox file for
+         * precisely that reason.
+         *
+         * Writing the `x` header byte over Windows-layout payloads would therefore produce a file
+         * that claims to be an Xbox asset and is not one. The default refuses; this option exists
+         * so somebody with real Xbox hardware can produce candidate files and find out, which is
+         * the only way the gap ever closes.
+         */
+        bool allowUnverifiedXboxPayloads = false;
+
         /** @brief Compares every container-level option, limits included. */
         bool operator==(const XnbFileOptions& other) const = default;
     };

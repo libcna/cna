@@ -91,13 +91,13 @@ All 30 failures are environmental and reproduce on the unmodified tree:
 **Current (2026-09-03, after Phases B–F except the open rows):**
 
 ```text
-CnaContentTests:          1701 run   1603 passed   68 skipped   30 failed
+CnaContentTests:          1702 run   1604 passed   68 skipped   30 failed
 CnaContentPipelineTests:    37 run     37 passed    0 skipped    0 failed
-CnaTests (whole suite):   7833 run   7292 passed  512 skipped   29 failed
+CnaTests (whole suite):   7834 run   7293 passed  512 skipped   29 failed
 ```
 
 `CnaContentTests` shows the same 30 environmental failures as the recorded baseline, +96 tests,
-+116 passing, **zero new failures**. `CnaContentPipelineTests` is the new build-time module's own
++117 passing, **zero new failures**. `CnaContentPipelineTests` is the new build-time module's own
 focused executable and is entirely new. The whole-suite figure is recorded here for completeness;
 its 29 failures are the STUB-renderer `TextureCube`/`Texture3D`/capability group, the uid-0
 permission case and the two audio-device `MediaLibrary` cases — none of them content-pipeline
@@ -370,8 +370,8 @@ Building a writer against the reader exposes disagreements the reader alone coul
 |---|---|---|
 | `XNAP-80` | LZ4 (`0x40`) output — extended-ecosystem only, never presented as XNA 4.0. | [ ] |
 | `XNAP-81` | XNA-compatible LZX (`0x80`) output: bounded encoder, correct decompressed-size field, block framing, round-trip against CNA's existing decoder. | [ ] |
-| `XNAP-82` | Xbox 360 (`x`) output audit: endianness, WAVEFORMATEX byte order, texture swizzling. Document as unsupported/experimental unless provable. | [ ] |
-| `XNAP-83` | Windows Phone (`m`) output audit: distinguish "header can be emitted" from "semantics verified". | [ ] |
+| `XNAP-82` | Xbox 360 (`x`) output audit: endianness, WAVEFORMATEX byte order, texture swizzling. Document as unsupported/experimental unless provable. | [x] **Audited, and the finding is enforced in code rather than only written down.** The 360 is big-endian; CNA has one piece of Xbox-specific payload handling (the `SoundEffect` WAVEFORMATEX swap) and nothing else — not texture dimension fields, not the bone table, not even that sound's own sample bytes, which CNA's *reader* already refuses to transcode out of an Xbox file for the same reason. Every asset writer now calls `RequireVerifiedPlatformPayload()`, so an `x` target is refused with a message naming what is missing. `XnbFileOptions::allowUnverifiedXboxPayloads` and `cna-content --xnb-allow-unverified-xbox` override it, because somebody producing candidate files on real hardware is the only way the gap closes and a refusal with no escape hatch would prevent that. Texture tiling was **not** investigated further: with the endianness question open, tiling cannot be the first thing to settle. |
+| `XNAP-83` | Windows Phone (`m`) output audit: distinguish "header can be emitted" from "semantics verified". | [x] `m` is a little-endian ARM target with no known payload difference from Windows, so it is **not** refused — the honest statement is narrower than Xbox's: the header byte is written, the payloads are the ones Windows gets, and nothing about it is verified, because no `m`-platform fixture and no Windows Phone runtime exist here. That is a documentation claim rather than a byte-order one, which is why it is not enforced in code, and `docs/xnb-interoperability.md` says exactly that. |
 | `XNAP-84` | Audit CNA's FX infrastructure for genuine XNA-compatible effect-bytecode generation; scope a sub-plan or record the blocker. Never fake it by embedding source text. | [ ] |
 | `XNAP-85` | Untrusted-input hardening sweep of the writer path: checked arithmetic, narrowing, offsets, counts, allocation ceilings, UTF-8 validity, deterministic failure. | [x] Four real defects found and fixed, each with a test. **(1)** Every limit is a signed `int32` and every check widened it to `std::size_t`, so a zero or negative limit did not mean "small", it meant "no limit at all"; `ValidateXnbWriteLimits()` now refuses one at the single point they enter the system. **(2)** The default payload ceiling is four times the file ceiling, so the writer would assemble up to 256 MB of something the file ceiling was always going to refuse; the assembly buffer is now capped by what the file ceiling leaves for a payload. **(3)** A texture level whose byte count disagreed with the dimensions and format the same file declares was written and only refused later by a reader, by which time the diagnostic could name a file but not the data; the writer now checks every level, down the mip chain, with the block-rounding rule block-compressed formats need. **(4)** An external reference containing a NUL or a control character was written verbatim — it survives this format's length-prefixed strings intact and truncates in whatever consumes the path as a C string. Also added: unconditional `Int32` representability checks on string lengths and collection counts, independent of the configured (relaxable) ceilings, because those two are properties of the format rather than policy. The writer already validated UTF-8 on the way out, refused unpaired surrogates, bounded nesting depth, and copied shared-resource values rather than borrowing pointers into caller temporaries. |
 

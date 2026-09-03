@@ -467,6 +467,7 @@ namespace CNA::Internal::Xnb
             [](XnbWriter& output, const XnbTexture2DContent& value)
             {
                 const XnbTextureData& texture = value.texture;
+                output.RequireVerifiedPlatformPayload("Texture2DWriter");
                 RequireTextureShape(output, texture, "Texture2DWriter");
                 if (texture.kind != XnbTextureKind::Texture2D || texture.faceCount != 1u ||
                     texture.depth != 1u)
@@ -487,6 +488,7 @@ namespace CNA::Internal::Xnb
             [](XnbWriter& output, const XnbTexture3DContent& value)
             {
                 const XnbTextureData& texture = value.texture;
+                output.RequireVerifiedPlatformPayload("Texture3DWriter");
                 RequireTextureShape(output, texture, "Texture3DWriter");
                 if (texture.kind != XnbTextureKind::Texture3D || texture.faceCount != 1u)
                 {
@@ -507,6 +509,7 @@ namespace CNA::Internal::Xnb
             [](XnbWriter& output, const XnbTextureCubeContent& value)
             {
                 const XnbTextureData& texture = value.texture;
+                output.RequireVerifiedPlatformPayload("TextureCubeWriter");
                 RequireTextureShape(output, texture, "TextureCubeWriter");
                 if (texture.kind != XnbTextureKind::TextureCube || texture.faceCount != 6u ||
                     texture.depth != 1u || texture.width != texture.height)
@@ -529,6 +532,7 @@ namespace CNA::Internal::Xnb
             true,
             [](XnbWriter& output, const XnbSpriteFontData& value)
             {
+                output.RequireVerifiedPlatformPayload("SpriteFontWriter");
                 if (value.glyphs.size() != value.cropping.size() ||
                     value.glyphs.size() != value.characters.size() ||
                     value.glyphs.size() != value.kerning.size())
@@ -562,6 +566,7 @@ namespace CNA::Internal::Xnb
             true,
             [](XnbWriter& output, const XnbSoundEffectData& value)
             {
+                output.RequireVerifiedPlatformPayload("SoundEffectWriter", true);
                 const bool swap = output.Platform() == 'x';
                 const std::size_t formatLength =
                     value.extensionData.empty() ? 16u : 18u + value.extensionData.size();
@@ -627,6 +632,7 @@ namespace CNA::Internal::Xnb
             true,
             [](XnbWriter& output, const XnbVertexDeclarationData& value)
             {
+                output.RequireVerifiedPlatformPayload("VertexDeclarationWriter");
                 WriteVertexDeclarationPayload(output, value);
             });
 
@@ -637,6 +643,7 @@ namespace CNA::Internal::Xnb
             true,
             [](XnbWriter& output, const XnbVertexBufferData& value)
             {
+                output.RequireVerifiedPlatformPayload("VertexBufferWriter");
                 // The declaration is written inline, but WriteRawObject still interns
                 // VertexDeclarationReader: that is exactly why a real Model .xnb lists a reader it
                 // never dispatches to.
@@ -663,6 +670,7 @@ namespace CNA::Internal::Xnb
             true,
             [](XnbWriter& output, const XnbIndexBufferData& value)
             {
+                output.RequireVerifiedPlatformPayload("IndexBufferWriter");
                 if (value.indexElementSize != 2u && value.indexElementSize != 4u)
                 {
                     throw XnbWriteException(
@@ -688,6 +696,7 @@ namespace CNA::Internal::Xnb
             true,
             [](XnbWriter& output, const XnbBasicEffectData& value)
             {
+                output.RequireVerifiedPlatformPayload("BasicEffectWriter");
                 output.WriteExternalReference(value.textureReference);
                 output.WriteVector3(value.diffuseColor);
                 output.WriteVector3(value.emissiveColor);
@@ -766,6 +775,7 @@ namespace CNA::Internal::Xnb
             true,
             [](XnbWriter& output, const XnbCompiledEffectContent& value)
             {
+                output.RequireVerifiedPlatformPayload("EffectWriter");
                 if (value.bytecode.empty())
                 {
                     throw XnbWriteException(
@@ -850,6 +860,7 @@ namespace CNA::Internal::Xnb
             true,
             [](XnbWriter& output, const XnbModelData& value)
             {
+                output.RequireVerifiedPlatformPayload("ModelWriter");
                 WriteModelGraph(output, value);
             });
     }

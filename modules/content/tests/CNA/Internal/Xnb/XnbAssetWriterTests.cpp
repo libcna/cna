@@ -393,12 +393,59 @@ TEST(XnbAssetWriterTest, ASoundEffectTargetingXbox360ByteSwapsItsWaveFormat)
 
     XnbFileOptions options;
     options.platform = XnbTargetPlatform::Xbox360;
+
+    // plans/plan_xnapipeline.md XNAP-82: an Xbox 360 target is refused by default, because the
+    // WAVEFORMATEX swap below is the only Xbox byte-order handling in this build -- the sample
+    // bytes are not swapped, and CNA's own reader already refuses to transcode Xbox samples for
+    // that reason. The opt-in exists so somebody with real hardware can produce a candidate.
+    try
+    {
+        (void)WriteXnbAsset(source, options, "xbox");
+        FAIL() << "an Xbox 360 target must be refused unless explicitly opted into";
+    }
+    catch (const XnbWriteException& error)
+    {
+        EXPECT_NE(std::string(error.what()).find("XNAP-82"), std::string::npos) << error.what();
+    }
+
+    options.allowUnverifiedXboxPayloads = true;
     const XnbCanonicalAsset asset = RoundTrip(scratch, "xbox", source, options);
     const auto& read = std::get<XnbSoundEffectData>(asset.value);
     EXPECT_EQ(read.platform, 'x');
     EXPECT_EQ(read.sampleRate, 8000u);
     EXPECT_EQ(read.channels, 1u);
     EXPECT_EQ(read.bitsPerSample, 16u);
+}
+
+TEST(XnbAssetWriterTest, EveryOtherAssetTypeRefusesAnXbox360TargetOutright)
+{
+    // plans/plan_xnapipeline.md XNAP-82. Writing 'x' into the header over Windows-layout payloads
+    // would claim a compatibility this build cannot deliver, so the refusal is in code rather
+    // than only in documentation, and it names the task that would close the gap.
+    XnbFileOptions options;
+    options.platform = XnbTargetPlatform::Xbox360;
+
+    try
+    {
+        (void)WriteXnbAsset(XnbTexture2DContent{MakeTexture2D()}, options, "xbox");
+        FAIL() << "a texture targeting Xbox 360 must be refused";
+    }
+    catch (const XnbWriteException& error)
+    {
+        const std::string message = error.what();
+        EXPECT_NE(message.find("big-endian"), std::string::npos) << message;
+        EXPECT_NE(message.find("XNAP-82"), std::string::npos) << message;
+    }
+
+    // Windows Phone is little-endian and has no known payload difference from Windows, so it is
+    // not refused. That it is unverified is a documentation claim, not a byte-order one.
+    options.platform = XnbTargetPlatform::WindowsPhone;
+    EXPECT_NO_THROW(
+        (void)WriteXnbAsset(XnbTexture2DContent{MakeTexture2D()}, options, "phone"));
+
+    options.platform = XnbTargetPlatform::Xbox360;
+    options.allowUnverifiedXboxPayloads = true;
+    EXPECT_NO_THROW((void)WriteXnbAsset(XnbTexture2DContent{MakeTexture2D()}, options, "opted"));
 }
 
 TEST(XnbAssetWriterTest, ASongRoundTripsWithItsDurationDispatchedThroughInt32Reader)

@@ -228,7 +228,8 @@ namespace
                "         [--format cnb|xnb] [--config <file>] [--workers <1..64>]\n"
                "         [--xnb-platform <name>] [--xnb-version 4|5]\n"
                "         [--xnb-profile reach|hidef] [--xnb-compress none|lzx|lz4]\n"
-               "         [--xnb-reader-names xna40|portable] [--explain] [--quiet]\n"
+               "         [--xnb-reader-names xna40|portable]\n"
+               "         [--xnb-allow-unverified-xbox] [--explain] [--quiet]\n"
             << "       cna-content clean <output-directory> [--quiet]\n\n"
             << "Builds source content through Importer -> Processor -> Content Type Writer.\n"
             << "--format selects the compiled container: CNA's native .cnb (the default) or the\n"
@@ -241,7 +242,12 @@ namespace
             << "XNA 4.0 target platforms: windows, windowsphone, xbox360. Every other\n"
             << "--xnb-platform value (desktopgl, linux, ios, android, windowsgl) is an extended\n"
             << "XNB ecosystem identifier that Microsoft XNA 4.0 never produced or consumed.\n"
-            << "--xnb-version 5 is the XNA 4.0-era container; 4 is earlier, legacy XNB.\n";
+            << "--xnb-version 5 is the XNA 4.0-era container; 4 is earlier, legacy XNB.\n\n"
+            << "--xnb-platform xbox360 is refused by default. The Xbox 360 is big-endian and\n"
+               "this build has one piece of Xbox byte-order handling (the SoundEffect\n"
+               "WAVEFORMATEX fields), so writing the 'x' header byte over the other payloads\n"
+               "would claim a compatibility it cannot deliver. --xnb-allow-unverified-xbox\n"
+               "produces one anyway, for testing on real hardware.\n";
     }
 
     std::size_t ParseWorkerCount(const std::filesystem::path& argument)
@@ -374,6 +380,13 @@ namespace
                                                 "'.");
                 }
                 formatSpecified = true;
+            }
+            else if (IsOption(argument, "--xnb-allow-unverified-xbox"))
+            {
+                // plans/plan_xnapipeline.md XNAP-82: the escape hatch has to be reachable from
+                // the tool, or the only way to produce a candidate Xbox file for somebody with
+                // real hardware to test is to write a custom compiler.
+                command.xnbOptions.allowUnverifiedXboxPayloads = true;
             }
             else if (IsOption(argument, "--xnb-platform"))
             {

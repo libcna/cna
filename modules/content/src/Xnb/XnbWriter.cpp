@@ -255,6 +255,32 @@ namespace CNA::Internal::Xnb
         }
     }
 
+    void XnbWriter::RequireVerifiedPlatformPayload(const std::string& readerName,
+                                                   const bool handlesXboxByteOrder) const
+    {
+        if (options_.platform != XnbTargetPlatform::Xbox360) { return; }
+        if (options_.allowUnverifiedXboxPayloads) { return; }
+        if (handlesXboxByteOrder)
+        {
+            // Even the one writer that swaps its header fields does not swap its sample bytes,
+            // which is why this still refuses unless the caller opts in: a half-converted payload
+            // is a worse outcome than a refusal, because it looks like it worked.
+            throw XnbWriteException(
+                "'" + assetName_ + "': " + readerName +
+                " byte-swaps its WAVEFORMATEX fields for the big-endian Xbox 360 but not its "
+                "sample bytes, so an 'x' file it writes is only half converted. Set "
+                "XnbFileOptions::allowUnverifiedXboxPayloads to produce one anyway -- see "
+                "plans/plan_xnapipeline.md XNAP-82.");
+        }
+        throw XnbWriteException(
+            "'" + assetName_ + "': " + readerName +
+            " has no Xbox 360 byte-order handling, and the Xbox 360 is big-endian, so writing "
+            "the 'x' platform byte over these payloads would claim a compatibility this build "
+            "cannot deliver. Target 'windows' instead, or set "
+            "XnbFileOptions::allowUnverifiedXboxPayloads if you can test the result on real "
+            "hardware -- see plans/plan_xnapipeline.md XNAP-82.");
+    }
+
     std::int32_t XnbWriter::InternTypeWriter(const XnbTypeWriterBase& writer)
     {
         const XnbReaderIdentity identity = writer.ReaderIdentity();
