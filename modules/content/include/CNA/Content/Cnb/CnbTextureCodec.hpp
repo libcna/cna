@@ -134,6 +134,44 @@ namespace CNA::Content::Cnb
                                                         std::vector<std::uint8_t> rgba);
 
     /**
+     * @brief The colour space a mip chain's averaging is done in.
+     *
+     * It matters, and getting it wrong is visible. Averaging four sRGB-encoded
+     * texels treats an encoded value as if it were a quantity of light, which it
+     * is not: the result is systematically darker than the four texels it stands
+     * for, and a surface built from that chain darkens as it recedes. Data maps
+     * -- normals, roughness, occlusion, masks -- are not encoded that way and
+     * must be averaged exactly as they are stored.
+     */
+    enum class CnbMipColorSpace
+    {
+        /** @brief Average the stored values directly. Correct for data maps. */
+        Linear,
+        /** @brief Decode to linear, average, re-encode. Correct for colour maps. */
+        Srgb
+    };
+
+    /**
+     * @brief Replaces @p data's single level with a complete box-filtered mip chain.
+     *
+     * A texture with one level is a texture that aliases. Any surface seen at a
+     * grazing angle -- a road, a pavement, a wall running away from the camera --
+     * samples far more than one texel per pixel, and without a chain to fall back
+     * on the result is a shimmer that no amount of anti-aliasing afterwards can
+     * fix, because the detail was already lost when the texel was fetched. The
+     * container has always been able to carry a chain; nothing generated one.
+     *
+     * @param data       A single-mip, single-face, 2D `Rgba8` texture. Replaced in place
+     *                   with the same texture carrying `floor(log2(max(w, h))) + 1` levels.
+     * @param colorSpace How to average. See @ref CnbMipColorSpace.
+     * @throws Microsoft::Xna::Framework::Content::ContentLoadException if @p data is not a
+     *         single-mip, single-face, depth-1 texture with exactly one `Rgba8` representation
+     *         whose level 0 is the right length.
+     */
+    void GenerateRgba8MipChain(CnbTextureData& data,
+                               CnbMipColorSpace colorSpace = CnbMipColorSpace::Linear);
+
+    /**
      * @brief Encodes a `Texture2D` as a complete `.cnb` byte image.
      *
      * @param data        The texture to encode. `faceCount` must be 1 and `depth` must be 1.

@@ -27,6 +27,7 @@
 #include "CNA/Content/Cnb/CnbSoundEffectCodec.hpp"
 #include "CNA/Content/Cnb/CnbSourceImport.hpp"
 #include "CNA/Content/Cnb/CnbTextureCodec.hpp"
+#include "CNA/Content/Cnb/CnbTextureCodec.hpp"
 #include "CnaToolAtomicWrite.hpp"
 #include "CnaToolNumericArgs.hpp"
 
@@ -63,6 +64,14 @@ namespace
             << "Options:\n"
             << "  --name <logical>       Logical asset name recorded in CMET.\n"
             << "                         Default: the input file's stem.\n"
+            << "  --mipmaps              Texture2D only. Generate a full box-filtered mip chain.\n"
+            << "                         A texture with one level aliases on anything seen at a\n"
+            << "                         grazing angle, and no amount of anti-aliasing afterwards\n"
+            << "                         recovers detail that was lost when the texel was fetched.\n"
+            << "  --mip-color-space <s>  linear (default) or srgb. Averaging four sRGB-encoded\n"
+            << "                         texels treats an encoded value as a quantity of light,\n"
+            << "                         which darkens the chain; pass srgb for colour maps and\n"
+            << "                         leave it alone for normal, roughness and mask maps.\n"
             << "  --color-key R,G,B      Texture2D only. Make pixels of exactly this RGB fully\n"
             << "                         transparent, keeping their colour. Never applied unless\n"
             << "                         asked for: silently rewriting pixels is worse than\n"
@@ -94,6 +103,9 @@ int main(int argc, char** argv)
     std::string title;
     std::string frameSize;
     std::optional<std::array<std::uint8_t, 3>> colorKey;
+    bool mipmaps = false;
+    bool sawMipColorSpace = false;
+    CNA::Content::Cnb::CnbMipColorSpace mipColorSpace = CNA::Content::Cnb::CnbMipColorSpace::Linear;
     std::uint32_t durationMs = 0u;
     std::uint32_t soundtrack = 0u;
     float fps = 0.0f;
@@ -143,6 +155,26 @@ int main(int argc, char** argv)
             {
                 fps = CNA::Tools::ParseFiniteFloatArg("--fps", next("--fps"), 0.0f, 100000.0f);
                 haveFps = true;
+            }
+            else if (arg == "--mipmaps") { mipmaps = true; }
+            else if (arg == "--mip-color-space")
+            {
+                const std::string value = next("--mip-color-space");
+                if (value == "linear")
+                {
+                    mipColorSpace = CNA::Content::Cnb::CnbMipColorSpace::Linear;
+                }
+                else if (value == "srgb")
+                {
+                    mipColorSpace = CNA::Content::Cnb::CnbMipColorSpace::Srgb;
+                }
+                else
+                {
+                    std::cerr << "error: --mip-color-space takes linear or srgb, not '" << value
+                              << "'\n";
+                    return 1;
+                }
+                sawMipColorSpace = true;
             }
             else if (arg == "--color-key")
             {
@@ -233,6 +265,8 @@ int main(int argc, char** argv)
         const bool media = kind == "song" || kind == "video";
         const Applicable applicability[] = {
             {"--color-key", colorKey.has_value(), kind == "texture2d"},
+            {"--mipmaps", mipmaps, kind == "texture2d"},
+            {"--mip-color-space", sawMipColorSpace, kind == "texture2d"},
             {"--stream", !stream.empty(), media},
             {"--duration-ms", sawDurationMs, media},
             {"--title", !title.empty(), kind == "song"},
@@ -256,11 +290,16 @@ int main(int argc, char** argv)
         {
             CNA::Content::Cnb::CnbImageImportOptions options;
             options.colorKey = colorKey;
-            const auto texture =
-                CNA::Content::Cnb::ImportImageAsCnbTexture2D(input.string(), options);
+            auto texture = CNA::Content::Cnb::ImportImageAsCnbTexture2D(input.string(), options);
+            if (mipmaps)
+            {
+                CNA::Content::Cnb::GenerateRgba8MipChain(texture, mipColorSpace);
+            }
             bytes = CNA::Content::Cnb::EncodeTexture2DToCnb(texture, name);
             produced = "Texture2D " + std::to_string(texture.width) + "x" +
-                        std::to_string(texture.height) + " Rgba8";
+                        std::to_string(texture.height) + " Rgba8, " +
+                        std::to_string(texture.mipCount) +
+                        (texture.mipCount == 1u ? " level" : " levels");
         }
         else if (kind == "soundeffect")
         {

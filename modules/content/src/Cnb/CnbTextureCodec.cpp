@@ -2,6 +2,8 @@
 
 #include "CNA/Content/Cnb/CnbTextureCodec.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <string>
 
 #include "CNA/Content/Cnb/CnbArithmetic.hpp"
@@ -410,6 +412,118 @@ namespace CNA::Content::Cnb
         TextureShape shape = kTexture2D;
         shape.label = label;
         return ReadTextureChunks(shape, document);
+    }
+
+    void GenerateRgba8MipChain(CnbTextureData& data, CnbMipColorSpace colorSpace)
+    {
+        if (data.faceCount != 1u || data.depth != 1u || data.mipCount != 1u
+            || data.representations.size() != 1u
+            || data.representations.front().format != CnbTextureFormat::Rgba8
+            || data.representations.front().levels.size() != 1u)
+        {
+            throw ContentLoadException(
+                "GenerateRgba8MipChain: expected a single-mip, single-face, 2D Rgba8 texture.");
+        }
+        if (data.width == 0u || data.height == 0u)
+        {
+            throw ContentLoadException("GenerateRgba8MipChain: texture has a zero dimension.");
+        }
+
+        std::vector<std::uint8_t> level = data.representations.front().levels.front();
+        const std::size_t expected =
+            static_cast<std::size_t>(data.width) * data.height * 4u;
+        if (level.size() != expected)
+        {
+            throw ContentLoadException(
+                "GenerateRgba8MipChain: level 0 is " + std::to_string(level.size())
+                + " bytes, expected " + std::to_string(expected) + ".");
+        }
+
+        // The sRGB transfer function, exactly as IEC 61966-2-1 states it. A
+        // gamma-2.2 approximation would be cheaper and would be wrong by up to
+        // three per cent in the darks, which is where a mip chain's error shows.
+        const auto toLinear = [](std::uint8_t value) {
+            const double s = static_cast<double>(value) / 255.0;
+            return s <= 0.04045 ? s / 12.92 : std::pow((s + 0.055) / 1.055, 2.4);
+        };
+        const auto toSrgb = [](double linear) {
+            const double s = linear <= 0.0031308 ? linear * 12.92
+                                                 : 1.055 * std::pow(linear, 1.0 / 2.4) - 0.055;
+            const double scaled = std::clamp(s, 0.0, 1.0) * 255.0 + 0.5;
+            return static_cast<std::uint8_t>(scaled);
+        };
+
+        std::uint32_t width = data.width;
+        std::uint32_t height = data.height;
+        std::vector<std::vector<std::uint8_t>> levels;
+        levels.push_back(level);
+
+        while (width > 1u || height > 1u)
+        {
+            const std::uint32_t nextWidth = std::max(1u, width / 2u);
+            const std::uint32_t nextHeight = std::max(1u, height / 2u);
+            std::vector<std::uint8_t> next(static_cast<std::size_t>(nextWidth) * nextHeight * 4u);
+
+            for (std::uint32_t y = 0u; y < nextHeight; ++y)
+            {
+                // A dimension that has already reached 1 stops halving, and the
+                // two source rows (or columns) collapse onto the same one. Not
+                // clamping here reads off the end of a 1xN texture's last level.
+                const std::uint32_t y0 = std::min(y * 2u, height - 1u);
+                const std::uint32_t y1 = std::min(y * 2u + 1u, height - 1u);
+                for (std::uint32_t x = 0u; x < nextWidth; ++x)
+                {
+                    const std::uint32_t x0 = std::min(x * 2u, width - 1u);
+                    const std::uint32_t x1 = std::min(x * 2u + 1u, width - 1u);
+                    const std::size_t source[4] = {
+                        (static_cast<std::size_t>(y0) * width + x0) * 4u,
+                        (static_cast<std::size_t>(y0) * width + x1) * 4u,
+                        (static_cast<std::size_t>(y1) * width + x0) * 4u,
+                        (static_cast<std::size_t>(y1) * width + x1) * 4u};
+                    const std::size_t target =
+                        (static_cast<std::size_t>(y) * nextWidth + x) * 4u;
+
+                    for (std::size_t channel = 0u; channel < 3u; ++channel)
+                    {
+                        if (colorSpace == CnbMipColorSpace::Srgb)
+                        {
+                            double sum = 0.0;
+                            for (const std::size_t at : source)
+                                sum += toLinear(level[at + channel]);
+                            next[target + channel] = toSrgb(sum * 0.25);
+                        }
+                        else
+                        {
+                            std::uint32_t sum = 0u;
+                            for (const std::size_t at : source)
+                                sum += level[at + channel];
+                            next[target + channel] = static_cast<std::uint8_t>((sum + 2u) / 4u);
+                        }
+                    }
+                    // Alpha is coverage, never a colour, so it is averaged
+                    // linearly whatever the other three channels are.
+                    std::uint32_t alpha = 0u;
+                    for (const std::size_t at : source) alpha += level[at + 3u];
+                    next[target + 3u] = static_cast<std::uint8_t>((alpha + 2u) / 4u);
+                }
+            }
+
+            levels.push_back(next);
+            level = std::move(next);
+            width = nextWidth;
+            height = nextHeight;
+        }
+
+        if (levels.size() > CnbMaxTextureMipLevels)
+        {
+            throw ContentLoadException(
+                "GenerateRgba8MipChain: a chain of " + std::to_string(levels.size())
+                + " levels exceeds the container's limit of "
+                + std::to_string(CnbMaxTextureMipLevels) + ".");
+        }
+
+        data.mipCount = static_cast<std::uint32_t>(levels.size());
+        data.representations.front().levels = std::move(levels);
     }
 
     void CnbTextureLevelDimensions(const CnbTextureData& data, std::uint32_t level,
