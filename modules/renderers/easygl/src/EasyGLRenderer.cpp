@@ -2873,10 +2873,9 @@ else
     // per-level storage, the multisample colour renderbuffer, and the probe that decides whether
     // this GL context can render to the format at all.
     //
-    // Only the formats CNA's HDR pipeline actually allocates are listed. Everything else is
-    // deliberately absent and refused rather than silently substituted -- a caller who asks for
-    // Rgba64 and is handed 8-bit Color has no way to find out, which is the exact failure mode
-    // MOD-100 exists to end.
+    // The formats CNA actually allocates are listed. Everything else is deliberately absent and
+    // refused rather than silently substituted. Rgba64 is desktop-only RGBA16 UNORM storage: FNA's
+    // adapter query promises it and the original Racing Game Kit uses the exact selected format.
     struct RenderTargetColorStorage
     {
         ::metagl::InternalFormat internalFormat;
@@ -2895,6 +2894,10 @@ else
         case SurfaceFormat::Color:
             out = {RgbaTexImageInternalFormat(), ::metagl::PixelFormat::Rgba,
                    ::metagl::PixelType::UnsignedByte, false, false, 4};
+            return true;
+        case SurfaceFormat::Rgba64:
+            out = {::metagl::InternalFormat::Rgba16, ::metagl::PixelFormat::Rgba,
+                   ::metagl::PixelType::UnsignedShort, false, false, 8};
             return true;
         case SurfaceFormat::Single:
             out = {::metagl::InternalFormat::R32F, ::metagl::PixelFormat::Red,
@@ -4666,6 +4669,7 @@ if (ProfileUsesGlslEs100())
                       // plans/plan_modern.md MOD-117: render targets are no longer Color-only, and the
                       // answer is driver-dependent, so it is probed rather than asserted.
                       << "; render-target SurfaceFormat: Color"
+                      << (ProfileIsDesktopCore() ? " + Rgba64 (RGBA16 UNORM)" : "")
                       << (ProbeFloatRenderTargetSupportEXT(false) ? " + half-float (RGBA16F)" : "")
                       << (ProbeFloatRenderTargetSupportEXT(true) ? " + float (RGBA32F)" : "");
             CNA::Logger::Info(capabilityMessage.str(), CNA::LogCategory::RENDER);
@@ -5361,6 +5365,9 @@ if (!ProfileIsEs2ApiGeneration())
         RenderTargetColorStorage storage{};
         if (!MapRenderTargetColorFormat(surfaceFormat, storage))
             return RendererFormatVerdict::Defer;
+        if (static_cast<SurfaceFormat>(surfaceFormat) == SurfaceFormat::Rgba64 &&
+            !ProfileIsDesktopCore())
+            return RendererFormatVerdict::Unsupported;
         if (!storage.isFloat)
             return RendererFormatVerdict::Supported;   // Color: every profile, always.
         return ProbeFloatRenderTargetSupportEXT(storage.isFullFloat)

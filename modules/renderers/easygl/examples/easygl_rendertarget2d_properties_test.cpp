@@ -21,9 +21,13 @@
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Rgba64.hpp"
 
+#include <algorithm>
+#include <array>
 #include <cstdio>
 #include <memory>
+#include <ranges>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -116,6 +120,33 @@ protected:
             const bool valid = (v == 0) || (v > 0 && v < 9999 && (v & (v - 1)) == 0);
             check(valid,
                   "Ctor3 multiSample=9999 (over any real cap): never a blind pass-through, Task 337 fix");
+        }
+
+        // SAMPLE-152: XNA's GraphicsAdapter accepts Rgba64 as a render-target format, and the
+        // Racing Game Kit uses the selected result for all three shadow targets. OPENGL33 must
+        // therefore provide real RGBA16 UNORM storage instead of accepting the adapter query and
+        // failing during construction.
+        if (device.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Rgba64))
+        {
+            RenderTarget2D rt(device, 4, 4, false, SurfaceFormat::Rgba64,
+                              DepthFormat::None);
+            device.SetRenderTarget(&rt);
+            device.Clear(Color(17, 34, 51, 68));
+            device.SetRenderTarget(nullptr);
+
+            std::array<PackedVector::Rgba64, 16> pixels{};
+            rt.GetData(pixels.data(), static_cast<int>(pixels.size()));
+            const PackedVector::Rgba64 expected(
+                17.0f / 255.0f, 34.0f / 255.0f,
+                51.0f / 255.0f, 68.0f / 255.0f);
+            check(rt.getFormatProperty() == SurfaceFormat::Rgba64,
+                  "Rgba64 target preserves its requested format");
+            check(std::ranges::all_of(
+                      pixels, [&](const PackedVector::Rgba64& pixel)
+                      {
+                          return pixel == expected;
+                      }),
+                  "Rgba64 target stores and reads four 16-bit UNORM channels");
         }
 
         std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);

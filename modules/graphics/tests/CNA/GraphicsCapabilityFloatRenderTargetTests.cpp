@@ -63,7 +63,6 @@ TEST(GraphicsCapabilityFloatRenderTargetTest, NonColourNonFloatFormatsAreNotRend
     EXPECT_FALSE(gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Dxt1));
     EXPECT_FALSE(gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Dxt5));
     EXPECT_FALSE(gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Bgr565));
-    EXPECT_FALSE(gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Rgba64));
     EXPECT_FALSE(gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Alpha8));
 }
 
