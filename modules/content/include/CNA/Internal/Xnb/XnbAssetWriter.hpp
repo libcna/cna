@@ -14,6 +14,19 @@
 namespace CNA::Internal::Xnb
 {
     /**
+     * @brief Writes complete `.xnb` bytes to disk through a temporary file and an atomic rename.
+     *
+     * Separated from the templates above so the filesystem handling exists once, in one
+     * translation unit, rather than being instantiated per root type.
+     *
+     * @param path Destination path; its parent directory must already exist.
+     * @param bytes The complete file image.
+     * @throws XnbWriteException if the file cannot be created, written or renamed.
+     */
+    void WriteXnbFileBytes(const std::filesystem::path& path,
+                           const std::vector<std::uint8_t>& bytes);
+
+    /**
      * @brief One-call entry point producing a complete `.xnb` file image
      *        (plans/plan_xnapipeline.md `XNAP-16`).
      *
@@ -61,16 +74,4 @@ namespace CNA::Internal::Xnb
         WriteXnbFileBytes(path, WriteXnbAsset(root, options, assetName, registry));
     }
 
-    /**
-     * @brief Writes complete `.xnb` bytes to disk through a temporary file and an atomic rename.
-     *
-     * Separated from the templates above so the filesystem handling exists once, in one
-     * translation unit, rather than being instantiated per root type.
-     *
-     * @param path Destination path; its parent directory must already exist.
-     * @param bytes The complete file image.
-     * @throws XnbWriteException if the file cannot be created, written or renamed.
-     */
-    void WriteXnbFileBytes(const std::filesystem::path& path,
-                           const std::vector<std::uint8_t>& bytes);
 }

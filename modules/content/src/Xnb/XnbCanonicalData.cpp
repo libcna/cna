@@ -756,9 +756,19 @@ namespace CNA::Internal::Xnb
         return curve;
     }
 
-    XnbSongData DecodeSongXnbData(ContentReader& input)
+    XnbSongData DecodeSongXnbData(ContentReader& input, const bool objectReferences)
     {
-        return {input.ReadString(), input.ReadInt32()};
+        XnbSongData result;
+        result.mediaPath = input.ReadString();
+        if (objectReferences)
+        {
+            RequireReader(
+                XnbCanonicalReaderAccess::ReadReference(input),
+                "Microsoft.Xna.Framework.Content.Int32Reader",
+                input.getAssetNameProperty());
+        }
+        result.durationMs = input.ReadInt32();
+        return result;
     }
 
     XnbVideoData DecodeVideoXnbData(ContentReader& input, const bool objectReferences)
@@ -1803,7 +1813,8 @@ namespace CNA::Internal::Xnb
         }
         else if (root.normalizedName == "Microsoft.Xna.Framework.Content.SongReader")
         {
-            result.value = DecodeSongXnbData(reader);
+            result.value = DecodeSongXnbData(
+                reader, XnbCanonicalReaderAccess::ReaderCount(reader) > 1u);
         }
         else if (root.normalizedName == "Microsoft.Xna.Framework.Content.VideoReader")
         {

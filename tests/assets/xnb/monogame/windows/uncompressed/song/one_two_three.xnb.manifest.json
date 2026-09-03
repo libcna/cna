@@ -12,8 +12,9 @@
   "sharedResourceCount": 0,
   "expectedFields": {
     "referenceString": "one_two_three.ogg",
-    "durationMs": 769282
+    "durationMs": 3005,
+    "durationEncoding": "The media path is a bare length-prefixed string; the duration is dispatched through Int32Reader, which is why this file's type-reader table contains Int32Reader at all. Independently corroborated against the companion one_two_three.ogg: its last Ogg page's granule position is 132480 samples at 44100 Hz = 3004.08 ms."
   },
   "companionFile": "one_two_three.ogg (72796 bytes, vendored alongside for a real Normalize()/File::exists() round trip, not just a path-string check)",
-  "notes": "plans/plan_xnb.md XNB-34: real MonoGame-produced Song fixture. Its reference string already names the real '.ogg' extension directly (MonoGame's own content pipeline behavior) rather than XNA's always-'.wma' convention, but SongReader's unconditional strip-last-4-characters-then-reprobe logic (ported from FNA verbatim) handles both cases identically since both extensions happen to be exactly 4 characters -- verified by this fixture actually round-tripping correctly, not just by reasoning about it."
+  "notes": "plans/plan_xnb.md XNB-34: real MonoGame-produced Song fixture. Its reference string already names the real '.ogg' extension directly (MonoGame's own content pipeline behavior) rather than XNA's always-'.wma' convention, but SongReader's unconditional strip-last-4-characters-then-reprobe logic (ported from FNA verbatim) handles both cases identically since both extensions happen to be exactly 4 characters -- verified by this fixture actually round-tripping correctly, not just by reasoning about it. Corrected 2026-09-03 (plans/plan_xnapipeline.md XNAP-70): this manifest previously recorded durationMs 769282, a value taken from CNA's own reader rather than from independent inspection. That reader consumed the duration's Int32Reader dispatch byte as part of the Int32."
 }

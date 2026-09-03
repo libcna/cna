@@ -88,6 +88,14 @@ All 30 failures are environmental and reproduce on the unmodified tree:
 
 `XNAP-04` owns keeping this baseline current. **Any new failure outside these 30 is a regression.**
 
+**Current (2026-09-03, after Phase B and most of Phase C):**
+
+```text
+CnaContentTests:  1641 run   1543 passed   68 skipped   30 failed
+```
+
+The same 30 environmental failures, +56 tests, +56 passing, zero new failures.
+
 ---
 
 ## 1. Target architecture
@@ -270,7 +278,7 @@ Legend: `[ ]` open · `[x]` complete · `[~]` partially complete (detail in the 
 | `XNAP-10` | `XnbByteWriter`: deterministic little-endian primitives, `Write7BitEncodedInt`, `.NET BinaryWriter`-compatible strings, UTF-8 `charcs`, raw bytes, bounded growth. | [x] |
 | `XNAP-11` | `XnbWriteLimits`: output ceilings mirroring `XnbReadLimits` (file size, type-table size, collection counts, nesting depth, string bytes, shared-resource count). | [x] |
 | `XNAP-12` | `XnbFileOptions`: target platform (with XNA-era vs extended classification), container version, graphics profile, compression, reader-name style. | [x] |
-| `XNAP-13` | Legacy version-4 output: inverse `SurfaceFormat` mapping, explicit opt-in, rejection of formats version 4 cannot express. | [ ] |
+| `XNAP-13` | Legacy version-4 output: inverse `SurfaceFormat` mapping, explicit opt-in, rejection of formats version 4 cannot express. | [x] |
 | `XNAP-14` | `XnbWriter`: type-manifest interning, 1-based `WriteObject` dispatch, `WriteRawObject`, shared-resource queue + 1-based references, nesting-depth guard, single-pass body then header prepend. | [x] |
 | `XNAP-15` | `XnbTypeKey<T>` + `XnbTypeWriterRegistry`: RTTI-free typed registry keyed by a per-`T` unique address; deterministic, freezable, no central switch. | [x] |
 | `XNAP-16` | `XnbAssetWriter`: root-object entry point producing complete `.xnb` bytes with a correct total-length field. | [x] |
@@ -283,21 +291,21 @@ Legend: `[ ]` open · `[x]` complete · `[~]` partially complete (detail in the 
 | `XNAP-20` | Primitives: `Byte`, `SByte`, `Int16`, `UInt16`, `Int32`, `UInt32`, `Int64`, `UInt64`, `Single`, `Double`, `Boolean`, `Char`, `String`, `TimeSpan`, `DateTime`, `Decimal`. | [~] all but `Decimal`, which needs `System::Decimal` and is only available where sharp-runtime reports `SHARP_RUNTIME_HAS_NATIVE_INT128`; the reader has the same conditional. |
 | `XNAP-21` | Framework value types: `Vector2/3/4`, `Matrix`, `Quaternion`, `Color`, `Point`, `Rectangle`, `Plane`, `BoundingBox`, `BoundingSphere`, `Ray`, `CurveKey`, `Curve`. | [x] |
 | `XNAP-22` | Collections: `T[]`, `List<T>`, `Dictionary<K,V>`, `Nullable<T>`, arbitrary nesting, element-count limits. | [~] `XnbListTypeWriter`, `XnbArrayTypeWriter`, `XnbDictionaryTypeWriter` and `XnbNullableTypeWriter` all exist and the list/dictionary instantiations CNA's runtime reader registry resolves are registered and tested. No `T[]` or `Nullable<T>` instantiation is registered by default, because no built-in CNA reader resolves one; registering one is the documented extension path. |
-| `XNAP-23` | `Texture2D`, `Texture3D`, `TextureCube` from `XnbTextureData`. | [ ] |
-| `XNAP-24` | `SpriteFont` from `XnbSpriteFontData`, including the nested `Texture2D` and the four nested list readers. | [ ] |
-| `XNAP-25` | `SoundEffect` from `XnbSoundEffectData`, including WAVEFORMATEX extension bytes and loop metadata. | [ ] |
-| `XNAP-26` | `Song`, `Video` from `XnbSongData`/`XnbVideoData`, including the object-referenced Video field form. | [ ] |
-| `XNAP-27` | `VertexDeclaration`, `VertexBuffer`, `IndexBuffer`. | [ ] |
-| `XNAP-28` | Stock effects: `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`, each with its external texture references. | [ ] |
-| `XNAP-29` | `Effect` (already-compiled bytecode) and `EffectMaterial`. | [ ] |
-| `XNAP-2A` | `Model` from `XnbModelData`: bones, hierarchy, meshes, parts, tags, shared vertex/index/effect resources, root reference, byte/uint32 bone-reference width rule. | [ ] |
-| `XNAP-2B` | `ExternalReference<T>`. | [ ] |
+| `XNAP-23` | `Texture2D`, `Texture3D`, `TextureCube` from `XnbTextureData`. | [x] |
+| `XNAP-24` | `SpriteFont` from `XnbSpriteFontData`, including the nested `Texture2D` and the four nested list readers. | [x] |
+| `XNAP-25` | `SoundEffect` from `XnbSoundEffectData`, including WAVEFORMATEX extension bytes and loop metadata. | [x] |
+| `XNAP-26` | `Song`, `Video` from `XnbSongData`/`XnbVideoData`, including the object-referenced Video field form. | [x] |
+| `XNAP-27` | `VertexDeclaration`, `VertexBuffer`, `IndexBuffer`. | [x] |
+| `XNAP-28` | Stock effects: `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`, each with its external texture references. | [x] |
+| `XNAP-29` | `Effect` (already-compiled bytecode) and `EffectMaterial`. | [~] `Effect` bytecode is written and refuses an empty payload. `EffectMaterial` has no writer yet: its payload is a `Dictionary<String,Object>` of heterogeneous parameter values, which needs the polymorphic-object work in `XNAP-2B`. |
+| `XNAP-2A` | `Model` from `XnbModelData`: bones, hierarchy, meshes, parts, tags, shared vertex/index/effect resources, root reference, byte/uint32 bone-reference width rule. | [x] |
+| `XNAP-2B` | `ExternalReference<T>`. | [~] `XnbWriter::WriteExternalReference()` writes and validates the reference string every stock effect uses. A standalone `ExternalReferenceReader`-rooted asset and heterogeneous `Object` values are not covered. |
 
 ### Phase D — round-trip, golden and conformance validation
 
 | ID | Task | State |
 |---|---|---|
-| `XNAP-40` | Round-trip every writer through CNA's own reader with value assertions (`cna-rt`). | [ ] |
+| `XNAP-40` | Round-trip every writer through CNA's own reader with value assertions (`cna-rt`). | [x] |
 | `XNAP-41` | **Byte-exact golden test against the genuine XNA 4.0 fixture**: write the same `List<string>` and compare to `ContentManifestListStrings.xnb` byte for byte (`golden`). | [x] |
 | `XNAP-42` | Byte-exact golden tests against MonoGame fixtures where CNA's canonical data is lossless for them. | [ ] |
 | `XNAP-43` | Independent specification-based XNB parser (Python), sharing no code or assumptions with CNA (`spec`). | [ ] |
@@ -339,6 +347,15 @@ Legend: `[ ]` open · `[x]` complete · `[~]` partially complete (detail in the 
 | `XNAP-32` | XNA 4.0 harness project + build/run instructions for an XNA-capable Windows installation. | [ ] |
 | `XNAP-33` | Harness asserts values, not just successful `Load<T>()`. | [ ] |
 | `XNAP-34` | Result-recording protocol so a future session with a real runtime can fill in the `xna40` column. | [!] blocked: no XNA 4.0 runtime, Wine, Mono or .NET in this environment (§0.3). |
+
+### Phase J — interoperability defects found by the writer
+
+Building a writer against the reader exposes disagreements the reader alone could not show.
+
+| ID | Task | State |
+|---|---|---|
+| `XNAP-70` | **`SongReader` consumed the duration's dispatch byte.** A real content pipeline writes a Song as a bare media-path string followed by an `Int32` dispatched through `Int32Reader`; CNA read a bare `Int32`, so it consumed the `0x02` dispatch byte as the low byte of the duration. The committed MonoGame fixture reported 769282 ms for a 3-second clip, and its own provenance manifest had recorded that misparse as fact. Fixed by selecting the encoding from the type-reader table size, exactly as `VideoReader` already did; the fixture manifest now records 3005 ms, corroborated independently from the companion `.ogg` (last Ogg page granule 132480 samples at 44100 Hz = 3004.08 ms). | [x] |
+| `XNAP-71` | `VideoReader`'s runtime path auto-detects the same two encodings from the table size, but CNA's hand-constructed Video fixtures still use the field-only form no real pipeline produces. The writer emits the object-referenced form. Regenerating those fixtures would make the legacy branch dead code that could then be removed. | [ ] |
 
 ### Phase H — compression, exotic targets, effects, hardening
 

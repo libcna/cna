@@ -108,8 +108,12 @@ TEST_F(ContentManagerSongXnbTest, LoadRealMonoGameFixtureEndToEnd)
     Song song = cm.Load<Song>("one_two_three");
 
     EXPECT_EQ(song.getHandle(), "tests/assets/xnb/monogame/windows/uncompressed/song/one_two_three.ogg");
+    // 3005 ms, cross-checked against the companion .ogg itself: its last Ogg page's granule
+    // position is 132480 samples at 44100 Hz = 3004.08 ms. The value this test asserted before
+    // (769282 ms, nearly 13 minutes for a 72 KB clip) came from reading the duration's own
+    // Int32Reader dispatch byte as part of the Int32 -- see plans/plan_xnapipeline.md XNAP-70.
     EXPECT_EQ(song.getDurationProperty().getTicksProperty(),
-              System::TimeSpan::FromMilliseconds(769282).getTicksProperty());
+              System::TimeSpan::FromMilliseconds(3005).getTicksProperty());
 }
 
 TEST_F(ContentManagerSongXnbTest, LoadNestedRealFixtureWithXnaBackslashPathEndToEnd)

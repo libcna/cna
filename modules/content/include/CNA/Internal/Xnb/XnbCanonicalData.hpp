@@ -453,11 +453,18 @@ namespace CNA::Internal::Xnb
     /**
      * @brief Reads Song path and duration fields without resolving or opening media.
      *
+     * The media path is always a bare length-prefixed string. The duration is dispatched through
+     * `Int32Reader` in the form real content-pipeline output uses, and is a bare `Int32` in the
+     * historical field-only form CNA's own hand-constructed fixtures were written in. Both are
+     * accepted; @p objectReferences selects between them.
+     *
      * @param input Content reader positioned at the first Song field.
+     * @param objectReferences Whether the duration carries its own reader dispatch index.
      * @return Authored media path and duration.
      */
     [[nodiscard]] XnbSongData DecodeSongXnbData(
-        Microsoft::Xna::Framework::Content::ContentReader& input);
+        Microsoft::Xna::Framework::Content::ContentReader& input,
+        bool objectReferences = false);
 
     /**
      * @brief Reads Video path and metadata fields without constructing playback objects.
