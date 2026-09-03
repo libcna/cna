@@ -1654,6 +1654,9 @@ namespace
         bool prepared = false;
         bool hasManifest = false;
         std::string failure;
+
+        /** @brief Diagnostics the pipeline emitted while this node was built. */
+        std::vector<Pipeline::ContentLogMessage> messages;
     };
 
     struct BuildNodeOutcome
@@ -1664,6 +1667,9 @@ namespace
         ContentBuildDecision decision;
         std::string failure;
         std::string statusLine;
+
+        /** @brief Diagnostics the pipeline emitted while this node was built. */
+        std::vector<Pipeline::ContentLogMessage> messages;
     };
 
     std::vector<std::uint8_t> ReadBinaryFile(const std::filesystem::path& path)
@@ -1837,6 +1843,7 @@ namespace
             request.outputFormat = item.format;
             request.parameters = item.parameters;
             Pipeline::ContentBuildResult result = pipeline.Build(request);
+            plan.messages = result.messages;
 
             plan.manifest = Pipeline::MakeContentBuildManifestEntry(
                 result, sourceRoot, outputRoot, item.output, externalSourceRoots);
@@ -1921,6 +1928,7 @@ namespace
                 {
                     const std::uintmax_t outputBytes = PublishStagedResult(plan, outputRoot);
                     outcome.statusLine = BuildStatusLine(item, outcome.manifest, outputBytes);
+                    outcome.messages = plan.messages;
                 }
                 catch (const std::exception& error)
                 {
@@ -1992,6 +2000,7 @@ namespace
                 outputBytes += std::filesystem::file_size(deployment.source);
             }
             outcome.statusLine = BuildStatusLine(item, outcome.manifest, outputBytes);
+            outcome.messages = result.messages;
             outcome.success = true;
         }
         catch (const std::exception& error)
@@ -2463,6 +2472,20 @@ namespace
                             outcome.statusLine, std::move(outcome.decision));
                     }
                     events.push_back({false, std::move(outcome.statusLine)});
+                    // A pipeline warning names something the author lost -- a material downgraded
+                    // for a container that cannot hold it, an animation an output format has no
+                    // place for. Collecting it in the build result and never showing it would
+                    // leave that discovery to run time.
+                    for (const Pipeline::ContentLogMessage& message : outcome.messages)
+                    {
+                        if (message.level == Pipeline::ContentLogLevel::Info) { continue; }
+                        events.push_back(
+                            {false,
+                             std::string("  ") +
+                                 (message.level == Pipeline::ContentLogLevel::Error ? "error"
+                                                                                    : "warning") +
+                                 " (" + message.component + "): " + message.text});
+                    }
                     if (outcome.skipped) { ++skipped; }
                     else { ++built; }
                 }

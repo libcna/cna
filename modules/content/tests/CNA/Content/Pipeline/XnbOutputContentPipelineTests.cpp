@@ -24,6 +24,7 @@ extern char** environ;
 #endif
 
 #include "CNA/Content/Cnb/CnbDocument.hpp"
+#include "CNA/Content/Cnb/CnbModelData.hpp"
 #include "CNA/Content/Cnb/CnbTextureCodec.hpp"
 #include "CNA/Content/Pipeline/ContentBuildConfiguration.hpp"
 #include "CNA/Content/Pipeline/ModelContentPipeline.hpp"
@@ -31,6 +32,7 @@ extern char** environ;
 #include "CNA/Content/Pipeline/Texture2DContentPipeline.hpp"
 #include "CNA/Content/Pipeline/XnbOutputContentPipeline.hpp"
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
+#include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include "CNA/Internal/Xnb/XnbByteWriter.hpp"
 #include "CNA/Internal/Xnb/XnbCanonicalData.hpp"
 
@@ -280,12 +282,36 @@ TEST(XnbOutputContentPipelineTest, RepeatedBuildsOfOneSourceAreByteIdentical)
     EXPECT_EQ(first.output.bytes, second.output.bytes);
 }
 
-TEST(XnbOutputContentPipelineTest, ASchemaOneModelIsRefusedWithAnActionableDiagnostic)
+TEST(XnbOutputContentPipelineTest, AModelNamingAnExternalEffectIsRefusedWithAnActionableDiagnostic)
 {
-    // CNB Model schema 1 records a vertex stride but no VertexDeclaration, which an XNA Model
-    // cannot do without. The refusal has to say that, and say where the fix is tracked.
+    // A schema-1 Model is written by deriving each part's VertexDeclaration from CNA's own
+    // canonical stride table, so schema 1 is no longer a refusal. What still cannot be written is
+    // a part that names an external compiled Effect: CNA cannot produce XNA-compatible effect
+    // bytecode, so emitting the reference would produce a Model that fails to load.
+    Cnb::CnbModelPart part;
+    part.name = "Hull";
+    part.vertexStride = 32u;
+    part.vertexCount = 3u;
+    part.vertexBytes.assign(96u, 0u);
+    part.indexElementSize = 2u;
+    part.indexCount = 3u;
+    part.indexBytes = {0u, 0u, 1u, 0u, 2u, 0u};
+    part.primitiveCount = 1u;
+    part.primitiveTopology = 4u;
+    part.effectKind = Cnb::CnbEffectKind::External;
+    part.externalEffect = "Effects/custom";
+
+    Cnb::CnbModelMesh mesh;
+    mesh.name = "Hull";
+    mesh.parentBone = -1;
+    mesh.partIndices = {0u};
+
+    Cnb::CnbModelData model;
+    model.parts.push_back(part);
+    model.meshes.push_back(mesh);
+
     Pipeline::ProcessedModelBundle bundle;
-    bundle.primary = Cnb::CnbModelData{};
+    bundle.primary = model;
 
     auto registry = std::make_shared<Pipeline::ContentPipelineRegistry>();
     Pipeline::RegisterXnbOutputContentPipeline(*registry, {});
@@ -298,13 +324,57 @@ TEST(XnbOutputContentPipelineTest, ASchemaOneModelIsRefusedWithAnActionableDiagn
     {
         (void)writer->Write(
             Pipeline::ContentValue::Create(Pipeline::ProcessedModelType, bundle), "ship");
-        FAIL() << "a schema-1 Model must be refused for XNB output";
+        FAIL() << "a part naming an external Effect must be refused";
     }
     catch (const Xnb::XnbWriteException& error)
     {
         const std::string message = error.what();
+        EXPECT_NE(message.find("Effects/custom"), std::string::npos) << message;
+        EXPECT_NE(message.find("XNAP-84"), std::string::npos) << message;
+    }
+}
+
+TEST(XnbOutputContentPipelineTest, AModelPartWithAnUnrecognizedStrideIsRefused)
+{
+    Cnb::CnbModelPart part;
+    part.name = "Odd";
+    part.vertexStride = 13u;
+    part.vertexCount = 2u;
+    part.vertexBytes.assign(26u, 0u);
+    part.indexElementSize = 2u;
+    part.indexCount = 3u;
+    part.indexBytes = {0u, 0u, 1u, 0u, 2u, 0u};
+    part.primitiveCount = 1u;
+    part.primitiveTopology = 4u;
+
+    Cnb::CnbModelMesh mesh;
+    mesh.name = "Odd";
+    mesh.parentBone = -1;
+    mesh.partIndices = {0u};
+
+    Cnb::CnbModelData model;
+    model.parts.push_back(part);
+    model.meshes.push_back(mesh);
+
+    Pipeline::ProcessedModelBundle bundle;
+    bundle.primary = model;
+
+    auto registry = std::make_shared<Pipeline::ContentPipelineRegistry>();
+    Pipeline::RegisterXnbOutputContentPipeline(*registry, {});
+    registry->Freeze();
+    const auto writer = registry->ResolveWriter(Pipeline::ProcessedModelType, {},
+                                                Pipeline::ContentOutputFormat::Xnb);
+    try
+    {
+        (void)writer->Write(
+            Pipeline::ContentValue::Create(Pipeline::ProcessedModelType, bundle), "odd");
+        FAIL() << "a stride with no canonical layout must be refused";
+    }
+    catch (const Xnb::XnbWriteException& error)
+    {
+        const std::string message = error.what();
+        EXPECT_NE(message.find("stride 13"), std::string::npos) << message;
         EXPECT_NE(message.find("VertexDeclaration"), std::string::npos) << message;
-        EXPECT_NE(message.find("XNAP-56"), std::string::npos) << message;
     }
 }
 
@@ -529,3 +599,198 @@ TEST(XnbOutputCliTest, TheUsageTextSeparatesXnaTargetsFromExtendedEcosystemTarge
 }
 
 #endif
+
+// -- glTF to XNA Model (XNAP-56, XNAP-57, XNAP-58) ---------------------------------------------
+//
+// Named XnbModelSourceRouteTest rather than anything with "Gltf" in it on purpose: these assert
+// what the XNB *writer* does with a model, not how CNA interprets glTF. plan_gltf.md's conformance
+// ladder governs every Gltf* suite and would have to claim this one, which would file an XNB
+// output test under a glTF conformance rung it does not belong to.
+
+namespace
+{
+    /** @brief Copies one committed glTF fixture into a scratch source root. */
+    void CopyGltfFixture(const ScratchDirectory& scratch, const std::string& name)
+    {
+        const std::filesystem::path source = std::filesystem::path("tests/assets/gltf") / name;
+        ASSERT_TRUE(std::filesystem::exists(source)) << source.string();
+        std::filesystem::copy_file(source, scratch.Path() / name,
+                                   std::filesystem::copy_options::overwrite_existing);
+    }
+
+    /** @brief Builds one glTF fixture to XNB and decodes it back through CNA's own reader. */
+    Xnb::XnbCanonicalAsset BuildGltfModel(const ScratchDirectory& scratch,
+                                          const std::string& name,
+                                          Pipeline::ContentBuildResult& result)
+    {
+        result = Build(scratch.Path(), name, "models/asset",
+                       Pipeline::ContentOutputFormat::Xnb);
+        const std::filesystem::path path = scratch.Path() / "asset.xnb";
+        WriteBytes(path, result.output.bytes);
+        return Xnb::DecodeXnbCanonicalAsset(path);
+    }
+}
+
+TEST(XnbModelSourceRouteTest, ATriangleListGltfBecomesACompleteXnaModel)
+{
+    ScratchDirectory scratch("gltf_model");
+    CopyGltfFixture(scratch, "mode-triangles.glb");
+
+    Pipeline::ContentBuildResult result;
+    const Xnb::XnbCanonicalAsset asset =
+        BuildGltfModel(scratch, "mode-triangles.glb", result);
+
+    EXPECT_EQ(result.importer.name, "CNA.GltfImporter");
+    EXPECT_EQ(result.processor.name, "CNA.ModelProcessor");
+    EXPECT_EQ(result.writer.name, "CNA.XnbModelWriter");
+    EXPECT_EQ(asset.rootReader, "Microsoft.Xna.Framework.Content.ModelReader");
+
+    const auto& model = std::get<Xnb::XnbModelData>(asset.value);
+    ASSERT_GE(model.bones.size(), 1u);
+    EXPECT_EQ(model.rootBone, 0);
+    EXPECT_EQ(model.bones[0].parent, -1);
+    ASSERT_EQ(model.meshes.size(), 1u);
+    ASSERT_EQ(model.meshes[0].parts.size(), 1u);
+    EXPECT_GT(model.meshes[0].parts[0].primitiveCount, 0);
+    EXPECT_GT(model.meshes[0].boundingSphere.Radius, 0.0f);
+
+    // One vertex buffer, one index buffer and one effect: the three resources an XNA mesh part
+    // must name.
+    ASSERT_EQ(model.sharedResources.size(), 3u);
+    const auto& vertexBuffer =
+        std::get<Xnb::XnbVertexBufferData>(model.sharedResources[0].value);
+    EXPECT_GT(vertexBuffer.declaration.stride, 0);
+    ASSERT_FALSE(vertexBuffer.declaration.elements.empty());
+    EXPECT_EQ(vertexBuffer.declaration.elements[0].getVertexElementUsageProperty(),
+              Microsoft::Xna::Framework::Graphics::VertexElementUsage::Position);
+    EXPECT_EQ(vertexBuffer.declaration.elements[0].getOffsetProperty(), 0);
+    EXPECT_EQ(vertexBuffer.bytes.size(),
+              static_cast<std::size_t>(vertexBuffer.declaration.stride) *
+                  vertexBuffer.vertexCount);
+    EXPECT_TRUE(std::holds_alternative<Xnb::XnbIndexBufferData>(
+        model.sharedResources[1].value));
+    EXPECT_TRUE(std::holds_alternative<Xnb::XnbBasicEffectData>(
+        model.sharedResources[2].value));
+}
+
+TEST(XnbModelSourceRouteTest, TheVertexDeclarationIsDerivedFromCnasOwnCanonicalStrideTable)
+{
+    ScratchDirectory scratch("gltf_declaration");
+    CopyGltfFixture(scratch, "mode-triangles.glb");
+
+    Pipeline::ContentBuildResult result;
+    const Xnb::XnbCanonicalAsset asset =
+        BuildGltfModel(scratch, "mode-triangles.glb", result);
+    const auto& model = std::get<Xnb::XnbModelData>(asset.value);
+    const auto& declaration =
+        std::get<Xnb::XnbVertexBufferData>(model.sharedResources[0].value).declaration;
+
+    // CNB Model schema 1 records only a stride. The declaration is recovered from
+    // InferredLayoutForStride(), the same table every CNA renderer interprets those bytes with,
+    // so the XNB says exactly what the bytes already mean rather than guessing.
+    const CNA::Internal::Graphics::InferredVertexLayout expected =
+        CNA::Internal::Graphics::InferredLayoutForStride(
+            declaration.stride,
+            CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt);
+    ASSERT_TRUE(expected.known);
+    ASSERT_EQ(declaration.elements.size(), expected.count);
+    for (std::size_t index = 0u; index < expected.count; ++index)
+    {
+        EXPECT_EQ(declaration.elements[index].getOffsetProperty(),
+                  expected.elements[index].offset);
+        EXPECT_EQ(declaration.elements[index].getVertexElementFormatProperty(),
+                  expected.elements[index].format);
+        EXPECT_EQ(declaration.elements[index].getVertexElementUsageProperty(),
+                  expected.elements[index].usage);
+        EXPECT_EQ(declaration.elements[index].getUsageIndexProperty(),
+                  expected.elements[index].usageIndex);
+    }
+}
+
+TEST(XnbModelSourceRouteTest, ANonTriangleTopologyIsRefusedByName)
+{
+    ScratchDirectory scratch("gltf_lines");
+    CopyGltfFixture(scratch, "mode-lines.glb");
+
+    try
+    {
+        Pipeline::ContentBuildResult result;
+        result = Build(scratch.Path(), "mode-lines.glb", "models/lines",
+                       Pipeline::ContentOutputFormat::Xnb);
+        FAIL() << "a line-list primitive cannot be an XNA Model mesh part";
+    }
+    catch (const Pipeline::ContentPipelineError& error)
+    {
+        const std::string message = error.what();
+        EXPECT_NE(message.find("triangle list"), std::string::npos) << message;
+        EXPECT_EQ(error.Stage(), Pipeline::ContentPipelineStage::Write);
+    }
+}
+
+TEST(XnbModelSourceRouteTest, APbrMaterialIsDowngradedAndTheLossIsNamed)
+{
+    ScratchDirectory scratch("gltf_pbr");
+    CopyGltfFixture(scratch, "mat-vertex-color-pbr.glb");
+
+    Pipeline::ContentBuildResult result;
+    const Xnb::XnbCanonicalAsset asset =
+        BuildGltfModel(scratch, "mat-vertex-color-pbr.glb", result);
+
+    const auto& model = std::get<Xnb::XnbModelData>(asset.value);
+    ASSERT_EQ(model.sharedResources.size(), 3u);
+    EXPECT_TRUE(std::holds_alternative<Xnb::XnbBasicEffectData>(
+        model.sharedResources[2].value));
+
+    // The downgrade must be stated, and it must say what was dropped rather than merely that
+    // something was.
+    ASSERT_FALSE(result.output.warnings.empty());
+    const std::string warning = result.output.warnings[0];
+    EXPECT_NE(warning.find("downgraded to XNA's BasicEffect"), std::string::npos) << warning;
+    EXPECT_NE(warning.find("metallicFactor"), std::string::npos) << warning;
+    EXPECT_NE(warning.find("roughnessFactor"), std::string::npos) << warning;
+
+    // A warning is a build-log message, not just a field on the result.
+    bool logged = false;
+    for (const Pipeline::ContentLogMessage& message : result.messages)
+    {
+        if (message.level == Pipeline::ContentLogLevel::Warning &&
+            message.stage == Pipeline::ContentPipelineStage::Write &&
+            message.component == "CNA.XnbModelWriter")
+        {
+            logged = true;
+        }
+    }
+    EXPECT_TRUE(logged);
+}
+
+TEST(XnbModelSourceRouteTest, ASkinnedModelStatesThatItsSkeletonIsNotWritten)
+{
+    ScratchDirectory scratch("gltf_skin");
+    CopyGltfFixture(scratch, "skin-unlit.glb");
+
+    Pipeline::ContentBuildResult result;
+    const Xnb::XnbCanonicalAsset asset = BuildGltfModel(scratch, "skin-unlit.glb", result);
+    EXPECT_EQ(asset.rootReader, "Microsoft.Xna.Framework.Content.ModelReader");
+
+    bool mentionsSkeleton = false;
+    for (const std::string& warning : result.output.warnings)
+    {
+        if (warning.find("skinning skeleton") != std::string::npos) { mentionsSkeleton = true; }
+    }
+    EXPECT_TRUE(mentionsSkeleton) << "an XNA Model has no skeleton; dropping one must be stated";
+}
+
+TEST(XnbModelSourceRouteTest, TheSameGltfSourceStillBuildsToCnbUnchanged)
+{
+    ScratchDirectory scratch("gltf_both");
+    CopyGltfFixture(scratch, "mode-triangles.glb");
+
+    const Pipeline::ContentBuildResult cnb =
+        Build(scratch.Path(), "mode-triangles.glb", "models/asset",
+              Pipeline::ContentOutputFormat::Cnb);
+    EXPECT_EQ(cnb.writer.name, "CNA.ModelContentWriter");
+    ASSERT_GE(cnb.output.bytes.size(), 3u);
+    EXPECT_EQ(cnb.output.bytes[0], 'C');
+    EXPECT_TRUE(cnb.output.warnings.empty())
+        << "CNB carries the whole model, so it has nothing to warn about";
+}

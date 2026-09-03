@@ -91,10 +91,10 @@ All 30 failures are environmental and reproduce on the unmodified tree:
 **Current (2026-09-03, after Phase B and most of Phase C):**
 
 ```text
-CnaContentTests:  1656 run   1558 passed   68 skipped   30 failed
+CnaContentTests:  1670 run   1572 passed   68 skipped   30 failed
 ```
 
-The same 30 environmental failures, +71 tests, +71 passing, zero new failures.
+The same 30 environmental failures, +85 tests, +85 passing, zero new failures.
 
 ---
 
@@ -321,7 +321,7 @@ Legend: `[ ]` open · `[x]` complete · `[~]` partially complete (detail in the 
 | `XNAP-62` | `cna-content --format xnb|cnb`, `--xnb-platform`, `--xnb-version`, `--xnb-profile`, `--xnb-compress`; `.xnb` output extension; help/validation/exit codes. | [ ] |
 | `XNAP-63` | `.cna-content.json` v2: project-wide and per-asset `format`, target platform, graphics profile. | [x] |
 | `XNAP-64` | Incremental build correctness for XNB: writer identity/schema fingerprints, format changes invalidating output. | [x] |
-| `XNAP-65` | Diagnostics: every XNB failure names source, importer, processor, output format, field and reason. | [x] |
+| `XNAP-65` | Diagnostics: every XNB failure names source, importer, processor, output format, field and reason. | [x] Also fixes a pre-existing gap: `cna-content` collected the pipeline's log messages and never printed any of them, so a warning about a documented loss reached nobody. |
 
 ### Phase F — source-asset routes
 
@@ -333,10 +333,10 @@ Legend: `[ ]` open · `[x]` complete · `[~]` partially complete (detail in the 
 | `XNAP-53` | Independent BC1/BC2/BC3 encoder + `TextureProcessor` format parameter. | [ ] |
 | `XNAP-54` | Mip generation, premultiply-alpha, colour-key, resize policy parameters shared by both outputs. | [ ] |
 | `XNAP-55` | Audio: broaden accepted WAV PCM variants; deterministic duration; loop metadata. | [ ] |
-| `XNAP-56` | Canonical pipeline model IR sufficient for XNA `Model` (declarations, streams, materials, bounds, shared resources) without overloading a frozen CNB carrier. | [ ] |
-| `XNAP-57` | glTF/GLB → canonical model IR → `Model` XNB, with vertex-declaration synthesis and validation. | [ ] |
-| `XNAP-58` | Material downgrade: glTF PBR → BasicEffect-family, deterministic and diagnosed; CNB keeps the full material. | [ ] |
-| `XNAP-59` | Model test matrix: triangle, cube, multi-mesh, multi-material, hierarchy, transforms, indexed/non-indexed, multi-attribute, textured, skinned, malformed, limits. | [ ] |
+| `XNAP-56` | Canonical pipeline model IR sufficient for XNA `Model` (declarations, streams, materials, bounds, shared resources) without overloading a frozen CNB carrier. | [x] Resolved without a new IR. CNB Model schema 1 records a vertex stride but no `VertexDeclaration`; `CNA/Internal/Graphics/VertexDeclarationFidelity.hpp` already holds the canonical stride-to-element table that **every CNA renderer interprets those same bytes with**, so the declaration is recovered rather than invented. Mesh bounds are derived exactly as the runtime adapter derives them, so both loaders see one bounding sphere. Adding a parallel IR would have created a second thing to keep in step with no new information in it. |
+| `XNAP-57` | glTF/GLB → canonical model IR → `Model` XNB, with vertex-declaration synthesis and validation. | [x] |
+| `XNAP-58` | Material downgrade: glTF PBR → BasicEffect-family, deterministic and diagnosed; CNB keeps the full material. | [x] |
+| `XNAP-59` | Model test matrix: triangle, cube, multi-mesh, multi-material, hierarchy, transforms, indexed/non-indexed, multi-attribute, textured, skinned, malformed, limits. | [~] Covered by tests plus a corpus sweep: 130 of the 148 committed `.glb` fixtures build to Model XNB and every one is accepted by the independent parser. The 18 that do not are all correct refusals — four non-triangle topologies, twelve pre-existing import refusals shared with the CNB route, one multi-Model source needing `generateChildAssets`, one glTF material-variants source CNB schema 1 already refuses. The sweep is not yet a committed test. |
 
 ### Phase G — real-XNA interoperability harness (cannot execute here)
 

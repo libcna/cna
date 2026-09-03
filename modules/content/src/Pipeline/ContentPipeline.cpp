@@ -1172,6 +1172,11 @@ namespace CNA::Content::Pipeline
             RequireDeclaredWriterOutput(writerSchemas, output.assetTypeId,
                                         output.assetTypeName, output.assetSchemaVersion,
                                         logicalName);
+            for (const std::string& warning : output.warnings)
+            {
+                EmitLog(logger, ContentLogLevel::Warning, source, logicalName,
+                        ContentPipelineStage::Write, writerIdentity.name, warning);
+            }
             if (output.additionalOutputs.size() >= MaxContentBuildOutputs)
             {
                 throw std::logic_error(

@@ -789,6 +789,17 @@ namespace CNA::Content::Pipeline
 
         /** @brief Additional outputs whose logical names are distinct from the primary asset. */
         std::vector<ContentAdditionalWriteOutput> additionalOutputs;
+
+        /**
+         * @brief Documented losses the writer took, in the order it took them.
+         *
+         * A writer that cannot represent something the processed value carries has three honest
+         * options: refuse, represent it exactly, or state precisely what it dropped. This field is
+         * the third. `ContentPipeline::Build()` forwards each entry to the build log as a warning
+         * against the writer's own component name, so an author is told what an output format cost
+         * them rather than discovering it at run time.
+         */
+        std::vector<std::string> warnings;
     };
 
     /**

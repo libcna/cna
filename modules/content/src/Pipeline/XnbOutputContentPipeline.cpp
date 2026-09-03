@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Content/Pipeline/XnbOutputContentPipeline.hpp"
 
+#include <cstring>
 #include <memory>
 #include <utility>
 #include <variant>
@@ -9,7 +10,10 @@
 #include "CNA/Content/Cnb/CnbSoundEffectCodec.hpp"
 #include "CNA/Content/Cnb/CnbSpriteFontCodec.hpp"
 #include "CNA/Content/Cnb/CnbTextureCodec.hpp"
+#include "CNA/Content/Cnb/CnbModelData.hpp"
 #include "CNA/Content/Cnb/CnbModelV2Data.hpp"
+#include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
+#include "Microsoft/Xna/Framework/BoundingSphere.hpp"
 #include "CNA/Content/Cnb/CnbTextureFormat.hpp"
 #include "CNA/Content/Pipeline/CnjContentPipeline.hpp"
 #include "CNA/Content/Pipeline/ModelContentPipeline.hpp"
@@ -354,19 +358,17 @@ namespace CNA::Content::Pipeline
                         "assets. Build with 'generateChildAssets' disabled, or build the child "
                         "assets as their own sources.");
                 }
-                const auto* schema2 = std::get_if<Cnb::CnbModelV2Data>(&bundle.primary);
-                if (schema2 == nullptr)
-                {
-                    throw XnbWriteException(
-                        "'" + logicalName +
-                        "': this Model was processed into CNB Model schema 1, which stores a "
-                        "vertex stride but no VertexDeclaration. An XNA Model requires one per "
-                        "vertex buffer, so the asset cannot be emitted as XNB. See "
-                        "plans/plan_xnapipeline.md XNAP-56/XNAP-57 for the canonical model "
-                        "representation this needs.");
-                }
-                return MakeResult(Xnb::WriteXnbAsset(
-                    ConvertModelV2ToXnb(*schema2, logicalName), Options(), logicalName));
+                std::vector<std::string> warnings;
+                const Xnb::XnbModelData model =
+                    std::holds_alternative<Cnb::CnbModelV2Data>(bundle.primary)
+                        ? ConvertModelV2ToXnb(std::get<Cnb::CnbModelV2Data>(bundle.primary),
+                                              logicalName)
+                        : ConvertModelSchema1ToXnb(std::get<Cnb::CnbModelData>(bundle.primary),
+                                                   logicalName, warnings);
+                ContentWriteResult result =
+                    MakeResult(Xnb::WriteXnbAsset(model, Options(), logicalName));
+                result.warnings = std::move(warnings);
+                return result;
             }
 
         private:
@@ -375,6 +377,10 @@ namespace CNA::Content::Pipeline
 
             [[nodiscard]] static Xnb::XnbModelData ConvertModelV2ToXnb(
                 const Cnb::CnbModelV2Data& model, const std::string& logicalName);
+
+            [[nodiscard]] static Xnb::XnbModelData ConvertModelSchema1ToXnb(
+                const Cnb::CnbModelData& model, const std::string& logicalName,
+                std::vector<std::string>& warnings);
         };
     }
 
@@ -563,6 +569,189 @@ namespace CNA::Content::Pipeline
                 std::to_string(static_cast<std::uint32_t>(effect.kind)) +
                 " has no XNB stock-effect writer.");
         }
+    }
+
+    namespace
+    {
+
+        /**
+         * @brief Compares two stock-effect shared resources for interning purposes.
+         *
+         * Only same-reader resources are ever compared, so this is a field comparison of the one
+         * alternative both hold.
+         *
+         * @param left First resource.
+         * @param right Second resource.
+         * @return True when the two describe the same effect.
+         */
+        [[nodiscard]] bool SameStockEffect(const Xnb::XnbModelSharedResourceData& left,
+                                            const Xnb::XnbModelSharedResourceData& right)
+        {
+            const auto sameVector = [](const Microsoft::Xna::Framework::Vector3& a,
+                                       const Microsoft::Xna::Framework::Vector3& b)
+            {
+                return a.X == b.X && a.Y == b.Y && a.Z == b.Z;
+            };
+            if (const auto* a = std::get_if<Xnb::XnbBasicEffectData>(&left.value))
+            {
+                const auto* b = std::get_if<Xnb::XnbBasicEffectData>(&right.value);
+                return b != nullptr && a->textureReference == b->textureReference &&
+                       sameVector(a->diffuseColor, b->diffuseColor) &&
+                       sameVector(a->emissiveColor, b->emissiveColor) &&
+                       sameVector(a->specularColor, b->specularColor) &&
+                       a->specularPower == b->specularPower && a->alpha == b->alpha &&
+                       a->vertexColorEnabled == b->vertexColorEnabled;
+            }
+            if (const auto* a = std::get_if<Xnb::XnbSkinnedEffectData>(&left.value))
+            {
+                const auto* b = std::get_if<Xnb::XnbSkinnedEffectData>(&right.value);
+                return b != nullptr && a->textureReference == b->textureReference &&
+                       a->weightsPerVertex == b->weightsPerVertex &&
+                       sameVector(a->diffuseColor, b->diffuseColor) &&
+                       sameVector(a->emissiveColor, b->emissiveColor) &&
+                       sameVector(a->specularColor, b->specularColor) &&
+                       a->specularPower == b->specularPower && a->alpha == b->alpha;
+            }
+            if (const auto* a = std::get_if<Xnb::XnbDualTextureEffectData>(&left.value))
+            {
+                const auto* b = std::get_if<Xnb::XnbDualTextureEffectData>(&right.value);
+                return b != nullptr && a->textureReference == b->textureReference &&
+                       a->texture2Reference == b->texture2Reference &&
+                       sameVector(a->diffuseColor, b->diffuseColor) && a->alpha == b->alpha &&
+                       a->vertexColorEnabled == b->vertexColorEnabled;
+            }
+            return false;
+        }
+
+        /**
+         * @brief Converts one schema-1 mesh part's material into an XNA stock effect.
+         *
+         * The field mapping is the one CNA's own runtime adapter already applies to a schema-1
+         * Model (`plan_content_pipeline.md` `CP-041`): base colour becomes DiffuseColor and Alpha,
+         * the emissive factor becomes EmissiveColor, and the specular colour factor becomes
+         * SpecularColor. Nothing is invented; SpecularPower and WeightsPerVertex have no schema
+         * field and take XNA's own constructor defaults, exactly as the runtime does.
+         *
+         * A PBR effect kind has no XNA counterpart at all. Rather than refuse an otherwise
+         * perfectly representable model, it is downgraded to the corresponding non-PBR stock
+         * effect and every dropped input is named in @p warnings.
+         *
+         * @param part The schema-1 mesh part.
+         * @param logicalName Logical asset name used in diagnostics.
+         * @param index The part's index, used in diagnostics.
+         * @param warnings Receives one entry per documented loss.
+         * @return The stock-effect shared resource to write.
+         * @throws XnbWriteException for an effect kind XNA cannot express at all.
+         */
+        [[nodiscard]] Xnb::XnbModelSharedResourceData ConvertSchema1Effect(
+            const Cnb::CnbModelPart& part, const std::string& logicalName,
+            const std::size_t index, std::vector<std::string>& warnings)
+        {
+            using Microsoft::Xna::Framework::Vector3;
+            const Cnb::CnbMaterial& material = part.material;
+            const Vector3 diffuse(material.baseColorFactor[0], material.baseColorFactor[1],
+                                  material.baseColorFactor[2]);
+            const Vector3 emissive(material.emissiveFactor[0], material.emissiveFactor[1],
+                                   material.emissiveFactor[2]);
+            const Vector3 specular(material.specularColorFactor[0],
+                                   material.specularColorFactor[1],
+                                   material.specularColorFactor[2]);
+            const float alpha = material.baseColorFactor[3];
+            const std::string where =
+                "mesh part " + std::to_string(index) +
+                (part.name.empty() ? std::string() : " ('" + part.name + "')");
+
+            const auto namePbrLoss = [&](const char* target)
+            {
+                std::string dropped;
+                const auto add = [&dropped](const std::string& text)
+                {
+                    if (!dropped.empty()) { dropped += ", "; }
+                    dropped += text;
+                };
+                add("metallicFactor " + std::to_string(material.metallicFactor));
+                add("roughnessFactor " + std::to_string(material.roughnessFactor));
+                if (!material.normalMap.empty()) { add("the normal map"); }
+                if (!material.metallicRoughnessMap.empty())
+                {
+                    add("the metallic-roughness map");
+                }
+                if (!material.emissiveMap.empty()) { add("the emissive map"); }
+                if (!material.occlusionMap.empty()) { add("the occlusion map"); }
+                if (!material.specularMap.empty()) { add("the specular map"); }
+                if (!material.specularColorMap.empty()) { add("the specular-colour map"); }
+                warnings.push_back(
+                    where + ": its physically based material was downgraded to XNA's " +
+                    std::string(target) +
+                    ", which has no PBR shading model. Base colour, emissive factor, specular "
+                    "colour factor and alpha survive; dropped: " + dropped +
+                    ". The CNB output of the same source keeps the complete material.");
+            };
+
+            Xnb::XnbModelSharedResourceData resource;
+            switch (part.effectKind)
+            {
+                case Cnb::CnbEffectKind::PbrEffect:
+                    namePbrLoss("BasicEffect");
+                    [[fallthrough]];
+                case Cnb::CnbEffectKind::BasicEffect:
+                {
+                    Xnb::XnbBasicEffectData effect;
+                    effect.textureReference = material.baseColorTexture;
+                    effect.diffuseColor = diffuse;
+                    effect.emissiveColor = emissive;
+                    effect.specularColor = specular;
+                    effect.specularPower = 16.0f;
+                    effect.alpha = alpha;
+                    effect.vertexColorEnabled = part.vertexColorEnabled;
+                    resource.reader = "Microsoft.Xna.Framework.Content.BasicEffectReader";
+                    resource.value = effect;
+                    return resource;
+                }
+                case Cnb::CnbEffectKind::SkinnedPbrEffect:
+                    namePbrLoss("SkinnedEffect");
+                    [[fallthrough]];
+                case Cnb::CnbEffectKind::SkinnedEffect:
+                {
+                    Xnb::XnbSkinnedEffectData effect;
+                    effect.textureReference = material.baseColorTexture;
+                    effect.weightsPerVertex = 4;
+                    effect.diffuseColor = diffuse;
+                    effect.emissiveColor = emissive;
+                    effect.specularColor = specular;
+                    effect.specularPower = 16.0f;
+                    effect.alpha = alpha;
+                    resource.reader = "Microsoft.Xna.Framework.Content.SkinnedEffectReader";
+                    resource.value = effect;
+                    return resource;
+                }
+                case Cnb::CnbEffectKind::DualTextureEffect:
+                {
+                    Xnb::XnbDualTextureEffectData effect;
+                    effect.textureReference = material.baseColorTexture;
+                    effect.texture2Reference = material.texture2;
+                    effect.diffuseColor = diffuse;
+                    effect.alpha = alpha;
+                    effect.vertexColorEnabled = part.vertexColorEnabled;
+                    resource.reader = "Microsoft.Xna.Framework.Content.DualTextureEffectReader";
+                    resource.value = effect;
+                    return resource;
+                }
+                case Cnb::CnbEffectKind::External:
+                    throw XnbWriteException(
+                        "'" + logicalName + "': " + where + " names the external Effect asset '" +
+                        part.externalEffect +
+                        "'. An XNA Model references a compiled Effect by external reference, and "
+                        "CNA cannot compile an XNA-compatible effect from source "
+                        "(plans/plan_xnapipeline.md XNAP-84), so writing the reference would "
+                        "produce a Model that cannot load. Use a stock effect for XNB output.");
+            }
+            throw XnbWriteException(
+                "'" + logicalName + "': " + where + " uses effect kind " +
+                std::to_string(static_cast<std::uint32_t>(part.effectKind)) +
+                ", which has no XNA stock effect.");
+        }
+
     }
 
     std::string XnbOutputOptionsDigest(const Xnb::XnbFileOptions& options)
@@ -820,4 +1009,261 @@ namespace CNA::Content::Pipeline
             return result;
         }
     }
+
+        Xnb::XnbModelData XnbModelWriter::ConvertModelSchema1ToXnb(
+            const Cnb::CnbModelData& model, const std::string& logicalName,
+            std::vector<std::string>& warnings)
+        {
+            namespace Fidelity = CNA::Internal::Graphics;
+            using Microsoft::Xna::Framework::BoundingSphere;
+            using Microsoft::Xna::Framework::Vector3;
+
+            Xnb::XnbModelData result;
+
+            // Bones. A schema-1 Model compiled from a hierarchy-less source carries none, and the
+            // runtime synthesizes a single "Root"; the XNB writer does the same so both loaders
+            // observe the same skeleton. Bone 0's stored transform is deliberately not written,
+            // matching the runtime adapter: a Model's root bone is the space the model is drawn
+            // in, and applying a transform there would move every mesh.
+            if (model.bones.empty())
+            {
+                Xnb::XnbModelBoneData root;
+                root.name = "Root";
+                root.transform = Microsoft::Xna::Framework::Matrix::getIdentityProperty();
+                root.parent = -1;
+                result.bones.push_back(std::move(root));
+            }
+            else
+            {
+                result.bones.reserve(model.bones.size());
+                for (std::size_t index = 0u; index < model.bones.size(); ++index)
+                {
+                    const Cnb::CnbModelBone& source = model.bones[index];
+                    Xnb::XnbModelBoneData bone;
+                    bone.name = source.name.empty() ? std::string("Root") : source.name;
+                    bone.transform = index == 0u
+                                         ? Microsoft::Xna::Framework::Matrix::getIdentityProperty()
+                                         : ConvertTransform(source.transform);
+                    bone.parent = index == 0u ? -1 : source.parent;
+                    result.bones.push_back(std::move(bone));
+                }
+                for (std::size_t index = 1u; index < result.bones.size(); ++index)
+                {
+                    const std::int32_t parent = result.bones[index].parent;
+                    if (parent < 0 || static_cast<std::size_t>(parent) >= result.bones.size())
+                    {
+                        throw XnbWriteException(
+                            "'" + logicalName + "': bone " + std::to_string(index) + " ('" +
+                            result.bones[index].name + "') names parent " +
+                            std::to_string(parent) + ", outside the " +
+                            std::to_string(result.bones.size()) + "-bone table.");
+                    }
+                    result.bones[static_cast<std::size_t>(parent)].children.push_back(
+                        static_cast<std::int32_t>(index));
+                }
+            }
+            result.rootBone = 0;
+
+            // Every part owns its own vertex and index bytes in schema 1, so each becomes its own
+            // pair of shared resources. Effects are interned by value, because a Model whose parts
+            // share one material should not carry the same stock effect several times.
+            std::vector<std::int32_t> vertexResource(model.parts.size(), -1);
+            std::vector<std::int32_t> indexResource(model.parts.size(), -1);
+            std::vector<std::int32_t> effectResource(model.parts.size(), -1);
+            std::vector<std::vector<Vector3>> partPositions(model.parts.size());
+            std::vector<Xnb::XnbModelSharedResourceData> effects;
+
+            for (std::size_t index = 0u; index < model.parts.size(); ++index)
+            {
+                const Cnb::CnbModelPart& part = model.parts[index];
+                const std::string where =
+                    "'" + logicalName + "': part " + std::to_string(index) +
+                    (part.name.empty() ? std::string() : " ('" + part.name + "')");
+
+                if (part.primitiveTopology != 4u)
+                {
+                    throw XnbWriteException(
+                        where + " uses primitive topology " +
+                        std::to_string(part.primitiveTopology) +
+                        "; an XNA Model mesh part is always a triangle list.");
+                }
+                if (part.vertexStride == 0u ||
+                    part.vertexBytes.size() !=
+                        static_cast<std::size_t>(part.vertexStride) * part.vertexCount)
+                {
+                    throw XnbWriteException(
+                        where + " declares " + std::to_string(part.vertexCount) +
+                        " vertices of stride " + std::to_string(part.vertexStride) +
+                        " but carries " + std::to_string(part.vertexBytes.size()) + " bytes.");
+                }
+
+                const Fidelity::InferredVertexLayout layout = Fidelity::InferredLayoutForStride(
+                    static_cast<int>(part.vertexStride),
+                    Fidelity::UnlistedStrideLayout::RendererRefusesIt);
+                if (!layout.known || layout.count == 0u)
+                {
+                    throw XnbWriteException(
+                        where + " has vertex stride " + std::to_string(part.vertexStride) +
+                        ", which is not one of CNA's canonical vertex layouts, so no "
+                        "VertexDeclaration can be derived for it. An XNA Model requires one.");
+                }
+
+                Xnb::XnbVertexBufferData vertexBuffer;
+                vertexBuffer.declaration.stride = static_cast<std::int32_t>(part.vertexStride);
+                vertexBuffer.declaration.elements.reserve(layout.count);
+                for (std::size_t element = 0u; element < layout.count; ++element)
+                {
+                    const Fidelity::InferredVertexElement& source = layout.elements[element];
+                    vertexBuffer.declaration.elements.emplace_back(
+                        source.offset, source.format, source.usage, source.usageIndex);
+                }
+                vertexBuffer.vertexCount = part.vertexCount;
+                vertexBuffer.bytes = part.vertexBytes;
+                result.sharedResources.push_back(
+                    {"Microsoft.Xna.Framework.Content.VertexBufferReader",
+                     std::move(vertexBuffer)});
+                vertexResource[index] =
+                    static_cast<std::int32_t>(result.sharedResources.size() - 1u);
+
+                if (part.indexElementSize != 2u && part.indexElementSize != 4u)
+                {
+                    throw XnbWriteException(
+                        where + " declares " + std::to_string(part.indexElementSize) +
+                        "-byte indices; XNA supports 2 and 4.");
+                }
+                Xnb::XnbIndexBufferData indexBuffer;
+                indexBuffer.indexElementSize = part.indexElementSize;
+                indexBuffer.bytes = part.indexBytes;
+                result.sharedResources.push_back(
+                    {"Microsoft.Xna.Framework.Content.IndexBufferReader",
+                     std::move(indexBuffer)});
+                indexResource[index] =
+                    static_cast<std::int32_t>(result.sharedResources.size() - 1u);
+
+                Xnb::XnbModelSharedResourceData effect =
+                    ConvertSchema1Effect(part, logicalName, index, warnings);
+                std::int32_t existing = -1;
+                for (std::size_t candidate = 0u; candidate < effects.size(); ++candidate)
+                {
+                    if (effects[candidate].reader == effect.reader &&
+                        SameStockEffect(effects[candidate], effect))
+                    {
+                        existing = static_cast<std::int32_t>(candidate);
+                        break;
+                    }
+                }
+                if (existing < 0)
+                {
+                    effects.push_back(std::move(effect));
+                    existing = static_cast<std::int32_t>(effects.size() - 1u);
+                }
+                effectResource[index] = existing;
+
+                // Mesh bounds come from the position element, exactly as the runtime adapter
+                // computes them: schema 1 stores no bounding sphere, so both loaders must derive
+                // the same one or a game would see different culling from the same asset.
+                std::vector<Vector3>& positions = partPositions[index];
+                positions.reserve(part.vertexCount);
+                for (std::uint32_t vertex = 0u; vertex < part.vertexCount; ++vertex)
+                {
+                    float xyz[3]{};
+                    std::memcpy(xyz,
+                                part.vertexBytes.data() +
+                                    static_cast<std::size_t>(vertex) * part.vertexStride,
+                                sizeof(xyz));
+                    positions.emplace_back(xyz[0], xyz[1], xyz[2]);
+                }
+            }
+
+            const auto effectBase = static_cast<std::int32_t>(result.sharedResources.size());
+            for (Xnb::XnbModelSharedResourceData& effect : effects)
+            {
+                result.sharedResources.push_back(std::move(effect));
+            }
+
+            result.meshes.reserve(model.meshes.size());
+            for (const Cnb::CnbModelMesh& source : model.meshes)
+            {
+                Xnb::XnbModelMeshData mesh;
+                mesh.name = source.name;
+                mesh.parentBone = source.parentBone;
+                if (mesh.parentBone >= static_cast<std::int32_t>(result.bones.size()))
+                {
+                    throw XnbWriteException(
+                        "'" + logicalName + "': mesh '" + source.name +
+                        "' names parent bone " + std::to_string(mesh.parentBone) +
+                        ", outside the " + std::to_string(result.bones.size()) +
+                        "-bone table.");
+                }
+
+                std::vector<Vector3> bounds;
+                mesh.parts.reserve(source.partIndices.size());
+                for (const std::uint32_t partIndex : source.partIndices)
+                {
+                    if (static_cast<std::size_t>(partIndex) >= model.parts.size())
+                    {
+                        throw XnbWriteException(
+                            "'" + logicalName + "': mesh '" + source.name +
+                            "' names part " + std::to_string(partIndex) + ", outside the " +
+                            std::to_string(model.parts.size()) + "-part table.");
+                    }
+                    const Cnb::CnbModelPart& part = model.parts[partIndex];
+                    Xnb::XnbModelPartData converted;
+                    converted.vertexOffset = 0;
+                    converted.vertexCount = static_cast<std::int32_t>(part.vertexCount);
+                    converted.startIndex = 0;
+                    converted.primitiveCount = static_cast<std::int32_t>(part.primitiveCount);
+                    converted.vertexBufferResource = vertexResource[partIndex];
+                    converted.indexBufferResource = indexResource[partIndex];
+                    converted.effectResource = effectBase + effectResource[partIndex];
+                    mesh.parts.push_back(converted);
+
+                    const std::vector<Vector3>& positions = partPositions[partIndex];
+                    bounds.insert(bounds.end(), positions.begin(), positions.end());
+                }
+                mesh.boundingSphere = bounds.empty()
+                                          ? BoundingSphere(Vector3{0.0f, 0.0f, 0.0f}, 0.0f)
+                                          : BoundingSphere::CreateFromPoints(bounds);
+                result.meshes.push_back(std::move(mesh));
+            }
+
+            // Everything an XNA Model has no place for is named rather than dropped in silence.
+            if (model.skeleton.has_value())
+            {
+                warnings.push_back(
+                    "the skinning skeleton (" +
+                    std::to_string(model.skeleton->hierarchy.size()) +
+                    " joints) is not written: an XNA Model has no skeleton, and XNA's own skinned "
+                    "sample carries one in Model.Tag, which this writer does not synthesize. The "
+                    "CNB output of the same source keeps it.");
+            }
+            if (!model.animations.empty())
+            {
+                warnings.push_back(
+                    std::to_string(model.animations.size()) +
+                    " animation clip(s) are not written: an XNA Model has no animation storage. "
+                    "The CNB output of the same source keeps them.");
+            }
+            if (!model.lights.empty())
+            {
+                warnings.push_back(
+                    std::to_string(model.lights.size()) +
+                    " punctual light(s) are not written: XNA stores lighting on an effect at run "
+                    "time, not in a Model asset.");
+            }
+            std::size_t morphParts = 0u;
+            for (const Cnb::CnbModelPart& part : model.parts)
+            {
+                if (part.morph.has_value()) { ++morphParts; }
+            }
+            if (morphParts != 0u)
+            {
+                warnings.push_back(
+                    std::to_string(morphParts) +
+                    " mesh part(s) carry morph targets, which are not written: an XNA Model has "
+                    "no morph representation.");
+            }
+            return result;
+        }
+
 }
