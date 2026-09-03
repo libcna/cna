@@ -5,10 +5,21 @@
 > custom C++ component API is explicitly experimental. CNB container 1.0 and the existing built-in
 > CNB schemas remain frozen.
 
-The CNA Content Pipeline is the build-time system that turns authoring files into CNB. It is
-inspired by XNA 4.0's Importer -> Processor -> Writer separation, but it uses CNA-native C++23
-components and the existing CNB codecs instead of CLR reflection or MSBuild. XNB reader tables are
-consulted only at the compatibility-source boundary; they never enter native CNB.
+The CNA Content Pipeline is the build-time system that turns authoring files into compiled
+content. It is inspired by XNA 4.0's Importer -> Processor -> Writer separation, but it uses
+CNA-native C++23 components and the existing codecs instead of CLR reflection or MSBuild.
+
+It has **two output formats**, selected per build with `--format`:
+
+- **CNB**, CNA's own compiled format, described in this document. The default.
+- **XNB**, the XNA 4.0 compiled format, described in
+  [`docs/xnb-interoperability.md`](xnb-interoperability.md).
+
+The importer, the processor and the canonical content value are the same for both; only the
+serializer differs. Everything in this document about component selection, parameters,
+dependencies, the manifest, incremental builds and publication applies to both formats. XNB reader
+tables are consulted at the compatibility-source boundary and produced by the XNB writer; they
+never enter native CNB.
 
 These three terms describe separate layers:
 

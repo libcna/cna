@@ -1052,6 +1052,32 @@ if(CNA_BUILD_TESTS)
             PROPERTIES LABELS "audio;platform")
     endforeach()
 
+    # plans/plan_xnapipeline.md XNAP-026: an independent, non-CNA implementation of the .xnb
+    # reader side, run over the fixture corpus. CNA's own reader and writer were built together
+    # and can share a mistake; this checker was written from the published format specification
+    # and validates every real, externally produced uncompressed fixture in the repository before
+    # it is trusted to judge CNA's own output.
+    if(NOT DEFINED Python3_Interpreter_FOUND)
+        find_package(Python3 QUIET COMPONENTS Interpreter)
+    endif()
+    if(Python3_Interpreter_FOUND)
+        file(GLOB _cna_xnb_conformance_files
+            "${CMAKE_SOURCE_DIR}/tests/assets/xnb/cna/windows/uncompressed/*.xnb"
+            "${CMAKE_SOURCE_DIR}/tests/assets/xnb/monogame/windows/uncompressed/*.xnb"
+            "${CMAKE_SOURCE_DIR}/tests/assets/xnb/monogame/windows/uncompressed/audio/*.xnb"
+            "${CMAKE_SOURCE_DIR}/tests/assets/xnb/monogame/windows/uncompressed/song/*.xnb"
+            "${CMAKE_SOURCE_DIR}/tests/assets/xnb/xna40/windows/uncompressed/*.xnb")
+        if(_cna_xnb_conformance_files)
+            add_test(NAME CnaXnbSpecificationConformance
+                COMMAND "${Python3_EXECUTABLE}"
+                    "${CMAKE_SOURCE_DIR}/tools/xnb/xnb_conformance.py"
+                    ${_cna_xnb_conformance_files})
+            set_tests_properties(CnaXnbSpecificationConformance
+                PROPERTIES LABELS "content;xnb;conformance")
+        endif()
+        unset(_cna_xnb_conformance_files)
+    endif()
+
     add_test(NAME CnaSdl2OnlyRendererGate
         COMMAND ${CMAKE_COMMAND}
             -DCNA_SDL2_ONLY_GUARD_FILE=${CMAKE_SOURCE_DIR}/cmake/Sdl2OnlyConfiguration.cmake
