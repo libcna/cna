@@ -23,6 +23,7 @@
 #include "CNA/Content/Pipeline/CnjContentPipeline.hpp"
 #include "CNA/Content/Pipeline/ContentCompiler.hpp"
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
+#include "CNA/Content/Pipeline/EffectContentPipeline.hpp"
 #include "CNA/Content/Pipeline/ModelContentPipeline.hpp"
 #include "CNA/Content/Pipeline/SongContentPipeline.hpp"
 #include "CNA/Content/Pipeline/SoundEffectContentPipeline.hpp"
@@ -2584,6 +2585,7 @@ namespace CNA::Content::Pipeline
         RegisterCnjContentPipeline(registry);
         RegisterXnbContentPipeline(registry);
         RegisterSpriteFontSourceContentPipeline(registry);
+        RegisterCompiledEffectContentPipeline(registry);
     }
 
     int RunContentCompiler(const std::vector<std::filesystem::path>& arguments,

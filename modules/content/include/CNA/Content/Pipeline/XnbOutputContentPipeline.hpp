@@ -40,6 +40,8 @@ namespace CNA::Content::Pipeline
         Model = 8u,
         /** @brief `Microsoft.Xna.Framework.Curve`. */
         Curve = 9u,
+        /** @brief `Microsoft.Xna.Framework.Graphics.Effect`, from already-compiled bytecode. */
+        Effect = 10u,
     };
 
     /**

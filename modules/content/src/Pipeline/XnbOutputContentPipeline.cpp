@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Content/Pipeline/XnbOutputContentPipeline.hpp"
 
+#include "CNA/Content/Pipeline/EffectContentPipeline.hpp"
+
 #include <cstring>
 #include <memory>
 #include <utility>
@@ -63,6 +65,8 @@ namespace CNA::Content::Pipeline
                 case XnbOutputAssetId::Video: return "Microsoft.Xna.Framework.Media.Video";
                 case XnbOutputAssetId::Model: return "Microsoft.Xna.Framework.Graphics.Model";
                 case XnbOutputAssetId::Curve: return "Microsoft.Xna.Framework.Curve";
+                case XnbOutputAssetId::Effect:
+                    return "Microsoft.Xna.Framework.Graphics.Effect";
             }
             return "";
         }
@@ -312,6 +316,38 @@ namespace CNA::Content::Pipeline
                 converted.framesPerSecond = video.framesPerSecond;
                 converted.soundtrackType = static_cast<std::int32_t>(video.soundtrackType);
                 return MakeResult(Xnb::WriteXnbAsset(converted, Options(), logicalName));
+            }
+        };
+
+        /**
+         * @brief Writes an already-compiled Effect, byte for byte.
+         *
+         * plans/plan_xnapipeline.md XNAP-84. This writer serializes bytecode; it never compiles
+         * HLSL and never embeds source text pretending to be bytecode. There is no matching CNB
+         * writer, and that is deliberate: the CNB container reserves an `Effect` identifier but
+         * has no schema for it, because CNA has many renderers and a `.cnb` carrying one API's
+         * shader bytecode would be useless on the others.
+         */
+        class XnbEffectWriter final : public XnbPipelineWriter
+        {
+        public:
+            explicit XnbEffectWriter(Xnb::XnbFileOptions options)
+                : XnbPipelineWriter("CNA.XnbEffectWriter", XnbOutputAssetId::Effect,
+                                    std::move(options))
+            {
+            }
+
+            [[nodiscard]] std::string InputType() const override
+            {
+                return ProcessedCompiledEffectType;
+            }
+
+            [[nodiscard]] ContentWriteResult Write(
+                const ContentValue& input, const std::string& logicalName) const override
+            {
+                const ImportedCompiledEffect& effect = input.Get<ImportedCompiledEffect>();
+                return MakeResult(Xnb::WriteXnbAsset(
+                    Xnb::XnbCompiledEffectContent{effect.bytecode}, Options(), logicalName));
             }
         };
 
@@ -865,6 +901,7 @@ namespace CNA::Content::Pipeline
         registry.RegisterWriter(std::make_shared<const XnbSongWriter>(options));
         registry.RegisterWriter(std::make_shared<const XnbVideoWriter>(options));
         registry.RegisterWriter(std::make_shared<const XnbCurveWriter>(options));
+        registry.RegisterWriter(std::make_shared<const XnbEffectWriter>(options));
         registry.RegisterWriter(std::make_shared<const XnbModelWriter>(options));
     }
 

@@ -222,7 +222,7 @@ Stated plainly, because a gap named is worth more than a gap rounded up.
 
 | Not supported | Detail |
 |---|---|
-| **Compiling `.fx` to shader bytecode** | The writer serializes an *already-compiled* `Effect` payload verbatim. Turning HLSL into D3D bytecode is a separate major subsystem (`XNAP-84`, and `plans/plan_fx.md`). CNA will not fake it by embedding source text in an `Effect` asset. |
+| **Compiling `.fx` to shader bytecode** | CNA does not host an HLSL compiler, and that is a standing decision rather than an oversight (`plans/plan_fx.md`: "Out of scope; CNA will not embed an HLSL source compiler"). It will not fake it by embedding source text in an `Effect` asset. What it *does* do is build an already-compiled `.fxb` into an `Effect` `.xnb` with the bytecode byte for byte — see §7. Compile the `.fx` with `fxc` at profile `fx_2_0`, which is what XNA's own Content Pipeline used. |
 | **Compressed output** | Neither LZX (`0x80`) nor LZ4 (`0x40`) is written. Both are refused with a message naming the task. CNA *reads* both. |
 | **Xbox 360 semantics** | Beyond the `SoundEffect` WAVEFORMATEX byte swap, nothing is endian-corrected or tiled — and the writer refuses an `x` target rather than emitting Windows bytes under an Xbox header. `--xnb-allow-unverified-xbox` overrides it for hardware testing. |
 | **Windows Phone semantics** | The header byte is written and the payloads are Windows's, which is very likely correct for a little-endian ARM target and is nonetheless **unverified**: no `m` fixture and no Windows Phone runtime exist here. |
@@ -244,6 +244,7 @@ containers and no importer or processor is duplicated.
 | `.wav` | `WavImporter` → `SoundEffectProcessor` → SoundEffect writer | ✅ | ✅ `SoundEffect` |
 | `.gltf`, `.glb` | glTF importer → model processor → model writer | ✅ | ✅ `Model` |
 | `.cnj` | CNJ importer, then the matching processor | ✅ | ✅ |
+| `.fxb` (already-compiled effect) | `CompiledEffectImporter` → `CompiledEffectProcessor` → Effect writer | — | ✅ `Effect` |
 | `.xnb` | XNB importer (transcode to `.cnb`) | ✅ | — |
 
 Texture policy parameters (`textureFormat`, `generateMipmaps`, `premultiplyAlpha`,
@@ -253,6 +254,11 @@ conservative because flipping it changes the bytes of every alpha-bearing textur
 this pipeline. `BlendState::AlphaBlend`, which `SpriteBatch::Begin()` selects by default in both
 frameworks, is the premultiplied blend, so a project reproducing XNA's appearance should set the
 parameter. This is tracked as `XNAP-96`.
+
+A `.fxb` has no `.cnb` route, deliberately: the CNB container reserves an `Effect` identifier and
+has no schema for it, because CNA has many renderers and a `.cnb` carrying one API's shader
+bytecode would be useless on the others. A `.fx` has no importer at all, so a build tree containing
+one reports that nothing imports it — which is the honest answer when there is no compiler.
 
 Audio sources may be 8-bit unsigned, 16-bit, 24-bit or 32-bit PCM, or 32-bit IEEE float. Everything
 wider than 16 bits is narrowed to the Pcm16 both containers store, deterministically, **with a
