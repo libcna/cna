@@ -26,6 +26,7 @@
 #include <fstream>
 #include <iterator>
 #include <memory>
+#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -749,4 +750,43 @@ TEST(EffectSourceCommandLineTest, ChangingAParameterRebuildsTheEffect)
               R"("debug":{"type":"bool","value":true})");
     EXPECT_TRUE(RunCli(arguments).Says("Built: 1")) << "debug";
     EXPECT_TRUE(RunCli(arguments).Says("Skipped: 1"));
+}
+
+// -- The parser and its own help -----------------------------------------------------------------
+
+TEST(EffectSourceCommandLineTest, EveryOptionTheParserAcceptsAppearsInTheUsageText)
+{
+    // XNAP-A5 fixed a service that documented two options the parser did not implement. This is
+    // the mirror image, and the reason it is worth a test rather than a proofread: `--output` was
+    // accepted and undocumented, so nobody could have found it except by reading the parser. The
+    // list is derived from the parser's own source rather than restated, so a new option is
+    // covered the moment it is written.
+    const std::filesystem::path parser =
+        std::filesystem::path(CNA_TOOLS_SOURCE_DIR) / "content" / "content.cpp";
+    ASSERT_TRUE(std::filesystem::is_regular_file(parser)) << parser;
+    const std::string source = ReadText(parser);
+
+    std::set<std::string> accepted;
+    const std::string marker = "IsOption(argument, \"";
+    for (std::size_t at = source.find(marker); at != std::string::npos;
+         at = source.find(marker, at + 1u))
+    {
+        const std::size_t start = at + marker.size();
+        const std::size_t end = source.find('"', start);
+        const std::string option = source.substr(start, end - start);
+        // Only long options: `-o` is documented as part of the usage line's own syntax, and the
+        // two subcommands are not options at all.
+        if (option.rfind("--", 0u) == 0u) { accepted.insert(option); }
+    }
+    ASSERT_GE(accepted.size(), 10u) << "the parser's option list could not be derived";
+
+    const Invocation usage = RunCli({});
+    ASSERT_EQ(usage.exitCode, 2);
+    for (const std::string& option : accepted)
+    {
+        EXPECT_TRUE(usage.Says(option))
+            << "the parser accepts '" << option << "' and the usage text never mentions it. An "
+               "option nobody documents is the same defect as an option nobody implements, "
+               "pointing the other way.";
+    }
 }

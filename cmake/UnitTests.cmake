@@ -739,6 +739,10 @@ if(CNA_BUILD_TESTS)
         add_dependencies(${CNA_TEST_OBJECT_TARGET_content_pipeline} cna_content_tool)
         target_compile_definitions(${CNA_TEST_OBJECT_TARGET_content_pipeline} PRIVATE
             CNA_CONTENT_TOOL_PATH="$<TARGET_FILE:cna_content_tool>"
+            # XNAP-A5: the parser/usage-text consistency check derives the option list from the
+            # parser's own source, so it needs the tools tree by absolute path -- same reasoning
+            # as the CNB producer-output invariant below.
+            CNA_TOOLS_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tools"
         )
 
         # plans/plan_content_pipeline.md CP-014: prove the public CMake helper itself delegates to

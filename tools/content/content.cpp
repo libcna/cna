@@ -237,7 +237,7 @@ namespace
     void PrintUsage()
     {
         std::cerr
-            << "Usage: cna-content build <source-file-or-directory> -o <output>\n"
+            << "Usage: cna-content build <source-file-or-directory> -o|--output <output>\n"
                "         [--format cnb|xnb] [--config <file>] [--workers <1..64>]\n"
                "         [--xnb-platform <name>] [--xnb-version 4|5]\n"
                "         [--xnb-profile reach|hidef] [--xnb-compress none|lzx|lz4]\n"
