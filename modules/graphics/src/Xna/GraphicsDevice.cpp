@@ -2894,6 +2894,13 @@ namespace Microsoft::Xna::Framework::Graphics
         description.title = CNA::Internal::GetDefaultWindowTitle();
         description.width = width;
         description.height = height;
+        // WindowDescription is also used by CNA-native callers and therefore defaults to a
+        // resizable window. An XNA GameWindow has the opposite default: AllowUserResizing is
+        // false. State that policy at this ownership boundary so the native window and the XNA
+        // property agree from the moment the window is created. On Android this also prevents SDL
+        // from treating the default orientation set as FULL_USER before the game's
+        // GraphicsDeviceManager preferences are applied.
+        description.resizable = false;
 
         // MERGE (plans/plan_platform.md PLAT-8 x plans/plan_runtimerenderer.md P1/P2): next derived the render
         // intent, the high-density backing and the framebuffer bits from #if defined(CNA_RENDERER_*)

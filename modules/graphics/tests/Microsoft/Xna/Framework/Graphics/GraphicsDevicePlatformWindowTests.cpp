@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/Internal/DefaultWindowTitle.hpp"
+#include "CNA/GraphicsRendererSelection.hpp"
+#include "CNA/Internal/Renderers/Common/GraphicsRendererRegistry.hpp"
 #include "CNA/Platform/PlatformTestDecorator.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "System/Environment.hpp"
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <stdexcept>
@@ -163,6 +167,60 @@ private:
     bool videoAcquired_ = false;
 };
 
+class GraphicsDeviceWindowDescriptionTest : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        CNA::GraphicsRendererSelection::ResetForTestingEXT();
+        System::Environment::SetEnvironmentVariable(
+            "CNA_DEBUG_FAIL_RENDERER_INIT", std::string{});
+
+        std::vector<CNA::GraphicsRendererType> available;
+        for (const auto& descriptor :
+             CNA::Internal::Renderers::GraphicsRendererRegistry::All())
+        {
+            available.push_back(descriptor.type);
+        }
+        CNA::GraphicsRendererSelectionAccessEXT::PublishAvailable(
+            available,
+            CNA::Internal::Renderers::GraphicsRendererRegistry::Default().type);
+    }
+
+    void TearDown() override
+    {
+        System::Environment::SetEnvironmentVariable(
+            "CNA_DEBUG_FAIL_RENDERER_INIT", std::string{});
+        CNA::GraphicsRendererSelection::ResetForTestingEXT();
+    }
+};
+
+TEST_F(GraphicsDeviceWindowDescriptionTest,
+       XnaOwnedWindowIsNonResizableFromCreation)
+{
+    const auto& descriptor =
+        CNA::Internal::Renderers::GraphicsRendererRegistry::Default();
+    if (!descriptor.needsWindow)
+    {
+        GTEST_SKIP() << descriptor.name << " does not create a platform window";
+    }
+
+    WindowOwnershipTrace trace;
+    TracedPlatform platform(trace);
+    ScopedCurrentPlatform current(platform);
+
+    // Stop after the complete window-creation/application path but before the native renderer
+    // can interpret TracedWindow's deliberately toolkit-neutral handle.
+    System::Environment::SetEnvironmentVariable(
+        "CNA_DEBUG_FAIL_RENDERER_INIT", std::string(descriptor.name));
+    EXPECT_THROW((void) GraphicsDevice(), std::exception);
+
+    ASSERT_NE(std::find(trace.events.begin(), trace.events.end(), "window-created"),
+              trace.events.end());
+    EXPECT_FALSE(trace.description.resizable)
+        << "XNA GameWindow.AllowUserResizing defaults to false";
+}
+
 TEST(GraphicsDevicePlatformWindowTests,
      OwnsThePlatformWindowAndReleasesVideoAfterItsDestruction)
 {
@@ -182,7 +240,9 @@ TEST(GraphicsDevicePlatformWindowTests,
         EXPECT_EQ(trace.description.title, CNA::Internal::GetDefaultWindowTitle());
         EXPECT_EQ(trace.description.width, 800);
         EXPECT_EQ(trace.description.height, 480);
-        EXPECT_TRUE(trace.description.resizable);
+        // WindowDescription's CNA-native default is resizable, but GraphicsDevice creates an XNA
+        // GameWindow, whose AllowUserResizing property defaults to false.
+        EXPECT_FALSE(trace.description.resizable);
         EXPECT_EQ(trace.events, (std::vector<std::string>{
             "video-acquired", "window-created", "fullscreen-applied",
             "size-requested", "window-synced"}));
