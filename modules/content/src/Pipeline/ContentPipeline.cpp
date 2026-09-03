@@ -692,11 +692,12 @@ namespace CNA::Content::Pipeline
         std::filesystem::path sourceRoot, std::filesystem::path source, std::string logicalName,
         std::string component, const ContentProcessorParameters& parameters,
         const ContentSourceRootCapabilities& externalSourceRoots,
-        ContentDependencyCollector& dependencies, ContentBuildLogger& logger)
+        ContentDependencyCollector& dependencies, ContentBuildLogger& logger,
+        const ContentOutputFormat outputFormat)
         : sourceRoot_(std::move(sourceRoot)), source_(std::move(source)),
           logicalName_(std::move(logicalName)), component_(std::move(component)),
           parameters_(&parameters), dependencies_(&dependencies), logger_(&logger),
-          externalSourceRoots_(&externalSourceRoots)
+          externalSourceRoots_(&externalSourceRoots), outputFormat_(outputFormat)
     {
     }
 
@@ -708,6 +709,11 @@ namespace CNA::Content::Pipeline
     const ContentProcessorParameters& ContentProcessorContext::Parameters() const noexcept
     {
         return *parameters_;
+    }
+
+    ContentOutputFormat ContentProcessorContext::OutputFormat() const noexcept
+    {
+        return outputFormat_;
     }
 
     std::filesystem::path ContentProcessorContext::ResolveSourceDependency(
@@ -1119,7 +1125,7 @@ namespace CNA::Content::Pipeline
             processor->ValidateParameters(request.parameters);
             ContentProcessorContext context(root, source, logicalName, processorIdentity.name,
                                             request.parameters, externalSourceRoots,
-                                            dependencies, logger);
+                                            dependencies, logger, request.outputFormat);
             processed = processor->Process(imported, context);
             if (processed.Empty())
             {

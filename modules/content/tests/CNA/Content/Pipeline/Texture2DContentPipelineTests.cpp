@@ -150,7 +150,7 @@ TEST(Texture2DContentPipelineTest, BuildsHeadlesslyThroughDistinctImporterProces
     const Pipeline::ContentBuildResult result = BuildTexture(scratch.Path());
     EXPECT_EQ(result.importer, (Pipeline::ContentComponentIdentity{"CNA.ImageImporter", "1"}));
     EXPECT_EQ(result.processor,
-              (Pipeline::ContentComponentIdentity{"CNA.TextureProcessor", "1"}));
+              (Pipeline::ContentComponentIdentity{"CNA.TextureProcessor", "2"}));
     EXPECT_EQ(result.writer,
               (Pipeline::ContentComponentIdentity{"CNA.Texture2DContentWriter", "1"}));
     EXPECT_EQ(result.output.assetTypeId, Cnb::CnbAssetTypeId::Texture2D);
@@ -317,5 +317,213 @@ TEST(Texture2DContentPipelineTest, RejectsUnknownMistypedAndMalformedProcessorPa
             EXPECT_EQ(error.Stage(), Pipeline::ContentPipelineStage::Process);
             EXPECT_EQ(error.Component(), "CNA.TextureProcessor");
         }
+    }
+}
+
+// -- texture build policy (plans/plan_xnapipeline.md XNAP-54) -----------------------------------
+
+TEST(TextureImageOperationsTest, NextPowerOfTwoRoundsUpAndLeavesExactPowersAlone)
+{
+    EXPECT_EQ(Pipeline::NextPowerOfTwoDimension(0u), 1u);
+    EXPECT_EQ(Pipeline::NextPowerOfTwoDimension(1u), 1u);
+    EXPECT_EQ(Pipeline::NextPowerOfTwoDimension(2u), 2u);
+    EXPECT_EQ(Pipeline::NextPowerOfTwoDimension(3u), 4u);
+    EXPECT_EQ(Pipeline::NextPowerOfTwoDimension(100u), 128u);
+    EXPECT_EQ(Pipeline::NextPowerOfTwoDimension(1024u), 1024u);
+}
+
+TEST(TextureImageOperationsTest, HalvingAnImageAveragesEachTwoByTwoGroup)
+{
+    // Four texels of 0, 10, 20 and 30 average to 15 exactly, so an off-by-one in the weighting
+    // or a dropped column is visible rather than merely plausible.
+    std::vector<std::uint8_t> source(2u * 2u * 4u);
+    for (std::size_t texel = 0; texel < 4u; ++texel)
+    {
+        for (std::size_t channel = 0; channel < 4u; ++channel)
+        {
+            source[texel * 4u + channel] = static_cast<std::uint8_t>(texel * 10u);
+        }
+    }
+    const std::vector<std::uint8_t> halved =
+        Pipeline::ResampleRgbaImage(source, 2u, 2u, 1u, 1u);
+    ASSERT_EQ(halved.size(), 4u);
+    for (const std::uint8_t channel : halved) { EXPECT_EQ(channel, 15u); }
+}
+
+TEST(TextureImageOperationsTest, ShrinkingByAnAwkwardRatioAreaAveragesRatherThanDroppingTexels)
+{
+    // 3 -> 2 gives each destination texel one and a half source texels, so neither result can be
+    // a source value copied through.
+    std::vector<std::uint8_t> source(3u * 1u * 4u);
+    for (std::size_t texel = 0; texel < 3u; ++texel)
+    {
+        for (std::size_t channel = 0; channel < 4u; ++channel)
+        {
+            source[texel * 4u + channel] = static_cast<std::uint8_t>(texel * 60u);
+        }
+    }
+    const std::vector<std::uint8_t> shrunk =
+        Pipeline::ResampleRgbaImage(source, 3u, 1u, 2u, 1u);
+    ASSERT_EQ(shrunk.size(), 8u);
+    // (0*2 + 60*1) / 3 = 20 and (60*1 + 120*2) / 3 = 100.
+    EXPECT_EQ(shrunk[0], 20u);
+    EXPECT_EQ(shrunk[4], 100u);
+}
+
+TEST(TextureImageOperationsTest, EnlargingInterpolatesAndKeepsTheCornersInPlace)
+{
+    std::vector<std::uint8_t> source(2u * 1u * 4u);
+    for (std::size_t channel = 0; channel < 4u; ++channel)
+    {
+        source[channel] = 0u;
+        source[4u + channel] = 200u;
+    }
+    const std::vector<std::uint8_t> grown = Pipeline::ResampleRgbaImage(source, 2u, 1u, 4u, 1u);
+    ASSERT_EQ(grown.size(), 16u);
+    EXPECT_EQ(grown[0], 0u);
+    EXPECT_EQ(grown[12], 200u);
+    EXPECT_GT(grown[4], grown[0]);
+    EXPECT_LT(grown[8], grown[12]);
+}
+
+TEST(TextureImageOperationsTest, PremultiplyScalesEachChannelByItsOwnAlpha)
+{
+    std::vector<std::uint8_t> pixels{200u, 100u, 50u, 128u, 10u, 20u, 30u, 255u,
+                                     90u,  90u,  90u, 0u};
+    Pipeline::PremultiplyRgbaAlpha(pixels);
+    // (200 * 128 + 127) / 255 == 100, and the fully opaque texel is untouched.
+    EXPECT_EQ(pixels[0], 100u);
+    EXPECT_EQ(pixels[1], 50u);
+    EXPECT_EQ(pixels[2], 25u);
+    EXPECT_EQ(pixels[3], 128u);
+    EXPECT_EQ(pixels[4], 10u);
+    EXPECT_EQ(pixels[7], 255u);
+    EXPECT_EQ(pixels[8], 0u);
+    EXPECT_EQ(pixels[11], 0u);
+}
+
+TEST(TextureImageOperationsTest, AMipChainHalvesUntilOneByOne)
+{
+    const std::vector<std::uint8_t> level0(8u * 4u * 4u, 64u);
+    const std::vector<std::vector<std::uint8_t>> chain =
+        Pipeline::GenerateRgbaMipChain(level0, 8u, 4u);
+    // 8x4 -> 4x2 -> 2x1 -> 1x1.
+    ASSERT_EQ(chain.size(), 3u);
+    EXPECT_EQ(chain[0].size(), 4u * 2u * 4u);
+    EXPECT_EQ(chain[1].size(), 2u * 1u * 4u);
+    EXPECT_EQ(chain[2].size(), 4u);
+    for (const std::vector<std::uint8_t>& level : chain)
+    {
+        for (const std::uint8_t channel : level) { EXPECT_EQ(channel, 64u); }
+    }
+    EXPECT_TRUE(Pipeline::GenerateRgbaMipChain(std::vector<std::uint8_t>(4u, 0u), 1u, 1u).empty());
+}
+
+TEST(Texture2DContentPipelineTest, PremultiplyAlphaIsOffByDefaultAndOnWhenAsked)
+{
+    ScratchDirectory scratch("premultiply");
+    std::vector<std::uint8_t> pixels{200u, 100u, 50u, 128u, 10u, 20u, 30u, 255u};
+    WriteBytes(scratch.Path() / "wall.png", MakePng(pixels, 2, 1));
+
+    const auto firstTexel = [](const Pipeline::ContentBuildResult& result)
+    {
+        return Cnb::DecodeTexture2DFromCnb(
+                   Cnb::CnbDocument::Parse(result.output.bytes, "premultiply.cnb"))
+            .representations[0]
+            .levels[0];
+    };
+
+    // XNA 4.0's own default is the opposite; see the parameter's documentation for why CNA's
+    // differs and what a project targeting XNA's appearance should set.
+    EXPECT_EQ(firstTexel(BuildTexture(scratch.Path()))[0], 200u);
+
+    Pipeline::ContentProcessorParameters parameters;
+    parameters.Set(Pipeline::TexturePremultiplyAlphaParameter, true);
+    const std::vector<std::uint8_t> premultiplied =
+        firstTexel(BuildTexture(scratch.Path(), parameters));
+    EXPECT_EQ(premultiplied[0], 100u);
+    EXPECT_EQ(premultiplied[3], 128u);
+    EXPECT_EQ(premultiplied[4], 10u);
+}
+
+TEST(Texture2DContentPipelineTest, GenerateMipmapsProducesEveryLevelDownToOneByOne)
+{
+    ScratchDirectory scratch("mips");
+    WriteBytes(scratch.Path() / "wall.png", MakePng(DistinctPixels(8, 8), 8, 8));
+
+    Pipeline::ContentProcessorParameters parameters;
+    parameters.Set(Pipeline::TextureGenerateMipmapsParameter, true);
+    const Cnb::CnbTextureData texture = Cnb::DecodeTexture2DFromCnb(Cnb::CnbDocument::Parse(
+        BuildTexture(scratch.Path(), parameters).output.bytes, "mips.cnb"));
+    EXPECT_EQ(texture.mipCount, 4u);
+    ASSERT_EQ(texture.representations.size(), 1u);
+    ASSERT_EQ(texture.representations[0].levels.size(), 4u);
+    EXPECT_EQ(texture.representations[0].levels[3].size(), 4u);
+
+    // Without the parameter the texture keeps exactly the level the image carried.
+    EXPECT_EQ(Cnb::DecodeTexture2DFromCnb(
+                  Cnb::CnbDocument::Parse(BuildTexture(scratch.Path()).output.bytes, "flat.cnb"))
+                  .mipCount,
+              1u);
+}
+
+TEST(Texture2DContentPipelineTest, ResizeToPowerOfTwoRoundsBothDimensionsUp)
+{
+    ScratchDirectory scratch("resize");
+    WriteBytes(scratch.Path() / "wall.png", MakePng(DistinctPixels(5, 3), 5, 3));
+
+    Pipeline::ContentProcessorParameters parameters;
+    parameters.Set(Pipeline::TextureResizeToPowerOfTwoParameter, true);
+    const Cnb::CnbTextureData texture = Cnb::DecodeTexture2DFromCnb(Cnb::CnbDocument::Parse(
+        BuildTexture(scratch.Path(), parameters).output.bytes, "resize.cnb"));
+    EXPECT_EQ(texture.width, 8u);
+    EXPECT_EQ(texture.height, 4u);
+    EXPECT_EQ(texture.representations[0].levels[0].size(), 8u * 4u * 4u);
+}
+
+TEST(Texture2DContentPipelineTest, TextureFormatValuesAreParsedAndUnknownOnesNamed)
+{
+    EXPECT_EQ(Pipeline::TryParseTextureBuildFormat("DxtCompressed"),
+              Pipeline::TextureBuildFormat::DxtCompressed);
+    EXPECT_EQ(Pipeline::TryParseTextureBuildFormat("dxt5"), Pipeline::TextureBuildFormat::Dxt5);
+    EXPECT_EQ(Pipeline::TryParseTextureBuildFormat("COLOR"),
+              Pipeline::TextureBuildFormat::Color);
+    EXPECT_FALSE(Pipeline::TryParseTextureBuildFormat("Bc7").has_value());
+    EXPECT_EQ(Pipeline::TextureBuildFormatName(Pipeline::TextureBuildFormat::Dxt1), "Dxt1");
+
+    ScratchDirectory scratch("format");
+    WriteBytes(scratch.Path() / "wall.png", MakePng(DistinctPixels(4, 4), 4, 4));
+    Pipeline::ContentProcessorParameters parameters;
+    parameters.Set(Pipeline::TextureFormatParameter, std::string("Bc7"));
+    try
+    {
+        (void)BuildTexture(scratch.Path(), parameters);
+        FAIL() << "an unknown textureFormat must be refused";
+    }
+    catch (const Pipeline::ContentPipelineError& error)
+    {
+        EXPECT_NE(std::string(error.what()).find("NoChange, Color, DxtCompressed"),
+                  std::string::npos)
+            << error.what();
+    }
+}
+
+TEST(Texture2DContentPipelineTest, CompressionWithoutAnEncoderSaysWhichBuildProvidesOne)
+{
+    // This registry is the runtime module's own, with no build-time encoder attached. Refusing
+    // here rather than quietly writing uncompressed pixels is the point.
+    ScratchDirectory scratch("no_encoder");
+    WriteBytes(scratch.Path() / "wall.png", MakePng(DistinctPixels(4, 4), 4, 4));
+    Pipeline::ContentProcessorParameters parameters;
+    parameters.Set(Pipeline::TextureFormatParameter, std::string("Dxt1"));
+    try
+    {
+        (void)BuildTexture(scratch.Path(), parameters);
+        FAIL() << "a compressed format must be refused when no encoder is registered";
+    }
+    catch (const Pipeline::ContentPipelineError& error)
+    {
+        const std::string message = error.what();
+        EXPECT_NE(message.find("cna_content_pipeline"), std::string::npos) << message;
     }
 }

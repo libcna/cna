@@ -571,13 +571,15 @@ namespace CNA::Content::Pipeline
          * @param externalSourceRoots Canonical request-local read capabilities.
          * @param dependencies Per-build dependency collector.
          * @param logger Scoped logger.
+         * @param outputFormat Compiled container this build is producing.
          */
         ContentProcessorContext(std::filesystem::path sourceRoot, std::filesystem::path source,
                                 std::string logicalName, std::string component,
                                 const ContentProcessorParameters& parameters,
                                 const ContentSourceRootCapabilities& externalSourceRoots,
                                 ContentDependencyCollector& dependencies,
-                                ContentBuildLogger& logger);
+                                ContentBuildLogger& logger,
+                                ContentOutputFormat outputFormat = ContentOutputFormat::Cnb);
 
         /** @brief Processor contexts are call-scoped and cannot be copied. */
         ContentProcessorContext(const ContentProcessorContext&) = delete;
@@ -590,6 +592,19 @@ namespace CNA::Content::Pipeline
 
         /** @brief Returns the ordered processor parameters. */
         [[nodiscard]] const ContentProcessorParameters& Parameters() const noexcept;
+
+        /**
+         * @brief Returns the compiled container this build is producing.
+         *
+         * A processor's job is to produce one canonical value, and almost none of them need
+         * this. It exists for the cases where the two containers genuinely cannot carry the same
+         * thing -- a block-compressed texture has an XNB `SurfaceFormat` but no representation in
+         * the frozen CNB texture schema -- so a processor can take the documented fallback and
+         * say so, instead of failing late inside a codec.
+         *
+         * @return The requested output format.
+         */
+        [[nodiscard]] ContentOutputFormat OutputFormat() const noexcept;
 
         /**
          * @brief Resolves and records a processor-read source dependency.
@@ -667,6 +682,7 @@ namespace CNA::Content::Pipeline
         ContentDependencyCollector* dependencies_ = nullptr;
         ContentBuildLogger* logger_ = nullptr;
         const ContentSourceRootCapabilities* externalSourceRoots_ = nullptr;
+        ContentOutputFormat outputFormat_ = ContentOutputFormat::Cnb;
     };
 
     /**

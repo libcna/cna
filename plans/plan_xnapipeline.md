@@ -91,13 +91,13 @@ All 30 failures are environmental and reproduce on the unmodified tree:
 **Current (2026-09-03, after Phases B–F except the open rows):**
 
 ```text
-CnaContentTests:          1670 run   1572 passed   68 skipped   30 failed
-CnaContentPipelineTests:    16 run     16 passed    0 skipped    0 failed
-CnaTests (whole suite):   7781 run   7240 passed  512 skipped   29 failed
+CnaContentTests:          1681 run   1583 passed   68 skipped   30 failed
+CnaContentPipelineTests:    37 run     37 passed    0 skipped    0 failed
+CnaTests (whole suite):   7813 run   7272 passed  512 skipped   29 failed
 ```
 
-`CnaContentTests` shows the same 30 environmental failures as the recorded baseline, +85 tests,
-+85 passing, **zero new failures**. `CnaContentPipelineTests` is the new build-time module's own
+`CnaContentTests` shows the same 30 environmental failures as the recorded baseline, +96 tests,
++96 passing, **zero new failures**. `CnaContentPipelineTests` is the new build-time module's own
 focused executable and is entirely new. The whole-suite figure is recorded here for completeness;
 its 29 failures are the STUB-renderer `TextureCube`/`Texture3D`/capability group, the uid-0
 permission case and the two audio-device `MediaLibrary` cases — none of them content-pipeline
@@ -337,8 +337,8 @@ Legend: `[ ]` open · `[x]` complete · `[~]` partially complete (detail in the 
 | `XNAP-50` | `.spritefont` XML description importer (FontName, Size, Spacing, UseKerning, Style, CharacterRegions, DefaultCharacter). | [x] Includes `CNA::Internal::ParseXml`, a deliberately strict XML subset (no DOCTYPE, no internal subset, no external entities) with line/column diagnostics. A field declared twice is refused rather than silently resolved to the first occurrence. `<FontName>` resolves to a **file beside the description**, not a Windows font family — see §5. |
 | `XNAP-51` | FreeType-backed glyph rasterization + deterministic atlas packing → `CnbSpriteFontData`/`XnbSpriteFontData`. | [x] Deterministic shelf packer (character order, 1px padding, power-of-two sides to 2048), premultiplied white glyphs, ABC kerning from FreeType's own bearings, `UseKerning=false` folding the bearings into the advance, a 1×1 transparent texel for a blank glyph, and a warning — not silence — when a style has to be synthesized. Both output formats come off the same rasterization. |
 | `XNAP-52` | FreeType dependency + test-font license audit; build-time-only isolation. | [x] New module `modules/content-pipeline/`, linked only by `cna_content_compiler`, so FreeType is absent from every runtime game's link closure. `CNA_ENABLE_FONT_PIPELINE` is three-state (`OFF`/`AUTO`/`ON`) like `CNA_ENABLE_VIDEO`; `OFF` reports "no font rasterizer" rather than emitting an empty font. FreeType (FreeType License) and the vendored OFL `LiberationMono-Regular.ttf` are both recorded in `THIRD_PARTY_NOTICES.md`, with `tests/assets/fonts/PROVENANCE.json` carrying the upstream, distributor, SHA-256 and redistribution reasoning. |
-| `XNAP-53` | Independent BC1/BC2/BC3 encoder + `TextureProcessor` format parameter. | [ ] |
-| `XNAP-54` | Mip generation, premultiply-alpha, colour-key, resize policy parameters shared by both outputs. | [ ] |
+| `XNAP-53` | Independent BC1/BC2/BC3 encoder + `TextureProcessor` format parameter. | [x] Integer-only encoder in `modules/content-pipeline/`, written against CNA's **own** decoder (`DxtUtil`) so the error it minimizes is the error a player sees. Endpoints come from two seeds -- the colour bounding box and the most distant texel pair -- each refined by an exact integer least-squares re-fit, keeping the best; the second seed is what stops a red/blue block collapsing to magenta. BC3 alpha tries both the eight-value and six-value modes and keeps the lower error. Measured against CNA's decoder: 38.0 dB on a 64x64 synthetic (all three formats), 39.6 dB on a smooth image with six partial edge blocks, 27.0 dB on a deliberately worst-case block where R, G and B all vary independently. The single-colour block, which naively encodes as BC1's transparent three-colour mode, is handled explicitly and tested. |
+| `XNAP-54` | Mip generation, premultiply-alpha, colour-key, resize policy parameters shared by both outputs. | [x] `textureFormat`, `generateMipmaps`, `premultiplyAlpha` and `resizeToPowerOfTwo` join the existing `colorKey`, applied in that documented order, with premultiplication before mip generation so a distant mip does not average the colour of invisible texels into visible ones. Resampling is integer area-averaging down and linear interpolation up. **`premultiplyAlpha` defaults to `false` where XNA 4.0 defaults it to `true` -- see `XNAP-96` and §5.** |
 | `XNAP-55` | Audio: broaden accepted WAV PCM variants; deterministic duration; loop metadata. | [ ] |
 | `XNAP-56` | Canonical pipeline model IR sufficient for XNA `Model` (declarations, streams, materials, bounds, shared resources) without overloading a frozen CNB carrier. | [x] Resolved without a new IR. CNB Model schema 1 records a vertex stride but no `VertexDeclaration`; `CNA/Internal/Graphics/VertexDeclarationFidelity.hpp` already holds the canonical stride-to-element table that **every CNA renderer interprets those same bytes with**, so the declaration is recovered rather than invented. Mesh bounds are derived exactly as the runtime adapter derives them, so both loaders see one bounding sphere. Adding a parallel IR would have created a second thing to keep in step with no new information in it. |
 | `XNAP-57` | glTF/GLB → canonical model IR → `Model` XNB, with vertex-declaration synthesis and validation. | [x] |
@@ -387,6 +387,7 @@ Building a writer against the reader exposes disagreements the reader alone coul
 | `XNAP-93` | Performance pass on large textures, mip generation, BC encoding, large models, atlas generation, compression. | [ ] |
 | `XNAP-94` | Provenance audit: no MonoGame/FNA/Microsoft implementation derivation; every fixture and dependency licensed and manifested. | [ ] |
 | `XNAP-95` | Final reconciliation: every checkbox true, exact test totals everywhere, no contradictory numbers, no placeholder shells. | [ ] |
+| `XNAP-96` | **Owner decision:** should `premultiplyAlpha` default to `true`, as XNA 4.0's `TextureProcessor` does? CNA's `BlendState::AlphaBlend` -- `SpriteBatch`'s default -- is the premultiplied blend, so content built with CNA's current default renders with dark fringes under CNA's own default blend state unless the game selects `BlendState::NonPremultiplied`. Flipping it changes the bytes of every texture with alpha that any existing CNA project has built, and three equivalence contracts in this repository pin the current output (`Texture2DContentPipelineTest.IsByteIdenticalToTheUnchangedSourceProducer`, `.ColorKeyPolicyMatchesTheUnchangedProducerExactly`, `CnjContentPipelineTest.Texture2DConvergesOnTheExistingTextureProcessorAndWriter`). The capability is implemented and tested either way; only the default is the open question, and it is a project-wide policy call rather than an implementation detail. | [ ] |
 
 ---
 
@@ -418,3 +419,24 @@ Building a writer against the reader exposes disagreements the reader alone coul
   nothing else, so the boundary is enforced by the dependency graph rather than by convention.
   Its test group is named explicitly in `cmake/UnitTests.cmake` for the same reason: it is
   deliberately absent from the `CNA` runtime umbrella that `CnaTests` otherwise links.
+* **Premultiplied alpha is available but not the default.** XNA 4.0's `TextureProcessor`
+  premultiplies by default and `BlendState::AlphaBlend` -- which CNA implements identically to
+  XNA, and which `SpriteBatch::Begin()` selects when given no blend state -- is the blend that
+  expects it. CNA's `premultiplyAlpha` parameter nevertheless defaults to `false`. The reason is
+  not a judgement that XNA is wrong: it is that flipping the default silently changes the bytes of
+  every alpha-bearing texture any existing CNA project has already built, and this repository
+  pins the current output in three separate equivalence tests against its own older producers.
+  Recorded as `XNAP-96` for the project owner rather than decided here.
+* **Block compression lives in `modules/content-pipeline/`, reached through a callable.**
+  `cna_content` declares the encoder's *shape* (`TextureBlockEncoder`) and never links one;
+  `cna_content_pipeline`, which only a content compiler links, supplies it. That keeps the
+  processor -- and every other texture policy -- in one place while leaving the encoder on the
+  build-time side of the boundary. A registry without an encoder builds every uncompressed
+  texture and refuses a compressed `textureFormat` with a message naming the configuration that
+  would provide one, rather than quietly writing uncompressed pixels.
+* **A block-compressed texture has no `.cnb`.** CNB texture schema 1 is frozen to `Rgba8`
+  (`plans/plan_cnb.md` `CNBF-101A`). A CNB build that asks for compression keeps the uncompressed
+  pixels and says so through the pipeline's warning channel; it does not fail the build over a
+  format the other container would have accepted. `ContentProcessorContext::OutputFormat()` was
+  added so a processor can see the difference and take a documented fallback rather than failing
+  late inside a codec.

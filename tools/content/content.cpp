@@ -27,6 +27,7 @@
 #include "CNA/Content/Pipeline/SongContentPipeline.hpp"
 #include "CNA/Content/Pipeline/SoundEffectContentPipeline.hpp"
 #include "CNA/Content/Pipeline/SpriteFontContentPipeline.hpp"
+#include "CNA/Content/Pipeline/TextureCompressionPipeline.hpp"
 #include "CNA/Content/Pipeline/Texture2DContentPipeline.hpp"
 #include "CNA/Content/Pipeline/VideoContentPipeline.hpp"
 #include "CNA/Content/Pipeline/XnbContentPipeline.hpp"
@@ -2562,7 +2563,7 @@ namespace CNA::Content::Pipeline
 {
     void RegisterBuiltInContentPipeline(ContentPipelineRegistry& registry)
     {
-        RegisterTexture2DContentPipeline(registry);
+        RegisterTexture2DContentPipeline(registry, MakeBlockCompressionTextureEncoder());
         RegisterSoundEffectContentPipeline(registry);
         RegisterSongContentPipeline(registry);
         RegisterVideoContentPipeline(registry);
