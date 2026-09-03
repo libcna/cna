@@ -56,3 +56,58 @@ reentrancy has not been established.
 Because this is a shared developer host and a Debug build, absolute times must not be compared
 across machines or used as a release threshold. The harness and JSON output are the authoritative
 way to repeat the experiment after scheduler changes.
+
+## XNAP-93: XNB output and texture-policy costs
+
+> Status: developer performance evidence for `plans/plan_xnapipeline.md` `XNAP-93`, measured
+> 2026-09-03. Not a released guarantee and not a CI threshold.
+
+These are end-to-end `cna-content` wall-clock times — process start, source decode, processing,
+serialization and atomic publication all included — so they answer "what does adding this cost a
+build?" rather than "how fast is this loop?". Each figure is the best of three runs on an
+otherwise-idle container, Debug build, single asset, single worker.
+
+**Environment**: the same container the rest of this plan's work was done in; Linux 6.18, GCC 13,
+`cmake-build-unit` (Debug, `CNA_PLATFORM=SDL3`, `CNA_GRAPHICS_RENDERER=STUB`), no sanitizer.
+
+### One 1024x1024 RGBA source (1 megapixel, 4 MiB of level-zero pixels)
+
+| Build | Time | Output |
+|---|---|---|
+| `Color`, no mips | 0.33 s | 4 194 491 bytes |
+| `Color`, full mip chain (11 levels) | 0.46 s | 5 592 631 bytes |
+| `Dxt1`, no mips | 1.08 s | 524 475 bytes |
+| `Dxt5`, full mip chain | 1.71 s | 1 398 355 bytes |
+| `Color`, LZ4 compressed | 0.53 s | 3 552 636 bytes |
+
+What the differences say:
+
+- **Mip generation costs about 0.13 s per megapixel** for the whole chain — the integer
+  area-average resampler, run ten times over geometrically shrinking images.
+- **Block compression is the expensive step, at roughly 1.4 megapixels per second.** That is
+  slower than a tuned production encoder and it is a deliberate trade: the encoder refines two
+  endpoint seeds per block (the colour bounding box and the most distant texel pair) rather than
+  one, which is what stops a red-and-blue block collapsing to flat magenta. `refinementRounds` is
+  the dial — 0 skips the least-squares refinement entirely — and quality is recorded in
+  `plans/plan_xnapipeline.md` `XNAP-53`.
+- **LZ4 runs at roughly 20 MB/s** and took this texture to 85% of its uncompressed size; the
+  synthetic source has per-texel noise, so it is close to a worst case. A flat 32x32 texture goes
+  from 4283 to 478 bytes.
+- Serialization itself does not appear as a line here because it is not measurable against the
+  rest: the `Color`/no-mips row is dominated by PNG decoding.
+
+### One `.spritefont`, 190 glyphs at 32 px
+
+| Build | Time | Output |
+|---|---|---|
+| `.spritefont` + TTF -> SpriteFont `.xnb` | 0.044 s | 1 058 241 bytes (512x512 atlas) |
+
+FreeType rasterization, shelf packing and serialization together cost well under a tenth of a
+second for a full Latin-1 font, so a project's font count is not a build-time concern.
+
+### What this means for a real build
+
+The pipeline parallelizes across assets (`--workers`), not within one, so these are per-asset
+costs on one core. A project whose textures are all `DxtCompressed` should expect block
+compression to dominate its content build, and should expect the incremental manifest to make that
+cost appear once rather than every build.
