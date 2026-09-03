@@ -116,4 +116,29 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
                            const std::vector<Texture*>& textures,
                            const CompiledEffectDeviceState& deviceState,
                            CompiledEffectPassStateChanges& changes);
+
+    /**
+     * @brief Translates sampler assignments stored directly in a legacy effect pass.
+     *
+     * Shader Model 1 effects can assign a sampler parameter to a pixel sampler register through
+     * a pass render-state token instead of the shader's sampler table. This resolves those
+     * references and appends the same renderer-neutral changes as TranslateSamplers().
+     *
+     * @param effectData Parsed effect that owns the referenced sampler parameters.
+     * @param stateChanges Render-state changes MojoShader reported for the applied pass.
+     * @param maxSlots Number of pixel sampler slots the calling renderer supports.
+     * @param samplerTextureParameters Map from BuildSamplerTextureParameterMap().
+     * @param textures Current texture per parameter runtime index.
+     * @param deviceState State groups currently selected on the owning GraphicsDevice.
+     * @param changes Receives one entry per legacy sampler assignment.
+     * @throws std::runtime_error if a pass references an invalid or non-sampler parameter.
+     */
+    void TranslateLegacySamplerAssignments(
+        const MOJOSHADER_effect* effectData,
+        const MOJOSHADER_effectStateChanges& stateChanges,
+        std::size_t maxSlots,
+        const std::unordered_map<std::string, std::uint32_t>& samplerTextureParameters,
+        const std::vector<Texture*>& textures,
+        const CompiledEffectDeviceState& deviceState,
+        CompiledEffectPassStateChanges& changes);
 }

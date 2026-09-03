@@ -20,6 +20,7 @@
 #include "CNA/Internal/Renderers/EasyGL/EasyGLCompiledEffect.hpp"
 #include "CNA/Internal/Renderers/EasyGL/GlProfile.hpp"
 #include "CNA/Internal/Renderers/EasyGL/EasyGLRenderer.hpp"
+#include "CNA/Internal/Renderers/MojoShader/EffectTranslation.hpp"
 #include "CNA/TestSupport/TestPaths.hpp"
 #include "CNA/TestSupport/CompiledEffectConformance.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -51,6 +52,15 @@ namespace
     std::vector<std::uint8_t> LoadEffect(const std::string& name)
     {
         const std::filesystem::path path = CNA::TestSupport::CompiledEffectDirectory() / name;
+        std::ifstream input(path, std::ios::binary);
+        if (!input) return {};
+        return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+    }
+
+    std::vector<std::uint8_t> LoadEffectFixture(const std::string& name)
+    {
+        const std::filesystem::path path =
+            CNA::TestSupport::CompiledEffectFixtureDirectory() / name;
         std::ifstream input(path, std::ios::binary);
         if (!input) return {};
         return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
@@ -158,6 +168,88 @@ TEST(EasyGLCompiledEffectTest, APassThatAssignsNoStateLeavesTheGamesSelectionAlo
     EXPECT_FALSE(changes.blendChanged);
     EXPECT_FALSE(changes.depthStencilChanged);
     EXPECT_FALSE(changes.rasterizerChanged);
+}
+
+TEST(EasyGLCompiledEffectTest, LegacyAssignmentMetadataNeedsNoValueStorage)
+{
+    MOJOSHADER_effectState states[2]{};
+    states[0].type = MOJOSHADER_RS_PIXELSHADERCONSTANT;
+    states[1].type = MOJOSHADER_RS_SETSAMPLER;
+    MOJOSHADER_effectStateChanges nativeChanges{};
+    nativeChanges.render_state_change_count = 2;
+    nativeChanges.render_state_changes = states;
+
+    CompiledEffectDeviceState deviceState;
+    CompiledEffectPassStateChanges changes;
+    EXPECT_NO_THROW(
+        CNA::Internal::Renderers::MojoShaderEffect::TranslateRenderStates(
+            nativeChanges, deviceState, changes));
+    EXPECT_FALSE(changes.blendChanged);
+    EXPECT_FALSE(changes.depthStencilChanged);
+    EXPECT_FALSE(changes.rasterizerChanged);
+}
+
+TEST(EasyGLCompiledEffectTest, AuthenticXna4LegacyPassBindsSamplersAndSurvivesClone)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    const std::vector<std::uint8_t> bytes =
+        LoadEffectFixture("racing-normal-mapping-xna4.fxb");
+    ASSERT_EQ(bytes.size(), 82656u);
+    auto runtime = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+    ASSERT_NE(runtime, nullptr);
+
+    const auto& description = runtime->GetDescription();
+    const auto diffuseParameter = std::find_if(
+        description.parameters.begin(), description.parameters.end(),
+        [](const auto& parameter) { return parameter.name == "diffuseTexture"; });
+    const auto normalParameter = std::find_if(
+        description.parameters.begin(), description.parameters.end(),
+        [](const auto& parameter) { return parameter.name == "normalTexture"; });
+    const auto diffuseTechnique = std::find_if(
+        description.techniques.begin(), description.techniques.end(),
+        [](const auto& technique) { return technique.name == "Diffuse"; });
+    ASSERT_NE(diffuseParameter, description.parameters.end());
+    ASSERT_NE(normalParameter, description.parameters.end());
+    ASSERT_NE(diffuseTechnique, description.techniques.end());
+
+    Texture2D diffuse = Texture2D::CreateFromPixels(
+        device, 1, 1, std::vector<std::uint8_t>{255, 0, 0, 255});
+    Texture2D normal = Texture2D::CreateFromPixels(
+        device, 1, 1, std::vector<std::uint8_t>{128, 128, 255, 255});
+    runtime->SetParameterTexture(diffuseParameter->runtimeIndex, &diffuse);
+    runtime->SetParameterTexture(normalParameter->runtimeIndex, &normal);
+    runtime->SetTechnique(static_cast<std::uint32_t>(
+        std::distance(description.techniques.begin(), diffuseTechnique)));
+
+    auto expectLegacyBindings = [&](ICompiledEffectRuntime& effect)
+    {
+        CompiledEffectDeviceState deviceState;
+        CompiledEffectPassStateChanges changes;
+        ASSERT_NO_THROW(effect.ApplyPass(0, deviceState, changes));
+        const auto diffuseBinding = std::find_if(
+            changes.samplers.begin(), changes.samplers.end(),
+            [&](const auto& change)
+            {
+                return !change.vertexStage && change.slot == 0 &&
+                    change.textureChanged && change.texture == &diffuse;
+            });
+        const auto normalBinding = std::find_if(
+            changes.samplers.begin(), changes.samplers.end(),
+            [&](const auto& change)
+            {
+                return !change.vertexStage && change.slot == 1 &&
+                    change.textureChanged && change.texture == &normal;
+            });
+        EXPECT_NE(diffuseBinding, changes.samplers.end());
+        EXPECT_NE(normalBinding, changes.samplers.end());
+    };
+
+    expectLegacyBindings(*runtime);
+    auto clone = runtime->Clone();
+    ASSERT_NE(clone, nullptr);
+    expectLegacyBindings(*clone);
 }
 
 TEST(EasyGLCompiledEffectTest, OutOfRangeTechniqueAndPassAreRejected)

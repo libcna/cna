@@ -511,6 +511,9 @@ namespace CNA::Internal::Renderers::Vulkan
             stateChanges_.vertex_sampler_state_change_count,
             /*vertexStage=*/true, boundVertexSamplers_.size(), samplerTextureParameters_, textures_,
             deviceState, changes);
+        MojoShaderEffect::TranslateLegacySamplerAssignments(
+            effectData_, stateChanges_, boundSamplers_.size(), samplerTextureParameters_, textures_,
+            deviceState, changes);
 
         // Persist the per-slot bindings, so a later pass that reassigns nothing keeps them --
         // real XNA behaviour, and what a deferred draw reads back at record time.

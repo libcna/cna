@@ -143,7 +143,7 @@ namespace CNA::TestSupport
      */
     inline void RunCompiledEffectFormatContract(GraphicsDevice& device)
     {
-        EXPECT_THROW(Effect(device, {}), System::ArgumentException)
+        EXPECT_THROW(Effect(device, std::vector<SharpRuntime::bytecs>{}), System::ArgumentException)
             << "empty bytecode must be rejected as an argument error";
 
         const std::vector<SharpRuntime::bytecs> mgfx = {'M', 'G', 'F', 'X', 1, 0, 0, 0};
@@ -331,18 +331,11 @@ namespace CNA::TestSupport
         EXPECT_EQ(device.getRasterizerStateProperty().getFillModeProperty(), FillMode::WireFrame);
         EXPECT_EQ(device.getRasterizerStateProperty().getCullModeProperty(), CullMode::None);
 
-        Effect unknown(device, BuildSyntheticConformanceEffect(
-            {{Fx::RsUnknownForTesting, 0u}}));
-        try
-        {
-            unknown.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
-            ADD_FAILURE() << "an unknown Effect Framework render state must never be ignored";
-        }
-        catch (const std::runtime_error& error)
-        {
-            EXPECT_NE(std::string(error.what()).find("177"), std::string::npos)
-                << "the diagnostic must name the token that was refused";
-        }
+        EXPECT_THROW(
+            Effect(device, BuildSyntheticConformanceEffect(
+                {{Fx::RsUnknownForTesting, 0u}})),
+            System::ArgumentException)
+            << "an unknown Effect Framework render state must be rejected before enum conversion";
     }
 
     /**

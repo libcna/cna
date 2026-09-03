@@ -150,6 +150,42 @@ index 486d7e0..6f7ddb7 100644
              } // switch
  
              operand->index = item;
+diff --git a/mojoshader.h b/mojoshader.h
+index 5a89569..941e363 100644
+--- a/mojoshader.h
++++ b/mojoshader.h
+@@ -2400,7 +2400,13 @@ typedef enum MOJOSHADER_renderStateType
+      * referred to by MOJOSHADER_effectStateType as such.
+      */
+     MOJOSHADER_RS_VERTEXSHADER = 146,
+-    MOJOSHADER_RS_PIXELSHADER = 147
++    MOJOSHADER_RS_PIXELSHADER = 147,
++
++    /* XNA 4 Effect Framework payloads can retain these legacy assignment records. Giving them
++     * names keeps a C++ consumer from observing an out-of-range enum value. -CNA
++     */
++    MOJOSHADER_RS_PIXELSHADERCONSTANT = 160,
++    MOJOSHADER_RS_SETSAMPLER = 178
+ } MOJOSHADER_renderStateType;
+ 
+ typedef enum MOJOSHADER_zBufferType
+@@ -2618,6 +2624,11 @@ typedef struct MOJOSHADER_effectValue
+ typedef struct MOJOSHADER_effectState
+ {
+     MOJOSHADER_renderStateType type;
++    unsigned int index;
++    int referenced_parameter;
++    MOJOSHADER_preshader *preshader;
++    unsigned int preshader_param_count;
++    unsigned int *preshader_params;
+     MOJOSHADER_effectValue value;
+ } MOJOSHADER_effectState;
+ 
+@@ -3150,4 +3161,3 @@ DECLSPEC void MOJOSHADER_mtlDeleteLibrary(void *library);
+ #endif  /* include-once blocker. */
+ 
+ /* end of mojoshader.h ... */
+-
 diff --git a/mojoshader_common.c b/mojoshader_common.c
 index 39cb5c0..1b7b303 100644
 --- a/mojoshader_common.c
@@ -187,28 +223,8 @@ index 39cb5c0..1b7b303 100644
              text += len;
              if (len >= left)
                  left = (left < 1) ? left : 1;
-diff --git a/mojoshader.h b/mojoshader.h
-index c0d45c4..ce64d9f 100644
---- a/mojoshader.h
-+++ b/mojoshader.h
-@@ -2396,8 +2396,14 @@ typedef enum MOJOSHADER_renderStateType
-      * referred to by MOJOSHADER_effectStateType as such.
-      */
-     MOJOSHADER_RS_VERTEXSHADER = 146,
--    MOJOSHADER_RS_PIXELSHADER = 147
-+    MOJOSHADER_RS_PIXELSHADER = 147,
-+
-+    /* XNA 4 Effect Framework payloads can retain these legacy assignment records. Giving them
-+     * names keeps a C++ consumer from observing an out-of-range enum value. -CNA
-+     */
-+    MOJOSHADER_RS_PIXELSHADERCONSTANT = 160,
-+    MOJOSHADER_RS_SETSAMPLER = 178
- } MOJOSHADER_renderStateType;
- 
- typedef enum MOJOSHADER_zBufferType
- {
 diff --git a/mojoshader_effects.c b/mojoshader_effects.c
-index 036f18d..bbb578a 100644
+index 036f18d..36e30e5 100644
 --- a/mojoshader_effects.c
 +++ b/mojoshader_effects.c
 @@ -16,16 +16,35 @@
@@ -598,13 +614,14 @@ index 036f18d..bbb578a 100644
  
      const uint32 siz = sizeof (MOJOSHADER_effectState) * numstates;
      *states = (MOJOSHADER_effectState *) m(siz, d);
-@@ -560,20 +682,24 @@ static void readstates(const uint32 numstates,
+@@ -560,20 +682,26 @@ static void readstates(const uint32 numstates,
      {
          MOJOSHADER_effectState *state = &(*states)[i];
  
 -        const uint32 type = readui32(ptr, len);
+-        /*const uint32 FIXME =*/ readui32(ptr, len);
 +        const uint32 type = readui32(ptr, len);  /* already a render-state ABI identifier. */
-         /*const uint32 FIXME =*/ readui32(ptr, len);
++        const uint32 target = readui32(ptr, len);
          const uint32 typeoffset = readui32(ptr, len);
          const uint32 valoffset = readui32(ptr, len);
  
@@ -612,6 +629,8 @@ index 036f18d..bbb578a 100644
 +            return 0;
          state->type = (MOJOSHADER_renderStateType) type;
 -        readvalue(base, typeoffset, valoffset,
++        state->index = target;
++        state->referenced_parameter = -1;
 +        readvalue(base, base_len, typeoffset, valoffset,
                    &state->value, objects,
                    m, d);
@@ -626,7 +645,7 @@ index 036f18d..bbb578a 100644
                         const uint8 **ptr,
                         uint32 *len,
                         MOJOSHADER_effectPass **passes,
-@@ -582,7 +708,7 @@ static void readpasses(const uint32 numpasses,
+@@ -582,7 +710,7 @@ static void readpasses(const uint32 numpasses,
                         void *d)
  {
      int i;
@@ -635,7 +654,7 @@ index 036f18d..bbb578a 100644
  
      const uint32 siz = sizeof (MOJOSHADER_effectPass) * numpasses;
      *passes = (MOJOSHADER_effectPass *) m(siz, d);
-@@ -596,22 +722,25 @@ static void readpasses(const uint32 numpasses,
+@@ -596,22 +724,25 @@ static void readpasses(const uint32 numpasses,
          const uint32 numannos = readui32(ptr, len);
          const uint32 numstates = readui32(ptr, len);
  
@@ -667,7 +686,7 @@ index 036f18d..bbb578a 100644
                             const uint8 **ptr,
                             uint32 *len,
                             MOJOSHADER_effectTechnique **techniques,
-@@ -620,7 +749,7 @@ static void readtechniques(const uint32 numtechniques,
+@@ -620,7 +751,7 @@ static void readtechniques(const uint32 numtechniques,
                             void *d)
  {
      int i;
@@ -676,7 +695,7 @@ index 036f18d..bbb578a 100644
  
      const uint32 siz = sizeof (MOJOSHADER_effectTechnique) * numtechniques;
      *techniques = (MOJOSHADER_effectTechnique *) m(siz, d);
-@@ -634,18 +763,20 @@ static void readtechniques(const uint32 numtechniques,
+@@ -634,18 +765,20 @@ static void readtechniques(const uint32 numtechniques,
          const uint32 numannos = readui32(ptr, len);
          const uint32 numpasses = readui32(ptr, len);
  
@@ -702,7 +721,7 @@ index 036f18d..bbb578a 100644
  } // readtechniques
  
  static void readsmallobjects(const uint32 numsmallobjects,
-@@ -670,6 +801,16 @@ static void readsmallobjects(const uint32 numsmallobjects,
+@@ -670,6 +803,16 @@ static void readsmallobjects(const uint32 numsmallobjects,
          const uint32 index = readui32(ptr, len);
          const uint32 length = readui32(ptr, len);
  
@@ -719,7 +738,7 @@ index 036f18d..bbb578a 100644
          MOJOSHADER_effectObject *object = &effect->objects[index];
          if (object->type == MOJOSHADER_SYMTYPE_STRING)
          {
-@@ -702,6 +843,13 @@ static void readsmallobjects(const uint32 numsmallobjects,
+@@ -702,6 +845,13 @@ static void readsmallobjects(const uint32 numsmallobjects,
                || object->type == MOJOSHADER_SYMTYPE_VERTEXSHADER)
          {
              char mainfn[32];
@@ -733,7 +752,7 @@ index 036f18d..bbb578a 100644
              snprintf(mainfn, sizeof(mainfn), "ShaderFunction%u", (unsigned int) index);
              object->shader.technique = -1;
              object->shader.pass = -1;
-@@ -734,10 +882,23 @@ static void readsmallobjects(const uint32 numsmallobjects,
+@@ -734,10 +884,23 @@ static void readsmallobjects(const uint32 numsmallobjects,
              {
                  int par = findparameter(effect->params,
                                          effect->param_count,
@@ -758,7 +777,7 @@ index 036f18d..bbb578a 100644
                      object->shader.samplers[curSampler].sampler_name = effect->params[par].value.name;
                      object->shader.samplers[curSampler].sampler_register = pd->symbols[j].register_index;
                      object->shader.samplers[curSampler].sampler_state_count = effect->params[par].value.value_count;
-@@ -751,9 +912,13 @@ static void readsmallobjects(const uint32 numsmallobjects,
+@@ -751,9 +914,13 @@ static void readsmallobjects(const uint32 numsmallobjects,
                  object->shader.preshader_params = (uint32 *) m(object->shader.preshader_param_count * sizeof (uint32), d);
                  for (j = 0; j < pd->preshader->symbol_count; j++)
                  {
@@ -775,7 +794,7 @@ index 036f18d..bbb578a 100644
                  } // for
              } // if
          } // else if
-@@ -798,11 +963,85 @@ static void readlargeobjects(const uint32 numlargeobjects,
+@@ -798,11 +965,145 @@ static void readlargeobjects(const uint32 numlargeobjects,
          const uint32 type = readui32(ptr, len);
          const uint32 length = readui32(ptr, len);
  
@@ -800,10 +819,11 @@ index 036f18d..bbb578a 100644
 +        } // if
 +
 +        // Every index in this chain is content, and each one selects the array the next one
-+        // indexes. Official XNA4 output can attach a type-1 auxiliary block to an empty sampler
-+        // value. There is no object index to dereference in that case and MojoShader never uses
-+        // the block, so skip it safely; all other empty-value records remain malformed. -CNA
++        // indexes. Official XNA4 output uses these auxiliary blocks for references from pass
++        // sampler assignments and for preshader expressions that compute pass constants. -CNA
          uint32 objectIndex;
++        MOJOSHADER_effectState *passState = NULL;
++        MOJOSHADER_effectValue *value;
          if (technique == -1)
 -            objectIndex = effect->params[index].value.valuesSS[state].value.valuesI[0];
 +        {
@@ -814,20 +834,7 @@ index 036f18d..bbb578a 100644
 +                errorlist_add(errors, NULL, 0, "Effect object names no sampler state.");
 +                return;
 +            } // if
-+            MOJOSHADER_effectValue *value =
-+                &effect->params[index].value.valuesSS[state].value;
-+            if (value->value_count < 1)
-+            {
-+                if (type != 1)
-+                {
-+                    errorlist_add(errors, NULL, 0, "Effect object names an empty sampler state.");
-+                    return;
-+                } // if
-+                *ptr += blocklen;
-+                *len -= blocklen;
-+                continue;
-+            } // if
-+            objectIndex = value->valuesI[0];
++            value = &effect->params[index].value.valuesSS[state].value;
 +        } // if
          else
 -            objectIndex = effect->techniques[technique].passes[index].states[state].value.valuesI[0];
@@ -839,21 +846,93 @@ index 036f18d..bbb578a 100644
 +                errorlist_add(errors, NULL, 0, "Effect object names no pass state.");
 +                return;
 +            } // if
-+            MOJOSHADER_effectValue *value =
-+                &effect->techniques[technique].passes[index].states[state].value;
-+            if (value->value_count < 1)
++            passState = &effect->techniques[technique].passes[index].states[state];
++            value = &passState->value;
++
++            if (type == 1)
 +            {
-+                if (type != 1)
++                int par;
++                if ((length == 0) || (memchr(*ptr, '\0', length) == NULL))
 +                {
-+                    errorlist_add(errors, NULL, 0, "Effect object names an empty pass state.");
++                    errorlist_add(errors, NULL, 0,
++                                  "Effect parameter reference is not a bounded string.");
 +                    return;
++                } // if
++                par = findparameter(effect->params, effect->param_count,
++                                    (const char *) *ptr, errors);
++                if (par < 0)
++                    return;
++                passState->referenced_parameter = par;
++            } // if
++
++            if ((passState->type == MOJOSHADER_RS_PIXELSHADERCONSTANT) && (type == 0))
++            {
++                if (length == 0)
++                {
++                    errorlist_add(errors, NULL, 0,
++                                  "Effect constant expression is empty.");
++                    return;
++                } // if
++                passState->preshader = (MOJOSHADER_preshader *)
++                    MOJOSHADER_parsePreshader(*ptr, length, m, f, d);
++                if (passState->preshader == NULL)
++                {
++                    errorlist_add(errors, NULL, 0,
++                                  "Effect constant expression could not be parsed.");
++                    return;
++                } // if
++                passState->preshader_param_count = passState->preshader->symbol_count;
++                if (passState->preshader_param_count > 0)
++                {
++                    uint32 parameterIndex;
++                    if (passState->preshader_param_count >
++                        (0x7FFFFFFFu / sizeof (uint32)))
++                    {
++                        errorlist_add(errors, NULL, 0,
++                                      "Effect constant expression has too many parameters.");
++                        return;
++                    } // if
++                    passState->preshader_params = (uint32 *) m(
++                        passState->preshader_param_count * sizeof (uint32), d);
++                    if (passState->preshader_params == NULL)
++                    {
++                        errorlist_add(errors, NULL, 0,
++                                      "Effect constant expression parameter allocation failed.");
++                        return;
++                    } // if
++                    for (parameterIndex = 0;
++                         parameterIndex < passState->preshader_param_count;
++                         parameterIndex++)
++                    {
++                        const int par = findparameter(
++                            effect->params, effect->param_count,
++                            passState->preshader->symbols[parameterIndex].name,
++                            errors);
++                        if (par < 0)
++                            return;
++                        passState->preshader_params[parameterIndex] = (uint32) par;
++                    } // for
 +                } // if
 +                *ptr += blocklen;
 +                *len -= blocklen;
 +                continue;
 +            } // if
-+            objectIndex = value->valuesI[0];
 +        } // else
++
++        if (value->value_count < 1)
++        {
++            if (type != 1)
++            {
++                errorlist_add(errors, NULL, 0,
++                              passState != NULL ? "Effect object names an empty pass state."
++                                                : "Effect object names an empty sampler state.");
++                return;
++            } // if
++            *ptr += blocklen;
++            *len -= blocklen;
++            continue;
++        } // if
++        objectIndex = value->valuesI[0];
 +
 +        if (objectIndex >= (uint32) effect->object_count)
 +        {
@@ -863,7 +942,7 @@ index 036f18d..bbb578a 100644
  
          MOJOSHADER_effectObject *object = &effect->objects[objectIndex];
          if (object->type == MOJOSHADER_SYMTYPE_PIXELSHADER
-@@ -819,28 +1058,48 @@ static void readlargeobjects(const uint32 numlargeobjects,
+@@ -819,28 +1120,48 @@ static void readlargeobjects(const uint32 numlargeobjects,
                   */
                  object->shader.is_preshader = 1;
                  const uint32 start = *((uint32 *) *ptr) + 4;
@@ -920,7 +999,7 @@ index 036f18d..bbb578a 100644
                  snprintf(mainfn, sizeof (mainfn), "ShaderFunction%u", (unsigned int) objectIndex);
                  object->shader.shader = effect->ctx.compileShader(effect->ctx.shaderContext,
                                                                    mainfn, *ptr, length,
-@@ -871,10 +1130,26 @@ static void readlargeobjects(const uint32 numlargeobjects,
+@@ -871,10 +1192,26 @@ static void readlargeobjects(const uint32 numlargeobjects,
                  {
                      int par = findparameter(effect->params,
                                              effect->param_count,
@@ -948,7 +1027,7 @@ index 036f18d..bbb578a 100644
                          object->shader.samplers[curSampler].sampler_name = effect->params[par].value.name;
                          object->shader.samplers[curSampler].sampler_register = pd->symbols[j].register_index;
                          object->shader.samplers[curSampler].sampler_state_count = effect->params[par].value.value_count;
-@@ -888,9 +1163,13 @@ static void readlargeobjects(const uint32 numlargeobjects,
+@@ -888,9 +1225,13 @@ static void readlargeobjects(const uint32 numlargeobjects,
                      object->shader.preshader_params = (uint32 *) m(object->shader.preshader_param_count * sizeof (uint32), d);
                      for (j = 0; j < pd->preshader->symbol_count; j++)
                      {
@@ -965,7 +1044,7 @@ index 036f18d..bbb578a 100644
                      } // for
                  } // if
              }
-@@ -919,7 +1198,6 @@ static void readlargeobjects(const uint32 numlargeobjects,
+@@ -919,7 +1260,6 @@ static void readlargeobjects(const uint32 numlargeobjects,
          } // else
  
          /* Object block is always a multiple of four */
@@ -973,7 +1052,7 @@ index 036f18d..bbb578a 100644
          *ptr += blocklen;
          *len -= blocklen;
      } // for
-@@ -977,6 +1255,7 @@ MOJOSHADER_effect *MOJOSHADER_compileEffect(const unsigned char *buf,
+@@ -977,6 +1317,7 @@ MOJOSHADER_effect *MOJOSHADER_compileEffect(const unsigned char *buf,
  
      /* Read in header magic, seek to initial offset */
      const uint8 *base = NULL;
@@ -981,7 +1060,7 @@ index 036f18d..bbb578a 100644
      uint16 magic;
      uint8 version_major;
      uint8 version_minor;
-@@ -988,8 +1267,13 @@ MOJOSHADER_effect *MOJOSHADER_compileEffect(const unsigned char *buf,
+@@ -988,8 +1329,13 @@ MOJOSHADER_effect *MOJOSHADER_compileEffect(const unsigned char *buf,
           * -flibit
           */
          const uint32 skip = readui32(&ptr, &len) - 8;
@@ -996,7 +1075,7 @@ index 036f18d..bbb578a 100644
          read_version_token(&ptr, &len, &magic, &version_major, &version_minor);
      } // if
      if (!((magic == 0xFEFF) && (version_major == 0x09) && (version_minor == 0x01)))
-@@ -1003,6 +1287,9 @@ MOJOSHADER_effect *MOJOSHADER_compileEffect(const unsigned char *buf,
+@@ -1003,6 +1349,9 @@ MOJOSHADER_effect *MOJOSHADER_compileEffect(const unsigned char *buf,
          base = ptr;
          if (offset > len)
              goto parseEffect_unexpectedEOF;
@@ -1006,7 +1085,7 @@ index 036f18d..bbb578a 100644
          ptr += offset;
          len -= offset;
      } // else
-@@ -1016,6 +1303,17 @@ MOJOSHADER_effect *MOJOSHADER_compileEffect(const unsigned char *buf,
+@@ -1016,6 +1365,17 @@ MOJOSHADER_effect *MOJOSHADER_compileEffect(const unsigned char *buf,
      /*const uint32 FIXME =*/ readui32(&ptr, &len);
      const uint32 numobjects = readui32(&ptr, &len);
  
@@ -1024,7 +1103,7 @@ index 036f18d..bbb578a 100644
      /* Alloc structures now, so object types can be stored */
      retval->object_count = numobjects;
      const uint32 siz = sizeof (MOJOSHADER_effectObject) * numobjects;
-@@ -1026,15 +1324,19 @@ MOJOSHADER_effect *MOJOSHADER_compileEffect(const unsigned char *buf,
+@@ -1026,15 +1386,19 @@ MOJOSHADER_effect *MOJOSHADER_compileEffect(const unsigned char *buf,
  
      /* Parse effect parameters */
      retval->param_count = numparams;
@@ -1048,7 +1127,7 @@ index 036f18d..bbb578a 100644
  
      /* Initial effect technique/pass */
      retval->current_technique = &retval->techniques[0];
-@@ -1095,11 +1397,10 @@ void freevalue(MOJOSHADER_effectValue *value, MOJOSHADER_free f, void *d)
+@@ -1095,11 +1459,10 @@ void freevalue(MOJOSHADER_effectValue *value, MOJOSHADER_free f, void *d)
      f((void *) value->name, d);
      f((void *) value->semantic, d);
      freetypeinfo(&value->type, f, d);
@@ -1064,7 +1143,16 @@ index 036f18d..bbb578a 100644
          for (i = 0; i < value->value_count; i++)
              freevalue(&value->valuesSS[i].value, f, d);
      f(value->values, d);
-@@ -1221,6 +1522,14 @@ void copysymboltypeinfo(MOJOSHADER_symbolTypeInfo *dst,
+@@ -1148,6 +1511,8 @@ void MOJOSHADER_deleteEffect(const MOJOSHADER_effect *_effect)
+             f((void *) pass->name, d);
+             for (k = 0; k < pass->state_count; k++)
+             {
++                MOJOSHADER_freePreshader(pass->states[k].preshader);
++                f((void *) pass->states[k].preshader_params, d);
+                 freevalue(&pass->states[k].value, f, d);
+             } // for
+             f((void *) pass->states, d);
+@@ -1221,6 +1586,14 @@ void copysymboltypeinfo(MOJOSHADER_symbolTypeInfo *dst,
      {
          siz = dst->member_count * sizeof (MOJOSHADER_symbolStructMember);
          dst->members = (MOJOSHADER_symbolStructMember *) m(siz, d);
@@ -1079,7 +1167,25 @@ index 036f18d..bbb578a 100644
          for (i = 0; i < dst->member_count; i++)
          {
              COPY_STRING(members[i].name)
-@@ -1420,13 +1729,20 @@ MOJOSHADER_effect *MOJOSHADER_cloneEffect(const MOJOSHADER_effect *effect)
+@@ -1345,6 +1718,7 @@ void copysymbol(MOJOSHADER_symbol *dst,
+ 
+ MOJOSHADER_preshader *copypreshader(const MOJOSHADER_preshader *src,
+                                     MOJOSHADER_malloc m,
++                                    MOJOSHADER_free f,
+                                     void *d)
+ {
+     int i, j;
+@@ -1354,6 +1728,9 @@ MOJOSHADER_preshader *copypreshader(const MOJOSHADER_preshader *src,
+     retval = (MOJOSHADER_preshader *) m(sizeof (MOJOSHADER_preshader), d);
+     // !!! FIXME: Out of memory check!
+     memset(retval, '\0', sizeof (MOJOSHADER_preshader));
++    retval->malloc = m;
++    retval->free = f;
++    retval->malloc_data = d;
+ 
+     siz = sizeof (double) * src->literal_count;
+     retval->literal_count = src->literal_count;
+@@ -1420,13 +1797,20 @@ MOJOSHADER_effect *MOJOSHADER_cloneEffect(const MOJOSHADER_effect *effect)
      /* Copy ctx */
      memcpy(&clone->ctx, &effect->ctx, sizeof(MOJOSHADER_effectShaderContext));
  
@@ -1100,7 +1206,54 @@ index 036f18d..bbb578a 100644
  
      /* Copy errors */
      siz = sizeof (MOJOSHADER_error) * effect->error_count;
-@@ -1587,13 +1903,22 @@ MOJOSHADER_effect *MOJOSHADER_cloneEffect(const MOJOSHADER_effect *effect)
+@@ -1497,9 +1881,32 @@ MOJOSHADER_effect *MOJOSHADER_cloneEffect(const MOJOSHADER_effect *effect)
+             memset(clone->techniques[i].passes[j].states, '\0', siz);
+             for (k = 0; k < clone->techniques[i].passes[j].state_count; k++)
+             {
+-                clone->techniques[i].passes[j].states[k].type = effect->techniques[i].passes[j].states[k].type;
+-                copyvalue(&clone->techniques[i].passes[j].states[k].value,
+-                          &effect->techniques[i].passes[j].states[k].value,
++                const MOJOSHADER_effectState *srcstate =
++                    &effect->techniques[i].passes[j].states[k];
++                MOJOSHADER_effectState *dststate =
++                    &clone->techniques[i].passes[j].states[k];
++                dststate->type = srcstate->type;
++                dststate->index = srcstate->index;
++                dststate->referenced_parameter = srcstate->referenced_parameter;
++                if (srcstate->preshader != NULL)
++                {
++                    dststate->preshader = copypreshader(
++                        srcstate->preshader, m, effect->ctx.f, d);
++                    if (dststate->preshader == NULL)
++                        goto cloneEffect_outOfMemory;
++                } // if
++                dststate->preshader_param_count = srcstate->preshader_param_count;
++                if (srcstate->preshader_param_count > 0)
++                {
++                    siz = sizeof (uint32) * srcstate->preshader_param_count;
++                    dststate->preshader_params = (uint32 *) m(siz, d);
++                    if (dststate->preshader_params == NULL)
++                        goto cloneEffect_outOfMemory;
++                    memcpy(dststate->preshader_params,
++                           srcstate->preshader_params, siz);
++                } // if
++                copyvalue(&dststate->value,
++                          &srcstate->value,
+                           m, d);
+             } // for
+ 
+@@ -1572,8 +1979,8 @@ MOJOSHADER_effect *MOJOSHADER_cloneEffect(const MOJOSHADER_effect *effect)
+ 
+             if (clone->objects[i].shader.is_preshader)
+             {
+-                clone->objects[i].shader.preshader = copypreshader(effect->objects[i].shader.preshader,
+-                                                                   m, d);
++                clone->objects[i].shader.preshader = copypreshader(
++                    effect->objects[i].shader.preshader, m, effect->ctx.f, d);
+                 continue;
+             } // if
+ 
+@@ -1587,13 +1994,22 @@ MOJOSHADER_effect *MOJOSHADER_cloneEffect(const MOJOSHADER_effect *effect)
              if (clone->objects[i].shader.samplers == NULL)
                  goto cloneEffect_outOfMemory;
              curSampler = 0;
@@ -1126,7 +1279,7 @@ index 036f18d..bbb578a 100644
                      curSampler++;
                  } // if
          } // if
-@@ -1734,22 +2059,42 @@ void MOJOSHADER_effectBeginPass(MOJOSHADER_effect *effect,
+@@ -1734,22 +2150,42 @@ void MOJOSHADER_effectBeginPass(MOJOSHADER_effect *effect,
      for (i = 0; i < curPass->state_count; i++)
      {
          state = &curPass->states[i];
@@ -1182,7 +1335,7 @@ index 036f18d..bbb578a 100644
      } // for
  
      effect->state_changes->render_state_changes = curPass->states;
-@@ -1787,7 +2132,10 @@ static inline void copy_parameter_data(MOJOSHADER_effectParam *params,
+@@ -1787,7 +2223,10 @@ static inline void copy_parameter_data(MOJOSHADER_effectParam *params,
                                         unsigned int *param_loc,
                                         MOJOSHADER_symbol *symbols,
                                         unsigned int symbol_count,
@@ -1194,7 +1347,7 @@ index 036f18d..bbb578a 100644
  {
      int i, j, r, c;
  
-@@ -1800,45 +2148,84 @@ static inline void copy_parameter_data(MOJOSHADER_effectParam *params,
+@@ -1800,45 +2239,84 @@ static inline void copy_parameter_data(MOJOSHADER_effectParam *params,
          // float/int registers are vec4, so they have 4 elements each
          const uint32 start = sym->register_index << 2;
  
@@ -1290,7 +1443,7 @@ index 036f18d..bbb578a 100644
          } // else if
      } // for
  } // copy_parameter_data
-@@ -1856,6 +2243,7 @@ void MOJOSHADER_effectCommitChanges(MOJOSHADER_effect *effect)
+@@ -1856,6 +2334,7 @@ void MOJOSHADER_effectCommitChanges(MOJOSHADER_effect *effect)
      float selector;
      int shader_object;
      int selector_ran = 0;
@@ -1298,7 +1451,7 @@ index 036f18d..bbb578a 100644
  
      float *vs_reg_file_f, *ps_reg_file_f;
      int *vs_reg_file_i, *ps_reg_file_i;
-@@ -1866,27 +2254,74 @@ void MOJOSHADER_effectCommitChanges(MOJOSHADER_effect *effect)
+@@ -1866,27 +2345,74 @@ void MOJOSHADER_effectCommitChanges(MOJOSHADER_effect *effect)
       * -flibit
       */
      // !!! FIXME: We're just running the preshaders every time. Blech. -flibit
@@ -1385,7 +1538,7 @@ index 036f18d..bbb578a 100644
      if (selector_ran)
      {
          effect->ctx.bindShaders(effect->ctx.shaderContext,
-@@ -1921,7 +2356,10 @@ void MOJOSHADER_effectCommitChanges(MOJOSHADER_effect *effect)
+@@ -1921,7 +2447,10 @@ void MOJOSHADER_effectCommitChanges(MOJOSHADER_effect *effect)
                                  pd->symbol_count, \
                                  stage##_reg_file_f, \
                                  stage##_reg_file_i, \
@@ -1397,7 +1550,7 @@ index 036f18d..bbb578a 100644
              if (pd->preshader) \
              { \
                  copy_parameter_data(effect->params, raw->preshader_params, \
-@@ -1929,8 +2367,10 @@ void MOJOSHADER_effectCommitChanges(MOJOSHADER_effect *effect)
+@@ -1929,8 +2458,10 @@ void MOJOSHADER_effectCommitChanges(MOJOSHADER_effect *effect)
                                      pd->preshader->symbol_count, \
                                      pd->preshader->registers, \
                                      NULL, \
@@ -1410,7 +1563,54 @@ index 036f18d..bbb578a 100644
              } \
          }
      effect->ctx.mapUniformBufferMemory(effect->ctx.shaderContext,
-@@ -1966,4 +2406,3 @@ void MOJOSHADER_effectEnd(MOJOSHADER_effect *effect)
+@@ -1938,6 +2469,46 @@ void MOJOSHADER_effectCommitChanges(MOJOSHADER_effect *effect)
+                                        &ps_reg_file_f, &ps_reg_file_i, &ps_reg_file_b);
+     COPY_PARAMETER_DATA(rawVert, vs)
+     COPY_PARAMETER_DATA(rawPixl, ps)
++    if ((effect->current_technique != NULL) && (effect->current_pass >= 0) &&
++        (effect->current_pass < effect->current_technique->pass_count))
++    {
++        MOJOSHADER_effectPass *pass =
++            &effect->current_technique->passes[effect->current_pass];
++        for (i = 0; i < pass->state_count; i++)
++        {
++            MOJOSHADER_effectState *state = &pass->states[i];
++            unsigned int start;
++            unsigned int cells;
++            if ((state->type != MOJOSHADER_RS_PIXELSHADERCONSTANT) ||
++                (state->value.valuesF == NULL) || (state->value.value_count == 0) ||
++                (state->index >= MOJOSHADER_EFFECT_MAX_REG_FILE_F))
++            {
++                continue;
++            } // if
++            if ((state->preshader != NULL) &&
++                ((state->preshader_param_count == 0) ||
++                 (state->preshader_params != NULL)) &&
++                (state->preshader_param_count == state->preshader->symbol_count) &&
++                (state->preshader->register_count <= 0x3FFFFFFFu))
++            {
++                copy_parameter_data(effect->params, state->preshader_params,
++                                    state->preshader->symbols,
++                                    state->preshader->symbol_count,
++                                    state->preshader->registers,
++                                    NULL, NULL,
++                                    state->preshader->register_count << 2,
++                                    0, 0);
++                run_preshader(state->preshader, state->value.valuesF,
++                              state->value.value_count);
++            } // if
++            start = state->index << 2;
++            cells = state->value.value_count;
++            if (cells > ((MOJOSHADER_EFFECT_MAX_REG_FILE_F << 2) - start))
++                cells = (MOJOSHADER_EFFECT_MAX_REG_FILE_F << 2) - start;
++            memcpy(ps_reg_file_f + start, state->value.valuesF,
++                   cells * sizeof (float));
++        } // for
++    } // if
+     effect->ctx.unmapUniformBufferMemory(effect->ctx.shaderContext);
+     #undef COPY_PARAMETER_DATA
+ } // MOJOSHADER_effectCommitChanges
+@@ -1966,4 +2537,3 @@ void MOJOSHADER_effectEnd(MOJOSHADER_effect *effect)
  #endif // MOJOSHADER_EFFECT_SUPPORT
  
  // end of mojoshader_effects.c ...

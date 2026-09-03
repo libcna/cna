@@ -308,6 +308,9 @@ namespace CNA::Internal::Renderers::Fna3d
             stateChanges_.vertex_sampler_state_change_count,
             /*vertexStage=*/true, renderer_.vertexSamplerStates_.size(),
             samplerTextureParameters_, textures_, deviceState, changes);
+        MojoShaderEffect::TranslateLegacySamplerAssignments(
+            effectData_, stateChanges_, renderer_.samplerStates_.size(),
+            samplerTextureParameters_, textures_, deviceState, changes);
         for (std::size_t i = alreadyPublished; i < changes.samplers.size(); ++i)
         {
             const CompiledEffectSamplerChange& change = changes.samplers[i];

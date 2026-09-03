@@ -625,7 +625,9 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
         {
             const MOJOSHADER_effectState& state = stateChanges.render_state_changes[i];
             if (state.type == MOJOSHADER_RS_VERTEXSHADER ||
-                state.type == MOJOSHADER_RS_PIXELSHADER)
+                state.type == MOJOSHADER_RS_PIXELSHADER ||
+                state.type == MOJOSHADER_RS_PIXELSHADERCONSTANT ||
+                state.type == MOJOSHADER_RS_SETSAMPLER)
             {
                 continue;
             }
@@ -820,9 +822,6 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
                     blendChanged = true;
                     break;
                 default:
-                    // FNA treats the legacy Effect compiler's undocumented "SetSampler" token
-                    // as metadata; the actual sampler records are applied below.
-                    if (static_cast<int>(state.type) == 178) break;
                     throw std::runtime_error(
                         "Compiled effect: unsupported render state " +
                         std::to_string(static_cast<int>(state.type)) + ".");
@@ -961,6 +960,44 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
             result.textureChanged = textureChanged;
             result.texture = texture;
             changes.samplers.push_back(std::move(result));
+        }
+    }
+
+    void TranslateLegacySamplerAssignments(
+        const MOJOSHADER_effect* effectData,
+        const MOJOSHADER_effectStateChanges& stateChanges,
+        std::size_t maxSlots,
+        const std::unordered_map<std::string, std::uint32_t>& samplerTextureParameters,
+        const std::vector<Texture*>& textures,
+        const CompiledEffectDeviceState& deviceState,
+        CompiledEffectPassStateChanges& changes)
+    {
+        if (effectData == nullptr)
+            throw std::runtime_error("Compiled effect: native effect is missing.");
+        for (unsigned int i = 0; i < stateChanges.render_state_change_count; ++i)
+        {
+            const MOJOSHADER_effectState& state = stateChanges.render_state_changes[i];
+            if (state.type != MOJOSHADER_RS_SETSAMPLER) continue;
+            if (state.referenced_parameter < 0 ||
+                state.referenced_parameter >= effectData->param_count)
+            {
+                throw std::runtime_error(
+                    "Compiled effect: pass sampler assignment has no valid parameter.");
+            }
+            const MOJOSHADER_effectValue& sampler =
+                effectData->params[state.referenced_parameter].value;
+            if (!IsSamplerValue(sampler))
+            {
+                throw std::runtime_error(
+                    "Compiled effect: pass sampler assignment references a non-sampler parameter.");
+            }
+            MOJOSHADER_samplerStateRegister assignment{};
+            assignment.sampler_name = sampler.name;
+            assignment.sampler_register = state.index;
+            assignment.sampler_state_count = sampler.value_count;
+            assignment.sampler_states = sampler.valuesSS;
+            TranslateSamplers(&assignment, 1, /*vertexStage=*/false, maxSlots,
+                              samplerTextureParameters, textures, deviceState, changes);
         }
     }
 }

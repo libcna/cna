@@ -297,6 +297,9 @@ namespace CNA::Internal::Renderers::SdlGpu
             stateChanges_.vertex_sampler_state_change_count,
             /*vertexStage=*/true, maxSlots, samplerTextureParameters_, textures_,
             deviceState, changes);
+        MojoShaderEffect::TranslateLegacySamplerAssignments(
+            effectData_, stateChanges_, maxSlots, samplerTextureParameters_, textures_,
+            deviceState, changes);
 
         // FX-071: fold this pass's assignments into the persistent per-slot state a draw route
         // reads through GetBoundSamplerEXT. Matches real XNA behavior -- a slot this pass does not
