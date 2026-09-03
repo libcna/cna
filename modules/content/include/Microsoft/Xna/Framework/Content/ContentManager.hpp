@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <sstream>
 #include <stdexcept>
@@ -103,12 +104,16 @@ namespace Microsoft::Xna::Framework::Content
 
         [[nodiscard]] std::string BuildAssetPath(const std::string& assetName) const;
         [[nodiscard]] std::string ResolveExistingAssetPath(const std::string& path) const;
+        [[nodiscard]] bool TryReadAssetBytes(
+            const std::string& path, std::vector<std::uint8_t>& bytes) const;
         [[nodiscard]] std::string NormalizeKey(const std::string& assetName) const;
 
         friend class ContentReader;
         [[nodiscard]] std::any LoadUntypedXnbReference(const std::string& assetName);
-        [[nodiscard]] std::any LoadXnbAssetUntyped(const std::string& xnbPath,
-                                                   const std::string& assetName);
+        [[nodiscard]] std::any LoadXnbAssetUntyped(
+            const std::vector<std::uint8_t>& bytes,
+            const std::string& xnbPath,
+            const std::string& assetName);
 
         void RegisterBuiltinLoaders();
 
@@ -404,9 +409,10 @@ namespace Microsoft::Xna::Framework::Content
             // table via the process-wide ContentTypeReaderManager registry (plans/plan_xnb.md XNB-17B).
             const std::string xnbCandidate =
                 ResolveExistingAssetPath(BuildAssetPath(assetName) + ".xnb");
-            if (std::filesystem::exists(xnbCandidate))
+            std::vector<std::uint8_t> xnbBytes;
+            if (TryReadAssetBytes(xnbCandidate, xnbBytes))
             {
-                T result = LoadXnbAsset<T>(xnbCandidate, assetName);
+                T result = LoadXnbAsset<T>(xnbBytes, xnbCandidate, assetName);
                 loadedAssets_[cacheKey] = result;
                 return result;
             }
@@ -592,26 +598,26 @@ namespace Microsoft::Xna::Framework::Content
          *
          * @tparam T        Requested asset type; must match (via `std::any_cast`) whatever the
          *                  file's root type-reader actually produces.
-         * @param xnbPath   Full filesystem path to the `.xnb` file.
+         * @param bytes     Complete `.xnb` bytes read from a filesystem or packaged asset.
+         * @param xnbPath   Logical or filesystem path used in diagnostics.
          * @param assetName Logical asset name, passed through to ContentReader for diagnostics.
          * @return The deserialized root asset.
          * @throws ContentLoadException if the file is malformed, decompression fails, or names
          *         an unregistered/version-mismatched reader.
          */
         template <typename T>
-        [[nodiscard]] T LoadXnbAsset(const std::string& xnbPath, const std::string& assetName)
+        [[nodiscard]] T LoadXnbAsset(const std::vector<std::uint8_t>& bytes,
+                                     const std::string& xnbPath,
+                                     const std::string& assetName)
         {
-            std::ifstream file(xnbPath, std::ios::binary);
-            if (!file.is_open())
+            if (bytes.size() > static_cast<std::size_t>(std::numeric_limits<int32_t>::max()))
             {
-                throw ContentLoadException("ContentManager: cannot open '" + xnbPath + "'.");
+                throw ContentLoadException(
+                    "ContentManager: '" + xnbPath + "' is too large to load.");
             }
-            std::ostringstream ss;
-            ss << file.rdbuf();
-            const std::string bytes = ss.str();
 
             System::IO::MemoryStream headerStream(
-                reinterpret_cast<const uint8_t*>(bytes.data()), static_cast<int32_t>(bytes.size()));
+                bytes.data(), static_cast<int32_t>(bytes.size()));
             System::IO::BinaryReader headerReader(&headerStream, true);
             const auto header = CNA::Internal::Xnb::ParseXnbHeader(headerReader, xnbPath);
 
@@ -640,7 +646,7 @@ namespace Microsoft::Xna::Framework::Content
                 case CNA::Internal::Xnb::XnbCompression::None:
                 {
                     System::IO::MemoryStream bodyStream(
-                        reinterpret_cast<const uint8_t*>(bytes.data()) + 10,
+                        bytes.data() + 10,
                         static_cast<int32_t>(bytes.size()) - 10);
                     ContentReader contentReader(this, &bodyStream, assetName, header.version, header.platform);
                     return contentReader.ReadAsset<T>();
@@ -654,7 +660,7 @@ namespace Microsoft::Xna::Framework::Content
                     const int32_t compressedSize = header.totalLength - 14;
 
                     const auto decompressed = CNA::Internal::Xnb::DecompressXnbPayload(
-                        reinterpret_cast<const uint8_t*>(bytes.data()) + 14,
+                        bytes.data() + 14,
                         compressedSize, decompressedSize, xnbPath);
 
                     System::IO::MemoryStream bodyStream(decompressed.data(), static_cast<int32_t>(decompressed.size()));
@@ -669,7 +675,7 @@ namespace Microsoft::Xna::Framework::Content
                     const int32_t decompressedSize = sizeReader.ReadInt32();
                     const int32_t compressedSize = header.totalLength - 14;
                     const auto decompressed = CNA::Internal::Xnb::DecompressXnbLz4Payload(
-                        reinterpret_cast<const uint8_t*>(bytes.data()) + 14,
+                        bytes.data() + 14,
                         compressedSize, decompressedSize, xnbPath);
 
                     System::IO::MemoryStream bodyStream(

@@ -10,7 +10,9 @@
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
+#include <unordered_map>
 
+#include "CNA/Platform/PlatformTestDecorator.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
@@ -75,6 +77,43 @@ namespace
     struct TestValue
     {
         int32_t value = 0;
+    };
+
+    class PackagedAssetFileSystem final : public CNA::Platform::IPlatformFileSystem
+    {
+    public:
+        std::unordered_map<std::string, std::vector<std::uint8_t>> assets;
+
+        [[nodiscard]] std::string GetBasePath() const override { return {}; }
+        [[nodiscard]] std::string GetPreferencesPath(
+            const std::string&, const std::string&) const override { return {}; }
+        [[nodiscard]] std::string GetUserFolder(CNA::Platform::UserFolder) const override
+        {
+            return {};
+        }
+        [[nodiscard]] bool TryLoadFile(
+            const std::string& path, std::vector<std::uint8_t>& data) const override
+        {
+            const auto asset = assets.find(path);
+            if (asset == assets.end())
+            {
+                return false;
+            }
+            data = asset->second;
+            return true;
+        }
+        void CreateDirectory(const std::string&) override {}
+    };
+
+    class PackagedAssetPlatform final : public CNA::Platform::Testing::PlatformTestDecorator
+    {
+    public:
+        [[nodiscard]] CNA::Platform::IPlatformFileSystem* GetFileSystem() override
+        {
+            return &fileSystem;
+        }
+
+        PackagedAssetFileSystem fileSystem;
     };
 
     class TestOnlyValueReader : public ContentTypeReader<TestValue>
@@ -159,6 +198,18 @@ TEST_F(ContentManagerXnbTest, LoadFindsAndDeserializesARealXnbFile)
     const TestValue result = cm.Load<TestValue>("fixture");
 
     EXPECT_EQ(result.value, 123);
+}
+
+TEST_F(ContentManagerXnbTest, LoadReadsXnbFromPlatformPackagedAssets)
+{
+    PackagedAssetPlatform platform;
+    platform.fileSystem.assets.emplace("PackagedContent/fixture.xnb", BuildTestXnbFile(789));
+    const CNA::Platform::Testing::ScopedCurrentPlatform current(platform);
+
+    ContentManager cm(nullptr, "PackagedContent");
+    const TestValue result = cm.Load<TestValue>("fixture");
+
+    EXPECT_EQ(result.value, 789);
 }
 
 TEST_F(ContentManagerXnbTest, LoadAcceptsWindowsSeparatorsAndXnaCaseInsensitiveAssetNames)

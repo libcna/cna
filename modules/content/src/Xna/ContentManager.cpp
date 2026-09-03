@@ -18,6 +18,7 @@
 #include "CNA/Internal/Json.hpp"
 #include "CNA/Internal/PathContainment.hpp"
 #include "CNA/Internal/Xnb/XnbTypeReaderTable.hpp"
+#include "CNA/Platform/CurrentPlatform.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "Microsoft/Xna/Framework/Curve.hpp"
@@ -174,32 +175,31 @@ namespace Microsoft::Xna::Framework::Content
 
         const std::string xnbPath =
             ResolveExistingAssetPath(BuildAssetPath(assetName) + ".xnb");
-        if (!std::filesystem::exists(xnbPath))
+        std::vector<std::uint8_t> xnbBytes;
+        if (!TryReadAssetBytes(xnbPath, xnbBytes))
         {
             throw ContentLoadException(
                 "ContentManager: external object reference '" + assetName +
                 "' does not resolve to a compiled .xnb asset.");
         }
 
-        std::any result = LoadXnbAssetUntyped(xnbPath, assetName);
+        std::any result = LoadXnbAssetUntyped(xnbBytes, xnbPath, assetName);
         loadedAssets_[cacheKey] = result;
         return result;
     }
 
-    std::any ContentManager::LoadXnbAssetUntyped(const std::string& xnbPath,
+    std::any ContentManager::LoadXnbAssetUntyped(const std::vector<std::uint8_t>& bytes,
+                                                  const std::string& xnbPath,
                                                   const std::string& assetName)
     {
-        std::ifstream file(xnbPath, std::ios::binary);
-        if (!file.is_open())
+        if (bytes.size() > static_cast<std::size_t>(std::numeric_limits<int32_t>::max()))
         {
-            throw ContentLoadException("ContentManager: cannot open '" + xnbPath + "'.");
+            throw ContentLoadException(
+                "ContentManager: '" + xnbPath + "' is too large to load.");
         }
-        std::ostringstream ss;
-        ss << file.rdbuf();
-        const std::string bytes = ss.str();
 
         System::IO::MemoryStream headerStream(
-            reinterpret_cast<const uint8_t*>(bytes.data()), static_cast<int32_t>(bytes.size()));
+            bytes.data(), static_cast<int32_t>(bytes.size()));
         System::IO::BinaryReader headerReader(&headerStream, true);
         const auto header = CNA::Internal::Xnb::ParseXnbHeader(headerReader, xnbPath);
         if (header.totalLength < 10 || static_cast<std::size_t>(header.totalLength) > bytes.size())
@@ -215,7 +215,7 @@ namespace Microsoft::Xna::Framework::Content
             case CNA::Internal::Xnb::XnbCompression::None:
             {
                 System::IO::MemoryStream bodyStream(
-                    reinterpret_cast<const uint8_t*>(bytes.data()) + 10,
+                    bytes.data() + 10,
                     static_cast<int32_t>(bytes.size()) - 10);
                 ContentReader contentReader(this, &bodyStream, assetName,
                                             header.version, header.platform);
@@ -229,7 +229,7 @@ namespace Microsoft::Xna::Framework::Content
                 const int32_t decompressedSize = sizeReader.ReadInt32();
                 const int32_t compressedSize = header.totalLength - 14;
                 const auto decompressed = CNA::Internal::Xnb::DecompressXnbPayload(
-                    reinterpret_cast<const uint8_t*>(bytes.data()) + 14,
+                    bytes.data() + 14,
                     compressedSize, decompressedSize, xnbPath);
                 System::IO::MemoryStream bodyStream(
                     decompressed.data(), static_cast<int32_t>(decompressed.size()));
@@ -484,6 +484,46 @@ namespace Microsoft::Xna::Framework::Content
             resolved /= matchedComponent;
         }
         return resolved.string();
+    }
+
+    bool ContentManager::TryReadAssetBytes(
+        const std::string& path, std::vector<std::uint8_t>& bytes) const
+    {
+        namespace fs = std::filesystem;
+
+        std::error_code ec;
+        if (fs::exists(path, ec) && !ec)
+        {
+            std::ifstream file(path, std::ios::binary | std::ios::ate);
+            if (!file.is_open())
+            {
+                throw ContentLoadException("ContentManager: cannot open '" + path + "'.");
+            }
+
+            const std::streamsize length = file.tellg();
+            if (length < 0)
+            {
+                throw ContentLoadException(
+                    "ContentManager: cannot determine the size of '" + path + "'.");
+            }
+            if (static_cast<std::uintmax_t>(length) >
+                static_cast<std::uintmax_t>(std::numeric_limits<int32_t>::max()))
+            {
+                throw ContentLoadException(
+                    "ContentManager: '" + path + "' is too large to load.");
+            }
+
+            bytes.resize(static_cast<std::size_t>(length));
+            file.seekg(0, std::ios::beg);
+            if (length > 0 &&
+                !file.read(reinterpret_cast<char*>(bytes.data()), length))
+            {
+                throw ContentLoadException("ContentManager: cannot read '" + path + "'.");
+            }
+            return true;
+        }
+
+        return CNA::Platform::GetCurrentPlatform().GetFileSystem()->TryLoadFile(path, bytes);
     }
 
     std::string ContentManager::NormalizeKey(const std::string& assetName) const
@@ -6257,9 +6297,10 @@ namespace Microsoft::Xna::Framework::Content
         // generic Load<T>() template's any-cache body entirely.
         const std::string xnbCandidate =
             ResolveExistingAssetPath(BuildAssetPath(assetName) + ".xnb");
-        if (std::filesystem::exists(xnbCandidate))
+        std::vector<std::uint8_t> xnbBytes;
+        if (TryReadAssetBytes(xnbCandidate, xnbBytes))
         {
-            return LoadXnbAsset<Audio::SoundEffect>(xnbCandidate, assetName);
+            return LoadXnbAsset<Audio::SoundEffect>(xnbBytes, xnbCandidate, assetName);
         }
 
         // plans/plan_cnb.md CNBF-103A. This tier was MISSING: because SoundEffect has its own
