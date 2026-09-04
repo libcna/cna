@@ -345,6 +345,7 @@ against the top of this section.
 | `VULKAN-145` | **223/224** | the same one; the added test is `Vulkan_VertexInputLayout`, which passes |
 | `VULKAN-146` | **224/225** `^Vulkan_`, but **8818/8856** on `-E '^Vulkan_'` — a regression of 8 in the shared `VertexDeclarationLayoutTests`, invisible to the prefixed filter. Reverted; see F-21. |
 | after the revert | **223/224** `^Vulkan_`, **8826/8856** `-E '^Vulkan_'` | the shared declaration suite is back to 10 passed / 2 skipped |
+| `VULKAN-097` narrowed to filled primitives | **223/224** `^Vulkan_`, **9055/9080** full `ctest` | F-21 also caught a second regression the prefixed filter could not see: the pixel-centre correction was moving indexed LINE lists. Restricted to `TriangleList`/`TriangleStrip`; `IndexedDrawDeferredTest` green, the six pixel-centre-sensitive `Vulkan_*` tests still green. The 25 remaining full-suite failures are audio/ENet/two-process/C-API/content cases outside this plan's surface — `CnjEffectTest`, `CnjStockEffectTest` and `GraphicsDeviceRendererTest.StartupDiagnosticNeverWritesToStdout` were **measured** failing at `dc0cb2057` too, and the set varies run to run under `-j6`, which is the known over-reporting. |
 
 ### 7.6 The EasyGL cross-check (the measurement that reclassified four failures)
 
@@ -401,6 +402,10 @@ ctest --test-dir cmake-build-vulkan --rerun-failed -j1   # the flake discriminat
 
 Environment rules that have cost this project time before and are not negotiable here:
 
+- **Run the whole `ctest`, not `-R '^Vulkan_'`.** That filter is 215 of this configuration's 9071
+  registered CTests and cannot see the shared, renderer-agnostic suites — including
+  `VertexDeclarationLayoutTests.cpp`, which measures F-15 itself. Two regressions this plan caused
+  were invisible to it (F-21). Record both numbers.
 - **Gate test runs on the build's exit code.** A failed build plus a stale binary passes silently.
 - `ctest -j8` over-reports failures; `--rerun-failed -j1` is the discriminator.
 - On a Wayland host, `DISPLAY` alone does not reach Xvfb — also set `SDL_VIDEODRIVER=x11`.

@@ -1284,13 +1284,21 @@ namespace CNA::Internal::Renderers::Vulkan
          * displacement EasyGL and Wine use, so the pixel centre stays inside the triangle under
          * Direct3D's top-left fill rule; the margin is the whole design.
          *
-         * Empty (identity) when the destination is multisampled: the correction is a GEOMETRY
-         * translation and that is only equivalent to what it means at one sample per pixel
-         * (REMED-GFX-235, and this renderer inherits the reasoning rather than the code).
+         * Empty (identity) in two cases, each for its own reason. When the destination is
+         * multisampled: the correction is a GEOMETRY translation and that is only equivalent to
+         * what it means at one sample per pixel (REMED-GFX-235, and this renderer inherits the
+         * reasoning rather than the code). And for a LINE or POINT topology: what the correction
+         * compensates for is Direct3D's top-left FILL rule, and a line has no fill rule -- Vulkan
+         * rasterizes it by its own line rule, which the half-pixel shift simply moves off the
+         * pixels XNA lights. Measured: applying it to lines turns
+         * `IndexedDrawDeferredTest`'s two indexed-line-list legs red while the three shared
+         * pixel-centre conformance tests it exists for stay green either way.
          *
+         * @param primitive The topology this draw will rasterize.
          * @return The clip-space translation, or identity where it must not be applied.
          */
-        CNAEXT [[nodiscard]] Microsoft::Xna::Framework::Matrix XnaPixelCenterCorrectionEXT() const;
+        CNAEXT [[nodiscard]] Microsoft::Xna::Framework::Matrix XnaPixelCenterCorrectionEXT(
+            Microsoft::Xna::Framework::Graphics::PrimitiveType primitive) const;
 
         /**
          * @brief CNAEXT. Refuses a PBR draw whose stride no PBR pipeline can express, at the DRAW.

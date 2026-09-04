@@ -1942,8 +1942,20 @@ namespace CNA::Internal::Renderers::Vulkan
         }
     }
 
-    Matrix VulkanRenderer::XnaPixelCenterCorrectionEXT() const
+    Matrix VulkanRenderer::XnaPixelCenterCorrectionEXT(PrimitiveType primitive) const
     {
+        // Filled primitives only. The correction compensates for Direct3D's top-left FILL rule by
+        // moving the pixel centre just inside the primitive; a line or a point has no fill rule,
+        // and the same shift only moves it off the pixels XNA lights. See the header for the
+        // measurement.
+        switch (primitive) {
+            case PrimitiveType::TriangleList:
+            case PrimitiveType::TriangleStrip:
+                break;
+            default:
+                return Matrix::getIdentityProperty();
+        }
+
         // The destination's own extent, in the same order the pass itself resolves it: an explicit
         // Viewport wins, then the bound render target, then the swapchain.
         int vpW = 0;
@@ -11139,7 +11151,7 @@ namespace CNA::Internal::Renderers::Vulkan
 
         Pending3DDraw d{};
         // VULKAN-097: XNA's D3D9 pixel-centre convention, post-multiplied in row-vector order.
-        const Matrix wvp = world * view * projection * XnaPixelCenterCorrectionEXT();
+        const Matrix wvp = world * view * projection * XnaPixelCenterCorrectionEXT(primitive);
         wvp.ToColumnMajor(d.pushConst);
         // This path carries no BasicEffect diffuse/VertexColorEnabled (no GpuDrawParams at
         // all); preserve the historical behavior of outputting the raw vertex colors
@@ -11182,7 +11194,7 @@ namespace CNA::Internal::Renderers::Vulkan
 
         Pending3DDraw d{};
         // VULKAN-097: XNA's D3D9 pixel-centre convention, post-multiplied in row-vector order.
-        const Matrix wvp = world * view * projection * XnaPixelCenterCorrectionEXT();
+        const Matrix wvp = world * view * projection * XnaPixelCenterCorrectionEXT(primitive);
         wvp.ToColumnMajor(d.pushConst);
         // See DrawColoredPrimitives above: preserve the historical raw-vertex-color output
         // for this no-GpuDrawParams legacy path (Task 364).
@@ -11250,7 +11262,7 @@ namespace CNA::Internal::Renderers::Vulkan
 
         Pending3DDraw d{};
         // VULKAN-097: XNA's D3D9 pixel-centre convention, post-multiplied in row-vector order.
-        const Matrix wvp = world * view * projection * XnaPixelCenterCorrectionEXT();
+        const Matrix wvp = world * view * projection * XnaPixelCenterCorrectionEXT(primitive);
         if (needsAlphaTest) {
             FillAlphaTestPushConst(d.pushConst, wvp, params);
             d.useAlphaTest = true;
@@ -11534,7 +11546,7 @@ namespace CNA::Internal::Renderers::Vulkan
 
         Pending3DDraw d{};
         // VULKAN-097: XNA's D3D9 pixel-centre convention, post-multiplied in row-vector order.
-        const Matrix wvp = world * view * projection * XnaPixelCenterCorrectionEXT();
+        const Matrix wvp = world * view * projection * XnaPixelCenterCorrectionEXT(primitive);
         if (needsAlphaTest) {
             FillAlphaTestPushConst(d.pushConst, wvp, params);
             d.useAlphaTest = true;
@@ -11881,7 +11893,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // VULKAN-097: this route's world comes from the per-instance buffer, so the
         // correction rides on the projection half of the view-projection product.
         FillInstancedPushConst(d.pushConst, view,
-                               projection * XnaPixelCenterCorrectionEXT(), params);
+                               projection * XnaPixelCenterCorrectionEXT(primitive), params);
 
         // Copy per-vertex data (all vertices)
         d.vbData.resize(static_cast<std::size_t>(vertexCount) * pvStride);
