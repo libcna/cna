@@ -1675,6 +1675,19 @@ namespace CNA::Internal::Renderers::Vulkan
             VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             buffer_, memory_, &mappedPtr_);
+        allocatedBytes_ = size;
+    }
+
+    void VulkanIndexBufferRenderer::RequireByteCapacity(VkDeviceSize needed, const char* what) const
+    {
+        if (needed <= allocatedBytes_) return;
+        throw std::runtime_error(
+            std::string("The Vulkan renderer: ") + what + " would write "
+            + std::to_string(needed) + " bytes into an index buffer mapped at "
+            + std::to_string(allocatedBytes_) + " bytes ("
+            + std::to_string(capacity_) + " indices of "
+            + std::to_string(thirtyTwoBit_ ? 4 : 2) + " bytes). The upload is refused rather than "
+            "truncated or written past the mapping.");
     }
 
     void VulkanIndexBufferRenderer::ReleaseVulkanResources()
@@ -1703,12 +1716,18 @@ namespace CNA::Internal::Renderers::Vulkan
 
     void VulkanIndexBufferRenderer::SetData16(const void* data, int index_count)
     {
+        if (index_count <= 0) { indexCount_ = index_count; return; }
+        RequireByteCapacity(
+            static_cast<VkDeviceSize>(index_count) * sizeof(uint16_t), "a 16-bit index upload");
         indexCount_ = index_count;
         std::memcpy(mappedPtr_, data, static_cast<size_t>(index_count) * sizeof(uint16_t));
     }
 
     void VulkanIndexBufferRenderer::SetData32(const void* data, int index_count)
     {
+        if (index_count <= 0) { indexCount_ = index_count; return; }
+        RequireByteCapacity(
+            static_cast<VkDeviceSize>(index_count) * sizeof(uint32_t), "a 32-bit index upload");
         indexCount_ = index_count;
         std::memcpy(mappedPtr_, data, static_cast<size_t>(index_count) * sizeof(uint32_t));
     }
@@ -10285,6 +10304,14 @@ namespace CNA::Internal::Renderers::Vulkan
         VkDeviceSize total = 0;
         for (const auto* vb : liveVertexBuffers_)
             total += vb->GetAllocatedBytesEXT();
+        return total;
+    }
+
+    VkDeviceSize VulkanRenderer::GetLiveIndexBufferBytesEXT() const noexcept
+    {
+        VkDeviceSize total = 0;
+        for (const auto* ib : liveIndexBuffers_)
+            total += ib->GetAllocatedBytesEXT();
         return total;
     }
 

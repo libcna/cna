@@ -704,13 +704,28 @@ namespace CNA::Internal::Renderers::Vulkan
         void ReleaseVulkanResources();
         void DisconnectOwner() { owner_ = nullptr; }
 
+        /// Bytes currently mapped at `mappedPtr_`, i.e. `capacity_` indices of this buffer's own
+        /// element width. plan_vulkan.md VULKAN-131.
+        VkDeviceSize GetAllocatedBytesEXT() const { return allocatedBytes_; }
+
     private:
+        /// plan_vulkan.md VULKAN-131: refuse an upload larger than the mapping, by name.
+        ///
+        /// Unlike the vertex buffer's twin this GROWS nothing, and the difference is deliberate.
+        /// A vertex buffer is allocated from a stride guess and a wider real stride is a legal
+        /// thing for a caller to have; an index buffer is allocated from the element width it was
+        /// created with, so the only ways past its end are more indices than its capacity or a
+        /// width that is not this buffer's. Both are caller errors, and widening the allocation
+        /// would make the second one draw from misread bytes rather than fail.
+        void RequireByteCapacity(VkDeviceSize needed, const char* what) const;
+
         VkBuffer                buffer_        = VK_NULL_HANDLE;
         VkDeviceMemory          memory_        = VK_NULL_HANDLE;
         void*                   mappedPtr_     = nullptr;
         int                     capacity_      = 0;
         int                     indexCount_    = 0;
         bool                    thirtyTwoBit_  = false;
+        VkDeviceSize            allocatedBytes_ = 0;
         VulkanRenderer*  owner_         = nullptr;
     };
 
@@ -1280,6 +1295,18 @@ namespace CNA::Internal::Renderers::Vulkan
          * @return Sum of the mapped sizes of every live `VulkanVertexBufferRenderer`.
          */
         CNAEXT [[nodiscard]] VkDeviceSize GetLiveVertexBufferBytesEXT() const noexcept;
+
+        /**
+         * @brief CNAEXT. Total host-visible bytes this renderer has mapped for live index buffers.
+         *
+         * plan_vulkan.md VULKAN-131. The counterpart of GetLiveVertexBufferBytesEXT(), and the
+         * reason it reads differently: an index buffer's allocation is exact from the start
+         * (`capacity` indices of the width it was created with), so a regression asserts that it
+         * stays exact and that an upload which would exceed it is refused by name.
+         *
+         * @return Sum of the mapped sizes of every live `VulkanIndexBufferRenderer`.
+         */
+        CNAEXT [[nodiscard]] VkDeviceSize GetLiveIndexBufferBytesEXT() const noexcept;
 
         /**
          * @brief Returns every warning/error emitted by the active Vulkan validation messenger.

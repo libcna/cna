@@ -1069,6 +1069,17 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_vertexbuffer_wide_stride_bounds
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plans/plan_vulkan.md VULKAN-131 (F-02): SetData16/SetData32 wrote index_count * element
+        # width into a mapping of capacity * element width with no comparison. The allocation is
+        # exact here (unlike the vertex buffer's stride guess), so this proves the exactness, the
+        # named refusal of an upload that would exceed it, and that a full-capacity 32-bit buffer
+        # still draws from its very last index.
+        cna_vulkan_test(cna_test_vulkan_indexbuffer_upload_bounds
+                        vulkan_indexbuffer_upload_bounds_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_IndexBuffer_UploadBounds
+            COMMAND cna_test_vulkan_indexbuffer_upload_bounds
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 855 (Phase 73 Vulkan gap closure): Texture2D SetData/GetData partial-rectangle +
         # startIndex/elementCount + mip-level on Vulkan -- verbatim reuse of the shared EasyGL
         # sources (Tasks 169-171); both operate entirely on a renderer-agnostic CPU-side shadow
