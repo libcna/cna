@@ -375,3 +375,114 @@ TEST(CnbTextureCodecTest, RepresentationSelectionPrefersTheEarliestSupportedForm
     EXPECT_EQ(CNA::Content::Cnb::SelectCnbTextureRepresentation(data, nothing),
               data.representations.size());
 }
+
+// ---------------------------------------------------------------------------
+// Mip chain generation.
+//
+// A texture with one level aliases on anything seen at a grazing angle, and the
+// container has always been able to carry a chain -- nothing generated one. The
+// interesting properties are that the chain is complete and correctly sized,
+// that a non-square and a non-power-of-two texture both terminate, and that the
+// colour space is respected: averaging sRGB-encoded texels as if they were light
+// darkens every level, which is visible as a surface that dims as it recedes.
+// ---------------------------------------------------------------------------
+namespace
+{
+    CnbTextureData SolidRgba8(std::uint32_t width, std::uint32_t height, std::uint8_t value)
+    {
+        std::vector<std::uint8_t> pixels(static_cast<std::size_t>(width) * height * 4u, value);
+        return CNA::Content::Cnb::MakeRgba8Texture2DData(width, height, std::move(pixels));
+    }
+}
+
+TEST(CnbTextureCodecTest, GeneratedMipChainIsCompleteAndCorrectlySized)
+{
+    CnbTextureData data = SolidRgba8(8u, 8u, 128u);
+    CNA::Content::Cnb::GenerateRgba8MipChain(data);
+
+    EXPECT_EQ(data.mipCount, 4u);   // 8, 4, 2, 1
+    ASSERT_EQ(data.representations.size(), 1u);
+    ASSERT_EQ(data.representations.front().levels.size(), 4u);
+    for (std::uint32_t level = 0u; level < data.mipCount; ++level)
+    {
+        std::uint32_t w = 0u, h = 0u, d = 0u;
+        CNA::Content::Cnb::CnbTextureLevelDimensions(data, level, w, h, d);
+        EXPECT_EQ(data.representations.front().levels[level].size(),
+                  static_cast<std::size_t>(w) * h * 4u)
+            << "level " << level;
+    }
+}
+
+TEST(CnbTextureCodecTest, GeneratedMipChainHandlesNonSquareAndNonPowerOfTwo)
+{
+    // 1 x N is the case that reads off the end if the already-collapsed dimension
+    // is not clamped, and 6 x 3 is the case where halving is not exact.
+    for (const auto& size : {std::pair<std::uint32_t, std::uint32_t>{1u, 16u},
+                             std::pair<std::uint32_t, std::uint32_t>{16u, 1u},
+                             std::pair<std::uint32_t, std::uint32_t>{6u, 3u},
+                             std::pair<std::uint32_t, std::uint32_t>{1u, 1u}})
+    {
+        CnbTextureData data = SolidRgba8(size.first, size.second, 200u);
+        CNA::Content::Cnb::GenerateRgba8MipChain(data);
+        std::uint32_t w = 0u, h = 0u, d = 0u;
+        CNA::Content::Cnb::CnbTextureLevelDimensions(data, data.mipCount - 1u, w, h, d);
+        EXPECT_EQ(w, 1u);
+        EXPECT_EQ(h, 1u);
+        // A flat texture stays flat all the way down, whatever the shape.
+        for (const std::uint8_t byte : data.representations.front().levels.back())
+        {
+            EXPECT_EQ(byte, 200u);
+        }
+    }
+}
+
+TEST(CnbTextureCodecTest, MipChainAveragesLinearlyByDefault)
+{
+    // Two black texels and two white ones: the linear average of the stored
+    // values is 127 or 128, whatever the transfer function of the source.
+    std::vector<std::uint8_t> pixels(2u * 2u * 4u, 0u);
+    for (std::size_t i = 0u; i < 4u; ++i) pixels[i] = 255u;            // texel (0,0)
+    for (std::size_t i = 4u; i < 8u; ++i) pixels[i] = 255u;            // texel (1,0)
+    CnbTextureData data = CNA::Content::Cnb::MakeRgba8Texture2DData(2u, 2u, std::move(pixels));
+    CNA::Content::Cnb::GenerateRgba8MipChain(data,
+                                             CNA::Content::Cnb::CnbMipColorSpace::Linear);
+    ASSERT_EQ(data.mipCount, 2u);
+    const std::vector<std::uint8_t>& level1 = data.representations.front().levels[1];
+    ASSERT_EQ(level1.size(), 4u);
+    EXPECT_NEAR(static_cast<double>(level1[0]), 128.0, 1.0);
+}
+
+TEST(CnbTextureCodecTest, MipChainInSrgbAveragesLightRatherThanCode)
+{
+    // Half black, half white, averaged as light: 0.5 in linear is 188 in sRGB,
+    // not 128. Getting this wrong is the classic mip-darkening artefact, and it
+    // is why the colour space is an argument rather than an assumption.
+    std::vector<std::uint8_t> pixels(2u * 2u * 4u, 0u);
+    for (std::size_t i = 0u; i < 8u; ++i) pixels[i] = 255u;
+    CnbTextureData data = CNA::Content::Cnb::MakeRgba8Texture2DData(2u, 2u, std::move(pixels));
+    CNA::Content::Cnb::GenerateRgba8MipChain(data, CNA::Content::Cnb::CnbMipColorSpace::Srgb);
+    const std::vector<std::uint8_t>& level1 = data.representations.front().levels[1];
+    EXPECT_NEAR(static_cast<double>(level1[0]), 188.0, 2.0);
+    // Alpha is coverage, never a colour, so it is averaged linearly even here.
+    EXPECT_NEAR(static_cast<double>(level1[3]), 128.0, 1.0);
+}
+
+TEST(CnbTextureCodecTest, GeneratedMipChainSurvivesAnEncodeDecodeRoundTrip)
+{
+    CnbTextureData data = SolidRgba8(16u, 8u, 77u);
+    CNA::Content::Cnb::GenerateRgba8MipChain(data);
+    const std::vector<std::uint8_t> encoded = EncodeTexture2DToCnb(data, "mipped");
+    const CnbTextureData decoded = DecodeTexture2DFromCnb(CnbDocument::Parse(encoded));
+
+    EXPECT_EQ(decoded.mipCount, data.mipCount);
+    ASSERT_EQ(decoded.representations.size(), 1u);
+    EXPECT_EQ(decoded.representations.front().levels, data.representations.front().levels);
+}
+
+TEST(CnbTextureCodecTest, GenerateMipChainRefusesATextureThatAlreadyHasOne)
+{
+    CnbTextureData data = SolidRgba8(4u, 4u, 10u);
+    CNA::Content::Cnb::GenerateRgba8MipChain(data);
+    EXPECT_THROW(CNA::Content::Cnb::GenerateRgba8MipChain(data),
+                 Microsoft::Xna::Framework::Content::ContentLoadException);
+}
