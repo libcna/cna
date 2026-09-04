@@ -26,9 +26,10 @@ real browser against the real library what a `THREEJS` renderer could and could 
 
 **Every technical premise this plan depends on is measured and holds.** The renderer is buildable.
 
-**Whether it should be built is a different question, and the honest answer is "probably not."**
-See §1. That conclusion is the reason this file leads with it rather than burying it under a task
-table.
+**Whether it should be built is a different question, and the answer is no.** See §1 — and §1.4
+in particular, which was corrected on 2026-09-04 after the owner pointed out that CNA already runs
+WebGPU in the browser. That correction removed the last argument this identity had in its favour.
+The conclusion is the reason this file leads with it rather than burying it under a task table.
 
 ---
 
@@ -62,7 +63,7 @@ whole game engine's render hardware interface **inside** a game framework."*
 | Test | `THREEJS` |
 |---|---|
 | Is it 2D-only? | **No.** Measured: real depth buffer (P11), render targets (P8), MRT (Q4), instancing (P13), CNA-authored GLSL ES 3.00 (P12). It clears the bar `SKIA`/`BLEND2D`/`NANOVG`/`OPENVG` structurally could not. |
-| Does it add a platform? | **No.** The browser is already reached by six identities: `WEBGL1`, `WEBGL2`, `CANVAS`, `HTML_DOM`, `SVG_DOM`, `PIXIJS`. |
+| Does it add a platform? | **No.** The browser is already reached by **seven** identities: `WEBGL1`, `WEBGL2`, `CANVAS`, `HTML_DOM`, `SVG_DOM`, `PIXIJS`, and `WEBGPU` (whose Emscripten backend shipped 2026-08-26 — see §1.4). |
 | Is it a translation layer over an API CNA reaches natively? | **Yes.** three.js drives WebGL2. `WEBGL2` (EasyGL) reaches WebGL2 natively, on the same platform, in the same browser. |
 
 Two of three disqualifying patterns apply. That is the same score `MAGNUM` had — *"it reached
@@ -96,21 +97,55 @@ use.
 That is the translation layer `docs/removed-renderers.md` rejects, arrived at by measurement rather
 than by analogy.
 
-### 1.4 The one argument this analysis cannot dismiss
+### 1.4 The last argument, and why it does not survive either
 
-`three.webgpu.js` ships in the same package (verified in the r185 build listing). three.js's
-`WebGPURenderer` is a route to **WebGPU in the browser** — which is candidate `C4 WEBGPU_WEB` in
-`docs/renderer-expansion-candidates.md`, a platform CNA genuinely does **not** reach today (CNA's
-`WEBGPU` is native wgpu-native).
+**Corrected 2026-09-04 — an earlier revision of this section was wrong, and the correction removes
+the only argument that was left in this identity's favour.**
 
-If the owner's real goal is browser WebGPU, that is a legitimate gap — but `THREEJS` is an indirect
-and expensive way to fill it, and this plan scopes it **out** (§6). Emscripten's own
-`emdawnwebgpu` port, which `spikes/webgpu-web-spike/` already proved builds, is the direct route.
+That revision claimed browser WebGPU was a platform CNA does not reach, and that three.js's
+`WebGPURenderer` (`three.webgpu.js`, which does ship in the same package) was therefore a route to
+something new. **CNA already reaches browser WebGPU, and has since 2026-08-26.** The tree says so
+plainly:
+
+- `cmake/ThirdPartyWebGPU.cmake` has an `if(EMSCRIPTEN)` branch linking Emscripten's
+  **emdawnwebgpu** port (`--use-port=emdawnwebgpu`), reaching the browser's own `navigator.gpu`.
+- `plans/plan_webgpu.md` `WEBGPU-119`–`122` and `WEBGPU-133` are all ✅: `cna_demo_2d` renders 120
+  SpriteBatch frames in headless Chrome, `cna_house3d_demo` drives the 3D `BasicEffect` path
+  in-browser, and **every** stock-effect shader family — `PbrEffect`, `EnvironmentMapEffect`,
+  `SkinnedEffect`, `DualTextureEffect`, `AlphaTestEffect` — compiles and renders there.
+- `WEBGPU-123` measured browser WebGPU against native Vulkan on the same scene: **byte-identical,
+  max per-channel diff 0.**
+- `docs/webgpu-renderer.md`: *"`WEBGPU` is one renderer identity with two backends, not two
+  renderers."* Five seams differ behind `#if defined(__EMSCRIPTEN__)`; everything else, including
+  every WGSL shader, is shared.
+
+That is the registry's own doctrine applied correctly — `docs/renderer-expansion-candidates.md` §4
+already rules that Dawn is *"a **profile** of `WEBGPU`, like the GL profiles"*, and the browser
+backend is the same kind of thing.
+
+So the position is worse than the earlier revision described, not better. Browser WebGPU is not a
+gap `THREEJS` could fill; it is **a seventh browser route CNA already has**, and one that is
+pixel-verified against native Vulkan — a standard of evidence a three.js-mediated route could not
+match, because it would be measured against three.js's output rather than against CNA's own.
+
+**Stale documentation, noted but not fixed here** (it belongs to whoever next touches that file):
+`docs/renderer-expansion-candidates.md` row `C4 WEBGPU_WEB` still proposes browser WebGPU as a
+future identity and argues it is *"identity-worthy, not an alias"*. That row is dated 2026-08-13,
+thirteen days before the browser backend shipped, and `docs/webgpu-renderer.md` now contradicts it
+directly.
 
 ### 1.5 Recommendation
 
 **Do not build `THREEJS` as a renderer identity.** It fails the admission test this project applied
 to eleven renderers five days ago, and it fails it for the same reason `MAGNUM` did.
+
+With §1.4 corrected, **no argument in its favour is left standing.** Not 3D capability (measured,
+but `WEBGL2` and browser `WEBGPU` both already have it). Not a distinct execution model (measured
+away by DD4: XNA fidelity forbids using the scene graph and material system that would make it
+distinct). Not a platform (seven browser routes already exist). Not browser WebGPU (shipped, and
+pixel-verified against native Vulkan). What remains is a well-understood, cheaply-vendored,
+thoroughly-spiked renderer that would duplicate `WEBGL2` and be a candidate for the next cull on
+the day it merged.
 
 If the owner authorizes it anyway — which is entirely their call, and this plan is complete enough
 to execute on — §3 onward is the real backlog, and §2 records what it would honestly be allowed to
@@ -453,11 +488,11 @@ All are `RawShaderMaterial` + CNA's own GLSL ES 3.00, DD4.
 
 ## 6. Explicitly out of scope
 
-- **`three.webgpu.js` / `WebGPURenderer`.** The one genuine platform argument (§1.4) and a whole
-  second renderer's worth of work: a different shader language (WGSL/TSL), a different resource
-  model, a different async device bring-up. If browser WebGPU is the goal, `WEBGPU_WEB` via
-  Emscripten's `emdawnwebgpu` port is the direct route, and `spikes/webgpu-web-spike/` already
-  proved it builds.
+- **`three.webgpu.js` / `WebGPURenderer`.** Out of scope because it is *redundant*, not merely
+  expensive (§1.4): CNA's `WEBGPU` identity already runs in the browser through Emscripten's
+  emdawnwebgpu port, with every stock effect verified in headless Chrome and byte-identical output
+  to native Vulkan. Building a second, three.js-mediated browser-WebGPU route would add a shader
+  language (WGSL/TSL), a resource model and an async bring-up, to reach somewhere CNA already is.
 - **three.js's own materials, lights, shadows, post-processing and loaders.** DD4 rules them out
   for fidelity reasons; `modules/graphics-ext/` is where CNA's engine-layer equivalents live.
 - **Native (non-browser) builds.** DD1.
@@ -492,9 +527,10 @@ Three readings of the request, each cheaper and each delivering more:
 
 1. **"CNA should render 3D in the browser."** It already does — `WEBGL2` (EasyGL) is a full 3D
    renderer with the whole stock-effect matrix. Nothing needs building.
-2. **"CNA should reach browser WebGPU."** A real gap. `WEBGPU_WEB` (candidate `C4`) via
-   `emdawnwebgpu` is the direct route, and its existence gate is already passed
-   (`spikes/webgpu-web-spike/`).
+2. **"CNA should reach browser WebGPU."** Already done — `-DCNA_GRAPHICS_RENDERER=WEBGPU` under
+   `emcmake`, shipped 2026-08-26 (`WEBGPU-119`–`122`/`133`), with 2D, 3D and every stock effect
+   verified in a real browser and output byte-identical to native Vulkan (`WEBGPU-123`). Nothing
+   needs building; `docs/webgpu-renderer.md` §"Web / browser target" is the recipe.
 3. **"CNA games should be embeddable in a three.js scene."** This is not a renderer at all — it is a
    *present sink*: render to a `RenderTarget2D`, hand the texture to a page. Cheap, additive,
    breaks no identity rules, and `docs/renderer-expansion-candidates.md` §4 already classifies
