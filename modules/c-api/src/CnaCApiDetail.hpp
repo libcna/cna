@@ -355,6 +355,12 @@ template<typename TCallable>
         return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_RANGE, exception.what());
     } catch (const std::invalid_argument& exception) {
         return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, exception.what());
+    } catch (const std::logic_error& exception) {
+        // After the two more specific arms above, which are its own derived classes. A route that
+        // throws a bare logic_error is refusing an operation its own state does not allow, which
+        // is what INVALID_STATE names -- not an invariant of this library's, which is what
+        // INTERNAL names and what this used to answer.
+        return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());
     } catch (const std::ios_base::failure& exception) {
         return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
     } catch (const std::filesystem::filesystem_error& exception) {
