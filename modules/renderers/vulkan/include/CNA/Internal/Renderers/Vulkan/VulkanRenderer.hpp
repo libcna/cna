@@ -1356,6 +1356,21 @@ namespace CNA::Internal::Renderers::Vulkan
         CNAEXT [[nodiscard]] VkDeviceSize GetLiveIndexBufferBytesEXT() const noexcept;
 
         /**
+         * @brief CNAEXT. How many descriptor pools back the single-sampler descriptor cache.
+         *
+         * plan_vulkan.md VULKAN-390. One until a game exceeds `MaxDescriptorSets` distinct live
+         * (image view, sampler) pairs, then one more per overflow. Exposed so a regression can
+         * prove the chaining actually happened rather than inferring it from the pixels being
+         * right -- which is exactly what the old silent white-texture fallback made them not be.
+         *
+         * @return The pool count; at least 1 once the renderer is initialised.
+         */
+        CNAEXT [[nodiscard]] std::size_t GetTexSamplerDescriptorPoolCountEXT() const noexcept
+        {
+            return 1u + texSamplerOverflowPools_.size();
+        }
+
+        /**
          * @brief Returns every warning/error emitted by the active Vulkan validation messenger.
          *
          * Used by native validation regressions to turn asynchronous debug output into a
@@ -1393,6 +1408,26 @@ namespace CNA::Internal::Renderers::Vulkan
          * @param enabled True to request synchronization validation.
          */
         CNAEXT static void SetSyncValidationEnabledEXT(bool enabled) noexcept;
+
+        /**
+         * @brief Test-only. Makes the next @p count single-sampler descriptor allocations fail.
+         *
+         * plan_vulkan.md VULKAN-390. The exhaustion arm cannot be reached by volume on either
+         * driver measured here: `vkAllocateDescriptorSets` keeps succeeding past the pool's
+         * `maxSets`, which the specification permits (running out is a runtime error the
+         * implementation *may* report, not a usage violation the validation layer will flag), and
+         * 4000 simultaneously live pairs still did not trigger it. Shrinking the pool does not help
+         * for the same reason. Without an injected failure a regression on this path would pass
+         * while executing none of it.
+         *
+         * Each failure makes `GetOrCreateTexSamplerDescSet` chain another pool, exactly as a real
+         * `VK_ERROR_OUT_OF_POOL_MEMORY` would. A count large enough to outlast the fresh pool's own
+         * first allocation reaches the named-refusal arm instead.
+         *
+         * @param count How many allocations to fail; 0 disables injection.
+         */
+        CNAEXT static void SetTexSamplerDescriptorAllocationFailuresForTestEXT(
+            std::uint32_t count) noexcept;
 
         /**
          * @brief Reports whether the Khronos validation layer is actually active.
@@ -1702,7 +1737,21 @@ namespace CNA::Internal::Renderers::Vulkan
         /// later setter cannot drop what an earlier one established.
         SamplerStateKey                                               samplerSlotState_[16] = {};
         VkSampler                                                     slotSamplers_[16] = {};
-        std::map<std::pair<VkImageView,VkSampler>, VkDescriptorSet>  texSamplerDescSets_;
+        /// plan_vulkan.md VULKAN-390: a cached single-sampler descriptor set together with the
+        /// pool it came from. The pool used to be implicit -- there was only one -- and a set
+        /// freed against the wrong pool is undefined behaviour, so chaining pools makes the
+        /// owner part of the entry rather than something a caller has to remember.
+        struct TexSamplerDescSetEXT {
+            VkDescriptorSet  set  = VK_NULL_HANDLE;
+            VkDescriptorPool pool = VK_NULL_HANDLE;
+        };
+        std::map<std::pair<VkImageView,VkSampler>, TexSamplerDescSetEXT>  texSamplerDescSets_;
+        /// VULKAN-390: pools chained after `descriptorPool_` fills. Each holds MaxDescriptorSets
+        /// more combined-image-sampler sets. Empty until a game genuinely exceeds the first pool.
+        std::vector<VkDescriptorPool> texSamplerOverflowPools_;
+        /// VULKAN-390: allocate one single-sampler set, chaining a new pool when the current ones
+        /// are full. Throws a named exception if the device refuses; never substitutes a resource.
+        void AllocateTexSamplerDescSetEXT(VkDescriptorSet& outSet, VkDescriptorPool& outPool);
         bool anisotropySupported_ = false;
         float maxSamplerAnisotropy_ = 1.f;
         bool independentBlendSupported_ = false;

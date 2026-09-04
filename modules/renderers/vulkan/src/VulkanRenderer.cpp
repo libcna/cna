@@ -198,6 +198,12 @@ namespace CNA::Internal::Renderers::Vulkan
     // VK_LAYER_SETTINGS_PATH file or an environment variable a test runner may not forward.
     static bool sRequestSyncValidation = false;
 
+    // plan_vulkan.md VULKAN-390: how many more single-sampler descriptor allocations a test wants
+    // to fail. 0 in every production run. See
+    // SetTexSamplerDescriptorAllocationFailuresForTestEXT for why an injected failure is the only
+    // way to execute the chaining and refusal arms on the drivers here.
+    static std::uint32_t sTexSamplerAllocFailuresToInject = 0;
+
     // =========================================================================
     // Helpers
     // =========================================================================
@@ -2024,8 +2030,12 @@ namespace CNA::Internal::Renderers::Vulkan
 
         // Step 4: destroy descriptor resources.
         if (descriptorPool_      != VK_NULL_HANDLE) { vkDestroyDescriptorPool(device_, descriptorPool_, nullptr);           descriptorPool_      = VK_NULL_HANDLE; }
+        // VULKAN-390: the chained overflow pools go with it, or their sets outlive their pool.
+        for (VkDescriptorPool pool : texSamplerOverflowPools_)
+            if (pool != VK_NULL_HANDLE) vkDestroyDescriptorPool(device_, pool, nullptr);
+        texSamplerOverflowPools_.clear();
         if (descriptorSetLayout_ != VK_NULL_HANDLE) { vkDestroyDescriptorSetLayout(device_, descriptorSetLayout_, nullptr); descriptorSetLayout_ = VK_NULL_HANDLE; }
-        texSamplerDescSets_.clear(); // descriptor sets freed with pool above
+        texSamplerDescSets_.clear(); // descriptor sets freed with pools above
         for (auto& [k, s] : samplerCache_)
             if (s != VK_NULL_HANDLE) vkDestroySampler(device_, s, nullptr);
         samplerCache_.clear();
@@ -3488,6 +3498,25 @@ namespace CNA::Internal::Renderers::Vulkan
             throw std::runtime_error("vkCreateDescriptorSetLayout failed");
     }
 
+    void VulkanRenderer::SetTexSamplerDescriptorAllocationFailuresForTestEXT(
+        std::uint32_t count) noexcept
+    {
+        sTexSamplerAllocFailuresToInject = count;
+    }
+
+    // VULKAN-390: one allocation attempt, with the test-only failure injection folded in so every
+    // call site sees the same behaviour a real VK_ERROR_OUT_OF_POOL_MEMORY would produce.
+    static VkResult AllocateOneDescriptorSet(VkDevice device,
+                                             const VkDescriptorSetAllocateInfo& info,
+                                             VkDescriptorSet& out)
+    {
+        if (sTexSamplerAllocFailuresToInject > 0) {
+            --sTexSamplerAllocFailuresToInject;
+            return VK_ERROR_OUT_OF_POOL_MEMORY;
+        }
+        return vkAllocateDescriptorSets(device, &info, &out);
+    }
+
     void VulkanRenderer::CreateDescriptorPool()
     {
         VkDescriptorPoolSize ps{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MaxDescriptorSets };
@@ -3634,18 +3663,18 @@ namespace CNA::Internal::Renderers::Vulkan
         if (it != texSamplerDescSets_.end()) {
             VkSamplerTraceEXT("desc.TexSampler  hit=1 key=(0x%llx,0x%llx) set=0x%llx "
                               "binding=0 slot=0 view=0x%llx sampler=0x%llx",
-                              VkH(view), VkH(sampler), VkH(it->second), VkH(view), VkH(sampler));
-            return it->second;
+                              VkH(view), VkH(sampler), VkH(it->second.set), VkH(view), VkH(sampler));
+            return it->second.set;
         }
 
-        VkDescriptorSet ds = VK_NULL_HANDLE;
-        VkDescriptorSetAllocateInfo dsAI{};
-        dsAI.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        dsAI.descriptorPool     = descriptorPool_;
-        dsAI.descriptorSetCount = 1;
-        dsAI.pSetLayouts        = &descriptorSetLayout_;
-        if (vkAllocateDescriptorSets(device_, &dsAI, &ds) != VK_SUCCESS)
-            return defaultWhiteDescSet_;
+        // VULKAN-390: this used to return defaultWhiteDescSet_ when the pool was full, so a game
+        // with more than MaxDescriptorSets live (view, sampler) pairs drew WHITE sprites with no
+        // exception, no log and no validation message. A wrong picture is the one failure mode a
+        // renderer must never choose; the pool is chained instead, and a device that refuses even
+        // that says so by name.
+        VkDescriptorSet  ds     = VK_NULL_HANDLE;
+        VkDescriptorPool dsPool = VK_NULL_HANDLE;
+        AllocateTexSamplerDescSetEXT(ds, dsPool);
 
         VkDescriptorImageInfo imgInfo{};
         imgInfo.sampler     = sampler;
@@ -3661,8 +3690,59 @@ namespace CNA::Internal::Renderers::Vulkan
         write.pImageInfo      = &imgInfo;
         vkUpdateDescriptorSets(device_, 1, &write, 0, nullptr);
 
-        texSamplerDescSets_[key] = ds;
+        texSamplerDescSets_[key] = TexSamplerDescSetEXT{ ds, dsPool };
         return ds;
+    }
+
+    void VulkanRenderer::AllocateTexSamplerDescSetEXT(VkDescriptorSet& outSet,
+                                                      VkDescriptorPool& outPool)
+    {
+        VkDescriptorSetAllocateInfo dsAI{};
+        dsAI.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        dsAI.descriptorSetCount = 1;
+        dsAI.pSetLayouts        = &descriptorSetLayout_;
+
+        // Newest pool first: the older ones are full, which is why the newer ones exist.
+        for (auto pool = texSamplerOverflowPools_.rbegin();
+             pool != texSamplerOverflowPools_.rend(); ++pool)
+        {
+            dsAI.descriptorPool = *pool;
+            if (AllocateOneDescriptorSet(device_, dsAI, outSet) == VK_SUCCESS) {
+                outPool = *pool;
+                return;
+            }
+        }
+        dsAI.descriptorPool = descriptorPool_;
+        if (AllocateOneDescriptorSet(device_, dsAI, outSet) == VK_SUCCESS) {
+            outPool = descriptorPool_;
+            return;
+        }
+
+        // Every existing pool is full. Chain another of the same size.
+        VkDescriptorPoolSize ps{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MaxDescriptorSets };
+        VkDescriptorPoolCreateInfo ci{};
+        ci.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        ci.flags         = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+        ci.maxSets       = MaxDescriptorSets;
+        ci.poolSizeCount = 1;
+        ci.pPoolSizes    = &ps;
+        VkDescriptorPool grown = VK_NULL_HANDLE;
+        if (vkCreateDescriptorPool(device_, &ci, nullptr, &grown) != VK_SUCCESS)
+            throw std::runtime_error(
+                "The Vulkan renderer: all " + std::to_string(GetTexSamplerDescriptorPoolCountEXT())
+                + " combined-image-sampler descriptor pools are full and the device refused "
+                  "another. Refused rather than drawing a substituted texture.");
+
+        dsAI.descriptorPool = grown;
+        if (AllocateOneDescriptorSet(device_, dsAI, outSet) != VK_SUCCESS) {
+            vkDestroyDescriptorPool(device_, grown, nullptr);
+            throw std::runtime_error(
+                "The Vulkan renderer: a freshly created combined-image-sampler descriptor pool "
+                "refused the very first allocation. Refused rather than drawing a substituted "
+                "texture.");
+        }
+        texSamplerOverflowPools_.push_back(grown);
+        outPool = grown;
     }
 
     // =========================================================================
@@ -10619,7 +10699,10 @@ namespace CNA::Internal::Renderers::Vulkan
         for (auto it = texSamplerDescSets_.begin(); it != texSamplerDescSets_.end(); )
         {
             if (it->first.first == view) {
-                if (it->second != VK_NULL_HANDLE) into.descriptorSets.push_back(it->second);
+                // VULKAN-390: freed against the pool it was allocated from, which is no longer
+                // always descriptorPool_.
+                if (it->second.set != VK_NULL_HANDLE)
+                    into.poolDescriptorSets.emplace_back(it->second.pool, it->second.set);
                 it = texSamplerDescSets_.erase(it);
             } else {
                 ++it;

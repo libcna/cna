@@ -1058,6 +1058,17 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_VertexBufferIndexBufferGetData COMMAND cna_test_vulkan_vertexbuffer_indexbuffer_getdata
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plans/plan_vulkan.md VULKAN-390 (F-06): GetOrCreateTexSamplerDescSet used to return the
+        # default WHITE descriptor set when the 512-set pool was full, so a game with more live
+        # texture/sampler pairs than that drew white sprites silently. Walks off that cliff on
+        # purpose with 640 live textures and asserts the pool chained, every sprite drew its own
+        # texture, and the layer stayed silent.
+        cna_vulkan_test(cna_test_vulkan_descriptor_pool_overflow
+                        vulkan_descriptor_pool_overflow_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DescriptorPoolOverflow
+            COMMAND cna_test_vulkan_descriptor_pool_overflow
+            TIMEOUT 90 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plans/plan_vulkan.md VULKAN-020 (F-07): SupportsCapability used to end in
         # `default: return true`, so the renderer answered true for six members GraphicsDevice
         # answers false, and for values that are not enumerators at all. Asks both seams the same
