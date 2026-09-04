@@ -29,6 +29,8 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 - [`plan_media.md`](plan_media.md) — media API implementation.
 - [`plan_net.md`](plan_net.md) — networking, GamerServices, and Avatar APIs.
 - [`plan_binding.md`](plan_binding.md) — native C API and stable C ABI.
+- [`plan_bindings_upstream.md`](plan_bindings_upstream.md) — defects the ten language
+  bindings measured in CNA, and the CNA-side work they are waiting on.
 - [`plan_cnj.md`](plan_cnj.md) — `.cnj` content format.
 - [`plan_gltf.md`](plan_gltf.md) — glTF import correctness.
 - [`plan_xnb.md`](plan_xnb.md) — XNB content pipeline.
