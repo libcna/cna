@@ -15,23 +15,27 @@
 
 ## 1. Current status
 
-**Implementation under way.** Thirteen tasks are ✅ (`VULKAN-004`, `-020`, `-021`, `-091`, `-097`,
-`-130`, `-131`, `-250`, `-332`, `-333`, `-346`, `-370`, `-390`), plus `VULKAN-011` from the planning
-session. Three rows were opened by work that discovered something the plan had not: `VULKAN-098`
-(F-19, the two renderers place the same XNA `z` at different depths and EasyGL is the one that
-diverges from XNA), `VULKAN-264` (F-08's tail, `ShaderDialectEXT::GlslVulkan` does not distinguish
-GLSL source from SPIR-V bytecode) and the `VULKAN-145`–`VULKAN-149` split of `VULKAN-144`.
+**Implementation under way.** Fifteen tasks are ✅ (`VULKAN-004`, `-020`, `-021`, `-091`, `-097`,
+`-130`, `-131`, `-145`, `-146`, `-250`, `-332`, `-333`, `-346`, `-370`, `-390`), plus `VULKAN-011`
+from the planning session. Four rows were opened by work that discovered something the plan had not:
+`VULKAN-098` (F-19, the two renderers place the same XNA `z` at different depths and EasyGL is the
+one that diverges from XNA), `VULKAN-264` (F-08's tail, `ShaderDialectEXT::GlslVulkan` does not
+distinguish GLSL source from SPIR-V bytecode), `VULKAN-150` (F-20, Vulkan's `DualTextureEffect` has
+one UV channel and the declaration guard is the only thing hiding it) — plus the
+`VULKAN-145`–`VULKAN-149` split of `VULKAN-144`.
 
-**The Vulkan suite is 222/223**, from the 209/215 this plan opened with. §7.5 carries the running
+**The Vulkan suite is 224/225**, from the 209/215 this plan opened with. §7.5 carries the running
 baseline, one line per completed task. The single remaining failure,
-`Vulkan_RenderTarget_EffectSource`, is `VULKAN-144`'s capability gap and now fails cleanly rather
+`Vulkan_RenderTarget_EffectSource`, is `VULKAN-148`'s capability gap and now fails cleanly rather
 than aborting the process (`VULKAN-346`).
 
-Three findings were corrected rather than confirmed, and those are the entries worth reading:
+Four findings were corrected rather than confirmed, and those are the entries worth reading:
 `Vulkan_DepthBias` was a **test** written against OpenGL's depth range, not a renderer defect
 (`VULKAN-091`); `PixelCountIsPreciseEXT` was **wrong**, not "probably right" as F-14 guessed
-(`VULKAN-370`); and F-06's silent white sprite is, on the SpriteBatch path it is most likely reached
-from, a `VK_NULL_HANDLE` bind and a segfault (`VULKAN-390`).
+(`VULKAN-370`); F-06's silent white sprite is, on the SpriteBatch path it is most likely reached
+from, a `VK_NULL_HANDLE` bind and a segfault (`VULKAN-390`); and `VULKAN-147`'s acceptance, written
+in this session's own split of `VULKAN-144`, could only have been satisfied by rendering the wrong
+picture — which is what F-20 records and `VULKAN-150` now owns.
 
 The rest of this section is the **planning-session baseline**, kept as written. It was produced by a
 static audit of the working tree on 2026-09-04, a mechanical inventory of both renderers' registered
