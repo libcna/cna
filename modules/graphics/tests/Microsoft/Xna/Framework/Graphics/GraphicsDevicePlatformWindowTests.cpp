@@ -224,7 +224,7 @@ TEST_F(GraphicsDeviceWindowDescriptionTest,
 TEST(GraphicsDevicePlatformWindowTests,
      OwnsThePlatformWindowAndReleasesVideoAfterItsDestruction)
 {
-#if defined(CNA_PLATFORM_SDL3) || !(defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_PORTABLEGL))
+#if defined(CNA_PLATFORM_SDL3) || !(defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_PORTABLEGL) || defined(CNA_RENDERER_TINYGL))
     GTEST_SKIP() << "requires an SDL-free platform selection and a window-independent renderer";
 #else
     WindowOwnershipTrace trace;
@@ -257,7 +257,7 @@ TEST(GraphicsDevicePlatformWindowTests,
 TEST(GraphicsDevicePlatformWindowTests,
      ConstructorFailureDestroysTheWindowBeforeReleasingVideo)
 {
-#if defined(CNA_PLATFORM_SDL3) || !(defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_PORTABLEGL))
+#if defined(CNA_PLATFORM_SDL3) || !(defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_PORTABLEGL) || defined(CNA_RENDERER_TINYGL))
     GTEST_SKIP() << "requires an SDL-free platform selection and a window-independent renderer";
 #else
     WindowOwnershipTrace trace;
@@ -275,7 +275,7 @@ TEST(GraphicsDevicePlatformWindowTests,
 TEST(GraphicsDevicePlatformWindowTests,
      ExternalWindowTokenIsInterpretedOnlyByThePlatform)
 {
-#if defined(CNA_PLATFORM_SDL3) || !(defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_PORTABLEGL))
+#if defined(CNA_PLATFORM_SDL3) || !(defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_PORTABLEGL) || defined(CNA_RENDERER_TINYGL))
     GTEST_SKIP() << "requires an SDL-free platform selection and a window-independent renderer";
 #else
     constexpr std::uintptr_t token = 0xCAFE1234u;
@@ -304,7 +304,7 @@ TEST(GraphicsDevicePlatformWindowTests,
 TEST(GraphicsDevicePlatformWindowTests,
      AViewportRefreshSurvivesAWindowThatRefusesItsDrawableSize)
 {
-#if defined(CNA_PLATFORM_SDL3) || !(defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_PORTABLEGL))
+#if defined(CNA_PLATFORM_SDL3) || !(defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_PORTABLEGL) || defined(CNA_RENDERER_TINYGL))
     GTEST_SKIP() << "requires an SDL-free platform selection and a window-independent renderer";
 #else
     // UpdateViewportFromWindow() is what GameWindow.ClientSizeChanged runs, from inside the frame's
@@ -332,7 +332,7 @@ TEST(GraphicsDevicePlatformWindowTests,
 TEST(GraphicsDevicePlatformWindowTests,
      DeviceCreationStillFailsOnAWindowThatRefusesItsDrawableSize)
 {
-#if defined(CNA_PLATFORM_SDL3) || !(defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_PORTABLEGL))
+#if defined(CNA_PLATFORM_SDL3) || !(defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_PORTABLEGL) || defined(CNA_RENDERER_TINYGL))
     GTEST_SKIP() << "requires an SDL-free platform selection and a window-independent renderer";
 #else
     // The other half of the contract, and the reason the tolerance above is scoped to one block

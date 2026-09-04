@@ -297,37 +297,3 @@ was the clearest case of an API with no future. EasyGL renders CNA's 2D everywhe
 unconditionally true, since no surviving renderer lacks `RenderTarget2D`. The gate is kept
 rather than deleted, with its reasoning intact, so a future renderer with the same
 limitation has somewhere to name itself.
-
----
-
-## TINYGL
-
-| | |
-|---|---|
-| Identity | `TINYGL` (enum `TinyGL`, C ABI `CNA_GRAPHICS_RENDERER_TINYGL` = 47) |
-| Family | `modules/renderers/tinygl` |
-| Removed | 2026-08-30, tag `removed/tinygl` |
-| Size | 5,042 lines (2,823 production, **0 tests**, 2,219 examples) |
-| Dependency | `https://github.com/C-Chads/tinygl.git` @ `36a7987e7bebfda19615ea33341b1cc0ff9c3b13` |
-| Build was | `-DCNA_GRAPHICS_RENDERER=TINYGL`; had its own `.github/workflows/tinygl-cross-platform-ci.yml` |
-
-**What it proved.** That a fixed-function CPU OpenGL 1.x subset can be driven through the
-same renderer contract as a GPU backend — the fixed-function counterpart to `PORTABLEGL`'s
-shader-era CPU OpenGL.
-
-**Why removed — and this one is a disqualification, not a redundancy.** TinyGL has no alpha
-blending. `TinyGLTextureRenderer::UploadCutout(float alphaMultiplier)` folds alpha into
-TinyGL's colour key, giving a 1-bit cutout. XNA's `SpriteBatch::Begin()` defaults to
-`BlendState::AlphaBlend`, so **the default path of the framework's most-used API does not
-work on this renderer**: every semi-transparent sprite, fade and particle renders wrong.
-It also has no stencil, no scissor, no render targets and no shaders of any kind.
-
-That is a different category from the other removals. The rest were redundant; this one
-could not run an XNA game. CNA's own `SOFTWARE` renderer is the CPU rasterization strategy
-worth keeping — it is CNA's, it speaks XNA semantics directly, and it does blend.
-
-**Kept, deliberately.** `PORTABLEGL` survives this pass. It is the closest call in the
-whole portfolio: it duplicates `SOFTWARE`'s strategy through someone else's GL API, but it
-is shader-era rather than fixed-function and it is not disqualified the way TinyGL is. If
-`SOFTWARE` ever proves unmaintainable, `PORTABLEGL` is what would let it be deleted —
-but the two are alternatives, never both.

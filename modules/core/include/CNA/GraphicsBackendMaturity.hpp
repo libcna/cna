@@ -98,6 +98,7 @@ namespace CNA
             case GraphicsRendererType::Fna3d:
             case GraphicsRendererType::SvgDom:
             case GraphicsRendererType::PortableGL:
+            case GraphicsRendererType::TinyGL:
             case GraphicsRendererType::PixiJs:
                 return GraphicsBackendMaturity::Experimental;
 

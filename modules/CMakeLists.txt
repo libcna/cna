@@ -381,7 +381,7 @@ set(_cna_renderer_modules
     directx7 directx8 directx9 directx10 directx11 directx12
     easygl fna3d freedirect gdi glide headless html-dom    metal  opengl1
     opengl2 opengl4 opengles1  pixijs portablegl sdl-gpu sdl-renderer  software 
-    stub svg-dom  vulkan
+    stub svg-dom tinygl vulkan
     webgpu  common/d3d common/mojoshader)
 string(JOIN "|" _cna_framework_module_pattern ${_cna_framework_modules})
 string(JOIN "|" _cna_renderer_module_pattern ${_cna_renderer_modules})

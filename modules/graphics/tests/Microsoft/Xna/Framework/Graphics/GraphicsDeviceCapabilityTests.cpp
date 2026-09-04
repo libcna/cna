@@ -161,6 +161,7 @@ struct CapabilityExpectation
         // fixed-function reasons -- CreateRenderTarget2D()/CreateRenderTargetCube() keep
         // IGraphicsRenderer's nullptr defaults, SetRenderTargets() refuses a non-empty binding, and
         // CreateOcclusionQuery() keeps its nullptr default.
+        case GraphicsRendererType::TinyGL:
             return {false, false, false};
 
         // plans/plan_diligent.md DILIGENT-42: a third genuinely 3D-capable renderer with its own honest,

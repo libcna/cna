@@ -17,7 +17,7 @@ static_assert(getCurrentGraphicsBackendMaturity() == getCurrentGraphicsBackendMa
 static_assert(!toStringView(getCurrentGraphicsBackendMaturity()).empty());
 constexpr GraphicsBackendMaturity kCompileTimeMaturity = getCurrentGraphicsBackendMaturity();
 constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::PixiJs) + 1;
-static_assert(kPublicRendererCount == 39,
+static_assert(kPublicRendererCount == 40,
               "GraphicsRendererType must expose all 48 genuine renderer identities");
 
 TEST(GraphicsBackendMaturityTest, GetCurrentGraphicsBackendMaturityDoesNotThrow)
@@ -79,6 +79,7 @@ namespace
             case GraphicsRendererType::SvgDom:
             case GraphicsRendererType::PortableGL:
             case GraphicsRendererType::PixiJs:
+            case GraphicsRendererType::TinyGL:
                 return GraphicsBackendMaturity::Experimental;
 
             case GraphicsRendererType::DirectX1:

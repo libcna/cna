@@ -198,7 +198,7 @@ TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsATexture2DFixtu
 [[nodiscard]] inline bool CubeStorageSupported()
 {
     return !CNA_RENDERER_IS(SdlRenderer, Canvas, HtmlDom, FreeDirect, Headless, Gdi,
-                            PortableGL, PixiJs);
+                            PortableGL, TinyGL, PixiJs);
 }
 
 TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsATextureCubeFixtureWithNoOtherSetup)

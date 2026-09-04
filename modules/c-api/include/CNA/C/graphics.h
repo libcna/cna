@@ -90,6 +90,8 @@ typedef uint32_t CNA_GraphicsRendererType;
 #define CNA_GRAPHICS_RENDERER_SVG_DOM UINT32_C(44)
 /** @brief Identifies the PortableGL backend. */
 #define CNA_GRAPHICS_RENDERER_PORTABLEGL UINT32_C(46)
+/** @brief Identifies the TinyGL backend. */
+#define CNA_GRAPHICS_RENDERER_TINYGL UINT32_C(47)
 /** @brief Identifies the PixiJS backend. */
 #define CNA_GRAPHICS_RENDERER_PIXIJS UINT32_C(49)
 

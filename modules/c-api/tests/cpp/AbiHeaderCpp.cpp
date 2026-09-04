@@ -133,6 +133,7 @@ static_assert(sizeof(CNA_SkinningDataDescriptor) == 64U);
 static_assert(sizeof(CNA_RendererInfo) == 32U);
 static_assert(CNA_GRAPHICS_RENDERER_SDL_RENDERER == UINT32_C(1));
 static_assert(CNA_GRAPHICS_RENDERER_PORTABLEGL == UINT32_C(46));
+static_assert(CNA_GRAPHICS_RENDERER_TINYGL == UINT32_C(47));
 static_assert(CNA_GRAPHICS_RENDERER_PIXIJS == UINT32_C(49));
 static_assert(CNA_GRAPHICS_RENDERER_MAXIMUM == CNA_GRAPHICS_RENDERER_PIXIJS);
 static_assert(CNA_GRAPHICS_CAPABILITY_THREE_D == UINT32_C(0));

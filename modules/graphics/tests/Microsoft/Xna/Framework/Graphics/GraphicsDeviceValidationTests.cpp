@@ -250,6 +250,15 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
     // SetRenderTargets() refuses a non-empty set as well, so neither layer can accept one silently.
     EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
     }
+    else if (CNA_RENDERER_IS(TinyGL))
+    {
+        // From `next`: TinyGL keeps IGraphicsRenderer's nullptr CreateRenderTarget2D()/
+        // CreateRenderTargetCube() defaults -- it renders into exactly one ZBuffer and has no
+        // off-screen framebuffer concept -- so GraphicsDevice rejects the bind before reaching the
+        // renderer, and TinyGLRenderer::SetRenderTargets() refuses a non-empty set as well
+        // (modules/renderers/tinygl/examples/tinygl_rejection_test.cpp).
+        EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
+    }
     else if (CNA_RENDERER_IS(OpenGLES1))
     {
     // plans/plan_opengles1.md: OpenGL ES 1.1 has no MRT mechanism, and no extension in the CM registry
@@ -291,7 +300,7 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_OneTarget_DoesNotThrow)
     GraphicsDevice gd;
     RenderTarget2D rt(gd, 4, 4);
     std::vector<RenderTargetBinding> bindings{ RenderTargetBinding(&rt) };
-    if (CNA_RENDERER_IS(Stub))
+    if (CNA_RENDERER_IS(Stub, TinyGL))
     {
     // Same Stub/OpenVG contract as the four-target case above: no render-target support of any
     // kind, so even a single binding is refused deterministically rather than silently accepted.
@@ -320,7 +329,7 @@ TEST(GraphicsDeviceValidationTest, SetRenderTarget_SingleOverload_MatchesArrayOv
     // this pins for both public entry points.
     GraphicsDevice gd;
     RenderTarget2D target(gd, 4, 4);
-    if (CNA_RENDERER_IS(Stub, PortableGL))
+    if (CNA_RENDERER_IS(Stub, PortableGL, TinyGL))
     {
     EXPECT_THROW(gd.SetRenderTarget(&target), System::NotSupportedException);
     // No partial state: GraphicsDevice must not report the rejected target as bound...

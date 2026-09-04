@@ -144,6 +144,9 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
 #ifdef CNA_RENDERER_PORTABLEGL
     ++enabled;
 #endif
+#ifdef CNA_RENDERER_TINYGL
+    ++enabled;
+#endif
 
     // The IGL identity (plans/plan_igl.md), registered here at the same time it was registered
     // everywhere else.
