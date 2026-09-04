@@ -1238,9 +1238,14 @@ objects. The existing choices remain canonical:
   is the largest capable backend that still lacks the already-public compute/storage/indirect/timer
   paths; OpenGL4 follows as the portability check without changing its existing 4.1 XNA floor.
 
-The current documentation assigns Vulkan compute to `plans/plan_vulkan.md`, but that file does not
-exist. Phase 22 therefore owns the shared contract and Vulkan implementation until a dedicated
-renderer plan is deliberately created; work must be moved, not copied, if that split later happens.
+`plans/plan_vulkan.md` now exists (created 2026-09-04) and owns **classic/current Vulkan renderer
+parity** — the ordinary, non-CNAEXT graphics surface measured against EasyGL. It deliberately does
+**not** take the modern-GPU work: Phase 22 keeps the shared contract and every Vulkan row below
+(`MOD-2240`–`MOD-2254` in particular), including Vulkan compute, storage buffers/textures, texture
+arrays, indirect draws, float/HDR render-target formats and GPU timers. `MOD-2096`'s reference to
+`plan_vulkan.md` is a pointer to where such a renderer-capability question would be *asked*, not a
+transfer of ownership; that plan declines it as modern-GPU work. If the split is ever revisited,
+work must be moved, not copied.
 
 ### 22.1 Reconciliation and contracts (`MOD-2200`–`MOD-2203`)
 
