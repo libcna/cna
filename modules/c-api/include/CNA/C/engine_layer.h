@@ -1329,7 +1329,9 @@ typedef struct CNA_PunctualLightEXT {
  * @brief Fills a punctual light with the canonical defaults.
  *
  * @param out_light Receives kind `NONE`, the origin, direction (0, -1, 0), white, range 20, inner
- * angle 0.35, outer angle 0.5, depth bias 0.004, no shadow textures and an identity transform.
+ * angle 0.35, outer angle 0.5, depth bias 0.004, no shadow textures and a zero transform --
+ * zero, not identity: the canonical default is `default(Matrix)`, which is all-zero, and a
+ * zero transform is degenerate rather than neutral. Set one before use.
  * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
  */
 CNA_C_API CNA_Result cna_punctual_light_ext_init(CNA_PunctualLightEXT* out_light);
@@ -1367,9 +1369,14 @@ typedef struct CNA_ShadowCascadeStateEXT {
 /**
  * @brief Fills a cascaded-shadow state with the canonical defaults.
  *
- * @param out_state Receives zero cascades, identity transforms, zero splits, no blend band and no
+ * @param out_state Receives zero cascades, zero matrices (not identity -- see below), zero
+ * splits, no blend band and no
  * debug tint -- which is the state that disables cascaded shadows.
  * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ *
+ * The transforms are **zero matrices, not identity**: the canonical defaults are
+ * `default(Matrix)`, which .NET and this runtime both make all-zero, and a zero transform is
+ * degenerate rather than neutral. Set them before use.
  */
 CNA_C_API CNA_Result cna_shadow_cascade_state_ext_init(CNA_ShadowCascadeStateEXT* out_state);
 
@@ -11453,7 +11460,12 @@ typedef struct CNA_GpuCullableInstance {
 /**
  * @brief Fills a cullable instance with the canonical defaults.
  *
- * @param out_instance Receives an instance with an identity world and an empty box.
+ * @param out_instance Receives an instance with a zero world matrix and an empty box.
+ *
+ * The world transform is **zero, not identity**: the canonical default is `default(Matrix)`,
+ * which .NET and this runtime both make all-zero. That is degenerate rather than neutral --
+ * every vertex maps to the origin -- so a caller who fills in the bounds and leaves the world
+ * alone gets a correct cull and an invisible draw, with nothing failing. Set one before use.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output,
  * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
  */

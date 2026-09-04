@@ -147,7 +147,13 @@ namespace XactFileGen
         w8(out, 1);
 
         // ── Variable 0: "SpeedOfSound" (13 bytes) ──
-        w8(out,  0x03);    // accessibility: global + settable
+        // PUBLIC (0x1) alone. 0x03 is PUBLIC|READONLY -- AudioEngine.cpp spells the bits out:
+        // PUBLIC=0x1, READONLY=0x2, CUE=0x4 -- so the byte said read-only while this comment said
+        // settable, and XactDemo's own Z and X keys called SetGlobalVariable on it to no effect.
+        // A binding author copying this example writes a settings file whose variable ignores
+        // every write, and what they see is SetGlobalVariable(500) followed by
+        // GetGlobalVariable() == 343, which reads exactly like a marshalling bug of their own.
+        w8(out,  0x01);    // accessibility: PUBLIC
         wf32(out, 343.0f); // initialValue
         wf32(out,   0.0f); // minValue
         wf32(out, 1000.f); // maxValue
