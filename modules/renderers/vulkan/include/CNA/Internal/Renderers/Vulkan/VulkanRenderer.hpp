@@ -1222,6 +1222,24 @@ namespace CNA::Internal::Renderers::Vulkan
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
 
         /**
+         * @brief The shader dialect a custom `ShaderEffect` must be written in here.
+         *
+         * plan_vulkan.md VULKAN-250. `VulkanEffectRenderer::CompileProgram` accepts nothing but
+         * SPIR-V words, so leaving this at the shared `Unknown` default made the one query that
+         * exists to stop an application guessing answer "guess".
+         *
+         * `GlslVulkan` is the closest honest value the enumeration currently has -- and it is not
+         * a precise one. See `VULKAN-264`: IGL's Vulkan backend reports the SAME enumerator and
+         * takes GLSL **source**, while this renderer takes compiled **bytecode**, so the answer
+         * still does not tell a caller which of the two to send. Narrowing that needs a new
+         * enumerator, which is a C-ABI change and belongs with `plans/plan_binding.md`.
+         *
+         * @return `ShaderDialectEXT::GlslVulkan`.
+         */
+        [[nodiscard]] CNA::Internal::Renderers::ShaderDialectEXT
+            GetShaderDialectEXT() const override;
+
+        /**
          * @brief CNAEXT. Whether a `RenderTarget2D` of @p format can really be created here.
          *
          * plan_vulkan.md VULKAN-020. Mirrors `GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT`,

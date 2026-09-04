@@ -1919,6 +1919,13 @@ namespace CNA::Internal::Renderers::Vulkan
         return false;
     }
 
+    CNA::Internal::Renderers::ShaderDialectEXT VulkanRenderer::GetShaderDialectEXT() const
+    {
+        // VULKAN-250. Not device-dependent and not build-dependent: this renderer has exactly one
+        // custom-effect intake, and CompileProgram rejects anything that is not SPIR-V words.
+        return CNA::Internal::Renderers::ShaderDialectEXT::GlslVulkan;
+    }
+
     void VulkanRenderer::RequirePbrStrideEXT(std::size_t stride, bool skinned) const
     {
         // The same two conditions GetOrCreatePipelinePbr3D and GetOrCreatePipelinePbrSkinned3D

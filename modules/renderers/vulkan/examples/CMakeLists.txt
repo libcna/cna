@@ -1058,6 +1058,17 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_VertexBufferIndexBufferGetData COMMAND cna_test_vulkan_vertexbuffer_indexbuffer_getdata
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plans/plan_vulkan.md VULKAN-250 (F-07/F-08): GetShaderDialectEXT() was unoverridden, so
+        # the one query that exists to stop an application guessing the dialect answered Unknown on
+        # a renderer whose ShaderEffect accepts nothing but SPIR-V words. Asserts the declaration,
+        # that GLSL source is refused rather than silently accepted, and pins the enumerator
+        # ambiguity VULKAN-264 owns.
+        cna_vulkan_test(cna_test_vulkan_shader_dialect_contract
+                        vulkan_shader_dialect_contract_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_ShaderDialectContract
+            COMMAND cna_test_vulkan_shader_dialect_contract
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plans/plan_vulkan.md VULKAN-390 (F-06): GetOrCreateTexSamplerDescSet used to return the
         # default WHITE descriptor set when the 512-set pool was full, so a game with more live
         # texture/sampler pairs than that drew white sprites silently. Walks off that cliff on
