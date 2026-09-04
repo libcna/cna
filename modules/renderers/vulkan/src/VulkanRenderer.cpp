@@ -1846,11 +1846,16 @@ namespace CNA::Internal::Renderers::Vulkan
                     || depthFormat_ == VK_FORMAT_D16_UNORM_S8_UINT
                     || depthFormat_ == VK_FORMAT_S8_UINT;
             case CNA::GraphicsCapability::MultiSampleAntiAliasing:
-                // VULKAN-021 owns replacing this with the device's own
-                // framebufferColorSampleCounts/framebufferDepthSampleCounts, which is the same
-                // source PickSampleCount already reads. Kept as the previous answer here so this
-                // task changes no answer, only where each one comes from.
-                return true;
+            {
+                // VULKAN-021: the same intersection PickSampleCount reads, asked the same way.
+                // Colour AND depth, because every MSAA path here attaches both -- a device that
+                // could multisample colour alone still could not run this renderer's MSAA render
+                // pass, so claiming the capability from the colour mask alone would be a promise
+                // ApplyMultiSampleCount then declines to keep.
+                const VkSampleCountFlags both = deviceLimits_.framebufferColorSampleCounts
+                                              & deviceLimits_.framebufferDepthSampleCounts;
+                return (both & ~static_cast<VkSampleCountFlags>(VK_SAMPLE_COUNT_1_BIT)) != 0;
+            }
 
             // ---- Answered from what this renderer implements -------------------------------
             case CNA::GraphicsCapability::ThreeD:

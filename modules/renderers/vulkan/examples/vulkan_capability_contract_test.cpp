@@ -23,6 +23,10 @@
 //   * FloatRenderTargets     -> RenderTarget2D(SurfaceFormat::Vector4)      -> refused
 //   * HalfFloatRenderTargets -> RenderTarget2D(SurfaceFormat::HdrBlendable) -> refused
 //
+// Leg E belongs to VULKAN-021: MultiSampleAntiAliasing is read from the device's own
+// framebufferColorSampleCounts & framebufferDepthSampleCounts, so it is required to agree, in both
+// directions, with the sample count GraphicsDeviceManager.ApplyChanges() actually reaches.
+//
 // The TRUE answers are not re-proved here. Each already has a dedicated Vulkan CTest that observes
 // the behaviour, and the map from member to CTest lives in VULKAN-020's plan row rather than being
 // duplicated into a second, weaker copy of those tests.
@@ -214,6 +218,31 @@ class VulkanCapabilityContractTest : public Game
         }
     }
 
+    // ── Leg E: the MSAA answer matches what the device actually applies ──────
+
+    void testMultiSampleAgreement()
+    {
+        // VULKAN-021. The capability is now read from the device's own
+        // framebufferColorSampleCounts & framebufferDepthSampleCounts, so the observable it must
+        // agree with is what ApplyMultiSampleCount can actually reach on that same device. Run
+        // last: it recreates renderer-owned MSAA state, and the renderer reference must be
+        // re-taken afterwards.
+        const bool capability = Renderer().SupportsCapability(
+            GraphicsCapability::MultiSampleAntiAliasing);
+
+        gdm_->setPreferMultiSamplingProperty(true);
+        gdm_->ApplyChanges();
+
+        const int applied = Renderer().GetMultiSampleCount();
+        // Both directions. A true report with a device that cannot exceed one sample is a promise
+        // nothing can keep; a false report on a device that just applied 4x is a capability the
+        // renderer is hiding.
+        check(capability == (applied > 1),
+              "E MultiSampleAntiAliasing matches the count the device applies",
+              std::string("capability=") + (capability ? "true" : "false")
+                  + ", applied MultiSampleCount=" + std::to_string(applied));
+    }
+
 protected:
     void Initialize() override
     {
@@ -223,6 +252,7 @@ protected:
         testSeamAgreement(dev);
         testOutOfRange();
         testFalseAnswersRefuse(dev);
+        testMultiSampleAgreement();
 
         const auto& messages = Renderer().GetValidationMessagesEXT();
         check(messages.empty(), "D no validation messages",
