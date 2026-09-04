@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/C/models.h"
+#include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "CnaCApiContentDetail.hpp"
 #include "CnaCApiDetail.hpp"
@@ -1173,8 +1174,14 @@ template<typename T>
     const MorphTargetDataEXT& data,
     const std::vector<float>& weights)
 {
-    if (data.Stride != 32 && data.Stride != 52 && data.Stride != 56) {
-        return InvalidArgument("Morph target stride must be 32, 52, or 56 bytes.");
+    // plans/plan_gltf.md GLTF-278 taught this lesson once already, in BlendMorphTargetsEXT: a
+    // restated stride list goes stale against the canonical table it copies. This one had, and
+    // the three it still admitted were exactly the layouts carrying no tangent, so every
+    // PBR morph target -- 48 unskinned, 68 skinned -- was refused outright. Ask the table.
+    if (!CNA::Internal::Graphics::InferredLayoutForStride(
+             data.Stride, CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt)
+             .known) {
+        return InvalidArgument("Morph target stride does not name a known vertex layout.");
     }
     if (data.BaseVertexBytes.size() % static_cast<std::size_t>(data.Stride) != 0U) {
         return InvalidArgument("Morph target base bytes must contain complete vertices.");
