@@ -528,6 +528,9 @@ namespace CNA::Internal::Renderers::EasyGL
         /// the SAME program this ShaderEffect's SetUniformXxx() calls actually write to.
         [[nodiscard]] ::easygl::Program& GetProgram() { return program_; }
 
+        /// Makes this effect's own program current, so a uniform written now reaches it.
+        void MakeProgramCurrent();
+
     private:
         ::easygl::Program program_;
         std::string compileError_;

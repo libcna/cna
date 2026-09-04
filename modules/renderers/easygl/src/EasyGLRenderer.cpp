@@ -2213,6 +2213,21 @@ if (!ProfileIsEs2ApiGeneration())
             program_.use();
     }
 
+    void EasyGLEffectRenderer::MakeProgramCurrent()
+    {
+        // glUniform writes to the program that is CURRENT, not to the one whose location was
+        // looked up. Every setter below used to assume Bind() had already run, so a uniform set
+        // before the effect was applied went to whichever program happened to be bound -- another
+        // effect's, or none -- and the setter reported nothing, because looking the location up
+        // needs no binding and succeeds either way. The observable was a shader drawing with a
+        // value the caller had set and CNA had delivered somewhere else.
+        //
+        // Binding here costs nothing a caller can see: every draw path in this renderer binds its
+        // own program before it draws.
+        if (program_.is_linked())
+            program_.use();
+    }
+
     void EasyGLEffectRenderer::Unbind()
     {
         // No easygl::Program::unuse() — the next bind or sprite-batch flush will override.
@@ -2230,36 +2245,42 @@ if (!ProfileIsEs2ApiGeneration())
 
     void EasyGLEffectRenderer::SetUniformFloat(const char* name, float value)
     {
+        MakeProgramCurrent();
         const int loc = program_.uniform_location(name);
         if (loc >= 0) program_.set_uniform(loc, value);
     }
 
     void EasyGLEffectRenderer::SetUniformInt(const char* name, int value)
     {
+        MakeProgramCurrent();
         const int loc = program_.uniform_location(name);
         if (loc >= 0) program_.set_uniform(loc, value);
     }
 
     void EasyGLEffectRenderer::SetUniformVec2(const char* name, float x, float y)
     {
+        MakeProgramCurrent();
         const int loc = program_.uniform_location(name);
         if (loc >= 0) program_.set_uniform(loc, x, y);
     }
 
     void EasyGLEffectRenderer::SetUniformVec3(const char* name, float x, float y, float z)
     {
+        MakeProgramCurrent();
         const int loc = program_.uniform_location(name);
         if (loc >= 0) program_.set_uniform(loc, x, y, z);
     }
 
     void EasyGLEffectRenderer::SetUniformVec4(const char* name, float x, float y, float z, float w)
     {
+        MakeProgramCurrent();
         const int loc = program_.uniform_location(name);
         if (loc >= 0) program_.set_uniform(loc, x, y, z, w);
     }
 
     void EasyGLEffectRenderer::SetUniformMat4(const char* name, const float* matrix)
     {
+        MakeProgramCurrent();
         const int loc = program_.uniform_location(name);
         if (loc >= 0) program_.set_uniform_matrix4(loc, matrix);
     }
@@ -2279,18 +2300,21 @@ if (!ProfileIsEs2ApiGeneration())
 
     void EasyGLEffectRenderer::SetUniformFloatArray(const char* name, const float* values, int count)
     {
+        MakeProgramCurrent();
         const int loc = ArrayUniformLocation(name);
         if (loc >= 0) program_.set_uniform_fv(loc, std::span<const float>(values, static_cast<std::size_t>(count)), 1);
     }
 
     void EasyGLEffectRenderer::SetUniformVec2Array(const char* name, const float* values, int count)
     {
+        MakeProgramCurrent();
         const int loc = ArrayUniformLocation(name);
         if (loc >= 0) program_.set_uniform_fv(loc, std::span<const float>(values, static_cast<std::size_t>(count) * 2), 2);
     }
 
     void EasyGLEffectRenderer::SetUniformVec3Array(const char* name, const float* values, int count)
     {
+        MakeProgramCurrent();
         const int loc = ArrayUniformLocation(name);
         if (loc >= 0) program_.set_uniform_fv(loc, std::span<const float>(values, static_cast<std::size_t>(count) * 3), 3);
     }
@@ -2298,6 +2322,7 @@ if (!ProfileIsEs2ApiGeneration())
     void EasyGLEffectRenderer::SetUniformMat4Array(const char* name, const float* matrices,
                                                   int count)
     {
+        MakeProgramCurrent();
         const int loc = ArrayUniformLocation(name);
         if (loc >= 0 && count > 0)
             ::metagl::glUniformMatrix4fv(::metagl::UniformLocation{loc}, count, 0, matrices);
@@ -2389,6 +2414,7 @@ if (!ProfileIsEs2ApiGeneration())
     void EasyGLComputeShaderRenderer::SetUniformInt(const char* name, const int value)
     {
         if (!valid_) return;
+        program_.use();
         const int location = program_.uniform_location(name);
         if (location >= 0) program_.set_uniform(location, value);
     }
@@ -2396,6 +2422,7 @@ if (!ProfileIsEs2ApiGeneration())
     void EasyGLComputeShaderRenderer::SetUniformFloat(const char* name, const float value)
     {
         if (!valid_) return;
+        program_.use();
         const int location = program_.uniform_location(name);
         if (location >= 0) program_.set_uniform(location, value);
     }
