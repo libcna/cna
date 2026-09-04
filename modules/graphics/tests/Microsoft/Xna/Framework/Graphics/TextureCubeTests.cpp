@@ -121,7 +121,8 @@ namespace
 {
 [[nodiscard]] inline bool CubeStorageSupported()
 {
-    return !CNA_RENDERER_IS(SdlRenderer, Canvas, HtmlDom, FreeDirect, Headless, Gdi, OpenVg, PortableGL, TinyGL, PixiJs);
+    return !CNA_RENDERER_IS(SdlRenderer, Canvas, HtmlDom, FreeDirect, Headless, Gdi, Blend2D,
+                            OpenVg, PortableGL, TinyGL, PixiJs, NanoVg);
 }
 
 /// Level-0 readback and storage are the same set again.

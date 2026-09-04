@@ -146,6 +146,7 @@ struct CapabilityExpectation
         // mechanism (SetRenderTargets rejects every RenderTarget2D binding), no occlusion-query
         // concept, and no caller-addressable programmable shader stage for a genuinely custom
         // Effect (NanoVG's own GLSL pipeline is fixed and internal).
+        case GraphicsRendererType::NanoVg:
             return {false, false, false};
 
         // PortableGL owns exactly one framebuffer per context and creates no render targets at all
@@ -235,7 +236,7 @@ constexpr bool kExpectCompiledEffects = false;
 /// this replaces did.
 [[nodiscard]] inline bool IsTwoDimensionalOnly()
 {
-    return CNA_RENDERER_IS(OpenVg);
+    return CNA_RENDERER_IS(Blend2D, OpenVg, NanoVg);
 }
 
 TEST(GraphicsDeviceCapabilityTest, SupportsThreeD)
@@ -477,6 +478,15 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
     // WireFrameTriangleOracle.hpp keeps this renderer out of HasPixelOracle().
     EXPECT_FALSE(reported)
         << "OpenVG claims WireFrame support -- this renderer has no 3D pipeline at all, so a true "
+           "report cannot be backed by any rendering path";
+#elif defined(CNA_RENDERER_NANOVG)
+    // NanoVG, same truthful-false shape as OpenVG immediately above: a 2D vector-graphics API
+    // with no polygon fill mode, no vertex/primitive route, no 3D pipeline at all --
+    // NanoVgRenderer's own 3D pure-virtuals all refuse through HandleUnsupported3DCall() before
+    // any topology could reach a draw. No pixel route to measure, so WireFrameTriangleOracle.hpp
+    // keeps this renderer out of HasPixelOracle() too.
+    EXPECT_FALSE(reported)
+        << "NANOVG claims WireFrame support -- this renderer has no 3D pipeline at all, so a true "
            "report cannot be backed by any rendering path";
 #elif defined(CNA_RENDERER_STUB)
     // Stub answers false to EVERY capability, WireFrame included: it is a no-op renderer that

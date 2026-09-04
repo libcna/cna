@@ -224,7 +224,7 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
     // too (up to four attachments), so 4 real targets bind cleanly here as well.
     EXPECT_THROW(gd.SetRenderTargets(bindings), std::runtime_error);
     }
-    else if (CNA_RENDERER_IS(Stub, OpenVg))
+    else if (CNA_RENDERER_IS(Stub, OpenVg, NanoVg))
     {
     // plans/plan_stub.md: Stub supports no render targets AT ALL -- it keeps IGraphicsRenderer's nullptr
     // CreateRenderTarget2D()/CreateRenderTargetCube() defaults -- so this is a different case from
@@ -300,7 +300,7 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_OneTarget_DoesNotThrow)
     GraphicsDevice gd;
     RenderTarget2D rt(gd, 4, 4);
     std::vector<RenderTargetBinding> bindings{ RenderTargetBinding(&rt) };
-    if (CNA_RENDERER_IS(Stub, OpenVg, TinyGL))
+    if (CNA_RENDERER_IS(Stub, OpenVg, TinyGL, NanoVg))
     {
     // Same Stub/OpenVG contract as the four-target case above: no render-target support of any
     // kind, so even a single binding is refused deterministically rather than silently accepted.
@@ -329,7 +329,7 @@ TEST(GraphicsDeviceValidationTest, SetRenderTarget_SingleOverload_MatchesArrayOv
     // this pins for both public entry points.
     GraphicsDevice gd;
     RenderTarget2D target(gd, 4, 4);
-    if (CNA_RENDERER_IS(Stub, PortableGL, TinyGL))
+    if (CNA_RENDERER_IS(Stub, PortableGL, TinyGL, NanoVg))
     {
     EXPECT_THROW(gd.SetRenderTarget(&target), System::NotSupportedException);
     // No partial state: GraphicsDevice must not report the rejected target as bound...

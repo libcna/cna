@@ -101,6 +101,7 @@ namespace CNA
             case GraphicsRendererType::PortableGL:
             case GraphicsRendererType::TinyGL:
             case GraphicsRendererType::PixiJs:
+            case GraphicsRendererType::NanoVg:
                 return GraphicsBackendMaturity::Experimental;
 
             case GraphicsRendererType::DirectX1:

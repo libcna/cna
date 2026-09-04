@@ -235,7 +235,7 @@ TEST_F(LevelCountTest, MipMapFalseIsAlwaysOneRegardlessOfSize)
 TEST_F(LevelCountTest, MipMapTrueSquarePowerOfTwo)
 {
     EXPECT_EQ(Texture2D(gd, 1, 1, true, SurfaceFormat::Color).getLevelCountProperty(), 1);
-#if defined(CNA_RENDERER_TINYGL)
+#if defined(CNA_RENDERER_TINYGL) || defined(CNA_RENDERER_NANOVG)
     EXPECT_THROW(Texture2D(gd, 2, 2, true, SurfaceFormat::Color), System::NotSupportedException);
     EXPECT_THROW(Texture2D(gd, 4, 4, true, SurfaceFormat::Color), System::NotSupportedException);
     EXPECT_THROW(Texture2D(gd, 16, 16, true, SurfaceFormat::Color), System::NotSupportedException);
@@ -248,7 +248,7 @@ TEST_F(LevelCountTest, MipMapTrueSquarePowerOfTwo)
 
 TEST_F(LevelCountTest, MipMapTrueNonSquarePowerOfTwo)
 {
-#if defined(CNA_RENDERER_TINYGL)
+#if defined(CNA_RENDERER_TINYGL) || defined(CNA_RENDERER_NANOVG)
     EXPECT_THROW(Texture2D(gd, 8, 4, true, SurfaceFormat::Color), System::NotSupportedException);
     EXPECT_THROW(Texture2D(gd, 1, 8, true, SurfaceFormat::Color), System::NotSupportedException);
 #else
@@ -259,7 +259,7 @@ TEST_F(LevelCountTest, MipMapTrueNonSquarePowerOfTwo)
 
 TEST_F(LevelCountTest, MipMapTrueNonPowerOfTwo)
 {
-#if defined(CNA_RENDERER_TINYGL)
+#if defined(CNA_RENDERER_TINYGL) || defined(CNA_RENDERER_NANOVG)
     EXPECT_THROW(Texture2D(gd, 3, 5, true, SurfaceFormat::Color), System::NotSupportedException);
     EXPECT_THROW(Texture2D(gd, 7, 11, true, SurfaceFormat::Color), System::NotSupportedException);
 #else
@@ -280,7 +280,7 @@ TEST(Texture2DMipLevelValidationTest, EveryValidMipKeepsItsDimensionsContentsAnd
     constexpr int kWidth = 13;
     constexpr int kHeight = 7;
     GraphicsDevice gd;
-#if defined(CNA_RENDERER_TINYGL)
+#if defined(CNA_RENDERER_TINYGL) || defined(CNA_RENDERER_NANOVG)
     // These renderers own level 0 only, so the mipmapped texture this test needs cannot be
     // constructed at all -- the refusal itself is the contract worth asserting here (see
     // LevelCountTest above).
@@ -574,6 +574,9 @@ TEST_F(HiDefFormatConstructionTest, TheProfileItselfRefusesNothing)
 
 TEST_F(HiDefFormatConstructionTest, SingleIsTheRenderersCallOnHiDef)
 {
+    if (CNA_RENDERER_IS(Igl))
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Single));
+    else
         EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Single), std::runtime_error);
 }
 
@@ -660,7 +663,7 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         // everything it can store. A format is here only once the whole public path is verified end
         // to end on both its backends, and only if its texel is a multiple of four bytes -- the
         // framework's own transfer rule, which ByteEXT, UShortEXT and HalfSingle would break.
-        const bool igl = false;
+        const bool igl = CNA_RENDERER_IS(Igl);
         const bool easyGlSignedNormalized =
             CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2);
         // REMED-GFX-244: the packed 16-bit formats Reach permits, promoted on the same ES 3

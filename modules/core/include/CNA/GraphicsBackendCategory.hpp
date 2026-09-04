@@ -98,6 +98,7 @@ namespace CNA
             case GraphicsRendererType::SdlGpu:
             case GraphicsRendererType::Fna3d:
             case GraphicsRendererType::OpenVg:
+            case GraphicsRendererType::NanoVg:
                 return GraphicsBackendCategory::TranslationLayer;
 
             case GraphicsRendererType::Software:

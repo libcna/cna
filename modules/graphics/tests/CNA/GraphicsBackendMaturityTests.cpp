@@ -16,8 +16,8 @@ using CNA::toStringView;
 static_assert(getCurrentGraphicsBackendMaturity() == getCurrentGraphicsBackendMaturity());
 static_assert(!toStringView(getCurrentGraphicsBackendMaturity()).empty());
 constexpr GraphicsBackendMaturity kCompileTimeMaturity = getCurrentGraphicsBackendMaturity();
-constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::PixiJs) + 1;
-static_assert(kPublicRendererCount == 41,
+constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::NanoVg) + 1;
+static_assert(kPublicRendererCount == 42,
               "GraphicsRendererType must expose all 48 genuine renderer identities");
 
 TEST(GraphicsBackendMaturityTest, GetCurrentGraphicsBackendMaturityDoesNotThrow)
@@ -81,6 +81,7 @@ namespace
             case GraphicsRendererType::PortableGL:
             case GraphicsRendererType::PixiJs:
             case GraphicsRendererType::TinyGL:
+            case GraphicsRendererType::NanoVg:
                 return GraphicsBackendMaturity::Experimental;
 
             case GraphicsRendererType::DirectX1:
