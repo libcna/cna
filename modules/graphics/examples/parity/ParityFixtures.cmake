@@ -1,0 +1,51 @@
+# plans/plan_webgpu.md WEBGPU-207: the ONE list of shared cross-renderer behavioural parity fixtures,
+# and the ONE registration entry point every renderer calls.
+#
+# A parity fixture is a renderer-neutral source in this directory (see ParityFixture.hpp for the
+# convention). Adding one is: write `parity_<name>.cpp`, append `<name>` to CNA_PARITY_FIXTURES
+# below. Every renderer that calls cna_register_parity_fixtures() then builds it and registers its
+# CTest automatically -- no per-renderer edit, no second test, no second oracle.
+#
+# Each fixture executable additionally accepts an optional output path and writes the whole
+# backbuffer there as raw RGBA8, in exactly the format cna_diag_compare already reads, so
+# scripts/run-parity-fixture.sh can diff one renderer's frame against another's.
+
+set(CNA_PARITY_FIXTURE_DIR "${CMAKE_CURRENT_LIST_DIR}")
+
+# The fixture names, without the `parity_` prefix or the `.cpp` suffix.
+set(CNA_PARITY_FIXTURES
+    # WEBGPU-155: the same mesh through declarations that differ only in element order/offset,
+    # plus the semantic cases WEBGPU-156/157/158/159 each add their own leg to.
+    vertex_semantics
+)
+
+# Builds and registers every fixture for one renderer.
+#
+#   BUILDER        name of the renderer's own "add an example executable" macro, called as
+#                  <BUILDER>(<target> <source>) -- e.g. cna_easygl_test / cna_webgpu_test.
+#   TARGET_SUFFIX  suffix for the executable name: cna_parity_<fixture>_<suffix>.
+#   TEST_PREFIX    prefix for the CTest name: <prefix>_Parity_<fixture>.
+#   LABELS         CTest labels (multi-value, forwarded verbatim).
+#   ENVIRONMENT    CTest environment entries (multi-value, forwarded verbatim).
+#   TIMEOUT        per-fixture CTest timeout in seconds (default 60).
+function(cna_register_parity_fixtures)
+    cmake_parse_arguments(P "" "BUILDER;TARGET_SUFFIX;TEST_PREFIX;TIMEOUT" "LABELS;ENVIRONMENT" ${ARGN})
+    if(NOT P_BUILDER OR NOT P_TARGET_SUFFIX OR NOT P_TEST_PREFIX)
+        message(FATAL_ERROR "cna_register_parity_fixtures: BUILDER, TARGET_SUFFIX and TEST_PREFIX are required")
+    endif()
+    if(NOT P_TIMEOUT)
+        set(P_TIMEOUT 60)
+    endif()
+    foreach(_fixture IN LISTS CNA_PARITY_FIXTURES)
+        set(_target "cna_parity_${_fixture}_${P_TARGET_SUFFIX}")
+        set(_source "${CNA_PARITY_FIXTURE_DIR}/parity_${_fixture}.cpp")
+        if(NOT EXISTS "${_source}")
+            message(FATAL_ERROR "cna_register_parity_fixtures: no source for fixture '${_fixture}' at ${_source}")
+        endif()
+        # cmake_language(CALL) so one shared list can drive each renderer's own link/runtime-copy
+        # macro without this file knowing anything about any renderer.
+        cmake_language(CALL ${P_BUILDER} ${_target} "${_source}")
+        cna_register_renderer_test(NAME "${P_TEST_PREFIX}_Parity_${_fixture}" COMMAND ${_target}
+            TIMEOUT ${P_TIMEOUT} LABELS ${P_LABELS} ENVIRONMENT ${P_ENVIRONMENT})
+    endforeach()
+endfunction()

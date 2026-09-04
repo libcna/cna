@@ -2395,6 +2395,19 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                 TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
         endif()
 
+
+        # plans/plan_webgpu.md WEBGPU-207: the shared cross-renderer behavioural parity fixtures.
+        # ONE renderer-neutral source per behaviour, listed once in ParityFixtures.cmake and built
+        # here through this renderer's own example macro -- EasyGL is the reference half of every
+        # EasyGL<->WebGPU comparison the WebGPU parity backlog makes.
+        include(${CNA_GRAPHICS_EXAMPLES_DIR}/parity/ParityFixtures.cmake)
+        cna_register_parity_fixtures(
+            BUILDER cna_easygl_test
+            TARGET_SUFFIX easygl
+            TEST_PREFIX EasyGL
+            LABELS "Parity;EasyGL"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot

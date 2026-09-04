@@ -979,6 +979,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/backbuffer_headless_reject_test.cpp)
     cna_register_renderer_test(NAME WebGPU_BackbufferReject COMMAND cna_test_webgpu_backbuffer_reject
         TIMEOUT 300 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plans/plan_webgpu.md WEBGPU-207: the shared cross-renderer behavioural parity fixtures. The SAME
+    # renderer-neutral sources EasyGL builds (modules/renderers/easygl/examples/CMakeLists.txt), listed
+    # once in ParityFixtures.cmake -- so a Phase 70 behavioural row adds one fixture rather than a
+    # WebGPU test, an EasyGL test and two oracles that can disagree.
+    include(${CNA_GRAPHICS_EXAMPLES_DIR}/parity/ParityFixtures.cmake)
+    cna_register_parity_fixtures(
+        BUILDER cna_webgpu_test
+        TARGET_SUFFIX webgpu
+        TEST_PREFIX WebGPU
+        LABELS "Parity;WebGPU"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
 
 # plans/plan_webgpu.md WEBGPU-121: browser shader coverage. The native effect suites above prove
