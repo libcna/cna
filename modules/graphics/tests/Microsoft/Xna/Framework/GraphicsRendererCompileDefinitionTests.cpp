@@ -159,6 +159,9 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
 
     // The IGL identity (plans/plan_igl.md), registered here at the same time it was registered
     // everywhere else.
+#ifdef CNA_RENDERER_IGL
+    ++enabled;
+#endif
 
     // plans/plan_pixijs.md: same registration discipline as every renderer above -- add the PIXIJS
     // entry here in the same task that adds the identity everywhere else, not after the fact.
@@ -185,6 +188,16 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
     EXPECT_EQ(enabled, 1);
 }
 
+#ifdef CNA_RENDERER_IGL
+TEST(GraphicsRendererCompileDefinitionsTest, IglRendererIsReportedByName)
+{
+    // The compile-time renderer identity has to agree with the CNA_RENDERER_IGL define
+    // cmake/RendererSelection.cmake set; a new renderer that forgets its GraphicsRendererType.hpp
+    // entry would otherwise still link and silently report another renderer's name.
+    EXPECT_EQ(CNA::getCurrentGraphicsRendererType(), CNA::GraphicsRendererType::Igl);
+    EXPECT_EQ(CNA::getCurrentGraphicsRendererName(), "IGL");
+}
+#endif
 
 TEST(GraphicsRendererCompileDefinitionsTest, CompileTimeIdentityIsTheBuildDefault)
 {

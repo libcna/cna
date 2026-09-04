@@ -14,7 +14,7 @@ static_assert(!getCurrentGraphicsRendererName().empty());
 constexpr GraphicsRendererType kCompileTimeType = getCurrentGraphicsRendererType();
 constexpr std::string_view kCompileTimeName = getCurrentGraphicsRendererName();
 constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::NanoVg) + 1;
-static_assert(kPublicRendererCount == 45,
+static_assert(kPublicRendererCount == 46,
               "GraphicsRendererType must expose all 50 genuine renderer identities");
 
 TEST(GraphicsRendererTypeTest, GetCurrentGraphicsRendererTypeDoesNotThrow)
@@ -93,6 +93,7 @@ namespace
             case GraphicsRendererType::OpenVg:      return "OPENVG";
             case GraphicsRendererType::PortableGL:  return "PORTABLEGL";
             case GraphicsRendererType::TinyGL:      return "TINYGL";
+            case GraphicsRendererType::Igl:         return "IGL";
             case GraphicsRendererType::PixiJs:      return "PIXIJS";
             case GraphicsRendererType::NanoVg:      return "NANOVG";
         }

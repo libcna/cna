@@ -206,6 +206,7 @@ struct CapabilityExpectation
         // This arm was missing entirely, so an IGL build took the default below and asserted a
         // query capability the renderer documents that it does not have -- a standing red for the
         // whole family rather than an honest expectation.
+        case GraphicsRendererType::Igl:
             return {true, false, true};
 
         default:

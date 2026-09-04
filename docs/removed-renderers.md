@@ -133,32 +133,3 @@ selection through `CNA::GraphicsRendererSelection` (`docs/runtime-renderer-selec
 does the same job without a third-party abstraction underneath. What is left is the same
 translation layer as LLGL and SOKOL, over APIs CNA already reaches natively.
 
-
----
-
-## IGL
-
-| | |
-|---|---|
-| Identity | `IGL` (enum `Igl`, C ABI `CNA_GRAPHICS_RENDERER_IGL` = 48) |
-| Family | `modules/renderers/igl` |
-| Removed | 2026-08-30, tag `removed/igl` |
-| Size | 14,122 lines (9,071 production, 569 tests, 4,482 examples) |
-| Dependency | `https://github.com/facebook/igl.git` @ `v1.1.1` (MIT) |
-| Build was | `-DCNA_GRAPHICS_RENDERER=IGL`, backend fixed for the process by `CNA_IGL_BACKEND` |
-
-**What it proved.** That a renderer can need its native API decided *before the renderer
-exists* — IGL's backend had to be fixed for the process because the platform window's
-render intent is chosen first. That constraint is a real fact about CNA's window/renderer
-ordering and outlives the renderer.
-
-**Why removed.** IGL drove OpenGL and Vulkan. CNA reaches both natively, through EasyGL and
-the `VULKAN` renderer, so it added no platform whatsoever — the weakest case of the three
-portable abstractions removed today.
-
-**What its removal uncovered.** `GraphicsBackendCategoryTests` and
-`GraphicsBackendMaturityTests` derived their loop bound from `GraphicsRendererType::Igl`,
-with `static_assert(kPublicRendererCount == 48)`. `Igl` had not been the last enumerator
-since `PIXIJS` and `NANOVG` were added, so both tests silently stopped short and never
-classified those two identities. Both now derive the bound from the real last enumerator.
-
