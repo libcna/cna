@@ -14,7 +14,7 @@ static_assert(!getCurrentGraphicsRendererName().empty());
 constexpr GraphicsRendererType kCompileTimeType = getCurrentGraphicsRendererType();
 constexpr std::string_view kCompileTimeName = getCurrentGraphicsRendererName();
 constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::NanoVg) + 1;
-static_assert(kPublicRendererCount == 46,
+static_assert(kPublicRendererCount == 47,
               "GraphicsRendererType must expose all 50 genuine renderer identities");
 
 TEST(GraphicsRendererTypeTest, GetCurrentGraphicsRendererTypeDoesNotThrow)
@@ -85,6 +85,7 @@ namespace
             case GraphicsRendererType::OpenGL1:     return "OPENGL1";
             case GraphicsRendererType::OpenGL2:     return "OPENGL2";
             case GraphicsRendererType::Wicked:      return "WICKED";
+            case GraphicsRendererType::Diligent:    return "DILIGENT";
             case GraphicsRendererType::Glide:       return "GLIDE";
             case GraphicsRendererType::Gdi:         return "GDI";
             case GraphicsRendererType::Metal:       return "METAL";

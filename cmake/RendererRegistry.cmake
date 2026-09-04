@@ -64,6 +64,7 @@ function(_cna_renderer_identity_map out_var)
         OPENGL1      OpenGL1
         OPENGL2      OpenGL2
         WICKED       Wicked
+        DILIGENT     Diligent
         GLIDE        Glide
         GDI          Gdi
         METAL        Metal

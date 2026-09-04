@@ -174,6 +174,7 @@ struct CapabilityExpectation
         // a real IQuery, exact or binary depending on the device feature) are both real. Each answer
         // is reported truthfully rather than inherited from EasyGL, and each moves when its own task
         // lands.
+        case GraphicsRendererType::Diligent:
             return {true, true, false};
 
         // plans/plan_fna3d.md: FNA3D's only shader entry point is FNA3D_CreateEffect, which takes a

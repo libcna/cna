@@ -125,6 +125,9 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
 #ifdef CNA_RENDERER_WICKED
     ++enabled;
 #endif
+#ifdef CNA_RENDERER_DILIGENT
+    ++enabled;
+#endif
 #ifdef CNA_RENDERER_GLIDE
     ++enabled;
 #endif
