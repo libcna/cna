@@ -110,6 +110,9 @@ namespace CNA
         /** @brief Native desktop OpenGL 2.1 (no EasyGL). */
         OpenGL2,
 
+        /** @brief Wicked Engine (wi::graphics RHI). */
+        Wicked,
+
         /** @brief 3dfx Glide 3.x, dynamically loaded from glide3x.dll. */
         Glide,
 
@@ -235,6 +238,8 @@ namespace CNA
         return GraphicsRendererType::OpenGL1;
 #elif defined(CNA_RENDERER_OPENGL2)
         return GraphicsRendererType::OpenGL2;
+#elif defined(CNA_RENDERER_WICKED)
+        return GraphicsRendererType::Wicked;
 #elif defined(CNA_RENDERER_GLIDE)
         return GraphicsRendererType::Glide;
 #elif defined(CNA_RENDERER_GDI)
@@ -313,6 +318,7 @@ namespace CNA
             case GraphicsRendererType::OpenGL4:       return "OPENGL4";
             case GraphicsRendererType::OpenGL1:       return "OPENGL1";
             case GraphicsRendererType::OpenGL2:       return "OPENGL2";
+            case GraphicsRendererType::Wicked:        return "WICKED";
             case GraphicsRendererType::Glide:         return "GLIDE";
             case GraphicsRendererType::Gdi:           return "GDI";
             case GraphicsRendererType::Metal:          return "METAL";

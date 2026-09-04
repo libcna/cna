@@ -382,7 +382,7 @@ set(_cna_renderer_modules
     easygl fna3d freedirect gdi glide headless html-dom   magnum metal nanovg opengl1
     opengl2 opengl4 opengles1 openvg pixijs portablegl sdl-gpu sdl-renderer  software 
     stub svg-dom tinygl vulkan
-    webgpu  common/d3d common/mojoshader)
+    webgpu wicked common/d3d common/mojoshader)
 string(JOIN "|" _cna_framework_module_pattern ${_cna_framework_modules})
 string(JOIN "|" _cna_renderer_module_pattern ${_cna_renderer_modules})
 file(GLOB_RECURSE _cna_all_module_tus RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"

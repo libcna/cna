@@ -115,6 +115,7 @@ struct CapabilityExpectation
         // this renderer does not do, so custom effects are refused at the call site rather than
         // approximated. MRT (up to 4 attachments) and occlusion queries (a real GPUQueryHeap with
         // readback) are genuinely implemented.
+        case GraphicsRendererType::Wicked:
             return {true, true, false};
 
         // Skia: all three answers are structural rather than not-yet-implemented. SkCanvas produces
