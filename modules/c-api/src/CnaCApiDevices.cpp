@@ -2280,8 +2280,20 @@ CNA_Result cna_camera_destroy(const CNA_CameraHandle camera)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
+        // cna_camera_create_with_test_backend_ext points the process-wide platform override at a
+        // provider this resource owns. Releasing the handle frees the provider with it, so the
+        // override has to let go first, or the next call that reads the platform's camera list
+        // dereferences freed memory -- which is a segfault on native and a table-index fault in
+        // WebAssembly. Only this camera's own provider is retired, so a second live test camera
+        // keeps the substitution it installed.
+        CNA::Platform::IPlatformCameraProvider* const installed = resource->testService.get();
+        const bool retired = CNA::C::Detail::GetPlatformOverride().ClearCameraIf(installed);
         const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Release(camera);
         if (result != CNA_RESULT_SUCCESS) {
+            // The camera is still alive, so its substitution goes back exactly as it was.
+            if (retired) {
+                CNA::C::Detail::GetPlatformOverride().SetCamera(installed);
+            }
             return Fail(
                 result,
                 ErrorCategoryForResult(result),

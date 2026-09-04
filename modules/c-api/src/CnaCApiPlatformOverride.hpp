@@ -74,6 +74,25 @@ public:
         camera_ = camera;
     }
 
+    /**
+     * @brief Restores the real provider if, and only if, @p camera is the substituted one.
+     *
+     * The substitution is a raw pointer into the resource that installed it, so whoever frees
+     * that resource has to take the pointer back out. Doing it unconditionally would unhook a
+     * different, still-live camera's provider when an older one is destroyed, which is why the
+     * caller names the pointer it is retiring rather than just clearing. Answers whether it was
+     * the substituted one, so a caller whose release then fails can put it back.
+     */
+    [[nodiscard]] bool ClearCameraIf(
+        const CNA::Platform::IPlatformCameraProvider* const camera) noexcept
+    {
+        if (camera == nullptr || camera_ != camera) {
+            return false;
+        }
+        camera_ = nullptr;
+        return true;
+    }
+
     /** @brief Whether any service is currently substituted. */
     [[nodiscard]] bool HasAnyOverride() const noexcept
     {
