@@ -59,9 +59,45 @@ and 105) against artifact `c32bfbd307d695664f906ccf2834ec3f9ebc240fa388d544ac21e
 Corroborated by `cna-go` (`docs/foundation-68-graphics-adapter-evidence.md`) and
 `cna-swift`.
 
-**Status:** open, not started. This is the single highest-value row in this plan: it is
-the only thing blocking `cna-ruby`'s entire `GraphicsAdapter` surface, and the binding
-reports that all sixteen of its remaining strict diagnostics reduce to it.
+**Status: fixed in `5726b1a828390e90e20d7973260069ea9697525a`.** Requalify against that SHA.
+
+What was taken, and why it is two changes rather than one:
+
+- `AdaptersChanged()` raises the video subsystem itself, so the enumeration no longer
+  depends on the order someone else happens to call it in. A platform with no display
+  server refuses the acquire, which is the no-display case and keeps the existing
+  fallback.
+- The reference is **kept** afterwards, not given straight back. A display id is only
+  meaningful inside the video session that issued it, so an enumeration that raises
+  video, reads the displays and drops it again caches ids that name nothing once the
+  device's own acquire has restarted the session — measured: the name and the 22-mode
+  list came out real while `CurrentDisplayMode` still answered 800x480.
+- A `Game` installs its own platform (`modules/runtime/src/Game.cpp:197`), so a second
+  `Game` in one process ends the session the cache was built from however long the pin
+  is held. The adapter therefore **rebinds itself by display name, in place**, when its
+  id stops naming anything. Fix shape C, and deliberately not B: rebuilding the cache is
+  what `cna_graphics_adapters_refresh` already refuses to do, "because a live
+  GraphicsDevice retains its adapter and replacing it would dangle" — the same
+  constraint this row asked for, already enforced at the ABI.
+
+Measured through the C ABI with nothing calling `SDL_Init` by hand, two sequential games
+in one process:
+
+| | before | after |
+|---|---|---|
+| `Description` | `Default Display` | `Dell Inc. 27"` |
+| `DeviceName` | `\\.\DISPLAY1` | `\\.\DISPLAY1` (the synthetic XNA-convention name FNA also produces) |
+| `CurrentDisplayMode` | 800x480 | 2048x1152 |
+| `SupportedDisplayModes` | 1 | 22 |
+| window vs adapter | contradict | agree, in the same frame |
+| second `Game` | same fallback | identical to the first |
+
+The probe is `build-probe/bindfix_adapter_ordering.c`.
+
+**Still open on this row:** the HEADLESS/no-display artifact check from the regression
+list below has not been run — this build carries OPENGLES3 only, and the available
+control was a video driver that cannot start, which degrades to the fallback and exits
+cleanly. The four separate audits at the end of this row are also untouched.
 
 ### The measured behaviour
 
