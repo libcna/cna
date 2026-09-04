@@ -231,6 +231,15 @@ ctest --test-dir cmake-build-vulkan  -N              → Total Tests: 302   (215
 ctest --test-dir cmake-build-easygl  -N              → Total Tests: 407   (317 ^EasyGL_)
 ```
 
+> **Correction (`VULKAN-004`, 2026-09-04).** The two totals above were taken while the
+> `CnbTextureCodecTests.cpp` break of §7.5 was still present. `gtest_discover_tests` enumerates a
+> suite by *running the built binary*, so an unbuildable test object registers nothing, and the
+> totals under-counted by an order of magnitude. From a green build the Vulkan configuration
+> reports **9071** registered CTests. The renderer-prefixed counts (`215 ^Vulkan_`,
+> `317 ^EasyGL_`) come from the renderer's own example/test registrations and did **not** change;
+> every parity number in this plan is derived from those, not from the totals. `VULKAN-006` owns
+> re-stating this section from a green build of both configurations.
+
 The shared (non-renderer-prefixed) sets are the same except for
 `ModuleLinkClosure_VulkanRendererClosure` (Vulkan only) and the four `easy-gl-*` library suites
 (EasyGL only, and GL-library-internal).
@@ -276,7 +285,7 @@ ctest --test-dir cmake-build-vulkan --rerun-failed -j1  → 0/6 passed — all s
 The one build error is renderer-independent and pre-existing:
 `modules/content/tests/CNA/Content/Cnb/CnbTextureCodecTests.cpp:475` calls
 `CnbDocument::Parse(const std::vector<unsigned char>&)`, which no longer matches the declaration at
-`CnbDocument.hpp:151`. It breaks `cna_content_test_objects` only (`VULKAN-004`).
+`CnbDocument.hpp:151`. It breaks `cna_content_test_objects` only (`VULKAN-004`, fixed 2026-09-04).
 
 | Failing test | What it actually reports | Reading |
 |---|---|---|
@@ -662,7 +671,7 @@ started, not silently widened.
 | VULKAN-001 | Record the implementation baseline commit and both build configurations | ⬜ | This file's §7 is re-confirmed against the commit work actually starts from: branch, SHA, the three worktree fixes of §7.2, both `cmake` command lines, and `cmake --build` exit codes for both directories. A configure that needs a fourth fix is added to §7.2 rather than worked around locally. |
 | VULKAN-002 | Establish a green **EasyGL** test baseline and record it | ⬜ | `ctest --test-dir cmake-build-easygl` run under Xvfb, full output captured, then `--rerun-failed -j1` to separate flakes from failures. The exact pass/fail list is written into this file's §7 as the reference-renderer baseline. A pre-existing EasyGL failure is named, not rounded away. |
 | VULKAN-003 | Establish a green **Vulkan** test baseline and record it | ⬜ | Same, for `cmake-build-vulkan`, and separately for `-R '^Vulkan_'`. Every failure is classified: CNA defect, environment, or driver. Nothing is called "accepted" without naming what accepts it. |
-| VULKAN-004 | Fix or quarantine the pre-existing non-Vulkan build break so the suite can be built at all | ⬜ | `modules/content/tests/CNA/Content/Cnb/CnbTextureCodecTests.cpp:475` calls `CnbDocument::Parse(const std::vector<unsigned char>&)`, which no longer matches the declaration at `CnbDocument.hpp:151`. It is renderer-independent and breaks `cna_content_test_objects` in every configuration. Either fix the call site (one argument list) or, if it belongs to another plan's in-flight work, record the owner here and build with `ninja -k 0`. Acceptance: `cmake --build cmake-build-vulkan` exits 0. |
+| VULKAN-004 | Fix or quarantine the pre-existing non-Vulkan build break so the suite can be built at all | ✅ | **Fixed at the call site.** `CnbTextureCodecTests.cpp:475` passed one argument to `CnbDocument::Parse(std::vector<std::uint8_t>, const std::string& origin, const CnbReadLimits&)`; `origin` has no default and every one of the file's other eleven `Parse` calls supplies one (`:190`, `:210`, `:217`, …). The asset is encoded as `EncodeTexture2DToCnb(data, "mipped")`, so the origin is `"mipped.cnb"`. Introduced by `347139500` (`feat(cnb): generate mip chains when compiling a source image`); not another plan's in-flight work, so it is repaired rather than quarantined. **Evidence:** `cmake --build cmake-build-vulkan -j16` exits **0**; `ctest -R CnbTextureCodecTest` is 15/15 including `GeneratedMipChainSurvivesAnEncodeDecodeRoundTrip`. **Discovered while closing it:** §7.3's `Total Tests: 302` / `407` were measured with this break present. `gtest_discover_tests` runs each test binary *after* it links, so the unbuildable `cna_content_test_objects` suppressed every test it and its dependents own. With the build green the same command reports **9071** registered CTests for the Vulkan configuration. The `215 ^Vulkan_` count is unchanged and is the number this plan's parity arithmetic actually uses. `VULKAN-006` owns re-stating §7.3 from a green build. |
 | VULKAN-005 | Record the Vulkan physical device, driver, extensions and layer environment | ⬜ | §7.1 is regenerated from `vulkaninfo --summary` plus the renderer's own startup capability dump, and the **selected** device is named (this machine has both RADV and llvmpipe, and `PickPhysicalDevice` takes the first that qualifies — which device it actually picks is recorded, not assumed). |
 | VULKAN-006 | Enumerate both renderers' registered CTests mechanically and check the numbers in §7.3 | ⬜ | `ctest -N` for both directories; the four counts in §7.3 either match or are corrected here. Output is captured **before** any other ctest invocation, because `ctest -N` overwrites `LastTest.log`. |
 | VULKAN-007 | Script the EasyGL↔Vulkan coverage comparison and keep it re-runnable | ⬜ | A small script under `tools/` (Python or shell — no new build system, no new build directory) that parses both `examples/CMakeLists.txt` files and emits the three §7.4 sets: shared sources, EasyGL-only CTests, Vulkan-only CTests. It reproduces §9.3's 143/51 numbers on this commit. Non-goal: making it a CTest. |
