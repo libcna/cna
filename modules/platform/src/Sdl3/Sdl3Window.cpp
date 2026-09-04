@@ -15,6 +15,7 @@
 #include <emscripten/html5.h>
 #endif
 
+#include <cmath>
 #include <cstring>
 
 namespace CNA::Platform::Sdl3 {
@@ -253,6 +254,27 @@ namespace CNA::Platform::Sdl3 {
                     canvasId, &canvasWidth, &canvasHeight) == EMSCRIPTEN_RESULT_SUCCESS &&
                 canvasWidth > 0 && canvasHeight > 0)
             {
+                double cssWidth = 0.0;
+                double cssHeight = 0.0;
+                if (emscripten_get_element_css_size(
+                        canvasId, &cssWidth, &cssHeight) == EMSCRIPTEN_RESULT_SUCCESS &&
+                    cssWidth > 0.0 && cssHeight > 0.0)
+                {
+                    const int clientWidth = static_cast<int>(std::lround(cssWidth));
+                    const int clientHeight = static_cast<int>(std::lround(cssHeight));
+                    int sdlWidth = 0;
+                    int sdlHeight = 0;
+                    if (SDL_GetWindowSize(window_, &sdlWidth, &sdlHeight) &&
+                        (sdlWidth != clientWidth || sdlHeight != clientHeight))
+                    {
+                        // SDL also uses window->w/window->h to scale browser pointer events.
+                        // Repair those cached logical dimensions together with the drawable;
+                        // otherwise the XNA cursor and DOM cursor disagree after pressing Esc.
+                        RequireSdlSuccess(
+                            SDL_SetWindowSize(window_, clientWidth, clientHeight),
+                            "Window::GetPixelSize(WebFullscreenExit)");
+                    }
+                }
                 wasWebFullscreen_ = false;
                 webDrawableOverride_ = WindowSize{canvasWidth, canvasHeight};
                 webDrawableOverrideActive_ =
