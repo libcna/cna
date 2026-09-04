@@ -28,6 +28,11 @@
 //   C  Rendering still works afterwards. A swapchain rebuilt mid-run drags every framebuffer,
 //      image view and depth resource with it, so "the mode changed" is worth nothing on its own.
 //   D  No validation messages across the whole sequence.
+//   E  VULKAN-333: the request itself is readable back through IGraphicsRenderer::GetSwapIntervalEXT(),
+//      the seam REMED-GFX-243 added so a vsync test can tell "CNA never asked" from "the driver
+//      declined". Read through the INTERFACE, not the concrete renderer, because that is the seam a
+//      cross-renderer test uses. The default -1 means "does not record", which was the honest
+//      answer while SetSwapInterval was the inherited no-op.
 //
 // Exit code 0 = all PASS, 1 = any FAIL.
 
@@ -116,6 +121,11 @@ protected:
         done_ = true;
         auto& dev = getGraphicsDeviceProperty();
 
+        auto& iface = dev.GetRenderer();
+        check(iface.GetSwapIntervalEXT() != -1,
+              "E the renderer records the interval it was asked for",
+              std::to_string(iface.GetSwapIntervalEXT()));
+
         const VkPresentModeKHR modeVsyncOn = Renderer().GetAppliedPresentModeEXT();
         check(modeVsyncOn == VK_PRESENT_MODE_FIFO_KHR,
               "A vsync on starts at FIFO, the only mode Vulkan guarantees",
@@ -146,6 +156,10 @@ protected:
                   PresentModeName(modeVsyncOff));
         }
 
+        check(iface.GetSwapIntervalEXT() == 0,
+              "E SynchronizeWithVerticalRetrace=false is forwarded and readable back",
+              std::to_string(iface.GetSwapIntervalEXT()));
+
         const Color afterOff = RenderProbe(dev);
         check(afterOff.getRProperty() > 200 && afterOff.getGProperty() < 60,
               "C rendering still works after the rebuild",
@@ -160,6 +174,10 @@ protected:
         check(modeBackOn == VK_PRESENT_MODE_FIFO_KHR,
               "A turning vsync back on returns the swapchain to FIFO",
               PresentModeName(modeBackOn));
+
+        check(iface.GetSwapIntervalEXT() != 0,
+              "E SynchronizeWithVerticalRetrace=true is forwarded and readable back",
+              std::to_string(iface.GetSwapIntervalEXT()));
 
         // ---- re-requesting the interval already in force keeps the mode where it is ----
         gdm_->setSynchronizeWithVerticalRetraceProperty(true);

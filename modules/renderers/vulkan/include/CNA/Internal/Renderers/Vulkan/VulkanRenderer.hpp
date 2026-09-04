@@ -1339,6 +1339,23 @@ namespace CNA::Internal::Renderers::Vulkan
          */
         void SetSwapInterval(int interval) override;
 
+        /**
+         * @brief The swap interval last requested of this renderer.
+         *
+         * plan_vulkan.md VULKAN-333. `REMED-GFX-243` added this getter because a setter alone
+         * cannot tell "CNA never forwarded the request" from "the driver declined it", and a vsync
+         * test that cannot tell them apart defends nothing. The default `-1` means "this renderer
+         * does not record what it was asked for", which was the honest answer while
+         * `SetSwapInterval` was the inherited no-op and is no longer one.
+         *
+         * This is CNA's own recorded request, not a driver query, so it is answerable anywhere --
+         * including where the surface cannot honour it.
+         *
+         * @return The interval last passed to SetSwapInterval, or the one this renderer was
+         *         constructed with if none has been.
+         */
+        [[nodiscard]] int GetSwapIntervalEXT() const override { return swapInterval_; }
+
 
         /**
          * @brief CNAEXT. The `VkPresentModeKHR` the live swapchain was actually created with.
