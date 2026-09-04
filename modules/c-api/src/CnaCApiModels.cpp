@@ -175,7 +175,9 @@ struct PartResource final {
 
     ~PartResource()
     {
-        value->setTagProperty(nullptr);
+        if (value != nullptr) {
+            value->setTagProperty(nullptr);
+        }
         if (detachedValue != nullptr) {
             detachedValue->setTagProperty(nullptr);
         }
@@ -317,7 +319,13 @@ MeshResource::~MeshResource()
             continue;
         }
         part->parentMesh = nullptr;
-        part->value = std::move(part->detachedValue);
+        // Only a part this ABI built has a standalone value to go back to. A part published by
+        // MirrorLoadedModel borrows its ModelMeshPart from the Model through an aliasing
+        // shared_ptr and never had a detachedValue, so moving one in would replace a live
+        // pointer with an empty one -- and ~PartResource would then dereference it.
+        if (part->detachedValue != nullptr) {
+            part->value = std::move(part->detachedValue);
+        }
     }
     if (countedAsGraphicsResource) {
         RemoveOwnedGraphicsResourceFor(parentGame);
