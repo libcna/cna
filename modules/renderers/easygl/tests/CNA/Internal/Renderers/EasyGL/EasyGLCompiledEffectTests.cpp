@@ -834,11 +834,10 @@ TEST(EasyGLCompiledEffectDrawTest, SharedSpriteBatchTextureSlotContract)
 
 TEST(EasyGLCompiledEffectDrawTest, CompiledDrawObjectsSurviveAContextRecreation)
 {
-    // plans/plan_fx.md FX-108. The compiled route owns two GL objects outside easy-gl's recovery
-    // registry: one shared vertex-array object and, per sampler slot, the row-order-corrected copy
-    // of a render-target source. Their creation flags used to stay true across a context
-    // recreation while the names behind them died with the old context, so every later compiled
-    // draw bound array object 0 and rasterized nothing -- silently.
+    // plans/plan_fx.md FX-108. A live compiled Effect must retain its bytecode, parameter state and
+    // texture bindings across a context recreation. The renderer-owned MojoShader context, shared
+    // VAO and scratch copies all belong to the old context and must be rebuilt, not merely have
+    // their creation flags cleared.
     GraphicsDevice device;
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
@@ -859,6 +858,12 @@ TEST(EasyGLCompiledEffectDrawTest, CompiledDrawObjectsSurviveAContextRecreation)
     const Color sourcePixel[1] = {Color(255, 0, 0, 255)};
     source.SetData(sourcePixel, 1);
     parameters["FxTexture"]->SetValue(&source);
+
+    TextureCube cube(device, 2, false, SurfaceFormat::Color);
+    const Color cubePixels[4] = {
+        Color(7, 17, 27, 255), Color(37, 47, 57, 255),
+        Color(67, 77, 87, 255), Color(97, 107, 117, 255)};
+    cube.SetData(CubeMapFace::PositiveX, cubePixels, 4);
 
     const auto drawAndRead = [&]() -> Color {
         CNA::TestSupport::SamplingQuadVertex quad[6];
@@ -884,22 +889,15 @@ TEST(EasyGLCompiledEffectDrawTest, CompiledDrawObjectsSurviveAContextRecreation)
 
     device.GetRenderer().DebugSimulateContextLoss();
 
-    // What the renderer may legitimately do here is refuse: this renderer does not yet recreate
-    // its MojoShader context, which is a documented limitation. What it must NOT do is silently
-    // draw nothing, or draw with a stale array object, which is what an unreset creation flag
-    // produced.
-    try
-    {
-        const Color after = drawAndRead();
-        EXPECT_NEAR(after.getRProperty(), 255, 3)
-            << "a compiled draw after a context recreation must rebuild its own GL objects";
-        EXPECT_NEAR(after.getGProperty(), 0, 3);
-    }
-    catch (const std::exception& error)
-    {
-        EXPECT_FALSE(std::string(error.what()).empty())
-            << "an explicit refusal must name what could not be restored";
-    }
+    const Color after = drawAndRead();
+    EXPECT_NEAR(after.getRProperty(), 255, 3)
+        << "a compiled draw after a context recreation must rebuild its native effect";
+    EXPECT_NEAR(after.getGProperty(), 0, 3);
+
+    Color restoredCubePixels[4];
+    cube.GetData(CubeMapFace::PositiveX, restoredCubePixels, 4);
+    for (std::size_t index = 0; index < std::size(cubePixels); ++index)
+        EXPECT_EQ(restoredCubePixels[index], cubePixels[index]);
 }
 
 TEST(EasyGLCompiledEffectDrawTest, SharedCubeAndVolumeSamplerContract)

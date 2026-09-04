@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 #include "CNA/Internal/Renderers/EasyGL/GlProfile.hpp"
@@ -434,10 +435,12 @@ namespace CNA::Internal::Renderers::EasyGL
     };
 
     /// EasyGL cube map texture renderer.
-    class EasyGLTextureCubeRenderer : public ITextureCubeRenderer
+    class EasyGLTextureCubeRenderer : public ITextureCubeRenderer,
+                                      public ::easygl::RecoverableResource
     {
     public:
-        EasyGLTextureCubeRenderer(int size, bool mipMap, int surfaceFormat);
+        EasyGLTextureCubeRenderer(int size, bool mipMap, int surfaceFormat,
+                                  std::shared_ptr<::easygl::ResourceRegistry> registry);
         /** @brief Releases the GL cube texture (and, under OPENGLES2, its level-registry entry). */
         ~EasyGLTextureCubeRenderer() override;
 
@@ -463,7 +466,22 @@ namespace CNA::Internal::Renderers::EasyGL
         /// Binds this cube map to the requested GL texture unit.
         void BindGL(int unit) const override;
 
+        /** @brief Shares one level-zero face's CPU pixels for context-loss restoration. */
+        void ShareCpuPixels(
+            int face, std::shared_ptr<std::vector<uint8_t>> pixels) override;
+
+        /** @brief Returns the cube edge length in texels. */
+        [[nodiscard]] int GetSizeEXT() const noexcept override { return size_; }
+
+        /** @brief Forgets the cube's GL name after its context is lost. */
+        void release_gl_handle_only() override;
+
+        /** @brief Recreates the cube and restores retained face pixels. */
+        void recreate_gl_resource() override;
+
     private:
+        void CreateResources();
+
         ::easygl::Texture tex_;
         int size_ = 0;
         int surfaceFormat_ = 0;
@@ -471,6 +489,10 @@ namespace CNA::Internal::Renderers::EasyGL
         int levelCount_ = 1;
         /// Exact face-major DXT blocks, retained because compressed GL images are not FBO-readable.
         std::vector<std::vector<std::uint8_t>> compressedLevels_;
+        /// Face-major uncompressed mip data retained only when context recovery is enabled.
+        std::vector<std::vector<std::uint8_t>> rgbaLevels_;
+        std::array<std::shared_ptr<std::vector<uint8_t>>, 6> cpuPixels_{};
+        std::weak_ptr<::easygl::ResourceRegistry> registry_;
     };
 
     /// EasyGL implementation of IEffectRenderer — wraps an easygl::Program.
@@ -851,7 +873,8 @@ namespace CNA::Internal::Renderers::EasyGL
         std::vector<uint8_t> cpu_data_;
     };
 
-    class EasyGLRenderer : public IGraphicsRenderer
+    class EasyGLRenderer : public IGraphicsRenderer,
+                           public ::easygl::RecoverableResource
     {
     private:
         // Declared first so it is destroyed last: all GL resources below release while the
@@ -865,6 +888,7 @@ namespace CNA::Internal::Renderers::EasyGL
         float viewportMinDepth_ = 0.0f;
         float viewportMaxDepth_ = 1.0f;
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
+        friend class EasyGLCompiledEffect;
         // plans/plan_fx.md FX-062: one MojoShader GL context per this renderer's whole lifetime, created
         // lazily on first CreateCompiledEffect() call (see GetMojoShaderContextEXT() in
         // EasyGLCompiledEffect.cpp).
@@ -904,6 +928,12 @@ namespace CNA::Internal::Renderers::EasyGL
         /// the source's own framebuffers -- including a multisample one -- are never touched.
         ::easygl::Framebuffer compiledFlipReadFbo_;
         bool compiledFlipReadFboCreated_ = false;
+        std::vector<EasyGLCompiledEffect*> compiledEffects_;
+
+        void RegisterCompiledEffectEXT(EasyGLCompiledEffect* effect);
+        void UnregisterCompiledEffectEXT(EasyGLCompiledEffect* effect);
+        void ReleaseCompiledEffectsForContextLossEXT();
+        void RecreateCompiledEffectsAfterContextLossEXT();
 #endif
         EasyGLSurfaceState surfaceState_;
         ::easygl::Device device;
@@ -915,6 +945,11 @@ namespace CNA::Internal::Renderers::EasyGL
         // now hold a weak_ptr and simply skip the removal when the registry is gone.
         std::shared_ptr<::easygl::ResourceRegistry> registry_ =
             std::make_shared<::easygl::ResourceRegistry>();
+
+        /** @brief Forgets renderer-owned GL objects when the active context is lost. */
+        void release_gl_handle_only() override;
+        /** @brief Recreates renderer-owned state before child resources are restored. */
+        void recreate_gl_resource() override;
 
         /// Raw XNA ColorWriteChannels values for MRT slots 0..3 (bit0=R..bit3=A).
         /// GLES 3.2 applies these with glColorMaski; Clear temporarily forces every active slot
@@ -1286,10 +1321,8 @@ namespace CNA::Internal::Renderers::EasyGL
          * @brief CNAEXT. Returns this device's MojoShader context, creating it on first use.
          *
          * MojoShader allows one context per GL context, so it is owned here rather than by each
-         * effect. Unlike SDL_GPU, EasyGL's GL context can be recreated (context-loss recovery);
-         * this initial implementation does not yet recreate the MojoShader context to follow --
-         * a documented, narrower scope than the ordinary (non-compiled-effect) draw path's own
-         * recovery support.
+         * effect. EasyGL's recovery listener rebuilds it and every live compiled effect from its
+         * retained bytecode when the GL context is recreated.
          * @return The context, or null if it could not be created.
          */
         CNAEXT [[nodiscard]] MOJOSHADER_glContext* GetMojoShaderContextEXT();
@@ -1411,15 +1444,13 @@ namespace CNA::Internal::Renderers::EasyGL
         CNAEXT void ReleaseCompiledEffectGlObjectsForContextLossEXT();
 
         /**
-         * @brief CNAEXT. Refuses a compiled-effect operation whose GL context no longer exists.
+         * @brief CNAEXT. Validates that compiled-effect state belongs to the active GL context.
          *
          * plans/plan_fx.md FX-108. This renderer supports context loss and recreation, and its own
-         * resources recover through easy-gl's registry. MojoShader's context does not: it owns the
-         * linked GL programs for every live compiled Effect, and recreating it would mean rebuilding
-         * every one of those effects from the bytecode the game no longer holds. Until that exists,
-         * a compiled draw after a recreation is refused BY NAME rather than issued against dead
-         * program and array-object names, which is what it used to do -- rasterizing nothing, with
-         * no diagnostic, on a renderer still advertising CompiledEffects.
+         * resources recover through easy-gl's registry. Live compiled effects retain their source
+         * bytecode and parameter values and are rebuilt by the renderer's first recovery entry.
+         * This guard remains as a hard failure if a caller ever reaches stale MojoShader state
+         * outside that transaction, rather than issuing a draw against dead program names.
          *
          * @param operation Public operation being refused, for the exception text.
          * @throws System::NotSupportedException if the GL context has been recreated since
@@ -1612,6 +1643,8 @@ namespace CNA::Internal::Renderers::EasyGL
         std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer32(int index_capacity) override;
 
         void SetContextRecoveryEnabled(bool enabled) override { contextRecoveryEnabled_ = enabled; }
+        /** @brief Returns false while meta-gl is between context-lost and context-restored. */
+        [[nodiscard]] bool CanBeginDrawEXT() const override;
         void DebugSimulateContextLoss() override;
         void DebugRestoreContext() override;
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;

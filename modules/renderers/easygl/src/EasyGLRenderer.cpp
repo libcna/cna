@@ -1814,10 +1814,27 @@ if (ProfileIsEs2ApiGeneration())
                    : ::metagl::CompressedInternalFormat::RgbaS3tcDxt5);
     }
 
-    EasyGLTextureCubeRenderer::EasyGLTextureCubeRenderer(int size, bool mipMap, int surfaceFormat)
+    EasyGLTextureCubeRenderer::EasyGLTextureCubeRenderer(
+        int size, bool mipMap, int surfaceFormat,
+        std::shared_ptr<::easygl::ResourceRegistry> registry)
         : size_(size)
         , surfaceFormat_(surfaceFormat)
         , levelCount_(mipMap ? CalculateCubeMipLevels(size) : 1)
+        , registry_(registry)
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
+        const bool dxt = format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+                         format == SurfaceFormat::Dxt5;
+        if (dxt)
+            compressedLevels_.resize(static_cast<std::size_t>(6 * levelCount_));
+        else if (registry != nullptr)
+            rgbaLevels_.resize(static_cast<std::size_t>(6 * levelCount_));
+        CreateResources();
+        if (registry != nullptr) registry->add(this);
+    }
+
+    void EasyGLTextureCubeRenderer::CreateResources()
     {
         tex_.create();
         tex_.bind(::easygl::TextureTarget::TextureCubeMap);
@@ -1825,8 +1842,6 @@ if (ProfileIsEs2ApiGeneration())
         const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
         const bool dxt = format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
                          format == SurfaceFormat::Dxt5;
-        if (dxt)
-            compressedLevels_.resize(static_cast<std::size_t>(6 * levelCount_));
         // Pre-allocate GPU storage for every mip level (not just level 0): SetData's box writes
         // use glTexSubImage2D, which requires the target level to already have a defined image —
         // without this loop, SetData(level>0,...) would silently fail (Task 276 finding).
@@ -1834,7 +1849,7 @@ if (ProfileIsEs2ApiGeneration())
         for (int face = 0; face < 6; ++face)
         {
             const auto faceTarget = kCubeFaceTargets[face];
-            int levelSize = size;
+            int levelSize = size_;
             for (int level = 0; level < levelCount; ++level)
             {
                 if (dxt && ContextHasS3tcEXT())
@@ -1844,7 +1859,7 @@ if (ProfileIsEs2ApiGeneration())
                         static_cast<std::size_t>((levelSize + 3) / 4) * DxtBlockBytesEXT(format);
                     auto& zeroBlocks = compressedLevels_[
                         static_cast<std::size_t>(face * levelCount_ + level)];
-                    zeroBlocks.assign(imageBytes, 0u);
+                    if (zeroBlocks.empty()) zeroBlocks.assign(imageBytes, 0u);
                     tex_.set_compressed_image_2d(faceTarget, level, ToDxtInternalFormatEXT(format),
                                                  levelSize, levelSize, imageBytes,
                                                  zeroBlocks.data());
@@ -1857,15 +1872,40 @@ if (ProfileIsEs2ApiGeneration())
                             static_cast<std::size_t>((levelSize + 3) / 4) *
                             static_cast<std::size_t>((levelSize + 3) / 4) *
                             DxtBlockBytesEXT(format);
-                        compressedLevels_[static_cast<std::size_t>(
-                            face * levelCount_ + level)].assign(imageBytes, 0u);
+                        auto& blocks = compressedLevels_[static_cast<std::size_t>(
+                            face * levelCount_ + level)];
+                        if (blocks.empty()) blocks.assign(imageBytes, 0u);
                     }
+                    const std::size_t index =
+                        static_cast<std::size_t>(face * levelCount_ + level);
+                    const std::vector<std::uint8_t>* saved = nullptr;
+                    if (!dxt && index < rgbaLevels_.size() && !rgbaLevels_[index].empty())
+                        saved = &rgbaLevels_[index];
+                    if (!dxt && level == 0 && cpuPixels_[face] && !cpuPixels_[face]->empty())
+                        saved = cpuPixels_[face].get();
                     tex_.set_image_2d(faceTarget, level,
                                       RgbaTexImageInternalFormat(),
                                       levelSize, levelSize,
                                       ::metagl::PixelFormat::Rgba,
                                       ::metagl::PixelType::UnsignedByte,
-                                      nullptr);
+                                      saved != nullptr ? saved->data() : nullptr);
+                    if (dxt)
+                    {
+                        const auto& blocks = compressedLevels_[index];
+                        using CNA::Internal::Graphics::DxtUtil;
+                        const std::vector<std::uint8_t> rgba = format == SurfaceFormat::Dxt1
+                            ? DxtUtil::DecompressDxt1(
+                                  blocks.data(), blocks.size(), levelSize, levelSize)
+                            : (format == SurfaceFormat::Dxt3
+                                   ? DxtUtil::DecompressDxt3(
+                                         blocks.data(), blocks.size(), levelSize, levelSize)
+                                   : DxtUtil::DecompressDxt5(
+                                         blocks.data(), blocks.size(), levelSize, levelSize));
+                        tex_.set_sub_image_2d(
+                            faceTarget, level, 0, 0, levelSize, levelSize,
+                            ::metagl::PixelFormat::Rgba,
+                            ::metagl::PixelType::UnsignedByte, rgba.data());
+                    }
                 }
                 levelSize = std::max(1, levelSize / 2);
             }
@@ -1931,11 +1971,31 @@ else
 
     EasyGLTextureCubeRenderer::~EasyGLTextureCubeRenderer()
     {
+        if (auto registry = registry_.lock()) registry->remove(this);
 if (ProfileIsEs2ApiGeneration())
 {
         // GL reuses deleted names; drop the level registration before tex_'s destructor frees it.
         Es2UnregisterTexture(tex_.native_handle());
 }
+    }
+
+    void EasyGLTextureCubeRenderer::ShareCpuPixels(
+        int face, std::shared_ptr<std::vector<uint8_t>> pixels)
+    {
+        if (face < 0 || face >= static_cast<int>(cpuPixels_.size())) return;
+        cpuPixels_[static_cast<std::size_t>(face)] = std::move(pixels);
+        const std::size_t levelZero = static_cast<std::size_t>(face * levelCount_);
+        if (levelZero < rgbaLevels_.size()) rgbaLevels_[levelZero].clear();
+    }
+
+    void EasyGLTextureCubeRenderer::release_gl_handle_only()
+    {
+        tex_.reset_handle_no_gl();
+    }
+
+    void EasyGLTextureCubeRenderer::recreate_gl_resource()
+    {
+        CreateResources();
     }
 
     void EasyGLTextureCubeRenderer::BindGL(int unit) const
@@ -1960,7 +2020,27 @@ if (ProfileIsEs2ApiGeneration())
                               ::metagl::PixelFormat::Rgba,
                               ::metagl::PixelType::UnsignedByte,
                               data);
-        return GlUploadSucceeded();
+        if (!GlUploadSucceeded()) return false;
+        const std::size_t index = static_cast<std::size_t>(face * levelCount_ + level);
+        if (index < rgbaLevels_.size())
+        {
+            const int rowPixels = levelSize;
+            auto& saved = rgbaLevels_[index];
+            if (saved.empty())
+            {
+                saved.resize(static_cast<std::size_t>(levelSize) * levelSize * 4, 0u);
+            }
+            for (int row = 0; row < h; ++row)
+            {
+                std::memcpy(
+                    saved.data() +
+                        (static_cast<std::size_t>(y + row) * rowPixels + x) * 4,
+                    static_cast<const std::uint8_t*>(data) +
+                        static_cast<std::size_t>(row) * w * 4,
+                    static_cast<std::size_t>(w) * 4);
+            }
+        }
+        return true;
     }
 
     bool EasyGLTextureCubeRenderer::SetCompressedDataEXT(
@@ -4718,6 +4798,10 @@ if (ProfileUsesGlslEs100())
 
         platformContext_->SetSwapInterval(swapInterval);
 
+        // Renderer-owned programs, samplers and MojoShader objects are not child resources. Keep
+        // this entry first so they are forgotten before children and recreated before child
+        // callbacks can compile or bind against the replacement context.
+        registry_->add(this);
         registry_->register_with_meta_gl();
 
         if (sampleCount_ > 1)
@@ -4809,6 +4893,7 @@ if (ProfileUsesGlslEs100())
         // GraphicsDevice_ is a Game base member destroyed after every subclass member; a globally
         // held render target reaches the first one, which is why the ownership is weak at all.)
         IGraphicsRenderer::UnregisterForWindow(surfaceState_.GetWindowId());
+        registry_->remove(this);
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
         // Must run here, in the destructor body, rather than relying on member destruction order:
         // mojoShaderContext_ is a raw pointer (no destructor of its own) and needs the GL context
@@ -4822,6 +4907,60 @@ if (ProfileUsesGlslEs100())
 #endif
         // platformContext_ is the first-declared member and therefore dies last, after every GL
         // resource member has released while the context is still current.
+    }
+
+    void EasyGLRenderer::release_gl_handle_only()
+    {
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+        ReleaseCompiledEffectsForContextLossEXT();
+        ReleaseCompiledEffectGlObjectsForContextLossEXT();
+#endif
+
+        prog_colored_.reset_no_gl();
+        prog_textured_.reset_no_gl();
+        prog_col_textured_.reset_no_gl();
+        prog_lit_textured_.reset_no_gl();
+        prog_lit_textured_vertexlit_.reset_no_gl();
+        prog_dual_textured_.reset_no_gl();
+        prog_dual_textured_colored_.reset_no_gl();
+        prog_env_mapped_.reset_no_gl();
+        prog_skinned_.reset_no_gl();
+        prog_skinned_vertexlit_.reset_no_gl();
+        prog_pbr_.reset_no_gl();
+        prog_pbr_dual_uv_.reset_no_gl();
+        prog_pbr_skinned_.reset_no_gl();
+        prog_pbr_skinned_dual_uv_.reset_no_gl();
+
+        default_white_texture_.reset_handle_no_gl();
+        default_white_texture_ready_ = false;
+        default_flat_normal_texture_.reset_handle_no_gl();
+        default_flat_normal_texture_ready_ = false;
+        for (auto& sampler : samplers_)
+            sampler.reset_handle_no_gl();
+
+        msaaFbo_.reset_handle_no_gl();
+        msaaColorRbo_.reset_handle_no_gl();
+        msaaDepthRbo_.reset_handle_no_gl();
+        msaaW_ = 0;
+        msaaH_ = 0;
+        mrtFbo_.reset_handle_no_gl();
+        bound_->mrtFramebuffer = 0;
+        wireframeIbo_.reset_handle_no_gl();
+        wireframeIboCreated_ = false;
+        probedFullFloatRenderable_.reset();
+        probedHalfFloatRenderable_.reset();
+
+        if (ProfileIsEs2ApiGeneration())
+            Es2TextureLevelCounts().clear();
+    }
+
+    void EasyGLRenderer::recreate_gl_resource()
+    {
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+        RecreateCompiledEffectsAfterContextLossEXT();
+#endif
+        // Stock programs, default textures, samplers, scratch objects and backbuffer MSAA storage
+        // are all recreated lazily by their ordinary first-use paths.
     }
 
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
@@ -4944,46 +5083,6 @@ else
         //    no GL calls made). Context is still valid here for proper cleanup.
         metagl::NotifyContextLost();
 
-if (ProfileIsEs2ApiGeneration())
-{
-        // Textures outside the recovery registry (e.g. plain cube maps) leave stale entries in
-        // the ES 2.0 level registry on context loss, and the fresh context may re-issue their GL
-        // names -- start the registry empty; recreate_gl_resource() below re-registers every
-        // recoverable texture with its fresh name.
-        Es2TextureLevelCounts().clear();
-}
-
-        // 3D programs are recreated lazily by their Ensure* helpers.
-        // Reset all handles so create() allocates fresh programs.
-        prog_colored_.reset_no_gl();
-        prog_textured_.reset_no_gl();
-        prog_col_textured_.reset_no_gl();
-        prog_lit_textured_.reset_no_gl();
-        prog_lit_textured_vertexlit_.reset_no_gl();
-        prog_dual_textured_.reset_no_gl();
-        prog_dual_textured_colored_.reset_no_gl();
-        prog_env_mapped_.reset_no_gl();
-        prog_skinned_.reset_no_gl();
-        prog_skinned_vertexlit_.reset_no_gl();
-        prog_pbr_.reset_no_gl();
-        prog_pbr_dual_uv_.reset_no_gl();
-        prog_pbr_skinned_.reset_no_gl();
-        prog_pbr_skinned_dual_uv_.reset_no_gl();
-        default_white_texture_.reset_handle_no_gl();
-        default_white_texture_ready_ = false;
-        default_flat_normal_texture_.reset_handle_no_gl();
-        default_flat_normal_texture_ready_ = false;
-#if defined(CNA_EASYGL_COMPILED_EFFECTS)
-        // plans/plan_fx.md FX-108: the compiled-effect route's own GL objects live on this renderer
-        // rather than in the recovery registry (they are not `RecoverableResource`s, because they
-        // hold nothing to recreate CONTENT from -- a fresh empty array object and a fresh scratch
-        // copy are as good as the originals). They still have to be forgotten here, or their
-        // pre-loss names would be bound into the new context: `compiledEffectVaoCreated_` stayed
-        // true across a recreation, so `EnsureCompiledEffectVaoEXT` handed back a dead name and
-        // every compiled draw bound array object 0.
-        ReleaseCompiledEffectGlObjectsForContextLossEXT();
-#endif
-
         // 2. Recreate the native context through the platform-owned transaction.
         platformContext_->Recreate();
 
@@ -5016,6 +5115,11 @@ if (ProfileIsEs2ApiGeneration())
 
         std::cerr << "[CNA] Desktop GL context recreated and all resources restored" << std::endl;
 #endif
+    }
+
+    bool EasyGLRenderer::CanBeginDrawEXT() const
+    {
+        return !metagl::IsContextLost();
     }
 
     void EasyGLRenderer::DebugRestoreContext()
@@ -5698,7 +5802,8 @@ if (!ProfileIsEs2ApiGeneration())
         int size, bool mipMap, int surfaceFormat)
     {
         EnsureCallingThreadContext();
-        return std::make_unique<EasyGLTextureCubeRenderer>(size, mipMap, surfaceFormat);
+        return std::make_unique<EasyGLTextureCubeRenderer>(
+            size, mipMap, surfaceFormat, RegistryPtr());
     }
 
     std::unique_ptr<IEffectRenderer> EasyGLRenderer::CreateEffectRenderer(

@@ -104,9 +104,12 @@ crashes) that has no equivalent on desktop GL:
   of the real SDL GL context (there's no equivalent async browser event to wait for), and
   `DebugRestoreContext()` just calls it again since desktop loss+restore is atomic.
 
-This is real, thought-through code addressing a genuine WebGL-specific concern — not a stub — but
-the 2026-08-30 MarbleMaze run did not deliberately lose and restore its context. That callback path
-therefore remains a separate browser test obligation.
+This path is browser-qualified as of 2026-09-04. Racing Game called the real
+`WEBGL_lose_context` extension during progressive loading, in its main menu and during a 3D race.
+All three transitions produced `lost,restored`, resumed animation and a substantial resource-backed
+PNG. The run also exposed and fixed two omissions hidden by the original callback plumbing: live
+MojoShader effects and cube maps now rebuild from retained CPU state, and the XNA frame boundary
+skips Draw/Present (while continuing Update) during the asynchronous lost/restored interval.
 
 ## WebGL2/GLES3 capability gaps
 
@@ -153,10 +156,11 @@ device/adapter-model concern rather than a rendering-renderer one.
 | `CnaTests` Emscripten build | Links (with real Asyncify tuning for the networking suite); cannot meaningfully run graphics-touching tests without a real browser/WebGL context |
 | SAMPLE-061 browser integration | Menu, touch, background XNB model/resource loading, gameplay and pause verified in real Chrome/WebGL 2 |
 | Graphics integration/pixel tests (`examples/*_test.cpp`) | Mostly native-only; SAMPLE-061 now supplies a real browser integration gate, not exhaustive pixel coverage |
-| WebGL context-loss handling (`EasyGLRenderer.cpp`) | Implemented; deliberate browser loss/restore remains separately unverified |
+| WebGL context-loss handling (`EasyGLRenderer.cpp`) | Three real loss/restore transitions qualified in Racing Game: loading, menu and 3D race |
 | GLES3/WebGL2 capability gaps vs. desktop GL | Core SAMPLE-061 paths verified; optional capabilities remain browser/GPU dependent |
 | WebGPU | Native `wgpu-native` renderer is active and experimental; the browser/Emscripten WebGPU path (same `WEBGPU` identity, via the emdawnwebgpu port) runs the 2D AND 3D paths in headless Chrome as of 2026-08-26 -- 2D SpriteBatch, 3D `BasicEffect`, and every stock effect shader all render in-browser (`WEBGPU-121`/`122` ✅). Run it with `scripts/run-webgpu-browser-test.sh` |
 
-The next high-value browser gate is deliberate `WEBGL_lose_context` loss/restoration followed by a
-resource-backed draw. It covers a different failure mode than SAMPLE-061's threaded loading gate and
-should remain a separate test rather than being inferred from it.
+The next high-value browser gates are lifecycle coverage outside an active foreground canvas
+(background/resume and browser-driven GPU-process loss) and the multi-browser/device matrix. The
+deliberate foreground `WEBGL_lose_context` resource-recovery gate is now covered directly rather
+than inferred from SAMPLE-061's threaded loading run.

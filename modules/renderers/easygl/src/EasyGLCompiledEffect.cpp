@@ -8,6 +8,7 @@
 
 #include "CNA/Internal/Renderers/EasyGL/EasyGLCompiledEffect.hpp"
 
+#include "CNA/Logger.hpp"
 #include "CNA/Internal/Renderers/EasyGL/EasyGLRenderer.hpp"
 #include "CNA/Internal/Renderers/MojoShader/EffectTranslation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerStateCollection.hpp"
@@ -345,56 +346,30 @@ namespace CNA::Internal::Renderers::EasyGL
                                                const std::uint8_t* effectCode,
                                                std::size_t effectCodeLength)
         : renderer_(renderer)
-        , context_(renderer.GetMojoShaderContextEXT())
     {
         if (effectCode == nullptr || effectCodeLength == 0 ||
             effectCodeLength > std::numeric_limits<std::uint32_t>::max())
         {
             throw std::invalid_argument("EasyGL compiled effect: invalid bytecode buffer.");
         }
-        if (context_ == nullptr)
-        {
-            throw std::runtime_error(
-                "EasyGL compiled effect: MojoShader has no context for this device.");
-        }
-
-        MOJOSHADER_effectShaderContext backend = MakeBackend(context_);
-        effectData_ = MOJOSHADER_compileEffect(effectCode,
-                                               static_cast<unsigned int>(effectCodeLength),
-                                               nullptr, 0, nullptr, 0, &backend);
-        try
-        {
-            MojoShaderEffect::ValidateNativeEffect(effectData_, "create");
-            description_ = MojoShaderEffect::BuildDescription(effectData_);
-            samplerTextureParameters_ =
-                MojoShaderEffect::BuildSamplerTextureParameterMap(effectData_);
-            textures_.resize(static_cast<std::size_t>(effectData_->param_count), nullptr);
-            SetTechnique(0);
-        }
-        catch (...)
-        {
-            // A rejected parse may be one of MojoShader's static sentinels rather than an
-            // allocation, and deleting one of those walks static storage as if it owned a heap.
-            if (MojoShaderEffect::CanSafelyDeleteNativeEffect(effectData_))
-                MOJOSHADER_deleteEffect(effectData_);
-            effectData_ = nullptr;
-            throw;
-        }
+        effectCode_ = std::make_shared<const std::vector<std::uint8_t>>(
+            effectCode, effectCode + effectCodeLength);
+        CreateNativeEffectEXT();
+        textures_.resize(static_cast<std::size_t>(effectData_->param_count), nullptr);
+        parameterValues_.resize(static_cast<std::size_t>(effectData_->param_count));
+        renderer_.RegisterCompiledEffectEXT(this);
     }
 
     EasyGLCompiledEffect::EasyGLCompiledEffect(EasyGLRenderer& renderer,
                                                const EasyGLCompiledEffect& cloneSource)
         : renderer_(renderer)
-        , context_(cloneSource.context_)
+        , effectCode_(cloneSource.effectCode_)
+        , parameterValues_(cloneSource.parameterValues_)
         , techniqueIndex_(cloneSource.techniqueIndex_)
     {
-        effectData_ = MOJOSHADER_cloneEffect(cloneSource.effectData_);
+        CreateNativeEffectEXT();
         try
         {
-            MojoShaderEffect::ValidateNativeEffect(effectData_, "clone");
-            description_ = MojoShaderEffect::BuildDescription(effectData_);
-            samplerTextureParameters_ =
-                MojoShaderEffect::BuildSamplerTextureParameterMap(effectData_);
             textures_ = cloneSource.textures_;
             boundTextures_ = cloneSource.boundTextures_;
             boundVertexTextures_ = cloneSource.boundVertexTextures_;
@@ -408,7 +383,14 @@ namespace CNA::Internal::Renderers::EasyGL
             boundVertexSamplers_ = cloneSource.boundVertexSamplers_;
             samplerAssigned_ = cloneSource.samplerAssigned_;
             vertexSamplerAssigned_ = cloneSource.vertexSamplerAssigned_;
+            for (std::size_t index = 0; index < parameterValues_.size(); ++index)
+            {
+                const auto& value = parameterValues_[index];
+                if (!value.empty())
+                    SetParameterValue(static_cast<std::uint32_t>(index), value.data(), value.size());
+            }
             SetTechnique(techniqueIndex_);
+            renderer_.RegisterCompiledEffectEXT(this);
         }
         catch (...)
         {
@@ -423,6 +405,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
     EasyGLCompiledEffect::~EasyGLCompiledEffect()
     {
+        renderer_.UnregisterCompiledEffectEXT(this);
         if (effectData_ != nullptr)
         {
             if (passActive_) MOJOSHADER_effectEndPass(effectData_);
@@ -430,6 +413,66 @@ namespace CNA::Internal::Renderers::EasyGL
                 MOJOSHADER_deleteEffect(effectData_);
             effectData_ = nullptr;
         }
+    }
+
+    void EasyGLCompiledEffect::CreateNativeEffectEXT()
+    {
+        context_ = renderer_.GetMojoShaderContextEXT();
+        if (context_ == nullptr)
+        {
+            throw std::runtime_error(
+                "EasyGL compiled effect: MojoShader has no context for this device.");
+        }
+
+        MOJOSHADER_glMakeContextCurrent(context_);
+        MOJOSHADER_effectShaderContext backend = MakeBackend(context_);
+        effectData_ = MOJOSHADER_compileEffect(
+            effectCode_->data(), static_cast<unsigned int>(effectCode_->size()),
+            nullptr, 0, nullptr, 0, &backend);
+        try
+        {
+            MojoShaderEffect::ValidateNativeEffect(effectData_, "create");
+            description_ = MojoShaderEffect::BuildDescription(effectData_);
+            samplerTextureParameters_ =
+                MojoShaderEffect::BuildSamplerTextureParameterMap(effectData_);
+            MOJOSHADER_effectSetTechnique(effectData_, &effectData_->techniques[0]);
+        }
+        catch (...)
+        {
+            if (MojoShaderEffect::CanSafelyDeleteNativeEffect(effectData_))
+                MOJOSHADER_deleteEffect(effectData_);
+            effectData_ = nullptr;
+            context_ = nullptr;
+            throw;
+        }
+    }
+
+    void EasyGLCompiledEffect::ReleaseForContextLossEXT()
+    {
+        passActive_ = false;
+        if (effectData_ != nullptr &&
+            MojoShaderEffect::CanSafelyDeleteNativeEffect(effectData_))
+        {
+            MOJOSHADER_deleteEffect(effectData_);
+        }
+        effectData_ = nullptr;
+        context_ = nullptr;
+    }
+
+    void EasyGLCompiledEffect::RecreateAfterContextLossEXT()
+    {
+        CreateNativeEffectEXT();
+        for (std::size_t index = 0; index < parameterValues_.size(); ++index)
+        {
+            const auto& value = parameterValues_[index];
+            if (!value.empty())
+            {
+                MOJOSHADER_effectSetRawValueHandle(
+                    &effectData_->params[index], value.data(), 0,
+                    static_cast<unsigned int>(value.size()));
+            }
+        }
+        SetTechnique(techniqueIndex_);
     }
 
     std::unique_ptr<ICompiledEffectRuntime> EasyGLCompiledEffect::Clone() const
@@ -468,6 +511,9 @@ namespace CNA::Internal::Renderers::EasyGL
         {
             MOJOSHADER_effectSetRawValueHandle(&parameter, data, 0,
                                                static_cast<unsigned int>(dataBytes));
+            auto& saved = parameterValues_[runtimeIndex];
+            saved.assign(static_cast<const std::uint8_t*>(data),
+                         static_cast<const std::uint8_t*>(data) + dataBytes);
         }
     }
 
@@ -644,9 +690,76 @@ namespace CNA::Internal::Renderers::EasyGL
         if (mojoShaderContextGeneration_ == metagl::GetContextGeneration()) return;
         throw System::NotSupportedException(
             std::string("CNA EasyGL: ") + operation + " cannot run after the GL context was "
-            "recreated -- MojoShader's context and every program it linked for a compiled Effect "
-            "belong to the destroyed context, and this renderer does not yet rebuild them. Create "
-            "the Effect again from its bytecode after a context loss.");
+            "recreated because its MojoShader state was not restored for the active context.");
+    }
+
+    void EasyGLRenderer::RegisterCompiledEffectEXT(EasyGLCompiledEffect* effect)
+    {
+        if (effect == nullptr ||
+            std::find(compiledEffects_.begin(), compiledEffects_.end(), effect) !=
+                compiledEffects_.end())
+        {
+            return;
+        }
+        compiledEffects_.push_back(effect);
+    }
+
+    void EasyGLRenderer::UnregisterCompiledEffectEXT(EasyGLCompiledEffect* effect)
+    {
+        compiledEffects_.erase(
+            std::remove(compiledEffects_.begin(), compiledEffects_.end(), effect),
+            compiledEffects_.end());
+    }
+
+    void EasyGLRenderer::ReleaseCompiledEffectsForContextLossEXT()
+    {
+        CNA::Logger::Info(
+            "EasyGL context recovery: releasing " +
+                std::to_string(compiledEffects_.size()) + " compiled effects",
+            CNA::LogCategory::RENDER);
+        for (EasyGLCompiledEffect* effect : compiledEffects_)
+        {
+            if (effect != nullptr)
+                effect->ReleaseForContextLossEXT();
+        }
+        if (mojoShaderContext_ != nullptr)
+        {
+            // MojoShader owns CPU allocations as well as the obsolete program names. On WebGL,
+            // deletion commands issued while the context-lost flag is set are specified no-ops;
+            // destroying the adapter here frees its CPU state without ever addressing a name in
+            // the replacement context.
+            MOJOSHADER_glMakeContextCurrent(nullptr);
+            MOJOSHADER_glDestroyContext(mojoShaderContext_);
+            mojoShaderContext_ = nullptr;
+            mojoShaderContextGeneration_ = 0;
+        }
+    }
+
+    void EasyGLRenderer::RecreateCompiledEffectsAfterContextLossEXT()
+    {
+        CNA::Logger::Info(
+            "EasyGL context recovery: recreating " +
+                std::to_string(compiledEffects_.size()) + " compiled effects",
+            CNA::LogCategory::RENDER);
+        for (std::size_t index = 0; index < compiledEffects_.size(); ++index)
+        {
+            EasyGLCompiledEffect* effect = compiledEffects_[index];
+            if (effect != nullptr)
+            {
+                try
+                {
+                    effect->RecreateAfterContextLossEXT();
+                }
+                catch (const std::exception& error)
+                {
+                    CNA::Logger::Error(
+                        "EasyGL context recovery: compiled effect " +
+                            std::to_string(index) + " failed: " + error.what(),
+                        CNA::LogCategory::RENDER);
+                    throw;
+                }
+            }
+        }
     }
 
     std::unique_ptr<ICompiledEffectRuntime> EasyGLRenderer::CreateCompiledEffect(

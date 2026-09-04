@@ -155,10 +155,15 @@ namespace CNA::Internal::Renderers::EasyGL
         friend class EasyGLRenderer;
 
         EasyGLCompiledEffect(EasyGLRenderer& renderer, const EasyGLCompiledEffect& cloneSource);
+        void CreateNativeEffectEXT();
+        void ReleaseForContextLossEXT();
+        void RecreateAfterContextLossEXT();
 
         EasyGLRenderer& renderer_;
         MOJOSHADER_glContext* context_ = nullptr;
         MOJOSHADER_effect* effectData_ = nullptr;
+        std::shared_ptr<const std::vector<std::uint8_t>> effectCode_;
+        std::vector<std::vector<std::uint8_t>> parameterValues_;
         MOJOSHADER_effectStateChanges stateChanges_{};
         CompiledEffectDescription description_;
         std::unordered_map<std::string, std::uint32_t> samplerTextureParameters_;

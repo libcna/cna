@@ -2885,6 +2885,17 @@ namespace CNA::Internal::Renderers
 
         // ---- Debug / testing ----
 
+        /**
+         * @brief Reports whether the renderer can safely accept a game Draw call now.
+         *
+         * The default is true. Context-restoring renderers override this while their native
+         * device is unavailable so the framework can continue Update ticks without letting game
+         * rendering call invalid entry points.
+         *
+         * @return True when a Draw/Present pair may begin.
+         */
+        [[nodiscard]] virtual bool CanBeginDrawEXT() const { return true; }
+
         /// Inserts a named GPU debug label into the command stream.
         /// Default implementation is a no-op; Vulkan renderer overrides with
         /// vkCmdInsertDebugUtilsLabelEXT when VK_EXT_debug_utils is available.
