@@ -2552,13 +2552,17 @@ typedef CNA_Handle CNA_ClusteredShadowPolicyHandle;
 /**
  * @brief Creates a shadow budget policy.
  *
- * @param game The owning game.
+ * The parameter is the game's graphics device, not the game: this route resolves it
+ * the way every other constructor in this header does, and a game handle is refused with
+ * `CNA_RESULT_INVALID_HANDLE`.
+ *
+ * @param graphics_device The graphics device of the game that owns the result.
  * @param budget How many lights may cast shadows at once.
  * @param out_policy Receives the owned handle; set invalid on failure.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
  */
 CNA_C_API CNA_Result cna_clustered_shadow_policy_create(
-    CNA_Handle game,
+    CNA_Handle graphics_device,
     int32_t budget,
     CNA_ClusteredShadowPolicyHandle* out_policy);
 
@@ -3384,12 +3388,16 @@ typedef CNA_Handle CNA_ClusteredLightSetHandle;
  * The set needs no device, but it is parented to a game so its lifetime is accounted for like
  * every other owned resource.
  *
- * @param game The owning game.
+ * The parameter is the game's graphics device, not the game: this route resolves it
+ * the way every other constructor in this header does, and a game handle is refused with
+ * `CNA_RESULT_INVALID_HANDLE`.
+ *
+ * @param graphics_device The graphics device of the game that owns the result.
  * @param out_set Receives the owned handle; set invalid on failure.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
  */
 CNA_C_API CNA_Result cna_clustered_light_set_create(
-    CNA_Handle game,
+    CNA_Handle graphics_device,
     CNA_ClusteredLightSetHandle* out_set);
 
 /**
@@ -3589,7 +3597,11 @@ typedef CNA_Handle CNA_ClusteredLightGridHandle;
 /**
  * @brief Creates a cluster grid.
  *
- * @param game The owning game.
+ * The parameter is the game's graphics device, not the game: this route resolves it
+ * the way every other constructor in this header does, and a game handle is refused with
+ * `CNA_RESULT_INVALID_HANDLE`.
+ *
+ * @param graphics_device The graphics device of the game that owns the result.
  * @param tiles_x Tiles along X, from 1 to `CNA_CLUSTER_GRID_MAX_TILES_PER_AXIS_EXT`.
  * @param tiles_y Tiles along Y, same range.
  * @param slice_count Depth slices, from 1 to `CNA_CLUSTER_GRID_MAX_SLICE_COUNT_EXT`.
@@ -3599,7 +3611,7 @@ typedef CNA_Handle CNA_ClusteredLightGridHandle;
  * clamped — `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
  */
 CNA_C_API CNA_Result cna_clustered_light_grid_create(
-    CNA_Handle game,
+    CNA_Handle graphics_device,
     int32_t tiles_x,
     int32_t tiles_y,
     int32_t slice_count,
@@ -3807,12 +3819,16 @@ typedef CNA_Handle CNA_ClusteredLightAssignmentHandle;
 /**
  * @brief Creates an empty assignment.
  *
- * @param game The owning game.
+ * The parameter is the game's graphics device, not the game: this route resolves it
+ * the way every other constructor in this header does, and a game handle is refused with
+ * `CNA_RESULT_INVALID_HANDLE`.
+ *
+ * @param graphics_device The graphics device of the game that owns the result.
  * @param out_assignment Receives the owned handle; set invalid on failure.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
  */
 CNA_C_API CNA_Result cna_clustered_light_assignment_create(
-    CNA_Handle game,
+    CNA_Handle graphics_device,
     CNA_ClusteredLightAssignmentHandle* out_assignment);
 
 /**

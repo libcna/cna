@@ -10276,7 +10276,7 @@ CNA_Result cna_cascaded_shadow_map_apply_to_receiver(
 }
 
 CNA_Result cna_clustered_shadow_policy_create(
-    const CNA_Handle gameHandle,
+    const CNA_Handle graphicsDeviceHandle,
     const int32_t budget,
     CNA_ClusteredShadowPolicyHandle* const outPolicy)
 {
@@ -10289,7 +10289,7 @@ CNA_Result cna_clustered_shadow_policy_create(
         }
         *outPolicy = CNA_INVALID_HANDLE;
         std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(gameHandle, &graphicsDevice);
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -11268,7 +11268,7 @@ CNA_Result cna_clustered_light_set_is_usable(
 }
 
 CNA_Result cna_clustered_light_set_create(
-    const CNA_Handle gameHandle, CNA_ClusteredLightSetHandle* const outSet)
+    const CNA_Handle graphicsDeviceHandle, CNA_ClusteredLightSetHandle* const outSet)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outSet == nullptr) {
@@ -11279,7 +11279,7 @@ CNA_Result cna_clustered_light_set_create(
         }
         *outSet = CNA_INVALID_HANDLE;
         std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(gameHandle, &graphicsDevice);
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -11659,7 +11659,7 @@ template<typename TSource>
 } // namespace
 
 CNA_Result cna_clustered_light_grid_create(
-    const CNA_Handle gameHandle,
+    const CNA_Handle graphicsDeviceHandle,
     const int32_t tilesX,
     const int32_t tilesY,
     const int32_t sliceCount,
@@ -11685,7 +11685,7 @@ CNA_Result cna_clustered_light_grid_create(
                 "the depth axis 1 to 256 slices.");
         }
         std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(gameHandle, &graphicsDevice);
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -11900,7 +11900,7 @@ CNA_Result cna_clustered_light_grid_destroy(const CNA_ClusteredLightGridHandle g
 }
 
 CNA_Result cna_clustered_light_assignment_create(
-    const CNA_Handle gameHandle, CNA_ClusteredLightAssignmentHandle* const outAssignment)
+    const CNA_Handle graphicsDeviceHandle, CNA_ClusteredLightAssignmentHandle* const outAssignment)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         if (outAssignment == nullptr) {
@@ -11911,7 +11911,7 @@ CNA_Result cna_clustered_light_assignment_create(
         }
         *outAssignment = CNA_INVALID_HANDLE;
         std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(gameHandle, &graphicsDevice);
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
