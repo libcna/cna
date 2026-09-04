@@ -6554,12 +6554,24 @@ CNA_Result cna_model_create_skin_skeleton_handle_ext(
                 "The Model skin names no skeleton.");
         }
         const std::size_t skinIndex = static_cast<std::size_t>(index);
-        if (skinIndex >= model->skinSkeletons.size() ||
-            model->skinSkeletons[skinIndex] == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
-                "The Model skin's skeleton was not created through the C API.");
+        if (skinIndex >= model->skinSkeletons.size()) {
+            model->skinSkeletons.resize(skinIndex + 1U);
+        }
+        if (model->skinSkeletons[skinIndex] == nullptr) {
+            // A skin this ABI built has its skeleton in skinSkeletons already. One that arrived
+            // with a loaded Model -- a glTF import, say -- does not, and used to be refused with
+            // "the skeleton was not created through the C API": a refusal models.h does not
+            // document, on a skin cna_model_get_skin_ext had just reported as having data. The
+            // skeleton was reachable the whole time.
+            //
+            // Model.hpp's own guarantee is what makes publishing it safe: "Data and every mesh
+            // pointer are owned by the Model's content resources and remain valid for the Model's
+            // lifetime." So the handle aliases the Model, the way every other borrowed piece of a
+            // loaded Model does, and keeps it alive for as long as it exists. Cached, so a second
+            // read answers the same resource rather than minting a rival for one skeleton.
+            auto adopted = std::make_shared<SkinningDataResource>();
+            adopted->value = std::shared_ptr<SkinningData>(model->value, skin->Data);
+            model->skinSkeletons[skinIndex] = std::move(adopted);
         }
         return CreateSkinningDataHandle(model->skinSkeletons[skinIndex], outData);
     });
