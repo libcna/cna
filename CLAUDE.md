@@ -9,13 +9,29 @@ abstraction layer — not a game — designed to preserve XNA-style APIs
 
 ### Source Reference
 
-The authoritative behavioral and API reference is the local FNA source tree:
+The working behavioral and API reference is the local FNA source tree:
 
 ```text
 /rv/data/library/github.com/FNA-XNA/FNA
 ```
 
 Do **not** treat old CNA code or AI-generated stubs as authoritative if they conflict with the FNA reference API.
+
+#### Where FNA and XNA disagree, XNA wins
+
+Decided by the project owner on 2026-09-04. FNA is a reimplementation, not the
+specification, and it carries known divergences from XNA 4.0 -- several marked
+`// FIXME` in FNA's own source. Where a measured behaviour of Microsoft XNA (read from
+the shipped assemblies' IL) and FNA's implementation disagree, **CNA follows XNA**.
+
+FNA remains the day-to-day reference, because it agrees with XNA almost everywhere and
+is readable source rather than IL. What changed is only the tie-break: matching FNA is
+no longer a defence for a behaviour XNA does not have.
+
+A divergence taken on these grounds must be recorded where it is made -- a comment
+naming the XNA IL that settles it, and a row in
+[`plans/plan_bindings_upstream.md`](plans/plan_bindings_upstream.md), which lists the
+ones the language bindings measured.
 
 ---
 
