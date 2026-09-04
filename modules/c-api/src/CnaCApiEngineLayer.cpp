@@ -10,6 +10,7 @@
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "CNA/Graphics/EngineException.hpp"
 #include "CNA/GraphicsImageAccess.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IShadowReceiverEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PunctualLightEXT.hpp"
@@ -18185,7 +18186,7 @@ namespace {
     std::shared_ptr<Ext::CubeLut> parsed;
     try {
         parsed = std::make_shared<Ext::CubeLut>(Ext::CubeLut::parse(text));
-    } catch (const CNA::CNAException&) {
+    } catch (const CNA::Graphics::EngineException&) {
         return Fail(
             CNA_RESULT_INVALID_ARGUMENT,
             CNA_ERROR_CATEGORY_ARGUMENT,
@@ -18248,7 +18249,7 @@ CNA_Result cna_cube_lut_load_from_file(
         std::shared_ptr<Ext::CubeLut> parsed;
         try {
             parsed = std::make_shared<Ext::CubeLut>(Ext::CubeLut::loadFromFile(owned));
-        } catch (const CNA::CNAException& failure) {
+        } catch (const CNA::Graphics::EngineException& failure) {
             // "cannot open" is an IO failure the caller can act on; anything else is malformed
             // content. The canonical code throws one type for both, so they are told apart by
             // what the message says about the file rather than about the table.
