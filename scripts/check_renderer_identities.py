@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Renderer-identity registry gate (plans/MODULARIZATION_PLAN.md §2.3).
 
-CNA has exactly 40 public renderer identities. This check mechanically compares
+CNA has exactly 41 public renderer identities. This check mechanically compares
 the authoritative registries -- the public GraphicsRendererType enum, the
 CNA_GRAPHICS_RENDERER cmake selection list, and the runtime renderer registry --
 against the canonical identity table below. Any addition, removal or rename of a
@@ -66,7 +66,7 @@ COUNTED_DOCUMENTS = {
     "CHECKLIST.md": False,
 }
 
-# "40 public renderer identities", "45 families / 40 public identities", "45 implementation
+# "41 public renderer identities", "45 families / 41 public identities", "45 implementation
 # families". Deliberately anchored on the words that mean the WHOLE registry: a legitimate
 # sub-count ("the five GL identities of the easygl family") does not match, because it never
 # says "public".
@@ -131,6 +131,7 @@ IDENTITIES = [
     ("METAL", "Metal"),
     ("FNA3D", "Fna3d"),
     ("SVG_DOM", "SvgDom"),
+    ("OPENVG", "OpenVg"),
     ("PORTABLEGL", "PortableGL"),
     ("TINYGL", "TinyGL"),
     ("PIXIJS", "PixiJs"),

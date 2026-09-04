@@ -266,34 +266,3 @@ platform CNA targets.
 value `CNA_GRAPHICS_RENDERER_MAXIMUM` named. `MAXIMUM` now names `PIXIJS` (49), so that one
 C ABI constant genuinely changes value: 50 is retired, and any binding that compared
 against `MAXIMUM` sees the new ceiling. Every other identity keeps its number.
-
----
-
-## OPENVG
-
-| | |
-|---|---|
-| Identity | `OPENVG` (enum `OpenVg`, C ABI `CNA_GRAPHICS_RENDERER_OPENVG` = 45) |
-| Family | `modules/renderers/openvg` |
-| Removed | 2026-08-30, tag `removed/openvg` |
-| Size | 3,158 lines (1,573 production, 50 tests, 1,535 examples) |
-| Dependency | `https://github.com/ileben/ShivaVG.git` @ `6122ccb3c4b86f69a326f1a65b0f86bc79f69c50` |
-| Build was | `-DCNA_GRAPHICS_RENDERER=OPENVG` |
-
-**What it proved.** The most reusable finding of the four 2D renderers, because it is about
-CNA rather than about the library: **OPENVG was the only renderer with no genuine
-render-target storage at all.** ShivaVG's non-EGL context extension
-(`vgCreateContextSH`/`vgResizeSurfaceSH`) binds the pipeline to the one real window surface,
-with no pbuffer- or FBO-backed off-screen `VGImage` to use as a draw target, so
-`CreateRenderTarget2D` kept the shared `IGraphicsRenderer` default (`nullptr`) and
-`RenderTarget2D` silently fell back to CPU-shadowed `Texture2D` behaviour. It was the first
-and only renderer to need that gate.
-
-**Why removed.** 2D-only, so it can never satisfy `IGraphicsRenderer`, and it targets
-OpenVG 1.1 — a Khronos standard that has been abandoned. Of everything in the registry it
-was the clearest case of an API with no future. EasyGL renders CNA's 2D everywhere CNA runs.
-
-**What went with it.** `Texture2DCacheReconstructionTests::RenderTarget2DSupported()` is now
-unconditionally true, since no surviving renderer lacks `RenderTarget2D`. The gate is kept
-rather than deleted, with its reasoning intact, so a future renderer with the same
-limitation has somewhere to name itself.

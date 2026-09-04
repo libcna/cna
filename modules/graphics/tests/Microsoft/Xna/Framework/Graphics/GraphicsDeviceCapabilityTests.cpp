@@ -139,6 +139,7 @@ struct CapabilityExpectation
 
         // OpenVG is a 2D vector-graphics API with no 3D pipeline, no MRT, and no occlusion-query
         // concept at all -- and no programmable shader stage for a genuinely custom Effect.
+        case GraphicsRendererType::OpenVg:
             return {false, false, false};
 
         // NanoVG, same shape as OpenVG: a 2D vector-graphics API with no 3D pipeline, no MRT
@@ -234,7 +235,7 @@ constexpr bool kExpectCompiledEffects = false;
 /// this replaces did.
 [[nodiscard]] inline bool IsTwoDimensionalOnly()
 {
-    return false;
+    return CNA_RENDERER_IS(OpenVg);
 }
 
 TEST(GraphicsDeviceCapabilityTest, SupportsThreeD)
@@ -467,6 +468,15 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
     // DIRECTX2's own software RGB device and on DIRECTX8/D3D10's DXVK GPU path.)
     EXPECT_FALSE(reported)
         << "DIRECTX1 claims WireFrame support -- this renderer has no 3D pipeline at all, so a true "
+           "report cannot be backed by any rendering path";
+#elif defined(CNA_RENDERER_OPENVG)
+    // OpenVG is a 2D vector-graphics API: no polygon fill mode, no vertex/primitive route, no 3D
+    // pipeline at all. Same truthful-false shape as Skia/DIRECTX1 -- OpenVgRenderer's own 3D
+    // pure-virtuals all refuse through HandleUnsupported3DCall() before any topology could reach a
+    // draw. Like Skia/DIRECTX1/Stub it has no pixel route to measure, which is why
+    // WireFrameTriangleOracle.hpp keeps this renderer out of HasPixelOracle().
+    EXPECT_FALSE(reported)
+        << "OpenVG claims WireFrame support -- this renderer has no 3D pipeline at all, so a true "
            "report cannot be backed by any rendering path";
 #elif defined(CNA_RENDERER_STUB)
     // Stub answers false to EVERY capability, WireFrame included: it is a no-op renderer that
