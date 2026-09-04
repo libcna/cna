@@ -38,6 +38,12 @@ CNA matches FNA faithfully in each case:
 - **`SoundEffectInstance::Apply3D`** refusing more than one listener, which
   `_bindings/fixcna-analysis.md` §2 already identified as a scope decision rather than a
   bug for the same reason.
+- **`SpriteFont::MeasureString`** adding the last glyph's right side bearing unclamped.
+  `cna-ts` (finding 27) and `cna-go` (Foundation 69) measured this independently, with
+  tables, against XNA's IL, which keeps the bearing pending and adds `Math.Max(pendingZ, 0)`
+  at each line break. CNA's `curLineWidth += cKern.Y + cKern.Z` is
+  `FNA/src/Graphics/SpriteFont.cs:201`, character for character, in both of FNA's measure
+  paths.
 
 Each of these is a real observable divergence from XNA that a binding has measured and
 pinned. Fixing them means deciding that XNA's IL outranks FNA where the two disagree,
@@ -226,6 +232,36 @@ CNA contradicted its own documentation or its own siblings:
   barrier's `EngineException` arm answered `CNA_RESULT_NOT_SUPPORTED` for every failure.
   A typo in an artist's `.cube` file reached a game as "this renderer cannot do colour
   grading". Reported by `cna-ts` (finding 24) and `cna-java` (`JAVA-UPSTREAM-009`).
+- **BINDFIX-005** — `cna_post_process_chain_add_owned_pass` consumed a pass handle without
+  the `RemoveOwnedGraphicsResourceFor` its sibling destroy performs, so one transfer left
+  `cna_game_destroy` refusing for the rest of the process. Reported by `cna-ts` (finding 1)
+  and `cna-java` (`JAVA-UPSTREAM-011`).
+- **BINDFIX-006** — `~MeshResource` moved an absent `detachedValue` over a content-loaded
+  part's live borrow and `~PartResource` dereferenced the result. Destroying or tearing
+  down any content-loaded `Model` faulted. Reported by `cna-rust` (`RUST-UPSTREAM-021`),
+  `cna-java` (`JAVA-UPSTREAM-004`) and `cna-ruby`.
+- **BINDFIX-007** — `ValidateMorphShape` restated a stride list that had gone stale against
+  CNA's own canonical table, refusing both PBR layouts. Reported by `cna-rust`
+  (`RUST-UPSTREAM-024`).
+- **BINDFIX-009** — `cna_morph_target_data_ext_copy_tangent_deltas` bounded the target index
+  against an array that is empty until the setter runs. Reported by `cna-java`
+  (`JAVA-UPSTREAM-023`).
+- **BINDFIX-010** — both `SpriteBatch` `Begin` routes refused the null state descriptors they
+  document, and that FNA's own `Begin` substitutes. Reported by `cna-ruby`.
+- **BINDFIX-011** — `cna_camera_destroy` freed the provider the process-wide platform override
+  points at, without taking the pointer back out. Reported by `cna-rust`
+  (`RUST-UPSTREAM-020`), `cna-ts` (finding 11) and `cna-java` (`JAVA-UPSTREAM-019`).
+- **BINDFIX-012** — the four clustered constructors documented a game handle and resolve a
+  graphics device. Header and parameter names corrected. Reported by `cna-python`
+  (ENGINE-006), `cna-ts` (finding 10) and `cna-java` (`JAVA-UPSTREAM-005`).
+- **BINDFIX-013** — `cna_pbr_effect_apply_material` wrote the C++ effect while
+  `set_texture`/`get_texture` use the C API's retained-handle table, so a material lost every
+  texture in both directions and could not clear a slot. Both routes now go through the table.
+  Reported by `cna-python` (ENGINE-005), `cna-ts` (finding 19) and `cna-java`
+  (`JAVA-UPSTREAM-010`).
+- **BINDFIX-014** — the packed depth encoding used base 256 where an 8-bit UNORM channel
+  stores `round(c * 255) / 255`, so the four channels delivered one channel's resolution.
+  Reported by `cna-ts` (finding 13).
 
 ---
 
