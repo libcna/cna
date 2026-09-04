@@ -31,11 +31,12 @@ namespace
     /// testing fewer identities than exist -- and then it did exactly that: TINYGL, IGL and
     /// PIXIJS were added to the enum and never to this list, so the completeness test below
     /// stopped covering the three newest names without anything failing. A restated list cannot
-    /// keep that promise; a derived one can. PixiJs is the last enumerator, which is the same
+    /// keep that promise; a derived one can. NanoVg is the last enumerator, which is the same
     /// range tryParseGraphicsRendererName() itself walks, so a new identity is covered the moment
-    /// it is declared.
+    /// it is declared. It read PixiJs until 2026-09-04, which was already one identity short the
+    /// day NanoVg was declared after it -- the exact failure this derivation exists to prevent.
     constexpr std::size_t RendererIdentityCount =
-        static_cast<std::size_t>(GraphicsRendererType::PixiJs) + 1;
+        static_cast<std::size_t>(GraphicsRendererType::NanoVg) + 1;
 
     /// scripts/check_renderer_identities.py is the registry gate for the public count; this
     /// restates it deliberately, as a tripwire rather than as a second list -- adding an identity

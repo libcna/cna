@@ -84,11 +84,11 @@ exclusions are worth 78 files that a naive `grep SDL_` misreports as coupling.
 
 | Metric | Value |
 |---|---|
-| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **989** |
-| Files referencing SDL (all) | **345** |
-| Production files (`src/` + `include/`) referencing SDL | **59** |
+| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **995** |
+| Files referencing SDL (all) | **337** |
+| Production files (`src/` + `include/`) referencing SDL | **60** |
 | …of which are renderer production files | **16** |
-| Test/example files referencing SDL | **286** |
+| Test/example files referencing SDL | **277** |
 | Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **8** |
 | Renderer families reaching for `SDL_GL_*` directly | **0** |
 
@@ -97,7 +97,7 @@ Production SDL surface per module (`src/` + `include/` only):
 | Module | Files | Dominant concern |
 |---|---:|---|
 | `modules/platform` | 35 | - |
-| `modules/audio` | 8 | audio device/stream, mixer, microphone |
+| `modules/audio` | 9 | audio device/stream, mixer, microphone |
 | `modules/renderers/*` | 16 | native window handle, GL context, Vulkan surface, SDL renderer/GPU (4 families) |
 
 The native-window properties actually consumed today — these define the minimum
