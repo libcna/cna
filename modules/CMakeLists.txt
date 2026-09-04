@@ -379,7 +379,7 @@ set(_cna_framework_modules
 set(_cna_renderer_modules
     bgfx blend2d canvas  direct2d directx1 directx2 directx3 directx5 directx6
     directx7 directx8 directx9 directx10 directx11 directx12
-    easygl fna3d freedirect gdi glide headless html-dom    metal nanovg opengl1
+    easygl fna3d freedirect gdi glide headless html-dom   magnum metal nanovg opengl1
     opengl2 opengl4 opengles1 openvg pixijs portablegl sdl-gpu sdl-renderer  software 
     stub svg-dom tinygl vulkan
     webgpu  common/d3d common/mojoshader)

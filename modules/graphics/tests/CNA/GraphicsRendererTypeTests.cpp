@@ -14,7 +14,7 @@ static_assert(!getCurrentGraphicsRendererName().empty());
 constexpr GraphicsRendererType kCompileTimeType = getCurrentGraphicsRendererType();
 constexpr std::string_view kCompileTimeName = getCurrentGraphicsRendererName();
 constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::NanoVg) + 1;
-static_assert(kPublicRendererCount == 43,
+static_assert(kPublicRendererCount == 44,
               "GraphicsRendererType must expose all 50 genuine renderer identities");
 
 TEST(GraphicsRendererTypeTest, GetCurrentGraphicsRendererTypeDoesNotThrow)
@@ -59,6 +59,7 @@ namespace
             case GraphicsRendererType::Bgfx:        return "BGFX";
             case GraphicsRendererType::Vulkan:      return "VULKAN";
             case GraphicsRendererType::WebGPU:      return "WEBGPU";
+            case GraphicsRendererType::Magnum:      return "MAGNUM";
             case GraphicsRendererType::Headless:    return "HEADLESS";
             case GraphicsRendererType::Software:    return "SOFTWARE";
             case GraphicsRendererType::DirectX11:       return "DIRECTX11";

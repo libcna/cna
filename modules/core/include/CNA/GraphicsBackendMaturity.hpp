@@ -80,6 +80,7 @@ namespace CNA
 
             case GraphicsRendererType::WebGL1:
             case GraphicsRendererType::WebGL2:
+            case GraphicsRendererType::Magnum:
             case GraphicsRendererType::Headless:
             case GraphicsRendererType::Stub:
             case GraphicsRendererType::Direct2D:
