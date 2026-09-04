@@ -6126,12 +6126,21 @@ CNA_Result cna_morph_target_data_ext_copy_tangent_deltas(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (targetIndex >= data->value->TangentDeltas.size()) {
+        // The target count is the position array's length, which is what the matching setter
+        // bounds against and why: TangentDeltas is grown to cover the targets only when a tangent
+        // is first written, so bounding against it refused every target of data that has none --
+        // and said the index was out of range, which was never the reason.
+        if (targetIndex >= data->value->PositionDeltas.size()) {
             return InvalidArgument(
                 "The MorphTargetDataEXT target index is outside the valid range.");
         }
+        static const std::vector<Microsoft::Xna::Framework::Vector3> kNoTangentDeltas;
+        const std::vector<Microsoft::Xna::Framework::Vector3>& tangents =
+            targetIndex < data->value->TangentDeltas.size()
+                ? data->value->TangentDeltas[static_cast<std::size_t>(targetIndex)]
+                : kNoTangentDeltas;
         return CopyOutputValues(
-            data->value->TangentDeltas[static_cast<std::size_t>(targetIndex)],
+            tangents,
             destination, capacity, outDeltaCount, ToCVector3,
             "The MorphTargetDataEXT tangent-delta output is invalid.",
             "The destination cannot hold all morph tangent deltas.");
