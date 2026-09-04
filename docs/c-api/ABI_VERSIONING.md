@@ -2,7 +2,17 @@
 
 ## ABI identity
 
-The ABI is `0.21.0`. It adds the small public-API tail introduced by SAMPLE-060/061, from
+The ABI is `0.22.0`. It **restores ten public renderer identities** -- `LLGL`, `SOKOL`,
+`DILIGENT`, `IGL`, `WICKED`, `MAGNUM`, `BLEND2D`, `NANOVG`, `OPENVG` and `TINYGL` -- together
+with the ten `CNA_GRAPHICS_RENDERER_*` constants that name them, and it moves
+`CNA_GRAPHICS_RENDERER_MAXIMUM` back from `49` to `50`. Every restored constant carries the
+same integer it had before `0.20.0` retired it, so a binding built against `0.19.0` or earlier
+sees the values it always saw; a binding built against `0.20.0`/`0.21.0` gains ten constants and
+a higher ceiling. `SKIA` alone stays retired, which leaves its number (`19`) a permanent gap in
+the identity range -- the reason `CNA_GRAPHICS_RENDERER_MAXIMUM` still may not be read as "every
+value below this names a live backend".
+
+`0.21.0` added the small public-API tail introduced by SAMPLE-060/061, from
 `plans/plan_binding.md` `CBIND-124`: `cna_environment_get_device_type` with its two fixed device
 identities, and the count/copy pair for an object dictionary's retained logical managed type name.
 All three routes are additive. The type-name pair matters because a content-loaded model tag can

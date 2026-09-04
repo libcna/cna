@@ -40,7 +40,7 @@ namespace
     /// scripts/check_renderer_identities.py is the registry gate for the public count; this
     /// restates it deliberately, as a tripwire rather than as a second list -- adding an identity
     /// fails here until the gate, the documentation and this number are updated together.
-    static_assert(RendererIdentityCount == 39,
+    static_assert(RendererIdentityCount == 49,
                   "the number of public renderer identities changed -- update "
                   "scripts/check_renderer_identities.py, cmake/RendererRegistry.cmake and the "
                   "documented count in the same change (plans/plan_runtimerenderer.md design "

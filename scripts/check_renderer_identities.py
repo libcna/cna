@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Renderer-identity registry gate (plans/MODULARIZATION_PLAN.md §2.3).
 
-CNA has exactly 48 public renderer identities. This check mechanically compares
+CNA has exactly 49 public renderer identities. This check mechanically compares
 the authoritative registries -- the public GraphicsRendererType enum, the
 CNA_GRAPHICS_RENDERER cmake selection list, and the runtime renderer registry --
 against the canonical identity table below. Any addition, removal or rename of a

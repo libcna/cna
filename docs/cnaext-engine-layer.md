@@ -264,6 +264,7 @@ Legend: ✅ verified in this repository · 🟨 partial, or verified only by sha
 | `SdlGpu` | 🟨 measured | Engine-layer suites run against it: **0 failures**. Accepts a custom effect and does not execute its source, so every shader-based subsystem reports false and copies through. No float targets, no compute. It also answers `Instancing: yes` while `DrawInstancedPrimitives` refuses — a promise it does not keep, which is why `InstancedRendererEXT` now asks `MultiStreamVertexInput` as well. Needs `libshaderc-dev` to build. |
 | `Bgfx` | 🟨 measured | **0 engine-layer failures** on its OpenGL backend. Accepts an effect without executing its source; no float targets, no compute, no shadow sampling, no IBL. Its descriptor did not compile until 2026-08-19. No `shaderc` regeneration was needed to measure it — the passes never reach bgfx's shader pipeline — but implementing them would need it. |
 | `WebGPU` | 🟨 measured | **0 engine-layer failures** on native `wgpu-native` (Vulkan/lavapipe), after it found two engine-layer bugs — `DepthNormalPrepass` trusting the `MultipleRenderTargets` capability WebGPU promises and does not keep, and a chain test asking only `CustomEffects`. Custom WGSL `ShaderEffect`s now execute (`WEBGPU-76` ✅: `ExecutesShaderEffectSourceEXT()`→true, dialect `Wgsl`). |
+| `Magnum` | 🟨 measured | **0 engine-layer failures** on desktop GL 4.5. Accepts an effect without executing its source. One of only two renderers measured that reports `MultiStreamVertexInput`. Single-context: a second `MagnumRenderer` is now refused by name rather than aborting the process. |
 | `DirectX11` | 🟨 measured | **0 engine-layer failures**, run under Wine on a real D3D11 device at feature level `0xB100` — the first Windows renderer this layer has been measured on. No float targets, shadow sampling, IBL or compute; every gated suite skips. |
 | `DirectX12` | ⬜ not implemented |  |
 | `DirectX10` | ⬜ not implemented |  |
@@ -280,16 +281,25 @@ Legend: ✅ verified in this repository · 🟨 partial, or verified only by sha
 | `HtmlDom` | ⛔ 2D-only by identity |  |
 | `SvgDom` | ⛔ 2D-only by identity |  |
 | `PixiJs` | ⛔ 2D-only by identity | Emscripten-only, and not yet built on any real toolchain (`plans/plan_pixijs.md`). |
+| `NanoVg` | ⛔ 2D-only by identity | Native NanoVG SpriteBatch renderer; explicitly reports no `ThreeD` capability. |
+| `Blend2D` | ⛔ 2D-only, and now measured | **0 engine-layer failures**; answers no to every capability the layer asks about. |
+| `OpenVg` | ⛔ 2D-only, and now measured | **0 engine-layer failures**; the one renderer that supports *nothing at all*, which is what showed `RequireCapabilityTest` had assumed every renderer supports something. Needs `libglu1-mesa-dev`. |
 | `Gdi` | ⛔ 2D-only by identity |  |
 | `Glide` | ⛔ fixed-function by identity |  |
 | `FreeDirect` | ⬜ not verified |  |
+| `TinyGL` | ⛔ fixed-function, and now measured | **0 engine-layer failures**. No shaders, render targets, stencil or scissor; 1-bit colour-key transparency. Single-context by design, and the only one of the three that already refused a second device cleanly. |
 | `PortableGL` | ⛔ measured, and refused | **0 engine-layer failures**: rasters 3D, accepts no custom effect. `MOD-1617` decided against float targets there — a CPU rasterizer that cannot run shader source has nothing downstream to use them. |
 | `OpenGL4` | 🟨 measured | **0 engine-layer failures**. Accepts an effect without executing its source; no float targets, compute, shadow sampling or IBL. Its own renderer, not EasyGL. |
 | `OpenGL2` | 🟨 measured | **0 engine-layer failures**; identical answers to `OpenGL4`. Float targets would need `ARB_texture_float`. |
 | `OpenGL1` | ⛔ fixed-function, and now measured | **0 engine-layer failures**: rasters 3D, accepts no custom effect. Its descriptor did not compile at all until 2026-08-19, so the identity could not be selected. |
 | `OpenGLES1` | ⛔ fixed-function; not measurable here | The container's GLX offers only an ES 3.2 profile, so an ES 1.x context request fails with `BadAlloc` before any CNA code runs. |
+| `Sokol` | 🟨 measured | **0 engine-layer failures**. Accepts an effect without executing its source. Single-context: `sg_setup` asserts and aborts on a second renderer, so `Sokol::CreateGraphicsRenderer` now refuses by name. |
+| `Diligent` | 🟨 measured | **0 engine-layer failures** on the Vulkan device it selects here. The only renderer measured that answers `CustomEffects: no` outright while still rasterizing 3D, so there is no promise/behaviour gap to catch. Measured on one native API, not the two the row wants. |
+| `Llgl` | 🟨 measured | **0 engine-layer failures**, after its descriptor was made to compile at all. Refuses a `RenderTargetCube` from the constructor, which is why three tests now gate on cube render targets. A second device leaves LLGL's globals broken and the teardown terminates — recorded for `plans/plan_llgl.md`. |
+| `Igl` | 🟨 partial | Capabilities measured (accepts effects, executes no source; reports `MultiStreamVertexInput`). The suite cannot finish: IGL's own *"Dangling IContext reference left behind"* assert raises `SIGTRAP` in Debug and segfaults in Release whenever a device is destroyed — including on the copy-through path. Needs `-DENABLE_OPT=0`. |
 | `Metal` | ⛔ macOS only | Hard configure gate; no cross-compilation route from Linux. |
 | `Fna3d` | ⬜ builds, cannot run here | `FNA3D_CreateDevice` fails for every driver in this container, so nothing can be measured. |
+| `Wicked` | ⬜ not built here | Needs a hand-supplied Wicked Engine clone (`CNA_WICKED_ROOT`). |
 
 ### Using it
 
