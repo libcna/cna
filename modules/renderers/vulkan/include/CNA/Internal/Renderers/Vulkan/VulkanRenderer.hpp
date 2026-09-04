@@ -651,13 +651,33 @@ namespace CNA::Internal::Renderers::Vulkan
         void ReleaseVulkanResources();
         void DisconnectOwner() { owner_ = nullptr; }
 
+        /// Bytes currently mapped at `mappedPtr_`. Never smaller than what a legal upload or a
+        /// legal draw of this buffer touches -- see EnsureByteCapacity.
+        VkDeviceSize GetAllocatedBytesEXT() const { return allocatedBytes_; }
+
     private:
+        /// plan_vulkan.md VULKAN-130: grow the host-visible allocation to hold `needed` bytes.
+        ///
+        /// The constructor cannot size the allocation, because `CreateVertexBuffer` is handed a
+        /// vertex COUNT and the stride only arrives with the first `SetData`. It therefore
+        /// reserves a 64-byte-per-vertex guess, and this repairs it the moment a wider layout
+        /// appears -- the renderer's own pipeline-key table already recognises strides 68, 76 and
+        /// 80, so the guess is genuinely too small for layouts this renderer draws.
+        ///
+        /// Discarding the old handles needs no fence and no device wait: this VkBuffer is a
+        /// host-visible CPU-side store that no command buffer ever binds. Every draw route copies
+        /// the bytes out of `mappedPtr_` into its own deferred record (`Pending3DDraw::vbData`),
+        /// so nothing but this object can name the handle. Keep that true, or this needs the
+        /// retirement queue.
+        void EnsureByteCapacity(VkDeviceSize needed);
+
         VkBuffer                buffer_      = VK_NULL_HANDLE;
         VkDeviceMemory          memory_      = VK_NULL_HANDLE;
         void*                   mappedPtr_   = nullptr;
         int                     capacity_    = 0;
         int                     vertexCount_ = 0;
         std::size_t             stride_      = 0;
+        VkDeviceSize            allocatedBytes_ = 0;
         VulkanRenderer*  owner_       = nullptr;
         CNA::Internal::Graphics::DeclaredVertexLayout declaration_;
     };
@@ -1247,6 +1267,20 @@ namespace CNA::Internal::Renderers::Vulkan
         {
             return lastMrtPipelineColorCountEXT_;
         }
+        /**
+         * @brief CNAEXT. Total host-visible bytes this renderer has mapped for live vertex buffers.
+         *
+         * plan_vulkan.md VULKAN-130. `CreateVertexBuffer` is handed a vertex count, never a
+         * stride, so the allocation starts as a 64-byte-per-vertex guess and is widened by the
+         * first upload that needs more. The guess is not a bound and must never be treated as one:
+         * this renderer's own pipeline-key table recognises strides 68, 76 and 80. Exposed so a
+         * regression can assert the widening happened, rather than inferring it from whether the
+         * process survived writing past its own mapping.
+         *
+         * @return Sum of the mapped sizes of every live `VulkanVertexBufferRenderer`.
+         */
+        CNAEXT [[nodiscard]] VkDeviceSize GetLiveVertexBufferBytesEXT() const noexcept;
+
         /**
          * @brief Returns every warning/error emitted by the active Vulkan validation messenger.
          *

@@ -1565,7 +1565,9 @@ namespace CNA::Internal::Renderers::Vulkan
                                                          VulkanRenderer* owner)
         : capacity_(vertex_capacity), owner_(owner)
     {
-        // Pre-allocate for worst-case stride (e.g. VertexPositionColor = 16 bytes).
+        // `CreateVertexBuffer` is handed a vertex COUNT; the stride arrives with the first
+        // SetData. 64 bytes per vertex is the opening guess, not a bound -- VULKAN-130's
+        // EnsureByteCapacity widens it as soon as a real stride says it is too small.
         // A 0-vertex capacity (e.g. an empty model part) must still produce a valid,
         // non-empty VkBuffer -- vkCreateBuffer/vkAllocateMemory with size 0 is invalid
         // per the Vulkan spec.
@@ -1574,6 +1576,42 @@ namespace CNA::Internal::Renderers::Vulkan
             VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             buffer_, memory_, &mappedPtr_);
+        allocatedBytes_ = size;
+    }
+
+    void VulkanVertexBufferRenderer::EnsureByteCapacity(VkDeviceSize needed)
+    {
+        if (needed <= allocatedBytes_) return;
+        if (!owner_ || !owner_->device_)
+            throw std::runtime_error(
+                "The Vulkan renderer: cannot grow a vertex buffer whose device is gone.");
+
+        VkDevice dev = owner_->device_;
+        VkBuffer       oldBuffer = buffer_;
+        VkDeviceMemory oldMemory = memory_;
+
+        VkBuffer       grownBuffer = VK_NULL_HANDLE;
+        VkDeviceMemory grownMemory = VK_NULL_HANDLE;
+        void*          grownMapped = nullptr;
+        owner_->CreateBuffer(needed,
+            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            grownBuffer, grownMemory, &grownMapped);
+
+        // Carry the bytes already uploaded across. A grow is triggered by an upload that is about
+        // to overwrite them, but SetData is not the only reader of this mapping and a partially
+        // filled buffer must not become garbage because it grew.
+        if (mappedPtr_ && allocatedBytes_ > 0)
+            std::memcpy(grownMapped, mappedPtr_, static_cast<std::size_t>(allocatedBytes_));
+
+        buffer_         = grownBuffer;
+        memory_         = grownMemory;
+        mappedPtr_      = grownMapped;
+        allocatedBytes_ = needed;
+
+        // Safe without a fence: nothing outside this object holds the handle (see the header).
+        if (oldBuffer != VK_NULL_HANDLE) vkDestroyBuffer(dev, oldBuffer, nullptr);
+        if (oldMemory != VK_NULL_HANDLE) vkFreeMemory(dev, oldMemory, nullptr);
     }
 
     void VulkanVertexBufferRenderer::ReleaseVulkanResources()
@@ -1605,7 +1643,19 @@ namespace CNA::Internal::Renderers::Vulkan
     {
         vertexCount_ = vertex_count;
         stride_      = stride_in_bytes;
-        std::memcpy(mappedPtr_, data, vertex_count * stride_in_bytes);
+        if (vertex_count <= 0 || stride_in_bytes == 0) return;
+
+        // VULKAN-130: reserve the WHOLE logical capacity at this stride, not just the bytes this
+        // call writes. Every draw route copies out of this mapping at the caller's own
+        // vertexStart/vertexCount, which the shared layer bounds by the buffer's capacity rather
+        // than by the last upload -- so a mapping sized to one short upload would still be read
+        // past its end by a legal draw.
+        const VkDeviceSize span = static_cast<VkDeviceSize>(
+            std::max(vertex_count, capacity_)) * static_cast<VkDeviceSize>(stride_in_bytes);
+        EnsureByteCapacity(span);
+
+        std::memcpy(mappedPtr_, data,
+                    static_cast<std::size_t>(vertex_count) * stride_in_bytes);
     }
 
     // =========================================================================
@@ -10228,6 +10278,14 @@ namespace CNA::Internal::Renderers::Vulkan
         auto vb = std::make_unique<VulkanVertexBufferRenderer>(cap, this);
         liveVertexBuffers_.push_back(vb.get());
         return vb;
+    }
+
+    VkDeviceSize VulkanRenderer::GetLiveVertexBufferBytesEXT() const noexcept
+    {
+        VkDeviceSize total = 0;
+        for (const auto* vb : liveVertexBuffers_)
+            total += vb->GetAllocatedBytesEXT();
+        return total;
     }
 
     std::unique_ptr<IIndexBufferRenderer> VulkanRenderer::CreateIndexBuffer16(int cap)

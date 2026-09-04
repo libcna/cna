@@ -1058,6 +1058,17 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_VertexBufferIndexBufferGetData COMMAND cna_test_vulkan_vertexbuffer_indexbuffer_getdata
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plans/plan_vulkan.md VULKAN-130 (F-01): the host-visible mapping a VertexBuffer uploads
+        # into is opened at 64 bytes per vertex, because CreateVertexBuffer is handed a count and
+        # not a stride -- while this renderer's own pipeline-key table recognises strides 68, 76
+        # and 80. Proves the allocation widens (its own EXT byte counter), that every uploaded byte
+        # survives, and that a draw from the far end of a wide buffer reads the right bytes.
+        cna_vulkan_test(cna_test_vulkan_vertexbuffer_wide_stride_bounds
+                        vulkan_vertexbuffer_wide_stride_bounds_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_VertexBuffer_WideStrideBounds
+            COMMAND cna_test_vulkan_vertexbuffer_wide_stride_bounds
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 855 (Phase 73 Vulkan gap closure): Texture2D SetData/GetData partial-rectangle +
         # startIndex/elementCount + mip-level on Vulkan -- verbatim reuse of the shared EasyGL
         # sources (Tasks 169-171); both operate entirely on a renderer-agnostic CPU-side shadow
