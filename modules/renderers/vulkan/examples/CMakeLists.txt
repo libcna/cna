@@ -1058,6 +1058,16 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_VertexBufferIndexBufferGetData COMMAND cna_test_vulkan_vertexbuffer_indexbuffer_getdata
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plans/plan_vulkan.md VULKAN-370 (F-14): a Vulkan occlusion query only counts exactly
+        # when occlusionQueryPrecise is enabled AND vkCmdBeginQuery is given
+        # VK_QUERY_CONTROL_PRECISE_BIT. This renderer did neither while inheriting the shared
+        # "precise" default. Asserts an exactly-known visible-fragment count, not "> 0".
+        cna_vulkan_test(cna_test_vulkan_occlusionquery_precision
+                        vulkan_occlusionquery_precision_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_OcclusionQuery_Precision
+            COMMAND cna_test_vulkan_occlusionquery_precision
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plans/plan_vulkan.md VULKAN-250 (F-07/F-08): GetShaderDialectEXT() was unoverridden, so
         # the one query that exists to stop an application guessing the dialect answered Unknown on
         # a renderer whose ShaderEffect accepts nothing but SPIR-V words. Asserts the declaration,

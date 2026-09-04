@@ -1870,7 +1870,9 @@ namespace CNA::Internal::Renderers::Vulkan
                 return true;
             case CNA::GraphicsCapability::OcclusionQuery:
                 // VK_QUERY_TYPE_OCCLUSION is core Vulkan 1.0 with no feature bit guarding its
-                // existence; VULKAN-370 owns the separate question of whether the count is exact.
+                // existence. Whether the COUNT is exact is a different question with a different
+                // feature behind it, answered by IOcclusionQueryRenderer::PixelCountIsPreciseEXT()
+                // (VULKAN-370) -- a device may support the query and still not count.
                 return true;
             case CNA::GraphicsCapability::CustomEffects:
                 // CreateEffect() builds a pipeline from a caller-supplied SPIR-V pair. What that
@@ -2548,6 +2550,14 @@ namespace CNA::Internal::Renderers::Vulkan
         if (supported.independentBlend) {
             feat.independentBlend = VK_TRUE;
             independentBlendSupported_ = true;
+        }
+        // VULKAN-370: without this feature AND VK_QUERY_CONTROL_PRECISE_BIT at vkCmdBeginQuery, an
+        // occlusion query is only required to answer "some samples passed", not how many. XNA's
+        // OcclusionQuery.PixelCount is a real tally, so ask for the real thing where the device
+        // offers it and report the truth through PixelCountIsPreciseEXT() where it does not.
+        if (supported.occlusionQueryPrecise) {
+            feat.occlusionQueryPrecise = VK_TRUE;
+            occlusionQueryPreciseSupported_ = true;
         }
         VkDeviceCreateInfo ci{};
         ci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -9222,7 +9232,13 @@ namespace CNA::Internal::Renderers::Vulkan
                     openQuery = nullptr;
                     if (draw.occlusionQuery && draw.occlusionQuery->pool_ != VK_NULL_HANDLE
                         && !draw.occlusionQuery->recordedThisFrame_) {
-                        vkCmdBeginQuery(cb, draw.occlusionQuery->pool_, 0, 0);
+                        // VULKAN-370: PRECISE only where the feature was enabled -- passing the
+                        // bit without it is a usage error, and the query would answer "any"
+                        // rather than a count either way.
+                        vkCmdBeginQuery(cb, draw.occlusionQuery->pool_, 0,
+                                        occlusionQueryPreciseSupported_
+                                            ? VK_QUERY_CONTROL_PRECISE_BIT
+                                            : 0);
                         openQuery = draw.occlusionQuery;
                     }
                 }
@@ -10553,6 +10569,11 @@ namespace CNA::Internal::Renderers::Vulkan
         auto vb = std::make_unique<VulkanVertexBufferRenderer>(cap, this);
         liveVertexBuffers_.push_back(vb.get());
         return vb;
+    }
+
+    bool VulkanOcclusionQueryRenderer::PixelCountIsPreciseEXT() const noexcept
+    {
+        return owner_ != nullptr && owner_->occlusionQueryPreciseSupported_;
     }
 
     VkDeviceSize VulkanRenderer::GetLiveVertexBufferBytesEXT() const noexcept

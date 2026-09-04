@@ -819,6 +819,20 @@ namespace CNA::Internal::Renderers::Vulkan
         [[nodiscard]] bool IsComplete() const override;
         [[nodiscard]] int  PixelCount() const override;
 
+        /**
+         * @brief Whether `PixelCount()` is a real tally rather than "any samples passed".
+         *
+         * plan_vulkan.md VULKAN-370. A Vulkan occlusion query is only required to produce an exact
+         * count when the device's `occlusionQueryPrecise` feature is enabled **and** the query is
+         * begun with `VK_QUERY_CONTROL_PRECISE_BIT`; without both, an implementation may return any
+         * non-zero value once a single sample passes. Inheriting the shared `true` default was
+         * therefore a claim this renderer had not earned, and the lensflare idiom -- `PixelCount()`
+         * divided by an area -- is exactly what it would have broken.
+         *
+         * @return True when this device enabled precise occlusion queries.
+         */
+        [[nodiscard]] bool PixelCountIsPreciseEXT() const noexcept override;
+
     private:
         VulkanRenderer*  owner_      = nullptr;
         VkQueryPool             pool_       = VK_NULL_HANDLE;
@@ -1790,6 +1804,10 @@ namespace CNA::Internal::Renderers::Vulkan
         bool anisotropySupported_ = false;
         float maxSamplerAnisotropy_ = 1.f;
         bool independentBlendSupported_ = false;
+        /// plan_vulkan.md VULKAN-370: whether `occlusionQueryPrecise` was enabled on this device.
+        /// Decides both the `VK_QUERY_CONTROL_PRECISE_BIT` this renderer passes to
+        /// `vkCmdBeginQuery` and the answer `PixelCountIsPreciseEXT()` gives.
+        bool occlusionQueryPreciseSupported_ = false;
         /// plan_vulkan.md VULKAN-020: the SELECTED physical device's limits, cached where the
         /// selection is made. `SupportsCapability` answers `MultipleRenderTargets` and (VULKAN-021)
         /// `MultiSampleAntiAliasing` from these rather than from a constant.
