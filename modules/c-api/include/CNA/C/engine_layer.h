@@ -9639,7 +9639,11 @@ CNA_C_API CNA_Result cna_skybox_draw(
  * @brief Returns the attached environment.
  *
  * The handle **borrows**: it keeps the skybox alive while it exists, and releasing it releases only
- * the handle, never the cube map.
+ * the handle, never the cube map. It is nonetheless a fresh handle, minted per call and counted
+ * against the game that owns the skybox, so **release it with @ref cna_texturecube_destroy when
+ * you are done with it**: a read whose handle is never released leaves @ref cna_game_destroy
+ * answering `CNA_RESULT_INVALID_STATE` for the rest of the process, and reading in a frame loop
+ * leaks one per frame.
  *
  * @param skybox The skybox.
  * @param out_environment Receives the cube map, or `CNA_INVALID_HANDLE` when none is attached.
@@ -9943,7 +9947,11 @@ CNA_C_API CNA_Result cna_atmospheric_sky_radiance(
 /**
  * @brief Returns the skybox the pipeline draws, if any.
  *
- * The handle **borrows**: it keeps the pipeline alive while it exists and releases only itself.
+ * The handle is the one @ref cna_render_pipeline_set_skybox was given, echoed back. It is the
+ * caller's own handle and this call takes no reference on it: **do not destroy it on account of
+ * this read**, or the skybox the caller still owns goes with it, and the pipeline is left drawing
+ * one that is gone. Unlike @ref cna_skybox_get_environment, which mints a handle of its own, there
+ * is nothing here to release.
  *
  * @param pipeline The pipeline.
  * @param out_skybox Receives the skybox, or `CNA_INVALID_HANDLE` when none is set.
