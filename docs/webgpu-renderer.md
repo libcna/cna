@@ -724,43 +724,57 @@ each WGSL family computes `fogFactor = 1 - saturate(dot(vec4(pos,1), fogVector))
 the fragment stage. Tests: `WebGPU_BasicEffect_Fog`/`AlphaTestEffect_Fog`/`DualTextureEffect_Fog`/
 `SkinnedEffect_Fog` (each uses `FogStart==FogEnd`→`FogColor` as the drop-the-fog discriminator).
 
-`FillMode::WireFrame` is deliberately **not** on the open list: it is not "unimplemented" but
-**reported unsupported and refused** (`WEBGPU-115`) -- the same shape as the MRT (`WEBGPU-134`)
-capability answer above.
+`FillMode::WireFrame` is not on the open list either: as of `WEBGPU-153` it is **implemented and
+reported true**, by triangle-edge expansion rather than by a polygon mode -- see its own section
+below.
 
 `GetBackBufferData()` and a first real 3D draw path (`DrawColoredPrimitives`/
 `DrawIndexedColoredPrimitives`, with genuine depth testing) are implemented — see below. Interface
 methods still not overridden by this renderer retain the common renderer's existing unsupported/
 default behavior (mostly silent no-ops, by `IGraphicsRenderer`'s own design for state setters).
 
-### `FillMode::WireFrame` is reported as unsupported and refused (`WEBGPU-115`)
+### `FillMode::WireFrame`, by triangle-edge expansion (`WEBGPU-153`)
 
-wgpu-native has **no polygon-mode API at all**: `WGPUPrimitiveState` carries topology, strip index
-format, front face and cull mode, and nothing that selects how a polygon's interior is filled. There
-is therefore no native state a wireframe request could reach.
+A wireframe does not need a polygon mode. The reference renderer (EasyGL) has never used one:
+`EasyGLRenderer::DrawWireframe` re-expands a triangle index sequence into a 32-bit `GL_LINES` index
+buffer and draws that. `WEBGPU-153` gives WebGPU the same mechanism.
 
-**What the renderer does now.**
+**How.** At **queue** time, a draw whose captured `FillMode` is `WireFrame` and whose primitive is
+`TriangleList` or `TriangleStrip` has its command rewritten in place: each triangle's three edges
+become three two-index lines in a 32-bit index buffer, and the topology becomes
+`WGPUPrimitiveTopology_LineList`. Nothing downstream has a wireframe branch at all -- what the
+replay receives is an ordinary 32-bit indexed line-list command, which every `Issue*Draw` family
+already knows how to draw, and the topology is already part of every pipeline cache key.
 
 | Step | Behaviour |
 |---|---|
-| `GraphicsDevice::SupportsCapability(GraphicsCapability::WireFrame)` | **`false`** — asserted by `WebGPURenderer`, not inherited from `IGraphicsRenderer`'s permissive default |
-| Selecting a `RasterizerState` whose `FillMode` is `WireFrame` | **Succeeds.** Setting state is a state operation; a state setter cannot know whether a draw will follow, or which route it would take |
-| The first **polygon** draw that would consume it | Throws `System::NotSupportedException` before any command is queued, any pipeline key is computed, any `WGPURenderPipeline` is created, any render pass is encoded and anything is submitted |
-| The refused draw's target | **Unchanged.** Nothing is written, nothing is created, nothing is retained |
-| The next `FillMode::Solid` draw | Renders exactly, on the same device, with no recreation and no extra frame |
-| A `LineList`, `LineStrip` or `PointListEXT` draw under `WireFrame` | **Accepted.** A fill mode selects how a *polygon's interior* is rasterized; a line or point has no interior, so `Solid` and `WireFrame` are the same request and this renderer substitutes nothing. Measured byte-identical under both modes |
+| `GraphicsDevice::SupportsCapability(GraphicsCapability::WireFrame)` | **`true`**, backed by pixels: the shared `WireFrameTriangleOracle` measures interior `0/1089` with all three edges present, against Solid's `1089/1089` |
+| A wireframe polygon draw | **Accepted.** Exactly one queued command, one native draw, one extra pipeline (the line-list variant is a sibling of the solid one, not a new key per draw), no extra pass, retry or frame |
+| `RasterizerState.DepthBias` on that draw | **Dropped for it.** WebGPU forbids a depth bias on a line topology, and a depth bias is defined as an offset along a *polygon's* depth slope -- a line has none |
+| An interior edge shared by two triangles | Drawn **twice**. Shared vertices stay shared, matching the reference renderer exactly |
+| A `LineList`, `LineStrip` or `PointListEXT` draw under `WireFrame` | **Untouched.** A fill mode selects how a *polygon's interior* is rasterized; a line or point has no interior, so `Solid` and `WireFrame` are the same request. Measured byte-identical under both modes |
 
-The refusal covers every public 3D draw route -- ordinary non-indexed and indexed (16- and 32-bit,
-with nonzero `vertexStart` / `startIndex` / `baseVertex`), both `DrawUserPrimitives` /
-`DrawUserIndexedPrimitives` families, every stock-effect family, and the instanced route.
+**Coverage.** Every public 3D draw route performs the expansion -- ordinary non-indexed and indexed
+(16- and 32-bit, with nonzero `vertexStart` / `startIndex` / `baseVertex`), both
+`DrawUserPrimitives` / `DrawUserIndexedPrimitives` families, every stock-effect family, the custom
+WGSL `ShaderEffect` route and the instanced route. `WebGpuWireFrameContract.EveryPublicDrawRouteWireframesAndAcceptsSolid`
+asserts it per route, because "some routes wireframe and the rest quietly fill" is exactly the defect
+worth catching and a whole-suite total would hide it.
 
-**Why this is a refusal rather than a documented deviation.** Until `WEBGPU-115` the renderer
-reported `WireFrame` as **supported**, accepted the request without a throw, warning or log, folded
-the `wireframe` bit into `Make3DPipelineKey` so a distinct `WGPURenderPipeline` was built and
-natively submitted, and returned a frame **byte-identical to the `Solid` one**. A prose note in this
-document is not reachable through the public API and was directly contradicted by the capability
-query, so callers had no way to find out. A renderer must not report a capability as supported while
-silently substituting a different rendering mode.
+**Why not `polygonMode`.** The pinned wgpu-native *does* expose one:
+`WGPUPrimitiveStateExtras::polygonMode` with `WGPUPolygonMode_Line`, behind
+`WGPUNativeFeature_PolygonModeLine` (listed for DX12/Vulkan/Metal). It is deliberately unused,
+because it is **native-only** and browser WebGPU has no polygon mode at all; index expansion is the
+one route that works on both targets, so this renderer has one implementation rather than two.
+
+**The history, because this renderer has given three different answers.** Before `WEBGPU-115` it
+reported `WireFrame` **supported**, accepted the request, built and natively submitted a distinct
+pipeline for it, and returned a frame byte-identical to the `Solid` one -- an affirmative false claim
+through the public capability query. `WEBGPU-115` replaced that with a deterministic refusal, on the
+stated grounds that "wgpu-native exposes no polygon mode, so a wireframe request cannot reach any
+native pipeline state". `WEBGPU-153` disproved the premise rather than the refusal: a wireframe never
+needed a polygon mode, and the sentence was wrong about the API as well. All three states are
+recorded in `WebGpuWireFrameContractTests.cpp`, which measures the current one.
 
 ### Custom WGSL `ShaderEffect` (`WEBGPU-76`)
 
@@ -824,9 +838,8 @@ draw (`WEBGPU-143`): slot *i*'s `@location(i)` output is masked by that attachme
 all targets, so there is no per-slot independent blend to model; the set shares slot 0's blend
 factors. MSAA + MRT resolves each attachment independently.
 
-**Implementing real wireframe** would mean index-expanding triangles into line topology, since
-wgpu-native offers no polygon mode. That is a genuine implementation task, tracked separately; it is
-not what `WEBGPU-115` did.
+**Wireframe** was implemented exactly that way by `WEBGPU-153` -- index expansion into a line
+topology -- and is no longer a deviation; see its section above.
 
 ## Architecture notes
 

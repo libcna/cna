@@ -25,6 +25,8 @@ set(CNA_PARITY_FIXTURES
     unlit_position_color
     # WEBGPU-159: DualTextureEffect consuming TEXCOORD0 and TEXCOORD1 independently.
     dual_texture_uv1
+    # WEBGPU-153: FillMode::WireFrame draws edges and leaves the interior empty.
+    fill_mode_wireframe
 )
 
 # Builds and registers every fixture for one renderer.

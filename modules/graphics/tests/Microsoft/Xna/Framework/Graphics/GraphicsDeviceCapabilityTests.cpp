@@ -459,11 +459,15 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
         << "the EasyGL-family renderers under-report WireFrame again -- REMED-GFX-219's corrected "
            "report is gone while the GL_LINES emulation still renders a measured-correct wireframe";
 #elif defined(CNA_RENDERER_WEBGPU)
-    // WEBGPU-115: asserted, not inherited. wgpu-native has no polygon mode at all, so
-    // WebGPURenderer::SupportsCapability answers false and the draw-time guard refuses.
-    EXPECT_FALSE(reported)
-        << "WebGPU claims WireFrame support again -- WEBGPU-115's capability override is gone, and "
-           "the renderer has no polygon mode to back the claim with";
+    // plans/plan_webgpu.md WEBGPU-153: true, for exactly the reason the EasyGL arm above is true and
+    // by the same mechanism. WEBGPU-115 asserted false here on the grounds that "wgpu-native has no
+    // polygon mode at all" -- true of the API and irrelevant to the question, since a wireframe is
+    // produced by expanding triangle edges into a line list and needs no polygon mode on any
+    // target. WebGPU now does that on every 3D route, and the pixel oracle below measures it:
+    // interior 0/1089 with all three edges present, against Solid's 1089/1089.
+    EXPECT_TRUE(reported)
+        << "WebGPU under-reports WireFrame again -- WEBGPU-153's edge-expansion implementation is "
+           "still in place while the capability claims the renderer cannot do it";
 #elif defined(CNA_RENDERER_DIRECTX1)
     // DIRECTX1 is 2D-only by design -- DirectX 1 has no Direct3D at all, so there is no polygon fill
     // mode to report on and DirectX1Renderer::SupportsCapability answers false for every

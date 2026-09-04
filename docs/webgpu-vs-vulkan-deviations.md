@@ -18,15 +18,36 @@ via `wgpuQueueWriteBuffer` and binds it as a UBO (`FillExtUniforms()` and the
 uniform buffer is correct and GPU-verified; a per-frame ring-buffer variant is a
 deferred performance optimisation only (`WEBGPU-12`).
 
-## Wireframe: refused, not emulated
+## Wireframe: emulated by edge expansion, not by a polygon mode
 
-Vulkan honours `FillMode::WireFrame` through `VK_POLYGON_MODE_LINE`. **WebGPU has
-no line polygon mode** — a render pipeline rasterizes filled triangles only.
-Rather than silently draw filled geometry when wireframe was asked for, the
-WebGPU renderer *refuses*: `SupportsCapability(GraphicsCapability::WireFrame)`
-returns `false` and a wireframe draw throws (`WEBGPU-115`, enforced by
-`WebGpuWireFrameContractTests`). Real wireframe would require CPU-side
-index-expansion of triangles into line topology; it is intentionally not done.
+Vulkan honours `FillMode::WireFrame` through `VK_POLYGON_MODE_LINE`. WebGPU's
+core `GPUPrimitiveState` has no equivalent — but a wireframe never needed one.
+Since `WEBGPU-153` the WebGPU renderer produces one the way the reference
+renderer (EasyGL) always has: at queue time each triangle's three edges become
+three two-index lines in a 32-bit index buffer, and the draw is submitted as a
+line list. `SupportsCapability(GraphicsCapability::WireFrame)` reports **true**,
+and the shared `WireFrameTriangleOracle` measures it — interior `0/1089` with all
+three edges present, against Solid's `1089/1089`.
+
+This section previously said the opposite ("refused, not emulated … Real
+wireframe would require CPU-side index-expansion of triangles into line topology;
+it is intentionally not done"), and its premise was wrong twice over. The
+expansion is not a fallback for a missing feature, it is how a wireframe is drawn
+without one; and the pinned wgpu-native *does* carry a polygon mode —
+`WGPUPrimitiveStateExtras::polygonMode` with `WGPUPolygonMode_Line`, behind
+`WGPUNativeFeature_PolygonModeLine`. CNA deliberately does not use it: it is
+native-only, and the expansion is the one route that also works in the browser,
+where WebGPU genuinely has no polygon mode.
+
+Two consequences worth knowing. A wireframe pipeline is a **line topology**, so
+WebGPU forbids a depth bias on it and the renderer drops `RasterizerState.DepthBias`
+for that draw — a depth bias is an offset along a polygon's depth slope, which a
+line does not have. And shared vertices stay shared, so an interior edge between
+two triangles is drawn twice; that matches the reference renderer exactly.
+
+Line and point topologies are left completely alone: they have no interior for a
+fill mode to select, so `Solid` and `WireFrame` produce byte-identical frames
+(`WebGpuWireFrameContract.OnlyPolygonTopologiesAreExpanded`).
 
 ## Async completion → synchronous pumping
 
@@ -76,9 +97,10 @@ writes attachment 0 only (`WebGPU_MRT`). **Occlusion queries** (`WEBGPU-84`, don
 sample counts (`WebGPU_OcclusionQuery`). (The `WEBGPU-134`/`135` "report `false`
 and refuse" arms this section originally described were the honest interim state
 before the features shipped; both were removed and their contract tests flipped to
-assert `true`.) The one capability still deliberately refused is
-`FillMode::WireFrame` (`WEBGPU-115`) — wgpu-native has no polygon-mode API, so the
-capability reports `false` and a polygon draw that would consume it throws.
+assert `true`.) `FillMode::WireFrame` joined them in `WEBGPU-153`: the capability
+reports `true` and the draw renders a measured wireframe, by edge expansion rather
+than by a polygon mode — see the section above. The one capability this renderer
+still reports `false` for is `MultiStreamVertexInput` (`WEBGPU-172`).
 
 Stock-effect **fog** is also at parity now (`WEBGPU-145`–`148`): unlike Vulkan,
 which layers a dedicated fog UBO on top of its push-constant range, WebGPU widens

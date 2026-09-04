@@ -77,6 +77,15 @@ A difference that needs more than `kShadingTolerance` is a **finding**, not a to
 belongs in `plans/plan_webgpu.md` (or the reference renderer's own plan), not in the fourth argument
 of an assertion.
 
+**When the whole-frame dump does not apply.** A fixture whose picture is *entirely* boundary — a
+wireframe is one-pixel lines and nothing else — cannot be judged by `cna_diag_compare`, because the
+only pixels it has are the ones two conforming rasterizers may legitimately disagree about.
+`fill_mode_wireframe` is the current example: EasyGL and WebGPU differ on 367 of 32768 pixels
+(1.12%, measured 2026-09-05), all of them on an edge and none anywhere else. The right answer is
+**not** a tolerance wide enough to swallow that; it is to say so in the fixture and let its
+assertions — interior coverage and per-edge counts, which agree exactly — be the comparison. A
+fixture that opts out of the dump comparison must say why in its header, as that one does.
+
 ## Making a fixture prove something
 
 Two renderers that both draw nothing agree perfectly. Every fixture therefore has to show that the
@@ -101,6 +110,7 @@ exactly 1 or 0, a point-sampled texel).
 | `lit_vertex_color` | `WEBGPU-157` | The stock `ModelProcessor`'s stride-36 `Position+Normal+Color+TextureCoordinate` vertex renders lit, with `VertexColorEnabled` gating the tint. |
 | `unlit_position_color` | `WEBGPU-158` | A stride-32 declaration with no `Normal` renders unlit and keeps its colour, while a real `VertexPositionNormalTexture` at the same stride still lights. |
 | `dual_texture_uv1` | `WEBGPU-159` | `DualTextureEffect` samples its two textures with `TEXCOORD0` and `TEXCOORD1` independently, and an absent `TEXCOORD1` reads `(0,0)`. |
+| `fill_mode_wireframe` | `WEBGPU-153` | `FillMode::WireFrame` draws all three triangle edges and leaves the interior empty, while `FillMode::Solid` fills it. |
 
 ## Adding a renderer
 

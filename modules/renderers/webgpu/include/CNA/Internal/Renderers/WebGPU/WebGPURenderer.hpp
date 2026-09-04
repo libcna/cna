@@ -3402,6 +3402,10 @@ namespace CNA::Internal::Renderers::WebGPU
             /// effect that writes N outputs honours each attachment's own BlendState mask.
             std::array<int, 4> colorWriteChannels{15, 15, 15, 15};
             int cullMode = 0;
+            /// WEBGPU-153: this draw's own FillMode, captured like every other pipeline
+            /// input. A custom WGSL effect draws triangles like any other route, so a
+            /// wireframe request must reach it too rather than silently filling.
+            bool wireframe = false;
             float depthBias = 0.0f;
             float slopeScaleDepthBias = 0.0f;
             WebGPUViewportSnapshot viewport{};

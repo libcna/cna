@@ -168,6 +168,105 @@ namespace CNA::Internal::Renderers::WebGPU
             return index32 ? WGPUIndexFormat_Uint32 : WGPUIndexFormat_Uint16;
         }
 
+        /// plans/plan_webgpu.md WEBGPU-153: whether a topology has a polygon interior at all.
+        ///
+        /// WebGPU forbids a non-zero depth bias on a line or point topology, so a pipeline built for
+        /// the wireframe expansion below has to drop the caller's `RasterizerState.DepthBias` --
+        /// which is not a substitution, because a depth bias is defined as an offset applied to a
+        /// polygon's depth slope and a line has no slope to offset.
+        [[nodiscard]] constexpr bool TopologyHasPolygonInterior(WGPUPrimitiveTopology topology) noexcept
+        {
+            return topology == WGPUPrimitiveTopology_TriangleList ||
+                   topology == WGPUPrimitiveTopology_TriangleStrip;
+        }
+
+        /// plans/plan_webgpu.md WEBGPU-153: rewrites one queued triangle draw into a line-list draw
+        /// over the same vertices -- `FillMode::WireFrame`, produced without any polygon-mode state.
+        ///
+        /// This is the reference renderer's own mechanism (`EasyGLRenderer::DrawWireframe`,
+        /// REMED-GFX-219): each triangle's three edges become three two-index lines in a 32-bit
+        /// index buffer, and the draw is submitted as a line list. It is chosen over
+        /// `WGPUPrimitiveStateExtras::polygonMode` -- which the pinned wgpu-native does expose,
+        /// behind the native-only `WGPUNativeFeature_PolygonModeLine` -- because index expansion is
+        /// the one route that works natively AND in the browser, where WebGPU has no polygon mode.
+        ///
+        /// It runs at QUEUE time, so the replay needs no wireframe branch anywhere: what the
+        /// Issue*Draw path receives is an ordinary 32-bit indexed line-list command, which every
+        /// family already knows how to draw. Shared vertices stay shared, so an interior edge is
+        /// drawn twice and the result matches the reference renderer's exactly.
+        ///
+        /// @param command The queued draw, rewritten in place.
+        /// @param primitive The public primitive type of the draw.
+        /// @param primitiveCount How many primitives the caller asked for.
+        /// @param ib The index buffer, or null for a non-indexed draw.
+        /// @param startIndex The first index of the draw within @p ib.
+        template <typename TCommand>
+        void ExpandTriangleEdgesForWireframeEXT(TCommand& command,
+                                                PrimitiveType primitive,
+                                                int primitiveCount,
+                                                const WebGPUIndexBufferRenderer* ib,
+                                                int startIndex)
+        {
+            // A line or point list has no interior, so Solid and WireFrame are the same request for
+            // it and there is nothing to expand -- the same boundary the refusal this replaces drew.
+            if (primitive != PrimitiveType::TriangleList &&
+                primitive != PrimitiveType::TriangleStrip)
+                return;
+            if (primitiveCount <= 0) return;
+
+            // The source index at sequence position `pos`. A non-indexed draw's vertices were copied
+            // into the command starting at the caller's vertexStart, so its sequence is simply
+            // 0..n-1; an indexed draw reads the buffer's own indices and leaves baseVertex to the GPU
+            // exactly as the unexpanded draw did.
+            const std::vector<std::uint8_t>* indexBytes =
+                ib != nullptr ? &ib->ShadowData() : nullptr;
+            const bool source32 = ib != nullptr && ib->IsThirtyTwoBit();
+            const std::size_t stride = source32 ? 4u : 2u;
+            const auto readSource = [&](int pos) -> std::uint32_t {
+                if (indexBytes == nullptr) return static_cast<std::uint32_t>(pos);
+                const std::size_t offset =
+                    static_cast<std::size_t>(startIndex + pos) * stride;
+                if (offset + stride > indexBytes->size()) return 0u;
+                if (source32)
+                {
+                    std::uint32_t value = 0;
+                    std::memcpy(&value, indexBytes->data() + offset, 4);
+                    return value;
+                }
+                std::uint16_t value = 0;
+                std::memcpy(&value, indexBytes->data() + offset, 2);
+                return static_cast<std::uint32_t>(value);
+            };
+
+            std::vector<std::uint32_t> edges;
+            edges.reserve(static_cast<std::size_t>(primitiveCount) * 6u);
+            const auto edge = [&edges](std::uint32_t a, std::uint32_t b) {
+                edges.push_back(a);
+                edges.push_back(b);
+            };
+            for (int triangle = 0; triangle < primitiveCount; ++triangle)
+            {
+                // A strip's triangle `t` is vertices t, t+1, t+2; a list's is 3t, 3t+1, 3t+2 --
+                // the same three consecutive positions, at a different starting stride.
+                const int base = primitive == PrimitiveType::TriangleList ? triangle * 3 : triangle;
+                const std::uint32_t a = readSource(base);
+                const std::uint32_t b = readSource(base + 1);
+                const std::uint32_t c = readSource(base + 2);
+                edge(a, b);
+                edge(b, c);
+                edge(c, a);
+            }
+
+            command.indexData.resize(edges.size() * sizeof(std::uint32_t));
+            if (!edges.empty())
+                std::memcpy(command.indexData.data(), edges.data(), command.indexData.size());
+            command.indexed = true;
+            command.index32 = true;
+            command.indexCount = static_cast<std::uint32_t>(edges.size());
+            command.firstIndex = 0;
+            command.topology = WGPUPrimitiveTopology_LineList;
+        }
+
         template<typename TCommand>
         [[nodiscard]] WGPUIndexFormat RequiredStripIndexFormat(const TCommand& command)
         {
@@ -3767,8 +3866,13 @@ namespace CNA::Internal::Renderers::WebGPU
         depthStencil.depthCompare = d.depthTest ? ToWGPUCompareFunction(d.depthFunc) : WGPUCompareFunction_Always;
         // WEBGPU-41/79: DepthBias/SlopeScaleDepthBias baked in (wgpu-native has no per-draw override).
         // Scale matches FNA's XNAToGL_DepthBiasScale for a 24-bit depth format ((1<<24)-1).
-        depthStencil.depthBias = static_cast<std::int32_t>(d.depthBias * 16777215.0f);
-        depthStencil.depthBiasSlopeScale = d.slopeScaleDepthBias;
+        // WEBGPU-153: WebGPU forbids a non-zero depth bias on a line or point topology, and a depth
+        // bias is defined as an offset along a POLYGON's depth slope, which a line does not have. So
+        // the wireframe expansion's line-list pipeline drops it rather than failing to be created.
+        const bool biasApplies = TopologyHasPolygonInterior(d.topology);
+        depthStencil.depthBias = biasApplies
+            ? static_cast<std::int32_t>(d.depthBias * 16777215.0f) : 0;
+        depthStencil.depthBiasSlopeScale = biasApplies ? d.slopeScaleDepthBias : 0.0f;
         if (replayDepthHasStencil_) FillWGPUStencilState(depthStencil, d.stencil);  // WEBGPU-39/83
         pipeline.depthStencil = (replayDepthFormat_ != WGPUTextureFormat_Undefined) ? &depthStencil : nullptr;  // WEBGPU-39
 
@@ -4693,6 +4797,12 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             command.vertexCount = static_cast<std::uint32_t>(PrimitiveVertexCount(primitive, primitiveCount));
         }
+
+        // WEBGPU-153: FillMode::WireFrame becomes a line-list draw over this command's own
+        // vertices, rewritten here at queue time so the replay needs no wireframe branch.
+        if (command.wireframe)
+            ExpandTriangleEdgesForWireframeEXT(command, primitive, primitiveCount,
+                                               static_cast<const WebGPUIndexBufferRenderer*>(ib), params.startIndex);
 
         envMapDrawCommands_.push_back(std::move(command));
         // REMED-GFX-159: the public position of this draw, the only thing replay orders by.
@@ -6557,6 +6667,9 @@ namespace CNA::Internal::Renderers::WebGPU
         command.blendParams = blendParams_;
         command.colorWriteChannels = colorWriteChannels_;  // WEBGPU-143: per-slot MRT write masks
         command.cullMode = cullMode_;
+        // WEBGPU-153: captured per draw for the same reason the rest of the pipeline state
+        // is -- a later ApplyRasterizerState must not retroactively wireframe a queued draw.
+        command.wireframe = fillModeWireframe_;
         command.depthBias = depthBias_;
         command.slopeScaleDepthBias = slopeScaleDepthBias_;
         command.viewport = CaptureViewport();
@@ -6578,6 +6691,12 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             command.vertexCount = static_cast<std::uint32_t>(PrimitiveVertexCount(primitive, primitiveCount));
         }
+
+        // WEBGPU-153: FillMode::WireFrame becomes a line-list draw over this command's own
+        // vertices, rewritten here at queue time so the replay needs no wireframe branch.
+        if (command.wireframe)
+            ExpandTriangleEdgesForWireframeEXT(command, primitive, primitiveCount,
+                                               static_cast<const WebGPUIndexBufferRenderer*>(ib), params.startIndex);
 
         customEffectDrawCommands_.push_back(std::move(command));
         RecordDrawOrder(DrawFamily::CustomEffect, customEffectDrawCommands_.size() - 1);
@@ -6713,8 +6832,11 @@ namespace CNA::Internal::Renderers::WebGPU
                 command.depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
             depthStencil.depthCompare = command.depthTest
                 ? ToWGPUCompareFunction(command.depthFunc) : WGPUCompareFunction_Always;
-            depthStencil.depthBias = static_cast<std::int32_t>(command.depthBias * 16777215.0f);
-            depthStencil.depthBiasSlopeScale = command.slopeScaleDepthBias;
+            // WEBGPU-153: see Build3DPipelineEXT -- a line topology takes no depth bias.
+            const bool biasApplies = TopologyHasPolygonInterior(command.topology);
+            depthStencil.depthBias = biasApplies
+                ? static_cast<std::int32_t>(command.depthBias * 16777215.0f) : 0;
+            depthStencil.depthBiasSlopeScale = biasApplies ? command.slopeScaleDepthBias : 0.0f;
             pipeline.depthStencil = (replayDepthFormat_ != WGPUTextureFormat_Undefined) ? &depthStencil : nullptr;  // WEBGPU-39
 
             pipe = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
@@ -6932,13 +7054,13 @@ namespace CNA::Internal::Renderers::WebGPU
 
     bool WebGPURenderer::SupportsCapability(CNA::GraphicsCapability capability) const
     {
-        // WEBGPU-115: the single entry this renderer genuinely lacks. wgpu-native has no polygon
-        // mode -- WGPUPrimitiveState carries topology, strip index format, front face and cull
-        // mode, and nothing that selects a fill. Reporting the shared permissive default here
-        // promised a mode the renderer then silently replaced with a solid fill, which is the one
-        // shape a capability query exists to prevent.
-        if (capability == CNA::GraphicsCapability::WireFrame)
-            return false;
+        // WEBGPU-115 reported false here, and WEBGPU-153 made that answer obsolete rather than
+        // wrong: `FillMode::WireFrame` is now implemented by expanding each triangle's edges into a
+        // 32-bit line-list index buffer at queue time, which is the reference renderer's own
+        // mechanism and needs no polygon-mode state on any target. The capability therefore falls
+        // through to the shared permissive default, which reports true. Every 3D route performs the
+        // expansion -- see ExpandTriangleEdgesForWireframeEXT's eleven call sites -- so the answer
+        // is not narrower than it sounds.
         // WEBGPU-85/86/87: multiple simultaneous render targets are now real. SetRenderTargets()
         // accepts 2..4 RenderTarget2D targets, ReplayOrderedSegments builds an N-attachment pass,
         // and a custom ShaderEffect that writes @location(0..N-1) fans out to every slot
@@ -6984,21 +7106,20 @@ namespace CNA::Internal::Renderers::WebGPU
     void WebGPURenderer::RequireSupportedFillModeEXT(PrimitiveType primitive,
                                                              const char* route) const
     {
-        if (!fillModeWireframe_)
-            return;
-        // A fill mode describes how a POLYGON's interior is rasterized. A line or point list has no
-        // interior, so Solid and WireFrame are the same request for it -- this renderer substitutes
-        // nothing there and the output already matches every other renderer's. Refusing it would
-        // delete a correct draw rather than prevent a wrong one.
-        if (primitive != PrimitiveType::TriangleList && primitive != PrimitiveType::TriangleStrip)
-            return;
-        throw System::NotSupportedException(
-            std::string("WebGPU: FillMode::WireFrame is not supported on this renderer, so the ") +
-            route +
-            " draw is refused rather than rendered as a solid fill. wgpu-native exposes no polygon "
-            "mode, so a wireframe request cannot reach any native pipeline state. Query "
-            "GraphicsDevice::SupportsCapability(GraphicsCapability::WireFrame) -- it reports false "
-            "here -- and select FillMode::Solid instead.");
+        // plans/plan_webgpu.md WEBGPU-153. This used to refuse every wireframe polygon draw, on the
+        // stated grounds that "wgpu-native exposes no polygon mode, so a wireframe request cannot
+        // reach any native pipeline state". BOTH halves of that were wrong: the pin does carry
+        // `WGPUPrimitiveStateExtras::polygonMode` behind the native-only
+        // `WGPUNativeFeature_PolygonModeLine`, and -- more to the point -- a wireframe never needed
+        // a polygon mode in the first place. The reference renderer has always produced one by
+        // expanding triangle edges into a line list, which is what this renderer now does, on every
+        // 3D route and in the browser as well as natively.
+        //
+        // The function is kept, empty of refusal, because it is the one narrow place a route that
+        // ever stops being covered must announce itself: WEBGPU-154 owns that boundary, and a
+        // silent solid fill is the outcome neither row will accept.
+        (void) primitive;
+        (void) route;
     }
 
     void WebGPURenderer::ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
@@ -7007,10 +7128,10 @@ namespace CNA::Internal::Renderers::WebGPU
         // XNA CullMode: None=0, CullClockwiseFace=1, CullCounterClockwiseFace=2.
         // XNA FillMode: Solid=0, WireFrame=1.
         cullMode_ = cullMode;
-        // WEBGPU-115: stored, not judged. Selecting a RasterizerState is a state operation in
-        // XNA's lifecycle and this setter cannot know whether a draw will follow, or which route
-        // it would take -- the same reasoning REMED-GFX-DECL-GUARD applied to SetVertexDeclaration.
-        // RequireSupportedFillModeEXT() refuses at the first draw that would consume this.
+        // WEBGPU-115 stored this rather than judging it, because a RasterizerState is selected in
+        // XNA's lifecycle without knowing whether a draw will follow or which route it would take.
+        // WEBGPU-153 keeps the storage and gave it a consumer: each Queue*Draw captures it per draw
+        // and rewrites that draw's own triangles into a line list.
         fillModeWireframe_ = (fillMode == 1);
         scissorEnabled_ = scissorTestEnable;
         depthBias_ = depthBias;
@@ -8350,6 +8471,12 @@ namespace CNA::Internal::Renderers::WebGPU
             command.vertexCount = static_cast<std::uint32_t>(PrimitiveVertexCount(primitive, primitiveCount));
         }
 
+        // WEBGPU-153: FillMode::WireFrame becomes a line-list draw over this command's own
+        // vertices, rewritten here at queue time so the replay needs no wireframe branch.
+        if (command.wireframe)
+            ExpandTriangleEdgesForWireframeEXT(command, primitive, primitiveCount,
+                                               static_cast<const WebGPUIndexBufferRenderer*>(ib), params != nullptr ? params->startIndex : 0);
+
         coloredDrawCommands_.push_back(std::move(command));
         // REMED-GFX-159: the public position of this draw, the only thing replay orders by.
         RecordDrawOrder(DrawFamily::Colored, coloredDrawCommands_.size() - 1);
@@ -8664,6 +8791,12 @@ namespace CNA::Internal::Renderers::WebGPU
         // column-major into [0..15], not specifically a WVP.
         const Matrix vp = view * projection;
         FillExtUniforms(command.uniforms, vp, params);
+
+        // WEBGPU-153: FillMode::WireFrame becomes a line-list draw over this command's own
+        // vertices, rewritten here at queue time so the replay needs no wireframe branch.
+        if (command.wireframe)
+            ExpandTriangleEdgesForWireframeEXT(command, primitive, primitiveCount,
+                                               &webgpuIb, params.startIndex);
 
         instancedDrawCommands_.push_back(std::move(command));
         // REMED-GFX-159: the public position of this draw, the only thing replay orders by.
@@ -9048,6 +9181,12 @@ namespace CNA::Internal::Renderers::WebGPU
             command.vertexCount = static_cast<std::uint32_t>(PrimitiveVertexCount(primitive, primitiveCount));
         }
 
+        // WEBGPU-153: FillMode::WireFrame becomes a line-list draw over this command's own
+        // vertices, rewritten here at queue time so the replay needs no wireframe branch.
+        if (command.wireframe)
+            ExpandTriangleEdgesForWireframeEXT(command, primitive, primitiveCount,
+                                               static_cast<const WebGPUIndexBufferRenderer*>(ib), params.startIndex);
+
         litTexturedDrawCommands_.push_back(std::move(command));
         // REMED-GFX-159: the public position of this draw, the only thing replay orders by.
         RecordDrawOrder(DrawFamily::LitTextured, litTexturedDrawCommands_.size() - 1);
@@ -9228,6 +9367,12 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             command.vertexCount = static_cast<std::uint32_t>(PrimitiveVertexCount(primitive, primitiveCount));
         }
+
+        // WEBGPU-153: FillMode::WireFrame becomes a line-list draw over this command's own
+        // vertices, rewritten here at queue time so the replay needs no wireframe branch.
+        if (command.wireframe)
+            ExpandTriangleEdgesForWireframeEXT(command, primitive, primitiveCount,
+                                               static_cast<const WebGPUIndexBufferRenderer*>(ib), params.startIndex);
 
         alphaTestDrawCommands_.push_back(std::move(command));
         // REMED-GFX-159: the public position of this draw, the only thing replay orders by.
@@ -9433,6 +9578,12 @@ namespace CNA::Internal::Renderers::WebGPU
             command.vertexCount = static_cast<std::uint32_t>(PrimitiveVertexCount(primitive, primitiveCount));
         }
 
+        // WEBGPU-153: FillMode::WireFrame becomes a line-list draw over this command's own
+        // vertices, rewritten here at queue time so the replay needs no wireframe branch.
+        if (command.wireframe)
+            ExpandTriangleEdgesForWireframeEXT(command, primitive, primitiveCount,
+                                               static_cast<const WebGPUIndexBufferRenderer*>(ib), params.startIndex);
+
         dualTextureDrawCommands_.push_back(std::move(command));
         // REMED-GFX-159: the public position of this draw, the only thing replay orders by.
         RecordDrawOrder(DrawFamily::DualTexture, dualTextureDrawCommands_.size() - 1);
@@ -9515,6 +9666,12 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             command.vertexCount = static_cast<std::uint32_t>(PrimitiveVertexCount(primitive, primitiveCount));
         }
+
+        // WEBGPU-153: FillMode::WireFrame becomes a line-list draw over this command's own
+        // vertices, rewritten here at queue time so the replay needs no wireframe branch.
+        if (command.wireframe)
+            ExpandTriangleEdgesForWireframeEXT(command, primitive, primitiveCount,
+                                               static_cast<const WebGPUIndexBufferRenderer*>(ib), params.startIndex);
 
         texturedDrawCommands_.push_back(std::move(command));
         // REMED-GFX-159: the public position of this draw, the only thing replay orders by.
@@ -9936,6 +10093,12 @@ namespace
         {
             command.vertexCount = static_cast<std::uint32_t>(PrimitiveVertexCount(primitive, primitiveCount));
         }
+
+        // WEBGPU-153: FillMode::WireFrame becomes a line-list draw over this command's own
+        // vertices, rewritten here at queue time so the replay needs no wireframe branch.
+        if (command.wireframe)
+            ExpandTriangleEdgesForWireframeEXT(command, primitive, primitiveCount,
+                                               static_cast<const WebGPUIndexBufferRenderer*>(ib), params.startIndex);
 
         pbrDrawCommands_.push_back(std::move(command));
         // REMED-GFX-159: the public position of this draw, the only thing replay orders by.
@@ -10379,6 +10542,12 @@ namespace
             command.vertexCount = static_cast<std::uint32_t>(PrimitiveVertexCount(primitive, primitiveCount));
         }
 
+        // WEBGPU-153: FillMode::WireFrame becomes a line-list draw over this command's own
+        // vertices, rewritten here at queue time so the replay needs no wireframe branch.
+        if (command.wireframe)
+            ExpandTriangleEdgesForWireframeEXT(command, primitive, primitiveCount,
+                                               static_cast<const WebGPUIndexBufferRenderer*>(ib), params.startIndex);
+
         skinnedDrawCommands_.push_back(std::move(command));
         // REMED-GFX-159: the public position of this draw, the only thing replay orders by.
         RecordDrawOrder(DrawFamily::Skinned, skinnedDrawCommands_.size() - 1);
@@ -10784,6 +10953,12 @@ namespace
         {
             command.vertexCount = static_cast<std::uint32_t>(PrimitiveVertexCount(primitive, primitiveCount));
         }
+
+        // WEBGPU-153: FillMode::WireFrame becomes a line-list draw over this command's own
+        // vertices, rewritten here at queue time so the replay needs no wireframe branch.
+        if (command.wireframe)
+            ExpandTriangleEdgesForWireframeEXT(command, primitive, primitiveCount,
+                                               static_cast<const WebGPUIndexBufferRenderer*>(ib), params.startIndex);
 
         skinnedPbrDrawCommands_.push_back(std::move(command));
         // REMED-GFX-159: the public position of this draw, the only thing replay orders by.

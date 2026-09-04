@@ -1,49 +1,45 @@
 // SPDX-License-Identifier: MS-PL
 
 // ============================================================================
-// WEBGPU-115 -- WebGPU's FillMode::WireFrame contract, measured end to end.
+// WebGPU's FillMode::WireFrame contract, measured end to end.
 //
-// wgpu-native has no polygon-mode API at all: `WGPUPrimitiveState` has no field a wireframe fill
-// could reach. What the renderer did with the request was therefore the whole question, and this
-// file answers it by measurement rather than by reading the source or the documentation.
+// THE HISTORY, because this file has now recorded three different answers and each one was true
+// when it was written:
 //
-// The reading this file was written against, taken on the pre-fix tree:
+//   * Before WEBGPU-115 the renderer reported the capability true, accepted the request, built and
+//     natively submitted a distinct pipeline for it, and returned SOLID geometry. The two frames
+//     were byte-identical (total=18176 interior=1089/1089 under both fill modes). That is an
+//     affirmative false claim through a public capability query, which is the one shape such a
+//     query exists to prevent.
+//   * WEBGPU-115 replaced it with a deterministic refusal, on the stated grounds that "wgpu-native
+//     exposes no polygon mode, so a wireframe request cannot reach any native pipeline state".
+//   * plans/plan_webgpu.md WEBGPU-153 disproved the premise rather than the refusal. A wireframe
+//     never needed a polygon mode: the reference renderer has always produced one by expanding
+//     each triangle's three edges into a 32-bit line-list index buffer, and that route works
+//     natively AND in the browser, where WebGPU genuinely has no polygon mode at all. (The pinned
+//     wgpu-native does in fact carry `WGPUPrimitiveStateExtras::polygonMode` behind the
+//     native-only `WGPUNativeFeature_PolygonModeLine`, so even the API claim was wrong -- but it
+//     is not what this renderer uses, precisely because it is native-only.)
 //
-//     SupportsCapability(WireFrame) == true          (inherited IGraphicsRenderer default)
-//     ApplyRasterizerState           accepted        (no throw, no warning, no log)
-//     queued draw commands           +1
-//     Colored3D pipeline cache       +1              (`wireframe` is folded into the key)
-//     native draw issues             +1
-//     render passes / queue submits  +1 / +1
-//     target                         total=18176 interior=1089/1089 AB=298 BC=310 CA=329
-//     the same frame under Solid     total=18176 interior=1089/1089 AB=298 BC=310 CA=329
+// THE CONTRACT THIS FILE NOW MEASURES:
 //
-// The two frames were BYTE-IDENTICAL. So the runtime made an affirmative false claim through the
-// public capability query, accepted the request, built and natively submitted a distinct pipeline
-// for it, and returned solid geometry -- with no exception, no capability rejection and no
-// diagnostic anywhere on the path. The commit that added this file asserts exactly those numbers;
-// it is the A/B evidence, and `git show` on it is where the old behaviour lives.
-//
-// THE CONTRACT THIS FILE NOW MEASURES. A renderer must not report a capability as supported while
-// silently substituting a different rendering mode, so:
-//
-//     SupportsCapability(WireFrame) == false        asserted by the renderer, not inherited
-//     a RasterizerState carrying WireFrame          still a legal state operation
-//     the first draw that would consume it          throws System::NotSupportedException
-//     queued draw commands                          +0
-//     pipeline caches                               +0
-//     native draw issues                            +0
-//     queue submits attributable to the draw        +0
-//     the target                                    unchanged -- clear colour only
+//     SupportsCapability(WireFrame) == true         backed by pixels, not inherited
+//     a WireFrame polygon draw                      accepted, no exception
+//     queued draw commands                          +1        (one line-list command)
+//     pipeline caches                               +1        (topology is part of the key)
+//     native draw issues                            +1        (no extra pass, retry or frame)
+//     uncaptured native errors                      +0
+//     the target                                    interior EMPTY, all three edges present
+//     the same frame under Solid                    interior FULL -- a different picture
 //     the next Solid draw                           renders exactly
 //
-// Rejection is at DRAW time, not at ApplyRasterizerState: a state setter cannot know whether a
-// draw will follow or which route it would take, which is the same reasoning REMED-GFX-DECL-GUARD
-// applied to SetVertexDeclaration.
+// The expansion happens at QUEUE time, so what the replay receives is an ordinary 32-bit indexed
+// line-list command and no Issue* path has a wireframe branch at all.
 //
 // The geometry is REMED-GFX-209's asymmetric triangle, shared through WireFrameTriangleOracle.hpp
 // rather than copied, so these readings are directly comparable with the per-renderer contract
-// suite's own.
+// suite's own. What this file adds over that shared suite is the NATIVE cardinality: how many
+// commands, pipelines, passes, submits and validation errors the wireframe request actually costs.
 // ============================================================================
 
 // plans/plan_runtimerenderer.md RTR-P9-9: a compile-time guard, because this suite needs the WebGPU
@@ -231,17 +227,41 @@ namespace
         return run;
     }
 
-    /// The refusal's own contract: a catchable System::NotSupportedException whose message names
-    /// what was refused and where to ask about it. A guard that fires with someone else's message
-    /// is a different guard.
-    void ExpectWireFrameRejection(const std::string& message)
+    /// A RouteRun as the shared oracle's own Result, so this file's counter-carrying runs can be
+    /// judged by `ExpectSolidTriangle` rather than by a second copy of its expectations.
+    [[nodiscard]] Result AsOracleResult(const RouteRun& run)
     {
-        EXPECT_NE(std::string::npos, message.find("WireFrame"))
-            << "the refusal does not name FillMode::WireFrame: \"" << message << '"';
-        EXPECT_NE(std::string::npos, message.find("WebGPU"))
-            << "the refusal does not name the renderer: \"" << message << '"';
-        EXPECT_NE(std::string::npos, message.find("SupportsCapability"))
-            << "the refusal does not point at the capability query: \"" << message << '"';
+        Result result;
+        result.frame = run.frame;
+        result.rendered = run.accepted;
+        result.rejection = run.rejection;
+        return result;
+    }
+
+    /// What a wireframe frame must look like: the interior empty, every edge present, and nothing
+    /// in the frame but ink and clear. Shared by every arm below so they cannot drift apart, and
+    /// deliberately the same four measurements the cross-renderer suite makes through the oracle.
+    void ExpectWireFrameFrame(const Frame& frame, const char* what)
+    {
+        // 1. THE INTERIOR IS EMPTY -- the one measurement that separates a wireframe from a fill.
+        EXPECT_EQ(0, frame.LitIn(kInterior))
+            << what << " filled " << frame.LitIn(kInterior)
+            << " interior pixels: that is a solid fill, not a wireframe (" << frame.Describe() << ')';
+        // 2. EVERY EDGE IS PRESENT. The probes are disjoint, so a dropped edge cannot hide behind
+        //    the surviving two, and the failure names which one went missing.
+        for (std::size_t i = 0; i < kEdgeProbes.size(); ++i)
+        {
+            EXPECT_GE(frame.LitIn(kEdgeProbes[i]), 8)
+                << what << " is missing edge " << kEdgeNames[i] << " (" << frame.Describe() << ')';
+            EXPECT_TRUE(Frame::NearInk(frame.FirstLitIn(kEdgeProbes[i])))
+                << what << " edge " << kEdgeNames[i] << " is "
+                << Describe(frame.FirstLitIn(kEdgeProbes[i])) << ", not the ink colour";
+        }
+        // 3. IT IS NOT A DROPPED DRAW.
+        EXPECT_GT(frame.LitTotal(), 0) << what << " rendered nothing at all";
+        // 4. NOTHING BUT INK AND CLEAR: a retry, a second draw or a blend leaves a third colour.
+        EXPECT_TRUE(frame.EveryLitPixelIsInk())
+            << what << " produced a lit pixel that is neither ink nor clear";
     }
 
     void PrintRun(const char* label, const RouteRun& run)
@@ -269,21 +289,18 @@ TEST(WebGpuWireFrameContract, CapabilityQueryAnswersForWireFrame)
     GraphicsDevice gd;
     EXPECT_NO_THROW({ (void)gd.SupportsCapability(GraphicsCapability::WireFrame); });
     const bool reported = gd.SupportsCapability(GraphicsCapability::WireFrame);
-    std::cout << "[WEBGPU-115] SupportsCapability(WireFrame) == "
+    std::cout << "[WEBGPU-153] SupportsCapability(WireFrame) == "
               << (reported ? "true" : "false") << std::endl;
 
-    // WEBGPU-115: false, and asserted by WebGPURenderer::SupportsCapability rather than
-    // inherited from IGraphicsRenderer's permissive default. The renderer has no polygon mode to
-    // back a `true` with, and the query is the public contract for that fact.
-    EXPECT_FALSE(reported)
-        << "WebGPU claims WireFrame support again -- the capability override is gone, and the "
-           "draws below will silently render solid geometry instead of refusing";
+    // WEBGPU-153: true, and backed by the pixels every arm below measures rather than by an
+    // inherited default. The claim a capability query makes has to be one the renderer can keep.
+    EXPECT_TRUE(reported)
+        << "WebGPU under-reports WireFrame -- the edge-expansion implementation is still here "
+           "while the capability says the renderer cannot do it";
 
-    // The surrounding capability answers must not move with it. MultiStreamVertexInput (shared
-    // REMED-GFX-201 default) is the only entry left that this renderer reports false for, for the same
-    // reason as WireFrame. OcclusionQuery is TRUE (WEBGPU-84 implemented real occlusion queries,
-    // superseding WEBGPU-135's temporary false arm) and MultipleRenderTargets is now TRUE too
-    // (WEBGPU-85/86/87 implemented MRT, superseding WEBGPU-134's temporary false arm).
+    // The surrounding capability answers must not move with it. MultiStreamVertexInput is the only
+    // entry this renderer still reports false for (REMED-GFX-201's shared default; WEBGPU-172 owns
+    // it). OcclusionQuery is true (WEBGPU-84) and MultipleRenderTargets too (WEBGPU-85/86/87).
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::ThreeD));
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::DepthStencilBuffer));
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::MultipleRenderTargets));
@@ -297,7 +314,7 @@ TEST(WebGpuWireFrameContract, CapabilityQueryAnswersForWireFrame)
 // 2. THE FULL PATH, counted. Capability -> RasterizerState -> public draw -> queued command ->
 //    pipeline key -> native pipeline -> render pass -> queue submit.
 // ---------------------------------------------------------------------------
-TEST(WebGpuWireFrameContract, WireFrameDrawIsRefusedBeforeAnythingIsQueued)
+TEST(WebGpuWireFrameContract, WireFrameDrawQueuesExactlyOneLineListCommand)
 {
     // plans/plan_runtimerenderer.md RTR-P9-9: this is WebGPU's own contract.
     CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
@@ -305,35 +322,40 @@ TEST(WebGpuWireFrameContract, WireFrameDrawIsRefusedBeforeAnythingIsQueued)
     const RouteRun run = RunOrdinaryRoute(gd, FillMode::WireFrame);
     PrintRun("ordinary-nonindexed wireframe", run);
 
-    ASSERT_FALSE(run.accepted)
-        << "WebGPU accepted a WireFrame draw again and produced " << run.frame.Describe();
-    ExpectWireFrameRejection(run.rejection);
+    ASSERT_TRUE(run.accepted)
+        << "WebGPU refused a WireFrame draw: " << run.rejection;
+    ExpectWireFrameFrame(run.frame, "the ordinary-nonindexed wireframe draw");
 
-    // Nothing downstream of the guard ran. Each of these was 1 before the fix.
-    EXPECT_EQ(0u, run.QueuedByDraw())
-        << "a refused draw appended a command to drawOrder_ -- " << run.afterDraw.Describe();
-    EXPECT_EQ(0u, run.ColoredPipelinesBuilt())
-        << "a refused draw grew the Colored3D pipeline cache -- " << run.afterFlush.Describe();
-    EXPECT_EQ(0u, run.NativeDraws())
-        << "a refused draw reached the render-pass encoder -- " << run.afterFlush.Describe();
-    EXPECT_EQ(0u, run.UncapturedErrors())
-        << "the refusal produced native validation errors -- " << run.afterFlush.Describe();
-
-    // No extra work either: the guard adds no retry, no dummy draw, no second frame. The one
-    // remaining pass and submit belong to the ordered Clear this fixture issued before the draw,
-    // which the refusal must neither cancel nor duplicate.
+    // The cost is EXACTLY one ordinary draw. The expansion happens at queue time and rewrites the
+    // command in place, so it must not cost a second command, a second pass or a second submit --
+    // and a renderer that re-drew the triangle once per edge would fail here while still producing
+    // a picture that looks right.
+    EXPECT_EQ(1u, run.QueuedByDraw())
+        << "a wireframe draw queued " << run.QueuedByDraw() << " commands -- "
+        << run.afterDraw.Describe();
+    EXPECT_EQ(1u, run.NativeDraws())
+        << "a wireframe draw issued " << run.NativeDraws() << " native draws -- "
+        << run.afterFlush.Describe();
     EXPECT_LE(run.Passes(), 1u) << run.afterFlush.Describe();
     EXPECT_LE(run.Submits(), 1u) << run.afterFlush.Describe();
 
-    // The target the refused draw was aimed at still holds the clear colour and nothing else.
-    ExpectClearOnly(run.frame, "the refused WireFrame draw");
+    // One extra pipeline, not more: the topology is part of the cache key, so the line-list variant
+    // is a sibling of the solid one rather than a new key per draw.
+    EXPECT_EQ(1u, run.ColoredPipelinesBuilt())
+        << "the wireframe draw built " << run.ColoredPipelinesBuilt()
+        << " pipelines -- " << run.afterFlush.Describe();
+
+    // A line topology takes no depth bias in WebGPU, so a pipeline that carried the caller's one
+    // through would fail validation rather than render. This is where that would surface.
+    EXPECT_EQ(0u, run.UncapturedErrors())
+        << "the wireframe draw produced native validation errors -- " << run.afterFlush.Describe();
 }
 
 // ---------------------------------------------------------------------------
 // 3. THE OUTPUT. The single measurement that makes this a silent wrong result rather than a
 //    missing feature: WireFrame and Solid are the same picture, byte for byte.
 // ---------------------------------------------------------------------------
-TEST(WebGpuWireFrameContract, SolidRendersExactlyAfterARefusedWireFrameDraw)
+TEST(WebGpuWireFrameContract, WireFrameAndSolidAreDifferentPicturesAndSolidIsUnaffected)
 {
     // plans/plan_runtimerenderer.md RTR-P9-9: this is WebGPU's own contract.
     CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
@@ -346,22 +368,31 @@ TEST(WebGpuWireFrameContract, SolidRendersExactlyAfterARefusedWireFrameDraw)
     PrintRun("ordinary-nonindexed solid-recovery", recovered);
 
     ASSERT_TRUE(solid.accepted) << "WebGPU refused an ordinary Solid draw: " << solid.rejection;
-    ASSERT_FALSE(wire.accepted) << "WebGPU accepted a WireFrame draw -- " << wire.frame.Describe();
+    ASSERT_TRUE(wire.accepted) << "WebGPU refused a WireFrame draw: " << wire.rejection;
     ASSERT_TRUE(recovered.accepted)
-        << "WebGPU refused a Solid draw after a refused WireFrame one: " << recovered.rejection;
+        << "WebGPU refused a Solid draw after a WireFrame one: " << recovered.rejection;
 
-    // The refusal is not the Solid picture, and the Solid picture is unchanged by it.
-    ExpectClearOnly(wire.frame, "the refused WireFrame draw");
+    ExpectSolidTriangle(AsOracleResult(solid));
+    ExpectWireFrameFrame(wire.frame, "the wireframe draw");
+
+    // THE MEASUREMENT THIS FILE EXISTS FOR. Before WEBGPU-115 these two frames were byte-identical
+    // and the renderer claimed the capability anyway; they must now differ by an order of
+    // magnitude. This triangle's edges are ~600 pixels against an interior of 18176.
+    EXPECT_NE(solid.frame.pixels == wire.frame.pixels, true)
+        << "WireFrame and Solid are the same picture again -- the silent substitution is back";
+    EXPECT_LT(wire.frame.LitTotal() * 4, solid.frame.LitTotal())
+        << "WireFrame covered " << wire.frame.LitTotal() << " pixels against Solid's "
+        << solid.frame.LitTotal() << " -- not a measurably smaller figure";
+
+    // And the wireframe draw leaves the solid one exactly as it was.
     EXPECT_TRUE(recovered.frame.pixels == solid.frame.pixels)
-        << "Solid output changed across a refused WireFrame draw -- " << recovered.frame.Describe()
+        << "Solid output changed across a WireFrame draw -- " << recovered.frame.Describe()
         << " vs " << solid.frame.Describe();
-
-    // And recovery costs exactly one ordinary draw: no extra frame, Present, wait, retry or dummy.
     EXPECT_EQ(1u, recovered.QueuedByDraw()) << recovered.afterDraw.Describe();
     EXPECT_EQ(1u, recovered.NativeDraws()) << recovered.afterFlush.Describe();
     EXPECT_EQ(1u, recovered.Submits()) << recovered.afterFlush.Describe();
-    // The recovery reuses the pipeline the first Solid draw built -- the refused draw left no
-    // WireFrame variant behind for it to collide with, and built none of its own.
+    // The recovery reuses the pipeline the first Solid draw built: the wireframe draw added the
+    // line-list variant beside it rather than replacing it.
     EXPECT_EQ(0u, recovered.ColoredPipelinesBuilt()) << recovered.afterFlush.Describe();
     EXPECT_EQ(0u, recovered.UncapturedErrors()) << recovered.afterFlush.Describe();
 }
@@ -370,7 +401,7 @@ TEST(WebGpuWireFrameContract, SolidRendersExactlyAfterARefusedWireFrameDraw)
 // 4. THE EXCEPTION TYPE. "Deterministic" means a caller can catch it by name and fall back, so the
 //    type is part of the contract, not just the fact that something was thrown.
 // ---------------------------------------------------------------------------
-TEST(WebGpuWireFrameContract, RefusalIsACatchableNotSupportedException)
+TEST(WebGpuWireFrameContract, WireFrameDrawThrowsNothingAndRepeatsIdenticallyOnOneTarget)
 {
     // plans/plan_runtimerenderer.md RTR-P9-9: this is WebGPU's own contract.
     CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
@@ -392,17 +423,11 @@ TEST(WebGpuWireFrameContract, RefusalIsACatchableNotSupportedException)
     effect.Apply();
     gd.SetVertexBuffer(&vb);
 
-    EXPECT_THROW(gd.DrawPrimitives(PrimitiveType::TriangleList, 0, 1),
-                 System::NotSupportedException);
-
-    // Repeating the refused draw is idempotent -- the guard holds no state of its own, so the
-    // second call fails exactly like the first rather than leaking through or aborting.
-    EXPECT_THROW(gd.DrawPrimitives(PrimitiveType::TriangleList, 0, 1),
-                 System::NotSupportedException);
-
-    // Selecting Solid on the same device, without recreating anything, is all recovery takes.
-    ApplyFixtureState(gd, FillMode::Solid);
-    effect.Apply();
+    // WEBGPU-115 asserted System::NotSupportedException here. There is nothing left to throw: the
+    // request is served, not refused.
+    EXPECT_NO_THROW(gd.DrawPrimitives(PrimitiveType::TriangleList, 0, 1));
+    // Repeating it is idempotent -- the expansion holds no state of its own, so a second call
+    // produces a second identical line-list command rather than accumulating anything.
     EXPECT_NO_THROW(gd.DrawPrimitives(PrimitiveType::TriangleList, 0, 1));
 
     gd.SetVertexBuffer(nullptr);
@@ -410,12 +435,29 @@ TEST(WebGpuWireFrameContract, RefusalIsACatchableNotSupportedException)
 
     Frame frame;
     ReadTarget(target, frame);
-    std::cout << "[WEBGPU-115] refuse, refuse, then Solid on one target: " << frame.Describe()
+    std::cout << "[WEBGPU-153] two wireframe draws on one target: " << frame.Describe()
               << std::endl;
-    EXPECT_EQ(kInteriorArea, frame.LitIn(kInterior))
-        << "the Solid draw after two refusals did not fill the interior -- " << frame.Describe();
-    EXPECT_TRUE(frame.EveryLitPixelIsInk())
-        << "a refused draw left a pixel behind -- " << frame.Describe();
+    // Two identical wireframe draws over each other are still the same wireframe: the interior
+    // stays empty (a pair that had promoted to a fill would show it here) and the edges stay ink.
+    ExpectWireFrameFrame(frame, "two stacked wireframe draws");
+
+    // And selecting Solid on the same device, without recreating anything, still fills.
+    gd.SetRenderTarget(&target);
+    gd.Clear(Color(kClear[0], kClear[1], kClear[2], kClear[3]));
+    ApplyFixtureState(gd, FillMode::Solid);
+    effect.Apply();
+    gd.SetVertexBuffer(&vb);
+    EXPECT_NO_THROW(gd.DrawPrimitives(PrimitiveType::TriangleList, 0, 1));
+    gd.SetVertexBuffer(nullptr);
+    gd.SetRenderTarget(nullptr);
+
+    Frame solidFrame;
+    ReadTarget(target, solidFrame);
+    EXPECT_EQ(kInteriorArea, solidFrame.LitIn(kInterior))
+        << "the Solid draw after two wireframe draws did not fill the interior -- "
+        << solidFrame.Describe();
+    EXPECT_TRUE(solidFrame.EveryLitPixelIsInk())
+        << "a wireframe draw left a stray pixel behind -- " << solidFrame.Describe();
 }
 
 // ===========================================================================
@@ -788,7 +830,7 @@ namespace
     }
 }   // namespace
 
-TEST(WebGpuWireFrameContract, EveryPublicDrawRouteRefusesWireFrameAndAcceptsSolid)
+TEST(WebGpuWireFrameContract, EveryPublicDrawRouteWireframesAndAcceptsSolid)
 {
     // plans/plan_runtimerenderer.md RTR-P9-9: this is WebGPU's own contract.
     CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
@@ -806,6 +848,10 @@ TEST(WebGpuWireFrameContract, EveryPublicDrawRouteRefusesWireFrameAndAcceptsSoli
     routes.emplace_back(std::make_unique<TexturedFamily>());
     routes.emplace_back(std::make_unique<InstancedRoute>());
 
+    // The route list is the point of this test, not a detail of it: the expansion is applied per
+    // draw FAMILY, so a family that was missed would silently fill while its neighbours wireframe.
+    // vertexStart, baseVertex and startIndex each appear because each one changes how the source
+    // index sequence is addressed, which is exactly what the expansion has to get right.
     for (const std::unique_ptr<Route>& route : routes)
     {
         SCOPED_TRACE(route->Name());
@@ -826,23 +872,31 @@ TEST(WebGpuWireFrameContract, EveryPublicDrawRouteRefusesWireFrameAndAcceptsSoli
         GraphicsDevice wireDevice;
         const RouteRun wire = RunRoute(wireDevice, FillMode::WireFrame, *route);
         PrintRun((std::string(route->Name()) + " wireframe").c_str(), wire);
-        ASSERT_FALSE(wire.accepted)
-            << route->Name() << " accepted a WireFrame draw and produced " << wire.frame.Describe();
-        ExpectWireFrameRejection(wire.rejection);
-        EXPECT_EQ(0u, wire.QueuedByDraw())
-            << route->Name() << " queued a command for a refused draw -- "
+        ASSERT_TRUE(wire.accepted)
+            << route->Name() << " refused a WireFrame draw: " << wire.rejection;
+        EXPECT_EQ(1u, wire.QueuedByDraw())
+            << route->Name() << " queued " << wire.QueuedByDraw() << " commands -- "
             << wire.afterDraw.Describe();
-        EXPECT_EQ(0u, wire.NativeDraws())
-            << route->Name() << " reached the render-pass encoder -- " << wire.afterFlush.Describe();
-        EXPECT_EQ(0u, wire.familyPipelinesBuilt)
-            << route->Name() << " grew its family's pipeline cache -- " << wire.afterFlush.Describe();
-        EXPECT_EQ(0u, wire.ColoredPipelinesBuilt())
-            << route->Name() << " grew the Colored3D pipeline cache -- "
+        EXPECT_EQ(1u, wire.NativeDraws())
+            << route->Name() << " issued " << wire.NativeDraws() << " native draws -- "
             << wire.afterFlush.Describe();
         EXPECT_EQ(0u, wire.UncapturedErrors())
             << route->Name() << " produced native validation errors -- "
             << wire.afterFlush.Describe();
-        ExpectClearOnly(wire.frame, route->Name());
+
+        // The interior is empty and the frame is smaller than Solid's. Stated per route, because
+        // "some routes wireframe and the rest quietly fill" is the defect this test exists to
+        // catch and a whole-suite total would hide it.
+        EXPECT_EQ(0, wire.frame.LitIn(kInterior))
+            << route->Name() << " filled the triangle interior under FillMode::WireFrame -- "
+            << wire.frame.Describe();
+        EXPECT_GT(wire.frame.LitTotal(), 0)
+            << route->Name() << " rendered nothing under FillMode::WireFrame -- "
+            << wire.frame.Describe();
+        EXPECT_LT(wire.frame.LitTotal() * 4, solid.frame.LitTotal())
+            << route->Name() << " WireFrame covered " << wire.frame.LitTotal()
+            << " pixels against Solid's " << solid.frame.LitTotal() << " -- "
+            << wire.frame.Describe();
     }
 }
 
@@ -868,49 +922,60 @@ TEST(WebGpuWireFrameContract, AlternatingFillModesNeverLeaveStaleState)
     const RouteRun solid2 = RunRoute(gd, FillMode::Solid, route);
     PrintRun("alternate solid-5", solid2);
 
-    EXPECT_FALSE(wire1.accepted);
-    EXPECT_FALSE(wire2.accepted);
-    EXPECT_FALSE(wire3.accepted);
+    ASSERT_TRUE(wire1.accepted) << wire1.rejection;
+    ASSERT_TRUE(wire2.accepted) << wire2.rejection;
+    ASSERT_TRUE(wire3.accepted) << wire3.rejection;
     ASSERT_TRUE(solid1.accepted) << solid1.rejection;
     ASSERT_TRUE(solid2.accepted) << solid2.rejection;
 
-    // Every refusal is identical -- the guard carries no state that a repetition could change.
-    EXPECT_EQ(wire1.rejection, wire2.rejection);
-    EXPECT_EQ(wire2.rejection, wire3.rejection);
-    ExpectClearOnly(wire1.frame, "the first refused draw");
-    ExpectClearOnly(wire2.frame, "the second refused draw");
-    ExpectClearOnly(wire3.frame, "the third refused draw");
+    // Every wireframe frame is the same picture, whatever ran before it. A pipeline cache keyed on
+    // topology could return a solid pipeline to a wireframe draw (or the reverse) after an
+    // alternation; that would show up here and nowhere else.
+    ExpectWireFrameFrame(wire1.frame, "the first wireframe draw");
+    ExpectWireFrameFrame(wire2.frame, "the wireframe draw after a Solid one");
+    ExpectWireFrameFrame(wire3.frame, "the second consecutive wireframe draw");
+    EXPECT_TRUE(wire1.frame.pixels == wire2.frame.pixels)
+        << "wireframe output drifted across a Solid draw -- " << wire1.frame.Describe() << " then "
+        << wire2.frame.Describe();
+    EXPECT_TRUE(wire2.frame.pixels == wire3.frame.pixels)
+        << "wireframe output drifted between consecutive draws -- " << wire2.frame.Describe()
+        << " then " << wire3.frame.Describe();
 
-    // And every Solid frame is the same picture, before and after any number of refusals.
+    // And every Solid frame is the same picture, before and after any number of wireframe draws.
     EXPECT_TRUE(solid1.frame.pixels == solid2.frame.pixels)
-        << "Solid output drifted across refused WireFrame draws -- " << solid1.frame.Describe()
+        << "Solid output drifted across WireFrame draws -- " << solid1.frame.Describe()
         << " then " << solid2.frame.Describe();
     EXPECT_EQ(kInteriorArea, solid2.frame.LitIn(kInterior)) << solid2.frame.Describe();
-    // Two consecutive refusals cost nothing at all: no pipeline, no command, no native draw.
-    EXPECT_EQ(0u, wire3.QueuedByDraw());
-    EXPECT_EQ(0u, wire3.NativeDraws());
-    EXPECT_EQ(0u, wire3.ColoredPipelinesBuilt());
+
+    // The second consecutive wireframe draw reuses the line-list pipeline the first one built:
+    // alternation must not make the cache grow without bound.
+    EXPECT_EQ(1u, wire3.QueuedByDraw());
+    EXPECT_EQ(1u, wire3.NativeDraws());
+    EXPECT_EQ(0u, wire3.ColoredPipelinesBuilt())
+        << "a repeated wireframe draw built another pipeline -- " << wire3.afterFlush.Describe();
 }
 
 // ---------------------------------------------------------------------------
 // 7. LIFETIME. A refusal must not retain the resources the draw would have referenced, and must
 //    not stop them being replaced or the device being torn down.
 // ---------------------------------------------------------------------------
-TEST(WebGpuWireFrameContract, RefusalRetainsNothingAndSurvivesResourceReplacement)
+TEST(WebGpuWireFrameContract, WireFrameRetainsNothingAndSurvivesResourceReplacement)
 {
     // plans/plan_runtimerenderer.md RTR-P9-9: this is WebGPU's own contract.
     CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
     GraphicsDevice gd;
     {
-        // Refuse a draw whose vertex buffer then goes out of scope while the device lives on.
+        // A wireframe draw whose vertex buffer then goes out of scope while the device lives on.
+        // The expansion copies the indices it derives into the command, so nothing here may
+        // outlive the buffers it read.
         OrdinaryNonIndexed doomed(0);
-        const RouteRun refused = RunRoute(gd, FillMode::WireFrame, doomed);
-        PrintRun("lifetime refused", refused);
-        EXPECT_FALSE(refused.accepted);
-        ExpectClearOnly(refused.frame, "the refused draw");
+        const RouteRun wire = RunRoute(gd, FillMode::WireFrame, doomed);
+        PrintRun("lifetime wireframe", wire);
+        ASSERT_TRUE(wire.accepted) << wire.rejection;
+        ExpectWireFrameFrame(wire.frame, "the wireframe draw whose buffers then died");
     }
-    // The buffers the refused draw referenced are gone. If the refusal had queued a command that
-    // held them, the flush below would replay a dangling reference.
+    // The buffers that draw referenced are gone. If the expansion had retained a reference to the
+    // source index buffer rather than copying out of it, the flush below would replay a dangling one.
     OrdinaryNonIndexed replacement(0);
     const RouteRun recovered = RunRoute(gd, FillMode::Solid, replacement);
     PrintRun("lifetime replacement solid", recovered);
@@ -918,13 +983,13 @@ TEST(WebGpuWireFrameContract, RefusalRetainsNothingAndSurvivesResourceReplacemen
     EXPECT_EQ(kInteriorArea, recovered.frame.LitIn(kInterior)) << recovered.frame.Describe();
     EXPECT_EQ(0u, recovered.UncapturedErrors()) << recovered.afterFlush.Describe();
 
-    // A trailing refusal, then teardown: the destructor drains the queue, and a command left there
-    // by a refused draw would release native handles after the device is gone.
+    // A trailing wireframe draw, then teardown: the destructor drains the queue, and a command
+    // holding a native handle past the device's lifetime would surface as an uncaptured error.
     OrdinaryNonIndexed trailing(0);
     const RouteRun last = RunRoute(gd, FillMode::WireFrame, trailing);
-    PrintRun("lifetime trailing refusal", last);
-    EXPECT_FALSE(last.accepted);
-    EXPECT_EQ(0u, last.QueuedByDraw()) << last.afterDraw.Describe();
+    PrintRun("lifetime trailing wireframe", last);
+    ASSERT_TRUE(last.accepted) << last.rejection;
+    EXPECT_EQ(1u, last.QueuedByDraw()) << last.afterDraw.Describe();
     EXPECT_EQ(0u, last.UncapturedErrors()) << last.afterFlush.Describe();
 }
 
@@ -979,7 +1044,7 @@ namespace
     }
 }   // namespace
 
-TEST(WebGpuWireFrameContract, RefusalAndRecoveryAreNativelyClean)
+TEST(WebGpuWireFrameContract, WireFrameAndRecoveryAreNativelyClean)
 {
     // plans/plan_runtimerenderer.md RTR-P9-9: this is WebGPU's own contract.
     CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
@@ -990,32 +1055,38 @@ TEST(WebGpuWireFrameContract, RefusalAndRecoveryAreNativelyClean)
     wgpuDevicePushErrorScope(renderer.Device(), WGPUErrorFilter_Validation);
 
     OrdinaryNonIndexed route(0);
-    const RouteRun refused = RunRoute(gd, FillMode::WireFrame, route);
-    PrintRun("validation refused", refused);
+    const RouteRun wire = RunRoute(gd, FillMode::WireFrame, route);
+    PrintRun("validation wireframe", wire);
     const RouteRun recovered = RunRoute(gd, FillMode::Solid, route);
     PrintRun("validation recovery", recovered);
 
-    EXPECT_FALSE(refused.accepted);
+    ASSERT_TRUE(wire.accepted) << wire.rejection;
     ASSERT_TRUE(recovered.accepted) << recovered.rejection;
+    ExpectWireFrameFrame(wire.frame, "the wireframe draw under a validation scope");
     EXPECT_EQ(kInteriorArea, recovered.frame.LitIn(kInterior)) << recovered.frame.Describe();
 
+    // wgpu-native's own verdict, not just this renderer's error counter. The line-list pipeline is
+    // where a stale depth bias or a mismatched index format would be caught, and this is the arm
+    // that asks the driver rather than inferring it from pixels.
     PopAndExpectClean(renderer, "validation scope");
     PopAndExpectClean(renderer, "out-of-memory scope");
     EXPECT_EQ(uncapturedBefore, renderer.GetUncapturedErrorCountEXT())
-        << "the refusal/recovery sequence produced uncaptured native errors";
+        << "the wireframe/recovery sequence produced uncaptured native errors";
 }
 
 // ---------------------------------------------------------------------------
-// 9. THE TOPOLOGY BOUNDARY. A fill mode describes how a POLYGON's interior is rasterized, so a
-//    line or point list has nothing for it to select and Solid/WireFrame are the same request.
-//    This renderer substitutes nothing there, so refusing those draws would delete a draw that is
-//    already correct -- an over-wide guard, not a safety property. The claim is MEASURED here, not
-//    reasoned about: each non-polygon topology is drawn under both fill modes and the two frames
-//    must be byte-identical.
+// 9. THE TOPOLOGY BOUNDARY. A fill mode describes how a POLYGON's interior is rasterized, so a line
+//    or point list has nothing for it to select and Solid/WireFrame are the same request. The
+//    expansion must therefore leave those draws completely alone -- expanding a line list into
+//    "edges" would double every line and rewrite a draw that was already correct.
 //
-//    This is what PointListPrimitiveTest.PointListIsNotAffectedByTriangleCulling found: the first
-//    version of the guard refused a WireFrame point-list draw that every other renderer renders,
-//    identically, under either fill mode.
+//    The claim is MEASURED, not reasoned about: each non-polygon topology is drawn under both fill
+//    modes and the two frames must be byte-identical, while each polygon topology must differ.
+//
+//    This boundary has now been got wrong in both directions, which is why it is tested from both:
+//    WEBGPU-115's first guard REFUSED a WireFrame point-list draw that every other renderer renders
+//    (found by PointListPrimitiveTest.PointListIsNotAffectedByTriangleCulling), and an expansion
+//    that forgot the same check would silently rewrite one.
 // ---------------------------------------------------------------------------
 namespace
 {
@@ -1080,7 +1151,7 @@ namespace
     };
 }   // namespace
 
-TEST(WebGpuWireFrameContract, OnlyPolygonTopologiesAreRefused)
+TEST(WebGpuWireFrameContract, OnlyPolygonTopologiesAreExpanded)
 {
     // plans/plan_runtimerenderer.md RTR-P9-9: this is WebGPU's own contract.
     CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
@@ -1106,27 +1177,30 @@ TEST(WebGpuWireFrameContract, OnlyPolygonTopologiesAreRefused)
         ASSERT_TRUE(solid.accepted) << c.name << " refused a Solid draw: " << solid.rejection;
         EXPECT_GT(solid.frame.LitTotal(), 0)
             << c.name << " rendered nothing under Solid -- " << solid.frame.Describe();
+        ASSERT_TRUE(wire.accepted)
+            << c.name << " refused a WireFrame draw: " << wire.rejection;
+        EXPECT_EQ(0u, wire.UncapturedErrors()) << wire.afterFlush.Describe();
 
         if (c.polygon)
         {
-            EXPECT_FALSE(wire.accepted)
-                << c.name << " is a polygon topology and must be refused -- "
+            // A polygon topology is expanded, so the two frames must NOT match.
+            EXPECT_FALSE(wire.frame.pixels == solid.frame.pixels)
+                << c.name << " rendered identically under both fill modes -- the expansion did not "
+                             "reach this topology (" << wire.frame.Describe() << ')';
+            EXPECT_EQ(0, wire.frame.LitIn(kInterior))
+                << c.name << " filled the interior under FillMode::WireFrame -- "
                 << wire.frame.Describe();
-            ExpectClearOnly(wire.frame, c.name);
         }
         else
         {
-            // Accepted, and -- the part that justifies accepting it -- the output is exactly what
-            // Solid produces. Nothing was substituted, so there is nothing to refuse.
-            ASSERT_TRUE(wire.accepted)
-                << c.name << " has no polygon interior, so WireFrame selects nothing and the draw "
-                             "must not be refused: " << wire.rejection;
+            // A non-polygon topology has no interior to leave empty, so WireFrame selects nothing
+            // and the output must be EXACTLY what Solid produces -- byte for byte, because an
+            // expansion that touched it would double every line or drop every point.
             EXPECT_TRUE(wire.frame.pixels == solid.frame.pixels)
                 << c.name << " rendered differently under WireFrame than under Solid -- "
                 << wire.frame.Describe() << " vs " << solid.frame.Describe();
             EXPECT_EQ(1u, wire.QueuedByDraw()) << wire.afterDraw.Describe();
             EXPECT_EQ(1u, wire.NativeDraws()) << wire.afterFlush.Describe();
-            EXPECT_EQ(0u, wire.UncapturedErrors()) << wire.afterFlush.Describe();
         }
     }
 }

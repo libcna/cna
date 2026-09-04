@@ -72,24 +72,32 @@ namespace CnaTest::WireFrameOracle
         return HasPixelOracle() && !CNA_RENDERER_IS(DirectX12);
     }
 
-    // Measured to render a genuine wireframe: edges lit, interior empty. WebGPU is excluded
-    // because it has no polygon-mode API at all and now refuses the request outright (WEBGPU-115).
+    // Measured to render a genuine wireframe: edges lit, interior empty.
+    //
+    // plans/plan_webgpu.md WEBGPU-153: WebGPU used to be excluded here, on the grounds that it "has
+    // no polygon-mode API at all and now refuses the request outright (WEBGPU-115)". The first half
+    // was beside the point and the second is no longer true: a wireframe never needed a polygon
+    // mode -- the reference renderer has always produced one by expanding triangle edges into a
+    // line list -- and WebGPU now does exactly that, on every 3D route. It is measured by this
+    // oracle like every other renderer.
     /** @brief Whether the active renderer draws a genuine wireframe: edges lit, interior empty. */
     [[nodiscard]] inline bool RendersEdges()
     {
-        return IsMeasured() && !CNA_RENDERER_IS(WebGPU);
+        return IsMeasured();
     }
 
-    // WEBGPU-115: the renderers that answer a WireFrame request with a deterministic refusal
-    // instead of pixels. This arm used to have an empty registration set -- no renderer rejected,
-    // so REMED-GFX-209 recorded the absence rather than manufacturing one. WebGPU now fills it,
-    // and it is the only member: EasyGL renders a genuine wireframe despite reporting false
-    // (REMED-GFX-219, deferred and deliberately untouched here), and every other measured renderer
-    // reports true and renders one.
+    // The renderers that answer a WireFrame request with a deterministic refusal instead of pixels.
+    //
+    // This set is EMPTY again, and that is a reading rather than an omission. REMED-GFX-209 found it
+    // empty and recorded the absence rather than manufacturing a member; WEBGPU-115 filled it with
+    // WebGPU; plans/plan_webgpu.md WEBGPU-153 implemented the edge expansion and emptied it once
+    // more. The arm below is kept for the day a renderer legitimately needs it -- a capability
+    // boundary that has no test until something fails is not a boundary -- and skips while no
+    // renderer refuses.
     /** @brief Whether the active renderer refuses a WireFrame request deterministically. */
     [[nodiscard]] inline bool RejectsWireFrame()
     {
-        return IsMeasured() && CNA_RENDERER_IS(WebGPU);
+        return false;
     }
 
     /** @brief The active renderer's display name. */

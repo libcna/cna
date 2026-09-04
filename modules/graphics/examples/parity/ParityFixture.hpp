@@ -412,6 +412,60 @@ namespace CNA::Parity
         }
 
         /**
+         * @brief How many pixels of a region differ from @p background.
+         *
+         * The measurement a coverage question needs -- "is this interior empty", "did these edges
+         * get drawn" -- which an average cannot answer: a thin bright line and a faint wash have
+         * the same mean.
+         *
+         * @param region The region to count in.
+         * @param background The colour that counts as "not drawn".
+         * @param tolerance Per-channel slack when deciding a pixel is still the background.
+         * @return How many pixels differ from @p background.
+         */
+        [[nodiscard]] int CountLit(const Microsoft::Xna::Framework::Rectangle& region,
+                                   const Microsoft::Xna::Framework::Color& background,
+                                   int tolerance = 2)
+        {
+            using Microsoft::Xna::Framework::Color;
+            int lit = 0;
+            for (const Color& p : ReadRegion(region))
+            {
+                const auto close = [tolerance](int x, int y) { return std::abs(x - y) <= tolerance; };
+                if (!(close(p.getRProperty(), background.getRProperty()) &&
+                      close(p.getGProperty(), background.getGProperty()) &&
+                      close(p.getBProperty(), background.getBProperty())))
+                    ++lit;
+            }
+            return lit;
+        }
+
+        /**
+         * @brief Asserts a region's drawn-pixel count falls in an inclusive range.
+         *
+         * @param label What this check proves.
+         * @param region The region to count in.
+         * @param background The colour that counts as "not drawn".
+         * @param minLit The smallest acceptable count.
+         * @param maxLit The largest acceptable count.
+         * @param tolerance Per-channel slack when deciding a pixel is still the background.
+         * @return Whether the check passed.
+         */
+        bool ExpectLitCount(const char* label,
+                            const Microsoft::Xna::Framework::Rectangle& region,
+                            const Microsoft::Xna::Framework::Color& background,
+                            int minLit, int maxLit, int tolerance = 2)
+        {
+            const int lit = CountLit(region, background, tolerance);
+            const int area = region.Width * region.Height;
+            const bool pass = lit >= minLit && lit <= maxLit;
+            std::printf("[%s] %s: %d of %d pixels drawn, expected %d..%d\n",
+                        pass ? "PASS" : "FAIL", label, lit, area, minLit, maxLit);
+            if (!pass) MarkFailedEXT();
+            return pass;
+        }
+
+        /**
          * @brief Writes the whole backbuffer as raw R,G,B,A bytes for `cna_diag_compare`.
          *
          * Byte order goes through `Color`'s accessors, not its packed layout, so the dump format is
