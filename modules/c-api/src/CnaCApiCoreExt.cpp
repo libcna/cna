@@ -191,7 +191,7 @@ using ConditionalLoggerRoute = void (*)(std::string_view, bool);
 
 // Every public renderer identity, paired explicitly so neither side depends on the other's
 // declaration order.
-constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererType>, 42>
+constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererType>, 43>
     RendererIdentities{{
         {CNA_GRAPHICS_RENDERER_SDL_RENDERER, CNA::GraphicsRendererType::SdlRenderer},
         {CNA_GRAPHICS_RENDERER_OPENGLES2, CNA::GraphicsRendererType::OpenGLES2},
@@ -210,6 +210,7 @@ constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererTy
         {CNA_GRAPHICS_RENDERER_DIRECT2D, CNA::GraphicsRendererType::Direct2D},
         {CNA_GRAPHICS_RENDERER_CANVAS, CNA::GraphicsRendererType::Canvas},
         {CNA_GRAPHICS_RENDERER_HTML_DOM, CNA::GraphicsRendererType::HtmlDom},
+        {CNA_GRAPHICS_RENDERER_BLEND2D, CNA::GraphicsRendererType::Blend2D},
         {CNA_GRAPHICS_RENDERER_FREEDIRECT, CNA::GraphicsRendererType::FreeDirect},
         {CNA_GRAPHICS_RENDERER_DIRECTX9, CNA::GraphicsRendererType::DirectX9},
         {CNA_GRAPHICS_RENDERER_DIRECTX1, CNA::GraphicsRendererType::DirectX1},

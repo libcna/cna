@@ -94,6 +94,7 @@ namespace CNA
 
             case GraphicsRendererType::WebGPU:
             case GraphicsRendererType::Software:
+            case GraphicsRendererType::Blend2D:
             case GraphicsRendererType::FreeDirect:
             case GraphicsRendererType::Fna3d:
             case GraphicsRendererType::SvgDom:

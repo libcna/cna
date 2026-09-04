@@ -212,30 +212,3 @@ expects to own the window.
 platform CNA targets, so it added nothing. It also pulled two pinned repositories plus
 system GL/X11 (and optionally EGL) development headers, making it one of the more
 expensive dependencies for the least unique coverage.
-
----
-
-## BLEND2D
-
-| | |
-|---|---|
-| Identity | `BLEND2D` (enum `Blend2D`, C ABI `CNA_GRAPHICS_RENDERER_BLEND2D` = 20) |
-| Family | `modules/renderers/blend2d` |
-| Removed | 2026-08-30, tag `removed/blend2d` |
-| Size | 3,974 lines (2,055 production, **0 tests**, 1,919 examples) |
-| Dependency | `https://github.com/blend2d/blend2d.git` @ `def0d1238c3e5d0983bb848e5676049d829e435b` and `asmjit` @ `b56f4176cb9b0c0501da659ac54d4c5877862c7b` (zlib) |
-| Build was | `-DCNA_GRAPHICS_RENDERER=BLEND2D` |
-
-**What it proved.** The "CPU raster + SDL presentation" shape — the same one SKIA used —
-works, and a JIT-compiled 2D rasterizer can sit behind `SpriteBatch`.
-
-**Why removed.** 2D-only, so it can never satisfy `IGraphicsRenderer`, and EasyGL already
-renders CNA's 2D on the GPU everywhere CNA runs. Its capability arms were also honest about
-being unmeasured: `BLContext` has no polygon fill mode and no vertex route at all, so
-`WireFrame`, MRT and occlusion queries were structural refusals rather than gaps —
-documented intent, never a measurement, because the renderer was not buildable in this
-environment.
-
-**Note.** `.github/workflows/platform-ci.yml` used `BLEND2D` for its "TERMINAL platform +
-NULL audio" matrix leg. That leg now uses `SOFTWARE`, which has the same shape (CPU raster,
-no display) and is maintained.

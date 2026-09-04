@@ -54,7 +54,7 @@ runtime-literal paths) and the cross-module minimal-link probes (`tests/modules`
 
 ## Renderer modules — modules/renderers/
 
-38 implementation families carry the 42 public renderer identities (the easygl family
+39 implementation families carry the 43 public renderer identities (the easygl family
 implements the five GL-profile identities OPENGLES2/OPENGLES3/OPENGL33/WEBGL1/WEBGL2).
 Identities are
 pinned by `scripts/check_renderer_identities.py` over `CNA/GraphicsRendererType.hpp` (core

@@ -48,6 +48,8 @@ typedef uint32_t CNA_GraphicsRendererType;
 #define CNA_GRAPHICS_RENDERER_CANVAS UINT32_C(17)
 /** @brief Identifies the HTML DOM backend. */
 #define CNA_GRAPHICS_RENDERER_HTML_DOM UINT32_C(18)
+/** @brief Identifies the Blend2D backend. */
+#define CNA_GRAPHICS_RENDERER_BLEND2D UINT32_C(20)
 /** @brief Identifies the FreeDirect backend. */
 #define CNA_GRAPHICS_RENDERER_FREEDIRECT UINT32_C(21)
 /** @brief Identifies the Direct3D 9 backend. */

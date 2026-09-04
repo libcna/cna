@@ -135,6 +135,7 @@ struct CapabilityExpectation
         // kExpectMultipleRenderTargets and friends undefined at their use sites -- this file could
         // not compile for that renderer at all. Same for OpenVG below. Neither is buildable in this
         // environment, so the values are the documented intent rather than a measurement.
+        case GraphicsRendererType::Blend2D:
             return {false, false, false};
 
         // OpenVG is a 2D vector-graphics API with no 3D pipeline, no MRT, and no occlusion-query
@@ -470,6 +471,16 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
     EXPECT_FALSE(reported)
         << "DIRECTX1 claims WireFrame support -- this renderer has no 3D pipeline at all, so a true "
            "report cannot be backed by any rendering path";
+#elif defined(CNA_RENDERER_BLEND2D)
+    // Same truthful-false shape as Skia immediately above: Blend2D's BLContext has no polygon fill
+    // mode and no vertex/primitive route at all -- SupportsCapability(ThreeD) is already false, and
+    // DrawColoredPrimitives/DrawIndexedColoredPrimitives refuse every 3D draw before any vertex
+    // input is inspected, so no polygon topology can reach a raster queue to be silently filled
+    // solid. Like Skia, WireFrameTriangleOracle.hpp keeps this renderer out of HasPixelOracle()
+    // (no pixel route to measure).
+    EXPECT_FALSE(reported)
+        << "Blend2D claims WireFrame support -- this raster renderer has no polygon fill mode and "
+           "no 3D draw route, so a true report cannot be backed by any rendering path";
 #elif defined(CNA_RENDERER_OPENVG)
     // OpenVG is a 2D vector-graphics API: no polygon fill mode, no vertex/primitive route, no 3D
     // pipeline at all. Same truthful-false shape as Skia/DIRECTX1 -- OpenVgRenderer's own 3D
