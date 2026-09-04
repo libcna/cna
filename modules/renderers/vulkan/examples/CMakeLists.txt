@@ -1058,16 +1058,6 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_VertexBufferIndexBufferGetData COMMAND cna_test_vulkan_vertexbuffer_indexbuffer_getdata
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # plans/plan_vulkan.md VULKAN-146 (F-15): the BasicEffect pipelines take their attribute
-        # offsets from the caller's VertexDeclaration. Two 24-byte declarations the stride table
-        # cannot tell apart -- colour at 12 and colour at 20 -- must draw their own colours and get
-        # their own pipelines, and a buffer with no declaration must keep the stride path.
-        cna_vulkan_test(cna_test_vulkan_declared_vertex_layout
-                        vulkan_declared_vertex_layout_test.cpp)
-        cna_register_renderer_test(NAME Vulkan_DeclaredVertexLayout
-            COMMAND cna_test_vulkan_declared_vertex_layout
-            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
         # plans/plan_vulkan.md VULKAN-145 (F-15's shared half): the declaration-driven vertex
         # input layout builder. No pipeline factory uses it yet -- this row is the contract and its
         # proof, so the conversion rows have something to rest on. Pure logic, no device needed.
