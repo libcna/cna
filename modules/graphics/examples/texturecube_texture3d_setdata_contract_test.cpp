@@ -863,7 +863,7 @@ class CubeVolumeSetDataContractTest : public Game
         {
             const std::vector<Color> src = CubeFacePattern(0, 0);
             check(Throws<std::invalid_argument>([&] {
-                      cube.SetData(CubeMapFace::PositiveX, nullptr, kCube * kCube);
+                      cube.SetData(CubeMapFace::PositiveX, static_cast<const Color*>(nullptr), kCube * kCube);
                   }),
                   "C20 cube: null source throws std::invalid_argument");
             check(Throws<std::out_of_range>([&] {
