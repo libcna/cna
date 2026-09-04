@@ -32,11 +32,21 @@ namespace Microsoft::Xna::Framework::Net
 
     Color PacketReader::ReadColor()
     {
-        float r = ReadSingle();
-        float g = ReadSingle();
-        float b = ReadSingle();
-        float a = ReadSingle();
-        return Color(r, g, b, a);
+        // Four bytes, because PacketWriter::Write(Color) writes four: it writes the channels
+        // themselves, which Color stores as bytes. Reading four floats consumed sixteen bytes for
+        // a colour that occupies four, so a packet holding one could not be read back at all --
+        // a 4-, 8- or 12-byte packet answered "attempted to read past the end of the stream", and
+        // only a 16-byte one succeeded, with a value that was never a colour. The two are meant
+        // to be inverses.
+        const SharpRuntime::bytecs r = ReadByte();
+        const SharpRuntime::bytecs g = ReadByte();
+        const SharpRuntime::bytecs b = ReadByte();
+        const SharpRuntime::bytecs a = ReadByte();
+        return Color(
+            static_cast<SharpRuntime::intcs>(r),
+            static_cast<SharpRuntime::intcs>(g),
+            static_cast<SharpRuntime::intcs>(b),
+            static_cast<SharpRuntime::intcs>(a));
     }
 
     Matrix PacketReader::ReadMatrix()
