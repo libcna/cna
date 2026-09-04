@@ -8331,15 +8331,45 @@ CNA_Result cna_pbr_effect_apply_material(
             return Fail(
                 CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The material is null.");
         }
-        return WithTypedEffect<PbrEffect>(effect, "PbrEffect", [&](PbrEffect& typed) {
-            Ext::PbrMaterial native;
-            if (const CNA_Result result = ToNativePbrMaterial(*material, &native);
+        if (const CNA_Result result =
+                WithTypedEffect<PbrEffect>(effect, "PbrEffect", [&](PbrEffect& typed) {
+                    Ext::PbrMaterial native;
+                    if (const CNA_Result converted = ToNativePbrMaterial(*material, &native);
+                        converted != CNA_RESULT_SUCCESS) {
+                        return converted;
+                    }
+                    Ext::applyMaterial(native, typed);
+                    return CNA_RESULT_SUCCESS;
+                });
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // applyMaterial reaches the C++ effect's own setters, which the C API's retained-handle
+        // table never sees -- so a texture applied this way left cna_pbr_effect_get_texture
+        // answering "empty" and cna_pbr_effect_extract_material handing back an invalid handle,
+        // while a slot an earlier set_texture had filled stayed filled even when the material
+        // said it should be empty. The material's seven slots therefore go through the same
+        // route a caller would use, which writes both sides and clears one an empty slot names.
+        const struct {
+            CNA_PbrTextureSlot slot;
+            CNA_Handle handle;
+        } materialSlots[] = {
+            {CNA_PBR_TEXTURE_BASE_COLOR, material->albedo_texture},
+            {CNA_PBR_TEXTURE_NORMAL, material->normal_texture},
+            {CNA_PBR_TEXTURE_METALLIC_ROUGHNESS, material->metallic_roughness_texture},
+            {CNA_PBR_TEXTURE_EMISSIVE, material->emissive_texture},
+            {CNA_PBR_TEXTURE_OCCLUSION, material->ambient_occlusion_texture},
+            {CNA_PBR_TEXTURE_SPECULAR_EXT, material->specular_texture},
+            {CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT, material->specular_color_texture},
+        };
+        for (const auto& materialSlot : materialSlots) {
+            if (const CNA_Result result =
+                    cna_pbr_effect_set_texture(effect, materialSlot.slot, materialSlot.handle);
                 result != CNA_RESULT_SUCCESS) {
                 return result;
             }
-            Ext::applyMaterial(native, typed);
-            return CNA_RESULT_SUCCESS;
-        });
+        }
+        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -8374,10 +8404,42 @@ CNA_Result cna_pbr_effect_extract_material(
                 CNA_ERROR_CATEGORY_ARGUMENT,
                 "The material output is null.");
         }
-        return WithTypedEffect<PbrEffect>(effect, "PbrEffect", [&](PbrEffect& typed) {
-            FromNativePbrMaterial(Ext::extractMaterial(typed), outMaterial);
-            return CNA_RESULT_SUCCESS;
-        });
+        if (const CNA_Result result =
+                WithTypedEffect<PbrEffect>(effect, "PbrEffect", [&](PbrEffect& typed) {
+                    FromNativePbrMaterial(Ext::extractMaterial(typed), outMaterial);
+                    return CNA_RESULT_SUCCESS;
+                });
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // FromNativePbrMaterial writes CNA_INVALID_HANDLE into all seven slots and cannot do
+        // better: it is given the C++ material, which holds raw Texture2D pointers, and this ABI
+        // deliberately has no route from an object back to a handle. The handles live in the C
+        // API's own retained table, so they are read from the route that owns it -- without which
+        // a material could not be round-tripped through an effect without losing every texture.
+        const struct {
+            CNA_PbrTextureSlot slot;
+            CNA_Handle* field;
+        } materialSlots[] = {
+            {CNA_PBR_TEXTURE_BASE_COLOR, &outMaterial->albedo_texture},
+            {CNA_PBR_TEXTURE_NORMAL, &outMaterial->normal_texture},
+            {CNA_PBR_TEXTURE_METALLIC_ROUGHNESS, &outMaterial->metallic_roughness_texture},
+            {CNA_PBR_TEXTURE_EMISSIVE, &outMaterial->emissive_texture},
+            {CNA_PBR_TEXTURE_OCCLUSION, &outMaterial->ambient_occlusion_texture},
+            {CNA_PBR_TEXTURE_SPECULAR_EXT, &outMaterial->specular_texture},
+            {CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT, &outMaterial->specular_color_texture},
+        };
+        for (const auto& materialSlot : materialSlots) {
+            CNA_Bool hasTexture = CNA_FALSE;
+            CNA_Handle texture = CNA_INVALID_HANDLE;
+            if (const CNA_Result result = cna_pbr_effect_get_texture(
+                    effect, materialSlot.slot, &hasTexture, &texture);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            *materialSlot.field = hasTexture == CNA_TRUE ? texture : CNA_INVALID_HANDLE;
+        }
+        return CNA_RESULT_SUCCESS;
     });
 }
 
