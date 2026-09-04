@@ -3,6 +3,7 @@
 
 #include "CNA/Platform/CurrentPlatform.hpp"
 #include "CNA/Platform/IPlatformSystemServices.hpp"
+#include "CNA/Platform/PlatformException.hpp"
 
 #include <stdexcept>
 #include <utility>
@@ -51,6 +52,94 @@ namespace Microsoft::Xna::Framework::Graphics
                 format == SurfaceFormat::HalfVector4 ||
                 format == SurfaceFormat::HdrBlendable;
         }
+    }
+
+    namespace
+    {
+        /// Holds the video subsystem up for as long as the adapter cache describes it.
+        ///
+        /// Two things made the enumeration below answer from a fallback on a host with a real
+        /// display. First, nothing guaranteed video was up when it ran: `GraphicsDevice`'s default
+        /// constructor passes `getDefaultAdapterProperty()` as a delegating-constructor argument,
+        /// and C++ sequences that before the delegated body -- which was the only place that
+        /// raised the subsystem. `SDL_GetDisplays` answers nothing before `SDL_INIT_VIDEO`, so the
+        /// first enumeration in a process cached "Default Display", one 800x480 mode, and that was
+        /// the answer for the rest of the process.
+        ///
+        /// Second, and the reason this holds the reference rather than taking it back at the end
+        /// of the enumeration: a display id is only meaningful inside the video session that
+        /// issued it. SDL hands out fresh `SDL_DisplayID`s after a `SDL_QuitSubSystem(VIDEO)`, so
+        /// an enumeration that raises video, reads the displays and drops it again caches ids that
+        /// name nothing by the time anyone asks `getCurrentDisplayModeProperty()` -- which then
+        /// falls back to 800x480 while the adapter's name and mode list are real. That is not a
+        /// new assumption: `adapters_` is a process-global cache and its own header already says a
+        /// reference must not outlive a call to `AdaptersChanged()`, so the design has always
+        /// taken the enumeration's data to stay valid for as long as the cache does.
+        ///
+        /// `IPlatform::AcquireSubsystem` allows exactly this -- "except where an implementation
+        /// deliberately pins a subsystem for the process lifetime" -- and the pin is bounded: one
+        /// reference at most, taken only when the enumeration actually found displays, and handed
+        /// over to the next enumeration rather than accumulating. A platform with no display
+        /// server refuses the acquire, which is not an error but the no-display case, and the
+        /// fallback below is its correct answer.
+        class AdapterVideoPin final
+        {
+        public:
+            /// Raises the subsystem, answering whether it came up. The previous pin is dropped
+            /// only after the new reference is taken, so a running session is never torn down
+            /// between two enumerations.
+            static bool Raise()
+            {
+                bool raised = false;
+                try
+                {
+                    CNA::Platform::GetCurrentPlatform().AcquireSubsystem(
+                        CNA::Platform::PlatformSubsystem::Video);
+                    raised = true;
+                }
+                catch (const CNA::Platform::PlatformException&)
+                {
+                    // No display server, or no video subsystem on this platform at all;
+                    // PlatformNotSupportedException derives from this, so both arrive here.
+                }
+
+                if (held_)
+                {
+                    Release();
+                }
+                held_ = raised;
+                return raised;
+            }
+
+            /// Gives the reference back, for an enumeration that found nothing to keep valid.
+            static void Drop()
+            {
+                if (!held_)
+                    return;
+
+                held_ = false;
+                Release();
+            }
+
+        private:
+            static void Release()
+            {
+                try
+                {
+                    CNA::Platform::GetCurrentPlatform().ReleaseSubsystem(
+                        CNA::Platform::PlatformSubsystem::Video);
+                }
+                catch (...)
+                {
+                    // A release that fails leaves the subsystem up, which is the harmless
+                    // direction and must not propagate out of an enumeration.
+                }
+            }
+
+            static bool held_;
+        };
+
+        bool AdapterVideoPin::held_ = false;
     }
 
     GraphicsAdapter& GraphicsAdapter::getDefaultAdapterProperty()
@@ -112,9 +201,42 @@ namespace Microsoft::Xna::Framework::Graphics
 #endif
     }
 
+    std::uint32_t GraphicsAdapter::resolveDisplayId() const
+    {
+        CNA::Platform::IPlatformDisplays* displays =
+            CNA::Platform::GetCurrentPlatform().GetDisplays();
+        if (displays == nullptr || displayId_ == 0)
+        {
+            return displayId_;
+        }
+
+        CNA::Platform::DisplayMode probe;
+        if (displays->TryGetCurrentDisplayMode(displayId_, probe))
+        {
+            return displayId_;
+        }
+
+        // The id named a display in a video session that has ended -- a Game installs its own
+        // platform and destroying it takes SDL's video subsystem down with it, and the next
+        // session issues fresh SDL_DisplayIDs. Rebinding beats both alternatives: rebuilding the
+        // cache would invalidate the adapter a live GraphicsDevice retains, which
+        // cna_graphics_adapters_refresh refuses to do for exactly that reason, and answering the
+        // 800x480 fallback would report a display this adapter is not describing.
+        for (const CNA::Platform::DisplayInfo& display : displays->GetDisplays())
+        {
+            if (display.id != 0 && getDisplayName(display, 0) == description_)
+            {
+                displayId_ = display.id;
+                return displayId_;
+            }
+        }
+
+        return 0;
+    }
+
     DisplayMode GraphicsAdapter::getCurrentDisplayModeProperty() const
     {
-        return queryCurrentDisplayMode(displayId_);
+        return queryCurrentDisplayMode(resolveDisplayId());
     }
 
     const DisplayModeCollection& GraphicsAdapter::getSupportedDisplayModesProperty() const
@@ -293,6 +415,10 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         adapters_.clear();
 
+        // Before GetDisplays and before every queryDisplayModes below, both of which need it.
+        // See AdapterVideoPin for why the reference is kept rather than given straight back.
+        AdapterVideoPin::Raise();
+
         SharpRuntime::intcs vendorId = 0, deviceId = 0;
         queryPciIds(vendorId, deviceId);
 
@@ -305,6 +431,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (displays.empty())
         {
+            // Nothing was enumerated, so there are no display ids to keep valid and no reason to
+            // hold the subsystem up. The fallback describes no real display and never goes stale.
+            AdapterVideoPin::Drop();
             adapters_.push_back(std::unique_ptr<GraphicsAdapter>(
                 new GraphicsAdapter(
                     0,

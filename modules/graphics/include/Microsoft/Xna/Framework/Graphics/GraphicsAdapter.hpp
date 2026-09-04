@@ -160,7 +160,12 @@ namespace Microsoft::Xna::Framework::Graphics
                         std::string description,
                         SharpRuntime::intcs vendorId = 0, SharpRuntime::intcs deviceId = 0);
 
-        std::uint32_t displayId_;
+        /// Mutable because it names a display inside one platform's video session, and the
+        /// adapter outlives that: a Game installs its own platform, and destroying it ends the
+        /// session that issued this id. The adapter is then re-bound to the same physical display
+        /// in the new session, in place, because the C ABI deliberately refuses to rebuild the
+        /// cache -- a live GraphicsDevice retains its adapter and replacing it would dangle.
+        mutable std::uint32_t displayId_;
         DisplayModeCollection supportedDisplayModes_;
         std::string description_;
         std::string deviceName_;
@@ -175,5 +180,10 @@ namespace Microsoft::Xna::Framework::Graphics
 
         [[nodiscard]] static std::vector<DisplayMode> queryDisplayModes(std::uint32_t displayId);
         [[nodiscard]] static DisplayMode queryCurrentDisplayMode(std::uint32_t displayId);
+
+        /// Answers this adapter's display id in the platform's current video session, rebinding
+        /// it by display name when the cached one no longer names anything. Returns 0 when the
+        /// display cannot be found, which is the no-display answer.
+        [[nodiscard]] std::uint32_t resolveDisplayId() const;
     };
 }
