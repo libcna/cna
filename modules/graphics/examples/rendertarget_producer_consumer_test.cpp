@@ -161,6 +161,12 @@ namespace
 #elif defined(CNA_RENDERER_CANVAS)
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "CANVAS";
+#elif defined(CNA_RENDERER_SOKOL)
+    // plans/plan_sokol.md SOKOL-25/38: real geometry really is rasterized into a RenderTarget2D here, and
+    // `SokolRenderTargetRenderer::GetData` now round-trips real content via a throwaway GL FBO
+    // (docs/sokol-renderer.md), so `kRasterizes = true` is accurate for this file's contract too.
+    constexpr bool kRasterizes = true;
+    constexpr const char* kRendererName = "SOKOL";
 #else
 #error "REMED-GFX-151: this renderer has no declared render-target producer/consumer contract."
 #endif
@@ -223,6 +229,13 @@ namespace
      */
     constexpr bool kDualTextureAcceptsPositionTexture =
 #if defined(CNA_RENDERER_DIRECTX9)
+        false;
+#elif defined(CNA_RENDERER_SOKOL)
+        // Not a vertex-layout rejection: SokolRenderer::DrawColored3D refuses ANY
+        // `params.dualTexture` draw outright (plans/plan_sokol.md -- dual-texture 3D is not implemented
+        // yet, unlike the single-texture Textured/Lit paths SOKOL-21 landed), so C4 would throw
+        // uncaught here rather than reject cleanly. Reusing this flag to skip it is the same
+        // "documented boundary, unrelated to render-to-texture" carve-out D3D9 already uses.
         false;
 #else
         true;

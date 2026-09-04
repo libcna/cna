@@ -19,7 +19,7 @@ set(CNA_RENDERER_REAL_GL_FAMILIES
     OPENVG                                        # ShivaVG on a real GL context
     NANOVG                                        # NanoVG's compiled-shader backend on a real GL context
     MAGNUM                                        # Magnum's own GL wrappers
-    )
+    SOKOL)                                        # sokol_gfx on GL
 
 # Identities served by one implementation family. Two of them in one binary would mean compiling
 # that family twice with different profile defines -- an ODR violation, not merely a name clash.

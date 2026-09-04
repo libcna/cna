@@ -239,6 +239,24 @@ namespace
 #elif defined(CNA_RENDERER_DIRECTX12)
     constexpr Contract kContract{"DIRECTX12", true, Support::Exact, true, Support::Exact,
                                  true, true, false, true, true, true, true, false};
+#elif defined(CNA_RENDERER_SOKOL)
+    // plans/plan_sokol.md SOKOL-25/26/38: both RenderTarget2D and RenderTargetCube can be created and
+    // bound, and GetData() now works on both single-sample targets (a throwaway GL FBO around the
+    // raw GL texture sg_gl_query_image_info() exposes), so readback/cubeReadback=Exact and every
+    // single-sample readback-driven check here measures real pixels. `msaaTargetReadback` stays
+    // false, conservatively: RunMsaaCycles's own skip guard (`readback != Exact ||
+    // !msaaTargetReadback`) keeps K1/K2 skipped regardless, because a multisampled RenderTarget2D's
+    // own multisample colour image has a DONTCARE store action at every pass end (SOKOL-26's
+    // resolve-then-discard design), so whether its content survives a PreserveContents
+    // unbind/rebind cycle the way K1/K2 require is genuinely unverified, not just untested. This
+    // file's other real value for SOKOL is its non-readback checks (pass segmentation, sprite
+    // viewport/scissor locality, and the cube-face bind cycle itself). Each public bind/unbind
+    // cycle is genuinely its own sokol pass (BeginPassIfNeeded/EndPassIfActive), and an explicit
+    // Clear() -- on a preserving target or after a draw in the same cycle -- always closes the
+    // active pass so the next one starts with a real clear load action, matching FNA's own
+    // command-ordered semantics exactly.
+    constexpr Contract kContract{"SOKOL", true, Support::Exact, true, Support::Exact,
+                                 true, true, false, true, true, true, false, false};
 #else
 #error "REMED-GFX-140: this renderer has no declared render-target pass-boundary contract."
 #endif

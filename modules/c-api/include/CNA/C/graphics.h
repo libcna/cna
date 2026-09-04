@@ -84,6 +84,8 @@ typedef uint32_t CNA_GraphicsRendererType;
 #define CNA_GRAPHICS_RENDERER_OPENGL2 UINT32_C(35)
 /** @brief Identifies the Wicked Engine backend. */
 #define CNA_GRAPHICS_RENDERER_WICKED UINT32_C(36)
+/** @brief Identifies the sokol_gfx backend. */
+#define CNA_GRAPHICS_RENDERER_SOKOL UINT32_C(37)
 /** @brief Identifies the Diligent Engine backend. */
 #define CNA_GRAPHICS_RENDERER_DILIGENT UINT32_C(38)
 /** @brief Identifies the 3dfx Glide backend. */

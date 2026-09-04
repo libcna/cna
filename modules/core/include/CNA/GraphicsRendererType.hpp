@@ -113,6 +113,9 @@ namespace CNA
         /** @brief Wicked Engine (wi::graphics RHI). */
         Wicked,
 
+        /** @brief sokol_gfx (experimental). */
+        Sokol,
+
         /** @brief Diligent Engine (experimental; picks its own native API at runtime). */
         Diligent,
 
@@ -244,6 +247,8 @@ namespace CNA
         return GraphicsRendererType::OpenGL2;
 #elif defined(CNA_RENDERER_WICKED)
         return GraphicsRendererType::Wicked;
+#elif defined(CNA_RENDERER_SOKOL)
+        return GraphicsRendererType::Sokol;
 #elif defined(CNA_RENDERER_DILIGENT)
         return GraphicsRendererType::Diligent;
 #elif defined(CNA_RENDERER_GLIDE)
@@ -327,6 +332,7 @@ namespace CNA
             case GraphicsRendererType::OpenGL1:       return "OPENGL1";
             case GraphicsRendererType::OpenGL2:       return "OPENGL2";
             case GraphicsRendererType::Wicked:        return "WICKED";
+            case GraphicsRendererType::Sokol:         return "SOKOL";
             case GraphicsRendererType::Diligent:      return "DILIGENT";
             case GraphicsRendererType::Glide:         return "GLIDE";
             case GraphicsRendererType::Gdi:           return "GDI";
