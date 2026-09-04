@@ -17,6 +17,21 @@ asserted something a single-UV mesh cannot show — already failing on EasyGL be
 repaired for every renderer (`WEBGPU-159`). Execution continues at **Wave 2**, starting with
 `WEBGPU-153`.
 
+**Full-suite baseline after Wave 1 (`cmake-build-webgpu/CnaTests`, `DISPLAY=:131`, one process,
+938 s):** 8801 tests from 827 suites — **8679 passed, 7 failed, 231 skipped**. The seven are in
+subsystems this pass does not touch, and are named here so a later run can tell a new failure from an
+old one rather than re-deriving the list: `CnjEffectTest.LoadsRealCnjFixture` and
+`CnjStockEffectTest.CustomGlslEffectStillWorks` (a GLSL `ShaderEffect` handed to a WGSL-only
+renderer — `WEBGPU-166`/`203`/`204`'s territory),
+`UnsupportedFormatConstructionTest.EverySurfaceFormatEitherWorksOrThrowsClearly` (a `Texture2D`
+`SurfaceFormat` ordinal that constructs instead of throwing — `WEBGPU-197`–`202`),
+`XnbContentPipelineTest.SpriteFontRuntimeXnbAndTranscodedCnbHaveEquivalentSemantics` and
+`ContentManagerVideoXnbTest.TheObjectReferencedFormLoadsToTheSameValuesAsTheInlineOne` (content
+pipeline), `GameWindowPlatformTest.DelegatesStateAndGeometryToTheSelectedPlatformWindow`
+(`AllowUserResizing`), and `PacketReaderTest.ReadColorReadsSixteenBytesAsFloats` (net). The Wave 1
+diff contains no reference to texture creation, surface-format classification, window state or the
+net module.
+
 **Amended 2026-09-04 (second planning pass).** The parity audit below stands; what it got wrong was
 *where it drew the scope line and how easily it accepted "platform limitation" as an answer*. Eleven
 rows (`WEBGPU-197`–`WEBGPU-207`) were added and five (`161`, `163`, `165`, `166`, `180`) rewritten,
