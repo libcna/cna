@@ -1207,11 +1207,35 @@ namespace CNA::Internal::Renderers::Vulkan
         explicit VulkanRenderer(const GraphicsRendererCreateArgs& args);
         ~VulkanRenderer() override;
 
-        // AnisotropicFiltering/WireFrame reflect real, already-cached device feature queries
-        // (anisotropySupported_/fillModeNonSolidSupported_, both set once at device creation).
-        // Everything else CNA::GraphicsCapability currently enumerates is genuinely supported
-        // here, so falls through to the shared default (true).
+        /**
+         * @brief Whether this renderer supports @p capability on the device it selected.
+         *
+         * plan_vulkan.md VULKAN-020: every member of `CNA::GraphicsCapability` has its own arm,
+         * and the switch has no `default:`. Appending a member therefore stops this target
+         * compiling (`-Werror=switch`) rather than silently claiming the new feature -- which is
+         * what the previous `default: return true` did, and what `GraphicsCapability`'s own
+         * documentation names as the reason several entries had to be made derived.
+         *
+         * @param capability The feature to ask about.
+         * @return Its support on the selected device; false for a value that is not an enumerator.
+         */
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
+
+        /**
+         * @brief CNAEXT. Whether a `RenderTarget2D` of @p format can really be created here.
+         *
+         * plan_vulkan.md VULKAN-020. Mirrors `GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT`,
+         * including its `Defer` arm, so this renderer's own answer for the float render-target
+         * capabilities cannot disagree with the one a game gets through `GraphicsDevice`.
+         *
+         * Takes an ordinal rather than the enum for the reason `IGraphicsRenderer` states about
+         * itself: this layer is deliberately not coupled to `SurfaceFormat`.
+         *
+         * @param surfaceFormatOrdinal The `SurfaceFormat` ordinal to ask about.
+         * @return True if a render target of that format is created rather than substituted.
+         */
+        CNAEXT [[nodiscard]] bool SupportsRenderTargetSurfaceFormatEXT(
+            int surfaceFormatOrdinal) const;
 
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
@@ -1659,6 +1683,10 @@ namespace CNA::Internal::Renderers::Vulkan
         bool anisotropySupported_ = false;
         float maxSamplerAnisotropy_ = 1.f;
         bool independentBlendSupported_ = false;
+        /// plan_vulkan.md VULKAN-020: the SELECTED physical device's limits, cached where the
+        /// selection is made. `SupportsCapability` answers `MultipleRenderTargets` and (VULKAN-021)
+        /// `MultiSampleAntiAliasing` from these rather than from a constant.
+        VkPhysicalDeviceLimits deviceLimits_{};
 
         // REMED-GFX-076: a cached effect descriptor set together with the sampled VkImageViews it
         // was written against. The seven per-frame effect descriptor caches below key on a *hash* of

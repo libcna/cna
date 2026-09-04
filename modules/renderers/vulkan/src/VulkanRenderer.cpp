@@ -2,6 +2,7 @@
 #include "shaders/spirv_shaders.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
 #include "CNA/Internal/Renderers/Vulkan/VulkanCompiledEffect.hpp"
@@ -1807,12 +1808,74 @@ namespace CNA::Internal::Renderers::Vulkan
 
     bool VulkanRenderer::SupportsCapability(CNA::GraphicsCapability capability) const
     {
+        // plan_vulkan.md VULKAN-020. Every member of CNA::GraphicsCapability is answered here, and
+        // there is deliberately **no `default:` arm**. Two things follow, and both are the point:
+        //
+        //  * appending a member to the enum makes this switch incomplete, and the target is built
+        //    with `-Werror=switch` (modules/renderers/vulkan/CMakeLists.txt), so the build stops
+        //    instead of this renderer claiming a feature nobody taught it;
+        //  * a value that is not an enumerator at all -- only reachable by casting an out-of-range
+        //    int -- falls out of the switch to the `return false` below. Refused, never claimed.
+        //
+        // The previous `default: return true` is what this replaces. GraphicsCapability's own
+        // documentation names that shape three times as the reason `ComputeShaders`,
+        // `IndirectDraw` and the float render-target entries had to be made derived: a catch-all
+        // true turns every future capability into an opt-out promise.
         switch (capability)
         {
+            // ---- Answered from a real device property -------------------------------------
             case CNA::GraphicsCapability::AnisotropicFiltering:
                 return anisotropySupported_;
             case CNA::GraphicsCapability::WireFrame:
                 return fillModeNonSolidSupported_;
+            case CNA::GraphicsCapability::MultipleRenderTargets:
+                // The renderer caps its own MRT set at FNA's MAX_RENDERTARGET_BINDINGS, but the
+                // question here is whether more than one attachment is expressible at all.
+                return deviceLimits_.maxColorAttachments > 1;
+            case CNA::GraphicsCapability::DepthStencilBuffer:
+                // FindDepthFormat() picks a device-wide depth format at construction and throws if
+                // the device offers none, so this is a real attachment rather than an assumption.
+                return depthFormat_ != VK_FORMAT_UNDEFINED;
+            case CNA::GraphicsCapability::StencilBuffer:
+                // Separate from the above on purpose: FindDepthFormat() prefers a stencil-capable
+                // format but falls back to VK_FORMAT_D32_SFLOAT, and on a device that took that
+                // fallback DepthStencilState.StencilEnable cannot work however correctly the
+                // pipeline maps it. Answer from the format actually chosen.
+                return depthFormat_ == VK_FORMAT_D24_UNORM_S8_UINT
+                    || depthFormat_ == VK_FORMAT_D32_SFLOAT_S8_UINT
+                    || depthFormat_ == VK_FORMAT_D16_UNORM_S8_UINT
+                    || depthFormat_ == VK_FORMAT_S8_UINT;
+            case CNA::GraphicsCapability::MultiSampleAntiAliasing:
+                // VULKAN-021 owns replacing this with the device's own
+                // framebufferColorSampleCounts/framebufferDepthSampleCounts, which is the same
+                // source PickSampleCount already reads. Kept as the previous answer here so this
+                // task changes no answer, only where each one comes from.
+                return true;
+
+            // ---- Answered from what this renderer implements -------------------------------
+            case CNA::GraphicsCapability::ThreeD:
+                // DrawPrimitivesEx / DrawIndexedPrimitivesEx / DrawInstancedPrimitivesEx, real
+                // depth and stencil state, and a full 3D pipeline cache.
+                return true;
+            case CNA::GraphicsCapability::OcclusionQuery:
+                // VK_QUERY_TYPE_OCCLUSION is core Vulkan 1.0 with no feature bit guarding its
+                // existence; VULKAN-370 owns the separate question of whether the count is exact.
+                return true;
+            case CNA::GraphicsCapability::CustomEffects:
+                // CreateEffect() builds a pipeline from a caller-supplied SPIR-V pair. What that
+                // acceptance does and does not promise is GetShaderDialectEXT()'s job to say
+                // (VULKAN-250), and the surface's own gaps are VULKAN-251..VULKAN-255.
+                return true;
+            case CNA::GraphicsCapability::Texture3D:
+                // VulkanTexture3DRenderer is real storage with a real SetData/GetData round-trip.
+                return true;
+            case CNA::GraphicsCapability::Instancing:
+                // vkCmdDrawIndexed with a per-instance binding; core, no extension.
+                return true;
+            case CNA::GraphicsCapability::AdditiveBlending:
+                // A real VkPipelineColorBlendAttachmentState carried in the pipeline key, not a
+                // degradation to source-over.
+                return true;
             case CNA::GraphicsCapability::MultiStreamVertexInput:
                 // REMED-GFX-201: not yet implemented here. Every 3D pipeline in this renderer bakes
                 // a single VkVertexInputBindingDescription at binding 0 with combined-layout
@@ -1820,9 +1883,45 @@ namespace CNA::Internal::Renderers::Vulkan
                 // attribute to claim. Reported honestly so an ordinary multi-stream draw is
                 // rejected before submission instead of rendering from stream 0 alone.
                 return false;
-            default:
-                return true;
+
+            // ---- Derived: answered above this switch by GraphicsDevice ----------------------
+            // A game never reaches these cases -- GraphicsDevice::SupportsCapability answers all
+            // six from a renderer virtual before asking the renderer's switch. They are answered
+            // here anyway, from the SAME virtual, so that a caller holding an IGraphicsRenderer
+            // directly (the C ABI, a renderer test) cannot be told something the seam would deny.
+            case CNA::GraphicsCapability::CompiledEffects:
+                return SupportsCompiledEffects();
+            case CNA::GraphicsCapability::ComputeShaders:
+                return SupportsComputeShadersEXT();
+            case CNA::GraphicsCapability::IndirectDraw:
+                return SupportsIndirectDrawEXT();
+            case CNA::GraphicsCapability::HalfFloatTextureLinearFiltering:
+                return SupportsHalfFloatTextureLinearFilteringEXT();
+            case CNA::GraphicsCapability::FloatRenderTargets:
+                return SupportsRenderTargetSurfaceFormatEXT(
+                    static_cast<int>(Microsoft::Xna::Framework::Graphics::SurfaceFormat::Vector4));
+            case CNA::GraphicsCapability::HalfFloatRenderTargets:
+                return SupportsRenderTargetSurfaceFormatEXT(
+                    static_cast<int>(Microsoft::Xna::Framework::Graphics::SurfaceFormat::HdrBlendable));
         }
+        // Not an enumerator. See the note above: refused, never claimed.
+        return false;
+    }
+
+    bool VulkanRenderer::SupportsRenderTargetSurfaceFormatEXT(int surfaceFormatOrdinal) const
+    {
+        // Mirrors GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT exactly, including the
+        // Defer arm's framework rule (Texture::ValidateFormat admits Color alone). It is repeated
+        // rather than called because GraphicsDevice is above this layer; if that reduction ever
+        // changes, this must change with it -- which is why the two float capability cases above
+        // route through here instead of hard-coding an answer.
+        switch (ClassifyRenderTargetFormatEXT(surfaceFormatOrdinal))
+        {
+            case CNA::Internal::Renderers::RendererFormatVerdict::Supported:   return true;
+            case CNA::Internal::Renderers::RendererFormatVerdict::Unsupported:  return false;
+            case CNA::Internal::Renderers::RendererFormatVerdict::Defer:        break;
+        }
+        return surfaceFormatOrdinal == static_cast<int>(Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color);
     }
 
     VulkanRenderer::~VulkanRenderer()
@@ -2329,6 +2428,10 @@ namespace CNA::Internal::Renderers::Vulkan
 
         VkPhysicalDeviceProperties p;
         vkGetPhysicalDeviceProperties(physicalDevice_, &p);
+        // plan_vulkan.md VULKAN-020: SupportsCapability answers several members from the device's
+        // own limits, and it must answer for the device this loop actually selected -- which is not
+        // necessarily GPU 0. Cached here, next to the selection, rather than re-queried per call.
+        deviceLimits_ = p.limits;
         std::clog << "[Vulkan] GPU: " << p.deviceName << '\n';
     }
 

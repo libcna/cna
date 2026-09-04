@@ -1058,6 +1058,17 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_VertexBufferIndexBufferGetData COMMAND cna_test_vulkan_vertexbuffer_indexbuffer_getdata
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plans/plan_vulkan.md VULKAN-020 (F-07): SupportsCapability used to end in
+        # `default: return true`, so the renderer answered true for six members GraphicsDevice
+        # answers false, and for values that are not enumerators at all. Asks both seams the same
+        # 19 questions, requires the same 19 answers, and drives every false answer into the public
+        # API to prove it is a refusal rather than a working path.
+        cna_vulkan_test(cna_test_vulkan_capability_contract
+                        vulkan_capability_contract_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_CapabilityContract
+            COMMAND cna_test_vulkan_capability_contract
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plans/plan_vulkan.md VULKAN-130 (F-01): the host-visible mapping a VertexBuffer uploads
         # into is opened at 64 bytes per vertex, because CreateVertexBuffer is handed a count and
         # not a stride -- while this renderer's own pipeline-key table recognises strides 68, 76
