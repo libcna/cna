@@ -1390,22 +1390,37 @@ CNA_Result cna_sprite_batch_begin_with_states(
                 CNA_ERROR_CATEGORY_ARGUMENT,
                 "The SpriteBatch sort mode is invalid.");
         }
-        if (const CNA_Result result = ToNativeBlendState(blendState, &nativeBlendState);
-            result != CNA_RESULT_SUCCESS) {
+        // Both Begin routes document each of these four as "or null for <default>", and that is
+        // the canonical behaviour: FNA's SpriteBatch.Begin stores
+        // `blendState ?? BlendState.AlphaBlend` and the same for the other three. Substituting
+        // here rather than teaching the shared converters null keeps every other route's
+        // refusal of a null descriptor exactly as it was.
+        if (blendState == nullptr) {
+            nativeBlendState = Microsoft::Xna::Framework::Graphics::BlendState::AlphaBlend;
+        } else if (const CNA_Result result = ToNativeBlendState(blendState, &nativeBlendState);
+                   result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (const CNA_Result result = ToNativeSamplerState(samplerState, &nativeSamplerState);
-            result != CNA_RESULT_SUCCESS) {
+        if (samplerState == nullptr) {
+            nativeSamplerState = Microsoft::Xna::Framework::Graphics::SamplerState::LinearClamp;
+        } else if (const CNA_Result result = ToNativeSamplerState(samplerState, &nativeSamplerState);
+                   result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (const CNA_Result result = ToNativeDepthStencilState(
-                depthStencilState, &nativeDepthStencilState);
-            result != CNA_RESULT_SUCCESS) {
+        if (depthStencilState == nullptr) {
+            nativeDepthStencilState =
+                Microsoft::Xna::Framework::Graphics::DepthStencilState::None;
+        } else if (const CNA_Result result = ToNativeDepthStencilState(
+                       depthStencilState, &nativeDepthStencilState);
+                   result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (const CNA_Result result = ToNativeRasterizerState(
-                rasterizerState, &nativeRasterizerState);
-            result != CNA_RESULT_SUCCESS) {
+        if (rasterizerState == nullptr) {
+            nativeRasterizerState =
+                Microsoft::Xna::Framework::Graphics::RasterizerState::CullCounterClockwise;
+        } else if (const CNA_Result result = ToNativeRasterizerState(
+                       rasterizerState, &nativeRasterizerState);
+                   result != CNA_RESULT_SUCCESS) {
             return result;
         }
 
@@ -1454,22 +1469,37 @@ CNA_Result cna_sprite_batch_begin_with_effect(
                 CNA_ERROR_CATEGORY_ARGUMENT,
                 "The SpriteBatch sort mode is invalid.");
         }
-        if (const CNA_Result result = ToNativeBlendState(blendState, &nativeBlendState);
-            result != CNA_RESULT_SUCCESS) {
+        // Both Begin routes document each of these four as "or null for <default>", and that is
+        // the canonical behaviour: FNA's SpriteBatch.Begin stores
+        // `blendState ?? BlendState.AlphaBlend` and the same for the other three. Substituting
+        // here rather than teaching the shared converters null keeps every other route's
+        // refusal of a null descriptor exactly as it was.
+        if (blendState == nullptr) {
+            nativeBlendState = Microsoft::Xna::Framework::Graphics::BlendState::AlphaBlend;
+        } else if (const CNA_Result result = ToNativeBlendState(blendState, &nativeBlendState);
+                   result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (const CNA_Result result = ToNativeSamplerState(samplerState, &nativeSamplerState);
-            result != CNA_RESULT_SUCCESS) {
+        if (samplerState == nullptr) {
+            nativeSamplerState = Microsoft::Xna::Framework::Graphics::SamplerState::LinearClamp;
+        } else if (const CNA_Result result = ToNativeSamplerState(samplerState, &nativeSamplerState);
+                   result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (const CNA_Result result = ToNativeDepthStencilState(
-                depthStencilState, &nativeDepthStencilState);
-            result != CNA_RESULT_SUCCESS) {
+        if (depthStencilState == nullptr) {
+            nativeDepthStencilState =
+                Microsoft::Xna::Framework::Graphics::DepthStencilState::None;
+        } else if (const CNA_Result result = ToNativeDepthStencilState(
+                       depthStencilState, &nativeDepthStencilState);
+                   result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (const CNA_Result result = ToNativeRasterizerState(
-                rasterizerState, &nativeRasterizerState);
-            result != CNA_RESULT_SUCCESS) {
+        if (rasterizerState == nullptr) {
+            nativeRasterizerState =
+                Microsoft::Xna::Framework::Graphics::RasterizerState::CullCounterClockwise;
+        } else if (const CNA_Result result = ToNativeRasterizerState(
+                       rasterizerState, &nativeRasterizerState);
+                   result != CNA_RESULT_SUCCESS) {
             return result;
         }
 
