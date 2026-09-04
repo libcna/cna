@@ -8928,15 +8928,6 @@ CNA_Result cna_shadow_map_destroy(const CNA_ShadowMapHandle shadowMapHandle)
                 CNA_ERROR_CATEGORY_STATE,
                 "The shadow map is still lending an effect or its shadow texture.");
         }
-        // The effects and the texture this map hands out are borrows that keep it alive.
-        // Destroying it underneath one would leave a handle naming an object that is gone,
-        // so the borrow is what has to be released first.
-        if (map->activeBorrowCount != 0U) {
-            return Fail(
-                CNA_RESULT_INVALID_STATE,
-                CNA_ERROR_CATEGORY_STATE,
-                "The spot shadow map is still lending an effect or its shadow texture.");
-        }
         const CNA_Result releaseResult = GetRuntimeHandles().Release(shadowMapHandle);
         if (releaseResult != CNA_RESULT_SUCCESS) {
             return Fail(
@@ -9168,6 +9159,15 @@ CNA_Result cna_spot_shadow_map_destroy(const CNA_SpotShadowMapHandle shadowMapHa
         if (const CNA_Result result = GetSpotShadowMap(shadowMapHandle, &map);
             result != CNA_RESULT_SUCCESS) {
             return result;
+        }
+        // The effects and the texture this map hands out are borrows that keep it alive.
+        // Destroying it underneath one would leave a handle naming an object that is gone,
+        // so the borrow is what has to be released first.
+        if (map->activeBorrowCount != 0U) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "The spot shadow map is still lending an effect or its shadow texture.");
         }
         const CNA_Result releaseResult = GetRuntimeHandles().Release(shadowMapHandle);
         if (releaseResult != CNA_RESULT_SUCCESS) {
