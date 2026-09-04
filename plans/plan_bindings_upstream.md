@@ -316,11 +316,23 @@ copy_available_ext       result=14 count=1
 They agree, and both read the same `State().available`. The `0` in the binding's own probe
 output comes from elsewhere in its sequence, after a `reset_for_tests`.
 
-What does still hold from that row is the second half, and it is worth taking on its own:
-`cna_graphics_renderer_get_current_type` answers `UNKNOWN` while
-`cna_graphics_renderer_get_current_name` answers `"OPENGLES3"`, and `get_active_ext`
-answers `UNKNOWN` after a device has run a frame. A route named "current" that cannot name
-the running renderer, beside one that can, is a contradiction rather than a gap.
+The row's second half does not reproduce either. Asked the same way:
+
+```
+get_current_type          result=0 type=3
+copy_current_name         result=0 name="OPENGLES3"
+```
+
+Both name OPENGLES3. Both derive from `getCurrentGraphicsRendererType()`, which is a
+compile-time constant, so they cannot disagree — and the `UNKNOWN` in the binding's output
+is again a later line in a sequence that has called `reset_for_tests` by then.
+
+Two lessons, and the second is the more useful. A binding's probe output is evidence about
+the binding's sequence, not about a route: both halves of this row were read off an
+aggregate that had moved on. Asking one route, twice, in a program that does nothing else
+settled it in a minute. `get_active_ext` answering `UNKNOWN` before any device exists is
+separate and correct — it is documented to, and `GetActive()` throws until a renderer has
+been created.
 
 ---
 
