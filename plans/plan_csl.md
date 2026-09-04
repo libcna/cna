@@ -21,7 +21,7 @@
 > 🟨 code exists but the criterion is not met/verified; ⬜ not started; ⛔ deliberately not done
 > (with the reason in the row itself, never in a commit message only).
 >
-> **1,166 numbered tasks across 43 phases, every one ⬜ today. Nothing in this plan has been
+> **1,173 numbered tasks across 43 phases, every one ⬜ today. Nothing in this plan has been
 > implemented.** This document is the thing being approved; implementation starts after approval,
 > not before. Task IDs are sparse inside each phase on purpose, so work discovered during
 > implementation takes a free neighbouring number instead of forcing a renumbering pass. The
@@ -142,14 +142,14 @@ A task is ✅ only when all of these hold:
 | 17 | `CSL-1225`–`CSL-1243` | MSL backend | 13 | — |
 | 18 | `CSL-1280`–`CSL-1304` | WGSL backend | 13 | **M5** |
 | 19 | `CSL-1335`–`CSL-1388` | CPU reference interpreter | 12 | **M6** |
-| 20 | `CSL-1425`–`CSL-1440` | EffectIR and the CSE layer | 7 | — |
+| 20 | `CSL-1425`–`CSL-1443` | EffectIR and the CSE layer | 7 | — |
 | 21 | `CSL-1485`–`CSL-1507` | FX / HLSL compatibility frontend | 20 | **M4** |
 | 22 | `CSL-1550`–`CSL-1574` | CSP compiled package format | 9, 14 | — |
-| 23 | `CSL-1620`–`CSL-1635` | Content pipeline, CNB and `ContentManager` | 22 | — |
+| 23 | `CSL-1620`–`CSL-1637` | Content pipeline, CNB and `ContentManager` | 22 | — |
 | 24 | `CSL-1675`–`CSL-1700` | Runtime: `CslEffect` and renderer binding | 22, 23 | — |
 | 25 | `CSL-1760`–`CSL-1819` | Target-profile rollout across all 49 identities | 24 | — |
-| 26 | `CSL-1845`–`CSL-1857` | Hot reload | 24 | — |
-| 27 | `CSL-1895`–`CSL-1921` | `cna-shaderc` | 14 | — |
+| 26 | `CSL-1845`–`CSL-1858` | Hot reload | 24 | — |
+| 27 | `CSL-1895`–`CSL-1922` | `cna-shaderc` | 14 | — |
 | 28 | `CSL-1955`–`CSL-1970` | `cna-shader-info` | 22 | — |
 | 29 | `CSL-1995`–`CSL-2017` | `cna-shader-test` and the conformance harness | 19, 24 | — |
 | 30 | `CSL-2070`–`CSL-2083` | `cna-shader-diff` and N-way differential testing | 29 | — |
@@ -216,7 +216,7 @@ discoverable, so every later phase has one place to add a header, a test and a d
 | CSL-26 | Decide where corpus fixtures live and how large they may get | ⬜ | `tests/csl-corpus/` at repository root (shared fixture assets stay top-level per CLAUDE.md), with a size budget in `docs/csl/conformance.md` and a ctest that fails if the tree exceeds it. |
 | CSL-27 | `.gitattributes` entries for `.csl`, `.csir`, `.csp` (text vs binary, no CRLF mangling) | ⬜ | `.csl` and `.csir` text with LF; `.csp` binary; verified by committing a file with a lone CR and reading it back byte-identical. |
 | CSL-28 | Register the four tool source directories under `tools/csl/` without building them yet | ⬜ | `tools/csl/{shaderc,shader_info,shader_test,shader_diff}/` exist with a `main` that prints the version and exits 0; each builds under `CNA_CSL=ON` and is absent under OFF. |
-| CSL-29 | Decide the file extensions and their meanings, and write them down | ⬜ | `docs/csl/architecture.md`: `.csl` source, `.csli` include, `.csir` textual IR (debug only, never shipped), `.csp` compiled package. A test asserts `cna-shaderc` refuses to *load* `.csir` as an input, so the debug format cannot quietly become an interchange format. |
+| CSL-29 | Decide the file extensions and their meanings, and write them down | ⬜ | `docs/csl/architecture.md`: `.csl` shader source, `.csle` effect source (**owner decision Q5**, `CSL-1431`), `.csli` include, `.csir` textual IR (debug only, never shipped), `.csp` compiled package. A test asserts `cna-shaderc` refuses to *load* `.csir` as an input, so the debug format cannot quietly become an interchange format. |
 | CSL-30 | Decide the `CNA::Shader` public/internal boundary | ⬜ | Everything a tool or renderer needs is in `include/`; AST nodes, parser state and backend internals are in `src/` and are unreachable from a consumer TU. A test TU that tries to include a parser internal fails to compile, and that failure is the assertion. |
 | CSL-31 | Thread-safety contract for the compiler | ⬜ | Documented: a `CompilationSession` is single-threaded; sessions are independent; nothing is shared. A stress test compiles 64 sources across `std::thread::hardware_concurrency()` sessions and asserts byte-identical outputs and clean TSan. |
 | CSL-32 | ASan/UBSan build of `cna_shader` and its tests in the presets | ⬜ | A `csl-asan` preset builds and the whole shader test set passes under ASan+UBSan; the row records the wall-clock cost so later phases know what they are paying. |
@@ -1162,19 +1162,19 @@ the best parallel track in the plan.
 
 ---
 
-## Phase 20 — EffectIR and the CSE layer (`CSL-1425`–`CSL-1440`)
+## Phase 20 — EffectIR and the CSE layer (`CSL-1425`–`CSL-1443`)
 
 → §15. Techniques, passes and pipeline state, kept strictly out of the shader language.
 
 | ID | Task | Status | Acceptance criterion |
 |---|---|---|---|
-| CSL-1425 | The `ShaderIR` / `EffectIR` split, documented before implementation | ⬜ | `docs/csl/effect.md`: an `EffectIR` references shader entry points by identity and adds no expressions of its own. A test asserts `EffectIR` has no dependency on the expression node types. |
+| CSL-1425 | The `ShaderIR` / `EffectIR` split, documented before implementation | ⬜ | `docs/csl/effect.md`: an `EffectIR` references shader entry points by identity and adds no expressions of its own. A test asserts `EffectIR` has no dependency on the expression node types. The split is **physical as well as logical** (owner decision Q5): shaders live in `.csl`, effects in `.csle`, and the document says why the two are not one file. |
 | CSL-1426 | `EffectModule` → techniques → passes, the §15 tree | ⬜ | Implemented with the same arena/handle model. |
 | CSL-1427 | `PassState`: blend, depth-stencil, rasterizer, topology | ⬜ | The fields are CNA's own `BlendState`/`DepthStencilState`/`RasterizerState` *values*, not a parallel vocabulary — a test asserts each maps onto the XNA type without loss. |
 | CSL-1428 | Pass shader references: vertex and fragment entry points by name | ⬜ | An unresolved reference is a diagnostic with a did-you-mean over the module's entry points. |
 | CSL-1429 | Effect parameters and their binding to shader resources | ⬜ | An effect parameter maps to a uniform-block member or a texture binding; the mapping is in reflection and an unmapped parameter is reported. |
 | CSL-1430 | Annotations on techniques, passes and parameters | ⬜ | Preserved through the pipeline into reflection, because the FX frontend needs them and `plan_fx.md`'s object graph already exposes them. |
-| CSL-1431 | Native CSL effect syntax (`.csle` or an `effect { }` block in `.csl`) | ⬜ | The choice is made in the row with the reason; the syntax is specified in `docs/csl/effect.md` and parsed by the same lexer. |
+| CSL-1431 | Native CSL effect syntax in a **separate `.csle` file** (owner decision Q5) | ⬜ | Specified in `docs/csl/effect.md` and parsed by the same lexer with an effect keyword set (the `CSL-1487` parameterization, reused a second time). An `effect { }` block inside `.csl` is **refused** — a shader file contains no pipeline state, which is §15's own argument applied to CSL itself. The refusal has its own diagnostic naming `.csle`. |
 | CSL-1432 | EffectIR validation | ⬜ | Every pass names existing entry points of the right stages; every technique has ≥ 1 pass; duplicate names are errors. |
 | CSL-1433 | EffectIR serialization inside the CSP | ⬜ | Round-trips; a package may hold an effect with several techniques and each technique's passes reference variants correctly. |
 | CSL-1434 | Effect reflection: techniques, passes and their state, queryable | ⬜ | Enough for a runtime to apply a pass without re-parsing anything. |
@@ -1184,6 +1184,9 @@ the best parallel track in the plan.
 | CSL-1438 | Effect-level capability requirements are the union of its passes' | ⬜ | Computed, not declared; a technique that cannot run on a device is reported per-technique, so an effect with a fallback technique still works. |
 | CSL-1439 | Technique selection by capability at load time | ⬜ | `CurrentTechnique` defaults to the first technique whose requirements the device meets, with the skipped ones and the reason available for inspection. |
 | CSL-1440 | Golden EffectIR text form for the corpus effects | ⬜ | Committed and round-trip-tested. |
+| CSL-1441 | `.csle` references its shaders by path, and the reference is resolved, not inlined | ⬜ | `shader "terrain.csl";` declares the shader module a technique's passes draw entry points from; a pass names an entry point within it. Several `.csle` files may reference one `.csl`, and one `.csle` may reference several — both tested, since that flexibility is the whole reason the file is separate. |
+| CSL-1442 | The `.csle` → `.csl` dependency edge is a first-class, queryable fact | ⬜ | The compilation session exposes the resolved shader-module set for a `.csle`; the content pipeline (`CSL-1636`), the incremental build (`CSL-1624`) and hot reload (`CSL-1848`) all consume that one API rather than each re-deriving it from the source. |
+| CSL-1443 | A missing or unparseable referenced `.csl` is diagnosed against the `.csle` | ⬜ | The diagnostic points at the reference in the `.csle` **and** carries the inner file's own diagnostics as notes, in the `CSL-184` include-chain form — not a bare "could not build effect". |
 
 ---
 
@@ -1254,11 +1257,11 @@ this is **not** a full HLSL implementation (§48 forbids one), it is the XNA-era
 
 ---
 
-## Phase 23 — Content pipeline, CNB and `ContentManager` (`CSL-1620`–`CSL-1635`)
+## Phase 23 — Content pipeline, CNB and `ContentManager` (`CSL-1620`–`CSL-1637`)
 
 | ID | Task | Status | Acceptance criterion |
 |---|---|---|---|
-| CSL-1620 | `CslContentPipeline` in `modules/content-pipeline` | ⬜ | Compiles a `.csl`/`.fx` source into a `.csp`, following the existing `EffectSourceContentPipeline` shape so the two are recognizably siblings. |
+| CSL-1620 | `CslContentPipeline` in `modules/content-pipeline` | ⬜ | Compiles a `.csl`, `.csle` or `.fx` source into a `.csp`, following the existing `EffectSourceContentPipeline` shape so the two are recognizably siblings. |
 | CSL-1621 | `cna-content` learns the `.csl` input type | ⬜ | `cna-content build shader.csl` produces `shader.csp`; the CLI surface matches the existing content tool's conventions exactly. |
 | CSL-1622 | Target selection from the build configuration | ⬜ | The renderer(s) the build targets determine the default profile set; `--targets` overrides. A test asserts a `CNA_GRAPHICS_RENDERER=VULKAN` build defaults to emitting `spirv-vulkan-*` and not MSL. |
 | CSL-1623 | Deterministic, parallel-safe builds | ⬜ | Following the `plan_xnapipeline.md` XNAP-44 precedent: output is byte-identical across worker counts and across process runs, and the test is the same shape as that one. |
@@ -1274,6 +1277,8 @@ this is **not** a full HLSL implementation (§48 forbids one), it is the XNA-era
 | CSL-1633 | Benchmark: shader build time as a fraction of a full content build | ⬜ | Measured on a representative asset set and recorded in `docs/content-pipeline-benchmark.md` beside the existing numbers. |
 | CSL-1634 | Hot-reload-friendly output layout for development builds | ⬜ | Loose `.csp` files next to sources under a development flag, which is what Phase 26 watches. |
 | CSL-1635 | Runtime compilation is available but never required (→ §18) | ⬜ | A test builds an application configuration with `CNA_CSL=OFF` that still loads and runs a pre-built `.csp` — proving the §18 claim structurally rather than by assertion. |
+| CSL-1636 | `cna-content` learns the `.csle` input type as a second, distinct route (owner decision Q5) | ⬜ | `cna-content build terrain.csle` produces an effect `.csp` carrying the EffectIR section (`CSL-1559`) plus every shader variant its passes need. A `.csl` referenced only by a `.csle` is **not** built as its own asset unless it is also named directly, and that rule is tested — otherwise every effect ships its shaders twice. |
+| CSL-1637 | Incremental builds follow the `.csle` → `.csl` edge (owner decision Q5) | ⬜ | Editing a `.csl` rebuilds every `.csle` that references it, transitively through `#include`; editing a `.csle` rebuilds only itself. Both directions tested, because the separate-file choice is only safe if this edge is never missed. |
 
 ---
 
@@ -1353,7 +1358,7 @@ name and is not a gap. No row in this phase may add a compiler to a renderer (D3
 | CSL-1784 | `DILIGENT` | ⬜ | The one renderer whose native API is chosen at run time; the profile list must be answered per-device, not per-build, and the row proves the selection algorithm handles that. |
 | CSL-1785 | `WICKED` | ⬜ | Declares what Wicked's own shader path accepts, or "none" with the reason. |
 | CSL-1786 | `SOKOL` | ⬜ | sokol_gfx takes per-backend source; the row records which profiles are declared per sokol backend, or "none" if sokol's own shader-compilation model cannot accept an external artifact. |
-| CSL-1787 | `BGFX` | ⬜ | bgfx consumes its own compiled format from `shaderc`. Expected outcome: "none" for v1, with the reason (a `CSIR → bgfx binary` backend is a legitimate future profile and the row says so rather than pretending it exists). |
+| CSL-1787 | `BGFX` | ⬜ | **Owner decision Q2: out of v1 scope.** bgfx consumes its own compiled format from `shaderc`, so the answer is "none", recorded with the reason and with `CSIR → bgfx binary` named as a legitimate future profile rather than a gap. The existing `bgfx_shaders.hpp` route is untouched. |
 | CSL-1788 | `FNA3D` | ⬜ | FNA3D consumes MojoShader effects; expected "none" for CSL, with the compiled-`.fx` path remaining its route (D4). Recorded, not left blank. |
 
 ### 25.4 HLSL-family identities
@@ -1375,7 +1380,7 @@ name and is not a gap. No row in this phase may add a compiler to a renderer (D3
 | CSL-1801 | `PIXIJS` | ⬜ | 2D-only, retained scene graph, no custom `Effect` (CLAUDE.md states it): "none", recorded against `plan_pixijs.md`'s boundary. |
 | CSL-1802 | `METAL` | ⬜ | Declares `msl-2.0`; load path complete; 🟨 with "no Apple machine here", consistent with `plan_metal.md`. |
 | CSL-1803 | `HEADLESS` | ⬜ | Accepts an artifact and executes nothing — but must say so honestly through `ExecutesShaderEffectSourceEXT()`-shaped queries (`CSL-1698`), which is precisely the trap CLAUDE.md warns about. The row's criterion is that a conformance run against HEADLESS **skips**, and never reports a pass. |
-| CSL-1804 | `SOFTWARE` | ⬜ | The interesting question of this phase: SOFTWARE could run CSIR-L through the interpreter and become the first renderer whose shaders are genuinely CSL. The row decides — either wiring it (a real feature) or ⛔ with the reason and the same honest-skip behaviour as HEADLESS. |
+| CSL-1804 | `SOFTWARE` | ⬜ | **Owner decision Q1: no for v1.** SOFTWARE could run CSIR-L through the interpreter and become the first renderer whose shaders are genuinely CSL; the owner decided against it for v1, so it answers "none" and takes the same honest-skip behaviour as `HEADLESS` — a conformance run SKIPs and never reports a pass. The row records the decision and its reason (an interpreter written for correctness is not a rasterizer's shading core until measured otherwise); `CSL-2744` re-decides on the `CSL-1385` number. |
 | CSL-1805 | `STUB` | ⬜ | "none"; the no-op renderer, recorded. |
 | CSL-1806 | `SKIA` | ⬜ | CPU-raster 2D with no custom effects: "none", recorded against `docs/skia-renderer.md`. |
 | CSL-1807 | `DIRECT2D`, `GDI`, `BLEND2D`, `CANVAS`, `HTML_DOM`, `SVG_DOM`, `OPENVG` | ⬜ | Seven 2D/vector identities, one row: all "none". Each is listed explicitly with its boundary document, so the matrix has no blanks. |
@@ -1394,7 +1399,7 @@ name and is not a gap. No row in this phase may add a compiler to a renderer (D3
 
 ---
 
-## Phase 26 — Hot reload (`CSL-1845`–`CSL-1857`)
+## Phase 26 — Hot reload (`CSL-1845`–`CSL-1858`)
 
 → §19.
 
@@ -1413,10 +1418,11 @@ name and is not a gap. No row in this phase may add a compiler to a renderer (D3
 | CSL-1855 | Reload latency measurement | ⬜ | Edit-to-pixel time measured for a representative shader on EasyGL and recorded; if it exceeds a stated budget the row says what dominates. |
 | CSL-1856 | Reload stress: 1000 consecutive reloads leak nothing | ⬜ | ASan-clean with a flat memory profile, since a leaking swap is invisible until an hour into a session. |
 | CSL-1857 | Reload across a device reset | ⬜ | Defined behaviour, tested — the two lifetime mechanisms must not fight. |
+| CSL-1858 | The watcher follows the `.csle` → `.csl` edge too (owner decision Q5) | ⬜ | Editing a referenced `.csl` reloads the effect that references it, using the `CSL-1442` API rather than a second dependency walker. Tested with one `.csl` referenced by two `.csle` files: both reload, and neither reloads when the other's `.csle` changes. |
 
 ---
 
-## Phase 27 — `cna-shaderc` (`CSL-1895`–`CSL-1921`)
+## Phase 27 — `cna-shaderc` (`CSL-1895`–`CSL-1922`)
 
 → §1, §17, §39.
 
@@ -1449,6 +1455,7 @@ name and is not a gap. No row in this phase may add a compiler to a renderer (D3
 | CSL-1919 | `--time-report` | ⬜ | Per-stage timings; used to keep the compiler's performance honest as phases land. |
 | CSL-1920 | The tool never writes a partial output file | ⬜ | Write-to-temp-and-rename; a test kills the process mid-write and asserts no truncated `.csp` is left behind. |
 | CSL-1921 | Man-page-quality `--help` and a `docs/csl/cna-shaderc.md` reference | ⬜ | Every flag documented with an example; a ctest asserts every flag the parser accepts appears in the document. |
+| CSL-1922 | `cna-shaderc` accepts a `.csle` and reports its shader dependencies (owner decision Q5) | ⬜ | `cna-shaderc terrain.csle -o terrain.csp` works; `--deps` prints the resolved `.csl` set in a form a build system can consume, so the separate-file choice does not force every consumer to re-implement `CSL-1442`. |
 
 ---
 
@@ -1797,7 +1804,7 @@ driver.
 
 | ID | Task | Status | Acceptance criterion |
 |---|---|---|---|
-| CSL-2695 | Decide the GUI technology and record the decision | ⬜ | Chosen from what the repository can already build and run; the row records the choice with its reason, and the choice must not add a runtime dependency to CNA itself (the Laboratory is a tool, not a module). |
+| CSL-2695 | Decide the GUI technology and record the decision | ⬜ | Chosen from what the repository can already build and run; the row records the choice with its reason, and the choice must not add a runtime dependency to CNA itself (the Laboratory is a tool, not a module). **Owner decision Q4** fixes its status: a developer tool, off by default (`CSL-2704`), never a shipped product. |
 | CSL-2696 | Three-pane layout: source, preview, output tabs (§40) | ⬜ | The §40 layout, working. |
 | CSL-2697 | CSL source editor with live diagnostics | ⬜ | Diagnostics come from the LSP path or from the library directly; either way, from one compiler. |
 | CSL-2698 | Output tabs: CSIR, SPIR-V, HLSL, GLSL, MSL, WGSL, Reflection, Capabilities (§40) | ⬜ | Exactly the §40 tab list; each tab's content is `cna-shaderc --dump-*` output, obtained through the library, never by shelling out. |
@@ -1823,8 +1830,8 @@ it decides on is exactly what those phases produce.
 | CSL-2741 | Decide: does `ShaderEffect` become a `CslEffect` wrapper? | ⬜ | A recorded decision with its reason. ⛔ is a perfectly good outcome, and if the answer is yes it becomes its own phase in a follow-up plan rather than being smuggled in here. |
 | CSL-2742 | Decide: do the engine layer's GLSL ES 3.00 shaders move to CSL? | ⬜ | Same discipline. The relevant evidence is whether CSL's ES 1.00 legalization (`CSL-1004`) is *better* than `MOD-15`'s documented floor, measured on the engine layer's own shaders. |
 | CSL-2743 | Decide: do the renderers' baked shader headers move to CSL? | ⬜ | The `compile_shaders.py` scripts of Vulkan, bgfx, D3D and DirectX9 are the concrete target; the evidence is whether one CSL source per stock effect produces artifacts equivalent to the four scripts' outputs. Partial adoption (one renderer) is an allowed outcome and is more likely than all-or-nothing. |
-| CSL-2744 | Decide: does `SOFTWARE` gain a real shader pipeline via the interpreter (`CSL-1804`)? | ⬜ | Evidence: the interpreter's measured throughput (`CSL-1385`) against what a software renderer needs. |
-| CSL-2745 | Decide: does the FX frontend replace or complement MojoShader? | ⬜ | Evidence: `CSL-1504`'s differential results and the refusal list of `CSL-1485`. Complementing is the expected answer and the row must say so with numbers if it is. |
+| CSL-2744 | Re-decide: does `SOFTWARE` gain a real shader pipeline via the interpreter (`CSL-1804`)? | ⬜ | The owner's standing answer is **no for v1** (Q1); this row may only overturn it on evidence — the interpreter's measured throughput (`CSL-1385`) against what a software renderer needs. Confirming the standing answer with that number is a perfectly good outcome and is what the row expects. |
+| CSL-2745 | Re-examine: does the FX frontend replace or complement MojoShader? | ⬜ | The owner's standing answer is **complementary** (Q3), so this row confirms with evidence rather than choosing: `CSL-1504`'s differential results and the refusal list of `CSL-1485`. Overturning it would require the Shader Model 2 backend this plan refuses (`CSL-1178`), which the row must state if it argues for replacement. |
 | CSL-2746 | Whatever is decided, record it where a future reader will meet it | ⬜ | In `CLAUDE.md`, `docs/csl/architecture.md` and this plan's §0.2 — not only here, since a decision recorded in one plan file is a decision nobody finds. |
 | CSL-2747 | Full-suite regression run with CSL fully landed | ⬜ | The whole repository test suite in `cmake-build-debug`, compared against the `CSL-41` baseline; every difference explained. This is the row that proves D4 held. |
 | CSL-2748 | `CNA_CSL=OFF` parity re-verified at the end | ⬜ | `CSL-8`'s gate re-run on the final tree. |
@@ -1863,7 +1870,7 @@ would make that surface inconsistent.
 |---|---|---|---|
 | CSL-2820 | CI job: build `cna_shader` and run its unit tests on every push | ⬜ | Under `.github/`, following the repository's existing workflow style; the job is fast enough to run on every push, and the row records its wall clock. |
 | CSL-2821 | CI job: the interpreter-only conformance run | ⬜ | No GPU needed (`CSL-1388`), so it runs everywhere; this is the gate that protects the compiler. |
-| CSL-2822 | CI job: the GPU conformance run, where a runner has one | ⬜ | Or documented as manual-only with the reason, since GPU CI availability is not something this plan can assume. |
+| CSL-2822 | GPU conformance runs are manual, and that is written down (owner decision Q6: no GPU CI) | ⬜ | `docs/csl/conformance.md` states that GPU runs happen on a developer machine, names the command, and records that CI's standing gate is the interpreter-only run (`CSL-2821`). No CI job is added. The consequence is stated once, plainly: every renderer's certification record (`CSL-2533`) is a point-in-time measurement by a human, not a continuously-enforced property, and `CSL-2542`'s regression gate therefore protects the committed records rather than the live tree. |
 | CSL-2823 | CI job: `CNA_CSL=OFF` parity (`CSL-8`) | ⬜ | Runs on every push; this is the gate that protects everyone who does not use CSL. |
 | CSL-2824 | CI job: sanitizer build of the shader tests | ⬜ | ASan+UBSan; the row records the runtime cost. |
 | CSL-2825 | CI job: the determinism check (`CSL-1916`) | ⬜ | Two builds, byte-compared. |
@@ -1909,19 +1916,27 @@ would make that surface inconsistent.
 
 ---
 
-## 4. Open questions for the owner
+## 4. Owner decisions (answered 2026-09-04)
 
-These do not block approval — each has a default recorded in the row that owns it — but an early
-answer would save rework.
+All six questions this plan raised are answered. They are recorded here **and** in the row that
+owns each one, so a future reader meets the decision where the work is, not only in a table. A row
+implementing one of these may not quietly re-decide it; reopening one is its own new row.
 
-| # | Question | The plan's default if unanswered |
-|---|---|---|
-| Q1 | Should `SOFTWARE` gain a real shader pipeline by running CSIR-L through the interpreter (`CSL-1804`)? | Decided on measured throughput in Phase 41 (`CSL-2744`); default is no for v1. |
-| Q2 | Is a `CSIR → bgfx` profile wanted, so `BGFX` stops being "none" (`CSL-1787`)? | Out of v1 scope; recorded as a named future profile. |
-| Q3 | Should the FX frontend eventually replace the MojoShader route, or stay complementary (`CSL-2745`)? | Complementary; both keep working (D4). |
-| Q4 | Should the Shader Laboratory (Phase 40) ship at all, or stay a developer tool built on request? | Built on request, off by default (`CSL-2704`). |
-| Q5 | Is `.csle` a separate effect file, or an `effect { }` block inside `.csl` (`CSL-1431`)? | Decided in the row; the plan leans to a block, since one file per shader keeps the content pipeline simple. |
-| Q6 | How much GPU CI is available (`CSL-2822`)? | Assume none; the interpreter-only run is the standing gate and GPU runs are manual. |
+| # | Question | Owner's answer | Effect on the plan |
+|---|---|---|---|
+| Q1 | Should `SOFTWARE` gain a real shader pipeline by running CSIR-L through the interpreter? | **No for v1; re-decide on measured throughput.** | `CSL-1804` answers "none" and behaves like `HEADLESS` — a conformance run against it SKIPs and never reports a pass. `CSL-2744` re-decides it in Phase 41 on the `CSL-1385` measurement. |
+| Q2 | Is a `CSIR → bgfx` profile wanted? | **Out of v1 scope; a named future profile.** | `CSL-1787` answers "none" with the reason and records `CSIR → bgfx binary` as a legitimate future profile rather than a gap. The existing `bgfx_shaders.hpp` route is untouched. |
+| Q3 | Does the FX frontend replace MojoShader, or complement it? | **Complementary; both keep working.** | D4 stands. `CSL-1486` states the two routes and which input each takes; `CSL-1630` defaults to the existing MojoShader route so nothing changes silently; D3D9 stays MojoShader-only (`CSL-1178`, `CSL-1795`). |
+| Q4 | Does the Shader Laboratory ship? | **Developer tool, off by default.** | Phase 40 keeps its own CMake option (`CSL-2704`); a default build is unaffected; it is built strictly on the public API (C12). |
+| Q5 | Separate `.csle` file, or an `effect { }` block inside `.csl`? | **Separate `.csle` file** — against this plan's own lean. | The largest change of the six. `CSL-1431` now *refuses* the in-`.csl` block by name, and seven rows carry the cost the separate file creates: `CSL-1441` (path references), `CSL-1442` (the dependency edge as one queryable API), `CSL-1443` (diagnostics across the edge), `CSL-1636`/`CSL-1637` (second content-pipeline input type and its incremental-build edge), `CSL-1858` (hot reload follows the edge) and `CSL-1922` (`cna-shaderc --deps`). |
+| Q6 | How much GPU CI is available? | **None. Assume the worst.** | `CSL-2822` adds no CI job and instead writes the consequence down: the interpreter-only run (`CSL-2821`) is the standing gate, GPU runs are manual, and a certification record is a human point-in-time measurement rather than a continuously-enforced property. |
+
+**What Q6 costs, stated plainly.** With no Windows and no macOS runner, `CSL-1176`, `CSL-1177` and
+`CSL-1242` cannot reach ✅ inside this plan — **M3 and the Metal half of M5 stay 🟨 by construction,
+not by neglect.** D12 already required that; Q6 makes it permanent rather than provisional. Those
+branches are verified here by golden text, structural assertions against the IR (`CSL-1175`), the
+partial MSL checker (`CSL-1243`) and any oracle that happens to be installed — and by nothing else.
+The plan does not pretend otherwise, and no row may flip them to ✅ without a machine that ran them.
 
 ---
 
@@ -1958,7 +1973,7 @@ answer would save rework.
 | **M0** | The specification exists and is precise | Phase 1 complete; `CSL-99` shaders are corpus cases |
 | **M1** | CSL → CSIR → GLSL draws a real pixel | `CSL-1000` |
 | **M2** | The same shader runs on Vulkan; first cross-renderer conformance | `CSL-1098`, `CSL-1099` |
-| **M3** | HLSL generation, D3D11/12 wired | `CSL-1176`, `CSL-1177` (🟨 until a Windows machine exists) |
+| **M3** | HLSL generation, D3D11/12 wired | `CSL-1176`, `CSL-1177` — **🟨 permanently within this plan** (owner decision Q6: no Windows runner) |
 | **M4** | XNA `.fx` and CSL share one meaning | `CSL-1506` |
-| **M5** | WGSL and MSL; every major shader ecosystem reachable | `CSL-1300` (verified), `CSL-1242` (🟨) |
+| **M5** | WGSL and MSL; every major shader ecosystem reachable | `CSL-1300` (verified on this machine's real GPU); `CSL-1242` — **🟨 permanently within this plan** (owner decision Q6: no macOS runner) |
 | **M6** | CPU reference + generative conformance; no GPU is the truth | `CSL-1383`, `CSL-2077` |
