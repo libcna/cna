@@ -1,0 +1,3 @@
+# Built probe binary; the source and README are the artefact.
+depth_bias_probe
+*.o
