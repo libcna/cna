@@ -129,7 +129,7 @@ also strengthen CI.
 | C1 | `QUARTZ2D` | CoreGraphics | 2D | macOS's `GDI`/`DIRECT2D` peer — today macOS has exactly one native identity (`METAL`). | macOS | M | med |
 | C2 | `ANDROID_CANVAS` | `android.graphics.Canvas` via JNI | 2D | Android's own 2D stack; CNA currently reaches Android only through GL. | Android | M | high |
 | C3 | `ANATIVEWINDOW` | NDK `ANativeWindow` | 2D presentation | Direct CPU buffer lock/post with no Java and no GL — the Android peer of `FBDEV`. | Android NDK | M | med |
-| C4 | `WEBGPU_WEB` | Browser WebGPU (Emscripten) | Programmable | Real **browser** WebGPU. `WEBGPU` today is native wgpu-native; the split mirrors `OPENGLES3` vs `WEBGL2` exactly and is therefore identity-worthy, not an alias. | Emscripten | M | med |
+| C4 | `WEBGPU_WEB` | Browser WebGPU (Emscripten) | Programmable | **WITHDRAWN 2026-09-04 — this row's premise is false.** It argued browser WebGPU was identity-worthy because `WEBGPU` was native-only. `WEBGPU` shipped its browser backend on 2026-08-26 (`WEBGPU-119`–`123`), through Emscripten's emdawnwebgpu port: 2D, the 3D `BasicEffect` path and every stock effect render in a real browser, byte-identical to native Vulkan. `docs/webgpu-renderer.md` states it is *"one renderer identity with two backends, not two renderers"*, which is §4's own Dawn ruling applied to the same question. Nothing to add. | — | — | — |
 | C5 | `DCOMP` | DirectComposition / Windows.UI.Composition | Composition | Windows' visual-layer compositor — the desktop peer of `HTML_DOM`, retained-mode rather than immediate. | Windows | M | high |
 
 ### Tier D — retro / exotic (matches the existing `DIRECTX1`…`GLIDE` appetite)

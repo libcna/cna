@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<!--
+  Three.js existence-gate spike for a prospective CNA THREEJS renderer identity.
+
+  Answers, in a real browser against the real library, the questions that decide whether
+  plans/plan_threejs.md is buildable at all. Every check below corresponds to a premise the plan
+  relies on; a premise that fails here must change the plan, not be worked around later.
+
+  Reports in this project's browser-suite format ("=== <passed>/<expected> PASS ===") so it can be
+  driven by scripts/run_pixijs_browser_tests.mjs without a second runner.
+-->
+<meta charset="utf-8">
+<title>CNA Three.js existence-gate spike</title>
+<canvas id="canvas" width="128" height="128"></canvas>
+<script>
+// Deliberately a CLASSIC script, not type="module": this is the exact shape Emscripten's
+// --extern-pre-js output has, and premise P1 is that three.js r161+ (ESM-only) can still be reached
+// from it.
+(async function () {
+    let passed = 0;
+    let expected = 0;
+
+    function check(name, condition, detail) {
+        expected += 1;
+        if (condition) {
+            passed += 1;
+            console.log(`[ok] ${name}`);
+        } else {
+            console.log(`[FAIL] ${name}${detail ? ` -- ${detail}` : ''}`);
+        }
+    }
+
+    function near(a, b, tol) { return Math.abs(a - b) <= (tol === undefined ? 2 : tol); }
+
+    // ---------------------------------------------------------------- P1: classic-script loading
+    let THREE = null;
+    try {
+        THREE = await import('./vendor/three.module.min.js');
+        globalThis.THREE = THREE;
+    } catch (e) {
+        console.log(`[FAIL] P1 dynamic import of ESM three from a classic script -- ${e}`);
+    }
+    check('P1 ESM three.js reachable from a classic script via dynamic import()',
+          THREE !== null && typeof THREE.WebGLRenderer === 'function',
+          THREE === null ? 'import threw' : 'no WebGLRenderer export');
+    if (THREE === null) {
+        console.log(`=== ${passed}/${expected} PASS ===`);
+        return;
+    }
+    check('P1b two-file ESM graph (three.module -> ./three.core) resolved without an import map',
+          typeof THREE.Mesh === 'function' && typeof THREE.BufferGeometry === 'function');
+    console.log(`[info] three.js REVISION = ${THREE.REVISION}`);
+
+    // ------------------------------------------------- P2: renderer on a platform-owned canvas
+    const canvas = document.getElementById('canvas');
+    let renderer = null;
+    try {
+        renderer = new THREE.WebGLRenderer({
+            canvas,                        // the CNA platform owns this element, as with CANVAS/PIXIJS
+            alpha: false,
+            antialias: false,
+            preserveDrawingBuffer: true,   // needed for ReadBackbuffer()
+            premultipliedAlpha: false,     // XNA hands us straight-alpha content
+        });
+        renderer.autoClear = false;        // XNA clears explicitly; nothing may clear implicitly
+    } catch (e) {
+        console.log(`[FAIL] P2 WebGLRenderer construction -- ${e}`);
+    }
+    check('P2 WebGLRenderer adopts an existing platform-owned <canvas>', renderer !== null);
+    if (renderer === null) {
+        console.log(`=== ${passed}/${expected} PASS ===`);
+        return;
+    }
+    const gl = renderer.getContext();
+    check('P2b raw WebGL context reachable for state three.js has no API for',
+          gl !== null && typeof gl.colorMask === 'function' && typeof gl.blendColor === 'function');
+    check('P2c context is WebGL2 (GLSL ES 3.00 shader floor)',
+          typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext,
+          'fell back to WebGL1');
+
+    // A 2D scene in XNA client space: orthographic camera, y down, origin top-left.
+    const ortho = new THREE.OrthographicCamera(0, 128, 0, 128, -1000, 1000);
+    const scene = new THREE.Scene();
+
+    function quad(x, y, w, h, material) {
+        const g = new THREE.PlaneGeometry(w, h);
+        const m = new THREE.Mesh(g, material);
+        m.position.set(x + w / 2, y + h / 2, 0);
+        return m;
+    }
+
+    function solid(r, g_, b, a, extra) {
+        return new THREE.MeshBasicMaterial(Object.assign({
+            color: new THREE.Color(r, g_, b),
+            opacity: a,
+            transparent: a < 1,
+            depthTest: false,
+            depthWrite: false,
+            toneMapped: false,
+            // P0: the y-down XNA ortho projection reverses winding; without this every quad is
+            // back-face culled. Recorded as a finding, not hidden as a tweak.
+            side: THREE.DoubleSide,
+        }, extra || {}));
+    }
+
+    function readBackbuffer(x, y, w, h) {
+        const out = new Uint8Array(w * h * 4);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        // WebGL's origin is bottom-left; XNA's is top-left. This is the flip the renderer owes.
+        gl.readPixels(x, 128 - y - h, w, h, gl.RGBA, gl.UNSIGNED_BYTE, out);
+        return out;
+    }
+    const px = (buf, i) => [buf[i * 4], buf[i * 4 + 1], buf[i * 4 + 2], buf[i * 4 + 3]];
+
+    // ------------------------------------------------------ P3: explicit Clear, no implicit clear
+    renderer.setClearColor(new THREE.Color(0, 0, 1), 1);
+    renderer.clear(true, true, true);
+    let sample = readBackbuffer(64, 64, 1, 1);
+    check('P3 explicit Clear() paints the whole target',
+          near(sample[0], 0) && near(sample[1], 0) && near(sample[2], 255),
+          `got ${px(sample, 0)}`);
+
+    // --------------------------------------------- P4: accumulation across submissions (PIXIJS-87)
+    // The defect that dominated the PixiJS renderer: does a second render() into the same target
+    // keep what the first one drew? SpriteBatch requires that it does.
+    const a1 = quad(0, 0, 32, 32, solid(1, 0, 0, 1));
+    scene.add(a1);
+    renderer.render(scene, ortho);
+    scene.remove(a1);
+
+    const a2 = quad(64, 0, 32, 32, solid(0, 1, 0, 1));
+    scene.add(a2);
+    renderer.render(scene, ortho);
+    scene.remove(a2);
+
+    const first = readBackbuffer(16, 16, 1, 1);
+    const second = readBackbuffer(80, 16, 1, 1);
+    check('P4 a second render() accumulates instead of discarding the first batch',
+          near(first[0], 255) && near(first[1], 0),
+          `first batch pixel = ${px(first, 0)}`);
+    check('P4b the second batch is present too',
+          near(second[1], 255) && near(second[0], 0),
+          `second batch pixel = ${px(second, 0)}`);
+
+    // ------------------------------------------------- P5: literal XNA blend factors, not presets
+    // PixiJS collapsed AlphaBlend and NonPremultiplied into one tuple. Three.js must let the two be
+    // set literally and must render them differently on the same straight-alpha source colour.
+    function blended(src, dst) {
+        return solid(1, 1, 1, 0.5, {
+            blending: THREE.CustomBlending,
+            blendSrc: src,
+            blendDst: dst,
+            blendSrcAlpha: src,
+            blendDstAlpha: dst,
+            blendEquation: THREE.AddEquation,
+            transparent: true,
+        });
+    }
+    renderer.setClearColor(new THREE.Color(0, 0, 0), 1);
+    renderer.clear(true, true, true);
+
+    // XNA AlphaBlend = (One, InverseSourceAlpha); NonPremultiplied = (SourceAlpha, InvSourceAlpha).
+    const alphaBlend = quad(0, 0, 32, 32, blended(THREE.OneFactor, THREE.OneMinusSrcAlphaFactor));
+    const nonPremul = quad(64, 0, 32, 32, blended(THREE.SrcAlphaFactor, THREE.OneMinusSrcAlphaFactor));
+    scene.add(alphaBlend); scene.add(nonPremul);
+    renderer.render(scene, ortho);
+    scene.remove(alphaBlend); scene.remove(nonPremul);
+
+    const ab = px(readBackbuffer(16, 16, 1, 1), 0);
+    const np = px(readBackbuffer(80, 16, 1, 1), 0);
+    console.log(`[info] AlphaBlend=${ab} NonPremultiplied=${np}`);
+    check('P5 CustomBlending honours literal XNA blend factors',
+          ab[0] > np[0] + 20,
+          `AlphaBlend ${ab} should be brighter than NonPremultiplied ${np}`);
+    check('P5b AlphaBlend on 0.5-alpha white over black is ~full white (One, InvSrcAlpha)',
+          near(ab[0], 255, 12), `got ${ab}`);
+    check('P5c NonPremultiplied on the same source is ~half white (SrcAlpha, InvSrcAlpha)',
+          near(np[0], 128, 14), `got ${np}`);
+
+    // --------------------------------------------------------- P6: blendColor / BlendFactor state
+    let blendColorOk = false;
+    try {
+        gl.blendColor(0.25, 0.5, 0.75, 1.0);
+        const bc = gl.getParameter(gl.BLEND_COLOR);
+        blendColorOk = Math.abs(bc[0] - 0.25) < 0.02 && Math.abs(bc[2] - 0.75) < 0.02;
+        // ...and three.js must not stomp it on the next render.
+        scene.add(a1); renderer.render(scene, ortho); scene.remove(a1);
+        const after = gl.getParameter(gl.BLEND_COLOR);
+        blendColorOk = blendColorOk && Math.abs(after[0] - 0.25) < 0.02;
+    } catch (e) { /* reported by the check */ }
+    check('P6 gl.blendColor survives a three.js render (BlendState.BlendFactor is reachable)',
+          blendColorOk);
+
+    // ------------------------------------------------------------ P7: per-axis sampler addressing
+    const data = new Uint8Array([255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255]);
+    const tex = new THREE.DataTexture(data, 2, 2, THREE.RGBAFormat);
+    tex.needsUpdate = true;
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;      // deliberately DIFFERENT from wrapS
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestFilter;
+    check('P7 Texture carries wrapS and wrapT independently (mixed AddressU/AddressV is expressible)',
+          tex.wrapS === THREE.RepeatWrapping && tex.wrapT === THREE.ClampToEdgeWrapping);
+    check('P7b point and linear filtering are separately selectable',
+          THREE.NearestFilter !== THREE.LinearFilter);
+
+    // ----------------------------------------------------------------- P8: render targets + readback
+    let rtOk = false, rtReadOk = false;
+    try {
+        const rt = new THREE.WebGLRenderTarget(32, 32, {
+            minFilter: THREE.NearestFilter,
+            magFilter: THREE.NearestFilter,
+            depthBuffer: true,
+            stencilBuffer: true,
+        });
+        renderer.setRenderTarget(rt);
+        renderer.setClearColor(new THREE.Color(1, 0, 1), 1);
+        renderer.clear(true, true, true);
+        const rtPixels = new Uint8Array(4);
+        renderer.readRenderTargetPixels(rt, 16, 16, 1, 1, rtPixels);
+        rtReadOk = near(rtPixels[0], 255) && near(rtPixels[1], 0) && near(rtPixels[2], 255);
+        renderer.setRenderTarget(null);
+        // The back buffer must be unchanged by the render-target excursion.
+        const back = px(readBackbuffer(16, 16, 1, 1), 0);
+        rtOk = rtReadOk && back[0] > 200;   // still the P6 red quad
+        rt.dispose();
+    } catch (e) {
+        console.log(`[FAIL] P8 render target -- ${e}`);
+    }
+    check('P8 WebGLRenderTarget: bind, clear, readRenderTargetPixels', rtReadOk);
+    check('P8b unbinding restores the back buffer with its contents intact', rtOk);
+
+    // ------------------------------------------------------------------ P9: scissor and viewport
+    let scissorOk = false;
+    try {
+        renderer.setClearColor(new THREE.Color(0, 0, 0), 1);
+        renderer.clear(true, true, true);
+        renderer.setScissor(0, 96, 32, 32);     // WebGL coords: top-left 32x32 in XNA space
+        renderer.setScissorTest(true);
+        renderer.setClearColor(new THREE.Color(1, 1, 0), 1);
+        renderer.clear(true, false, false);
+        renderer.setScissorTest(false);
+        const inside = px(readBackbuffer(16, 16, 1, 1), 0);
+        const outside = px(readBackbuffer(100, 100, 1, 1), 0);
+        scissorOk = inside[0] > 200 && inside[1] > 200 && outside[0] < 40 && outside[1] < 40;
+    } catch (e) { /* reported below */ }
+    check('P9 setScissor/setScissorTest genuinely restricts a clear', scissorOk);
+
+    // ------------------------------------------------------ P10: colorMask (ColorWriteChannels)
+    let colorMaskOk = false;
+    try {
+        renderer.setClearColor(new THREE.Color(0, 0, 0), 1);
+        renderer.clear(true, true, true);
+        gl.colorMask(true, false, false, true);
+        scene.add(quad(0, 0, 32, 32, solid(1, 1, 1, 1)));
+        renderer.render(scene, ortho);
+        scene.clear();
+        gl.colorMask(true, true, true, true);
+        const masked = px(readBackbuffer(16, 16, 1, 1), 0);
+        colorMaskOk = masked[0] > 200 && masked[1] < 40;
+        console.log(`[info] colorMask(R only) result = ${masked}`);
+    } catch (e) { /* reported below */ }
+    check('P10 gl.colorMask survives three.js state management (ColorWriteChannels)', colorMaskOk);
+
+    // ------------------------------------------------------- P11: real 3D with a depth buffer
+    let depthOk = false;
+    try {
+        const persp = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+        persp.position.set(0, 0, 5);
+        persp.lookAt(0, 0, 0);
+        renderer.setClearColor(new THREE.Color(0, 0, 0), 1);
+        renderer.clear(true, true, true);
+
+        // Far quad drawn FIRST, near quad second -- then the reverse order must give the same
+        // answer if the depth buffer is real.
+        function depthQuad(z, colour) {
+            const m = new THREE.Mesh(
+                new THREE.PlaneGeometry(2, 2),
+                new THREE.MeshBasicMaterial({ color: colour, depthTest: true, depthWrite: true, toneMapped: false }));
+            m.position.set(0, 0, z);
+            return m;
+        }
+        const near_ = depthQuad(1, new THREE.Color(0, 1, 0));
+        const far = depthQuad(-1, new THREE.Color(1, 0, 0));
+        scene.add(far); scene.add(near_);
+        renderer.render(scene, persp);
+        const orderA = px(readBackbuffer(64, 64, 1, 1), 0);
+        scene.clear();
+
+        renderer.clear(true, true, true);
+        const near2 = depthQuad(1, new THREE.Color(0, 1, 0));
+        const far2 = depthQuad(-1, new THREE.Color(1, 0, 0));
+        near2.renderOrder = -1; far2.renderOrder = 1;   // force submission order near-then-far
+        scene.add(near2); scene.add(far2);
+        renderer.render(scene, persp);
+        const orderB = px(readBackbuffer(64, 64, 1, 1), 0);
+        scene.clear();
+        console.log(`[info] depth order A=${orderA} B=${orderB}`);
+        depthOk = orderA[1] > 200 && orderB[1] > 200;   // green (nearer) wins in both orders
+    } catch (e) {
+        console.log(`[FAIL] P11 depth -- ${e}`);
+    }
+    check('P11 a real depth buffer makes submission order irrelevant (3D is genuine)', depthOk);
+
+    // --------------------------------------------- P12: CNA-authored GLSL ES 3.00 via RawShader
+    let rawOk = false, rawCompileLog = '';
+    try {
+        const mat = new THREE.RawShaderMaterial({
+            glslVersion: THREE.GLSL3,
+            uniforms: { uTint: { value: new THREE.Vector4(0, 1, 1, 1) } },
+            vertexShader: `
+                in vec3 position;
+                uniform mat4 modelViewMatrix;
+                uniform mat4 projectionMatrix;
+                void main() { gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+            fragmentShader: `
+                precision highp float;
+                uniform vec4 uTint;
+                out vec4 fragColour;
+                void main() { fragColour = uTint; }`,
+            depthTest: false,
+            depthWrite: false,
+            side: THREE.DoubleSide,
+        });
+        renderer.setClearColor(new THREE.Color(0, 0, 0), 1);
+        renderer.clear(true, true, true);
+        scene.add(quad(0, 0, 32, 32, mat));
+        renderer.render(scene, ortho);
+        scene.clear();
+        const shaded = px(readBackbuffer(16, 16, 1, 1), 0);
+        rawOk = shaded[1] > 200 && shaded[2] > 200 && shaded[0] < 40;
+        console.log(`[info] RawShaderMaterial GLSL3 output = ${shaded}`);
+    } catch (e) {
+        rawCompileLog = String(e);
+    }
+    check('P12 RawShaderMaterial runs CNA-authored GLSL ES 3.00 (a real CustomEffects route)',
+          rawOk, rawCompileLog);
+
+    // ------------------------------------------------------------------- P13: instancing
+    let instancedOk = false;
+    try {
+        renderer.setClearColor(new THREE.Color(0, 0, 0), 1);
+        renderer.clear(true, true, true);
+        const inst = new THREE.InstancedMesh(
+            new THREE.PlaneGeometry(32, 32),
+            solid(1, 1, 1, 1), 2);
+        const m4 = new THREE.Matrix4();
+        inst.setMatrixAt(0, m4.makeTranslation(16, 16, 0));
+        inst.setMatrixAt(1, m4.makeTranslation(112, 16, 0));
+        inst.instanceMatrix.needsUpdate = true;
+        scene.add(inst);
+        renderer.render(scene, ortho);
+        scene.clear();
+        const i0 = px(readBackbuffer(16, 16, 1, 1), 0);
+        const i1 = px(readBackbuffer(112, 16, 1, 1), 0);
+        instancedOk = i0[0] > 200 && i1[0] > 200;
+        inst.dispose();
+    } catch (e) {
+        console.log(`[FAIL] P13 instancing -- ${e}`);
+    }
+    check('P13 InstancedMesh draws N instances in one submission (Instancing capability)', instancedOk);
+
+    // --------------------------------------------- P14: context/renderer teardown and recreation
+    // PIXIJS-92: a canvas hands out exactly one WebGL context, and destroying the library's
+    // renderer can lose it permanently. Does three.js survive dispose + reconstruct on the SAME
+    // canvas? The answer decides whether a CNA GraphicsDevice can be destroyed and recreated.
+    let recreateOk = false;
+    try {
+        renderer.dispose();
+        const r2 = new THREE.WebGLRenderer({ canvas, preserveDrawingBuffer: true, antialias: false });
+        r2.autoClear = false;
+        r2.setClearColor(new THREE.Color(0, 1, 0), 1);
+        r2.clear(true, true, true);
+        const after = px(readBackbuffer(64, 64, 1, 1), 0);
+        recreateOk = after[1] > 200;
+        console.log(`[info] after dispose+recreate, clear produced ${after}`);
+        r2.dispose();
+    } catch (e) {
+        console.log(`[FAIL] P14 recreate -- ${e}`);
+    }
+    check('P14 renderer.dispose() then a new WebGLRenderer on the same canvas still renders',
+          recreateOk);
+
+    console.log(`=== ${passed}/${expected} PASS ===`);
+})();
+</script>

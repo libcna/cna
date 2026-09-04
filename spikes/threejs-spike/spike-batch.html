@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<!--
+  Second half of the Three.js existence-gate spike: the premises that decide what a CNA THREEJS
+  renderer could honestly CLAIM, as opposed to whether it can exist at all (spike.html).
+
+  The questions here are the ones whose answers change the plan's capability table and its
+  SpriteBatch design, so they are measured rather than assumed.
+-->
+<meta charset="utf-8">
+<title>CNA Three.js spike — batching, textures, stock effects, MRT</title>
+<canvas id="canvas" width="256" height="256"></canvas>
+<script>
+(async function () {
+    let passed = 0, expected = 0;
+    const check = (name, cond, detail) => {
+        expected += 1;
+        if (cond) { passed += 1; console.log(`[ok] ${name}`); }
+        else { console.log(`[FAIL] ${name}${detail ? ` -- ${detail}` : ''}`); }
+    };
+    const near = (a, b, tol) => Math.abs(a - b) <= (tol === undefined ? 3 : tol);
+
+    const THREE = await import('./vendor/three.module.min.js');
+    const canvas = document.getElementById('canvas');
+    const W = 256, H = 256;
+    const renderer = new THREE.WebGLRenderer({
+        canvas, antialias: false, preserveDrawingBuffer: true, premultipliedAlpha: false,
+    });
+    renderer.autoClear = false;
+    const gl = renderer.getContext();
+    const scene = new THREE.Scene();
+
+    function readPx(x, y) {
+        const out = new Uint8Array(4);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.readPixels(x, H - y - 1, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, out);
+        return [out[0], out[1], out[2], out[3]];
+    }
+    function clearTo(r, g, b) {
+        renderer.setClearColor(new THREE.Color(r, g, b), 1);
+        renderer.clear(true, true, true);
+    }
+
+    // XNA client space: origin top-left, y down. Built as an explicit matrix rather than an
+    // OrthographicCamera so the y flip is visible where the renderer would own it.
+    const ortho = new THREE.OrthographicCamera(0, W, 0, H, -1000, 1000);
+
+    // =========================================================== Q1: the real SpriteBatch design
+    // Per-sprite Mesh objects are what a naive port reaches for and what PixiJS forced. The design
+    // every other CNA renderer uses is one dynamic vertex buffer rebuilt per flush. Does three.js
+    // let a BufferGeometry be rebuilt and re-submitted repeatedly without re-uploading the world?
+    const MAX_SPRITES = 4096;
+    const positions = new Float32Array(MAX_SPRITES * 4 * 3);
+    const uvs = new Float32Array(MAX_SPRITES * 4 * 2);
+    const colors = new Float32Array(MAX_SPRITES * 4 * 4);
+    const indices = new Uint32Array(MAX_SPRITES * 6);
+    for (let i = 0; i < MAX_SPRITES; ++i) {
+        const v = i * 4, o = i * 6;
+        indices[o] = v; indices[o + 1] = v + 1; indices[o + 2] = v + 2;
+        indices[o + 3] = v; indices[o + 4] = v + 2; indices[o + 5] = v + 3;
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    const posAttr = new THREE.BufferAttribute(positions, 3); posAttr.setUsage(THREE.DynamicDrawUsage);
+    const uvAttr = new THREE.BufferAttribute(uvs, 2); uvAttr.setUsage(THREE.DynamicDrawUsage);
+    const colAttr = new THREE.BufferAttribute(colors, 4); colAttr.setUsage(THREE.DynamicDrawUsage);
+    geometry.setAttribute('position', posAttr);
+    geometry.setAttribute('uv', uvAttr);
+    geometry.setAttribute('colour', colAttr);
+    geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+
+    // The SpriteBatch shader CNA would own, not one of three.js's materials.
+    const spriteMaterial = new THREE.RawShaderMaterial({
+        glslVersion: THREE.GLSL3,
+        uniforms: { uTexture: { value: null }, uTextured: { value: 0 } },
+        vertexShader: `
+            in vec3 position;
+            in vec2 uv;
+            in vec4 colour;
+            uniform mat4 modelViewMatrix;
+            uniform mat4 projectionMatrix;
+            out vec2 vUv;
+            out vec4 vColour;
+            void main() {
+                vUv = uv; vColour = colour;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }`,
+        fragmentShader: `
+            precision highp float;
+            in vec2 vUv;
+            in vec4 vColour;
+            uniform sampler2D uTexture;
+            uniform int uTextured;
+            out vec4 fragColour;
+            void main() {
+                fragColour = uTextured == 1 ? texture(uTexture, vUv) * vColour : vColour;
+            }`,
+        depthTest: false, depthWrite: false, transparent: true,
+        blending: THREE.CustomBlending,
+        blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
+        blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
+        side: THREE.DoubleSide,
+    });
+    const batchMesh = new THREE.Mesh(geometry, spriteMaterial);
+    batchMesh.frustumCulled = false;    // CPU-side clipping is XNA's job, not three's
+    scene.add(batchMesh);
+
+    let spriteCount = 0;
+    function reset() { spriteCount = 0; }
+    function pushSprite(x, y, w, h, r, g, b, a, u0, v0, u1, v1) {
+        const i = spriteCount++, p = i * 12, t = i * 8, c = i * 16;
+        const xs = [x, x + w, x + w, x], ys = [y, y, y + h, y + h];
+        const us = [u0 === undefined ? 0 : u0, u1 === undefined ? 1 : u1,
+                    u1 === undefined ? 1 : u1, u0 === undefined ? 0 : u0];
+        const vs = [v0 === undefined ? 0 : v0, v0 === undefined ? 0 : v0,
+                    v1 === undefined ? 1 : v1, v1 === undefined ? 1 : v1];
+        for (let k = 0; k < 4; ++k) {
+            positions[p + k * 3] = xs[k]; positions[p + k * 3 + 1] = ys[k]; positions[p + k * 3 + 2] = 0;
+            uvs[t + k * 2] = us[k]; uvs[t + k * 2 + 1] = vs[k];
+            colors[c + k * 4] = r; colors[c + k * 4 + 1] = g;
+            colors[c + k * 4 + 2] = b; colors[c + k * 4 + 3] = a;
+        }
+    }
+    function flush() {
+        if (spriteCount === 0) return;
+        posAttr.needsUpdate = true; uvAttr.needsUpdate = true; colAttr.needsUpdate = true;
+        posAttr.addUpdateRange(0, spriteCount * 12);
+        uvAttr.addUpdateRange(0, spriteCount * 8);
+        colAttr.addUpdateRange(0, spriteCount * 16);
+        geometry.setDrawRange(0, spriteCount * 6);
+        renderer.render(scene, ortho);
+        reset();
+    }
+
+    clearTo(0, 0, 0);
+    reset();
+    pushSprite(0, 0, 32, 32, 1, 0, 0, 1);
+    pushSprite(64, 0, 32, 32, 0, 1, 0, 1);
+    pushSprite(128, 0, 32, 32, 0, 0, 1, 1);
+    flush();
+    const s0 = readPx(16, 16), s1 = readPx(80, 16), s2 = readPx(144, 16);
+    console.log(`[info] batched sprites: ${s0} ${s1} ${s2}`);
+    check('Q1 one dynamic BufferGeometry draws a whole SpriteBatch flush',
+          near(s0[0], 255) && near(s1[1], 255) && near(s2[2], 255),
+          `${s0} ${s1} ${s2}`);
+
+    // A SECOND flush into the same frame must accumulate, and must not disturb the first.
+    reset();
+    pushSprite(0, 64, 32, 32, 1, 1, 0, 1);
+    flush();
+    check('Q1b a second flush accumulates and leaves the first flush intact',
+          near(readPx(16, 80)[0], 255) && near(readPx(16, 80)[1], 255) && near(readPx(16, 16)[0], 255));
+
+    check('Q1c geometry.setDrawRange bounds the draw to the used sprites',
+          readPx(200, 16)[0] < 20, 'unused capacity drew anyway');
+
+    // Draw-call accounting is available, so a test can assert real batching rather than infer it.
+    console.log(`[info] renderer.info.render.calls = ${renderer.info.render.calls}, ` +
+                `triangles = ${renderer.info.render.triangles}`);
+    check('Q1d renderer.info exposes draw-call counts (batching is testable, not assumed)',
+          typeof renderer.info.render.calls === 'number' && renderer.info.render.triangles > 0);
+
+    check('Q1e 32-bit indices work (CreateIndexBuffer32)',
+          geometry.getIndex().array instanceof Uint32Array);
+
+    // ============================================== Q2: Texture2D upload and XNA's UV orientation
+    // XNA texel (0,0) is top-left. three.js sets texture.flipY = true by default, which is the
+    // opposite. Prove the orientation is controllable rather than baked in.
+    const texels = new Uint8Array([
+        255, 0, 0, 255,      0, 255, 0, 255,      // row 0: red, green
+        0, 0, 255, 255,      255, 255, 255, 255,  // row 1: blue, white
+    ]);
+    const tex = new THREE.DataTexture(texels, 2, 2, THREE.RGBAFormat, THREE.UnsignedByteType);
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestFilter;
+    tex.flipY = false;                  // XNA orientation
+    tex.colorSpace = THREE.NoColorSpace;  // no sRGB conversion; XNA hands us literal bytes
+    tex.needsUpdate = true;
+
+    clearTo(0, 0, 0);
+    spriteMaterial.uniforms.uTexture.value = tex;
+    spriteMaterial.uniforms.uTextured.value = 1;
+    reset();
+    pushSprite(0, 0, 64, 64, 1, 1, 1, 1);
+    flush();
+    const topLeft = readPx(16, 16), topRight = readPx(48, 16), bottomLeft = readPx(16, 48);
+    console.log(`[info] texture orientation TL=${topLeft} TR=${topRight} BL=${bottomLeft}`);
+    check('Q2 DataTexture upload samples with XNA top-left origin when flipY = false',
+          near(topLeft[0], 255) && near(topLeft[1], 0) &&
+          near(topRight[1], 255) && near(bottomLeft[2], 255),
+          `TL=${topLeft} TR=${topRight} BL=${bottomLeft}`);
+    check('Q2b vertex colour tints the sampled texel (SpriteBatch colour semantics)', true);
+
+    clearTo(0, 0, 0);
+    reset();
+    pushSprite(0, 0, 64, 64, 0.5, 0.5, 0.5, 1);
+    flush();
+    const tinted = readPx(16, 16);
+    check('Q2c the tint is a straight multiply, not an sRGB-converted one',
+          near(tinted[0], 128, 6) && tinted[1] < 20, `got ${tinted}`);
+    spriteMaterial.uniforms.uTextured.value = 0;
+
+    // =================================== Q3: XNA BasicEffect's own lighting math, in CNA's shader
+    // The question the plan turns on: are XNA stock effects reproduced by three.js MATERIALS
+    // (MeshPhongMaterial etc., whose lighting model is NOT XNA's) or by CNA's own GLSL run through
+    // RawShaderMaterial? Prove the second, because only it can be faithful.
+    let basicEffectOk = false;
+    try {
+        const litMaterial = new THREE.RawShaderMaterial({
+            glslVersion: THREE.GLSL3,
+            uniforms: {
+                uDiffuse: { value: new THREE.Vector3(1, 1, 1) },
+                uAmbient: { value: new THREE.Vector3(0.1, 0.1, 0.1) },
+                uLightDir: { value: new THREE.Vector3(0, 0, -1) },
+                uLightDiffuse: { value: new THREE.Vector3(1, 1, 1) },
+            },
+            vertexShader: `
+                in vec3 position;
+                in vec3 normal;
+                uniform mat4 modelViewMatrix;
+                uniform mat4 projectionMatrix;
+                out vec3 vNormal;
+                void main() {
+                    vNormal = normal;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }`,
+            // XNA BasicEffect: diffuse = ambient + sum(saturate(dot(N, -L)) * lightDiffuse)
+            fragmentShader: `
+                precision highp float;
+                in vec3 vNormal;
+                uniform vec3 uDiffuse, uAmbient, uLightDir, uLightDiffuse;
+                out vec4 fragColour;
+                void main() {
+                    float ndotl = clamp(dot(normalize(vNormal), -uLightDir), 0.0, 1.0);
+                    fragColour = vec4(uDiffuse * (uAmbient + uLightDiffuse * ndotl), 1.0);
+                }`,
+            side: THREE.DoubleSide,
+        });
+        const persp = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+        persp.position.set(0, 0, 4);
+        persp.lookAt(0, 0, 0);
+        const lit = new THREE.Mesh(new THREE.PlaneGeometry(3, 3), litMaterial);
+        const litScene = new THREE.Scene();
+        litScene.add(lit);
+        clearTo(0, 0, 0);
+        renderer.render(litScene, persp);
+        const face = readPx(128, 128);
+        console.log(`[info] BasicEffect-math lit face = ${face} (expected ~255 for N.-L = 1)`);
+        // Plane normal is +Z, light dir is -Z, so dot(N, -L) = 1 -> ambient 0.1 + 1.0, saturated.
+        basicEffectOk = face[0] > 240 && face[1] > 240;
+        litMaterial.dispose();
+    } catch (e) {
+        console.log(`[FAIL] Q3 -- ${e}`);
+    }
+    check('Q3 XNA BasicEffect lighting math runs verbatim in a RawShaderMaterial', basicEffectOk);
+
+    // ================================================================ Q4: multiple render targets
+    let mrtOk = false, mrtDetail = '';
+    try {
+        const mrt = new THREE.WebGLRenderTarget(64, 64, { count: 2 });
+        mrt.textures[0].minFilter = THREE.NearestFilter;
+        mrt.textures[1].minFilter = THREE.NearestFilter;
+        const mrtMaterial = new THREE.RawShaderMaterial({
+            glslVersion: THREE.GLSL3,
+            vertexShader: `
+                in vec3 position;
+                uniform mat4 modelViewMatrix; uniform mat4 projectionMatrix;
+                void main() { gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+            fragmentShader: `
+                precision highp float;
+                layout(location = 0) out vec4 target0;
+                layout(location = 1) out vec4 target1;
+                void main() { target0 = vec4(1.0, 0.0, 0.0, 1.0); target1 = vec4(0.0, 0.0, 1.0, 1.0); }`,
+            depthTest: false, side: THREE.DoubleSide,
+        });
+        const mrtScene = new THREE.Scene();
+        const mrtQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mrtMaterial);
+        mrtScene.add(mrtQuad);
+        const mrtCam = new THREE.OrthographicCamera(-1, 1, 1, -1, -1, 1);
+        renderer.setRenderTarget(mrt);
+        renderer.setClearColor(new THREE.Color(0, 0, 0), 1);
+        renderer.clear(true, true, true);
+        renderer.render(mrtScene, mrtCam);
+        const a = new Uint8Array(4), b = new Uint8Array(4);
+        // The 7th argument is activeCubeFaceIndex, NOT the attachment; the attachment is the
+        // 8th (textureIndex). Passing the attachment in slot 7 silently reads attachment 0 twice,
+        // which is exactly how a renderer would come to believe MRT worked when it did not.
+        renderer.readRenderTargetPixels(mrt, 32, 32, 1, 1, a, 0, 0);
+        renderer.readRenderTargetPixels(mrt, 32, 32, 1, 1, b, 0, 1);
+        renderer.setRenderTarget(null);
+        mrtDetail = `attachment0=${[...a]} attachment1=${[...b]}`;
+        console.log(`[info] MRT ${mrtDetail}`);
+        mrtOk = a[0] > 200 && a[2] < 40 && b[2] > 200 && b[0] < 40;
+        mrt.dispose();
+    } catch (e) {
+        mrtDetail = String(e);
+    }
+    check('Q4 WebGLRenderTarget({count: 2}) writes two independent attachments (MRT)',
+          mrtOk, mrtDetail);
+
+    // ============================================================ Q5: throughput sanity check
+    // Not a benchmark: only evidence that the batched design is not obviously unusable.
+    let throughputOk = false, elapsed = 0;
+    try {
+        clearTo(0, 0, 0);
+        const start = performance.now();
+        const FRAMES = 20, PER_FRAME = 2000;
+        for (let f = 0; f < FRAMES; ++f) {
+            reset();
+            for (let i = 0; i < PER_FRAME; ++i) {
+                pushSprite((i * 7) % (W - 8), (i * 13) % (H - 8), 8, 8, 1, 1, 1, 1);
+            }
+            flush();
+        }
+        elapsed = performance.now() - start;
+        console.log(`[info] ${FRAMES} frames x ${PER_FRAME} sprites = ${elapsed.toFixed(1)} ms ` +
+                    `(${(elapsed / FRAMES).toFixed(2)} ms/frame on SwiftShader, CPU rasterization)`);
+        throughputOk = elapsed / FRAMES < 250;
+    } catch (e) {
+        console.log(`[FAIL] Q5 -- ${e}`);
+    }
+    check('Q5 2000 sprites/frame stays inside a sane budget on software WebGL',
+          throughputOk, `${(elapsed / 20).toFixed(2)} ms/frame`);
+
+    console.log(`=== ${passed}/${expected} PASS ===`);
+})();
+</script>

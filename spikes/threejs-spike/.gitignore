@@ -1,0 +1,4 @@
+# Third-party three.js builds, fetched by fetch.sh. Not committed, for the same reason
+# cmake/ThirdPartyPixiJS.cmake downloads pixi.min.js rather than vendoring it: it is a
+# pinned upstream artifact, not CNA source.
+vendor/
