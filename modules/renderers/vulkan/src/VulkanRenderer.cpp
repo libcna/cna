@@ -1919,6 +1919,20 @@ namespace CNA::Internal::Renderers::Vulkan
         return false;
     }
 
+    void VulkanRenderer::RequirePbrStrideEXT(std::size_t stride, bool skinned) const
+    {
+        // The same two conditions GetOrCreatePipelinePbr3D and GetOrCreatePipelinePbrSkinned3D
+        // apply, and deliberately the same two messages: a caller that catches this at the draw
+        // and a caller that used to catch it at Present must not have to tell them apart.
+        if (skinned) {
+            if (stride != 68 && stride != 76 && stride != 80)
+                throw std::runtime_error("Vulkan SkinnedPbrEffect requires vertex stride 68, 76 or 80");
+        } else {
+            if (stride != 48 && stride != 60)
+                throw std::runtime_error("Vulkan PbrEffect requires vertex stride 48 or 60");
+        }
+    }
+
     Matrix VulkanRenderer::XnaPixelCenterCorrectionEXT() const
     {
         // The destination's own extent, in the same order the pass itself resolves it: an explicit
@@ -11232,6 +11246,8 @@ namespace CNA::Internal::Renderers::Vulkan
         // EasyGLRenderer::SelectProgram()'s own pbr&&skinned / pbr / skinned priority order).
         d.usePbrSkinned  = needsPbr && needsSkinned;
         d.usePbr         = needsPbr && !needsSkinned;
+        // VULKAN-346: refuse here, not at Present. Nothing is queued that the replay cannot build.
+        if (d.usePbr || d.usePbrSkinned) RequirePbrStrideEXT(stride, d.usePbrSkinned);
         d.useSkinned     = needsSkinned && !needsPbr;
         d.useLitTextured = needsLitTextured;
         // Task 1103: real XNA default is PreferPerPixelLighting=false (per-vertex/
@@ -11514,6 +11530,8 @@ namespace CNA::Internal::Renderers::Vulkan
         // plans/plan_cnj.md CNB-58/CNB-91 Vulkan port: see DrawPrimitivesEx's identical comment above.
         d.usePbrSkinned  = needsPbr && needsSkinned;
         d.usePbr         = needsPbr && !needsSkinned;
+        // VULKAN-346: refuse here, not at Present. Nothing is queued that the replay cannot build.
+        if (d.usePbr || d.usePbrSkinned) RequirePbrStrideEXT(stride, d.usePbrSkinned);
         d.useSkinned     = needsSkinned && !needsPbr;
         d.useLitTextured = needsLitTextured;
         // Task 1103: real XNA default is PreferPerPixelLighting=false (per-vertex/

@@ -1569,6 +1569,15 @@ protected:
         }
         catch (const std::exception& e)
         {
+            // plans/plan_vulkan.md VULKAN-346, and the same recovery
+            // rendertarget_effect_source_test.cpp already documents for its own legs. Render()
+            // binds a render target before the draw it is probing with, so a renderer that refuses
+            // that draw leaves the target BOUND -- the unbind after it never runs. The shutdown
+            // Present then throws "Cannot present while render targets are bound", which escapes
+            // main and turns an orderly SKIP into a std::terminate the runner can only report as a
+            // crash. Unbinding here keeps the exit code matching the verdict actually printed.
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            ResetDeviceState(dev, kBBW, kBBH);
             skip(std::string("A..M: this renderer does not implement DualTextureEffect (") +
                  e.what() + ")");
             Finish();

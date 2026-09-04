@@ -1260,6 +1260,23 @@ namespace CNA::Internal::Renderers::Vulkan
          */
         CNAEXT [[nodiscard]] Microsoft::Xna::Framework::Matrix XnaPixelCenterCorrectionEXT() const;
 
+        /**
+         * @brief CNAEXT. Refuses a PBR draw whose stride no PBR pipeline can express, at the DRAW.
+         *
+         * plan_vulkan.md VULKAN-346. `GetOrCreatePipelinePbr3D` and its skinned twin raise this
+         * refusal, and they are called from `RecordCommandBuffer` -- at `Present()`, long after the
+         * call that made the mistake. A caller therefore saw its draw accepted, and the exception
+         * arrived from a frame boundary it could no longer associate with anything, escaping
+         * whatever recovery it had around the draw itself. Asking the same question where the draw
+         * is queued makes the refusal reach the caller at the point of the mistake, which is what
+         * section 6.3 of the plan requires of every unsupported combination.
+         *
+         * @param stride Byte stride of the vertex record.
+         * @param skinned True for the SkinnedPbrEffect family.
+         * @throws std::runtime_error naming the strides that family accepts.
+         */
+        void RequirePbrStrideEXT(std::size_t stride, bool skinned) const;
+
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void GetViewportSize(int& width, int& height) override;
