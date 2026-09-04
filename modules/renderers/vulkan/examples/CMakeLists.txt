@@ -1058,6 +1058,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_VertexBufferIndexBufferGetData COMMAND cna_test_vulkan_vertexbuffer_indexbuffer_getdata
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plans/plan_vulkan.md VULKAN-145 (F-15's shared half): the declaration-driven vertex
+        # input layout builder. No pipeline factory uses it yet -- this row is the contract and its
+        # proof, so the conversion rows have something to rest on. Pure logic, no device needed.
+        cna_vulkan_test(cna_test_vulkan_vertex_input_layout
+                        vulkan_vertex_input_layout_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_VertexInputLayout
+            COMMAND cna_test_vulkan_vertex_input_layout
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plans/plan_vulkan.md VULKAN-332 (F-05): swapInterval_ was read once, at swapchain
         # creation, so GraphicsDeviceManager.SynchronizeWithVerticalRetrace + ApplyChanges()
         # reached nothing. Asserts the swapchain was really rebuilt and the live VkPresentModeKHR
