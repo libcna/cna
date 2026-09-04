@@ -55,8 +55,13 @@ vec4 cnaPackDepth(float value) {
     // of what it means. Depth is normalised by the far plane, so 1.0 is the most common value in
     // the buffer, and getting it inverted would put the whole background in front of the scene.
     // `channels` rather than `packed`: the latter is a reserved word in GLSL ES 3.00.
-    const vec4 shift = vec4(16777216.0, 65536.0, 256.0, 1.0);
-    const vec4 mask  = vec4(0.0, 1.0 / 256.0, 1.0 / 256.0, 1.0 / 256.0);
+    // 255, not 256. An 8-bit UNORM channel stores round(c * 255) / 255, so a base of 256 makes
+    // every channel land between two storable values and the low channels' quantisation error
+    // passes straight through the reconstruction -- the delivered resolution was 1 part in 255,
+    // exactly what one channel alone gives, and the other three bought nothing. With 255 each
+    // channel comes out an exact multiple of 1/255 and survives the target unchanged.
+    const vec4 shift = vec4(16581375.0, 65025.0, 255.0, 1.0);
+    const vec4 mask  = vec4(0.0, 1.0 / 255.0, 1.0 / 255.0, 1.0 / 255.0);
     vec4 channels = fract(clamp(value, 0.0, 0.99999994) * shift);
     channels -= channels.xxyz * mask;
     return channels;
@@ -65,7 +70,7 @@ vec4 cnaPackDepth(float value) {
 
         constexpr const char* kUnpackGlsl = R"(
 float cnaUnpackDepth(vec4 channels) {
-    const vec4 shift = vec4(1.0 / 16777216.0, 1.0 / 65536.0, 1.0 / 256.0, 1.0);
+    const vec4 shift = vec4(1.0 / 16581375.0, 1.0 / 65025.0, 1.0 / 255.0, 1.0);
     return dot(channels, shift);
 }
 )";
@@ -538,7 +543,7 @@ void main() {
         //
         // Choosing the packed path anyway is not settling for a workaround, because packing is the
         // better encoding on its own terms and this class's own documentation already said so:
-        // 1 part in 2^24 against a half-float's 11-bit mantissa, at the price of a little
+        // 1 part in 255^3 against a half-float's 11-bit mantissa, at the price of a little
         // arithmetic on both ends, and no capability required at all -- one fewer per-renderer
         // branch rather than one more.
         //
@@ -613,7 +618,7 @@ vec2 cnaDecodeVelocity(vec4 texel) { return (texel.xy - 0.5) * 2.0; }
         // fract(1.0) is 0, so an unclamped far-plane depth would read back as the nearest possible
         // surface. See kPackGlsl.
         const float clamped = std::clamp(value, 0.0f, 0.99999994f);
-        const float shift[4] = {16777216.0f, 65536.0f, 256.0f, 1.0f};
+        const float shift[4] = {16581375.0f, 65025.0f, 255.0f, 1.0f};
         float channels[4];
         for (int i = 0; i < 4; ++i)
         {
@@ -623,15 +628,15 @@ vec2 cnaDecodeVelocity(vec4 texel) { return (texel.xy - 0.5) * 2.0; }
         // Same subtraction as the GLSL: each channel drops the part the previous one already holds.
         const float raw[4] = {channels[0], channels[1], channels[2], channels[3]};
         r = raw[0];
-        g = raw[1] - raw[0] / 256.0f;
-        b = raw[2] - raw[1] / 256.0f;
-        a = raw[3] - raw[2] / 256.0f;
+        g = raw[1] - raw[0] / 255.0f;
+        b = raw[2] - raw[1] / 255.0f;
+        a = raw[3] - raw[2] / 255.0f;
     }
 
     float DepthNormalPrepass::unpackDepth(const float r, const float g, const float b,
                                           const float a)
     {
-        return r / 16777216.0f + g / 65536.0f + b / 256.0f + a;
+        return r / 16581375.0f + g / 65025.0f + b / 255.0f + a;
     }
 
 } // namespace CNA::Graphics

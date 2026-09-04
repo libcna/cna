@@ -175,7 +175,7 @@ namespace CNA::Graphics {
          * @brief Whether depth is packed into an 8-bit target rather than stored as a float.
          *
          * plans/plan_modern.md `MOD-507`. Where float render targets are missing, linear depth is packed
-         * across the four channels of a `Color` target. It round-trips to about 1 part in 2^24
+         * across the four channels of a `Color` target. It round-trips to about 1 part in 255^3
          * rather than a half-float's 11 bits of mantissa — *more* precise, in fact, but banded
          * differently, and the packing costs arithmetic on both ends.
          *
