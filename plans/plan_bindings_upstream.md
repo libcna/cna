@@ -274,6 +274,34 @@ Reported as `JAVA-UPSTREAM-008`.
 
 ---
 
+## BINDFIX-019 — a test camera's birth state is one its own setter refuses
+
+`cna_camera_set_test_state_ext` refuses `CNA_CAMERA_STATE_CLOSED` and
+`CNA_CAMERA_STATE_NOT_SUPPORTED`, and its implementation gives a reason worth keeping: a
+device that is not open is never handed out, so nothing reports closed, and "not supported"
+is what an absent device answers rather than a state one can be put in. Every state it
+accepts reads back unchanged, which is a property worth having.
+
+Measured against `next`, with `cna-java`'s own probe:
+
+```
+state at birth        SUCCESS NOT_SUPPORTED
+set NOT_SUPPORTED     INVALID_ARGUMENT  reads back SUCCESS OPENING
+```
+
+So the refusal and the birth reading disagree, though not for the reason
+`JAVA-UPSTREAM-021` gives. `CameraTestState::state` defaults to `Opening`, not to
+`NOT_SUPPORTED`; the `NOT_SUPPORTED` at birth is the `Camera` object's own answer, from a
+layer above the test state, before anything has driven it. Two layers, two answers, and a
+setter whose domain matches one of them.
+
+Left as measured. Widening the setter's domain for a test backend — where "closed" and "not
+supported" are exactly the situations a test wants to reproduce — is defensible, and so is
+keeping the guarantee that every accepted state reads back unchanged. That is a decision
+about what the test surface is for.
+
+---
+
 ## Fixed in this pass
 
 Three defects, each independently reported by two or more bindings, each one a place where
@@ -327,6 +355,16 @@ CNA contradicted its own documentation or its own siblings:
 - **BINDFIX-014** — the packed depth encoding used base 256 where an 8-bit UNORM channel
   stores `round(c * 255) / 255`, so the four channels delivered one channel's resolution.
   Reported by `cna-ts` (finding 13).
+- **BINDFIX-015** — `cna_render_pipeline_get_skybox` echoes the handle that was set while
+  `cna_skybox_get_environment` mints a counted one, and both carried the same borrow
+  sentence: following it destroyed the caller's own skybox on one route and made the game
+  undestroyable on the other. Both headers now say which they are. Reported by `cna-ts`
+  (finding 15).
+- **BINDFIX-016** — withdrawing a `Motion` or `Compass` test backend left `IsDataValid`
+  true for a reading `getCurrentValueProperty()` would no longer hand over. Reported by
+  `cna-ts` (finding 5).
+- **BINDFIX-017** — `cna_area_light_brdf_table_get_texture` mints a handle counted against
+  the game and said only that it borrows. Reported by `cna-rust` (`RUST-UPSTREAM-025`).
 
 ---
 
