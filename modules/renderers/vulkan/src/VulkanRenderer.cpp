@@ -4839,6 +4839,82 @@ namespace CNA::Internal::Renderers::Vulkan
         return key ^ (static_cast<uint64_t>(depthFmt) << 45);
     }
 
+    // =========================================================================
+    // plan_vulkan.md VULKAN-146: the stock programs' vertex inputs, by attribute location
+    // =========================================================================
+    //
+    // One table per shader, in the order that shader declares its `layout(location = N) in`
+    // variables -- this project's established "location N == the Nth field of the ported HLSL
+    // input struct" convention, which every file under src/shaders/ already follows. These are
+    // what BuildVulkanVertexInputLayoutEXT matches a caller's VertexDeclaration against.
+    //
+    // The tables describe the SHADER. Which shader runs is still chosen by the stride, exactly as
+    // before and deliberately: VULKAN-146 makes the OFFSETS come from the declaration, not the
+    // program selection, so a 24-byte record still means colored_textured3d. That is the scope
+    // this row set, and it is what F-15 actually complained about -- "TextureCoordinate0@12 ... is
+    // not bound at all" is an offset the pipeline did not know, not a program it could not pick.
+    namespace StockInputs
+    {
+        using CNA::Internal::Graphics::StockProgramInput;
+        using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+        using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+
+        constexpr StockProgramInput kPos{
+            VertexElementUsage::Position, 0, VertexElementFormat::Vector3, "aPos"};
+        constexpr StockProgramInput kColor{
+            VertexElementUsage::Color, 0, VertexElementFormat::Color, "aColor"};
+        constexpr StockProgramInput kUv{
+            VertexElementUsage::TextureCoordinate, 0, VertexElementFormat::Vector2, "aUV"};
+        constexpr StockProgramInput kNormal{
+            VertexElementUsage::Normal, 0, VertexElementFormat::Vector3, "aNormal"};
+
+        /// colored3d / colored3d_legacy: float3 position + ubyte4 colour (stride 16).
+        constexpr StockProgramInput kColored[]      = { kPos, kColor };
+        /// textured3d: float3 position + float2 uv (stride 20).
+        constexpr StockProgramInput kTextured[]     = { kPos, kUv };
+        /// colored_textured3d: float3 position + ubyte4 colour + float2 uv (stride 24).
+        constexpr StockProgramInput kColTextured[]  = { kPos, kColor, kUv };
+        /// lit_textured3d and its vertex-lit sibling: float3 position + float3 normal + float2 uv.
+        constexpr StockProgramInput kLitTextured[]  = { kPos, kNormal, kUv };
+    }
+
+    // VULKAN-146: swap a factory's baked attribute array for the declaration-derived one when the
+    // caller supplied a complete layout. Deliberately a mutation of the array the factory already
+    // built rather than a replacement of the whole vertex-input state: the BINDING (stride, input
+    // rate) is the buffer's and is already correct, and leaving each factory's own array in place
+    // for the empty-declaration case keeps the `VertexBuffer(device, count)` path byte-identical.
+    static void ApplyDeclaredVertexLayoutEXT(const VulkanVertexInputLayoutEXT& layout,
+                                             VkVertexInputAttributeDescription* attrs,
+                                             std::size_t attrsCapacity,
+                                             uint32_t& attrCount)
+    {
+        if (!layout.IsComplete()) return;
+        if (layout.attributeCount > attrsCapacity) return;   // cannot happen; not worth risking
+        for (std::uint32_t i = 0; i < layout.attributeCount; ++i)
+            attrs[i] = layout.attributes[i];
+        attrCount = layout.attributeCount;
+    }
+
+    // VULKAN-146: the input table for whichever of the four BasicEffect-family programs this draw
+    // selected. Returns nullptr for a family this row has not converted, so those keep their
+    // stride-derived layout untouched.
+    static const CNA::Internal::Graphics::StockProgramInput* BasicFamilyStockInputsEXT(
+        bool useFogTex3D, bool useLitTextured, std::size_t stride, std::size_t& countOut)
+    {
+        countOut = 0;
+        if (useLitTextured) {
+            countOut = std::size(StockInputs::kLitTextured);
+            return StockInputs::kLitTextured;
+        }
+        if (!useFogTex3D) return nullptr;
+        switch (stride) {
+            case 16: countOut = std::size(StockInputs::kColored);     return StockInputs::kColored;
+            case 20: countOut = std::size(StockInputs::kTextured);    return StockInputs::kTextured;
+            case 24: countOut = std::size(StockInputs::kColTextured); return StockInputs::kColTextured;
+            default: return nullptr;
+        }
+    }
+
     // REMED-GFX-DECL-GUARD: the declaration-fidelity boundary for every route that infers its
     // vertex input from the stride. The ordinary routes fall back to the colored pipeline's
     // Position@0 + Color@12 layout for a stride the canonical table does not list -- which is why
@@ -6241,12 +6317,12 @@ namespace CNA::Internal::Renderers::Vulkan
         VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
-        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
+        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt, const VulkanVertexInputLayoutEXT& vertexLayout)
     {
         EnsureLitTexturedResources();
 
         constexpr std::size_t kLitStride = 32;
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kLitStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask };
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kLitStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask, vertexLayout.Hash() };
         auto it = pipelinesLitTextured3D_.find(key);
         if (it != pipelinesLitTextured3D_.end()) return it->second;
 
@@ -6259,11 +6335,13 @@ namespace CNA::Internal::Renderers::Vulkan
         attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0  };   // aPos
         attrs[1] = { 1, 0, VK_FORMAT_R32G32B32_SFLOAT, 12 };   // aNormal
         attrs[2] = { 2, 0, VK_FORMAT_R32G32_SFLOAT,    24 };   // aUV
+        uint32_t attrCount = 3;
+        ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, std::size(attrs), attrCount);
 
         VkPipelineVertexInputStateCreateInfo vis{};
         vis.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
         vis.vertexBindingDescriptionCount   = 1; vis.pVertexBindingDescriptions   = &bind;
-        vis.vertexAttributeDescriptionCount = 3; vis.pVertexAttributeDescriptions = attrs;
+        vis.vertexAttributeDescriptionCount = attrCount; vis.pVertexAttributeDescriptions = attrs;
 
         VkPipelineShaderStageCreateInfo stages[2]{};
         stages[0] = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
@@ -6365,12 +6443,12 @@ namespace CNA::Internal::Renderers::Vulkan
         VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
-        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
+        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt, const VulkanVertexInputLayoutEXT& vertexLayout)
     {
         EnsureLitTexturedResources();
 
         constexpr std::size_t kLitStride = 32;
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kLitStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask };
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kLitStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask, vertexLayout.Hash() };
         auto it = pipelinesLitTextured3DVertexLit_.find(key);
         if (it != pipelinesLitTextured3DVertexLit_.end()) return it->second;
 
@@ -6383,11 +6461,13 @@ namespace CNA::Internal::Renderers::Vulkan
         attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0  };   // aPos
         attrs[1] = { 1, 0, VK_FORMAT_R32G32B32_SFLOAT, 12 };   // aNormal
         attrs[2] = { 2, 0, VK_FORMAT_R32G32_SFLOAT,    24 };   // aUV
+        uint32_t attrCount = 3;
+        ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, std::size(attrs), attrCount);
 
         VkPipelineVertexInputStateCreateInfo vis{};
         vis.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
         vis.vertexBindingDescriptionCount   = 1; vis.pVertexBindingDescriptions   = &bind;
-        vis.vertexAttributeDescriptionCount = 3; vis.pVertexAttributeDescriptions = attrs;
+        vis.vertexAttributeDescriptionCount = attrCount; vis.pVertexAttributeDescriptions = attrs;
 
         VkPipelineShaderStageCreateInfo stages[2]{};
         stages[0] = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
@@ -7265,11 +7345,11 @@ namespace CNA::Internal::Renderers::Vulkan
         VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
-        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
+        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt, const VulkanVertexInputLayoutEXT& vertexLayout)
     {
         EnsureFogTex3DResources();
 
-        PipelineKey key = { FoldDepthFormatIntoKey(Make3DKey(topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask };
+        PipelineKey key = { FoldDepthFormatIntoKey(Make3DKey(topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask, vertexLayout.Hash() };
         auto it = pipelinesFogColored3D_.find(key);
         if (it != pipelinesFogColored3D_.end()) return it->second;
 
@@ -7281,11 +7361,13 @@ namespace CNA::Internal::Renderers::Vulkan
         VkVertexInputAttributeDescription attrs[2]{};
         attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0  };
         attrs[1] = { 1, 0, VK_FORMAT_R8G8B8A8_UNORM,   12 };
+        uint32_t attrCount = 2;
+        ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, std::size(attrs), attrCount);
 
         VkPipelineVertexInputStateCreateInfo vis{};
         vis.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
         vis.vertexBindingDescriptionCount   = 1; vis.pVertexBindingDescriptions   = &bind;
-        vis.vertexAttributeDescriptionCount = 2; vis.pVertexAttributeDescriptions = attrs;
+        vis.vertexAttributeDescriptionCount = attrCount; vis.pVertexAttributeDescriptions = attrs;
 
         VkPipelineShaderStageCreateInfo stages[2]{};
         stages[0] = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
@@ -7385,11 +7467,11 @@ namespace CNA::Internal::Renderers::Vulkan
         std::size_t stride, VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
-        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
+        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt, const VulkanVertexInputLayoutEXT& vertexLayout)
     {
         EnsureFogTex3DResources();
 
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask };
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask, vertexLayout.Hash() };
         auto it = pipelinesFogTex3D_.find(key);
         if (it != pipelinesFogTex3D_.end()) return it->second;
 
@@ -7421,6 +7503,7 @@ namespace CNA::Internal::Renderers::Vulkan
             attrs[1] = {1, 0, VK_FORMAT_R32G32_SFLOAT,    12};
             attrCount = 2;
         }
+        ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, std::size(attrs), attrCount);
 
         VkPipelineVertexInputStateCreateInfo vis{};
         vis.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -9389,10 +9472,10 @@ namespace CNA::Internal::Renderers::Vulkan
                     pipe = draw.preferVertexLit
                            ? GetOrCreatePipelineLitTextured3DVertexLit(draw.topology,
                                                             draw.depthTest, draw.depthWrite,
-                                                            draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt)
+                                                            draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt, draw.vertexLayout)
                            : GetOrCreatePipelineLitTextured3D(draw.topology,
                                                             draw.depthTest, draw.depthWrite,
-                                                            draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
+                                                            draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt, draw.vertexLayout);
                 } else if (draw.useFogTex3D) {
                     // Task 899: colored3d (stride 16) / textured3d (20) / colored_textured3d (24)
                     // fog-capable bundle. The legacy no-GpuDrawParams DrawColoredPrimitives()
@@ -9401,10 +9484,10 @@ namespace CNA::Internal::Renderers::Vulkan
                     pipe = (draw.stride == 16)
                            ? GetOrCreatePipelineFogColored3D(draw.topology,
                                                              draw.depthTest, draw.depthWrite,
-                                                             draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt)
+                                                             draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt, draw.vertexLayout)
                            : GetOrCreatePipelineFogTex3D(draw.stride, draw.topology,
                                                          draw.depthTest, draw.depthWrite,
-                                                         draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
+                                                         draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt, draw.vertexLayout);
                 } else {
                     pipe = GetOrCreatePipeline3D(draw.topology,
                                                  draw.depthTest, draw.depthWrite,
@@ -11226,15 +11309,12 @@ namespace CNA::Internal::Renderers::Vulkan
         // REMED-GFX-DECL-GUARD: before anything is recorded, queued or created. This renderer
         // still picks its VkVertexInputAttributeDescription set from the stride, so a declaration
         // that set cannot represent is refused here rather than rendered from the wrong bytes.
-        RequireFaithfulDeclarationEXT(vb_in, "ordinary-nonindexed", /*positionOnlyFallback=*/false,
-                                      params.compiledEffectRuntime != nullptr);
-        // REMED-GFX-151: record which render targets this draw SAMPLES, so a mid-frame readback
-        // flush replays their producing cycles before this one. See NoteSampledSourcesEXT.
-        NoteSampledSourcesEXT(params);
-        EnsureDefaultWhiteTexture();
+        // VULKAN-146: the family the draw selects, and with it whether the declaration can be
+        // bound EXACTLY, is decided before the guard runs. These are pure functions of the stride
+        // and the draw params -- nothing here has a side effect, which is what makes hoisting them
+        // above the guard safe. Everything that does have one still happens after it.
         const auto& vb = static_cast<const VulkanVertexBufferRenderer&>(vb_in);
         const std::size_t stride = vb.GetStride() > 0 ? vb.GetStride() : 20;
-        const uint32_t drawCount = static_cast<uint32_t>(VertexCountForPrimitives(primitive, primitiveCount));
 
         const bool needsPbr        = params.pbr;
         const bool needsAlphaTest  = !needsPbr &&
@@ -11247,6 +11327,30 @@ namespace CNA::Internal::Renderers::Vulkan
         // effect (alpha test/dual tex/env map/skinned/pbr) takes priority for this stride.
         const bool needsLitTextured = (stride == 32) && !needsAlphaTest && !needsDualTex
                                      && !needsEnvMap && !needsSkinned && !needsPbr;
+        const bool usesFogTex3D = !needsAlphaTest && !needsDualTex && !needsEnvMap && !needsSkinned
+                                && !needsPbr && !needsLitTextured;
+
+        VulkanVertexInputLayoutEXT declaredLayout;
+        {
+            std::size_t inputCount = 0;
+            if (const auto* inputs = BasicFamilyStockInputsEXT(
+                    usesFogTex3D, needsLitTextured, stride, inputCount))
+                declaredLayout = BuildVulkanVertexInputLayoutEXT(
+                    vb.GetDeclarationEXT(), inputs, inputCount);
+        }
+        // VULKAN-146: the guard is for a route that infers its input from the stride. A family
+        // this row converted, given a declaration that supplies every one of its inputs, no longer
+        // does -- the pipeline is keyed and built from the declaration's own offsets. Anything
+        // else still goes through the guard unchanged, including a converted family whose
+        // declaration left an input unsupplied.
+        if (!declaredLayout.IsComplete())
+            RequireFaithfulDeclarationEXT(vb_in, "ordinary-nonindexed", /*positionOnlyFallback=*/false,
+                                          params.compiledEffectRuntime != nullptr);
+        // REMED-GFX-151: record which render targets this draw SAMPLES, so a mid-frame readback
+        // flush replays their producing cycles before this one. See NoteSampledSourcesEXT.
+        NoteSampledSourcesEXT(params);
+        EnsureDefaultWhiteTexture();
+        const uint32_t drawCount = static_cast<uint32_t>(VertexCountForPrimitives(primitive, primitiveCount));
 
         Pending3DDraw d{};
         // VULKAN-097: XNA's D3D9 pixel-centre convention, post-multiplied in row-vector order.
@@ -11299,6 +11403,9 @@ namespace CNA::Internal::Renderers::Vulkan
         if (d.usePbr || d.usePbrSkinned) RequirePbrStrideEXT(stride, d.usePbrSkinned);
         d.useSkinned     = needsSkinned && !needsPbr;
         d.useLitTextured = needsLitTextured;
+        // VULKAN-146: taken at DRAW time, above, because the record is replayed at Present(), by
+        // which point the buffer may carry a different declaration entirely.
+        d.vertexLayout = declaredLayout;
         // Task 1103: real XNA default is PreferPerPixelLighting=false (per-vertex/
         // Gouraud lighting) -- only meaningful while lighting is actually enabled.
         d.preferVertexLit = params.lightingEnabled && !params.preferPerPixelLighting;
@@ -11511,17 +11618,13 @@ namespace CNA::Internal::Renderers::Vulkan
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
         // REMED-GFX-DECL-GUARD: see DrawPrimitivesEx above.
-        RequireFaithfulDeclarationEXT(vb_in, "ordinary-indexed", /*positionOnlyFallback=*/false,
-                                      params.compiledEffectRuntime != nullptr);
-        // REMED-GFX-151: record which render targets this draw SAMPLES, so a mid-frame readback
-        // flush replays their producing cycles before this one. See NoteSampledSourcesEXT.
-        NoteSampledSourcesEXT(params);
-        EnsureDefaultWhiteTexture();
+        // VULKAN-146: the family the draw selects, and with it whether the declaration can be
+        // bound EXACTLY, is decided before the guard runs. These are pure functions of the stride
+        // and the draw params -- nothing here has a side effect, which is what makes hoisting them
+        // above the guard safe. Everything that does have one still happens after it.
         const auto& vb = static_cast<const VulkanVertexBufferRenderer&>(vb_in);
         const auto& ib = static_cast<const VulkanIndexBufferRenderer&>(ib_in);
         const std::size_t stride  = vb.GetStride() > 0 ? vb.GetStride() : 20;
-        const uint32_t indexCount = static_cast<uint32_t>(VertexCountForPrimitives(primitive, primitiveCount));
-        const int vertexCount     = vb.GetVertexCount();
 
         const bool needsPbr       = params.pbr;
         const bool needsAlphaTest = !needsPbr &&
@@ -11531,6 +11634,31 @@ namespace CNA::Internal::Renderers::Vulkan
         const bool needsSkinned   = params.skinned     && !needsAlphaTest && !needsDualTex && !needsEnvMap;
         const bool needsLitTextured = (stride == 32) && !needsAlphaTest && !needsDualTex
                                      && !needsEnvMap && !needsSkinned && !needsPbr;
+        const bool usesFogTex3D = !needsAlphaTest && !needsDualTex && !needsEnvMap && !needsSkinned
+                                && !needsPbr && !needsLitTextured;
+
+        VulkanVertexInputLayoutEXT declaredLayout;
+        {
+            std::size_t inputCount = 0;
+            if (const auto* inputs = BasicFamilyStockInputsEXT(
+                    usesFogTex3D, needsLitTextured, stride, inputCount))
+                declaredLayout = BuildVulkanVertexInputLayoutEXT(
+                    vb.GetDeclarationEXT(), inputs, inputCount);
+        }
+        // VULKAN-146: the guard is for a route that infers its input from the stride. A family
+        // this row converted, given a declaration that supplies every one of its inputs, no longer
+        // does -- the pipeline is keyed and built from the declaration's own offsets. Anything
+        // else still goes through the guard unchanged, including a converted family whose
+        // declaration left an input unsupplied.
+        if (!declaredLayout.IsComplete())
+            RequireFaithfulDeclarationEXT(vb_in, "ordinary-indexed", /*positionOnlyFallback=*/false,
+                                          params.compiledEffectRuntime != nullptr);
+        // REMED-GFX-151: record which render targets this draw SAMPLES, so a mid-frame readback
+        // flush replays their producing cycles before this one. See NoteSampledSourcesEXT.
+        NoteSampledSourcesEXT(params);
+        EnsureDefaultWhiteTexture();
+        const uint32_t indexCount = static_cast<uint32_t>(VertexCountForPrimitives(primitive, primitiveCount));
+        const int vertexCount     = vb.GetVertexCount();
 
         Pending3DDraw d{};
         // VULKAN-097: XNA's D3D9 pixel-centre convention, post-multiplied in row-vector order.
@@ -11583,6 +11711,9 @@ namespace CNA::Internal::Renderers::Vulkan
         if (d.usePbr || d.usePbrSkinned) RequirePbrStrideEXT(stride, d.usePbrSkinned);
         d.useSkinned     = needsSkinned && !needsPbr;
         d.useLitTextured = needsLitTextured;
+        // VULKAN-146: taken at DRAW time, above, because the record is replayed at Present(), by
+        // which point the buffer may carry a different declaration entirely.
+        d.vertexLayout = declaredLayout;
         // Task 1103: real XNA default is PreferPerPixelLighting=false (per-vertex/
         // Gouraud lighting) -- only meaningful while lighting is actually enabled.
         d.preferVertexLit = params.lightingEnabled && !params.preferPerPixelLighting;

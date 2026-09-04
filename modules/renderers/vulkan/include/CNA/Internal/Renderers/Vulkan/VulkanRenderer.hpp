@@ -7,6 +7,7 @@
 #endif
 #include "CNA/Internal/Renderers/Common/PlatformVulkanRendererState.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
+#include "CNA/Internal/Renderers/Vulkan/VulkanVertexInputLayout.hpp"
 #include <vulkan/vulkan.h>
 #include <algorithm>
 #include <array>
@@ -1122,6 +1123,16 @@ namespace CNA::Internal::Renderers::Vulkan
         uint32_t b = 0;
         uint32_t cw = 0;
         uint32_t sm = 0xFFFFFFFFu;
+        /// plan_vulkan.md VULKAN-146: the vertex input layout this pipeline bakes, as
+        /// VulkanVertexInputLayoutEXT::Hash(). 0 means "the factory's own stride-derived layout",
+        /// which is what an empty declaration produces and what every unconverted family still
+        /// uses -- so an untouched family's keys are byte-identical to before.
+        ///
+        /// A field of its own rather than more bits in `a`: `a` is already carrying the stride
+        /// bucket, topology, depth/stencil state, colour-attachment count, the depth format and
+        /// (on the instanced route) a raw stride at bits 53..63, and a 64-bit hash has nowhere to
+        /// hide in what is left.
+        uint64_t vl = 0;
         bool operator==(const PipelineKey&) const noexcept = default;
     };
     struct PipelineKeyHash {
@@ -1131,6 +1142,7 @@ namespace CNA::Internal::Renderers::Vulkan
             h ^= std::hash<uint32_t>{}(k.b) * 0x9E3779B97F4A7C15ull;
             h ^= (std::hash<uint32_t>{}(k.cw) + 0x165667B19E3779F9ull + (h << 6) + (h >> 2));
             h ^= (std::hash<uint32_t>{}(k.sm) + 0x27D4EB2F165667C5ull + (h << 6) + (h >> 2));
+            h ^= (std::hash<uint64_t>{}(k.vl) + 0x9E3779B97F4A7C15ull + (h << 6) + (h >> 2));
             return h;
         }
     };
@@ -2192,6 +2204,13 @@ namespace CNA::Internal::Renderers::Vulkan
             // between this draw and the frame that replays it.
             std::shared_ptr<VulkanRTSource> rt; // null = backbuffer
             std::size_t             stride = 16;  // vertex stride in bytes
+            /// plan_vulkan.md VULKAN-146: where each of the selected stock program's inputs
+            /// lives, taken from the caller's own VertexDeclaration at DRAW time (the record is
+            /// replayed at Present, by which point the buffer's declaration may have moved on).
+            /// Empty when the buffer carries no declaration, which is the
+            /// `VertexBuffer(device, count)` convenience constructor -- there the factory keeps its
+            /// stride-derived layout, exactly as before.
+            VulkanVertexInputLayoutEXT vertexLayout{};
             VkDescriptorSet         descSet = VK_NULL_HANDLE; // texture (or null)
             // Task 899: true for BasicEffect draws with no alpha-test/dual-tex/env-map/skinned/
             // lit-textured override (stride 16/20/24) -- routes to the new fog-capable
@@ -2828,7 +2847,8 @@ namespace CNA::Internal::Renderers::Vulkan
                                                      uint32_t colorAttachmentCount, bool wireframe,
                                                      bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
-                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {});
         // Task 1103: PreferPerPixelLighting=false sibling of GetOrCreatePipelineLitTextured3D
         // above (real per-vertex/Gouraud lighting, XNA's own default) — same signature/layout,
         // different shader modules and pipeline cache only.
@@ -2838,7 +2858,8 @@ namespace CNA::Internal::Renderers::Vulkan
                                                      uint32_t colorAttachmentCount, bool wireframe,
                                                      bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
-                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {});
         // BasicEffect fog bundle (Task 899) — shared by colored3d/textured3d/colored_textured3d.
         void       EnsureFogTex3DResources();
         /// REMED-GFX-169: @p sampler is slot 0's SamplerState, keyed as well as written. This is
@@ -2852,14 +2873,16 @@ namespace CNA::Internal::Renderers::Vulkan
                                                     uint32_t colorAttachmentCount, bool wireframe,
                                                     bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
-                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {});
         VkPipeline GetOrCreatePipelineFogTex3D(std::size_t stride, VkPrimitiveTopology,
                                                 bool depthTest, bool depthWrite,
                                                 bool blend, int cullMode,
                                                 uint32_t colorAttachmentCount, bool wireframe,
                                                 bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
-                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {});
         // --- Instanced 3D pipeline ---
         VkPipeline GetOrCreatePipelineInstanced3D(std::size_t pvStride, VkPrimitiveTopology,
                                                    bool depthTest, bool depthWrite,
