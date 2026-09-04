@@ -15674,6 +15674,7 @@ CNA_Result cna_post_process_chain_add_owned_pass(
             }
             // The chain resource takes ownership and registers the pass non-owningly, which
             // gives the canonical lifetime without needing a transfer this ABI cannot express.
+            const CNA_Handle parentGame = passResource->parentGame;
             c->ownedPasses.push_back(passResource->value);
             c->value->addPass(passResource->value.get());
             const CNA_Result releaseResult = GetRuntimeHandles().Release(pass);
@@ -15688,6 +15689,11 @@ CNA_Result cna_post_process_chain_add_owned_pass(
                     ErrorCategoryForResult(releaseResult),
                     "The pass handle could not be consumed.");
             }
+            // The pass's creating route counted it against the game, and this route is the other
+            // way its handle can end: consuming one without the matching decrement leaves a count
+            // no later call can ever bring down, and cna_game_destroy refuses on it forever.
+            // cna_post_process_pass_destroy does exactly this after its own Release.
+            RemoveOwnedGraphicsResourceFor(parentGame);
             return CNA_RESULT_SUCCESS;
         });
 }
