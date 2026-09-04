@@ -115,6 +115,7 @@ struct CapabilityExpectation
         // this renderer does not do, so custom effects are refused at the call site rather than
         // approximated. MRT (up to 4 attachments) and occlusion queries (a real GPUQueryHeap with
         // readback) are genuinely implemented.
+        case GraphicsRendererType::Wicked:
             return {true, true, false};
 
         // Skia: all three answers are structural rather than not-yet-implemented. SkCanvas produces
@@ -135,16 +136,19 @@ struct CapabilityExpectation
         // kExpectMultipleRenderTargets and friends undefined at their use sites -- this file could
         // not compile for that renderer at all. Same for OpenVG below. Neither is buildable in this
         // environment, so the values are the documented intent rather than a measurement.
+        case GraphicsRendererType::Blend2D:
             return {false, false, false};
 
         // OpenVG is a 2D vector-graphics API with no 3D pipeline, no MRT, and no occlusion-query
         // concept at all -- and no programmable shader stage for a genuinely custom Effect.
+        case GraphicsRendererType::OpenVg:
             return {false, false, false};
 
         // NanoVG, same shape as OpenVG: a 2D vector-graphics API with no 3D pipeline, no MRT
         // mechanism (SetRenderTargets rejects every RenderTarget2D binding), no occlusion-query
         // concept, and no caller-addressable programmable shader stage for a genuinely custom
         // Effect (NanoVG's own GLSL pipeline is fixed and internal).
+        case GraphicsRendererType::NanoVg:
             return {false, false, false};
 
         // PortableGL owns exactly one framebuffer per context and creates no render targets at all
@@ -161,6 +165,7 @@ struct CapabilityExpectation
         // fixed-function reasons -- CreateRenderTarget2D()/CreateRenderTargetCube() keep
         // IGraphicsRenderer's nullptr defaults, SetRenderTargets() refuses a non-empty binding, and
         // CreateOcclusionQuery() keeps its nullptr default.
+        case GraphicsRendererType::TinyGL:
             return {false, false, false};
 
         // plans/plan_diligent.md DILIGENT-42: a third genuinely 3D-capable renderer with its own honest,
@@ -169,6 +174,7 @@ struct CapabilityExpectation
         // a real IQuery, exact or binary depending on the device feature) are both real. Each answer
         // is reported truthfully rather than inherited from EasyGL, and each moves when its own task
         // lands.
+        case GraphicsRendererType::Diligent:
             return {true, true, false};
 
         // plans/plan_fna3d.md: FNA3D's only shader entry point is FNA3D_CreateEffect, which takes a
@@ -201,6 +207,7 @@ struct CapabilityExpectation
         // This arm was missing entirely, so an IGL build took the default below and asserted a
         // query capability the renderer documents that it does not have -- a standing red for the
         // whole family rather than an honest expectation.
+        case GraphicsRendererType::Igl:
             return {true, false, true};
 
         default:
@@ -233,7 +240,7 @@ constexpr bool kExpectCompiledEffects = false;
 /// this replaces did.
 [[nodiscard]] inline bool IsTwoDimensionalOnly()
 {
-    return false;
+    return CNA_RENDERER_IS(Blend2D, OpenVg, NanoVg);
 }
 
 TEST(GraphicsDeviceCapabilityTest, SupportsThreeD)
@@ -466,6 +473,34 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
     // DIRECTX2's own software RGB device and on DIRECTX8/D3D10's DXVK GPU path.)
     EXPECT_FALSE(reported)
         << "DIRECTX1 claims WireFrame support -- this renderer has no 3D pipeline at all, so a true "
+           "report cannot be backed by any rendering path";
+#elif defined(CNA_RENDERER_BLEND2D)
+    // Same truthful-false shape as Skia immediately above: Blend2D's BLContext has no polygon fill
+    // mode and no vertex/primitive route at all -- SupportsCapability(ThreeD) is already false, and
+    // DrawColoredPrimitives/DrawIndexedColoredPrimitives refuse every 3D draw before any vertex
+    // input is inspected, so no polygon topology can reach a raster queue to be silently filled
+    // solid. Like Skia, WireFrameTriangleOracle.hpp keeps this renderer out of HasPixelOracle()
+    // (no pixel route to measure).
+    EXPECT_FALSE(reported)
+        << "Blend2D claims WireFrame support -- this raster renderer has no polygon fill mode and "
+           "no 3D draw route, so a true report cannot be backed by any rendering path";
+#elif defined(CNA_RENDERER_OPENVG)
+    // OpenVG is a 2D vector-graphics API: no polygon fill mode, no vertex/primitive route, no 3D
+    // pipeline at all. Same truthful-false shape as Skia/DIRECTX1 -- OpenVgRenderer's own 3D
+    // pure-virtuals all refuse through HandleUnsupported3DCall() before any topology could reach a
+    // draw. Like Skia/DIRECTX1/Stub it has no pixel route to measure, which is why
+    // WireFrameTriangleOracle.hpp keeps this renderer out of HasPixelOracle().
+    EXPECT_FALSE(reported)
+        << "OpenVG claims WireFrame support -- this renderer has no 3D pipeline at all, so a true "
+           "report cannot be backed by any rendering path";
+#elif defined(CNA_RENDERER_NANOVG)
+    // NanoVG, same truthful-false shape as OpenVG immediately above: a 2D vector-graphics API
+    // with no polygon fill mode, no vertex/primitive route, no 3D pipeline at all --
+    // NanoVgRenderer's own 3D pure-virtuals all refuse through HandleUnsupported3DCall() before
+    // any topology could reach a draw. No pixel route to measure, so WireFrameTriangleOracle.hpp
+    // keeps this renderer out of HasPixelOracle() too.
+    EXPECT_FALSE(reported)
+        << "NANOVG claims WireFrame support -- this renderer has no 3D pipeline at all, so a true "
            "report cannot be backed by any rendering path";
 #elif defined(CNA_RENDERER_STUB)
     // Stub answers false to EVERY capability, WireFrame included: it is a no-op renderer that

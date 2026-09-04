@@ -16,9 +16,9 @@ using CNA::toStringView;
 static_assert(getCurrentGraphicsBackendMaturity() == getCurrentGraphicsBackendMaturity());
 static_assert(!toStringView(getCurrentGraphicsBackendMaturity()).empty());
 constexpr GraphicsBackendMaturity kCompileTimeMaturity = getCurrentGraphicsBackendMaturity();
-constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::PixiJs) + 1;
-static_assert(kPublicRendererCount == 39,
-              "GraphicsRendererType must expose all 48 genuine renderer identities");
+constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::NanoVg) + 1;
+static_assert(kPublicRendererCount == 49,
+              "GraphicsRendererType must expose all 49 genuine renderer identities");
 
 TEST(GraphicsBackendMaturityTest, GetCurrentGraphicsBackendMaturityDoesNotThrow)
 {
@@ -60,6 +60,7 @@ namespace
 
             case GraphicsRendererType::WebGL1:
             case GraphicsRendererType::WebGL2:
+            case GraphicsRendererType::Magnum:
             case GraphicsRendererType::Headless:
             case GraphicsRendererType::Stub:
             case GraphicsRendererType::Direct2D:
@@ -74,11 +75,20 @@ namespace
 
             case GraphicsRendererType::WebGPU:
             case GraphicsRendererType::Software:
+            case GraphicsRendererType::Blend2D:
             case GraphicsRendererType::FreeDirect:
+            case GraphicsRendererType::Wicked:
+            case GraphicsRendererType::Sokol:
+            case GraphicsRendererType::Diligent:
+            case GraphicsRendererType::Llgl:
+            case GraphicsRendererType::Igl:
             case GraphicsRendererType::Fna3d:
             case GraphicsRendererType::SvgDom:
+            case GraphicsRendererType::OpenVg:
             case GraphicsRendererType::PortableGL:
             case GraphicsRendererType::PixiJs:
+            case GraphicsRendererType::TinyGL:
+            case GraphicsRendererType::NanoVg:
                 return GraphicsBackendMaturity::Experimental;
 
             case GraphicsRendererType::DirectX1:

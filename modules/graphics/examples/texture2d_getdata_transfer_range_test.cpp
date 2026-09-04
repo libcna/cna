@@ -189,6 +189,10 @@ namespace
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kRendererName = "CANVAS";
     constexpr MipPolicy kMipPolicy = MipPolicy::RejectUpload;
+#elif defined(CNA_RENDERER_LLGL)
+    constexpr RtContract kRtContract = RtContract::Exact;
+    constexpr const char* kRendererName = "LLGL";
+    constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
 #else
 #error "REMED-GFX-149: this renderer has no declared Texture2D::GetData render-target contract."
 #endif

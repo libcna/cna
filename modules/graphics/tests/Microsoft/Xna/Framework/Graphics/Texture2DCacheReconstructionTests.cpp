@@ -203,19 +203,18 @@ TEST_F(Texture2DCacheReconstructionTest, RepeatedReconstructionCyclesStayCorrect
     EXPECT_EQ(out, in);
 }
 
-// Every renderer CNA still carries implements RenderTarget2D, so this gate is open for all of
-// them. It is kept rather than deleted because the shape it guarded is real and can return:
-// OPENVG was the one renderer without genuine render-target storage -- ShivaVG's non-EGL context
-// extension (vgCreateContextSH/vgResizeSurfaceSH) binds the pipeline to the one real window
-// surface, with no pbuffer/FBO-backed off-screen VGImage to use as a draw target, so
-// CreateRenderTarget2D kept the shared IGraphicsRenderer default (nullptr) and RenderTarget2D
-// silently fell back to CPU-shadowed Texture2D behaviour. That renderer was removed on 2026-08-30
-// (docs/removed-renderers.md); a future renderer with the same limitation names itself here.
+// OPENVG: ShivaVG's non-EGL context extension (vgCreateContextSH/vgResizeSurfaceSH) only ever
+// binds the OpenVG pipeline to the one real window surface -- there is no pbuffer/FBO-backed
+// off-screen VGImage surface to bind as a draw target, so CreateRenderTarget2D keeps the shared
+// IGraphicsRenderer default (returns nullptr) and RenderTarget2D silently falls back to ordinary
+// CPU-shadowed Texture2D behaviour. Same "no genuine render-target storage" shape as this file's
+// pre-existing TextureCube/RenderTargetCube gates elsewhere use, just for the 2D case; no other
+// current renderer lacks RenderTarget2D, so this is the first gate of its kind here.
 /// plans/plan_runtimerenderer.md RTR-P9-8: asked of the ACTIVE renderer, so a multi-renderer build gets
 /// the right answer per run instead of the build default's.
 [[nodiscard]] inline bool RenderTarget2DSupported()
 {
-    return true;
+    return !CNA_RENDERER_IS(CNA::GraphicsRendererType::OpenVg);
 }
 
 // (6) a real RenderTarget2D keeps the opposite semantics: its renderer is updated in place -- it

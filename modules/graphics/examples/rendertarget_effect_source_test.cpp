@@ -188,6 +188,8 @@ namespace
     constexpr const char* kRendererName = "DIRECTX11";
 #elif defined(CNA_RENDERER_DIRECTX12)
     constexpr const char* kRendererName = "DIRECTX12";
+#elif defined(CNA_RENDERER_LLGL)
+    constexpr const char* kRendererName = "LLGL";
 #else
 #error "REMED-GFX-152: this renderer has no declared render-target effect-source contract."
 #endif
@@ -243,7 +245,7 @@ namespace
     constexpr bool kSkinnedFamiliesAcceptPositionTexture =
 #if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_WEBGPU) || \
     defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_DIRECTX11) || \
-    defined(CNA_RENDERER_DIRECTX12)
+    defined(CNA_RENDERER_DIRECTX12) || defined(CNA_RENDERER_LLGL)
         false;
 #else
         true;
@@ -288,7 +290,8 @@ namespace
      */
     constexpr bool kEnvMapAcceptsPositionTexture =
 #if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_DIRECTX9) || \
-    defined(CNA_RENDERER_DIRECTX11) || defined(CNA_RENDERER_DIRECTX12)
+    defined(CNA_RENDERER_DIRECTX11) || defined(CNA_RENDERER_DIRECTX12) || \
+    defined(CNA_RENDERER_LLGL)
         false;
 #else
         true;

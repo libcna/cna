@@ -32,6 +32,8 @@ typedef uint32_t CNA_GraphicsRendererType;
 #define CNA_GRAPHICS_RENDERER_VULKAN UINT32_C(8)
 /** @brief Identifies the WebGPU backend. */
 #define CNA_GRAPHICS_RENDERER_WEBGPU UINT32_C(9)
+/** @brief Identifies the Magnum backend. */
+#define CNA_GRAPHICS_RENDERER_MAGNUM UINT32_C(10)
 /** @brief Identifies the no-window HEADLESS backend. */
 #define CNA_GRAPHICS_RENDERER_HEADLESS UINT32_C(11)
 /** @brief Identifies the CPU SOFTWARE backend. */
@@ -48,6 +50,8 @@ typedef uint32_t CNA_GraphicsRendererType;
 #define CNA_GRAPHICS_RENDERER_CANVAS UINT32_C(17)
 /** @brief Identifies the HTML DOM backend. */
 #define CNA_GRAPHICS_RENDERER_HTML_DOM UINT32_C(18)
+/** @brief Identifies the Blend2D backend. */
+#define CNA_GRAPHICS_RENDERER_BLEND2D UINT32_C(20)
 /** @brief Identifies the FreeDirect backend. */
 #define CNA_GRAPHICS_RENDERER_FREEDIRECT UINT32_C(21)
 /** @brief Identifies the Direct3D 9 backend. */
@@ -78,20 +82,36 @@ typedef uint32_t CNA_GraphicsRendererType;
 #define CNA_GRAPHICS_RENDERER_OPENGL1 UINT32_C(34)
 /** @brief Identifies the desktop OpenGL 2 backend. */
 #define CNA_GRAPHICS_RENDERER_OPENGL2 UINT32_C(35)
+/** @brief Identifies the Wicked Engine backend. */
+#define CNA_GRAPHICS_RENDERER_WICKED UINT32_C(36)
+/** @brief Identifies the sokol_gfx backend. */
+#define CNA_GRAPHICS_RENDERER_SOKOL UINT32_C(37)
+/** @brief Identifies the Diligent Engine backend. */
+#define CNA_GRAPHICS_RENDERER_DILIGENT UINT32_C(38)
 /** @brief Identifies the 3dfx Glide backend. */
 #define CNA_GRAPHICS_RENDERER_GLIDE UINT32_C(39)
 /** @brief Identifies the Win32 GDI backend. */
 #define CNA_GRAPHICS_RENDERER_GDI UINT32_C(40)
+/** @brief Identifies the LLGL backend. */
+#define CNA_GRAPHICS_RENDERER_LLGL UINT32_C(41)
 /** @brief Identifies the Apple Metal backend. */
 #define CNA_GRAPHICS_RENDERER_METAL UINT32_C(42)
 /** @brief Identifies the FNA3D backend. */
 #define CNA_GRAPHICS_RENDERER_FNA3D UINT32_C(43)
 /** @brief Identifies the SVG DOM backend. */
 #define CNA_GRAPHICS_RENDERER_SVG_DOM UINT32_C(44)
+/** @brief Identifies the OpenVG backend. */
+#define CNA_GRAPHICS_RENDERER_OPENVG UINT32_C(45)
 /** @brief Identifies the PortableGL backend. */
 #define CNA_GRAPHICS_RENDERER_PORTABLEGL UINT32_C(46)
+/** @brief Identifies the TinyGL backend. */
+#define CNA_GRAPHICS_RENDERER_TINYGL UINT32_C(47)
+/** @brief Identifies the IGL backend. */
+#define CNA_GRAPHICS_RENDERER_IGL UINT32_C(48)
 /** @brief Identifies the PixiJS backend. */
 #define CNA_GRAPHICS_RENDERER_PIXIJS UINT32_C(49)
+/** @brief Identifies the NanoVG backend. */
+#define CNA_GRAPHICS_RENDERER_NANOVG UINT32_C(50)
 
 /**
  * @brief Largest defined renderer identity.
@@ -102,7 +122,7 @@ typedef uint32_t CNA_GraphicsRendererType;
  * Every value above @ref CNA_GRAPHICS_RENDERER_MAXIMUM is refused by every route that takes a
  * @ref CNA_GraphicsRendererType, as is any retired value within the range.
  */
-#define CNA_GRAPHICS_RENDERER_MAXIMUM CNA_GRAPHICS_RENDERER_PIXIJS
+#define CNA_GRAPHICS_RENDERER_MAXIMUM CNA_GRAPHICS_RENDERER_NANOVG
 
 /** @brief Fixed-width identifier for a renderer-dependent graphics capability. */
 typedef uint32_t CNA_GraphicsCapability;

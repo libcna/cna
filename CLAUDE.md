@@ -504,7 +504,7 @@ task/evidence log is `plans/plan_platform.md`.
 Renderer selection is compile-time via `CNA_GRAPHICS_RENDERER` CMake option
 (`SDL_RENDERER` | `OPENGLES2` | `OPENGLES3` | `OPENGL33` | `WEBGL1` | `WEBGL2` | `BGFX` | `VULKAN` | `WEBGPU` |
 `MAGNUM` | `HEADLESS` | `SOFTWARE` | `STUB` | `DIRECTX11` | `DIRECTX12` | `DIRECT2D` | `CANVAS` |
-`HTML_DOM` | `SKIA` | `FREEDIRECT` | `DIRECTX9` | `DIRECTX1` | `DIRECTX2` | `DIRECTX3` | `DIRECTX5` | `DIRECTX6` |
+`HTML_DOM` | `NANOVG` | `FREEDIRECT` | `DIRECTX9` | `DIRECTX1` | `DIRECTX2` | `DIRECTX3` | `DIRECTX5` | `DIRECTX6` |
 `DIRECTX7` | `DIRECTX8` | `DIRECTX10` | `SDL_GPU` | `OPENGLES1` | `OPENGL4` | `OPENGL1` | `OPENGL2` |
 `WICKED` | `SOKOL` | `DILIGENT` | `GLIDE` | `GDI` | `LLGL` | `METAL` | `BLEND2D` | `FNA3D` |
 `SVG_DOM` | `OPENVG` | `PORTABLEGL` | `TINYGL` | `IGL` | `PIXIJS`). These are exactly 49
@@ -529,11 +529,11 @@ not alpha blending, and it has no stencil, scissor, render targets or shaders of
 OpenGL (GLX) or Vulkan backend, fixed for the process by `CNA_IGL_BACKEND` because the platform
 window's render intent must be decided before the renderer exists -- see `plans/plan_igl.md` and
 `docs/igl-renderer.md`.
-`SKIA` is a separate experimental CPU-raster 2D renderer backed by a pinned external Skia artifact;
-it does not delegate rendering to EasyGL and does not advertise 3D/depth/MSAA/MRT capabilities.
-Use `plans/plan_skia.md`, `NEXT_skia.md`, `docs/skia-renderer.md`, and
-`docs/skia-developer-build.md` for that subsystem; do not reconstruct its state from the general
-`NEXT.md`.
+`NANOVG` is a 2D-only renderer that puts `SpriteBatch` output through NanoVG's own compiled GLSL
+vector-rasterization pipeline (memononen/nanovg, GL2 backend) on a desktop OpenGL context it
+creates itself; see `docs/nanovg-renderer.md` and `plans/plan_nanovg.md`.
+The `SKIA` identity was retired on 2026-08-30 and is the one renderer NOT restored on 2026-09-04;
+its identity number stays a permanent gap in the C ABI range. See `docs/removed-renderers.md`.
 `PIXIJS` is the newest renderer, Emscripten-only and 2D-only in its v1 scope, rendering
 `SpriteBatch` output through pooled `PIXI.Sprite` objects (pixijs.com) rather than raw WebGL calls
 or Canvas2D/DOM primitives. It builds under a real Emscripten toolchain and its draw path is

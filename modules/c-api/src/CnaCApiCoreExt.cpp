@@ -191,7 +191,7 @@ using ConditionalLoggerRoute = void (*)(std::string_view, bool);
 
 // Every public renderer identity, paired explicitly so neither side depends on the other's
 // declaration order.
-constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererType>, 39>
+constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererType>, 49>
     RendererIdentities{{
         {CNA_GRAPHICS_RENDERER_SDL_RENDERER, CNA::GraphicsRendererType::SdlRenderer},
         {CNA_GRAPHICS_RENDERER_OPENGLES2, CNA::GraphicsRendererType::OpenGLES2},
@@ -202,6 +202,7 @@ constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererTy
         {CNA_GRAPHICS_RENDERER_BGFX, CNA::GraphicsRendererType::Bgfx},
         {CNA_GRAPHICS_RENDERER_VULKAN, CNA::GraphicsRendererType::Vulkan},
         {CNA_GRAPHICS_RENDERER_WEBGPU, CNA::GraphicsRendererType::WebGPU},
+        {CNA_GRAPHICS_RENDERER_MAGNUM, CNA::GraphicsRendererType::Magnum},
         {CNA_GRAPHICS_RENDERER_HEADLESS, CNA::GraphicsRendererType::Headless},
         {CNA_GRAPHICS_RENDERER_SOFTWARE, CNA::GraphicsRendererType::Software},
         {CNA_GRAPHICS_RENDERER_STUB, CNA::GraphicsRendererType::Stub},
@@ -210,6 +211,7 @@ constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererTy
         {CNA_GRAPHICS_RENDERER_DIRECT2D, CNA::GraphicsRendererType::Direct2D},
         {CNA_GRAPHICS_RENDERER_CANVAS, CNA::GraphicsRendererType::Canvas},
         {CNA_GRAPHICS_RENDERER_HTML_DOM, CNA::GraphicsRendererType::HtmlDom},
+        {CNA_GRAPHICS_RENDERER_BLEND2D, CNA::GraphicsRendererType::Blend2D},
         {CNA_GRAPHICS_RENDERER_FREEDIRECT, CNA::GraphicsRendererType::FreeDirect},
         {CNA_GRAPHICS_RENDERER_DIRECTX9, CNA::GraphicsRendererType::DirectX9},
         {CNA_GRAPHICS_RENDERER_DIRECTX1, CNA::GraphicsRendererType::DirectX1},
@@ -225,13 +227,21 @@ constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererTy
         {CNA_GRAPHICS_RENDERER_OPENGL4, CNA::GraphicsRendererType::OpenGL4},
         {CNA_GRAPHICS_RENDERER_OPENGL1, CNA::GraphicsRendererType::OpenGL1},
         {CNA_GRAPHICS_RENDERER_OPENGL2, CNA::GraphicsRendererType::OpenGL2},
+        {CNA_GRAPHICS_RENDERER_WICKED, CNA::GraphicsRendererType::Wicked},
+        {CNA_GRAPHICS_RENDERER_SOKOL, CNA::GraphicsRendererType::Sokol},
+        {CNA_GRAPHICS_RENDERER_DILIGENT, CNA::GraphicsRendererType::Diligent},
         {CNA_GRAPHICS_RENDERER_GLIDE, CNA::GraphicsRendererType::Glide},
         {CNA_GRAPHICS_RENDERER_GDI, CNA::GraphicsRendererType::Gdi},
+        {CNA_GRAPHICS_RENDERER_LLGL, CNA::GraphicsRendererType::Llgl},
         {CNA_GRAPHICS_RENDERER_METAL, CNA::GraphicsRendererType::Metal},
         {CNA_GRAPHICS_RENDERER_FNA3D, CNA::GraphicsRendererType::Fna3d},
         {CNA_GRAPHICS_RENDERER_SVG_DOM, CNA::GraphicsRendererType::SvgDom},
+        {CNA_GRAPHICS_RENDERER_OPENVG, CNA::GraphicsRendererType::OpenVg},
         {CNA_GRAPHICS_RENDERER_PORTABLEGL, CNA::GraphicsRendererType::PortableGL},
+        {CNA_GRAPHICS_RENDERER_TINYGL, CNA::GraphicsRendererType::TinyGL},
+        {CNA_GRAPHICS_RENDERER_IGL, CNA::GraphicsRendererType::Igl},
         {CNA_GRAPHICS_RENDERER_PIXIJS, CNA::GraphicsRendererType::PixiJs},
+        {CNA_GRAPHICS_RENDERER_NANOVG, CNA::GraphicsRendererType::NanoVg},
     }};
 
 // A retired identity's numeric value is never reused (see docs/c-api/ABI_VERSIONING.md), so

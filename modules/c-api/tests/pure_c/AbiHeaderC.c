@@ -8,7 +8,7 @@
 
 #include <stddef.h>
 
-_Static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 21, 0),
+_Static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 22, 0),
                "CNA C ABI version encoding must remain stable");
 _Static_assert(sizeof(CNA_Result) == sizeof(uint32_t),
                "CNA_Result must have a fixed-width representation");
@@ -179,8 +179,11 @@ _Static_assert(sizeof(CNA_RendererInfo) == 32U,
                "CNA_RendererInfo layout must remain stable");
 _Static_assert(CNA_GRAPHICS_RENDERER_SDL_RENDERER == UINT32_C(1) &&
                    CNA_GRAPHICS_RENDERER_PORTABLEGL == UINT32_C(46) &&
+                   CNA_GRAPHICS_RENDERER_TINYGL == UINT32_C(47) &&
+                   CNA_GRAPHICS_RENDERER_IGL == UINT32_C(48) &&
                    CNA_GRAPHICS_RENDERER_PIXIJS == UINT32_C(49) &&
-                   CNA_GRAPHICS_RENDERER_MAXIMUM == CNA_GRAPHICS_RENDERER_PIXIJS,
+                   CNA_GRAPHICS_RENDERER_NANOVG == UINT32_C(50) &&
+                   CNA_GRAPHICS_RENDERER_MAXIMUM == CNA_GRAPHICS_RENDERER_NANOVG,
                "CNA renderer identities must remain stable");
 _Static_assert(CNA_GRAPHICS_CAPABILITY_THREE_D == UINT32_C(0) &&
                    CNA_GRAPHICS_CAPABILITY_ADDITIVE_BLENDING == UINT32_C(12) &&

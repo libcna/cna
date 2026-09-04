@@ -167,6 +167,15 @@ namespace
 #elif defined(CNA_RENDERER_CANVAS)
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "CANVAS";
+#elif defined(CNA_RENDERER_SOKOL)
+    // plans/plan_sokol.md SOKOL-25/38: real geometry is genuinely rasterized, and `RequireReadable`'s
+    // direct `ReadWholeTarget` (a RenderTarget2D::GetData) now round-trips real content via a
+    // throwaway GL FBO around the raw texture handle `sg_gl_query_image_info()` exposes.
+    constexpr bool kRasterizes = true;
+    constexpr const char* kRendererName = "SOKOL";
+#elif defined(CNA_RENDERER_LLGL)
+    constexpr bool kRasterizes = true;
+    constexpr const char* kRendererName = "LLGL";
 #else
 #error "REMED-GFX-158: this renderer has no declared first-use contract."
 #endif

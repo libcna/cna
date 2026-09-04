@@ -210,6 +210,11 @@ namespace
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = true;
     constexpr const char* kRendererName = "DIRECTX12";
+#elif defined(CNA_RENDERER_LLGL)
+    constexpr bool kRasterizes = true;
+    constexpr bool kReadsBackbuffer = true;
+    constexpr bool kDraws3D = true;
+    constexpr const char* kRendererName = "LLGL";
 #else
 #error "REMED-GFX-157: this renderer has no declared SpriteBatch/3D ordering contract."
 #endif

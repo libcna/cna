@@ -131,7 +131,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 [[nodiscard]] inline bool DeclarationLayout()
 {
     return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, Software, SdlGpu, 
-                            DirectX9, DirectX11, DirectX12);
+                            DirectX9, DirectX11, DirectX12, Wicked);
 }
 
 // The renderers measured on a real display here. D3D9/D3D11/D3D12 stay outside it because no D3D
@@ -140,7 +140,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 [[nodiscard]] inline bool DeclarationLayoutMeasured()
 {
     return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Bgfx,
-                           Vulkan, WebGPU, Software, SdlGpu);
+                           Vulkan, WebGPU, Software, SdlGpu, Wicked);
 }
 
 /// REMED-GFX-234: does this renderer derive its native layout from the DECLARATION?

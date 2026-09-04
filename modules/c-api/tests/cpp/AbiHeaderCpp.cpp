@@ -8,7 +8,7 @@
 
 #include <cstddef>
 
-static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 21, 0));
+static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 22, 0));
 static_assert(sizeof(CNA_Result) == sizeof(uint32_t));
 static_assert(sizeof(CNA_Handle) == sizeof(uint64_t));
 static_assert(sizeof(CNA_GraphicsResourceTag) == sizeof(uint64_t));
@@ -133,8 +133,11 @@ static_assert(sizeof(CNA_SkinningDataDescriptor) == 64U);
 static_assert(sizeof(CNA_RendererInfo) == 32U);
 static_assert(CNA_GRAPHICS_RENDERER_SDL_RENDERER == UINT32_C(1));
 static_assert(CNA_GRAPHICS_RENDERER_PORTABLEGL == UINT32_C(46));
+static_assert(CNA_GRAPHICS_RENDERER_TINYGL == UINT32_C(47));
+static_assert(CNA_GRAPHICS_RENDERER_IGL == UINT32_C(48));
 static_assert(CNA_GRAPHICS_RENDERER_PIXIJS == UINT32_C(49));
-static_assert(CNA_GRAPHICS_RENDERER_MAXIMUM == CNA_GRAPHICS_RENDERER_PIXIJS);
+static_assert(CNA_GRAPHICS_RENDERER_NANOVG == UINT32_C(50));
+static_assert(CNA_GRAPHICS_RENDERER_MAXIMUM == CNA_GRAPHICS_RENDERER_NANOVG);
 static_assert(CNA_GRAPHICS_CAPABILITY_THREE_D == UINT32_C(0));
 static_assert(CNA_GRAPHICS_CAPABILITY_ADDITIVE_BLENDING == UINT32_C(12));
 static_assert(CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS == UINT32_C(13));

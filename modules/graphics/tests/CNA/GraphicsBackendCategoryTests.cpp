@@ -16,9 +16,9 @@ using CNA::toStringView;
 static_assert(getCurrentGraphicsBackendCategory() == getCurrentGraphicsBackendCategory());
 static_assert(!toStringView(getCurrentGraphicsBackendCategory()).empty());
 constexpr GraphicsBackendCategory kCompileTimeCategory = getCurrentGraphicsBackendCategory();
-constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::PixiJs) + 1;
-static_assert(kPublicRendererCount == 39,
-              "GraphicsRendererType must expose all 48 genuine renderer identities");
+constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::NanoVg) + 1;
+static_assert(kPublicRendererCount == 49,
+              "GraphicsRendererType must expose all 49 genuine renderer identities");
 
 TEST(GraphicsBackendCategoryTest, GetCurrentGraphicsBackendCategoryDoesNotThrow)
 {
@@ -48,6 +48,7 @@ namespace
             case GraphicsRendererType::OpenGLES3:
             case GraphicsRendererType::OpenGL33:
             case GraphicsRendererType::Vulkan:
+            case GraphicsRendererType::Magnum:
             case GraphicsRendererType::DirectX11:
             case GraphicsRendererType::DirectX12:
             case GraphicsRendererType::Direct2D:
@@ -74,11 +75,20 @@ namespace
             case GraphicsRendererType::WebGPU:
             case GraphicsRendererType::FreeDirect:
             case GraphicsRendererType::SdlGpu:
+            case GraphicsRendererType::Wicked:
+            case GraphicsRendererType::Sokol:
+            case GraphicsRendererType::Diligent:
+            case GraphicsRendererType::Llgl:
+            case GraphicsRendererType::Igl:
             case GraphicsRendererType::Fna3d:
+            case GraphicsRendererType::OpenVg:
+            case GraphicsRendererType::NanoVg:
                 return GraphicsBackendCategory::TranslationLayer;
 
             case GraphicsRendererType::Software:
+            case GraphicsRendererType::Blend2D:
             case GraphicsRendererType::PortableGL:
+            case GraphicsRendererType::TinyGL:
                 return GraphicsBackendCategory::Software;
 
             case GraphicsRendererType::WebGL1:
