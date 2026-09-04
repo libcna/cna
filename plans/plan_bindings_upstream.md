@@ -336,6 +336,37 @@ been created.
 
 ---
 
+## BINDFIX-031 — the GPU instance culler culls nothing, narrowed
+
+`cna-ts` (finding 20) measured the culler running, reporting success and keeping every
+instance it is given: one ten thousand units off the side of a hundred-unit frustum
+survives. `is_supported` answers true and the unsupported reason is empty, so nothing is
+announced.
+
+What this pass established, without reproducing it on a GPU:
+
+- CNA has its own test for exactly this, `ComputeCullingTest.TheGpuCullerAgreesWithTheCpuOneBoxForBox`
+  (`plans/plan_modern.md` MOD-1551), and it passes. So the shader's arithmetic and the
+  outward-normal convention it mirrors are not the fault on their own — the test runs the
+  same test expression, character for character.
+- The test and the shipped route differ in exactly one thing: **where the frustum comes
+  from**. The test uploads `culler.getFrustum()`, the frustum the CPU culler already holds.
+  `GpuInstanceCuller::cull` builds its own, `BoundingFrustum(view * projection)`, from the
+  two matrices the caller passed.
+
+So the hypothesis to test first is the product, not the shader: whether the matrices reach
+`cull` in the order and convention `BoundingFrustum` expects. A frustum built from a
+transposed or mis-ordered view-projection yields six planes that reject nothing, which is
+the measured symptom exactly, and it would leave the existing test green because that test
+never goes through this path.
+
+The next step is a probe that culls with a known camera and compares against
+`FrustumCullerEXT` on the CPU, then prints the six planes both produce. That is a GPU
+measurement rather than a reading, which is why it is written down here instead of guessed
+at.
+
+---
+
 ## Fixed in this pass
 
 Three defects, each independently reported by two or more bindings, each one a place where
@@ -420,6 +451,12 @@ CNA contradicted its own documentation or its own siblings:
   Reported by `cna-ts` (21).
 - **BINDFIX-027** — `importance_sample_ggx` needs a unit normal and said nothing about it.
   Reported by `cna-python` (ENGINE-007).
+- **BINDFIX-029** — `cna_post_process_chain_is_gpu_timing_enabled`, the route the header
+  sends a caller to, answered `CNA_FALSE` until the chain had applied once, because it
+  asked timers that are made lazily. Reported by `cna-python` (ENGINE-004).
+- **BINDFIX-030** — a glTF-imported skin's skeleton was refused as "not created through the
+  C API" though `skin->Data` held it; it is now published as an aliasing borrow of the
+  Model. Reported by `cna-rust` (`RUST-UPSTREAM-022`).
 
 ---
 
