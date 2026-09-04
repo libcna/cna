@@ -93,6 +93,11 @@
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "System/Exception.hpp"
@@ -161,6 +166,11 @@ namespace
     /// Stride-20 VertexPositionTexture.
     struct VtxPT { float px, py, pz; float u, v; };
     static_assert(sizeof(VtxPT) == 20, "stride 20");
+    /// plans/plan_webgpu.md WEBGPU-159: a stride-28 Position + TEXCOORD0 + TEXCOORD1 vertex, for the
+    /// one assertion below that needs `DualTextureEffect`'s SECOND UV set to exist -- see
+    /// `RunM_MultiSlot`'s M3 for why a single-UV mesh cannot carry that assertion.
+    struct VtxPTT { float px, py, pz; float u, v; float u1, v1; };
+    static_assert(sizeof(VtxPTT) == 28, "stride 28");
     /// Stride-32 VertexPositionNormalTexture.
     struct VtxPNT { float px, py, pz; float nx, ny, nz; float u, v; };
     static_assert(sizeof(VtxPNT) == 32, "stride 32");
@@ -410,6 +420,18 @@ class StockEffectSamplerContractTest : public Game
     static void DrawQuad(GraphicsDevice& dev, const std::vector<V>& verts)
     {
         VertexBuffer vb(dev, static_cast<int>(verts.size()));
+        vb.SetDataRaw(verts.data(), static_cast<int>(verts.size()), static_cast<int>(sizeof(V)));
+        dev.SetVertexBuffer(&vb);
+        dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+        dev.SetVertexBuffer(nullptr);
+    }
+
+    /// The same draw with an explicit declaration, for a layout no canonical stride table names.
+    template <typename V>
+    static void DrawDeclaredQuad(GraphicsDevice& dev, const std::vector<V>& verts,
+                                 const VertexDeclaration& declaration)
+    {
+        VertexBuffer vb(dev, declaration, static_cast<int>(verts.size()), BufferUsage::None);
         vb.SetDataRaw(verts.data(), static_cast<int>(verts.size()), static_cast<int>(sizeof(V)));
         dev.SetVertexBuffer(&vb);
         dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
@@ -847,9 +869,50 @@ private:
         std::string why;
         check(BlockUniform(both, kBlock, why),
               "M2: both slots PointClamp -- the combined image is block-uniform. " + why);
-        check(!BlockUniform(a, kBlock, why),
-              "M3: slot 1 Linear alone breaks block uniformity, so slot 1's sampler really is "
-              "consulted");
+        // plans/plan_webgpu.md WEBGPU-159. M3 used to make this assertion on the SAME single-UV quad
+        // M1/M2 use, and that premise is unsound: `DualTextureEffect` samples Texture2 with
+        // TEXCOORD1, and a mesh that declares no TEXCOORD1 supplies (0,0,0,1) for it -- D3D9's rule,
+        // which XNA is defined against, and equally OpenGL's disabled generic vertex attribute. So
+        // Texture2 is sampled at ONE constant coordinate, its magnification filter cannot be
+        // observed, and the image stays block-uniform however slot 1 is set. It passed only on
+        // renderers that sampled both textures with TEXCOORD0; the reference renderer, which binds
+        // TEXCOORD1 by semantic, has been failing it.
+        //
+        // Asked properly: a quad that DOES carry a second UV set. A renderer whose native layout
+        // cannot express a stride-28 dual-UV declaration refuses the draw, and says so here rather
+        // than being credited with an assertion it never ran.
+        auto dualUv = MakeQuad<VtxPTT>(1.0f);
+        for (auto& vertex : dualUv) { vertex.u1 = vertex.u; vertex.v1 = vertex.v; }
+        const VertexDeclaration dualUvDeclaration(
+            28,
+            {VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+             VertexElement(12, VertexElementFormat::Vector2,
+                           VertexElementUsage::TextureCoordinate, 0),
+             VertexElement(20, VertexElementFormat::Vector2,
+                           VertexElementUsage::TextureCoordinate, 1)});
+        auto drawDualUv = [&](GraphicsDevice& d) {
+            DualTextureEffect fx(d);
+            Matrices(fx);
+            fx.setTextureProperty(&tex_);
+            fx.setTexture2Property(&tex2_);
+            fx.Apply();
+            DrawDeclaredQuad(d, dualUv, dualUvDeclaration);
+        };
+        SetSlot(dev, 0, TextureFilter::Point, TextureAddressMode::Clamp);
+        SetSlot(dev, 1, TextureFilter::Linear, TextureAddressMode::Clamp);
+        try
+        {
+            const std::vector<Color> secondUv = Render(dev, drawDualUv);
+            check(!BlockUniform(secondUv, kBlock, why),
+                  "M3: with a real TEXCOORD1, slot 1 Linear alone breaks block uniformity, so "
+                  "slot 1's sampler really is consulted");
+        }
+        catch (const std::exception& e)
+        {
+            std::printf("[SKIP] M3: this renderer cannot express a stride-28 dual-UV declaration "
+                        "(%s)\n", e.what());
+            std::fflush(stdout);
+        }
         SetSlot(dev, 0, TextureFilter::Linear, TextureAddressMode::Wrap);
         SetSlot(dev, 1, TextureFilter::Linear, TextureAddressMode::Wrap);
     }

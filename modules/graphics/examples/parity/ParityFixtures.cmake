@@ -17,6 +17,14 @@ set(CNA_PARITY_FIXTURES
     # WEBGPU-155: the same mesh through declarations that differ only in element order/offset,
     # plus the semantic cases WEBGPU-156/157/158/159 each add their own leg to.
     vertex_semantics
+    # WEBGPU-156: BasicEffect lighting on an untextured Position+Normal declaration.
+    lit_untextured
+    # WEBGPU-157: the stock ModelProcessor's Position+Normal+Color+TextureCoordinate vertex.
+    lit_vertex_color
+    # WEBGPU-158: a Position+Colour vertex that declares no Normal renders unlit, keeping its colour.
+    unlit_position_color
+    # WEBGPU-159: DualTextureEffect consuming TEXCOORD0 and TEXCOORD1 independently.
+    dual_texture_uv1
 )
 
 # Builds and registers every fixture for one renderer.

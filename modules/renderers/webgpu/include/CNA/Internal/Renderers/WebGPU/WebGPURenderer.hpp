@@ -3,6 +3,7 @@
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/Common/PlatformRendererSurfaceState.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
+#include "CNA/Internal/Graphics/StockVertexSemantics.hpp"
 
 #if __has_include(<webgpu/webgpu.h>)
 #include <webgpu/webgpu.h>
@@ -1255,6 +1256,28 @@ namespace CNA::Internal::Renderers::WebGPU
         // other effects (alpha test/dual texture/env map/skinned) fall back to
         // DrawColoredPrimitives()/DrawIndexedColoredPrimitives(), replicating exactly what
         // IGraphicsRenderer's own default implementation already did before this override existed.
+        /**
+         * @brief plans/plan_webgpu.md WEBGPU-155: the ONE stock dispatch, shared by the indexed and
+         *        non-indexed entry points.
+         *
+         * Selects the stock family from the vertex declaration's semantics plus the effect state,
+         * then queues the matching draw. The skinned and PBR families were deliberately not
+         * converted by that task and keep the stride cascade plus the REMED-GFX-DECL-GUARD refusal.
+         *
+         * @param vb The draw's vertex buffer.
+         * @param ib The index buffer, or null for a non-indexed draw.
+         * @param world The world matrix.
+         * @param view The view matrix.
+         * @param projection The projection matrix.
+         * @param primitive The primitive type.
+         * @param primitiveCount How many primitives to draw.
+         * @param params The draw's effect state.
+         * @param route The route's name, for the declaration-guard diagnostic.
+         */
+        void DispatchStockDrawEXT(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
+                                  const Matrix& world, const Matrix& view, const Matrix& projection,
+                                  PrimitiveType primitive, int primitiveCount,
+                                  const GpuDrawParams& params, const char* route);
         void DrawPrimitivesEx(const IVertexBufferRenderer& vb,
                               const Matrix& world, const Matrix& view, const Matrix& projection,
                               PrimitiveType primitive, int primitiveCount,
@@ -1813,6 +1836,123 @@ namespace CNA::Internal::Renderers::WebGPU
          */
         void ApplyDrawScissor(WGPURenderPassEncoder pass, const WebGPUScissorSnapshot& snapshot);
 
+        /**
+         * @brief plans/plan_webgpu.md WEBGPU-155: which stock shader family one draw is bound to.
+         *
+         * Chosen from the DECLARATION's semantics plus the effect state, never from the buffer's
+         * byte stride: 24 bytes is `VertexPositionColorTexture` and also `Position+Normal`, 32 is
+         * `VertexPositionNormalTexture` and also a padded `Position+Colour`, and the stock
+         * `ModelProcessor` emits a 36-byte vertex that used to match nothing at all. A declaration
+         * is the only thing that answers "is this a lit vertex" or "does it carry a second UV set".
+         */
+        enum class StockVertexShapeEXT
+        {
+            Colored,             ///< Position + Color.
+            Textured,            ///< Position + TexCoord0.
+            ColoredTextured,     ///< Position + Color + TexCoord0.
+            /// Position + Normal, with TexCoord0 and Color optional -- per-pixel lighting.
+            ///
+            /// WEBGPU-156/157: this ONE family covers `VertexPositionNormal` (stride 24),
+            /// `VertexPositionNormalTexture` (32) and the stock `ModelProcessor`'s
+            /// Position+Normal+Colour+UV vertex (36). It does not need three shaders, because a
+            /// semantic the declaration does not name is supplied by the neutral record and the
+            /// existing `textureEnabled` / `vertexColorEnabled` uniforms already gate its use.
+            Lit,
+            LitVertexLit,        ///< The Gouraud sibling of Lit.
+            AlphaTest,           ///< Position + TexCoord0, alpha-tested.
+            AlphaTestColored,    ///< Position + Color + TexCoord0, alpha-tested.
+            DualTextured,        ///< Position + TexCoord0 + TexCoord1.
+            DualTexturedColored, ///< Position + Color + TexCoord0 + TexCoord1.
+            EnvMapped,           ///< Position + Normal + TexCoord0, reflection-mapped.
+            /// Not converted by WEBGPU-155: skinned, PBR and instanced draws keep the stride-derived
+            /// layout and the REMED-GFX-DECL-GUARD refusal that makes it safe. See WEBGPU-172/177.
+            StrideDerived
+        };
+
+        /**
+         * @brief WEBGPU-155: picks the stock family for a draw from its declaration and effect state.
+         *
+         * @param declaredElements The vertex buffer's declaration elements; empty when none was propagated.
+         * @param stride The buffer's byte stride, used only for the families this task did not convert.
+         * @param params The draw's effect state.
+         * @return The selected family, or `StrideDerived` when the draw belongs to an unconverted route.
+         */
+        [[nodiscard]] static StockVertexShapeEXT SelectStockVertexShapeEXT(
+            const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaredElements,
+            std::size_t stride,
+            const GpuDrawParams& params);
+
+        /**
+         * @brief WEBGPU-155: the ordered input list one stock family declares.
+         *
+         * @param shape The family.
+         * @param inputs Receives the input list, in shader-location order.
+         * @param count Receives the number of inputs.
+         * @param programName Receives the family's WGSL name, for a diagnostic.
+         */
+        static void StockVertexInputsForShapeEXT(
+            StockVertexShapeEXT shape,
+            const CNA::Internal::Graphics::StockProgramInput*& inputs,
+            std::size_t& count,
+            const char*& programName);
+
+        /**
+         * @brief WEBGPU-155: validates and resolves one draw's vertex layout against its declaration.
+         *
+         * Raises the shared format diagnostic first (nothing native exists yet if it throws), then
+         * binds each of the family's inputs at the declared element's own offset and format. A
+         * buffer that carries no declaration keeps this renderer's historical stride-derived layout,
+         * which is what every existing stock draw already relies on.
+         *
+         * @param vb The draw's vertex buffer.
+         * @param shape The selected stock family.
+         * @return The resolved layout.
+         */
+        [[nodiscard]] CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT ResolveStockVertexLayoutForDrawEXT(
+            const WebGPUVertexBufferRenderer& vb, StockVertexShapeEXT shape) const;
+
+        /// WEBGPU-155: the assembled native vertex state for one resolved layout. Two buffer slots:
+        /// slot 0 is the draw's own vertex record, slot 1 the zero-stride neutral record that
+        /// supplies any semantic the declaration does not name.
+        struct StockVertexStateEXT
+        {
+            std::array<WGPUVertexAttribute, CNA::Internal::Graphics::kMaxStockVertexAttributes> recordAttributes{};
+            std::array<WGPUVertexAttribute, CNA::Internal::Graphics::kMaxStockVertexAttributes> neutralAttributes{};
+            std::array<WGPUVertexBufferLayout, 2> buffers{};
+            std::size_t bufferCount = 0;
+        };
+
+        /**
+         * @brief WEBGPU-155: turns a resolved layout into `WGPUVertexBufferLayout`s for a pipeline.
+         *
+         * @param layout The resolved layout.
+         * @param out Receives the assembled attribute arrays and buffer layouts; it must outlive the
+         *            `Build3DPipelineEXT` call, because the descriptor points into it.
+         */
+        static void BuildStockVertexStateEXT(
+            const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& layout,
+            StockVertexStateEXT& out);
+
+        /**
+         * @brief WEBGPU-155: the shared zero-stride buffer holding the `(0, 0, 0, 1)` neutral record.
+         *
+         * Created once and reused, because a neutral value is the same for every draw. WebGPU's own
+         * `arrayStride = 0` is what makes every vertex read it.
+         *
+         * @return The neutral vertex buffer.
+         */
+        [[nodiscard]] WGPUBuffer GetOrCreateNeutralVertexBufferEXT();
+
+        /**
+         * @brief WEBGPU-155: binds slot 1 to the neutral record when a draw's layout needs it.
+         *
+         * @param pass The render pass encoder being recorded.
+         * @param layout The draw's resolved layout.
+         */
+        void BindNeutralVertexBufferEXT(
+            WGPURenderPassEncoder pass,
+            const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& layout);
+
         /// WEBGPU-29: the inputs that vary between the 12 GetOrCreatePipeline*3D families. Everything
         /// else in a 3D WGPURenderPipelineDescriptor -- colour target (surfaceFormat_ + CurrentWriteMask
         /// + MRT via InitStockColorTargetsEXT), fragment/vertex entry points, CCW front face,
@@ -1850,14 +1990,16 @@ namespace CNA::Internal::Renderers::WebGPU
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
                                                        float depthBias, float slopeScaleDepthBias,
-                                                       const StencilKeyParams& stencil);  // WEBGPU-83
+                                                       const StencilKeyParams& stencil,
+                                                       const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);  // WEBGPU-83
         // params == nullptr: the legacy DrawColoredPrimitives path (hardcoded white diffuse,
         // vertexColorEnabled=true, vertexStart=0). params != nullptr: DrawPrimitivesEx's real
         // GpuDrawParams dispatch (stride-16 only -- caller must have already verified the stride).
         void QueueColoredDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                               const Matrix& world, const Matrix& view, const Matrix& projection,
                               PrimitiveType primitive, int primitiveCount,
-                              const GpuDrawParams* params = nullptr);
+                              const GpuDrawParams* params = nullptr,
+                              StockVertexShapeEXT shape = StockVertexShapeEXT::Colored);
         void CaptureReadback(WGPUCommandEncoder encoder, WGPUTexture surfaceTexture);
         // Acquires a swapchain texture if none is currently held, and renders any pending
         // Clear()/sprite work into it. Called on demand by both Present() and ReadBackbuffer()
@@ -2019,6 +2161,9 @@ namespace CNA::Internal::Renderers::WebGPU
         std::array<std::uint64_t, kSpriteVertexRing> spriteVertexRingCapacity_{};
         std::size_t spriteVertexRingIndex_ = 0;
         WGPUBuffer spriteVertexBuffer_ = nullptr;        ///< Non-owning alias of the active ring slot.
+        /// WEBGPU-155: the shared 16-byte (0,0,0,1) neutral vertex record, bound at array stride 0
+        /// for any stock shader input the draw's declaration does not name. Created on first use.
+        WGPUBuffer neutralVertexBuffer_ = nullptr;
         std::uint64_t spriteVertexCapacityBytes_ = 0;    ///< Active slot's capacity.
         /// REMED-GFX-159: bytes UploadSpriteVertices() wrote for the cycle being replayed. The
         /// sprite vertex buffer used to be bound once for the whole sprite run; interleaved 3D
@@ -2279,6 +2424,10 @@ namespace CNA::Internal::Renderers::WebGPU
         // untextured) Model/BasicEffect draws going through that fallback.
         struct ColoredDrawCommand
         {
+            /// WEBGPU-155: this draw's vertex layout, resolved from its own VertexDeclaration at
+            /// queue time. Captured per command for the same reason the pipeline state is: a later
+            /// SetVertexBuffer must not retroactively relayout an already-queued draw.
+            CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout{};
             std::vector<std::uint8_t> vertexData;
             std::vector<std::uint8_t> indexData;   ///< empty for a non-indexed draw
             bool indexed = false;
@@ -2327,6 +2476,10 @@ namespace CNA::Internal::Renderers::WebGPU
         // own WEBGPU-N task).
         struct TexturedDrawCommand
         {
+            /// WEBGPU-155: this draw's vertex layout, resolved from its own VertexDeclaration at
+            /// queue time. Captured per command for the same reason the pipeline state is: a later
+            /// SetVertexBuffer must not retroactively relayout an already-queued draw.
+            CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout{};
             /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
             StencilKeyParams stencil{};
             int stencilRef = 0;
@@ -2388,7 +2541,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
                                                        float depthBias, float slopeScaleDepthBias,
-                                                       const StencilKeyParams& stencil);
+                                                       const StencilKeyParams& stencil,
+                                                       const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineColoredTextured3D(WGPUPrimitiveTopology topology,
                                                                                WGPUIndexFormat stripIndexFormat,
                                                                                bool depthTest, bool depthWrite,
@@ -2396,10 +2550,12 @@ namespace CNA::Internal::Renderers::WebGPU
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
                                                        float depthBias, float slopeScaleDepthBias,
-                                                       const StencilKeyParams& stencil);
+                                                       const StencilKeyParams& stencil,
+                                                       const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);
         void QueueTexturedDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                const Matrix& world, const Matrix& view, const Matrix& projection,
-                               PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+                               PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+                               StockVertexShapeEXT shape);
         void IssueTexturedDraw(WGPURenderPassEncoder pass, const TexturedDrawCommand& command,
                               ReplayState& state);
 
@@ -2452,6 +2608,10 @@ namespace CNA::Internal::Renderers::WebGPU
         // sampler + texture) unchanged. No fog (same deliberate deferral as the other 3D shaders).
         struct LitTexturedDrawCommand
         {
+            /// WEBGPU-155: this draw's vertex layout, resolved from its own VertexDeclaration at
+            /// queue time. Captured per command for the same reason the pipeline state is: a later
+            /// SetVertexBuffer must not retroactively relayout an already-queued draw.
+            CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout{};
             /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
             StencilKeyParams stencil{};
             int stencilRef = 0;
@@ -2506,7 +2666,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
                                                        float depthBias, float slopeScaleDepthBias,
-                                                       const StencilKeyParams& stencil);
+                                                       const StencilKeyParams& stencil,
+                                                       const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);
         /// Task 1105: real per-vertex-lit sibling to GetOrCreatePipelineLitTextured3D above --
         /// identical Blinn-Phong math (FNA's Lighting.fxh ComputeLights()), moved into the vertex
         /// stage and passed to the fragment shader as litRGB/specularRGB varyings instead of being
@@ -2520,10 +2681,12 @@ namespace CNA::Internal::Renderers::WebGPU
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
                                                        float depthBias, float slopeScaleDepthBias,
-                                                       const StencilKeyParams& stencil);
+                                                       const StencilKeyParams& stencil,
+                                                       const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);
         void QueueLitTexturedDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                   const Matrix& world, const Matrix& view, const Matrix& projection,
-                                  PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+                                  PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+                                  StockVertexShapeEXT shape);
         void IssueLitTexturedDraw(WGPURenderPassEncoder pass, const LitTexturedDrawCommand& command,
                               ReplayState& state);
 
@@ -2551,6 +2714,10 @@ namespace CNA::Internal::Renderers::WebGPU
         // for stride 24. No fog (same deliberate deferral as the other 3D shaders).
         struct AlphaTestDrawCommand
         {
+            /// WEBGPU-155: this draw's vertex layout, resolved from its own VertexDeclaration at
+            /// queue time. Captured per command for the same reason the pipeline state is: a later
+            /// SetVertexBuffer must not retroactively relayout an already-queued draw.
+            CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout{};
             /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
             StencilKeyParams stencil{};
             int stencilRef = 0;
@@ -2593,7 +2760,7 @@ namespace CNA::Internal::Renderers::WebGPU
         };
         void CreateAlphaTestResources();
         void DestroyAlphaTestResources();
-        [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineAlphaTest3D(std::size_t stride,
+        [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineAlphaTest3D(bool colored,
                                                                         WGPUPrimitiveTopology topology,
                                                                         WGPUIndexFormat stripIndexFormat,
                                                                         bool depthTest, bool depthWrite,
@@ -2601,10 +2768,12 @@ namespace CNA::Internal::Renderers::WebGPU
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
                                                        float depthBias, float slopeScaleDepthBias,
-                                                       const StencilKeyParams& stencil);
+                                                       const StencilKeyParams& stencil,
+                                                       const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);
         void QueueAlphaTestDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                 const Matrix& world, const Matrix& view, const Matrix& projection,
-                                PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+                                PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+                                StockVertexShapeEXT shape);
         void IssueAlphaTestDraw(WGPURenderPassEncoder pass, const AlphaTestDrawCommand& command,
                               ReplayState& state);
 
@@ -2628,6 +2797,10 @@ namespace CNA::Internal::Renderers::WebGPU
         // No fog (same deliberate deferral as the other 3D shaders).
         struct DualTextureDrawCommand
         {
+            /// WEBGPU-155: this draw's vertex layout, resolved from its own VertexDeclaration at
+            /// queue time. Captured per command for the same reason the pipeline state is: a later
+            /// SetVertexBuffer must not retroactively relayout an already-queued draw.
+            CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout{};
             /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
             StencilKeyParams stencil{};
             int stencilRef = 0;
@@ -2682,7 +2855,7 @@ namespace CNA::Internal::Renderers::WebGPU
         };
         void CreateDualTextureResources();
         void DestroyDualTextureResources();
-        [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineDualTexture3D(std::size_t stride,
+        [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineDualTexture3D(bool colored,
                                                                           WGPUPrimitiveTopology topology,
                                                                           WGPUIndexFormat stripIndexFormat,
                                                                           bool depthTest, bool depthWrite,
@@ -2690,10 +2863,12 @@ namespace CNA::Internal::Renderers::WebGPU
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
                                                        float depthBias, float slopeScaleDepthBias,
-                                                       const StencilKeyParams& stencil);
+                                                       const StencilKeyParams& stencil,
+                                                       const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);
         void QueueDualTextureDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                   const Matrix& world, const Matrix& view, const Matrix& projection,
-                                  PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+                                  PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+                                  StockVertexShapeEXT shape);
         void IssueDualTextureDraw(WGPURenderPassEncoder pass, const DualTextureDrawCommand& command,
                               ReplayState& state);
 
@@ -2726,6 +2901,10 @@ namespace CNA::Internal::Renderers::WebGPU
         // support already exists in the reference GLSL this was ported from, so it is wired in.
         struct EnvMapDrawCommand
         {
+            /// WEBGPU-155: this draw's vertex layout, resolved from its own VertexDeclaration at
+            /// queue time. Captured per command for the same reason the pipeline state is: a later
+            /// SetVertexBuffer must not retroactively relayout an already-queued draw.
+            CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout{};
             /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
             StencilKeyParams stencil{};
             int stencilRef = 0;
@@ -2802,10 +2981,12 @@ namespace CNA::Internal::Renderers::WebGPU
                                                    bool blend, const BlendKeyParams& blendParams,
                                                    int cullMode, bool wireframe,
                                                    float depthBias, float slopeScaleDepthBias,
-                                                       const StencilKeyParams& stencil);
+                                                       const StencilKeyParams& stencil,
+                                                       const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);
         void QueueEnvMapDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                              const Matrix& world, const Matrix& view, const Matrix& projection,
-                             PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+                             PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+                             StockVertexShapeEXT shape);
         void IssueEnvMapDraw(WGPURenderPassEncoder pass, const EnvMapDrawCommand& command,
                               ReplayState& state);
 

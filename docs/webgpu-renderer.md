@@ -613,6 +613,57 @@ The initial renderer is deliberately useful rather than an empty scaffold. It cu
   caching;
 - CNA logical-presentation modes and window/logical coordinate conversion.
 
+## Semantic vertex layouts for the stock 3D families (2026-09-04, `WEBGPU-155`–`159`)
+
+Until `WEBGPU-155` this renderer chose a stock shader family, and that family's whole
+`WGPUVertexAttribute` array, **from the vertex buffer's byte stride**. A stride is not a layout:
+
+* the same semantic content is legally described at several strides (padding, an unused element, a
+  different vertex struct) — a `Position+Colour` record padded to 32 bytes was read as
+  `VertexPositionNormalTexture`, so its declared colour was dropped and twelve padding bytes were lit
+  as a normal;
+* the same stride legally describes different semantic content — 24 bytes is
+  `VertexPositionColorTexture` *and* the `Position+Normal` vertex Microsoft's own Primitives3D sample
+  uses, which must be lit;
+* strides the table did not list were refused outright — including 36, which is exactly what the
+  stock XNA `ModelProcessor` emits for a mesh with a colour channel, and 40, the canonical
+  `PositionNormalDualTexture`.
+
+The dispatch now asks the **declaration**. `WebGPURenderer::SelectStockVertexShapeEXT()` picks the
+family from the semantics the declaration names plus the effect state, and
+`ResolveStockVertexLayoutForDrawEXT()` binds each of that family's inputs by `(usage, usageIndex)` at
+the declared element's own offset and format. The stride survives as exactly one thing: the
+pipeline's `arrayStride`. The resolver itself is renderer-neutral
+(`modules/graphics/include/CNA/Internal/Graphics/StockVertexSemantics.hpp`), so a second renderer
+adopting it gets the same bindings from the same declaration rather than a second interpretation.
+
+Element **order** is unrestricted, deliberately: XNB model data routinely orders
+`TextureCoordinate` before `Normal`, and a renderer that keys on list position reads such a mesh
+from the wrong bytes. What is still checked, before anything native exists, is the **format** of each
+semantic the selected program consumes (`RequireDeclarationMatchesStockProgram`).
+
+A semantic a program declares but the declaration does not supply — `DualTextureEffect`'s
+`TEXCOORD1` on a single-UV mesh, a colour input on a mesh with no colour channel — reads a shared
+16-byte **neutral record** holding `(0, 0, 0, 1)`, bound at vertex-buffer slot 1 with per-instance
+step so every vertex of the single-instance draw reads it. That value is not a convenience: D3D9,
+which XNA is defined against, fills a vertex register's missing components with `(0, 0, 0, 1)`, and
+OpenGL's disabled generic vertex attribute — what the reference renderer leaves such an input at —
+has the same default.
+
+Shader changes that came with it: the two lit families gained a colour input at `@location(3)`
+(XNA's `VSBasicVertexLightingVc` family — the vertex colour multiplies the diffuse result *before*
+the specular term is added), and both dual-texture families gained `TEXCOORD1` so the overlay is
+sampled with its own UV set.
+
+**What was deliberately NOT converted**, and still selects its attribute array from the stride with
+`REMED-GFX-DECL-GUARD`'s refusal keeping it safe: the **skinned**, **PBR** and **instanced** routes.
+`WEBGPU-172` and `WEBGPU-177` own their conversion. A declaration those routes cannot represent is
+refused by name, exactly as before.
+
+Verified by the shared EasyGL↔WebGPU parity fixtures (`WEBGPU-207`, see
+[`cross-renderer-parity-fixtures.md`](cross-renderer-parity-fixtures.md)) plus the renderer-neutral
+`VertexDeclarationLayoutTests`, where WebGPU moved from the refusing arm to the translating one.
+
 ## Important limitations
 
 The desktop feature set now covers 3D (every stock effect, with FNA fog parity), real instancing,

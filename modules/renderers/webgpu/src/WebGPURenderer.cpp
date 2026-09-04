@@ -716,6 +716,10 @@ namespace CNA::Internal::Renderers::WebGPU
                 std::to_string(static_cast<int>(format)));
         }
 
+        /// WEBGPU-155: the byte size of the shared (0, 0, 0, 1) neutral vertex record.
+        inline constexpr std::uint64_t kNeutralVertexRecordBytes =
+            sizeof(float) * CNA::Internal::Graphics::kNeutralVertexRecordEXT.size();
+
         // REMED-GFX-DECL-GUARD: the declaration-fidelity boundary. This renderer selects its
         // WGPUVertexBufferLayout from the stride (REMED-GFX-217), so a declaration that layout
         // cannot represent is refused before a pipeline is created or a command queued. The
@@ -3174,6 +3178,10 @@ namespace CNA::Internal::Renderers::WebGPU
 
     void WebGPURenderer::DestroySpriteResources()
     {
+        // WEBGPU-155: the neutral vertex record is shared by every stock family, so it is released
+        // with the sprite resources rather than owned by any one of them.
+        if (neutralVertexBuffer_ != nullptr) wgpuBufferRelease(neutralVertexBuffer_);
+        neutralVertexBuffer_ = nullptr;
         // WEBGPU-59: the ring owns the buffers; spriteVertexBuffer_ only aliases the active slot.
         for (std::size_t s = 0; s < kSpriteVertexRing; ++s)
         {
@@ -3203,6 +3211,10 @@ namespace CNA::Internal::Renderers::WebGPU
         DestroySpriteResources();
         if (surfaceFormat_ == WGPUTextureFormat_Undefined)
             return;
+
+        // WEBGPU-155: created up front, so the neutral record's queue write can never be issued
+        // from inside a render pass that a stock draw is already recording into.
+        (void) GetOrCreateNeutralVertexBufferEXT();
 
         static constexpr const char* shaderSource = webgpu_shaders::kSprite;
 
@@ -3448,6 +3460,264 @@ namespace CNA::Internal::Renderers::WebGPU
             throw std::runtime_error("CNA WebGPU: failed to create Colored3D GPU resources");
     }
 
+    // ---------------------------------------------------------------------------------------
+    // plans/plan_webgpu.md WEBGPU-155: the semantic vertex layout.
+    //
+    // Everything below replaces "the buffer stride names a canonical packed struct, and the
+    // pipeline's WGPUVertexAttribute array is that struct's offsetof()s" with "the declaration
+    // names each semantic, and the attribute array is the declaration's own offsets and formats".
+    // The stride survives as exactly one thing: the pipeline's arrayStride.
+    // ---------------------------------------------------------------------------------------
+
+    WebGPURenderer::StockVertexShapeEXT WebGPURenderer::SelectStockVertexShapeEXT(
+        const std::vector<VertexElement>& declaredElements, std::size_t stride,
+        const GpuDrawParams& params)
+    {
+        using namespace CNA::Internal::Graphics;
+
+        const bool haveDeclaration = !declaredElements.empty();
+        // A buffer that never had a declaration propagated is the one case where the stride is
+        // still all there is to go on. If it is not a stride the canonical table describes either,
+        // there is nothing to bind from -- keep the historical refusal rather than inventing a
+        // layout, which is what StrideDerived plus the declaration guard produces.
+        if (!haveDeclaration &&
+            !InferredLayoutForStride(static_cast<int>(stride),
+                                     UnlistedStrideLayout::RendererRefusesIt).known)
+            return StockVertexShapeEXT::StrideDerived;
+        // A declaration with no POSITION0 describes no drawable vertex; let the guard say so rather
+        // than binding a defaulted (0,0,0) position for every vertex.
+        if (haveDeclaration &&
+            FindDeclaredSemanticEXT(declaredElements, VertexElementUsage::Position, 0) == nullptr)
+            return StockVertexShapeEXT::StrideDerived;
+
+        const bool hasNormal = haveDeclaration
+            ? DeclarationNamesUsageEXT(declaredElements, VertexElementUsage::Normal)
+            : (stride == 32);
+        const bool hasColor = haveDeclaration
+            ? (FindDeclaredSemanticEXT(declaredElements, VertexElementUsage::Color, 0) != nullptr)
+            : (stride == 16 || stride == 24);
+        const bool hasUv = haveDeclaration
+            ? (FindDeclaredSemanticEXT(declaredElements,
+                                       VertexElementUsage::TextureCoordinate, 0) != nullptr)
+            : (stride == 20 || stride == 24 || stride == 32);
+
+        // The effect-state gates below are the ordinary route's own, in its own priority order --
+        // what WEBGPU-155 changed is that the vertex SHAPE beside each of them is a declaration
+        // question rather than a stride one.
+        const bool needsAlphaTest = !params.pbr &&
+                                    (params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f);
+        if (needsAlphaTest && hasUv && params.texture0 != nullptr)
+        {
+            return hasColor ? StockVertexShapeEXT::AlphaTestColored
+                            : StockVertexShapeEXT::AlphaTest;
+        }
+        const bool needsDualTexture = !needsAlphaTest && params.dualTexture;
+        if (needsDualTexture && hasUv &&
+            params.texture0 != nullptr && params.texture1 != nullptr)
+        {
+            return hasColor ? StockVertexShapeEXT::DualTexturedColored
+                            : StockVertexShapeEXT::DualTextured;
+        }
+        // EnvironmentMapEffect takes over the normal/UV attributes lit_textured3d would otherwise
+        // light with, so it wins over the lit family for the same declaration.
+        const bool needsEnvMap = !needsAlphaTest && !needsDualTexture && params.envMapping;
+        if (needsEnvMap && hasNormal && hasUv) return StockVertexShapeEXT::EnvMapped;
+
+        // Skinned and PBR draws are NOT converted by this task: they keep the stride-derived
+        // attribute arrays and the REMED-GFX-DECL-GUARD refusal that makes reading a declaration
+        // those arrays cannot represent impossible rather than silent (WEBGPU-172/177 own their
+        // conversion). The condition matches the ladder this function replaced exactly: a skinned
+        // draw never reached the unlit/lit families, and a PBR draw only bypassed them once its
+        // stride was one of PBR's own.
+        if (needsAlphaTest || needsDualTexture) return StockVertexShapeEXT::StrideDerived;
+        if (params.skinned) return StockVertexShapeEXT::StrideDerived;
+        if (params.pbr && (stride == 48 || stride == 60 || stride == 68 || stride == 80))
+            return StockVertexShapeEXT::StrideDerived;
+
+        // Task 1105 / plans/plan_dx9.md Divergence 1: XNA's BasicEffect defaults
+        // PreferPerPixelLighting=false, so a lit draw is Gouraud unless it asks otherwise. Only
+        // meaningfully distinct while lighting is actually on.
+        const bool vertexLit = params.lightingEnabled && !params.preferPerPixelLighting;
+        // SAMPLE-002 / REMED-GFX-234: a declaration that names a Normal is a lit vertex at ANY
+        // stride, and one that does not is not a lit vertex at any stride either. Whether it also
+        // carries a UV or a colour changes which attributes are bound, not which family it is.
+        if (hasNormal)
+            return vertexLit ? StockVertexShapeEXT::LitVertexLit : StockVertexShapeEXT::Lit;
+        if (hasUv)
+        {
+            return hasColor ? StockVertexShapeEXT::ColoredTextured
+                            : StockVertexShapeEXT::Textured;
+        }
+        return StockVertexShapeEXT::Colored;
+    }
+
+    void WebGPURenderer::StockVertexInputsForShapeEXT(
+        StockVertexShapeEXT shape,
+        const CNA::Internal::Graphics::StockProgramInput*& inputs,
+        std::size_t& count,
+        const char*& programName)
+    {
+        using CNA::Internal::Graphics::StockProgramInput;
+        namespace In = CNA::Internal::Graphics::StockVertexInputsEXT;
+
+        // Each list is in SHADER-LOCATION order, because a resolved input's location is its index
+        // here -- so these lists and the @location() numbers in webgpu_shaders.hpp are one
+        // statement made twice and must be changed together.
+        static constexpr StockProgramInput kColored[]            = {In::kPos, In::kColor};
+        static constexpr StockProgramInput kTextured[]           = {In::kPos, In::kUv};
+        static constexpr StockProgramInput kColoredTextured[]    = {In::kPos, In::kColor, In::kUv};
+        static constexpr StockProgramInput kLit[]                = {In::kPos, In::kNormal,
+                                                                    In::kUv, In::kColor};
+        static constexpr StockProgramInput kDualTextured[]       = {In::kPos, In::kUv, In::kUv1};
+        static constexpr StockProgramInput kDualTexturedColored[]= {In::kPos, In::kColor,
+                                                                    In::kUv, In::kUv1};
+        static constexpr StockProgramInput kEnvMapped[]          = {In::kPos, In::kNormal, In::kUv};
+
+        switch (shape)
+        {
+        case StockVertexShapeEXT::Colored:
+            inputs = kColored; count = std::size(kColored);
+            programName = "colored3d"; return;
+        case StockVertexShapeEXT::Textured:
+            inputs = kTextured; count = std::size(kTextured);
+            programName = "textured3d"; return;
+        case StockVertexShapeEXT::ColoredTextured:
+            inputs = kColoredTextured; count = std::size(kColoredTextured);
+            programName = "colored_textured3d"; return;
+        case StockVertexShapeEXT::Lit:
+            inputs = kLit; count = std::size(kLit);
+            programName = "lit_textured3d"; return;
+        case StockVertexShapeEXT::LitVertexLit:
+            inputs = kLit; count = std::size(kLit);
+            programName = "lit_textured3d_vertexlit"; return;
+        case StockVertexShapeEXT::AlphaTest:
+            inputs = kTextured; count = std::size(kTextured);
+            programName = "alpha_test3d"; return;
+        case StockVertexShapeEXT::AlphaTestColored:
+            inputs = kColoredTextured; count = std::size(kColoredTextured);
+            programName = "alpha_test_colored3d"; return;
+        case StockVertexShapeEXT::DualTextured:
+            inputs = kDualTextured; count = std::size(kDualTextured);
+            programName = "dual_texture3d"; return;
+        case StockVertexShapeEXT::DualTexturedColored:
+            inputs = kDualTexturedColored; count = std::size(kDualTexturedColored);
+            programName = "dual_texture_colored3d"; return;
+        case StockVertexShapeEXT::EnvMapped:
+            inputs = kEnvMapped; count = std::size(kEnvMapped);
+            programName = "env_map3d"; return;
+        case StockVertexShapeEXT::StrideDerived:
+            break;
+        }
+        inputs = nullptr; count = 0; programName = "stride-derived";
+    }
+
+    CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT
+    WebGPURenderer::ResolveStockVertexLayoutForDrawEXT(
+        const WebGPUVertexBufferRenderer& vb, StockVertexShapeEXT shape) const
+    {
+        using namespace CNA::Internal::Graphics;
+
+        const StockProgramInput* inputs = nullptr;
+        std::size_t inputCount = 0;
+        const char* programName = "";
+        StockVertexInputsForShapeEXT(shape, inputs, inputCount, programName);
+
+        const std::vector<VertexElement>& declared = vb.Declaration().GetElements();
+        // Raised BEFORE anything native exists, exactly like the guard it replaces on this route:
+        // the FORMAT of a consumed semantic must be one the shader input accepts. Offsets and
+        // element order are deliberately unrestricted -- XNB model data routinely orders
+        // TextureCoordinate before Normal, and that is a legal declaration.
+        RequireDeclarationMatchesStockProgram(declared, inputs, inputCount, "WebGPU", programName);
+
+        if (!declared.empty())
+            return ResolveStockVertexLayoutEXT(declared, static_cast<int>(vb.Stride()),
+                                               inputs, inputCount);
+
+        // No declaration was ever propagated for this buffer. The canonical stride table is then
+        // the only description of its bytes there is -- and it is the SAME table this renderer's
+        // hardcoded attribute arrays were derived from, so synthesising a declaration from it
+        // preserves the historical layout without restating any offset here.
+        const InferredVertexLayout inferred =
+            InferredLayoutForStride(static_cast<int>(vb.Stride()),
+                                    UnlistedStrideLayout::RendererRefusesIt);
+        std::vector<VertexElement> synthesized;
+        synthesized.reserve(inferred.count);
+        for (std::size_t i = 0; i < inferred.count; ++i)
+        {
+            const InferredVertexElement& e = inferred.elements[i];
+            synthesized.emplace_back(e.offset, e.format, e.usage, e.usageIndex);
+        }
+        ResolvedStockVertexLayoutEXT resolved = ResolveStockVertexLayoutEXT(
+            synthesized, static_cast<int>(vb.Stride()), inputs, inputCount);
+        resolved.fromDeclaration = false;
+        return resolved;
+    }
+
+    void WebGPURenderer::BuildStockVertexStateEXT(
+        const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& layout,
+        StockVertexStateEXT& out)
+    {
+        std::size_t recordCount = 0;
+        std::size_t neutralCount = 0;
+        for (std::size_t i = 0; i < layout.count; ++i)
+        {
+            const CNA::Internal::Graphics::ResolvedStockAttributeEXT& a = layout.attributes[i];
+            WGPUVertexAttribute attribute{};
+            attribute.format = WebGPUVertexFormatFromVEF(a.format);
+            attribute.offset = static_cast<std::uint64_t>(a.offset);
+            attribute.shaderLocation = static_cast<std::uint32_t>(a.shaderLocation);
+            if (a.defaulted) out.neutralAttributes[neutralCount++] = attribute;
+            else             out.recordAttributes[recordCount++] = attribute;
+        }
+
+        out.buffers[0] = WGPUVertexBufferLayout{};
+        out.buffers[0].arrayStride = static_cast<std::uint64_t>(layout.stride);
+        out.buffers[0].stepMode = WGPUVertexStepMode_Vertex;
+        out.buffers[0].attributeCount = recordCount;
+        out.buffers[0].attributes = out.recordAttributes.data();
+        out.bufferCount = 1;
+
+        if (neutralCount > 0)
+        {
+            out.buffers[1] = WGPUVertexBufferLayout{};
+            // WEBGPU-155: PER-INSTANCE step, not a zero array stride. Every stock draw on this
+            // route submits exactly one instance with firstInstance 0, so an instance-stepped
+            // binding reads record 0 for every vertex -- which is what a "same value for the whole
+            // draw" attribute needs -- while keeping the buffer's required size at one record and
+            // staying inside the plainly specified part of WebGPU's vertex-buffer validation.
+            out.buffers[1].arrayStride = kNeutralVertexRecordBytes;
+            out.buffers[1].stepMode = WGPUVertexStepMode_Instance;
+            out.buffers[1].attributeCount = neutralCount;
+            out.buffers[1].attributes = out.neutralAttributes.data();
+            out.bufferCount = 2;
+        }
+    }
+
+    WGPUBuffer WebGPURenderer::GetOrCreateNeutralVertexBufferEXT()
+    {
+        if (neutralVertexBuffer_ != nullptr) return neutralVertexBuffer_;
+        WGPUBufferDescriptor descriptor{};
+        descriptor.label = StringView("CNA WebGPU Neutral Vertex Record");
+        descriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
+        descriptor.size = kNeutralVertexRecordBytes;
+        neutralVertexBuffer_ = wgpuDeviceCreateBuffer(device_, &descriptor);
+        if (neutralVertexBuffer_ == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create the neutral vertex record buffer");
+        wgpuQueueWriteBuffer(queue_, neutralVertexBuffer_, 0,
+                             CNA::Internal::Graphics::kNeutralVertexRecordEXT.data(),
+                             kNeutralVertexRecordBytes);
+        return neutralVertexBuffer_;
+    }
+
+    void WebGPURenderer::BindNeutralVertexBufferEXT(
+        WGPURenderPassEncoder pass,
+        const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& layout)
+    {
+        if (!layout.usesNeutralRecord) return;
+        wgpuRenderPassEncoderSetVertexBuffer(pass, 1, GetOrCreateNeutralVertexBufferEXT(), 0,
+                                             kNeutralVertexRecordBytes);
+    }
+
     // WEBGPU-29: the one WGPURenderPipelineDescriptor assembly shared by all 12 GetOrCreatePipeline*3D
     // families. The colour target (surfaceFormat_ + CurrentWriteMask() + InitStockColorTargetsEXT MRT),
     // vs/fs entry points, CCW front face, ToWGPUCullMode, the baked blend (WEBGPU-78), the
@@ -3516,39 +3786,32 @@ namespace CNA::Internal::Renderers::WebGPU
                                                     bool blend, const BlendKeyParams& blendParams,
                                                     int cullMode, bool wireframe,
                                                     float depthBias, float slopeScaleDepthBias,
-                                                    const StencilKeyParams& stencil)
+                                                    const StencilKeyParams& stencil,
+                                                    const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout)
     {
         // WEBGPU-83: the stencil state is folded into the colored3d cache key locally (Make3DPipelineKey
         // stays shared/unchanged), so a stencil-enabled draw is a distinct pipeline variant.
+        // WEBGPU-155: the resolved vertex layout is folded in the same way, so two declarations that
+        // bind different offsets can never share one pipeline -- which is exactly what a stride-keyed
+        // cache used to let them do.
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
+                                                     depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         if (auto it = coloredPipelines_.find(key); it != coloredPipelines_.end())
             return it->second;
 
-        struct ColoredVertex { float x, y, z; std::uint8_t r, g, b, a; };
-        std::array<WGPUVertexAttribute, 2> attributes{};
-        attributes[0].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
-        attributes[0].offset = offsetof(ColoredVertex, x);
-        attributes[0].shaderLocation = 0;
-        attributes[1].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Color);
-        attributes[1].offset = offsetof(ColoredVertex, r);
-        attributes[1].shaderLocation = 1;
-        WGPUVertexBufferLayout vertexBufferLayout{};
-        vertexBufferLayout.arrayStride = sizeof(ColoredVertex);
-        vertexBufferLayout.stepMode = WGPUVertexStepMode_Vertex;
-        vertexBufferLayout.attributeCount = attributes.size();
-        vertexBufferLayout.attributes = attributes.data();
+        StockVertexStateEXT vertexState;
+        BuildStockVertexStateEXT(vertexLayout, vertexState);
 
         Pipeline3DDescEXT desc;
         desc.label = "CNA WebGPU Colored3D Pipeline";
         desc.layout = coloredPipelineLayout_;
         desc.vertexModule = coloredShader_;
         desc.fragmentModule = coloredShader_;
-        desc.vertexBuffers = &vertexBufferLayout;
-        desc.vertexBufferCount = 1;
+        desc.vertexBuffers = vertexState.buffers.data();
+        desc.vertexBufferCount = vertexState.bufferCount;
         desc.topology = topology;
         desc.stripIndexFormat = stripIndexFormat;
         desc.depthTest = depthTest;
@@ -3655,37 +3918,28 @@ namespace CNA::Internal::Renderers::WebGPU
                                                     bool blend, const BlendKeyParams& blendParams,
                                                     int cullMode, bool wireframe,
                                                     float depthBias, float slopeScaleDepthBias,
-                                                    const StencilKeyParams& stencil)
+                                                    const StencilKeyParams& stencil,
+                                                    const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout)
     {
+        // WEBGPU-155: the resolved vertex layout is part of the cache key -- see Colored3D.
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
+                                                     depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         if (auto it = texturedPipelines_.find(key); it != texturedPipelines_.end())
             return it->second;
 
-        struct TexturedVertex { float x, y, z; float u, v; };
-        std::array<WGPUVertexAttribute, 2> attributes{};
-        attributes[0].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
-        attributes[0].offset = offsetof(TexturedVertex, x);
-        attributes[0].shaderLocation = 0;
-        attributes[1].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector2);
-        attributes[1].offset = offsetof(TexturedVertex, u);
-        attributes[1].shaderLocation = 1;
-        WGPUVertexBufferLayout vertexBufferLayout{};
-        vertexBufferLayout.arrayStride = sizeof(TexturedVertex);
-        vertexBufferLayout.stepMode = WGPUVertexStepMode_Vertex;
-        vertexBufferLayout.attributeCount = attributes.size();
-        vertexBufferLayout.attributes = attributes.data();
+        StockVertexStateEXT vertexState;
+        BuildStockVertexStateEXT(vertexLayout, vertexState);
 
         Pipeline3DDescEXT desc;
         desc.label = "CNA WebGPU Textured3D Pipeline";
         desc.layout = texturedPipelineLayout_;
         desc.vertexModule = texturedShader_;
         desc.fragmentModule = texturedShader_;
-        desc.vertexBuffers = &vertexBufferLayout;
-        desc.vertexBufferCount = 1;
+        desc.vertexBuffers = vertexState.buffers.data();
+        desc.vertexBufferCount = vertexState.bufferCount;
         desc.topology = topology;
         desc.stripIndexFormat = stripIndexFormat;
         desc.depthTest = depthTest;
@@ -3709,40 +3963,28 @@ namespace CNA::Internal::Renderers::WebGPU
                                                     bool blend, const BlendKeyParams& blendParams,
                                                     int cullMode, bool wireframe,
                                                     float depthBias, float slopeScaleDepthBias,
-                                                    const StencilKeyParams& stencil)
+                                                    const StencilKeyParams& stencil,
+                                                    const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout)
     {
+        // WEBGPU-155: the resolved vertex layout is part of the cache key -- see Colored3D.
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
+                                                     depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         if (auto it = coloredTexturedPipelines_.find(key); it != coloredTexturedPipelines_.end())
             return it->second;
 
-        struct ColoredTexturedVertex { float x, y, z; std::uint8_t r, g, b, a; float u, v; };
-        std::array<WGPUVertexAttribute, 3> attributes{};
-        attributes[0].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
-        attributes[0].offset = offsetof(ColoredTexturedVertex, x);
-        attributes[0].shaderLocation = 0;
-        attributes[1].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Color);
-        attributes[1].offset = offsetof(ColoredTexturedVertex, r);
-        attributes[1].shaderLocation = 1;
-        attributes[2].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector2);
-        attributes[2].offset = offsetof(ColoredTexturedVertex, u);
-        attributes[2].shaderLocation = 2;
-        WGPUVertexBufferLayout vertexBufferLayout{};
-        vertexBufferLayout.arrayStride = sizeof(ColoredTexturedVertex);
-        vertexBufferLayout.stepMode = WGPUVertexStepMode_Vertex;
-        vertexBufferLayout.attributeCount = attributes.size();
-        vertexBufferLayout.attributes = attributes.data();
+        StockVertexStateEXT vertexState;
+        BuildStockVertexStateEXT(vertexLayout, vertexState);
 
         Pipeline3DDescEXT desc;
         desc.label = "CNA WebGPU ColoredTextured3D Pipeline";
         desc.layout = texturedPipelineLayout_;
         desc.vertexModule = coloredTexturedShader_;
         desc.fragmentModule = coloredTexturedShader_;
-        desc.vertexBuffers = &vertexBufferLayout;
-        desc.vertexBufferCount = 1;
+        desc.vertexBuffers = vertexState.buffers.data();
+        desc.vertexBufferCount = vertexState.bufferCount;
         desc.topology = topology;
         desc.stripIndexFormat = stripIndexFormat;
         desc.depthTest = depthTest;
@@ -3861,40 +4103,28 @@ namespace CNA::Internal::Renderers::WebGPU
                                                     bool blend, const BlendKeyParams& blendParams,
                                                     int cullMode, bool wireframe,
                                                     float depthBias, float slopeScaleDepthBias,
-                                                    const StencilKeyParams& stencil)
+                                                    const StencilKeyParams& stencil,
+                                                    const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout)
     {
+        // WEBGPU-155: the resolved vertex layout is part of the cache key -- see Colored3D.
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
+                                                     depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         if (auto it = litTexturedPipelines_.find(key); it != litTexturedPipelines_.end())
             return it->second;
 
-        struct LitTexturedVertex { float x, y, z, nx, ny, nz, u, v; };
-        std::array<WGPUVertexAttribute, 3> attributes{};
-        attributes[0].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
-        attributes[0].offset = offsetof(LitTexturedVertex, x);
-        attributes[0].shaderLocation = 0;
-        attributes[1].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
-        attributes[1].offset = offsetof(LitTexturedVertex, nx);
-        attributes[1].shaderLocation = 1;
-        attributes[2].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector2);
-        attributes[2].offset = offsetof(LitTexturedVertex, u);
-        attributes[2].shaderLocation = 2;
-        WGPUVertexBufferLayout vertexBufferLayout{};
-        vertexBufferLayout.arrayStride = sizeof(LitTexturedVertex);
-        vertexBufferLayout.stepMode = WGPUVertexStepMode_Vertex;
-        vertexBufferLayout.attributeCount = attributes.size();
-        vertexBufferLayout.attributes = attributes.data();
+        StockVertexStateEXT vertexState;
+        BuildStockVertexStateEXT(vertexLayout, vertexState);
 
         Pipeline3DDescEXT desc;
         desc.label = "CNA WebGPU LitTextured3D Pipeline";
         desc.layout = litPipelineLayout_;
         desc.vertexModule = litTexturedShader_;
         desc.fragmentModule = litTexturedShader_;
-        desc.vertexBuffers = &vertexBufferLayout;
-        desc.vertexBufferCount = 1;
+        desc.vertexBuffers = vertexState.buffers.data();
+        desc.vertexBufferCount = vertexState.bufferCount;
         desc.topology = topology;
         desc.stripIndexFormat = stripIndexFormat;
         desc.depthTest = depthTest;
@@ -3917,40 +4147,28 @@ namespace CNA::Internal::Renderers::WebGPU
                                                     bool blend, const BlendKeyParams& blendParams,
                                                     int cullMode, bool wireframe,
                                                     float depthBias, float slopeScaleDepthBias,
-                                                    const StencilKeyParams& stencil)
+                                                    const StencilKeyParams& stencil,
+                                                    const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout)
     {
+        // WEBGPU-155: the resolved vertex layout is part of the cache key -- see Colored3D.
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
+                                                     depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         if (auto it = litTexturedVertexLitPipelines_.find(key); it != litTexturedVertexLitPipelines_.end())
             return it->second;
 
-        struct LitTexturedVertex { float x, y, z, nx, ny, nz, u, v; };
-        std::array<WGPUVertexAttribute, 3> attributes{};
-        attributes[0].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
-        attributes[0].offset = offsetof(LitTexturedVertex, x);
-        attributes[0].shaderLocation = 0;
-        attributes[1].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
-        attributes[1].offset = offsetof(LitTexturedVertex, nx);
-        attributes[1].shaderLocation = 1;
-        attributes[2].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector2);
-        attributes[2].offset = offsetof(LitTexturedVertex, u);
-        attributes[2].shaderLocation = 2;
-        WGPUVertexBufferLayout vertexBufferLayout{};
-        vertexBufferLayout.arrayStride = sizeof(LitTexturedVertex);
-        vertexBufferLayout.stepMode = WGPUVertexStepMode_Vertex;
-        vertexBufferLayout.attributeCount = attributes.size();
-        vertexBufferLayout.attributes = attributes.data();
+        StockVertexStateEXT vertexState;
+        BuildStockVertexStateEXT(vertexLayout, vertexState);
 
         Pipeline3DDescEXT desc;
         desc.label = "CNA WebGPU LitTextured3D VertexLit Pipeline";
         desc.layout = litPipelineLayout_;
         desc.vertexModule = litTexturedVertexLitShader_;
         desc.fragmentModule = litTexturedVertexLitShader_;
-        desc.vertexBuffers = &vertexBufferLayout;
-        desc.vertexBufferCount = 1;
+        desc.vertexBuffers = vertexState.buffers.data();
+        desc.vertexBufferCount = vertexState.bufferCount;
         desc.topology = topology;
         desc.stripIndexFormat = stripIndexFormat;
         desc.depthTest = depthTest;
@@ -4025,7 +4243,7 @@ namespace CNA::Internal::Renderers::WebGPU
             throw std::runtime_error("CNA WebGPU: failed to create AlphaTestColored3D shader");
     }
 
-    WGPURenderPipeline WebGPURenderer::GetOrCreatePipelineAlphaTest3D(std::size_t stride,
+    WGPURenderPipeline WebGPURenderer::GetOrCreatePipelineAlphaTest3D(bool colored,
                                                                               WGPUPrimitiveTopology topology,
                                                                               WGPUIndexFormat stripIndexFormat,
                                                                               bool depthTest, bool depthWrite,
@@ -4033,80 +4251,34 @@ namespace CNA::Internal::Renderers::WebGPU
                                                     bool blend, const BlendKeyParams& blendParams,
                                                     int cullMode, bool wireframe,
                                                     float depthBias, float slopeScaleDepthBias,
-                                                    const StencilKeyParams& stencil)
+                                                    const StencilKeyParams& stencil,
+                                                    const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout)
     {
+        // WEBGPU-155: `colored` (a declaration question -- does it name COLOR0?) replaces the
+        // former `stride == 24` test, and the three hand-written stride layouts below it are gone:
+        // stride 20, 24 and 32 were three spellings of "position and a UV somewhere", which a
+        // declaration says directly.
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias,
-                                                     static_cast<std::uint64_t>(stride), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
+                                                     CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
-        auto& cache = (stride == 24) ? alphaTestColoredPipelines_ : alphaTestPipelines_;
+        auto& cache = colored ? alphaTestColoredPipelines_ : alphaTestPipelines_;
         if (auto it = cache.find(key); it != cache.end())
             return it->second;
 
-        WGPUVertexAttribute attributes[3]{};
-        std::uint32_t attributeCount = 0;
-        std::uint64_t arrayStride = stride;
-        WGPUShaderModule shaderModule = alphaTestShader_;
-
-        if (stride == 24)
-        {
-            struct ColoredTexturedVertex { float x, y, z; std::uint8_t r, g, b, a; float u, v; };
-            attributes[0].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
-            attributes[0].offset = offsetof(ColoredTexturedVertex, x);
-            attributes[0].shaderLocation = 0;
-            attributes[1].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Color);
-            attributes[1].offset = offsetof(ColoredTexturedVertex, r);
-            attributes[1].shaderLocation = 1;
-            attributes[2].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector2);
-            attributes[2].offset = offsetof(ColoredTexturedVertex, u);
-            attributes[2].shaderLocation = 2;
-            attributeCount = 3;
-            arrayStride = sizeof(ColoredTexturedVertex);
-            shaderModule = alphaTestColoredShader_;
-        }
-        else if (stride == 32)
-        {
-            // VertexPositionNormalTexture: position (offset 0) + UV (offset 24, past the unread
-            // 12-byte normal) -- one shared shader for strides 20 and 32, only the vertex buffer
-            // layout differs.
-            struct LitTexturedVertex { float x, y, z, nx, ny, nz, u, v; };
-            attributes[0].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
-            attributes[0].offset = offsetof(LitTexturedVertex, x);
-            attributes[0].shaderLocation = 0;
-            attributes[1].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector2);
-            attributes[1].offset = offsetof(LitTexturedVertex, u);
-            attributes[1].shaderLocation = 1;
-            attributeCount = 2;
-            arrayStride = sizeof(LitTexturedVertex);
-        }
-        else
-        {
-            struct TexturedVertex { float x, y, z; float u, v; };
-            attributes[0].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
-            attributes[0].offset = offsetof(TexturedVertex, x);
-            attributes[0].shaderLocation = 0;
-            attributes[1].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector2);
-            attributes[1].offset = offsetof(TexturedVertex, u);
-            attributes[1].shaderLocation = 1;
-            attributeCount = 2;
-            arrayStride = sizeof(TexturedVertex);
-        }
-
-        WGPUVertexBufferLayout vertexBufferLayout{};
-        vertexBufferLayout.arrayStride = arrayStride;
-        vertexBufferLayout.stepMode = WGPUVertexStepMode_Vertex;
-        vertexBufferLayout.attributeCount = attributeCount;
-        vertexBufferLayout.attributes = attributes;
+        WGPUShaderModule shaderModule = colored ? alphaTestColoredShader_ : alphaTestShader_;
+        StockVertexStateEXT vertexState;
+        BuildStockVertexStateEXT(vertexLayout, vertexState);
 
         Pipeline3DDescEXT desc;
         desc.label = "CNA WebGPU AlphaTest3D Pipeline";
         desc.layout = texturedPipelineLayout_;
         desc.vertexModule = shaderModule;
         desc.fragmentModule = shaderModule;
-        desc.vertexBuffers = &vertexBufferLayout;
-        desc.vertexBufferCount = 1;
+        desc.vertexBuffers = vertexState.buffers.data();
+        desc.vertexBufferCount = vertexState.bufferCount;
         desc.topology = topology;
         desc.stripIndexFormat = stripIndexFormat;
         desc.depthTest = depthTest;
@@ -4222,7 +4394,7 @@ namespace CNA::Internal::Renderers::WebGPU
             throw std::runtime_error("CNA WebGPU: failed to create DualTexture3D GPU resources");
     }
 
-    WGPURenderPipeline WebGPURenderer::GetOrCreatePipelineDualTexture3D(std::size_t stride,
+    WGPURenderPipeline WebGPURenderer::GetOrCreatePipelineDualTexture3D(bool colored,
                                                                                 WGPUPrimitiveTopology topology,
                                                                                 WGPUIndexFormat stripIndexFormat,
                                                                                 bool depthTest, bool depthWrite,
@@ -4230,65 +4402,33 @@ namespace CNA::Internal::Renderers::WebGPU
                                                     bool blend, const BlendKeyParams& blendParams,
                                                     int cullMode, bool wireframe,
                                                     float depthBias, float slopeScaleDepthBias,
-                                                    const StencilKeyParams& stencil)
+                                                    const StencilKeyParams& stencil,
+                                                    const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout)
     {
+        // WEBGPU-159: the layout now carries TEXCOORD1 as well, which is what makes an independent
+        // second UV set reach the shader instead of being a copy of the first. WEBGPU-155 replaced
+        // the `stride == 24` colour test with the declaration's own answer.
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias,
-                                                     static_cast<std::uint64_t>(stride), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
+                                                     CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
-        auto& cache = (stride == 24) ? dualTextureColoredPipelines_ : dualTexturePipelines_;
+        auto& cache = colored ? dualTextureColoredPipelines_ : dualTexturePipelines_;
         if (auto it = cache.find(key); it != cache.end())
             return it->second;
 
-        WGPUVertexAttribute attributes[3]{};
-        std::uint32_t attributeCount = 0;
-        std::uint64_t arrayStride = stride;
-        WGPUShaderModule shaderModule = dualTextureShader_;
-
-        if (stride == 24)
-        {
-            struct ColoredTexturedVertex { float x, y, z; std::uint8_t r, g, b, a; float u, v; };
-            attributes[0].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
-            attributes[0].offset = offsetof(ColoredTexturedVertex, x);
-            attributes[0].shaderLocation = 0;
-            attributes[1].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Color);
-            attributes[1].offset = offsetof(ColoredTexturedVertex, r);
-            attributes[1].shaderLocation = 1;
-            attributes[2].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector2);
-            attributes[2].offset = offsetof(ColoredTexturedVertex, u);
-            attributes[2].shaderLocation = 2;
-            attributeCount = 3;
-            arrayStride = sizeof(ColoredTexturedVertex);
-            shaderModule = dualTextureColoredShader_;
-        }
-        else
-        {
-            struct TexturedVertex { float x, y, z; float u, v; };
-            attributes[0].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
-            attributes[0].offset = offsetof(TexturedVertex, x);
-            attributes[0].shaderLocation = 0;
-            attributes[1].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector2);
-            attributes[1].offset = offsetof(TexturedVertex, u);
-            attributes[1].shaderLocation = 1;
-            attributeCount = 2;
-            arrayStride = sizeof(TexturedVertex);
-        }
-
-        WGPUVertexBufferLayout vertexBufferLayout{};
-        vertexBufferLayout.arrayStride = arrayStride;
-        vertexBufferLayout.stepMode = WGPUVertexStepMode_Vertex;
-        vertexBufferLayout.attributeCount = attributeCount;
-        vertexBufferLayout.attributes = attributes;
+        WGPUShaderModule shaderModule = colored ? dualTextureColoredShader_ : dualTextureShader_;
+        StockVertexStateEXT vertexState;
+        BuildStockVertexStateEXT(vertexLayout, vertexState);
 
         Pipeline3DDescEXT desc;
         desc.label = "CNA WebGPU DualTexture3D Pipeline";
         desc.layout = dualTexturePipelineLayout_;
         desc.vertexModule = shaderModule;
         desc.fragmentModule = shaderModule;
-        desc.vertexBuffers = &vertexBufferLayout;
-        desc.vertexBufferCount = 1;
+        desc.vertexBuffers = vertexState.buffers.data();
+        desc.vertexBufferCount = vertexState.bufferCount;
         desc.topology = topology;
         desc.stripIndexFormat = stripIndexFormat;
         desc.depthTest = depthTest;
@@ -4440,40 +4580,28 @@ namespace CNA::Internal::Renderers::WebGPU
                                                bool blend, const BlendKeyParams& blendParams,
                                                int cullMode, bool wireframe,
                                                float depthBias, float slopeScaleDepthBias,
-                                                    const StencilKeyParams& stencil)
+                                                    const StencilKeyParams& stencil,
+                                                    const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout)
     {
+        // WEBGPU-155: the resolved vertex layout is part of the cache key -- see Colored3D.
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
+                                                     depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         if (auto it = envMapPipelines_.find(key); it != envMapPipelines_.end())
             return it->second;
 
-        struct EnvMapVertex { float x, y, z, nx, ny, nz, u, v; };
-        std::array<WGPUVertexAttribute, 3> attributes{};
-        attributes[0].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
-        attributes[0].offset = offsetof(EnvMapVertex, x);
-        attributes[0].shaderLocation = 0;
-        attributes[1].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
-        attributes[1].offset = offsetof(EnvMapVertex, nx);
-        attributes[1].shaderLocation = 1;
-        attributes[2].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector2);
-        attributes[2].offset = offsetof(EnvMapVertex, u);
-        attributes[2].shaderLocation = 2;
-        WGPUVertexBufferLayout vertexBufferLayout{};
-        vertexBufferLayout.arrayStride = sizeof(EnvMapVertex);
-        vertexBufferLayout.stepMode = WGPUVertexStepMode_Vertex;
-        vertexBufferLayout.attributeCount = attributes.size();
-        vertexBufferLayout.attributes = attributes.data();
+        StockVertexStateEXT vertexState;
+        BuildStockVertexStateEXT(vertexLayout, vertexState);
 
         Pipeline3DDescEXT desc;
         desc.label = "CNA WebGPU EnvMap3D Pipeline";
         desc.layout = envMapPipelineLayout_;
         desc.vertexModule = envMapShader_;
         desc.fragmentModule = envMapShader_;
-        desc.vertexBuffers = &vertexBufferLayout;
-        desc.vertexBufferCount = 1;
+        desc.vertexBuffers = vertexState.buffers.data();
+        desc.vertexBufferCount = vertexState.bufferCount;
         desc.topology = topology;
         desc.stripIndexFormat = stripIndexFormat;
         desc.depthTest = depthTest;
@@ -4493,17 +4621,18 @@ namespace CNA::Internal::Renderers::WebGPU
     void WebGPURenderer::QueueEnvMapDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                                 const Matrix& world, const Matrix& view, const Matrix& projection,
                                                 PrimitiveType primitive, int primitiveCount,
-                                                const GpuDrawParams& params)
+                                                const GpuDrawParams& params,
+                                                StockVertexShapeEXT shape)
     {
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
-        if (webgpuVb.Stride() != 32)
-            throw std::invalid_argument("CNA WebGPU: QueueEnvMapDraw requires a stride-32 "
-                                        "(VertexPositionNormalTexture) vertex buffer");
+        // WEBGPU-155: reached because the declaration names Position, Normal and TEXCOORD0, at
+        // whatever offsets and stride it puts them.
         EnsureEnvMapDefaultTextures();
 
         EnvMapDrawCommand command;
+        command.vertexLayout = ResolveStockVertexLayoutForDrawEXT(webgpuVb, shape);
         const auto& shadow = webgpuVb.ShadowData();
-        const std::size_t byteOffset = static_cast<std::size_t>(params.vertexStart) * 32u;
+        const std::size_t byteOffset = static_cast<std::size_t>(params.vertexStart) * webgpuVb.Stride();
         if (byteOffset <= shadow.size())
             command.vertexData.assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset), shadow.end());
         command.topology = ToTopology(primitive);
@@ -4667,7 +4796,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                               command.depthWrite, command.depthFunc,
                                                               command.blend, command.blendParams,
                                                               command.cullMode, command.wireframe,
-                                                              command.depthBias, command.slopeScaleDepthBias, command.stencil);
+                                                              command.depthBias, command.slopeScaleDepthBias, command.stencil,
+                                                              command.vertexLayout);
         // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
         // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
@@ -4680,6 +4810,9 @@ namespace CNA::Internal::Renderers::WebGPU
         wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
+        // WEBGPU-155: slot 1 supplies (0, 0, 0, 1) for any stock input this draw's
+        // declaration does not name; a no-op when every input came from the record.
+        BindNeutralVertexBufferEXT(pass, command.vertexLayout);
 
         if (command.indexed && !command.indexData.empty())
         {
@@ -8145,17 +8278,23 @@ namespace CNA::Internal::Renderers::WebGPU
     void WebGPURenderer::QueueColoredDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                                   PrimitiveType primitive, int primitiveCount,
-                                                  const GpuDrawParams* params)
+                                                  const GpuDrawParams* params,
+                                                  StockVertexShapeEXT shape)
     {
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
-        if (webgpuVb.Stride() != 16)
+        // WEBGPU-155: the stride-16 requirement was DrawColoredPrimitives' own historical contract
+        // and stays exactly that -- a legacy call with no GpuDrawParams. A DrawPrimitivesEx draw
+        // reaches this family because its DECLARATION is Position+Colour, at whatever stride that
+        // declaration happens to use, so it is not held to the packed 16-byte record any more.
+        if (params == nullptr && webgpuVb.Stride() != 16)
             throw std::invalid_argument("CNA WebGPU: DrawColoredPrimitives requires a stride-16 "
                                         "(VertexPositionColor) vertex buffer");
 
         ColoredDrawCommand command;
+        command.vertexLayout = ResolveStockVertexLayoutForDrawEXT(webgpuVb, shape);
         const int vertexStart = params != nullptr ? params->vertexStart : 0;
         const auto& shadow = webgpuVb.ShadowData();
-        const std::size_t byteOffset = static_cast<std::size_t>(vertexStart) * 16u;
+        const std::size_t byteOffset = static_cast<std::size_t>(vertexStart) * webgpuVb.Stride();
         if (byteOffset <= shadow.size())
             command.vertexData.assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset), shadow.end());
         command.topology = ToTopology(primitive);
@@ -8238,114 +8377,105 @@ namespace CNA::Internal::Renderers::WebGPU
     // namespace helper of the same name. WEBGPU-115's fill-mode guard sits beside it, on these
     // three plus the two DrawColoredPrimitives routes above -- the five public 3D draw entry
     // points, which together are the narrowest boundary every Queue*Draw() family passes through.
+    void WebGPURenderer::DispatchStockDrawEXT(const IVertexBufferRenderer& vb,
+                                              const IIndexBufferRenderer* ib,
+                                              const Matrix& world, const Matrix& view,
+                                              const Matrix& projection,
+                                              PrimitiveType primitive, int primitiveCount,
+                                              const GpuDrawParams& params, const char* route)
+    {
+        // plans/plan_webgpu.md WEBGPU-155: ONE dispatch, shared by the indexed and non-indexed
+        // entry points, and one decision inside it. What used to be a ladder of `stride == 16`,
+        // `stride == 20 || stride == 24`, `stride == 32` tests -- each of which claimed to know a
+        // vertex's semantic content from its byte count -- is now `SelectStockVertexShapeEXT`
+        // asking the declaration, with the stride consulted only for the routes this task did not
+        // convert (skinned, PBR) and for a buffer that carries no declaration at all.
+        const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
+        const std::size_t stride = webgpuVb.Stride();
+        const StockVertexShapeEXT shape = SelectStockVertexShapeEXT(
+            webgpuVb.Declaration().GetElements(), stride, params);
+
+        switch (shape)
+        {
+        case StockVertexShapeEXT::AlphaTest:
+        case StockVertexShapeEXT::AlphaTestColored:
+            QueueAlphaTestDraw(vb, ib, world, view, projection, primitive, primitiveCount, params, shape);
+            return;
+        case StockVertexShapeEXT::DualTextured:
+        case StockVertexShapeEXT::DualTexturedColored:
+            QueueDualTextureDraw(vb, ib, world, view, projection, primitive, primitiveCount, params, shape);
+            return;
+        case StockVertexShapeEXT::EnvMapped:
+            QueueEnvMapDraw(vb, ib, world, view, projection, primitive, primitiveCount, params, shape);
+            return;
+        case StockVertexShapeEXT::Lit:
+        case StockVertexShapeEXT::LitVertexLit:
+            QueueLitTexturedDraw(vb, ib, world, view, projection, primitive, primitiveCount, params, shape);
+            return;
+        case StockVertexShapeEXT::Textured:
+        case StockVertexShapeEXT::ColoredTextured:
+            QueueTexturedDraw(vb, ib, world, view, projection, primitive, primitiveCount, params, shape);
+            return;
+        case StockVertexShapeEXT::Colored:
+            QueueColoredDraw(vb, ib, world, view, projection, primitive, primitiveCount, &params, shape);
+            return;
+        case StockVertexShapeEXT::StrideDerived:
+            break;
+        }
+
+        // REMED-GFX-DECL-GUARD: the skinned and PBR families still select their attribute arrays
+        // from the byte stride, so they still need the guard that refuses a declaration those
+        // arrays would silently reinterpret. WEBGPU-155 deliberately did not convert them; the
+        // check is here rather than at the top of the entry points so a converted family is
+        // judged by its declaration instead.
+        RequireFaithfulDeclarationEXT(vb, route);
+
+        // SkinnedPbrEffect (PBR + skinning combo) is checked BEFORE unskinned PBR, matching
+        // EasyGLRenderer::SelectProgram()'s own priority order.
+        // plans/plan_gltf.md GLTF-465: strides 80 and 60 join their bare twins, and there is no
+        // `texture0` clause -- a base-colour map is optional in glTF and the PBR replay binds a
+        // neutral-white default for it.
+        if (params.pbr && params.skinned && (stride == 68 || stride == 80))
+        {
+            QueueSkinnedPbrDraw(vb, ib, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
+        if (params.pbr && !params.skinned && (stride == 48 || stride == 60))
+        {
+            QueuePbrDraw(vb, ib, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
+        if (params.skinned && !params.pbr && (stride == 52 || stride == 56))
+        {
+            QueueSkinnedDraw(vb, ib, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
+
+        // An unsupported effect on a stride that carries no palette or tangent basis, or a buffer
+        // with neither a declaration nor a canonical stride -- fall back exactly like
+        // IGraphicsRenderer's own default implementation did, which throws for anything but a
+        // stride-16 buffer. Unchanged "unsupported, fail loudly" behaviour.
+        if (ib != nullptr)
+            DrawIndexedColoredPrimitives(vb, *ib, world, view, projection, primitive, primitiveCount);
+        else
+            DrawColoredPrimitives(vb, world, view, projection, primitive, primitiveCount);
+    }
+
     void WebGPURenderer::DrawPrimitivesEx(const IVertexBufferRenderer& vb,
                                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                                   PrimitiveType primitive, int primitiveCount,
                                                   const GpuDrawParams& params)
     {
         RequireSupportedFillModeEXT(primitive, "ordinary-nonindexed");
-        RequireFaithfulDeclarationEXT(vb, "ordinary-nonindexed");
         // WEBGPU-76: a bound custom WGSL ShaderEffect owns the whole draw -- its own shaders,
-        // vertex layout and uniforms -- so it is routed before any stock stride dispatch below.
+        // vertex layout and uniforms -- so it is routed before any stock dispatch below.
         if (params.customEffectRenderer != nullptr)
         {
             QueueCustomEffectDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
-        // PBR owns its glTF MASK coverage; standalone AlphaTestEffect wins only for non-PBR
-        // draws. Dual-texture then wins over env-map/skinned/
-        // lit-textured (an AlphaTestEffect or DualTextureEffect draw on a
-        // VertexPositionNormalTexture buffer never reaches lit_textured3d -- the normal is simply
-        // unread in both cases); env-map wins over lit-textured for the same stride-32 buffer
-        // shape (EnvironmentMapEffect's own reflection shader takes over the normal/UV attributes
-        // that lit_textured3d.wgsl would otherwise consume for Blinn-Phong lighting).
-        const bool needsAlphaTest = !params.pbr &&
-                                    (params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f);
-        const bool needsDualTexture = !needsAlphaTest && params.dualTexture;
-        const bool needsEnvMap = !needsAlphaTest && !needsDualTexture && params.envMapping;
-        const bool needsUnsupportedEffect = !needsAlphaTest && !needsDualTexture && !needsEnvMap &&
-                                            params.skinned;
-        const std::size_t stride = webgpuVb.Stride();
-        if (needsAlphaTest && (stride == 20 || stride == 24 || stride == 32) && params.texture0 != nullptr)
-        {
-            QueueAlphaTestDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
-            return;
-        }
-        if (needsDualTexture && (stride == 20 || stride == 24) &&
-            params.texture0 != nullptr && params.texture1 != nullptr)
-        {
-            QueueDualTextureDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
-            return;
-        }
-        // WEBGPU-25/36/74: EnvironmentMapEffect. Unlike every other stride-32+ effect branch
-        // below, this is NOT gated on params.texture0 != nullptr -- both Texture and
-        // EnvironmentMap are genuinely optional on real XNA EnvironmentMapEffect instances (see
-        // QueueEnvMapDraw()'s own fallback-to-white comment).
-        if (needsEnvMap && stride == 32)
-        {
-            QueueEnvMapDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
-            return;
-        }
-        if (!needsUnsupportedEffect && !needsAlphaTest && !needsDualTexture && stride == 16)
-        {
-            QueueColoredDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, &params);
-            return;
-        }
-        // plans/plan_gltf.md GLTF-474: no `params.texture0 != nullptr` clause. A stock effect's
-        // base-colour map is optional in XNA and absent in glTF's own default material, and the
-        // replay binds neutral white for it -- so requiring one here did not make the draw safe,
-        // it made an untextured primitive fall past every branch into the stride-16 colour path
-        // and be refused there. Same defect, and same fix, as SDL_GPU's own.
-        if (!needsUnsupportedEffect && !needsAlphaTest && !needsDualTexture &&
-            (stride == 20 || stride == 24))
-        {
-            QueueTexturedDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
-            return;
-        }
-        if (!needsUnsupportedEffect && !needsAlphaTest && !needsDualTexture && stride == 32)
-        {
-            QueueLitTexturedDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
-            return;
-        }
-        // SkinnedPbrEffect (PBR + skinning combo, stride 68). Checked BEFORE the unskinned-PBR
-        // branch below, matching EasyGLRenderer::SelectProgram()'s own priority order
-        // (pbr&&skinned combo first, then pbr-only, then skinned-only).
-        // plans/plan_gltf.md GLTF-465: strides 80 and 60 join their bare twins, and the `texture0` clause
-        // is gone -- a base-colour map is optional in glTF (3.9.2's default material has none) and
-        // the PBR replay already binds a neutral-white default for it, so requiring one here only
-        // made such a draw fall through to a route that refuses it.
-        if (!needsAlphaTest && !needsDualTexture && params.pbr && params.skinned &&
-            (stride == 68 || stride == 80))
-        {
-            QueueSkinnedPbrDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
-            return;
-        }
-        // Unskinned PbrEffect (stride 48, VertexPositionNormalTangentTexture). Gated on
-        // !params.skinned directly (rather than needsUnsupportedEffect, which already excludes
-        // skinned draws via its own OR-condition).
-        if (!needsAlphaTest && !needsDualTexture && params.pbr && !params.skinned &&
-            (stride == 48 || stride == 60))
-        {
-            QueuePbrDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
-            return;
-        }
-        // SkinnedEffect (stride 52, or 56 with VertexColorEnabled). Gated on !params.pbr directly
-        // (rather than needsUnsupportedEffect, which already excludes skinned draws via its own
-        // OR-condition) so the SkinnedPbrEffect branch above keeps first priority, matching
-        // EasyGLRenderer::SelectProgram()'s own ordering.
-        if (!needsAlphaTest && !needsDualTexture && params.skinned && !params.pbr &&
-            (stride == 52 || stride == 56))
-        {
-            QueueSkinnedDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
-            return;
-        }
-        // Remaining unsupported effect (skinned on a non-skinned stride) or an unmatched
-        // stride/texture combination -- fall back exactly like IGraphicsRenderer's own default
-        // implementation did before this override existed. This will itself throw for anything
-        // other than a stride-16 buffer (DrawColoredPrimitives' own requirement), matching the
-        // pre-existing "unsupported, fail loudly" behaviour.
-        DrawColoredPrimitives(vb, world, view, projection, primitive, primitiveCount);
+        DispatchStockDrawEXT(vb, nullptr, world, view, projection, primitive, primitiveCount,
+                             params, "ordinary-nonindexed");
     }
 
     void WebGPURenderer::DrawIndexedPrimitivesEx(const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
@@ -8354,83 +8484,14 @@ namespace CNA::Internal::Renderers::WebGPU
                                                          const GpuDrawParams& params)
     {
         RequireSupportedFillModeEXT(primitive, "ordinary-indexed");
-        RequireFaithfulDeclarationEXT(vb, "ordinary-indexed");
         // WEBGPU-76: a bound custom WGSL ShaderEffect owns the whole draw (see the non-indexed twin).
         if (params.customEffectRenderer != nullptr)
         {
             QueueCustomEffectDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
-        const bool needsAlphaTest = !params.pbr &&
-                                    (params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f);
-        const bool needsDualTexture = !needsAlphaTest && params.dualTexture;
-        const bool needsEnvMap = !needsAlphaTest && !needsDualTexture && params.envMapping;
-        const bool needsUnsupportedEffect = !needsAlphaTest && !needsDualTexture && !needsEnvMap &&
-                                            params.skinned;
-        const std::size_t stride = webgpuVb.Stride();
-        if (needsAlphaTest && (stride == 20 || stride == 24 || stride == 32) && params.texture0 != nullptr)
-        {
-            QueueAlphaTestDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
-            return;
-        }
-        if (needsDualTexture && (stride == 20 || stride == 24) &&
-            params.texture0 != nullptr && params.texture1 != nullptr)
-        {
-            QueueDualTextureDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
-            return;
-        }
-        if (needsEnvMap && stride == 32)
-        {
-            QueueEnvMapDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
-            return;
-        }
-        if (!needsUnsupportedEffect && !needsAlphaTest && !needsDualTexture && stride == 16)
-        {
-            QueueColoredDraw(vb, &ib, world, view, projection, primitive, primitiveCount, &params);
-            return;
-        }
-        // plans/plan_gltf.md GLTF-474: no `params.texture0 != nullptr` clause. A stock effect's
-        // base-colour map is optional in XNA and absent in glTF's own default material, and the
-        // replay binds neutral white for it -- so requiring one here did not make the draw safe,
-        // it made an untextured primitive fall past every branch into the stride-16 colour path
-        // and be refused there. Same defect, and same fix, as SDL_GPU's own.
-        if (!needsUnsupportedEffect && !needsAlphaTest && !needsDualTexture &&
-            (stride == 20 || stride == 24))
-        {
-            QueueTexturedDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
-            return;
-        }
-        if (!needsUnsupportedEffect && !needsAlphaTest && !needsDualTexture && stride == 32)
-        {
-            QueueLitTexturedDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
-            return;
-        }
-        // See DrawPrimitivesEx()'s identical branch for the SkinnedPbrEffect/PbrEffect/SkinnedEffect
-        // priority ordering rationale.
-        // plans/plan_gltf.md GLTF-465: strides 80 and 60 join their bare twins, and the `texture0` clause
-        // is gone -- a base-colour map is optional in glTF (3.9.2's default material has none) and
-        // the PBR replay already binds a neutral-white default for it, so requiring one here only
-        // made such a draw fall through to a route that refuses it.
-        if (!needsAlphaTest && !needsDualTexture && params.pbr && params.skinned &&
-            (stride == 68 || stride == 80))
-        {
-            QueueSkinnedPbrDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
-            return;
-        }
-        if (!needsAlphaTest && !needsDualTexture && params.pbr && !params.skinned &&
-            (stride == 48 || stride == 60))
-        {
-            QueuePbrDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
-            return;
-        }
-        if (!needsAlphaTest && !needsDualTexture && params.skinned && !params.pbr &&
-            (stride == 52 || stride == 56))
-        {
-            QueueSkinnedDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
-            return;
-        }
-        DrawIndexedColoredPrimitives(vb, ib, world, view, projection, primitive, primitiveCount);
+        DispatchStockDrawEXT(vb, &ib, world, view, projection, primitive, primitiveCount,
+                             params, "ordinary-indexed");
     }
 
     void WebGPURenderer::DrawInstancedPrimitivesEx(
@@ -8650,7 +8711,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                                command.blend, command.blendParams,
                                                                command.cullMode, command.wireframe,
                                                                command.depthBias, command.slopeScaleDepthBias,
-                                                               command.stencil);  // WEBGPU-83
+                                                               command.stencil,
+                                                               command.vertexLayout);  // WEBGPU-83
         // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
         // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
@@ -8662,6 +8724,9 @@ namespace CNA::Internal::Renderers::WebGPU
         wgpuRenderPassEncoderSetPipeline(pass, pipe);
         wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
+        // WEBGPU-155: slot 1 supplies (0, 0, 0, 1) for any stock input this draw's
+        // declaration does not name; a no-op when every input came from the record.
+        BindNeutralVertexBufferEXT(pass, command.vertexLayout);
 
         if (command.indexed && !command.indexData.empty())
         {
@@ -8739,7 +8804,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                    command.depthWrite, command.depthFunc,
                                                    command.blend, command.blendParams,
                                                    command.cullMode, command.wireframe,
-                                                   command.depthBias, command.slopeScaleDepthBias, command.stencil)
+                                                   command.depthBias, command.slopeScaleDepthBias, command.stencil,
+                                                   command.vertexLayout)
             : GetOrCreatePipelineTextured3D(
                                             command.topology,
                                             RequiredStripIndexFormat(command),
@@ -8747,7 +8813,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                             command.depthWrite, command.depthFunc,
                                             command.blend, command.blendParams,
                                             command.cullMode, command.wireframe,
-                                            command.depthBias, command.slopeScaleDepthBias, command.stencil);
+                                            command.depthBias, command.slopeScaleDepthBias, command.stencil,
+                                            command.vertexLayout);
         // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
         // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
@@ -8760,6 +8827,9 @@ namespace CNA::Internal::Renderers::WebGPU
         wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
+        // WEBGPU-155: slot 1 supplies (0, 0, 0, 1) for any stock input this draw's
+        // declaration does not name; a no-op when every input came from the record.
+        BindNeutralVertexBufferEXT(pass, command.vertexLayout);
 
         if (command.indexed && !command.indexData.empty())
         {
@@ -8848,7 +8918,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                          command.depthWrite, command.depthFunc,
                                                          command.blend, command.blendParams,
                                                          command.cullMode, command.wireframe,
-                                                         command.depthBias, command.slopeScaleDepthBias, command.stencil)
+                                                         command.depthBias, command.slopeScaleDepthBias, command.stencil,
+                                                         command.vertexLayout)
             : GetOrCreatePipelineLitTextured3D(
                                                 command.topology,
                                                 RequiredStripIndexFormat(command),
@@ -8856,7 +8927,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                 command.depthWrite, command.depthFunc,
                                                 command.blend, command.blendParams,
                                                 command.cullMode, command.wireframe,
-                                                command.depthBias, command.slopeScaleDepthBias, command.stencil);
+                                                command.depthBias, command.slopeScaleDepthBias, command.stencil,
+                                                command.vertexLayout);
         // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
         // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
@@ -8869,6 +8941,9 @@ namespace CNA::Internal::Renderers::WebGPU
         wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
+        // WEBGPU-155: slot 1 supplies (0, 0, 0, 1) for any stock input this draw's
+        // declaration does not name; a no-op when every input came from the record.
+        BindNeutralVertexBufferEXT(pass, command.vertexLayout);
 
         if (command.indexed && !command.indexData.empty())
         {
@@ -8895,18 +8970,21 @@ namespace CNA::Internal::Renderers::WebGPU
     void WebGPURenderer::QueueLitTexturedDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                                       const Matrix& world, const Matrix& view, const Matrix& projection,
                                                       PrimitiveType primitive, int primitiveCount,
-                                                      const GpuDrawParams& params)
+                                                      const GpuDrawParams& params,
+                                                      StockVertexShapeEXT shape)
     {
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
-        if (webgpuVb.Stride() != 32)
-            throw std::invalid_argument("CNA WebGPU: QueueLitTexturedDraw requires a stride-32 "
-                                        "(VertexPositionNormalTexture) vertex buffer");
+        // WEBGPU-155/156/157: no stride requirement. This family is reached because the
+        // declaration names a Normal -- stride 24 (Position+Normal), 32 (VertexPositionNormalTexture)
+        // and 36 (the stock ModelProcessor's Position+Normal+Colour+UV) all arrive here and are
+        // bound from their own offsets.
         // plans/plan_gltf.md GLTF-474: an absent base-colour map is no longer refused -- the command
         // takes the neutral-white default below, which is the identity for `tex * colour`.
 
         LitTexturedDrawCommand command;
+        command.vertexLayout = ResolveStockVertexLayoutForDrawEXT(webgpuVb, shape);
         const auto& shadow = webgpuVb.ShadowData();
-        const std::size_t byteOffset = static_cast<std::size_t>(params.vertexStart) * 32u;
+        const std::size_t byteOffset = static_cast<std::size_t>(params.vertexStart) * webgpuVb.Stride();
         if (byteOffset <= shadow.size())
             command.vertexData.assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset), shadow.end());
         command.topology = ToTopology(primitive);
@@ -9025,14 +9103,15 @@ namespace CNA::Internal::Renderers::WebGPU
         WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
 
         WGPURenderPipeline pipe = GetOrCreatePipelineAlphaTest3D(
-                                                                 command.stride,
+                                                                 command.hasVertexColor,
                                                                  command.topology,
                                                                  RequiredStripIndexFormat(command),
                                                                  command.depthTest, command.depthWrite,
                                                                  command.depthFunc,
                                                                  command.blend, command.blendParams,
                                                                  command.cullMode, command.wireframe,
-                                                                 command.depthBias, command.slopeScaleDepthBias, command.stencil);
+                                                                 command.depthBias, command.slopeScaleDepthBias, command.stencil,
+                                                                 command.vertexLayout);
         // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
         // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
@@ -9045,6 +9124,9 @@ namespace CNA::Internal::Renderers::WebGPU
         wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
+        // WEBGPU-155: slot 1 supplies (0, 0, 0, 1) for any stock input this draw's
+        // declaration does not name; a no-op when every input came from the record.
+        BindNeutralVertexBufferEXT(pass, command.vertexLayout);
 
         if (command.indexed && !command.indexData.empty())
         {
@@ -9070,19 +9152,22 @@ namespace CNA::Internal::Renderers::WebGPU
     void WebGPURenderer::QueueAlphaTestDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                                     const Matrix& world, const Matrix& view, const Matrix& projection,
                                                     PrimitiveType primitive, int primitiveCount,
-                                                    const GpuDrawParams& params)
+                                                    const GpuDrawParams& params,
+                                                    StockVertexShapeEXT shape)
     {
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
+        // WEBGPU-155: no stride requirement -- this family is reached because the declaration
+        // names Position and TEXCOORD0, wherever it puts them.
         const std::size_t stride = webgpuVb.Stride();
-        if (stride != 20 && stride != 24 && stride != 32)
-            throw std::invalid_argument("CNA WebGPU: QueueAlphaTestDraw requires a stride-20, "
-                                        "-24, or -32 vertex buffer");
         // plans/plan_gltf.md GLTF-474: an absent base-colour map is no longer refused -- the command
         // takes the neutral-white default below, which is the identity for `tex * colour`.
 
         AlphaTestDrawCommand command;
         command.stride = stride;
-        command.hasVertexColor = (stride == 24);
+        // WEBGPU-155: "does this vertex carry a colour" is the declaration's answer now, not the
+        // stride's -- a padded Position+Colour+UV record is as coloured as a packed 24-byte one.
+        command.hasVertexColor = (shape == StockVertexShapeEXT::AlphaTestColored);
+        command.vertexLayout = ResolveStockVertexLayoutForDrawEXT(webgpuVb, shape);
         const auto& shadow = webgpuVb.ShadowData();
         const std::size_t byteOffset = static_cast<std::size_t>(params.vertexStart) * stride;
         if (byteOffset <= shadow.size())
@@ -9222,14 +9307,15 @@ namespace CNA::Internal::Renderers::WebGPU
                                      dualTexturePipelineLayout_, texBindGroup, texEntries.size());
         }
 
-        WGPURenderPipeline pipe = GetOrCreatePipelineDualTexture3D(command.hasVertexColor ? 24 : 20,
+        WGPURenderPipeline pipe = GetOrCreatePipelineDualTexture3D(command.hasVertexColor,
                                                                    command.topology,
                                                                    RequiredStripIndexFormat(command),
                                                                    command.depthTest,
                                                                    command.depthWrite, command.depthFunc,
                                                                    command.blend, command.blendParams,
                                                                    command.cullMode, command.wireframe,
-                                                                   command.depthBias, command.slopeScaleDepthBias, command.stencil);
+                                                                   command.depthBias, command.slopeScaleDepthBias, command.stencil,
+                                                                   command.vertexLayout);
         // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
         // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
@@ -9242,6 +9328,9 @@ namespace CNA::Internal::Renderers::WebGPU
         wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
+        // WEBGPU-155: slot 1 supplies (0, 0, 0, 1) for any stock input this draw's
+        // declaration does not name; a no-op when every input came from the record.
+        BindNeutralVertexBufferEXT(pass, command.vertexLayout);
 
         if (command.indexed && !command.indexData.empty())
         {
@@ -9267,19 +9356,20 @@ namespace CNA::Internal::Renderers::WebGPU
     void WebGPURenderer::QueueDualTextureDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                                       const Matrix& world, const Matrix& view, const Matrix& projection,
                                                       PrimitiveType primitive, int primitiveCount,
-                                                      const GpuDrawParams& params)
+                                                      const GpuDrawParams& params,
+                                                      StockVertexShapeEXT shape)
     {
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
+        // WEBGPU-155/159: no stride requirement -- the canonical XNA dual-texture vertex is
+        // `PositionNormalDualTexture` at stride 40, which this route used to refuse outright.
         const std::size_t stride = webgpuVb.Stride();
-        if (stride != 20 && stride != 24)
-            throw std::invalid_argument("CNA WebGPU: QueueDualTextureDraw requires a stride-20 "
-                                        "or stride-24 vertex buffer");
         if (params.texture0 == nullptr || params.texture1 == nullptr)
             throw std::invalid_argument("CNA WebGPU: QueueDualTextureDraw requires both texture0 "
                                         "and texture1 to be bound");
 
         DualTextureDrawCommand command;
-        command.hasVertexColor = (stride == 24);
+        command.hasVertexColor = (shape == StockVertexShapeEXT::DualTexturedColored);
+        command.vertexLayout = ResolveStockVertexLayoutForDrawEXT(webgpuVb, shape);
         const auto& shadow = webgpuVb.ShadowData();
         const std::size_t byteOffset = static_cast<std::size_t>(params.vertexStart) * stride;
         if (byteOffset <= shadow.size())
@@ -9352,19 +9442,19 @@ namespace CNA::Internal::Renderers::WebGPU
     void WebGPURenderer::QueueTexturedDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                                   PrimitiveType primitive, int primitiveCount,
-                                                  const GpuDrawParams& params)
+                                                  const GpuDrawParams& params,
+                                                  StockVertexShapeEXT shape)
     {
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
+        // WEBGPU-155: no stride requirement -- reached because the declaration names Position and
+        // TEXCOORD0 and no Normal.
         const std::size_t stride = webgpuVb.Stride();
-        if (stride != 20 && stride != 24)
-            throw std::invalid_argument("CNA WebGPU: QueueTexturedDraw requires a stride-20 "
-                                        "(VertexPositionTexture) or stride-24 "
-                                        "(VertexPositionColorTexture) vertex buffer");
         // plans/plan_gltf.md GLTF-474: an absent base-colour map is no longer refused -- the command
         // takes the neutral-white default below, which is the identity for `tex * colour`.
 
         TexturedDrawCommand command;
-        command.hasVertexColor = (stride == 24);
+        command.hasVertexColor = (shape == StockVertexShapeEXT::ColoredTextured);
+        command.vertexLayout = ResolveStockVertexLayoutForDrawEXT(webgpuVb, shape);
         const auto& shadow = webgpuVb.ShadowData();
         const std::size_t byteOffset = static_cast<std::size_t>(params.vertexStart) * stride;
         if (byteOffset <= shadow.size())

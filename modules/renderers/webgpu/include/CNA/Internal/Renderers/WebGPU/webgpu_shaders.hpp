@@ -158,6 +158,17 @@ struct VertexOutput {
 }
 )WGSL";
 
+    // WEBGPU-156/157: the lit families carry a COLOUR input at location 3, and no longer require a
+    // UV to be present. BasicEffect.VertexColorEnabled has a "Vc" variant of every lit family in
+    // XNA (VSBasicVertexLightingVc and friends) which multiplies the lit diffuse by the per-vertex
+    // colour, and the stock ModelProcessor emits exactly such a vertex (Position+Normal+Colour+UV)
+    // for any mesh with a colour channel -- a mesh this family could not draw at all before. A
+    // location is the input's INDEX in this program's own table
+    // (WebGPURenderer::StockVertexInputsForShapeEXT's kLit = {kPos, kNormal, kUv, kColor}), so the
+    // colour is 3. A declaration that names no COLOR0 -- or no TEXCOORD0, which is SAMPLE-002's
+    // Position+Normal mesh -- leaves that input on the shared neutral (0,0,0,1) record, and
+    // u.light0DiffuseVertexColor.w / u.light0DirTexture.w are 0, so vc is white and the sample is
+    // white: every existing lit draw is byte-identical.
     inline constexpr char kLitTextured[] = R"WGSL(
 struct Uniforms {
     mvp: mat4x4f,
@@ -194,6 +205,7 @@ struct VertexInput {
     @location(0) position: vec3f,
     @location(1) normal: vec3f,
     @location(2) uv: vec2f,
+    @location(3) color: vec4f,
 };
 struct VertexOutput {
     @builtin(position) position: vec4f,
@@ -201,11 +213,13 @@ struct VertexOutput {
     @location(1) worldNormal: vec3f,
     @location(2) worldPos: vec3f,
     @location(3) fogFactor: f32,
+    @location(4) tint: vec4f,
 };
 @vertex fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
     output.position = u.mvp * vec4f(input.position, 1.0);
     output.uv = input.uv;
+    output.tint = input.color;
     let normalMatrix = mat3x3f(lp.normalMatrixCol0.xyz, lp.normalMatrixCol1.xyz, lp.normalMatrixCol2.xyz);
     output.worldNormal = normalMatrix * input.normal;
     output.worldPos = (lp.world * vec4f(input.position, 1.0)).xyz;
@@ -217,9 +231,12 @@ struct VertexOutput {
     let textureEnabled = u.light0DirTexture.w;
     let sampled = select(vec4f(1.0), textureSample(tex, texSampler, input.uv), textureEnabled > 0.5);
     let lightingEnabled = u.ambientLighting.w;
+    // WEBGPU-157: XNA's Vc variants multiply the vertex colour into the DIFFUSE result BEFORE the
+    // specular term is added, so the highlight is scaled only through the resulting alpha.
+    let vc = select(vec4f(1.0), input.tint, u.light0DiffuseVertexColor.w > 0.5);
     if (lightingEnabled <= 0.5) {
         // WEBGPU-145: fog applies in the unlit branch too (BasicEffect fog is independent of lighting).
-        let unlit = u.diffuseColor * sampled;
+        let unlit = u.diffuseColor * sampled * vc;
         return vec4f(mix(u.fogColor.xyz * unlit.a, unlit.rgb, input.fogFactor), unlit.a);
     }
     let n = normalize(input.worldNormal);
@@ -246,7 +263,7 @@ struct VertexOutput {
     let specularRgb = (spec0 * lp.light0Specular.xyz + spec1 * lp.light1Specular.xyz
                        + spec2 * lp.light2Specular.xyz) * lp.specularColorPower.xyz;
     let lit = lightSum * u.diffuseColor.rgb + lp.emissiveColor.xyz;
-    var color = vec4f(lit, u.diffuseColor.a) * sampled;
+    var color = vec4f(lit, u.diffuseColor.a) * sampled * vc;
     color = vec4f(color.rgb + specularRgb * color.a, color.a);
     // WEBGPU-149: FNA ApplyFog last, after lighting+specular; mix(FogColor*color.a, rgb, keep).
     return vec4f(mix(u.fogColor.xyz * color.a, color.rgb, input.fogFactor), color.a);
@@ -289,6 +306,7 @@ struct VertexInput {
     @location(0) position: vec3f,
     @location(1) normal: vec3f,
     @location(2) uv: vec2f,
+    @location(3) color: vec4f,
 };
 struct VertexOutput {
     @builtin(position) position: vec4f,
@@ -296,11 +314,13 @@ struct VertexOutput {
     @location(1) litRGB: vec3f,
     @location(2) specularRGB: vec3f,
     @location(3) fogFactor: f32,
+    @location(4) tint: vec4f,
 };
 @vertex fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
     output.position = u.mvp * vec4f(input.position, 1.0);
     output.uv = input.uv;
+    output.tint = input.color;
     let normalMatrix = mat3x3f(lp.normalMatrixCol0.xyz, lp.normalMatrixCol1.xyz, lp.normalMatrixCol2.xyz);
     let worldNormal = normalMatrix * input.normal;
     let worldPos = (lp.world * vec4f(input.position, 1.0)).xyz;
@@ -334,12 +354,14 @@ struct VertexOutput {
     let textureEnabled = u.light0DirTexture.w;
     let sampled = select(vec4f(1.0), textureSample(tex, texSampler, input.uv), textureEnabled > 0.5);
     let lightingEnabled = u.ambientLighting.w;
+    // WEBGPU-157: see the per-pixel sibling -- the vertex colour multiplies the diffuse result.
+    let vc = select(vec4f(1.0), input.tint, u.light0DiffuseVertexColor.w > 0.5);
     if (lightingEnabled <= 0.5) {
         // WEBGPU-145: fog applies in the unlit branch too (BasicEffect fog is independent of lighting).
-        let unlit = u.diffuseColor * sampled;
+        let unlit = u.diffuseColor * sampled * vc;
         return vec4f(mix(u.fogColor.xyz * unlit.a, unlit.rgb, input.fogFactor), unlit.a);
     }
-    var color = vec4f(input.litRGB, u.diffuseColor.a) * sampled;
+    var color = vec4f(input.litRGB, u.diffuseColor.a) * sampled * vc;
     color = vec4f(color.rgb + input.specularRGB * color.a, color.a);
     // WEBGPU-149: FNA ApplyFog last; mix(FogColor*color.a, rgb, keep).
     return vec4f(mix(u.fogColor.xyz * color.a, color.rgb, input.fogFactor), color.a);
@@ -447,6 +469,14 @@ struct VertexOutput {
 }
 )WGSL";
 
+    // WEBGPU-159: DualTextureEffect consumes TEXCOORD0 and TEXCOORD1 INDEPENDENTLY -- that is what
+    // the effect is for (lightmapping: a base map on the mesh's own UVs, a lightmap on a second,
+    // separately unwrapped set). Both families used to declare one `uv` and sample BOTH textures
+    // with it, so a second UV set could not reach the shader at all and the canonical
+    // `PositionNormalDualTexture` vertex (stride 40) was refused outright by the stride table.
+    // A declaration that names no TEXCOORD1 leaves location `kUv1` on the shared neutral
+    // (0, 0, 0, 1) record, so uv1 is (0,0) -- the same value the reference renderer's unbound GL
+    // attribute supplies, which is what keeps a single-UV dual-texture draw identical on both.
     inline constexpr char kDualTexture[] = R"WGSL(
 struct Uniforms {
     mvp: mat4x4f,
@@ -466,23 +496,26 @@ struct Uniforms {
 struct VertexInput {
     @location(0) position: vec3f,
     @location(1) uv: vec2f,
+    @location(2) uv1: vec2f,
 };
 struct VertexOutput {
     @builtin(position) position: vec4f,
     @location(0) uv: vec2f,
     @location(1) fogFactor: f32,
+    @location(2) uv1: vec2f,
 };
 @vertex fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
     output.position = u.mvp * vec4f(input.position, 1.0);
     output.uv = input.uv;
+    output.uv1 = input.uv1;
     // WEBGPU-147: FNA fog keep factor (see colored3d.wgsl).
     output.fogFactor = 1.0 - clamp(dot(vec4f(input.position, 1.0), u.fogVector), 0.0, 1.0);
     return output;
 }
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     var sample0 = textureSample(tex0, tex0Sampler, input.uv);
-    let sample1 = textureSample(tex1, tex1Sampler, input.uv);
+    let sample1 = textureSample(tex1, tex1Sampler, input.uv1);
     sample0 = vec4f(sample0.rgb * 2.0, sample0.a);
     let base = sample0 * sample1 * u.diffuseColor;
     // WEBGPU-149: FNA ApplyFog -- mix(FogColor*base.a, rgb, keep); output alpha preserved.
@@ -510,17 +543,20 @@ struct VertexInput {
     @location(0) position: vec3f,
     @location(1) color: vec4f,
     @location(2) uv: vec2f,
+    @location(3) uv1: vec2f,
 };
 struct VertexOutput {
     @builtin(position) position: vec4f,
     @location(0) uv: vec2f,
     @location(1) tint: vec4f,
     @location(2) fogFactor: f32,
+    @location(3) uv1: vec2f,
 };
 @vertex fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
     output.position = u.mvp * vec4f(input.position, 1.0);
     output.uv = input.uv;
+    output.uv1 = input.uv1;
     let vertexColorEnabled = u.light0DiffuseVertexColor.w;
     output.tint = select(u.diffuseColor, input.color * u.diffuseColor, vertexColorEnabled > 0.5);
     // WEBGPU-147: FNA fog keep factor (see colored3d.wgsl).
@@ -529,7 +565,7 @@ struct VertexOutput {
 }
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     var sample0 = textureSample(tex0, tex0Sampler, input.uv);
-    let sample1 = textureSample(tex1, tex1Sampler, input.uv);
+    let sample1 = textureSample(tex1, tex1Sampler, input.uv1);
     sample0 = vec4f(sample0.rgb * 2.0, sample0.a);
     let base = sample0 * sample1 * input.tint;
     // WEBGPU-149: FNA ApplyFog -- mix(FogColor*base.a, rgb, keep); output alpha preserved.
