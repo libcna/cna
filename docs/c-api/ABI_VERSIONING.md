@@ -2,7 +2,20 @@
 
 ## ABI identity
 
-The ABI is `0.22.0`. It **restores ten public renderer identities** -- `LLGL`, `SOKOL`,
+The ABI is `0.23.0`. It adds **one route**, `cna_decal_pass_is_supported`, and is otherwise
+identical to `0.22.0`. The addition closes a gap the language bindings recorded as
+`BINDFIX-018` in [`plans/plan_bindings_upstream.md`](../../plans/plan_bindings_upstream.md): a
+decal pass is its own handle kind, so `cna_post_process_pass_is_supported` refuses it with
+`CNA_RESULT_INVALID_HANDLE`, and `cna_decal_pass_create` succeeds on a renderer that cannot run
+the pass -- which left a caller told to ask a question no route would answer. The header used to
+name that route anyway, so a caller who followed it also leaked the pass through
+`cna_post_process_pass_destroy`, which refuses the kind for the same reason.
+
+The change is purely additive: no existing route, constant, structure field or error rule moves.
+The minor increments because that is what this project does for every additive generation, and
+because a consumer needs a number to require.
+
+`0.22.0` **restored ten public renderer identities** -- `LLGL`, `SOKOL`,
 `DILIGENT`, `IGL`, `WICKED`, `MAGNUM`, `BLEND2D`, `NANOVG`, `OPENVG` and `TINYGL` -- together
 with the ten `CNA_GRAPHICS_RENDERER_*` constants that name them, and it moves
 `CNA_GRAPHICS_RENDERER_MAXIMUM` back from `49` to `50`. Every restored constant carries the
@@ -321,7 +334,7 @@ Recording the baseline needs the library:
 python3 tools/c-api/generate_abi_baseline.py --write --library <build>/modules/c-api/libcna_c_api.so
 ```
 
-All four build configurations export the same 4,055 symbols. That is itself part of the contract:
+All four build configurations export the same 4,056 symbols. That is itself part of the contract:
 the ABI **surface** does not vary with the renderer, with `CNA_DEVICES`, or with `CNA_CNAEXT` —
 only the answers do. A route whose backend or layer is absent exists and refuses, rather than
 disappearing from the library. `CNA_CNAEXT` is the newest member of that list and the one with the

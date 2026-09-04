@@ -1,10 +1,10 @@
 {
  "abi_version": {
-  "encoded": 5632,
+  "encoded": 5888,
   "major": 0,
-  "minor": 22,
+  "minor": 23,
   "patch": 0,
-  "runtime": 5632
+  "runtime": 5888
  },
  "colors": {
   "CNA_COLOR_ALICE_BLUE": [
@@ -1965,6 +1965,7 @@
   "cna_decal_pass_get_opacity",
   "cna_decal_pass_get_tint",
   "cna_decal_pass_is_inside_decal_box",
+  "cna_decal_pass_is_supported",
   "cna_decal_pass_set_camera",
   "cna_decal_pass_set_max_slope_angle",
   "cna_decal_pass_set_opacity",
@@ -4912,9 +4913,9 @@
   "cna_write_leaderboards_event_info_init"
  ],
  "integers": {
-  "CNA_ABI_VERSION": 5632,
+  "CNA_ABI_VERSION": 5888,
   "CNA_ABI_VERSION_MAJOR": 0,
-  "CNA_ABI_VERSION_MINOR": 22,
+  "CNA_ABI_VERSION_MINOR": 23,
   "CNA_ABI_VERSION_PATCH": 0,
   "CNA_ALPHA_MODE_BLEND_EXT": 2,
   "CNA_ALPHA_MODE_MASK_EXT": 1,

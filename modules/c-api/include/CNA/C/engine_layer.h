@@ -7661,10 +7661,10 @@ CNA_C_API CNA_Result cna_bloom_pass_set_iterations(
  * `cna_post_process_pass_destroy` and `cna_post_process_pass_copy_name` included, which this
  * paragraph used to send callers to and which leaked the pass when they went.
  *
- * Creation succeeds on a renderer that cannot run it, and there is no support query that takes
- * this handle: `cna_post_process_pass_is_supported` refuses it for the same reason. That is a gap
- * rather than a rule, and it is recorded in `plans/plan_bindings_upstream.md` instead of being
- * papered over with a route name that does not work.
+ * Creation succeeds on a renderer that cannot run it, as everywhere in this header. Ask
+ * @ref cna_decal_pass_is_supported, which is this family's own query --
+ * `cna_post_process_pass_is_supported` refuses a decal handle for the same reason the destroy
+ * routes do.
  *
  * @param graphics_device The device to compile on.
  * @param out_pass Receives the owned handle; set invalid on failure.
@@ -7680,6 +7680,24 @@ CNA_C_API CNA_Result cna_decal_pass_create(
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
  */
 CNA_C_API CNA_Result cna_decal_pass_destroy(CNA_DecalPassHandle pass);
+
+/**
+ * @brief Answers whether the active renderer can run this decal pass.
+ *
+ * A decal pass is its own handle kind, so `cna_post_process_pass_is_supported` refuses it: this is
+ * the query for this family. It exists because @ref cna_decal_pass_create succeeds on a renderer
+ * that cannot run the pass -- the engine layer's usual contract -- and until this route a caller
+ * had no way to ask, which is recorded as `BINDFIX-018` in `plans/plan_bindings_upstream.md`.
+ *
+ * @param pass The decal pass.
+ * @param out_supported Receives `CNA_TRUE` when the pass can run here.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or a documented handle failure.
+ *
+ * @since ABI 0.23.0
+ */
+CNA_C_API CNA_Result cna_decal_pass_is_supported(
+    CNA_DecalPassHandle pass, CNA_Bool* out_supported);
 
 /**
  * @brief Returns the pass's Opacity.

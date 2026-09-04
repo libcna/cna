@@ -628,6 +628,7 @@ static int validate_unavailable(const CNA_Handle graphics_device)
         CNA_PostProcessPassHandle pass = CNA_INVALID_HANDLE;
         CNA_DecalPassHandle decal = CNA_INVALID_HANDLE;
         CNA_SpatialUpscalePassHandle upscale = CNA_INVALID_HANDLE;
+        CNA_Bool flag = UINT8_C(9);
         uint64_t number = UINT64_C(0);
         int32_t count = -1;
         float scalar = -1.0F;
@@ -638,6 +639,7 @@ static int validate_unavailable(const CNA_Handle graphics_device)
             cna_decal_pass_create(graphics_device, &decal) != CNA_RESULT_NOT_SUPPORTED ||
             decal != CNA_INVALID_HANDLE ||
             cna_decal_pass_destroy(decal) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_decal_pass_is_supported(decal, &flag) != CNA_RESULT_NOT_SUPPORTED ||
             cna_spatial_upscale_pass_create(graphics_device, &upscale) !=
                 CNA_RESULT_NOT_SUPPORTED ||
             upscale != CNA_INVALID_HANDLE ||
@@ -5496,6 +5498,16 @@ static int validate_remaining_passes(const CNA_Handle graphics_device)
     /* Cross-type accessors refuse by argument. */
     ok = ok && cna_bloom_pass_get_threshold(fxaa, &scalar) == CNA_RESULT_INVALID_ARGUMENT;
     ok = ok && cna_decal_pass_get_opacity(upscale, &scalar) != CNA_RESULT_SUCCESS;
+
+    /* BINDFIX-018: because the shared support query refuses a decal handle -- asserted just
+       above by its sibling destroy -- the decal family has a query of its own. Without it a
+       caller was told to ask a question no route would answer, and cna_decal_pass_create
+       succeeds on a renderer that cannot run the pass. */
+    ok = ok && cna_decal_pass_is_supported(decal, &flag) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_post_process_pass_is_supported(decal, graphics_device, &flag) !=
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_decal_pass_is_supported(decal, NULL) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_decal_pass_is_supported(fxaa, &flag) != CNA_RESULT_SUCCESS;
 
 
     /* ---- bloom_pass ---- */

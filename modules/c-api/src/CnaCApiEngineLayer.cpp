@@ -4603,6 +4603,13 @@ CNA_Result cna_decal_pass_destroy(CNA_DecalPassHandle p0)
     return ExtensionUnavailable();
 }
 
+CNA_Result cna_decal_pass_is_supported(CNA_DecalPassHandle p0, CNA_Bool* p1)
+{
+    (void)p0;
+    if (p1 != nullptr) { *p1 = CNA_FALSE; }
+    return ExtensionUnavailable();
+}
+
 CNA_Result cna_spatial_upscale_pass_destroy(CNA_SpatialUpscalePassHandle p0)
 {
     (void)p0;
@@ -16962,6 +16969,21 @@ CNA_Result cna_decal_pass_destroy(const CNA_DecalPassHandle pass)
 {
     return DestroyStandaloneEffect<Ext::DecalPass>(pass, ObjectKind::DecalPass, "DecalPass");
 }
+CNA_Result cna_decal_pass_is_supported(
+    const CNA_DecalPassHandle pass, CNA_Bool* const outSupported)
+{
+    if (outSupported == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The decal-pass support output is null.");
+    }
+    *outSupported = CNA_FALSE;
+    return WithStandaloneEffect<Ext::DecalPass>(pass, ObjectKind::DecalPass, "DecalPass", [&](Ext::DecalPass* const p) -> CNA_Result {
+        return StoreValue(outSupported, static_cast<CNA_Bool>(p->isSupported() ? CNA_TRUE : CNA_FALSE));
+    });
+}
+
 CNA_Result cna_decal_pass_get_opacity(
     const CNA_DecalPassHandle pass, float* const outValue)
 {
