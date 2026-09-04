@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Graphics/PostProcessChain.hpp"
 
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+
 #ifdef CNA_CNAEXT
 
 #include "CNA/Graphics/BlitPass.hpp"
@@ -100,7 +102,19 @@ namespace CNA::Graphics {
 
     bool PostProcessChain::isGpuTimingEnabled() const
     {
-        return gpuTimingRequested_ && !timers_.empty() && timers_[0] && timers_[0]->isSupported();
+        if (!gpuTimingRequested_)
+            return false;
+
+        // Asking the timers only worked once the chain had run: they are made lazily in
+        // updateTimings, so the read straight after setGpuTimingEnabled(true) answered false on a
+        // device whose timer works perfectly well, and answered true one apply later. This is the
+        // route the header sends a caller to in order to find out what the request got, so it has
+        // to be answerable before the first frame.
+        if (!timers_.empty())
+            return timers_[0] != nullptr && timers_[0]->isSupported();
+
+        // No timer made yet: ask the device the same question a timer would.
+        return device_.GetRenderer().SupportsGpuTimerEXT();
     }
 
     void PostProcessChain::setGpuTimingEnabled(const bool value)
