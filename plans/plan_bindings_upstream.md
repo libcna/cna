@@ -302,6 +302,28 @@ about what the test surface is for.
 
 ---
 
+## BINDFIX-028 — `JAVA-UPSTREAM-018` does not reproduce as reported
+
+The row says creating a device resets three renderer-selection queries, "the count becomes
+0 while `copy_available_ext` still answers 5". Asked directly, back to back, in a probe
+that does nothing else:
+
+```
+get_available_count_ext  result=0 count=1
+copy_available_ext       result=14 count=1
+```
+
+They agree, and both read the same `State().available`. The `0` in the binding's own probe
+output comes from elsewhere in its sequence, after a `reset_for_tests`.
+
+What does still hold from that row is the second half, and it is worth taking on its own:
+`cna_graphics_renderer_get_current_type` answers `UNKNOWN` while
+`cna_graphics_renderer_get_current_name` answers `"OPENGLES3"`, and `get_active_ext`
+answers `UNKNOWN` after a device has run a frame. A route named "current" that cannot name
+the running renderer, beside one that can, is a contradiction rather than a gap.
+
+---
+
 ## Fixed in this pass
 
 Three defects, each independently reported by two or more bindings, each one a place where
@@ -365,6 +387,27 @@ CNA contradicted its own documentation or its own siblings:
   `cna-ts` (finding 5).
 - **BINDFIX-017** — `cna_area_light_brdf_table_get_texture` mints a handle counted against
   the game and said only that it borrows. Reported by `cna-rust` (`RUST-UPSTREAM-025`).
+- **BINDFIX-020** — `SDL_INIT_CAMERA` appeared nowhere in the tree, so `SDL_GetCameras`
+  always answered nothing while `IsSupported` answered true. Reported by `cna-ts` (34).
+- **BINDFIX-021** — every GPU timer's first sample was `4294.967295` ms, the value a 32-bit
+  query saturates at and what a driver returns for a disjoint result. Reported by
+  `cna-python` (ENGINE-003).
+- **BINDFIX-022** — `PacketWriter::Write(Color)` wrote four bytes and `PacketReader::ReadColor`
+  read four floats, so a colour could not be read back out of a packet. Reported by
+  `cna-python`.
+- **BINDFIX-023** — the XACT demo's own Z and X keys wrote to a variable its generator had
+  marked read-only, under a comment saying "settable". Reported by `cna-ts` (31).
+- **BINDFIX-024** — three `_init` routes documented identity transforms and fill zero
+  matrices; the code is right and `default(Matrix)` is why. Reported by `cna-ts` (23) and
+  `cna-python` (ENGINE-008).
+- **BINDFIX-025** — EasyGL's uniform setters wrote through `glUniform` without making their
+  own program current, so a uniform set before an effect was applied went to whichever
+  program was bound. Reported by `cna-java` (`JAVA-UPSTREAM-016`).
+- **BINDFIX-026** — `cna_weighted_blended_transparency_begin` documented the behaviour
+  MOD-1697 corrected, and the defensive code it asked for leaves the bracket open forever.
+  Reported by `cna-ts` (21).
+- **BINDFIX-027** — `importance_sample_ggx` needs a unit normal and said nothing about it.
+  Reported by `cna-python` (ENGINE-007).
 
 ---
 
