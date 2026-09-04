@@ -1321,6 +1321,56 @@ namespace CNA::Internal::Renderers::Vulkan
 
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int)       override {}
+
+        /**
+         * @brief Applies a runtime swap-interval change by rebuilding the swapchain.
+         *
+         * plan_vulkan.md VULKAN-332. `swapInterval_` used to be read once, at swapchain creation,
+         * so `GraphicsDeviceManager.SynchronizeWithVerticalRetrace` + `ApplyChanges()` -- which
+         * routes through `GraphicsDevice::Reset` and does reach `SetSwapInterval` -- changed
+         * nothing here. `IGraphicsRenderer`'s own comment that Vulkan "cannot change VSync at
+         * runtime" described that implementation, not the API: `CreateSwapchain` already picks the
+         * present mode from `swapInterval_`, and this renderer already rebuilds its swapchain on
+         * every resize, so the mechanism was present and simply never invoked.
+         *
+         * A request equal to the current interval rebuilds nothing.
+         *
+         * @param interval 0 = immediate, 1 = vsync, 2 = half-rate.
+         */
+        void SetSwapInterval(int interval) override;
+
+
+        /**
+         * @brief CNAEXT. The `VkPresentModeKHR` the live swapchain was actually created with.
+         *
+         * plan_vulkan.md VULKAN-332. The interval is the request; this is what the device gave,
+         * and the two are not the same claim -- `VK_PRESENT_MODE_IMMEDIATE_KHR` may simply not be
+         * offered. A regression that asserted only the recorded interval would pass on a renderer
+         * that recorded it and rebuilt nothing.
+         *
+         * @return The present mode of the current swapchain.
+         */
+        CNAEXT [[nodiscard]] VkPresentModeKHR GetAppliedPresentModeEXT() const noexcept
+        {
+            return appliedPresentMode_;
+        }
+
+        /**
+         * @brief CNAEXT. Whether this surface offers a present mode that does not wait for vblank.
+         *
+         * plan_vulkan.md VULKAN-332. `VK_PRESENT_MODE_FIFO_KHR` is the only mode Vulkan guarantees,
+         * so "the mode is still FIFO with vsync off" is a correct answer on some surfaces and a
+         * broken renderer on others. Without this a regression has to guess which, and guessing
+         * means an escape hatch that excuses the defect -- measured while writing the one for this
+         * task: with `SetSwapInterval` reverted to its no-op the test still passed, because the
+         * lenient branch accepted FIFO.
+         *
+         * @return True if IMMEDIATE or MAILBOX is available on this surface.
+         */
+        CNAEXT [[nodiscard]] bool SupportsUnsynchronisedPresentModeEXT() const noexcept
+        {
+            return unsynchronisedPresentModeAvailable_;
+        }
         // Task 902: real in-place backbuffer MSAA reconfiguration, wired from
         // GraphicsDevice::Reset() so GraphicsDeviceManager.PreferMultiSampling actually reaches
         // the renderer. Deliberately scoped to the backbuffer only -- already-live RenderTarget2D/
@@ -1743,6 +1793,13 @@ namespace CNA::Internal::Renderers::Vulkan
         VkRenderPass GetOrCreateSwapchainRenderPass(const SwapchainPassKey& key);
         /// Destroys every cached swapchain pass variant (swapchain recreation / shutdown).
         void DestroySwapchainPassVariants();
+
+        /// plan_vulkan.md VULKAN-332: the present mode CreateSwapchain settled on, recorded so a
+        /// regression can tell a real rebuild from a recorded request.
+        VkPresentModeKHR appliedPresentMode_ = VK_PRESENT_MODE_FIFO_KHR;
+        /// plan_vulkan.md VULKAN-332: whether the surface offers IMMEDIATE or MAILBOX at all,
+        /// so a regression can tell "correctly stayed FIFO" from "never applied the request".
+        bool unsynchronisedPresentModeAvailable_ = false;
 
         // --- Depth buffer (recreated with swapchain) ---
         VkFormat        depthFormat_    = VK_FORMAT_UNDEFINED;

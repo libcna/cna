@@ -2639,6 +2639,13 @@ namespace CNA::Internal::Renderers::Vulkan
         {
             for (auto m : modes) if (m == VK_PRESENT_MODE_FIFO_RELAXED_KHR) { mode = m; break; }
         }
+        // VULKAN-332: what the device actually gave, which is not always what was asked for, and
+        // whether an unsynchronised mode was on offer at all -- FIFO is the only guaranteed one.
+        appliedPresentMode_ = mode;
+        unsynchronisedPresentModeAvailable_ = false;
+        for (auto m : modes)
+            if (m == VK_PRESENT_MODE_IMMEDIATE_KHR || m == VK_PRESENT_MODE_MAILBOX_KHR)
+                unsynchronisedPresentModeAvailable_ = true;
 
         VkExtent2D ext;
         if (caps.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
@@ -3423,6 +3430,20 @@ namespace CNA::Internal::Renderers::Vulkan
         // regardless -- kept as a belt-and-braces guard against a future code path that might
         // call CleanupSwapchain()/RecreateSwapchain() without an immediate follow-up refresh.
         viewportSet_ = false;
+    }
+
+    void VulkanRenderer::SetSwapInterval(int interval)
+    {
+        // VULKAN-332. Recorded first, so GetSwapIntervalEXT() answers the request even where the
+        // rebuild cannot happen (a zero-sized surface, or no device yet) -- REMED-GFX-243's whole
+        // point is separating "CNA never asked" from "the driver declined".
+        if (interval == swapInterval_) return;
+        swapInterval_ = interval;
+        if (device_ == VK_NULL_HANDLE || !initialized_) return;
+        // CreateSwapchain reads swapInterval_ for its present mode, and this renderer already
+        // rebuilds the whole swapchain on every resize, so applying the change is the existing
+        // path rather than a new one.
+        RecreateSwapchain();
     }
 
     void VulkanRenderer::RecreateSwapchain()

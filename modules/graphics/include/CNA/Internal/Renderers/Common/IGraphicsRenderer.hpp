@@ -1879,7 +1879,11 @@ namespace CNA::Internal::Renderers
         /// Called by GraphicsDevice when GraphicsDeviceManager::ApplyChanges() is used.
         virtual void SetPresentationMode(int mode) = 0;
         /// Updates the swap interval at runtime (0=immediate, 1=VSync, 2=half-rate).
-        /// Renderers that cannot change VSync at runtime (e.g. Vulkan) silently ignore this.
+        /// A renderer that cannot change VSync after construction ignores this; one that can is
+        /// expected to apply it, not merely record it. The Vulkan renderer used to be named here
+        /// as an example of the former and is no longer one -- it rebuilds its swapchain with the
+        /// matching VkPresentModeKHR (plans/plan_vulkan.md VULKAN-332), which is the same
+        /// mechanism it already ran on every resize.
         virtual void SetSwapInterval(int /*interval*/) {}
         /**
          * @brief The swap interval this renderer was last asked for, honoured by the driver or not.

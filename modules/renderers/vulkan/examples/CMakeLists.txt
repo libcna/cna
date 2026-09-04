@@ -1058,6 +1058,24 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_VertexBufferIndexBufferGetData COMMAND cna_test_vulkan_vertexbuffer_indexbuffer_getdata
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plans/plan_vulkan.md VULKAN-332 (F-05): swapInterval_ was read once, at swapchain
+        # creation, so GraphicsDeviceManager.SynchronizeWithVerticalRetrace + ApplyChanges()
+        # reached nothing. Asserts the swapchain was really rebuilt and the live VkPresentModeKHR
+        # followed -- not merely that the request was recorded, which the defect would satisfy.
+        cna_vulkan_test(cna_test_vulkan_swap_interval
+                        vulkan_swap_interval_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SwapInterval
+            COMMAND cna_test_vulkan_swap_interval
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plans/plan_vulkan.md VULKAN-332: the renderer-agnostic PresentationParameters round-trip
+        # half, reused verbatim from EasyGL's own registration.
+        cna_vulkan_test(cna_test_vulkan_present_interval
+            ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_present_interval_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_PresentInterval
+            COMMAND cna_test_vulkan_present_interval
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plans/plan_vulkan.md VULKAN-370 (F-14): a Vulkan occlusion query only counts exactly
         # when occlusionQueryPrecise is enabled AND vkCmdBeginQuery is given
         # VK_QUERY_CONTROL_PRECISE_BIT. This renderer did neither while inheriting the shared
