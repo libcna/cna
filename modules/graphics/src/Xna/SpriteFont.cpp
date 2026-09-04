@@ -119,6 +119,21 @@ namespace Microsoft::Xna::Framework::Graphics
         float curLineWidth = 0.0f;
         float finalLineHeight = static_cast<float>(lineSpacing_);
         bool firstInLine = true;
+        // The previous glyph's RIGHT side bearing, held rather than added.
+        //
+        // XNA keeps it in a local, adds it to the next glyph unclamped (IL_00da, IL_010d) and
+        // adds Math.Max(pendingZ, 0) once per line break and once after the loop (IL_0054,
+        // IL_015c). So a line's last glyph contributes its right bearing only when that bearing
+        // is positive: a negative one is an overhang, which occupies no width to the right of
+        // where the line ends.
+        //
+        // FNA/src/Graphics/SpriteFont.cs:201 writes `curLineWidth += cKern.Y + cKern.Z` instead,
+        // in both of its measure paths, which is right for every interior glyph and wrong for the
+        // last one on a line. The result was short by the overhang whenever the widest line ended
+        // in a glyph with a negative right bearing -- silently, font-dependently, and growing with
+        // the number of lines. CLAUDE.md settles the direction: XNA wins. The first-glyph left
+        // bearing above already diverges from FNA the same way, measured against a live XNA build.
+        float pendingRightBearing = 0.0f;
 
         for (std::size_t i = 0; i < text.size();)
         {
@@ -130,9 +145,11 @@ namespace Microsoft::Xna::Framework::Graphics
             }
             if (c == u'\n')
             {
-                result.X = std::max(result.X, curLineWidth);
+                result.X = std::max(
+                    result.X, curLineWidth + std::max(pendingRightBearing, 0.0f));
                 result.Y += static_cast<float>(lineSpacing_);
                 curLineWidth = 0.0f;
+                pendingRightBearing = 0.0f;
                 finalLineHeight = static_cast<float>(lineSpacing_);
                 firstInLine = true;
                 continue;
@@ -178,7 +195,10 @@ namespace Microsoft::Xna::Framework::Graphics
                 curLineWidth += spacing_ + cKern.X;
             }
 
-            curLineWidth += cKern.Y + cKern.Z;
+            // The previous glyph's overhang, unclamped: between two glyphs it is real width.
+            curLineWidth += pendingRightBearing;
+            curLineWidth += cKern.Y;
+            pendingRightBearing = cKern.Z;
 
             const int cCropHeight = croppingData_[index].Height;
             if (static_cast<float>(cCropHeight) > finalLineHeight)
@@ -187,7 +207,7 @@ namespace Microsoft::Xna::Framework::Graphics
             }
         }
 
-        result.X = std::max(result.X, curLineWidth);
+        result.X = std::max(result.X, curLineWidth + std::max(pendingRightBearing, 0.0f));
         result.Y += finalLineHeight;
 
         return result;

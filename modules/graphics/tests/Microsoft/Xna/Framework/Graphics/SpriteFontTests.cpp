@@ -56,6 +56,66 @@ static SpriteFont makeFontAB(float spacing = 0.0f)
                       /*lineSpacing=*/16, spacing, kern, std::nullopt);
 }
 
+// Three glyphs from cna-go's Foundation 69 measurement, whose 'B' carries a NEGATIVE right
+// side bearing -- the case where XNA and FNA disagree and every glyph above hides it.
+//   '?' kern (1, 4, 2), 'A' kern (0, 5, 0), 'B' kern (-3, 6, -2), lineSpacing 10, spacing 1.
+static SpriteFont makeFontOverhang()
+{
+    std::vector<Rectangle> glyphs   = { {0, 0, 4, 8}, {4, 0, 5, 8}, {9, 0, 6, 8} };
+    std::vector<Rectangle> cropping = { {0, 0, 4, 8}, {0, 0, 5, 8}, {0, 0, 6, 8} };
+    std::vector<charcs>    chars    = { u'?', u'A', u'B' };
+    std::vector<Vector3>   kern     = { Vector3(1.0f, 4.0f, 2.0f),
+                                        Vector3(0.0f, 5.0f, 0.0f),
+                                        Vector3(-3.0f, 6.0f, -2.0f) };
+    return SpriteFont(Texture2D{}, glyphs, cropping, chars,
+                      /*lineSpacing=*/10, /*spacing=*/1.0f, kern, std::nullopt);
+}
+
+// -----------------------------------------------------------------------
+// MeasureString -- a line ending in a negative right side bearing
+//
+// XNA holds each glyph's right bearing back, adds it to the NEXT glyph unclamped, and adds
+// Math.Max(pending, 0) at every line break and once after the loop (IL_00da, IL_010d, IL_0054,
+// IL_015c). So a trailing overhang -- a negative bearing -- occupies no width to the right of
+// where the line ends. FNA adds `cKern.Y + cKern.Z` per glyph instead, which is right for every
+// interior glyph and short by the overhang for the last one; CNA matched FNA until CLAUDE.md
+// settled that XNA wins. The numbers here are cna-go's XNA column, measured independently by
+// cna-ts on its own font.
+// -----------------------------------------------------------------------
+
+TEST(SpriteFontTest, MeasureDoesNotSubtractATrailingOverhang)
+{
+    SpriteFont font = makeFontOverhang();
+    // 'B' alone: max(-3, 0) + 6 = 6, and its -2 overhang adds nothing. FNA answered 4.
+    EXPECT_FLOAT_EQ(font.MeasureString(std::string("B")).X, 6.0f);
+}
+
+TEST(SpriteFontTest, MeasureCountsAnInteriorOverhangButNotATrailingOne)
+{
+    SpriteFont font = makeFontOverhang();
+    // "AB": A gives max(0,0)+5 = 5 holding 0; B adds spacing 1 + (-3) + held 0 + 6 = 9,
+    // and its -2 is trailing. FNA answered 7.
+    EXPECT_FLOAT_EQ(font.MeasureString(std::string("AB")).X, 9.0f);
+}
+
+TEST(SpriteFontTest, MeasureClampsTheOverhangOnEveryLineNotJustTheLast)
+{
+    SpriteFont font = makeFontOverhang();
+    const Vector2 size = font.MeasureString(std::string("AB\nA"));
+    // The first line still measures 9 -- the clamp happens at the break as well as at the end --
+    // and it is the wider of the two. FNA answered 7.
+    EXPECT_FLOAT_EQ(size.X, 9.0f);
+    EXPECT_FLOAT_EQ(size.Y, 20.0f);
+}
+
+TEST(SpriteFontTest, MeasureKeepsAPositiveTrailingBearing)
+{
+    SpriteFont font = makeFontOverhang();
+    // '?' ends in +2, which is width rather than overhang: max(1,0) + 4 + 2 = 7. This is the
+    // case where XNA and FNA agree, and it must not have moved.
+    EXPECT_FLOAT_EQ(font.MeasureString(std::string("?")).X, 7.0f);
+}
+
 // -----------------------------------------------------------------------
 // Constructor / property getters
 // -----------------------------------------------------------------------

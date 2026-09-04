@@ -62,14 +62,16 @@ namespace Microsoft::Xna::Framework::Graphics
         /// display. First, nothing guaranteed video was up when it ran: `GraphicsDevice`'s default
         /// constructor passes `getDefaultAdapterProperty()` as a delegating-constructor argument,
         /// and C++ sequences that before the delegated body -- which was the only place that
-        /// raised the subsystem. `SDL_GetDisplays` answers nothing before `SDL_INIT_VIDEO`, so the
-        /// first enumeration in a process cached "Default Display", one 800x480 mode, and that was
-        /// the answer for the rest of the process.
+        /// raised the subsystem. A platform's display list is empty until its video subsystem is
+        /// up -- that is the contract, whichever backend implements it -- so the first enumeration
+        /// in a process cached "Default Display", one 800x480 mode, and that was the answer for
+        /// the rest of the process.
         ///
         /// Second, and the reason this holds the reference rather than taking it back at the end
         /// of the enumeration: a display id is only meaningful inside the video session that
-        /// issued it. SDL hands out fresh `SDL_DisplayID`s after a `SDL_QuitSubSystem(VIDEO)`, so
-        /// an enumeration that raises video, reads the displays and drops it again caches ids that
+        /// issued it. A platform is free to issue different ids once its video subsystem has been
+        /// released and raised again -- and they do -- so an enumeration that raises video, reads
+        /// the displays and drops it again caches ids that
         /// name nothing by the time anyone asks `getCurrentDisplayModeProperty()` -- which then
         /// falls back to 800x480 while the adapter's name and mode list are real. That is not a
         /// new assumption: `adapters_` is a process-global cache and its own header already says a
@@ -217,8 +219,8 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 
         // The id named a display in a video session that has ended -- a Game installs its own
-        // platform and destroying it takes SDL's video subsystem down with it, and the next
-        // session issues fresh SDL_DisplayIDs. Rebinding beats both alternatives: rebuilding the
+        // platform and destroying it takes the video subsystem down with it, and the next session
+        // is free to issue different ids. Rebinding beats both alternatives: rebuilding the
         // cache would invalidate the adapter a live GraphicsDevice retains, which
         // cna_graphics_adapters_refresh refuses to do for exactly that reason, and answering the
         // 800x480 fallback would report a display this adapter is not describing.
@@ -267,7 +269,13 @@ namespace Microsoft::Xna::Framework::Graphics
 
     bool GraphicsAdapter::getIsWideScreenProperty() const
     {
-        constexpr float limit = 4.0f / 3.0f;
+        // XNA's IL compares against 1.6, not 4:3. FNA/src/Graphics/GraphicsAdapter.cs:79 uses
+        // `const float limit = 4.0f / 3.0f`, under a comment that admits it is a guess ("XNA does
+        // not appear to account for rotated displays"), and CNA matched it. The two disagree over
+        // a real range: every mode between 1.334 and 1.6 -- 3:2 and 5:3 among them -- is
+        // widescreen to FNA and not to XNA, and 16:10 is widescreen to FNA while XNA's strict
+        // `>` excludes it. CLAUDE.md now settles that direction: XNA wins.
+        constexpr float limit = 1.6f;
         return getCurrentDisplayModeProperty().getAspectRatioProperty() > limit;
     }
 

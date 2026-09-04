@@ -89,10 +89,15 @@ namespace Microsoft::Xna::Framework::Audio
 
     void Microphone::setBufferDurationProperty(System::TimeSpan value)
     {
-        const auto milliseconds = value.getMillisecondsProperty();
+        // XNA's set_BufferDuration reads get_TotalMilliseconds: IL_0018 `ldc.r8 100. blt.s`,
+        // IL_002a `ldc.r8 1000. bgt.s`, IL_003c `ldc.r8 10. rem bne`. FNA/src/Audio/Microphone.cs:57-60
+        // reads value.Milliseconds, the sub-second component bounded to [-999, 999], which made
+        // the "> 1000" branch unreachable and -- worse -- refused 1000 ms, the exact value this
+        // property REPORTS on a microphone nothing has configured. So `mic.BufferDuration =
+        // mic.BufferDuration` threw, while 1100, 1500 and 2500 ms were accepted because their
+        // sub-second components are 100, 500 and 500. CLAUDE.md settles the direction: XNA wins.
+        const auto milliseconds = static_cast<long long>(value.getTotalMillisecondsProperty());
 
-        // getMillisecondsProperty() is the sub-second component, bounded to [-999, 999], so the
-        // "> 1000" branch below can never be true; kept as-is to match FNA (Microphone.cs:60).
         if (milliseconds < 100 || milliseconds > 1000 || milliseconds % 10 != 0)
         {
             throw System::ArgumentOutOfRangeException("BufferDuration");
