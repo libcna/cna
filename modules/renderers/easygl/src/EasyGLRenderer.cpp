@@ -2625,6 +2625,13 @@ if (!ProfileIsEs2ApiGeneration())
         open_ = true;
     }
 
+    namespace
+    {
+        /// What a 32-bit timer query saturates at, and what a driver hands back for a result
+        /// GL_EXT_disjoint_timer_query leaves undefined. Neither is a duration.
+        constexpr ::metagl::GLuint kUndefinedTimerResult = 0xFFFFFFFFu;
+    } // namespace
+
     void EasyGLGpuTimerRenderer::End()
     {
         if (metagl::IsContextLost() || !created_ || !open_) return;
@@ -2638,7 +2645,23 @@ if (!ProfileIsEs2ApiGeneration())
         ::metagl::GLuint available = 0;
         ::metagl::glGetQueryObjectuiv(id_, ::metagl::QueryObjectParameter::ResultAvailable,
                                       &available);
-        return available != 0;
+        if (available == 0) return false;
+
+        // Available is not the same as meaningful. GL_EXT_disjoint_timer_query says a result
+        // taken across a disjoint event -- a context switch, a power transition -- is undefined,
+        // and requires GL_GPU_DISJOINT_EXT to be checked before it is believed; metagl exposes
+        // neither that query nor a general glGetIntegerv, so it cannot be asked here. What can be
+        // recognised is the value drivers hand back for it: the all-ones saturation, which is the
+        // same 0xFFFFFFFF this query saturates at.
+        //
+        // Rejecting it costs nothing real, by the argument the comment below already makes: no
+        // pass this layer measures is within three orders of magnitude of 4.29 seconds, so a
+        // reading of exactly that is not a duration. Reporting it as one made every timer's FIRST
+        // sample 4294.967295 ms -- a disjoint is routine on the first query after a context comes
+        // up -- while every later sample was a plausible microsecond figure.
+        ::metagl::GLuint nanoseconds = 0;
+        ::metagl::glGetQueryObjectuiv(id_, ::metagl::QueryObjectParameter::Result, &nanoseconds);
+        return nanoseconds != kUndefinedTimerResult;
     }
 
     std::uint64_t EasyGLGpuTimerRenderer::ElapsedNanoseconds() const
