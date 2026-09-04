@@ -254,6 +254,26 @@ Reported by `cna-rust` (`RUST-UPSTREAM-026`) and `cna-ruby`.
 
 ---
 
+## BINDFIX-018 — a decal pass has no support query
+
+`cna_decal_pass_create` succeeds on a renderer that cannot run the pass, which is the
+engine layer's usual contract, and the caller is meant to ask before using it. There is
+nothing to ask: a decal pass is its own handle kind, so `cna_post_process_pass_is_supported`
+refuses it with `CNA_RESULT_INVALID_HANDLE`, and no `cna_decal_pass_is_supported` exists.
+
+The header used to name that route anyway, along with `cna_post_process_pass_destroy`,
+which refuses the handle too and so leaked every pass a caller released by the book. The
+header is fixed; the missing query is not, because adding a route is an ABI addition.
+Either give the family its own `cna_decal_pass_is_supported`, or let the
+`cna_post_process_pass_*` routes accept the kind — the second is what the header assumed
+all along and would close `copy_name` at the same time.
+
+Measured by `cna-java`'s `engine_layer_families.c`, which asks a bloom pass the same
+questions and gets SUCCESS, so the difference is the handle kind rather than the renderer.
+Reported as `JAVA-UPSTREAM-008`.
+
+---
+
 ## Fixed in this pass
 
 Three defects, each independently reported by two or more bindings, each one a place where

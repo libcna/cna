@@ -7642,8 +7642,15 @@ CNA_C_API CNA_Result cna_bloom_pass_set_iterations(
 /**
  * @brief Creates a deferred-decal pass.
  *
- * Creation succeeds on a renderer that cannot run it; ask `cna_post_process_pass_is_supported`.
- * Release it with `cna_post_process_pass_destroy`.
+ * Release it with @ref cna_decal_pass_destroy. A decal pass is its own handle kind, so the
+ * `cna_post_process_pass_*` family refuses it with `CNA_RESULT_INVALID_HANDLE` --
+ * `cna_post_process_pass_destroy` and `cna_post_process_pass_copy_name` included, which this
+ * paragraph used to send callers to and which leaked the pass when they went.
+ *
+ * Creation succeeds on a renderer that cannot run it, and there is no support query that takes
+ * this handle: `cna_post_process_pass_is_supported` refuses it for the same reason. That is a gap
+ * rather than a rule, and it is recorded in `plans/plan_bindings_upstream.md` instead of being
+ * papered over with a route name that does not work.
  *
  * @param graphics_device The device to compile on.
  * @param out_pass Receives the owned handle; set invalid on failure.
@@ -10136,7 +10143,12 @@ CNA_C_API CNA_Result cna_area_light_brdf_table_destroy(CNA_AreaLightBrdfTableHan
  * @brief Returns the table's texture.
  *
  * The handle **borrows**: it keeps the table alive while it exists, and releasing it releases only
- * the handle, never the texture.
+ * the handle, never the texture. It is nonetheless a fresh handle, minted per call and counted
+ * against the game that owns the table, so **release it with @ref cna_texture2d_destroy when you
+ * are done with it**: a read whose handle is never released leaves @ref cna_game_destroy answering
+ * `CNA_RESULT_INVALID_STATE` for the rest of the process. The ten sibling getters in this header
+ * publish an uncounted borrow instead; this one does not, and `cna_texture2d_destroy` rather than
+ * `cna_render_target_destroy` is what releases it.
  *
  * @param table The table.
  * @param out_texture Receives the texture, or `CNA_INVALID_HANDLE` when the renderer could not
