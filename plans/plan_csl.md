@@ -21,7 +21,7 @@
 > 🟨 code exists but the criterion is not met/verified; ⬜ not started; ⛔ deliberately not done
 > (with the reason in the row itself, never in a commit message only).
 >
-> **1,173 numbered tasks across 43 phases, every one ⬜ today. Nothing in this plan has been
+> **1,174 numbered tasks across 43 phases, every one ⬜ today. Nothing in this plan has been
 > implemented.** This document is the thing being approved; implementation starts after approval,
 > not before. Task IDs are sparse inside each phase on purpose, so work discovered during
 > implementation takes a free neighbouring number instead of forcing a renumbering pass. The
@@ -122,7 +122,7 @@ A task is ✅ only when all of these hold:
 
 | Phase | Range | Subject | Depends on | Milestone |
 |---|---|---|---|---|
-| 0 | `CSL-1`–`CSL-48` | Foundation: module, build wiring, conventions, ledger | — | — |
+| 0 | `CSL-1`–`CSL-49` | Foundation: module, build wiring, conventions, ledger | — | — |
 | 1 | `CSL-60`–`CSL-137` | The written specification | 0 | **M0** |
 | 2 | `CSL-150`–`CSL-191` | Diagnostics engine | 0 | — |
 | 3 | `CSL-200`–`CSL-227` | Source manager and lexer | 2 | — |
@@ -181,7 +181,82 @@ CSP/content path (Phases 22–23, which needs no backend beyond GLSL).
 
 ---
 
-## Phase 0 — Foundation: module, build wiring, conventions, ledger (`CSL-1`–`CSL-48`)
+## 3. What this costs, and how the estimate corrects itself
+
+An estimate, not a commitment. It is here because a plan of this size cannot be approved without
+one, and because a number with its method attached can be checked — and corrected — later.
+
+### 3.1 The measured baseline
+
+Taken from this repository's own history rather than from judgement. The `plan_xnapipeline.md` work
+visible in this clone closed **95 distinct task IDs across 48 commits in ~11.2 hours** of active
+wall-clock, in three bursts (2026-09-02 19:09–20:24, 2026-09-03 05:37–08:53, 2026-09-03
+11:55–18:35; the gaps between bursts are excluded). That is **8.5 task IDs/hour**, 4.3 commits/hour,
+about 14 minutes per commit, and ~2 IDs per commit.
+
+### 3.2 Why a CSL row is more expensive than an XNAP row
+
+| # | Reason | Effect |
+|---|---|---|
+| 1 | §0.3 requires **one task = one commit**; XNAP batched ~2 IDs per commit | Halves the ceiling to ~4.3 rows/hour before anything else |
+| 2 | XNAP extended an existing content pipeline; **CSL builds a compiler from nothing** | No in-tree reference to calibrate a binary SPIR-V emitter, a type checker or a rasterizer against |
+| 3 | Many rows are multi-hour by construction — `CSL-2286` is 120 matrix conformance cases with hand-computed expectations; `CSL-1340` measures ULP error for 14 transcendentals over swept domains | Row count understates the work in Phases 14–19 and 31–35 |
+| 4 | 2,543 `.cpp` and 1,005 `.hpp` across 36 renderer families; rows touching `IGraphicsRenderer.hpp` (`CSL-913`, `CSL-1680`) trigger a wide rebuild, and Phase 25 builds and runs each family | Build and run time dominates Phase 25, not authoring |
+
+### 3.3 The estimate
+
+| Phases | Subject | Rows | Estimate |
+|---|---|---:|---:|
+| 0–1 | Foundation and specification | 116 | ~35 h |
+| 2–13 | Compiler core | 381 | ~190 h |
+| 14–18 | Five backends | 154 | ~120 h |
+| 19 | CPU reference interpreter | 44 | ~35 h |
+| 20–21 | EffectIR and the FX frontend | 42 | ~25 h |
+| 22–24 | CSP, content pipeline, runtime | 69 | ~40 h |
+| 25 | Rollout across 49 identities | 46 | ~60 h |
+| 26–30 | Hot reload and the four tools | 95 | ~40 h |
+| 31–35 | Conformance corpus and generators | 104 | ~85 h |
+| 36–37 | Fuzzing and certification | 31 | ~30 h |
+| 38–42 | Docs, LSP, Laboratory, migration, C ABI | 91 | ~40 h |
+| | **Total** | **1,174** | **~700 h** |
+
+**Range: 400 h to 1,000 h.** The low end assumes batching wherever §0.3 allows it and no surprises
+in the emitters; the high end assumes the SPIR-V writer or the interpreter's exactness contract is
+harder than expected, with rework.
+
+**Cross-check by a second method.** 1,174 rows at XNAP's strict one-commit-per-task rate (4.3/h)
+would be 273 h *if a CSL row were as cheap as an XNAP row*. Reasons 2–4 above put the average CSL
+row at roughly 2–2.5× an XNAP row, which lands at 550–680 h. The two methods agree, which is the
+only reason the ~700 h figure is stated at all.
+
+### 3.4 The same estimate, by milestone
+
+Cumulative, along the critical path of §2. The plan is built to stop at any of these.
+
+| | Meaning | Cumulative |
+|---|---|---:|
+| **M0** | The specification exists (Phases 0–1) | ~35 h |
+| **M1** | A CSL shader draws a real pixel (282 rows on the critical path) | ~150 h |
+| **M2** | The same shader runs on Vulkan; first cross-renderer conformance | ~250 h |
+| **M6** | Interpreter + N-way differential — the point of the whole subsystem | ~400 h |
+
+### 3.5 Where the estimate is weakest
+
+Phase 15 (binary SPIR-V emission) and Phase 19 (bit-exactness of the interpreter) have **no
+precedent in this repository**, so their numbers are the least trustworthy in the table. Phases 0,
+1 and 38 are nearly all text and their numbers should hold. Phase 25's number is dominated by build
+and run time, which is measurable in advance and is not being measured here.
+
+### 3.6 It corrects itself
+
+`CSL-49` records measured hours against rows completed, per phase, in `NEXT_csl.md`. After Phases 0
+and 1 (~35 h) there is a real rate to re-estimate from, and this section is rewritten against it
+rather than left to age. **A row may not be marked ✅ on the strength of this estimate; the estimate
+is never evidence.**
+
+---
+
+## Phase 0 — Foundation: module, build wiring, conventions, ledger (`CSL-1`–`CSL-49`)
 
 Nothing compiles a shader in this phase. It makes the subsystem buildable, testable, documented and
 discoverable, so every later phase has one place to add a header, a test and a doc line.
@@ -236,6 +311,7 @@ discoverable, so every later phase has one place to add a header, a test and a d
 | CSL-46 | Amend `misc/csl.md` with corrections C1–C12, at the paragraph each is about | ⬜ | Each correction appears next to the text it corrects, plus a pointer to this plan, so a reader of the proposal meets them; the proposal's header gains the `plans/plan_csl.md` link. |
 | CSL-47 | Amend CLAUDE.md's *File Structure* section for the `src/<Area>/` interpretation (→ C2) | ⬜ | CLAUDE.md states that a single-area module of this size uses namespace-mirroring `src/` sub-directories, so a future reader does not read `modules/shader/src/Csl/` as a violation. |
 | CSL-48 | A "no compiler in a renderer" gate (D3) | ⬜ | `tools/platform/`-style checker `tools/csl/check_no_renderer_compiler.py` fails if any file under `modules/renderers/` includes a `CNA/Shader/` header other than the four consumption headers it is allowed to; registered as ctest `CSL_RendererBoundary`. |
+| CSL-49 | Record measured hours against rows completed, per phase, so §3's estimate self-corrects | ⬜ | `NEXT_csl.md` gains an `hours / rows / rows-per-hour` table filled in at each phase boundary, with the measurement taken from commit timestamps rather than from memory. §3 is rewritten against it after Phases 0–1. The estimate is never evidence for a row's ✅ — that rule is written into the ledger's own header. |
 
 ---
 
@@ -1899,7 +1975,7 @@ would make that surface inconsistent.
 
 ---
 
-## 3. Risks, and what this plan does about each
+## 4. Risks, and what this plan does about each
 
 | # | Risk | Mitigation, by row |
 |---|---|---|
@@ -1916,7 +1992,7 @@ would make that surface inconsistent.
 
 ---
 
-## 4. Owner decisions (answered 2026-09-04)
+## 5. Owner decisions (answered 2026-09-04)
 
 All six questions this plan raised are answered. They are recorded here **and** in the row that
 owns each one, so a future reader meets the decision where the work is, not only in a table. A row
@@ -1940,7 +2016,57 @@ The plan does not pretend otherwise, and no row may flip them to ✅ without a m
 
 ---
 
-## 5. Appendix A — the profile table (normative source: `docs/csl/shader-profiles.md`)
+## 6. If this plan is not implemented
+
+Recorded because "we decided not to" is a legitimate outcome that deserves to be written down as
+carefully as the work itself, and because a later reader should not have to re-derive it.
+
+**Nothing regresses.** D4 cuts both ways: the plan changes nothing that exists, so declining it
+costs no working behaviour. `ShaderEffect`, the compiled `.fx`/MojoShader path, the stock effects,
+the engine layer's GLSL ES 3.00 and all 49 renderer identities keep working exactly as they do
+today.
+
+**What stays true** — these are existing costs the plan intended to remove, not new problems:
+
+| | Present state |
+|---|---|
+| Shader toolchains | **Six**, sharing no code: `vulkan/src/shaders/compile_shaders.py` (libshaderc via ctypes), `bgfx/…/compile_shaders.py` (bgfx shaderc), `common/d3d/…/compile_shaders_hlsl.py` (fxc), `sdl-gpu/…/compile_shaders.py`, `directx9/…/compile_shaders_sm2.py` and `compile_pbr_shaders.py`. Renderer 50 means toolchain 7. |
+| Cross-renderer agreement | **Eight** hand-written comparison documents (`d3d9-divergence-report.md`, `direct2d-easygl-differential.md`, `fna3d-parity-report.md`, `opengles1-parity-report.md`, `graphics-compatibility-report.md`, `graphics-renderer-feature-matrix.md`, and the two XNA culling/depth audits) against **1,176 possible renderer pairs**. The method does not scale and will not. |
+| `ShaderDialectEXT` | Seven enumerators; **one** renderer answers it. An application targeting Vulkan and GL supplies two shader sources and hand-writes `DeclareUniformBlockEXT` byte offsets. |
+| `CustomEffects == true` | Still means "accepts a shader", not "runs yours". The four `*EXT()` queries document the trap rather than removing it. |
+
+**What is actually lost** is one thing, and it is the thing `misc/csl.md` itself called more
+valuable than CSL: the claim that the same program means the same thing on every renderer stays
+**unproven** — not false, unproven. A backend that multiplies a matrix in the wrong order gets
+found by someone noticing a screenshot, not by a failing check.
+
+### 6.1 The three subsets worth doing on their own
+
+The plan is not all-or-nothing. If the whole is declined, these three carry most of the value for
+about 7 % of the cost, and each is independently useful:
+
+| | Subset | Rows | Estimate | Why it stands alone |
+|---|---|---:|---:|---|
+| **S1** | **`docs/csl/shader-abi.md` only** — Phase 1.4 (`CSL-120`–`CSL-133`): coordinate conventions, the matrix multiplication rule, uniform layout, the binding model. **No compiler.** | 14 | ~5 h | Pure text. It makes the *existing* hand-written shaders auditable against one written rule, which is the highest value per hour anywhere in this plan. |
+| **S2** | **Conformance harness against existing shaders** — Phase 29 plus Phase 33's determinism rules (`CSL-1995`–`CSL-2017`, `CSL-2270`–`CSL-2275`), running today's GLSL on six GL profiles and comparing readbacks. | 29 | ~30 h | Needs no compiler and no CSL. Replaces hand-written pairwise parity documents with a mechanical check. |
+| **S3** | **Renderers declare what they consume** — the Phase 25 framework (`CSL-913`–`CSL-915`, `CSL-1760`–`CSL-1763`, `CSL-1815`). | 8 | ~15 h | Fixes the empty `ShaderDialectEXT` without a compiler existing, and makes the renderer matrix generated rather than hand-maintained. |
+
+**51 rows and ~50 h, instead of 1,174 rows and ~700 h** — and S1 is text alone. The row counts
+are exact; the hour figures carry §3's error bars.
+
+### 6.2 The risk in the other direction
+
+Declining is not the only risk. **A 60 %-finished compiler is worse than none**: a half-built
+`modules/shader/` is a maintenance burden nobody wants to inherit, and `CNA_CSL=OFF` (`CSL-8`)
+protects the build but not anyone's attention. So the decision rule is stated plainly here rather
+than left implicit:
+
+> If reaching **M1** (~150 h — the first point at which the subsystem does something) is not
+> realistic, do not start. Take **S1** instead, and stop there.
+
+---
+
+## 7. Appendix A — the profile table (normative source: `docs/csl/shader-profiles.md`)
 
 | Profile | Language | Version directive | Tier ceiling | Legalization it needs |
 |---|---|---|---|---|
@@ -1959,14 +2085,17 @@ The plan does not pretend otherwise, and no row may flip them to ✅ without a m
 | `wgsl-1.0` | WGSL | none | Compute | none |
 | `csir-interpreter` | CSIR-L | n/a | Compute | none |
 
-## 6. Appendix B — the binding mapping (normative source: `docs/csl/shader-abi.md` §Binding)
+## 8. Appendix B — the binding mapping (normative source: `docs/csl/shader-abi.md` §Binding)
 
 | CSIR | Vulkan | WGSL | HLSL | Metal | OpenGL |
 |---|---|---|---|---|---|
 | `group` | descriptor set | `@group` | `register space` | argument group | flattened by `CSL-129` |
 | `binding` | binding | `@binding` | `register(b/t/s/u N)` | buffer/texture/sampler index | synthesized unit |
 
-## 7. Appendix C — milestones and their proving rows
+## 9. Appendix C — milestones and their proving rows
+
+What each milestone *means* and which row proves it. For what each one is estimated to **cost**,
+see §3.4 — the two tables are complementary and must be kept consistent when either changes.
 
 | Milestone | Meaning | The row that proves it |
 |---|---|---|
