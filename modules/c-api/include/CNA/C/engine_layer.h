@@ -5710,11 +5710,18 @@ CNA_C_API CNA_Result cna_weighted_blended_transparency_resize(
 /**
  * @brief Opens accumulation, binding and clearing both targets.
  *
- * **On a renderer that cannot run the resolve this succeeds without opening anything**, so
- * @ref cna_weighted_blended_transparency_is_accumulating still reports `CNA_FALSE` and a matching
- * @ref cna_weighted_blended_transparency_end refuses. That is the canonical behaviour, reproduced
- * rather than corrected; ask `is_supported` before bracketing, or treat `end`'s refusal on an
- * unsupported renderer as expected. See `plans/plan_binding.md` `CBIND-098`.
+ * **The bracket opens on every renderer**, including one that cannot run the resolve: what the
+ * unsupported path skips is the device work, not the bracket. So
+ * @ref cna_weighted_blended_transparency_is_accumulating reports `CNA_TRUE` afterwards and a
+ * matching @ref cna_weighted_blended_transparency_end succeeds, wherever it runs -- pair them
+ * unconditionally.
+ *
+ * This paragraph used to describe the opposite, and describing the opposite was worse than saying
+ * nothing: a caller who wrote the defensive `if (!is_supported) { skip end; }` it asked for left
+ * the bracket open for good. `plans/plan_modern.md` `MOD-1697` corrected the code -- the earlier
+ * behaviour left a correctly paired call failing its second half on exactly the renderers least
+ * able to explain why -- and this is the header catching up. See also `plans/plan_binding.md`
+ * `CBIND-098`.
  *
  * @param transparency The resolve.
  * @param far_plane The camera's far plane; must be positive, because the weight divides by it.
@@ -9544,7 +9551,13 @@ CNA_C_API CNA_Result cna_environment_processor_hammersley(
  *
  * @param x The first sequence coordinate.
  * @param y The second sequence coordinate.
- * @param normal The surface normal to build the basis around.
+ * @param normal The surface normal to build the basis around. **It must be unit length.** The
+ * vector is used as supplied -- the tangent frame is built from it and the sampled local direction
+ * combined with it, and only the result is normalised -- so a normal whose length is not one tilts
+ * every sample. Nothing refuses it: the route answers a plausible direction, wrong by roughly the
+ * amount the length is wrong by. Measured over sixteen sequence points at roughness 0.3, a normal
+ * of length 0.98995 was 4.9e-3 rad off the reference against 3.7e-4 rad for the same vector
+ * normalised.
  * @param roughness The roughness the lobe is shaped by.
  * @param out_direction Receives the sampled direction.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null argument,
