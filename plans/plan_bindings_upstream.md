@@ -184,6 +184,25 @@ semantics.
 
 ---
 
+## BINDFIX-008 — should `cna_game_launch_parameters_add` refuse a duplicate key?
+
+`LaunchParameters::Add` calls `emplace`, so the first value for a key wins and a second add is a
+silent no-op that still answers `CNA_RESULT_SUCCESS`. Three contracts existed for one operation:
+the C header said "adds or replaces", the implementation kept the first value, and XNA's
+`Dictionary<string, string>.Add` throws on a duplicate.
+
+The header's claim was the demonstrably false one — it asserted the canonical add overwrites,
+which it does not — so it now states the measured behaviour. What remains open is whether the
+boundary should answer `CNA_RESULT_INVALID_STATE` for a key already present, which is what XNA's
+throw becomes in a C ABI. That is a behaviour change to a published route, and `LaunchParameters`
+also carries two related divergences `cna-ruby` measured and `cna-rust` restated:
+`cna_game_launch_parameters_parse_ext` skips an argument shorter than three characters or without
+a colon, where XNA keeps a colonless argument with an empty value; and
+`cna_game_launch_parameters_get_key_size` enumerates by name rather than in container order.
+Reported by `cna-rust` (`RUST-UPSTREAM-026`) and `cna-ruby`.
+
+---
+
 ## Fixed in this pass
 
 Three defects, each independently reported by two or more bindings, each one a place where

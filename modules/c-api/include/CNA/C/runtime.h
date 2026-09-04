@@ -623,14 +623,19 @@ CNA_C_API CNA_Result cna_game_launch_parameters_copy_key(
     uint64_t* out_bytes);
 
 /**
- * @brief Adds or replaces one launch parameter.
+ * @brief Adds one launch parameter, keeping any value the key already has.
  *
  * @param game Active owned or callback-borrowed game handle.
  * @param key UTF-8 parameter name.
  * @param value UTF-8 parameter value.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * The canonical add overwrites an existing entry rather than refusing, and so does this.
+ * A key that is already present keeps its first value and the call still answers
+ * `CNA_RESULT_SUCCESS`, so a caller cannot tell an add from a no-op by the result. That is
+ * `LaunchParameters::Add`, which reaches `emplace`, and it is deliberately not what XNA does:
+ * `Dictionary<string, string>.Add` throws on a duplicate key, and the canonical parse never
+ * reaches the throw because it guards every add with `ContainsKey` first. Whether this boundary
+ * should refuse a duplicate instead is recorded in `plans/plan_bindings_upstream.md`.
  */
 CNA_C_API CNA_Result cna_game_launch_parameters_add(
     CNA_Handle game,
