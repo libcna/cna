@@ -68,6 +68,7 @@ function(_cna_renderer_identity_map out_var)
         DILIGENT     Diligent
         GLIDE        Glide
         GDI          Gdi
+        LLGL         Llgl
         METAL        Metal
         FNA3D        Fna3d
         OPENVG       OpenVg

@@ -95,6 +95,9 @@ namespace
 #elif defined(CNA_RENDERER_DIRECTX12)
     constexpr const char* kRendererName = "DIRECTX12";
     constexpr bool kRasterizes = true;
+#elif defined(CNA_RENDERER_LLGL)
+    constexpr const char* kRendererName = "LLGL";
+    constexpr bool kRasterizes = true;
 #else
 #error "REMED-GFX-165: this renderer has no declared backbuffer-readback contract."
 #endif

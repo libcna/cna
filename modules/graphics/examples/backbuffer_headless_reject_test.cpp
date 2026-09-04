@@ -82,6 +82,9 @@ namespace
 #elif defined(CNA_RENDERER_SDL_GPU)
     constexpr const char* kRendererName = "SDL_GPU";
     constexpr bool kRasterizes = true;
+#elif defined(CNA_RENDERER_LLGL)
+    constexpr const char* kRendererName = "LLGL";
+    constexpr bool kRasterizes = true;
 #else
 #error "REMED-GFX-162: this renderer has no declared backbuffer-readback capability contract."
 #endif

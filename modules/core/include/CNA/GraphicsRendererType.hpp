@@ -125,6 +125,9 @@ namespace CNA
         /** @brief Classic Win32 GDI with private CPU 2D rasterization. */
         Gdi,
 
+        /** @brief LLGL rendering abstraction; CNA's supported runtime uses its OpenGL module. */
+        Llgl,
+
         /** @brief Native Apple Metal. */
         Metal,
 
@@ -255,6 +258,8 @@ namespace CNA
         return GraphicsRendererType::Glide;
 #elif defined(CNA_RENDERER_GDI)
         return GraphicsRendererType::Gdi;
+#elif defined(CNA_RENDERER_LLGL)
+        return GraphicsRendererType::Llgl;
 #elif defined(CNA_RENDERER_METAL)
         return GraphicsRendererType::Metal;
 #elif defined(CNA_RENDERER_FNA3D)
@@ -336,6 +341,7 @@ namespace CNA
             case GraphicsRendererType::Diligent:      return "DILIGENT";
             case GraphicsRendererType::Glide:         return "GLIDE";
             case GraphicsRendererType::Gdi:           return "GDI";
+            case GraphicsRendererType::Llgl:          return "LLGL";
             case GraphicsRendererType::Metal:          return "METAL";
             case GraphicsRendererType::Fna3d:         return "FNA3D";
             case GraphicsRendererType::SvgDom:         return "SVG_DOM";

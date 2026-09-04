@@ -56,7 +56,7 @@ RENDERERS=(OPENGLES3 VULKAN BGFX SDL_RENDERER)
 if [ "${1:-}" = "--tier" ]; then
     case "${2:-}" in
         routine) RENDERERS=(OPENGLES3 SDL_RENDERER OPENGLES1) ;;
-        full)    RENDERERS=(OPENGLES3 SDL_RENDERER OPENGLES1 VULKAN MAGNUM DILIGENT BGFX WEBGPU) ;;
+        full)    RENDERERS=(OPENGLES3 SDL_RENDERER OPENGLES1 VULKAN LLGL MAGNUM DILIGENT BGFX WEBGPU) ;;
         *) echo "usage: $0 [--tier routine|full] | [--multi \"R;R;...\"]" >&2; exit 2 ;;
     esac
     shift 2
@@ -68,6 +68,7 @@ declare -A RENDERER_DIRS=(
     [BGFX]="cmake-build-bgfx"
     [SDL_RENDERER]="cmake-build-sdl"
     [OPENGLES1]="cmake-build-opengles1"
+    [LLGL]="cmake-build-llgl"
     [MAGNUM]="cmake-build-magnum"
     [DILIGENT]="cmake-build-diligent"
     [WEBGPU]="cmake-build-webgpu"
