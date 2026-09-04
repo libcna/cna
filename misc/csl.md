@@ -1,9 +1,14 @@
 # CSL — the CNA Shader Language and the "Shader Rosetta Stone" subsystem
 
 > **This is the original architectural proposal, kept for its rationale. It is not a specification
-> and it is not a status report.** Nothing described below exists in the repository yet. Where this
-> document and a later specification or plan disagree, the later document is right and this one is
-> history.
+> and it is not a status report.** Nothing described below exists in the repository yet.
+>
+> The executable task backlog derived from this document is **[`plans/plan_csl.md`](../plans/plan_csl.md)**,
+> whose §0.2 lists the twelve corrections it makes to this file (the `spec/` directory of §34, the
+> module layout, the "46 renderers" count, the renderer-declares-a-profile hook of §12, and the
+> capability vocabulary of §10, among others). Where this document and that plan disagree, **the
+> plan is right and this one is history**; the same applies to any specification later written under
+> `docs/csl/`.
 
 Yes. I would make this a standalone CNA subsystem, not just a "shader transpiler". The goal would
 be:

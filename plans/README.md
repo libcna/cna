@@ -33,6 +33,12 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 - [`plan_gltf.md`](plan_gltf.md) — glTF import correctness.
 - [`plan_xnb.md`](plan_xnb.md) — XNB content pipeline.
 
+## Shader language and conformance
+
+- [`plan_csl.md`](plan_csl.md) — CSL, the CSIR intermediate representation, the CNA Shader ABI,
+  the five shader backends, the CPU reference interpreter and the shader conformance framework.
+  Design proposal: [`../misc/csl.md`](../misc/csl.md).
+
 ## Graphics architecture and effects
 
 - [`plan_graphics.md`](plan_graphics.md) — graphics API and shared implementation work.
