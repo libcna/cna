@@ -377,6 +377,17 @@ namespace Microsoft::Devices::Sensors
 
         backend_ = std::move(backend);
         setIsSupportedProperty(backend_ ? backend_->IsSupported() : getIsSupportedProperty());
+
+        if (!backend_)
+        {
+            // The retained reading came from the backend that has just been withdrawn, and
+            // nothing stands behind it now. Leaving IsDataValid true made the sensor contradict
+            // itself: it reported that its current data was valid while getCurrentValueProperty()
+            // refused to hand that data over -- it throws once IsSupported is false, which a
+            // withdrawn unsupported backend leaves behind. A reader has to be able to believe one
+            // of the two.
+            setIsDataValidProperty(false);
+        }
     }
 
     GetTypeNameCPP(Motion, "Microsoft.Devices.Sensors.Motion")
