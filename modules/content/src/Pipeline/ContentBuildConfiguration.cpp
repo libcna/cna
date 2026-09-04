@@ -202,8 +202,9 @@ namespace CNA::Content::Pipeline
             Fail(sourceName, "JSON", error.what());
         }
 
-        RequireKnownUniqueMembers(root, {"format", "version", "sourceRoots", "assets"},
-                                  sourceName, "root");
+        RequireKnownUniqueMembers(
+            root, {"format", "version", "outputFormat", "sourceRoots", "assets"},
+            sourceName, "root");
         if (RequireMember(root, "format", JsonType::String, sourceName, "root").stringValue !=
             kConfigurationKind)
         {
@@ -217,6 +218,16 @@ namespace CNA::Content::Pipeline
         }
 
         ContentBuildConfiguration configuration;
+        if (const JsonValue* outputFormat = root.FindMember("outputFormat"))
+        {
+            ContentOutputFormat parsed = ContentOutputFormat::Cnb;
+            if (outputFormat->type != JsonType::String ||
+                !TryParseContentOutputFormat(outputFormat->stringValue, parsed))
+            {
+                Fail(sourceName, "root field 'outputFormat'", "must be \"cnb\" or \"xnb\".");
+            }
+            configuration.outputFormat_ = parsed;
+        }
         if (const JsonValue* sourceRoots = root.FindMember("sourceRoots"))
         {
             if (sourceRoots->type != JsonType::Object)
@@ -262,7 +273,8 @@ namespace CNA::Content::Pipeline
             RequireSafeSource(source, sourceName);
             const std::string context = "asset entry '" + source + "'";
             RequireKnownUniqueMembers(
-                value, {"logicalName", "importer", "processor", "writer", "parameters"},
+                value,
+                {"logicalName", "importer", "processor", "writer", "outputFormat", "parameters"},
                 sourceName, context);
 
             ContentAssetBuildConfiguration entry;
@@ -271,6 +283,17 @@ namespace CNA::Content::Pipeline
             entry.importer = OptionalNonEmptyString(value, "importer", sourceName, context);
             entry.processor = OptionalNonEmptyString(value, "processor", sourceName, context);
             entry.writer = OptionalNonEmptyString(value, "writer", sourceName, context);
+            if (const JsonValue* assetFormat = value.FindMember("outputFormat"))
+            {
+                ContentOutputFormat parsed = ContentOutputFormat::Cnb;
+                if (assetFormat->type != JsonType::String ||
+                    !TryParseContentOutputFormat(assetFormat->stringValue, parsed))
+                {
+                    Fail(sourceName, context + " field 'outputFormat'",
+                         "must be \"cnb\" or \"xnb\".");
+                }
+                entry.outputFormat = parsed;
+            }
             if (!entry.logicalName.empty())
             {
                 const std::string problem = Cnb::CnbLogicalNameProblem(entry.logicalName);
@@ -328,5 +351,11 @@ namespace CNA::Content::Pipeline
     ContentBuildConfiguration::SourceRoots() const noexcept
     {
         return sourceRoots_;
+    }
+
+    const std::optional<ContentOutputFormat>&
+    ContentBuildConfiguration::OutputFormat() const noexcept
+    {
+        return outputFormat_;
     }
 } // namespace CNA::Content::Pipeline

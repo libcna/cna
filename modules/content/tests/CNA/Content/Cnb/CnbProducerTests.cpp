@@ -314,14 +314,45 @@ TEST(CnbProducerTest, MalformedAndUnsupportedWavsAreRefusedByReason)
     expectMessage(MakeWav(2u, 44100u, 16u, std::vector<std::uint8_t>(6u, 0u)),
                   "whole number of");
 
-    // An encoding this compiler deliberately refuses rather than converting lossily.
-    std::vector<std::uint8_t> ieee = MakeWav(1u, 44100u, 16u, Pcm16(8u, 1u));
-    ieee[20] = 3u; // format tag 3 = IEEE float
-    expectMessage(ieee, "IEEE float");
+    // A compressed encoding is refused rather than guessed at: decoding ADPCM is not this
+    // compiler's job, and the fields that would describe it are codec-specific.
+    std::vector<std::uint8_t> adpcm = MakeWav(1u, 44100u, 16u, Pcm16(8u, 1u));
+    adpcm[20] = 2u; // WAVE_FORMAT_ADPCM
+    expectMessage(adpcm, "compressed source");
 
-    std::vector<std::uint8_t> deep = MakeWav(1u, 44100u, 16u, Pcm16(8u, 1u));
-    deep[34] = 24u; // 24 bits per sample
-    expectMessage(deep, "24-bit PCM");
+    // 24-bit and 32-bit PCM and 32-bit IEEE float are read (plans/plan_xnapipeline.md XNAP-55);
+    // widths outside that set still are not, and the refusal names the width.
+    std::vector<std::uint8_t> twelveBit = MakeWav(1u, 44100u, 12u, Pcm16(8u, 1u));
+    expectMessage(twelveBit, "12-bit PCM");
+
+    // 64-bit float carries far more precision than any CNA audio format stores, so converting
+    // it stays an authoring decision rather than a silent one.
+    std::vector<std::uint8_t> doublePrecision =
+        MakeWav(1u, 44100u, 64u, std::vector<std::uint8_t>(64u, 0u));
+    doublePrecision[20] = 3u; // WAVE_FORMAT_IEEE_FLOAT
+    expectMessage(doublePrecision, "64-bit float master");
+}
+
+TEST(CnbProducerTest, WiderSourcePcmIsReadAndNarrowedToPcm16)
+{
+    // plans/plan_xnapipeline.md XNAP-55. Both containers store 16-bit PCM, so a wider source is
+    // narrowed; refusing it outright only pushed the same conversion onto the author's audio
+    // editor, where it is no less lossy and no more visible.
+    std::vector<std::uint8_t> twentyFour(4u * 3u);
+    for (std::size_t sample = 0; sample < 4u; ++sample)
+    {
+        const auto packed = static_cast<std::uint32_t>(
+            static_cast<std::int32_t>(sample) * 0x100000 - 0x200000);
+        twentyFour[sample * 3u] = static_cast<std::uint8_t>(packed & 0xFFu);
+        twentyFour[sample * 3u + 1u] = static_cast<std::uint8_t>((packed >> 8) & 0xFFu);
+        twentyFour[sample * 3u + 2u] = static_cast<std::uint8_t>((packed >> 16) & 0xFFu);
+    }
+    const auto sound =
+        CNA::Content::Cnb::DecodeWavAsCnbSoundEffect(MakeWav(1u, 44100u, 24u, twentyFour),
+                                                     "wide.wav");
+    EXPECT_EQ(sound.format, CNA::Content::Cnb::CnbAudioFormat::Pcm16);
+    EXPECT_EQ(sound.frameCount, 4u);
+    EXPECT_EQ(sound.samples.size(), 8u);
 }
 
 // --------------------------------------------------------------------------------------------

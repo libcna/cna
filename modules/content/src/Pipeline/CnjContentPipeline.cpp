@@ -178,6 +178,12 @@ namespace CNA::Content::Pipeline
             imported.authoredColorKey = CNA::Internal::ReadCnjColorKey(
                 root, "Texture2D .cnj '" +
                           CNA::Internal::ContentPathToUtf8(context.SourcePath()) + "'");
+            // plans/plan_xnapipeline.md XNAP-96: the processor premultiplies by default now,
+            // matching XNA 4.0. CNJ version 1 has no premultiplyAlpha member, so what a v1
+            // document compiles to is already defined -- straight alpha -- and CompileCnjToCnb
+            // pins it. Say so here rather than changing what an existing .cnj means. A build that
+            // wants premultiplication still gets it by setting the processor parameter.
+            imported.authoredPremultiplyAlpha = false;
             context.LogInfo("imported Texture2D CNJ through the shared image front end.");
             return ContentValue::Create(ImportedImageType, std::move(imported));
         }
@@ -564,6 +570,13 @@ namespace CNA::Content::Pipeline
         registry.RegisterWriter(std::make_shared<CurveContentWriter>());
         registry.RegisterProcessor(std::make_shared<AnimationClipProcessor>());
         registry.RegisterWriter(std::make_shared<AnimationClipContentWriter>());
+        registry.DocumentAbsentWriter(
+            ContentOutputFormat::Xnb, ProcessedAnimationClipType,
+            "XNA 4.0 has no AnimationClip content type and no reader for one; "
+            "AnimationClipEXT is CNA's own extension. An .xnb naming a CNA-only reader would "
+            "fail to load in the XNA-compatible runtime the XNB container exists for, so this "
+            "type is CNB-only by design rather than by omission. A Model's clips still reach "
+            "XNB, embedded in the Model the way XNA itself carried them.");
         registry.RegisterProcessor(std::make_shared<SpriteFontProcessor>());
         registry.RegisterWriter(std::make_shared<SpriteFontContentWriter>());
     }

@@ -17,9 +17,15 @@ namespace
         arguments.reserve(argc > 1 ? static_cast<std::size_t>(argc - 1) : 0u);
         for (int index = 1; index < argc; ++index) { arguments.emplace_back(argv[index]); }
 
-        auto registry = std::make_shared<Pipeline::ContentPipelineRegistry>();
-        Pipeline::RegisterBuiltInContentPipeline(*registry);
-        return Pipeline::RunContentCompiler(arguments, std::move(registry));
+        // The registry is built by the coordinator, after it has parsed the command line, so that
+        // options selecting a build-time service (--fx-compiler) reach registration.
+        return Pipeline::RunContentCompiler(
+            arguments, [](const Pipeline::ContentCompilerOptions& options)
+        {
+            auto registry = std::make_shared<Pipeline::ContentPipelineRegistry>();
+            Pipeline::RegisterBuiltInContentPipeline(*registry, options);
+            return registry;
+        });
     }
 }
 

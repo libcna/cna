@@ -12,7 +12,7 @@
 namespace CNA::Content::Pipeline
 {
     /** @brief Current on-disk CNA Content Pipeline manifest format version. */
-    inline constexpr std::uint32_t ContentBuildManifestVersion = 8u;
+    inline constexpr std::uint32_t ContentBuildManifestVersion = 9u;
 
     /** @brief File name used for the inspectable manifest below a content output
      * root. */
@@ -35,6 +35,17 @@ namespace CNA::Content::Pipeline
 
         /** @brief Canonical runtime type name declared by the selected writer. */
         std::string assetTypeName;
+
+        /**
+         * @brief Root `ContentTypeReader` name for an `.xnb` output; empty for a CNB one
+         *        (plans/plan_xnapipeline.md `XNAP-99`).
+         *
+         * The `.xnb` counterpart of the three CNB fields above. A compiled `.xnb` carries no asset
+         * type id and no schema version; the reader its root object dispatches to is what decides
+         * whether a runtime can load it, so that is what the manifest records. Assembly-free, and
+         * observed from the write itself rather than declared beside it.
+         */
+        std::string rootReaderName;
 
         /** @brief SHA-256 of the published CNB bytes, used to detect deletion or tampering. */
         std::string sha256;
@@ -303,7 +314,8 @@ namespace CNA::Content::Pipeline
      * @param outputRoot Canonical output root.
      * @param outputPath Published artifact path.
      * @param externalSourceRoots Explicit alias-to-native-root mappings.
-     * Additional outputs use their logical names below @p outputRoot with a `.cnb` suffix. The
+     * Additional outputs use their logical names below @p outputRoot with the extension of the
+     * result's own output format. The
      * primary output keeps the caller-selected path, which matters for single-file builds.
      *
      * @return Record with normalized output identities/digests and empty direct/effective

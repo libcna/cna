@@ -82,6 +82,56 @@ namespace
         return std::vector<std::uint8_t>(fileBytes.begin(), fileBytes.end());
     }
 
+    // plans/plan_xnapipeline.md XNAP-71: the same asset in the form a real content pipeline
+    // writes it -- every field dispatched through the object protocol rather than laid out
+    // inline. VideoReader selects between the two forms from the type-reader table's size, and
+    // that selection is only meaningful if both forms are actually exercised end to end.
+    std::vector<std::uint8_t> BuildObjectReferencedVideoXnbFile(
+        const std::string& reference, int32_t durationMs, int32_t width, int32_t height, float fps,
+        VideoSoundtrackType soundtrackType)
+    {
+        System::IO::MemoryStream bodyMs;
+        System::IO::BinaryWriter bodyWriter(&bodyMs, true);
+        bodyWriter.Write7BitEncodedInt(4); // VideoReader, StringReader, Int32Reader, SingleReader
+        bodyWriter.Write(std::string("Microsoft.Xna.Framework.Content.VideoReader"));
+        bodyWriter.Write((int32_t)0);
+        bodyWriter.Write(std::string("Microsoft.Xna.Framework.Content.StringReader"));
+        bodyWriter.Write((int32_t)0);
+        bodyWriter.Write(std::string("Microsoft.Xna.Framework.Content.Int32Reader"));
+        bodyWriter.Write((int32_t)0);
+        bodyWriter.Write(std::string("Microsoft.Xna.Framework.Content.SingleReader"));
+        bodyWriter.Write((int32_t)0);
+        bodyWriter.Write7BitEncodedInt(0); // zero shared resources
+        bodyWriter.Write7BitEncodedInt(1); // root object -> VideoReader
+        bodyWriter.Write7BitEncodedInt(2); // -> StringReader
+        bodyWriter.Write(reference);
+        bodyWriter.Write7BitEncodedInt(3); // -> Int32Reader
+        bodyWriter.Write(durationMs);
+        bodyWriter.Write7BitEncodedInt(3);
+        bodyWriter.Write(width);
+        bodyWriter.Write7BitEncodedInt(3);
+        bodyWriter.Write(height);
+        bodyWriter.Write7BitEncodedInt(4); // -> SingleReader
+        bodyWriter.Write(fps);
+        bodyWriter.Write7BitEncodedInt(3);
+        bodyWriter.Write(static_cast<int32_t>(soundtrackType));
+        bodyWriter.Flush();
+        auto bodyBytes = bodyMs.ToArray();
+
+        System::IO::MemoryStream fileMs;
+        System::IO::BinaryWriter fileWriter(&fileMs, true);
+        fileWriter.Write((uint8_t)'X'); fileWriter.Write((uint8_t)'N'); fileWriter.Write((uint8_t)'B');
+        fileWriter.Write((uint8_t)'w');
+        fileWriter.Write((uint8_t)5);
+        fileWriter.Write((uint8_t)0);
+        fileWriter.Write((int32_t)(10 + (int32_t)bodyBytes.size()));
+        fileWriter.Write(bodyBytes.data(), 0, (int32_t)bodyBytes.size());
+        fileWriter.Flush();
+
+        auto fileBytes = fileMs.ToArray();
+        return std::vector<std::uint8_t>(fileBytes.begin(), fileBytes.end());
+    }
+
     class ContentManagerVideoXnbTest : public ::testing::Test
     {
     protected:
@@ -127,4 +177,29 @@ TEST_F(ContentManagerVideoXnbTest, LoadRealFixtureEndToEndProducesAPlayableVideo
     EXPECT_EQ(texture->getHeightProperty(), 90);
 
     std::filesystem::remove("tests/assets/media/video/video_xnb_fixture.xnb");
+}
+
+TEST_F(ContentManagerVideoXnbTest, TheObjectReferencedFormLoadsToTheSameValuesAsTheInlineOne)
+{
+    // plans/plan_xnapipeline.md XNAP-71. A real content pipeline dispatches every one of a
+    // Video's fields through the object protocol; CNA's own hand-built fixtures used the inline
+    // form, so until now only one of VideoReader's two branches was ever taken end to end.
+    ContentManager cm(nullptr, "tests/assets/media/video");
+    cm.setGraphicsDevice(gd);
+
+    const std::filesystem::path path =
+        std::filesystem::path("tests/assets/media/video") / "video_xnb_object_fixture.xnb";
+    WriteBytes(path, BuildObjectReferencedVideoXnbFile("chroma_420.mkv", 2000, 160, 90, 25.0f,
+                                                       VideoSoundtrackType::Music));
+
+    Video video = cm.Load<Video>("video_xnb_object_fixture");
+
+    EXPECT_EQ(video.getWidthProperty(), 160);
+    EXPECT_EQ(video.getHeightProperty(), 90);
+    EXPECT_FLOAT_EQ(video.getFramesPerSecondProperty(), 25.0f);
+    EXPECT_EQ(video.getVideoSoundtrackTypeProperty(), VideoSoundtrackType::Music);
+    EXPECT_EQ(video.getDurationProperty(), System::TimeSpan::FromMilliseconds(2000));
+    ASSERT_TRUE(std::filesystem::exists(video.getFileNameProperty()));
+
+    std::filesystem::remove(path);
 }

@@ -347,7 +347,10 @@ TEST(CustomContentPipelineTest, BuiltInWritersDeclareStableSchemaAndCodecIdentit
 
 TEST(CustomContentPipelineTest, CompilerEmbeddingRejectsANullRegistry)
 {
-    EXPECT_THROW(static_cast<void>(Pipeline::RunContentCompiler({}, nullptr)),
+    // Spelled out rather than written as nullptr: RunContentCompiler() also has a registry-factory
+    // overload (plans/plan_xnapipeline.md XNAP-A5), and nullptr converts to both.
+    EXPECT_THROW(static_cast<void>(Pipeline::RunContentCompiler(
+                     {}, std::shared_ptr<Pipeline::ContentPipelineRegistry>{})),
                  std::invalid_argument);
 }
 

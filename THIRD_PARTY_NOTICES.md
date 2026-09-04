@@ -272,3 +272,45 @@ of `nanovg.c`; those carry their own permissive notices in the same upstream che
 
 A build configured with any other `CNA_GRAPHICS_RENDERER` value does not fetch, build or link
 NanoVG at all.
+
+## FreeType (optional SpriteFont content-pipeline dependency)
+
+The `.spritefont` source route (`plans/plan_xnapipeline.md` `XNAP-51`) rasterizes glyphs with
+[FreeType 2](https://freetype.org/). No FreeType source is vendored: CNA's CMake integration
+(`modules/content-pipeline/CMakeLists.txt`) probes for a system FreeType with
+`find_package(Freetype)` and links the imported `Freetype::Freetype` target when one is present.
+`CNA_ENABLE_FONT_PIPELINE=OFF` omits the probe and the link entirely, and a `.spritefont` build in
+that configuration reports that the configuration has no font rasterizer rather than producing an
+empty font.
+
+FreeType is linked **only** by `cna_content_pipeline`, which in turn is linked only by
+`cna_content_compiler` (the `cna-content` build tool and user-built custom content compilers). It
+is not part of the CNA runtime umbrella, so a shipped game does not link FreeType merely because
+the content pipeline exists.
+
+FreeType is Copyright © 1996-2023 by David Turner, Robert Wilhelm, and Werner Lemberg, and is
+dual-licensed under the FreeType License (a BSD-style license with a credit clause) and the GNU
+General Public License v2. CNA uses it under the FreeType License. The complete license text ships
+with the FreeType distribution the host provides (`docs/FTL.TXT` upstream; on Debian and Ubuntu,
+`/usr/share/doc/libfreetype6/`).
+
+The FreeType License requires that use of the library be credited in the documentation of any
+product that uses it. This notice is that credit:
+
+> Portions of this software are copyright © 1996-2023 The FreeType Project (www.freetype.org).
+> All rights reserved.
+
+## Liberation Mono (test font)
+
+`tests/assets/fonts/LiberationMono-Regular.ttf` is committed so that the SpriteFont content-pipeline
+tests rasterize a real typeface with stable, reproducible metrics instead of depending on whatever
+fonts a developer's machine happens to have installed.
+
+Liberation Mono is Copyright © 2012 Red Hat, Inc., with Liberation being a trademark of Red Hat,
+Inc., and is licensed under the **SIL Open Font License, Version 1.1**. The complete license text is
+committed beside the font as `tests/assets/fonts/LiberationMono-Regular.LICENSE.txt`, and
+`tests/assets/fonts/PROVENANCE.json` records the upstream project, the distributing package, the
+file's SHA-256 and why it is in the tree.
+
+Only tests read this file. No CNA library or example links, embeds or redistributes it as part of a
+built artifact, and no CNA runtime module depends on its presence.

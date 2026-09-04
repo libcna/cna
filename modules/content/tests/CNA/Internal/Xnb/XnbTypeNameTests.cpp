@@ -8,6 +8,7 @@
 
 using CNA::Internal::Xnb::NormalizeXnbTypeReaderName;
 using CNA::Internal::Xnb::ParseXnbTypeName;
+using CNA::Internal::Xnb::XnbTypeName;
 
 TEST(XnbTypeNameTest, PlainReaderNameStripsAssemblyQualification)
 {
@@ -134,4 +135,60 @@ TEST(XnbTypeNameTest, CustomLimitsRejectsNestingThatWouldBeAllowedByDefault)
 
     EXPECT_NO_THROW(ParseXnbTypeName(BuildNestedTypeName(2), tightLimits));
     EXPECT_THROW(ParseXnbTypeName(BuildNestedTypeName(3), tightLimits), std::invalid_argument);
+}
+
+// plans/plan_xnapipeline.md XNAP-9C: a .NET array type name. Found by auditing the *writer's*
+// reader-identity model: a `List<int[]>` reader name genuinely contains `System.Int32[]` as a
+// generic argument, and this parser read `System.Int32` followed by what it took to be a
+// malformed generic-argument list and threw. A real `.xnb` whose type table names any array-typed
+// generic argument therefore failed to load, before registry lookup was even reached.
+TEST(XnbTypeNameTest, AnArrayTypeNameKeepsItsRankSpecifier)
+{
+    const XnbTypeName parsed = ParseXnbTypeName(
+        "System.Int32[], mscorlib, Version=4.0.0.0, Culture=neutral, "
+        "PublicKeyToken=b77a5c561934e089");
+    EXPECT_EQ(parsed.baseName, "System.Int32");
+    EXPECT_EQ(parsed.arraySuffix, "[]");
+    EXPECT_TRUE(parsed.genericArguments.empty());
+    EXPECT_EQ(parsed.ToCanonicalString(), "System.Int32[]");
+}
+
+TEST(XnbTypeNameTest, AnArrayTypedGenericArgumentParsesAndNormalizes)
+{
+    EXPECT_EQ(NormalizeXnbTypeReaderName(
+                  "Microsoft.Xna.Framework.Content.ListReader`1[[System.Int32[], mscorlib, "
+                  "Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089]], "
+                  "Microsoft.Xna.Framework, Version=4.0.0.0"),
+              "Microsoft.Xna.Framework.Content.ListReader`1[[System.Int32[]]]");
+}
+
+TEST(XnbTypeNameTest, AJaggedAndAMultidimensionalRankAreBothPreserved)
+{
+    EXPECT_EQ(NormalizeXnbTypeReaderName("System.Single[][], mscorlib"), "System.Single[][]");
+    EXPECT_EQ(NormalizeXnbTypeReaderName("System.Single[,], mscorlib"), "System.Single[,]");
+    EXPECT_EQ(NormalizeXnbTypeReaderName("System.Single[,,][], mscorlib"),
+              "System.Single[,,][]");
+}
+
+TEST(XnbTypeNameTest, AnArrayOfAGenericTypeKeepsDotNetsOwnFieldOrder)
+{
+    // .NET spells `List<int>[]` as `List`1[[System.Int32, …]][]` -- rank *after* the argument
+    // list -- so the canonical key must put it back in that order, not before the arguments.
+    const XnbTypeName parsed = ParseXnbTypeName(
+        "System.Collections.Generic.List`1[[System.Int32, mscorlib]][], mscorlib");
+    EXPECT_EQ(parsed.baseName, "System.Collections.Generic.List`1");
+    EXPECT_EQ(parsed.arraySuffix, "[]");
+    ASSERT_EQ(parsed.genericArguments.size(), 1u);
+    EXPECT_EQ(parsed.genericArguments[0].baseName, "System.Int32");
+    EXPECT_EQ(parsed.ToCanonicalString(),
+              "System.Collections.Generic.List`1[[System.Int32]][]");
+}
+
+TEST(XnbTypeNameTest, AGenericArgumentListIsStillNotMistakenForAnArrayRank)
+{
+    // The distinction is what is inside the bracket: only commas and spaces means a rank.
+    EXPECT_EQ(NormalizeXnbTypeReaderName(
+                  "Microsoft.Xna.Framework.Content.ArrayReader`1[[System.Int32, mscorlib]]"),
+              "Microsoft.Xna.Framework.Content.ArrayReader`1[[System.Int32]]");
+    EXPECT_THROW(ParseXnbTypeName("Some.Type[System.Int32]"), std::invalid_argument);
 }

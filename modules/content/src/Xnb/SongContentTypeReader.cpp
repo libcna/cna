@@ -7,6 +7,7 @@
 #include "CNA/Internal/CaseInsensitivePath.hpp"
 #include "CNA/Internal/PathContainment.hpp"
 #include "CNA/Internal/Xnb/XnbCanonicalData.hpp"
+#include "XnbCanonicalReaderAccess.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
@@ -62,7 +63,12 @@ namespace CNA::Internal::Xnb
     Song SongReader::Read(ContentReader& input, std::optional<Song> existingInstance)
     {
         (void)existingInstance; // never provided: CanDeserializeIntoExistingObject defaults false, matching FNA
-        const XnbSongData decoded = DecodeSongXnbData(input);
+        // A Song written by a real content pipeline dispatches its duration through
+        // Int32Reader, so its type-reader table has two entries; CNA's own historical
+        // hand-constructed fixtures wrote a bare Int32 with a single-entry table. The table size
+        // tells the two apart, exactly as VideoReader already does for the same reason.
+        const XnbSongData decoded = DecodeSongXnbData(
+            input, XnbCanonicalReaderAccess::ReaderCount(input) > 1u);
 
         auto* contentManager = input.getContentManagerProperty();
         if (!contentManager)

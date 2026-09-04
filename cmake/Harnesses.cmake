@@ -442,3 +442,18 @@ if(CNA_BUILD_TESTS AND NOT WIN32)
         cna_platform
     )
 endif()
+
+# --- plans/plan_xnapipeline.md XNAP-A5: fake external effect compiler ---
+# A standalone (non-GTest) program that stands in for Microsoft's legacy `fxc` on the other side of
+# a real process boundary, so the `.fx` product route is proven as one chain -- command line,
+# backend discovery, argument quoting, process invocation, both output streams, the processor and
+# the writer -- rather than only from the EffectCompilerService seam inwards. It is not an HLSL
+# compiler and proves nothing about real `fxc` compatibility; see its own top-of-file comment.
+#
+# Deliberately links nothing: it must behave like a third-party tool, and a dependency on CNA
+# would let a bug hide behind shared code on both sides of the boundary.
+if(CNA_BUILD_TESTS)
+    add_executable(cna_fake_effect_compiler
+        tools/content/fake_effect_compiler.cpp
+    )
+endif()

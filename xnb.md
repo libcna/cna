@@ -29,9 +29,14 @@
 > scans the `Content` root once — internal perf cache + a public introspection API + the `.xnb`
 > reader-name inventory) is now part of the active scope too, folded into `plans/plan_xnb.md`'s Phase B3.
 > See `plans/plan_xnb.md`'s own top-of-file note for the complete list of what changed in this revision.
-> Writing/producing `.xnb` files remains permanently out of scope either way — see "Scope" in
-> `plans/plan_xnb.md`; CNA only ever needs to consume `.xnb` files produced by real XNA/MonoGame/FNA
-> tooling.
+> **Superseded 2026-09-02 for the write side.** This document's original scope note said writing
+> `.xnb` was permanently out of scope. That is no longer CNA's direction: CNA now produces `.xnb`
+> files natively through its own content pipeline. This plan and `plans/plan_xnb.md` continue to
+> own the **reader**; the writer is a separate subsystem with its own plan
+> ([`plans/plan_xnapipeline.md`](plans/plan_xnapipeline.md)) and its own documentation
+> ([`docs/xnb-interoperability.md`](docs/xnb-interoperability.md)). Nothing else in this document
+> changes: the reader remains the authority on how a `.xnb` file is consumed, and the writer treats
+> it as one of its two normative specification sources.
 
 **Status: planning document only. Nothing described here is implemented yet.** This document
 replaces the previous "analysis only, low priority" version of `xnb.md` with an actual phased
@@ -115,9 +120,12 @@ Texture2D::FromStream(device, stream);    // player.png (existing path, unchange
 ## File layout (confirmed from FNA's `ContentManager`/`ContentReader`)
 
 ```text
-4-byte magic + platform char   'X' 'N' 'B' <platform: 'w'/'d'/'g'/'l'/...>
-1-byte version                 4 or 5 (FNA rejects anything else)
-1-byte flags                   bit 0x80 = LZX-compressed payload
+4-byte magic + platform char   'X' 'N' 'B' <platform byte, see below>
+1-byte version                 5 = the XNA 4.0-era container; 4 = earlier, XNA 3.x-era
+                               (FNA rejects anything else)
+1-byte flags                   bit 0x01 = HiDef graphics profile (clear = Reach)
+                               bit 0x40 = single raw LZ4 block (later ecosystem, not XNA 4.0)
+                               bit 0x80 = LZX-compressed payload
 4-byte int32                   total file length
 [if compressed] 4-byte int32   decompressed size, then the LZX-compressed payload
 type-reader table               7-bit-encoded count, then per entry: 7-bit-encoded string
@@ -126,6 +134,13 @@ shared-resource count           7-bit-encoded int
 root object                     read via the table's first-referenced reader, recursively
 shared resources                read last, each fixed up into earlier placeholder references
 ```
+
+Only three platform bytes are Microsoft XNA 4.0 targets: `w` (Windows), `m` (Windows Phone 7) and
+`x` (Xbox 360). The other thirteen bytes CNA accepts -- `i`, `a`, `d`, `X`, `W`, `n`, `u`, `p`, `M`,
+`r`, `P`, `g`, `l` -- were introduced by later, non-Microsoft implementations of the format. Reading
+them is useful; describing them as XNA 4.0 compatibility is not, and this document does not.
+Likewise, version **5** is the XNA 4.0-era container version; version 4 is *earlier*, not a variant
+of 4.0. `docs/xnb-interoperability.md` carries the full table and what CNA's writer does with each.
 
 Primitives needed to read any of the above: 7-bit-encoded int (`BinaryReader.Read7BitEncodedInt`
 equivalent), 7-bit-length-prefixed strings, little-endian fixed-width integers/floats. Shared

@@ -19,10 +19,12 @@ or a `.cnj` sidecar/file.
 **In scope**: loading (deserializing) an already-built, real `.xnb` file at runtime — matching
 FNA's own `ContentManager`/`ContentReader`/`ContentTypeReaderManager` read-side API and protocol.
 
-**Out of scope, permanently**: anything that *produces* `.xnb` files (`ContentCompiler`,
-`ContentImporter`, `ContentProcessor`, `ContentTypeWriter`, MSBuild/XNA project build-tool
-integration). CNA only ever consumes `.xnb` files produced by real external tooling (XNA, MonoGame,
-FNA); it has no need to generate them itself.
+**Out of scope for this document**: anything that *produces* `.xnb` files. That was once out of
+scope permanently -- this document said so, and said CNA "has no need to generate them itself" --
+and that is **no longer true**. CNA now has a native C++ XNB writer and a content pipeline that
+compiles source assets to `.xnb`: see `docs/xnb-interoperability.md` for what it writes and how
+strongly each type is verified, and `plans/plan_xnapipeline.md` for the task history. This document
+remains about the **read** side only.
 
 ## Getting started: registering the built-in readers
 
@@ -213,6 +215,13 @@ remains available and is still the right answer when you control the pipeline.
 | Both compression bits set simultaneously | ❌ `XnbCompression::Unknown` — throws a precise `ContentLoadException` |
 
 ## Platform support
+
+**Not every accepted platform byte is a Microsoft XNA 4.0 target.** XNA 4.0 itself shipped for
+three: Windows (`w`), Windows Phone 7 (`m`) and Xbox 360 (`x`). Every other identifier in the list
+below was introduced by a later, non-Microsoft implementation of the format; a file carrying one is
+part of the extended XNB ecosystem and was never produced or consumed by a Microsoft XNA 4.0
+runtime. CNA reads all of them, and `docs/xnb-interoperability.md` keeps the two categories apart
+on the write side as well.
 
 CNA's accepted platform-identifier list (`CNA::Internal::Xnb::XnbAcceptedPlatforms()`) matches
 FNA's own `ContentManager.targetPlatformIdentifiers` **exactly** (16 identifiers: Windows, Xbox360,

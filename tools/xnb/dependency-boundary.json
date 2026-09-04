@@ -1,0 +1,42 @@
+{
+  "comment": [
+    "plans/plan_xnapipeline.md XNAP-90: which CMake targets and libraries a game may link, and",
+    "which exist only while content is being built. tools/xnb/dependency_boundary.py (ctest",
+    "CnaXnbDependencyBoundary) walks CMake's own dependency graph from these roots and compares",
+    "the derived build-time-only set with 'buildTimeOnly'. A new entry is unreviewed rather than",
+    "wrong: regenerate with --update and read the diff. 'neverInRuntime' states the invariant",
+    "directly, and the archive lists drive the symbol-level layer."
+  ],
+  "runtimeRoots": [
+    "CNA",
+    "cna_content",
+    "cna_graphics_core",
+    "cna_audio",
+    "cna_runtime"
+  ],
+  "buildTimeRoots": [
+    "cna_content_pipeline",
+    "cna_content_compiler"
+  ],
+  "neverInRuntime": [
+    "cna_content_pipeline",
+    "cna_content_compiler",
+    "Freetype::Freetype"
+  ],
+  "buildTimeArchives": [
+    "cna_content_pipeline",
+    "cna_content_compiler"
+  ],
+  "runtimeArchives": [
+    "cna_content",
+    "cna_graphics_core",
+    "cna_audio",
+    "cna_core",
+    "cna_runtime"
+  ],
+  "buildTimeOnly": [
+    "Freetype::Freetype",
+    "cna_content_compiler",
+    "cna_content_pipeline"
+  ]
+}

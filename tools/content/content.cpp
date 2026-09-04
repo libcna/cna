@@ -23,12 +23,19 @@
 #include "CNA/Content/Pipeline/CnjContentPipeline.hpp"
 #include "CNA/Content/Pipeline/ContentCompiler.hpp"
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
+#include "CNA/Content/Pipeline/EffectCompilerService.hpp"
+#include "CNA/Content/Pipeline/EffectContentPipeline.hpp"
+#include "CNA/Content/Pipeline/EffectSourceContentPipeline.hpp"
 #include "CNA/Content/Pipeline/ModelContentPipeline.hpp"
 #include "CNA/Content/Pipeline/SongContentPipeline.hpp"
 #include "CNA/Content/Pipeline/SoundEffectContentPipeline.hpp"
+#include "CNA/Content/Pipeline/SpriteFontContentPipeline.hpp"
+#include "CNA/Content/Pipeline/TextureCompressionPipeline.hpp"
 #include "CNA/Content/Pipeline/Texture2DContentPipeline.hpp"
 #include "CNA/Content/Pipeline/VideoContentPipeline.hpp"
 #include "CNA/Content/Pipeline/XnbContentPipeline.hpp"
+#include "CNA/Content/Pipeline/XnbOutputContentPipeline.hpp"
+#include "CNA/Internal/Xnb/XnbFileOptions.hpp"
 #include "CNA/Internal/ContentPath.hpp"
 #include "CNA/Internal/Json.hpp"
 #include "CnaContentStaging.hpp"
@@ -53,6 +60,22 @@ namespace
         std::size_t workers = 1u;
         bool quiet = false;
         bool explain = false;
+
+        /** @brief Default compiled container for every asset this invocation builds. */
+        Pipeline::ContentOutputFormat format = Pipeline::ContentOutputFormat::Cnb;
+
+        /** @brief Container options applied to every `.xnb` this invocation writes. */
+        CNA::Internal::Xnb::XnbFileOptions xnbOptions;
+
+        /** @brief Build-tool service selection this invocation registers its routes with. */
+        Pipeline::ContentCompilerOptions services;
+
+        /** @brief Whether the command line named an effect compiler or launcher explicitly. */
+        [[nodiscard]] bool SelectsEffectCompiler() const
+        {
+            return !services.effectCompilerExecutable.empty() ||
+                   !services.effectCompilerLauncher.empty();
+        }
     };
 
     constexpr std::size_t MaxContentCompilerWorkers = 64u;
@@ -66,6 +89,7 @@ namespace
         std::string importer;
         std::string processor;
         std::string writer;
+        Pipeline::ContentOutputFormat format = Pipeline::ContentOutputFormat::Cnb;
         Pipeline::ContentProcessorParameters parameters;
     };
 
@@ -213,16 +237,45 @@ namespace
     void PrintUsage()
     {
         std::cerr
-            << "Usage: cna-content build <source-file-or-directory> -o <output> "
-               "[--config <file>] [--workers <1..64>] [--explain] [--quiet]\n"
+            << "Usage: cna-content build <source-file-or-directory> -o|--output <output>\n"
+               "         [--format cnb|xnb] [--config <file>] [--workers <1..64>]\n"
+               "         [--xnb-platform <name>] [--xnb-version 4|5]\n"
+               "         [--xnb-profile reach|hidef] [--xnb-compress none|lzx|lz4]\n"
+               "         [--xnb-reader-names xna40|portable]\n"
+               "         [--xnb-allow-unverified-xbox]\n"
+               "         [--fx-compiler <path>] [--fx-compiler-launcher <program>]\n"
+               "         [--explain] [--quiet]\n"
             << "       cna-content clean <output-directory> [--quiet]\n\n"
-            << "Builds source content through Importer -> Processor -> Content Type Writer -> "
-               "CNB.\n"
-            << "A source file requires an output .cnb path. A source directory requires an "
-               "output\n"
-            << "directory; relative paths and logical content names are preserved. Clean removes "
-               "only\n"
-            << "unchanged files proven to be pipeline-owned by a valid output manifest.\n";
+            << "Builds source content through Importer -> Processor -> Content Type Writer.\n"
+            << "--format selects the compiled container: CNA's native .cnb (the default) or the\n"
+            << "XNA-compatible .xnb. Importers and processors are the same either way; only the\n"
+            << "writer differs, so every source route reaches both containers.\n\n"
+            << "A single source file requires an output path whose extension matches --format.\n"
+            << "A source directory requires an output directory; relative paths and logical\n"
+            << "content names are preserved. Clean removes only unchanged files proven to be\n"
+            << "pipeline-owned by a valid output manifest.\n\n"
+            << "XNA 4.0 target platforms: windows, windowsphone, xbox360. Every other\n"
+            << "--xnb-platform value (desktopgl, linux, ios, android, windowsgl) is an extended\n"
+            << "XNB ecosystem identifier that Microsoft XNA 4.0 never produced or consumed.\n"
+            << "--xnb-version 5 is the XNA 4.0-era container; 4 is earlier, legacy XNB.\n\n"
+            << "--xnb-platform xbox360 is refused by default. The Xbox 360 is big-endian and\n"
+               "this build has one piece of Xbox byte-order handling (the SoundEffect\n"
+               "WAVEFORMATEX fields), so writing the 'x' header byte over the other payloads\n"
+               "would claim a compatibility it cannot deliver. --xnb-allow-unverified-xbox\n"
+               "produces one anyway, for testing on real hardware.\n\n"
+            << "--xnb-compress lzx is the compression Microsoft XNA 4.0 itself produced and is\n"
+               "the only compressed form an XNA 4.0 runtime loads. CNA emits real LZX: one\n"
+               "verbatim block per 32 KiB frame, with Huffman-coded literals and matches,\n"
+               "repeated-offset matching and position-slot offsets. Aligned-offset and\n"
+               "uncompressed LZX blocks are not emitted; neither is needed for a conforming\n"
+               "stream. --xnb-compress lz4 is a later-ecosystem extension that XNA 4.0 never\n"
+               "produced, and is refused on an XNA 4.0 target platform for that reason.\n"
+               "Compression is deterministic: the same payload always produces the same bytes.\n\n"
+            << "A .fx source is compiled by an external fxc-compatible compiler; a .fxb is\n"
+               "already-compiled bytecode and needs none. --fx-compiler names the compiler and\n"
+               "--fx-compiler-launcher a program to run it through, such as wine. Each has the\n"
+               "highest precedence in its own order: the option, then CNA_FXC / CNA_FXC_LAUNCHER\n"
+               "in the environment, then the path baked in by CMake, then fxc on PATH.\n";
     }
 
     std::size_t ParseWorkerCount(const std::filesystem::path& argument)
@@ -289,6 +342,7 @@ namespace
         }
 
         bool workersSpecified = false;
+        bool formatSpecified = false;
         for (std::size_t index = 1u; index < arguments.size(); ++index)
         {
             const std::filesystem::path& argument = arguments[index];
@@ -337,6 +391,176 @@ namespace
                 command.workers = ParseWorkerCount(arguments[index]);
                 workersSpecified = true;
             }
+            else if (IsOption(argument, "--format"))
+            {
+                if (++index >= arguments.size())
+                {
+                    throw std::invalid_argument("--format requires 'cnb' or 'xnb'.");
+                }
+                if (formatSpecified)
+                {
+                    throw std::invalid_argument("--format was specified more than once.");
+                }
+                const std::string name = CNA::Internal::ContentPathToUtf8(arguments[index]);
+                if (!Pipeline::TryParseContentOutputFormat(name, command.format))
+                {
+                    throw std::invalid_argument("--format must be 'cnb' or 'xnb', not '" + name +
+                                                "'.");
+                }
+                formatSpecified = true;
+            }
+            else if (IsOption(argument, "--xnb-allow-unverified-xbox"))
+            {
+                // plans/plan_xnapipeline.md XNAP-82: the escape hatch has to be reachable from
+                // the tool, or the only way to produce a candidate Xbox file for somebody with
+                // real hardware to test is to write a custom compiler.
+                command.xnbOptions.allowUnverifiedXboxPayloads = true;
+            }
+            else if (IsOption(argument, "--xnb-platform"))
+            {
+                if (++index >= arguments.size())
+                {
+                    throw std::invalid_argument("--xnb-platform requires a platform name.");
+                }
+                const std::string name = CNA::Internal::ContentPathToUtf8(arguments[index]);
+                if (!CNA::Internal::Xnb::TryParseXnbTargetPlatform(
+                        name, command.xnbOptions.platform))
+                {
+                    std::string known;
+                    for (const std::string& candidate :
+                         CNA::Internal::Xnb::XnbTargetPlatformNames())
+                    {
+                        if (!known.empty()) { known += ", "; }
+                        known += candidate;
+                    }
+                    throw std::invalid_argument("--xnb-platform '" + name +
+                                                "' is not a known target; expected one of: " +
+                                                known + ".");
+                }
+            }
+            else if (IsOption(argument, "--xnb-version"))
+            {
+                if (++index >= arguments.size())
+                {
+                    throw std::invalid_argument("--xnb-version requires 4 or 5.");
+                }
+                const std::string name = CNA::Internal::ContentPathToUtf8(arguments[index]);
+                if (name == "5")
+                {
+                    command.xnbOptions.version = CNA::Internal::Xnb::XnbContainerVersion::Xna40;
+                }
+                else if (name == "4")
+                {
+                    command.xnbOptions.version = CNA::Internal::Xnb::XnbContainerVersion::Legacy4;
+                }
+                else
+                {
+                    throw std::invalid_argument(
+                        "--xnb-version must be 5 (the XNA 4.0-era container) or 4 (legacy), not '" +
+                        name + "'.");
+                }
+            }
+            else if (IsOption(argument, "--xnb-profile"))
+            {
+                if (++index >= arguments.size())
+                {
+                    throw std::invalid_argument("--xnb-profile requires 'reach' or 'hidef'.");
+                }
+                const std::string name = CNA::Internal::ContentPathToUtf8(arguments[index]);
+                if (name == "reach")
+                {
+                    command.xnbOptions.graphicsProfile =
+                        CNA::Internal::Xnb::XnbGraphicsProfile::Reach;
+                }
+                else if (name == "hidef")
+                {
+                    command.xnbOptions.graphicsProfile =
+                        CNA::Internal::Xnb::XnbGraphicsProfile::HiDef;
+                }
+                else
+                {
+                    throw std::invalid_argument("--xnb-profile must be 'reach' or 'hidef', not '" +
+                                                name + "'.");
+                }
+            }
+            else if (IsOption(argument, "--xnb-compress"))
+            {
+                if (++index >= arguments.size())
+                {
+                    throw std::invalid_argument(
+                        "--xnb-compress requires 'none', 'lzx' or 'lz4'.");
+                }
+                const std::string name = CNA::Internal::ContentPathToUtf8(arguments[index]);
+                if (name == "none")
+                {
+                    command.xnbOptions.compression =
+                        CNA::Internal::Xnb::XnbOutputCompression::None;
+                }
+                else if (name == "lzx")
+                {
+                    command.xnbOptions.compression = CNA::Internal::Xnb::XnbOutputCompression::Lzx;
+                }
+                else if (name == "lz4")
+                {
+                    command.xnbOptions.compression = CNA::Internal::Xnb::XnbOutputCompression::Lz4;
+                }
+                else
+                {
+                    throw std::invalid_argument(
+                        "--xnb-compress must be 'none', 'lzx' or 'lz4', not '" + name + "'.");
+                }
+            }
+            else if (IsOption(argument, "--fx-compiler"))
+            {
+                if (++index >= arguments.size())
+                {
+                    throw std::invalid_argument(
+                        "--fx-compiler requires a path to an fxc-compatible effect compiler.");
+                }
+                if (arguments[index].empty())
+                {
+                    throw std::invalid_argument("--fx-compiler path must not be empty.");
+                }
+                command.services.effectCompilerExecutable = arguments[index];
+            }
+            else if (IsOption(argument, "--fx-compiler-launcher"))
+            {
+                if (++index >= arguments.size())
+                {
+                    throw std::invalid_argument(
+                        "--fx-compiler-launcher requires a program to run the compiler through, "
+                        "such as 'wine'.");
+                }
+                if (arguments[index].empty())
+                {
+                    throw std::invalid_argument("--fx-compiler-launcher path must not be empty.");
+                }
+                command.services.effectCompilerLauncher = arguments[index];
+            }
+            else if (IsOption(argument, "--xnb-reader-names"))
+            {
+                if (++index >= arguments.size())
+                {
+                    throw std::invalid_argument(
+                        "--xnb-reader-names requires 'xna40' or 'portable'.");
+                }
+                const std::string name = CNA::Internal::ContentPathToUtf8(arguments[index]);
+                if (name == "xna40")
+                {
+                    command.xnbOptions.readerNameStyle =
+                        CNA::Internal::Xnb::XnbReaderNameStyle::Xna40;
+                }
+                else if (name == "portable")
+                {
+                    command.xnbOptions.readerNameStyle =
+                        CNA::Internal::Xnb::XnbReaderNameStyle::Portable;
+                }
+                else
+                {
+                    throw std::invalid_argument(
+                        "--xnb-reader-names must be 'xna40' or 'portable', not '" + name + "'.");
+                }
+            }
             else if (!argument.empty() && argument.native().front() ==
                                               std::filesystem::path("-").native().front())
             {
@@ -354,6 +578,7 @@ namespace
         }
         if (command.source.empty()) { throw std::invalid_argument("a source path is required."); }
         if (command.output.empty()) { throw std::invalid_argument("-o/--output is required."); }
+        CNA::Internal::Xnb::ValidateXnbFileOptions(command.xnbOptions);
         return command;
     }
 
@@ -458,10 +683,14 @@ namespace
         if (std::filesystem::is_regular_file(source))
         {
             directoryBuild = false;
-            if (command.output.extension() != ".cnb")
+            const std::string extension =
+                Pipeline::ContentOutputFormatExtension(command.format);
+            if (command.output.extension() != std::filesystem::path(extension))
             {
                 throw std::invalid_argument(
-                    "a single source file requires an output path ending in '.cnb'.");
+                    "a single source file built as " +
+                    std::string(Pipeline::ContentOutputFormatName(command.format)) +
+                    " requires an output path ending in '" + extension + "'.");
             }
             const std::filesystem::path output = WeaklyCanonical(command.output);
             if (output == source)
@@ -470,8 +699,11 @@ namespace
             }
             sourceRoot = source.parent_path();
             outputRoot = output.parent_path();
-            return {{source, output, CNA::Internal::ContentPathToUtf8(source.filename()),
-                     LogicalName(source.filename())}};
+            BuildItem item{source, output,
+                           CNA::Internal::ContentPathToUtf8(source.filename()),
+                           LogicalName(source.filename())};
+            item.format = command.format;
+            return {std::move(item)};
         }
         if (!std::filesystem::is_directory(source))
         {
@@ -498,9 +730,11 @@ namespace
             const std::filesystem::path relative =
                 std::filesystem::relative(entry.path(), sourceRoot);
             std::filesystem::path output = outputRoot / relative;
-            output.replace_extension(".cnb");
-            builds.push_back({entry.path(), std::move(output),
-                              CNA::Internal::ContentPathToUtf8(relative), LogicalName(relative)});
+            output.replace_extension(Pipeline::ContentOutputFormatExtension(command.format));
+            BuildItem item{entry.path(), std::move(output),
+                           CNA::Internal::ContentPathToUtf8(relative), LogicalName(relative)};
+            item.format = command.format;
+            builds.push_back(std::move(item));
         }
         std::sort(builds.begin(), builds.end(), [](const BuildItem& left, const BuildItem& right)
         {
@@ -585,20 +819,45 @@ namespace
         std::map<std::string, std::string> outputOwners;
         for (BuildItem& item : builds)
         {
-            if (const Pipeline::ContentAssetBuildConfiguration* entry =
-                    configuration.Find(item.relativeSource))
+            // Container selection narrows from the command line, to the project-wide default,
+            // to the one asset: each level only overrides the one above it when it says so.
+            if (configuration.OutputFormat().has_value())
+            {
+                item.format = *configuration.OutputFormat();
+            }
+            const Pipeline::ContentAssetBuildConfiguration* entry =
+                configuration.Find(item.relativeSource);
+            if (entry != nullptr)
             {
                 if (!entry->logicalName.empty()) { item.logicalName = entry->logicalName; }
                 item.importer = entry->importer;
                 item.processor = entry->processor;
                 item.writer = entry->writer;
                 item.parameters = entry->parameters;
-                if (directoryBuild && !entry->logicalName.empty())
+                if (entry->outputFormat.has_value()) { item.format = *entry->outputFormat; }
+            }
+            if (directoryBuild)
+            {
+                if (entry != nullptr && !entry->logicalName.empty())
                 {
                     item.output = outputRoot /
                                   CNA::Internal::ContentPathFromUtf8(item.logicalName);
-                    item.output += ".cnb";
+                    item.output += Pipeline::ContentOutputFormatExtension(item.format);
                 }
+                else
+                {
+                    item.output.replace_extension(
+                        Pipeline::ContentOutputFormatExtension(item.format));
+                }
+            }
+            else if (item.output.extension() !=
+                     std::filesystem::path(Pipeline::ContentOutputFormatExtension(item.format)))
+            {
+                throw std::runtime_error(
+                    "content configuration asset '" + item.relativeSource + "' selects " +
+                    Pipeline::ContentOutputFormatName(item.format) +
+                    " output, but the requested output path ends in '" +
+                    CNA::Internal::ContentPathToUtf8(item.output.extension()) + "'.");
             }
 
             if (!logicalOwners.emplace(item.logicalName, item.relativeSource).second)
@@ -973,7 +1232,8 @@ namespace
                     const std::shared_ptr<const Pipeline::ContentTypeWriter> writer =
                         registry.ResolveWriter(
                             processor->OutputType(),
-                            item.writer.empty() ? entry.writer.name : item.writer);
+                            item.writer.empty() ? entry.writer.name : item.writer,
+                            item.format);
                     if (entry.processor == processor->Identity() &&
                         entry.writer == writer->Identity() &&
                         entry.writerSchemas == writer->OutputSchemaIdentities())
@@ -1464,6 +1724,9 @@ namespace
         bool prepared = false;
         bool hasManifest = false;
         std::string failure;
+
+        /** @brief Diagnostics the pipeline emitted while this node was built. */
+        std::vector<Pipeline::ContentLogMessage> messages;
     };
 
     struct BuildNodeOutcome
@@ -1474,6 +1737,9 @@ namespace
         ContentBuildDecision decision;
         std::string failure;
         std::string statusLine;
+
+        /** @brief Diagnostics the pipeline emitted while this node was built. */
+        std::vector<Pipeline::ContentLogMessage> messages;
     };
 
     std::vector<std::uint8_t> ReadBinaryFile(const std::filesystem::path& path)
@@ -1644,8 +1910,10 @@ namespace
             request.importer = item.importer;
             request.processor = item.processor;
             request.writer = item.writer;
+            request.outputFormat = item.format;
             request.parameters = item.parameters;
             Pipeline::ContentBuildResult result = pipeline.Build(request);
+            plan.messages = result.messages;
 
             plan.manifest = Pipeline::MakeContentBuildManifestEntry(
                 result, sourceRoot, outputRoot, item.output, externalSourceRoots);
@@ -1664,7 +1932,7 @@ namespace
                         plan.manifest.outputs[outputIndex];
                     const std::vector<std::uint8_t>& bytes = OutputBytes(result, output);
                     const std::filesystem::path staged =
-                        nodeStage / (std::to_string(outputIndex) + ".cnb");
+                        nodeStage / (std::to_string(outputIndex) + ".stage");
                     CNA::Tools::WriteFileAtomically(staged, bytes);
                     plan.stagedOutputs.emplace(output.logicalName,
                                                StagedOutput{staged, bytes.size()});
@@ -1730,6 +1998,7 @@ namespace
                 {
                     const std::uintmax_t outputBytes = PublishStagedResult(plan, outputRoot);
                     outcome.statusLine = BuildStatusLine(item, outcome.manifest, outputBytes);
+                    outcome.messages = plan.messages;
                 }
                 catch (const std::exception& error)
                 {
@@ -1763,6 +2032,7 @@ namespace
             request.importer = item.importer;
             request.processor = item.processor;
             request.writer = item.writer;
+            request.outputFormat = item.format;
             request.parameters = item.parameters;
             Pipeline::ContentBuildResult result = pipeline.Build(request);
             outcome.manifest = Pipeline::MakeContentBuildManifestEntry(
@@ -1800,6 +2070,7 @@ namespace
                 outputBytes += std::filesystem::file_size(deployment.source);
             }
             outcome.statusLine = BuildStatusLine(item, outcome.manifest, outputBytes);
+            outcome.messages = result.messages;
             outcome.success = true;
         }
         catch (const std::exception& error)
@@ -1810,7 +2081,7 @@ namespace
     }
 
     int Run(const std::vector<std::filesystem::path>& arguments,
-            std::shared_ptr<const Pipeline::ContentPipelineRegistry> registry)
+            const Pipeline::ContentPipelineRegistryFactory& createRegistry)
     {
         CommandLine command;
         try
@@ -1824,6 +2095,47 @@ namespace
             return 2;
         }
         if (command.operation == ContentCommand::Clean) { return RunClean(command); }
+
+        // The registry is built here, after parsing, because a route whose backend is an external
+        // program cannot be registered before that program has been chosen: the backend's identity
+        // enters the incremental fingerprint. Nothing is retained between calls, which is what
+        // makes two invocations in one process with different --fx-compiler paths independent.
+        std::shared_ptr<Pipeline::ContentPipelineRegistry> mutableRegistry;
+        try
+        {
+            mutableRegistry = createRegistry(command.services);
+        }
+        catch (const std::exception& error)
+        {
+            std::cerr << "error: " << error.what() << "\n";
+            return 2;
+        }
+        if (mutableRegistry == nullptr)
+        {
+            std::cerr << "error: the content pipeline registry factory returned null.\n";
+            return 2;
+        }
+
+        // The XNB writers are bound to the container options this invocation selected, which is
+        // what puts those options into each writer's own build version and therefore into the
+        // incremental manifest: rebuilding for another platform or container version invalidates
+        // the previous artifacts instead of silently reusing them. They are registered whatever
+        // --format says, because a project file may still select xnb for individual assets, and
+        // writer resolution is keyed by (format, processed type) so they never shadow the CNB
+        // writers. Importers and processors are format-neutral and the caller already registered
+        // them.
+        try
+        {
+            Pipeline::RegisterXnbOutputContentPipeline(*mutableRegistry, command.xnbOptions);
+        }
+        catch (const std::exception& error)
+        {
+            std::cerr << "error: " << error.what() << "\n";
+            return 2;
+        }
+        mutableRegistry->Freeze();
+        std::shared_ptr<const Pipeline::ContentPipelineRegistry> registry =
+            std::move(mutableRegistry);
 
         std::filesystem::path sourceRoot;
         std::filesystem::path outputRoot;
@@ -2250,6 +2562,20 @@ namespace
                             outcome.statusLine, std::move(outcome.decision));
                     }
                     events.push_back({false, std::move(outcome.statusLine)});
+                    // A pipeline warning names something the author lost -- a material downgraded
+                    // for a container that cannot hold it, an animation an output format has no
+                    // place for. Collecting it in the build result and never showing it would
+                    // leave that discovery to run time.
+                    for (const Pipeline::ContentLogMessage& message : outcome.messages)
+                    {
+                        if (message.level == Pipeline::ContentLogLevel::Info) { continue; }
+                        events.push_back(
+                            {false,
+                             std::string("  ") +
+                                 (message.level == Pipeline::ContentLogLevel::Error ? "error"
+                                                                                    : "warning") +
+                                 " (" + message.component + "): " + message.text});
+                    }
                     if (outcome.skipped) { ++skipped; }
                     else { ++built; }
                 }
@@ -2323,25 +2649,57 @@ namespace
 
 namespace CNA::Content::Pipeline
 {
-    void RegisterBuiltInContentPipeline(ContentPipelineRegistry& registry)
+    void RegisterBuiltInContentPipeline(ContentPipelineRegistry& registry,
+                                        const ContentCompilerOptions& options)
     {
-        RegisterTexture2DContentPipeline(registry);
+        RegisterTexture2DContentPipeline(registry, MakeBlockCompressionTextureEncoder());
         RegisterSoundEffectContentPipeline(registry);
         RegisterSongContentPipeline(registry);
         RegisterVideoContentPipeline(registry);
         RegisterModelContentPipeline(registry);
         RegisterCnjContentPipeline(registry);
         RegisterXnbContentPipeline(registry);
+        RegisterSpriteFontSourceContentPipeline(registry);
+        RegisterCompiledEffectContentPipeline(registry);
+
+        ExternalEffectCompilerOptions compiler;
+        compiler.executable = options.effectCompilerExecutable;
+        compiler.launcher = options.effectCompilerLauncher;
+        RegisterEffectSourceContentPipeline(registry, MakeExternalEffectCompiler(compiler));
     }
 
     int RunContentCompiler(const std::vector<std::filesystem::path>& arguments,
-                           std::shared_ptr<const ContentPipelineRegistry> registry)
+                           std::shared_ptr<ContentPipelineRegistry> registry)
     {
         if (registry == nullptr)
         {
             throw std::invalid_argument("RunContentCompiler(): registry must not be null.");
         }
-        registry->Freeze();
-        return Run(arguments, std::move(registry));
+        return Run(arguments, [&registry](const ContentCompilerOptions& options)
+        {
+            if (options != ContentCompilerOptions{})
+            {
+                // Refusing beats ignoring: the registry was configured before this command line
+                // existed, so the compiler it holds is not the one being asked for.
+                throw std::invalid_argument(
+                    "--fx-compiler and --fx-compiler-launcher select a build-time service, so "
+                    "they can only be applied while the pipeline is being registered. This "
+                    "compiler was handed an already-configured registry. Use the "
+                    "RunContentCompiler() overload that takes a "
+                    "ContentPipelineRegistryFactory, which is called with these options.");
+            }
+            return registry;
+        });
+    }
+
+    int RunContentCompiler(const std::vector<std::filesystem::path>& arguments,
+                           const ContentPipelineRegistryFactory& createRegistry)
+    {
+        if (!createRegistry)
+        {
+            throw std::invalid_argument(
+                "RunContentCompiler(): the registry factory must not be empty.");
+        }
+        return Run(arguments, createRegistry);
     }
 } // namespace CNA::Content::Pipeline

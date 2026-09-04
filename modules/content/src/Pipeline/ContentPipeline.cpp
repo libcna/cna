@@ -296,10 +296,11 @@ namespace CNA::Content::Pipeline
             return result;
         }
 
-        template<typename Component>
+        template<typename Component, typename RouteKey>
         std::shared_ptr<const Component> ResolveByRoute(
             const std::map<std::string, std::shared_ptr<const Component>>& components,
-            const std::map<std::string, std::set<std::string>>& routes, const std::string& route,
+            const std::map<RouteKey, std::set<std::string>>& routes, const RouteKey& route,
+            const std::string& routeText,
             const std::string& explicitName, const char* kind, const char* routeLabel)
         {
             if (!explicitName.empty())
@@ -314,7 +315,7 @@ namespace CNA::Content::Pipeline
                 if (routeIt == routes.end() || !routeIt->second.contains(explicitName))
                 {
                     throw std::logic_error(std::string(kind) + " '" + explicitName +
-                                           "' does not accept " + routeLabel + " '" + route +
+                                           "' does not accept " + routeLabel + " '" + routeText +
                                            "'.");
                 }
                 return component->second;
@@ -324,12 +325,12 @@ namespace CNA::Content::Pipeline
             if (routeIt == routes.end() || routeIt->second.empty())
             {
                 throw std::logic_error("no " + std::string(kind) + " is registered for " +
-                                       routeLabel + " '" + route + "'.");
+                                       routeLabel + " '" + routeText + "'.");
             }
             if (routeIt->second.size() != 1u)
             {
                 throw std::logic_error("ambiguous " + std::string(kind) + " for " + routeLabel +
-                                       " '" + route + "': " + JoinCandidates(routeIt->second) +
+                                       " '" + routeText + "': " + JoinCandidates(routeIt->second) +
                                        ". Select one explicitly.");
             }
             return components.at(*routeIt->second.begin());
@@ -367,6 +368,23 @@ namespace CNA::Content::Pipeline
                     source, logicalName, stage, component, "non-standard exception"));
             }
         }
+    }
+
+    const char* ContentOutputFormatName(const ContentOutputFormat format) noexcept
+    {
+        return format == ContentOutputFormat::Xnb ? "xnb" : "cnb";
+    }
+
+    const char* ContentOutputFormatExtension(const ContentOutputFormat format) noexcept
+    {
+        return format == ContentOutputFormat::Xnb ? ".xnb" : ".cnb";
+    }
+
+    bool TryParseContentOutputFormat(const std::string& name, ContentOutputFormat& format)
+    {
+        if (name == "cnb") { format = ContentOutputFormat::Cnb; return true; }
+        if (name == "xnb") { format = ContentOutputFormat::Xnb; return true; }
+        return false;
     }
 
     const char* ContentPipelineStageName(ContentPipelineStage stage) noexcept
@@ -674,11 +692,12 @@ namespace CNA::Content::Pipeline
         std::filesystem::path sourceRoot, std::filesystem::path source, std::string logicalName,
         std::string component, const ContentProcessorParameters& parameters,
         const ContentSourceRootCapabilities& externalSourceRoots,
-        ContentDependencyCollector& dependencies, ContentBuildLogger& logger)
+        ContentDependencyCollector& dependencies, ContentBuildLogger& logger,
+        const ContentOutputFormat outputFormat)
         : sourceRoot_(std::move(sourceRoot)), source_(std::move(source)),
           logicalName_(std::move(logicalName)), component_(std::move(component)),
           parameters_(&parameters), dependencies_(&dependencies), logger_(&logger),
-          externalSourceRoots_(&externalSourceRoots)
+          externalSourceRoots_(&externalSourceRoots), outputFormat_(outputFormat)
     {
     }
 
@@ -690,6 +709,11 @@ namespace CNA::Content::Pipeline
     const ContentProcessorParameters& ContentProcessorContext::Parameters() const noexcept
     {
         return *parameters_;
+    }
+
+    ContentOutputFormat ContentProcessorContext::OutputFormat() const noexcept
+    {
+        return outputFormat_;
     }
 
     std::filesystem::path ContentProcessorContext::ResolveSourceDependency(
@@ -908,7 +932,7 @@ namespace CNA::Content::Pipeline
         {
             throw std::logic_error("writer '" + identity.name + "' is already registered.");
         }
-        writersByInputType_[writer->InputType()].insert(identity.name);
+        writersByInputType_[{writer->OutputFormat(), writer->InputType()}].insert(identity.name);
         writers_.emplace(identity.name, std::move(writer));
     }
 
@@ -916,7 +940,8 @@ namespace CNA::Content::Pipeline
         const std::filesystem::path& source, const std::string& explicitName) const
     {
         const std::shared_lock lock(configurationMutex_);
-        return ResolveByRoute(importers_, importersByExtension_, LowerExtension(source),
+        const std::string extension = LowerExtension(source);
+        return ResolveByRoute(importers_, importersByExtension_, extension, extension,
                               explicitName, "importer", "source extension");
     }
 
@@ -932,16 +957,116 @@ namespace CNA::Content::Pipeline
         const std::string& inputType, const std::string& explicitName) const
     {
         const std::shared_lock lock(configurationMutex_);
-        return ResolveByRoute(processors_, processorsByInputType_, inputType, explicitName,
-                              "processor", "imported type");
+        return ResolveByRoute(processors_, processorsByInputType_, inputType, inputType,
+                              explicitName, "processor", "imported type");
     }
 
     std::shared_ptr<const ContentTypeWriter> ContentPipelineRegistry::ResolveWriter(
-        const std::string& inputType, const std::string& explicitName) const
+        const std::string& inputType, const std::string& explicitName,
+        const ContentOutputFormat format) const
     {
         const std::shared_lock lock(configurationMutex_);
-        return ResolveByRoute(writers_, writersByInputType_, inputType, explicitName, "writer",
-                              "processed type");
+        const std::pair<ContentOutputFormat, std::string> route{format, inputType};
+        const std::string routeText =
+            std::string(ContentOutputFormatName(format)) + " output of processed type '" +
+            inputType + "'";
+        try
+        {
+            return ResolveByRoute(writers_, writersByInputType_, route, routeText, explicitName,
+                                  "writer", "the");
+        }
+        catch (const std::logic_error& error)
+        {
+            // A documented absence is a decision, and a user who hits one deserves the decision
+            // rather than the symptom (XNAP-61).
+            const auto absence = absentWriters_.find(route);
+            if (absence == absentWriters_.end()) { throw; }
+            throw std::logic_error(std::string(error.what()) + " " + absence->second);
+        }
+    }
+
+    std::vector<std::shared_ptr<const ContentImporter>>
+    ContentPipelineRegistry::Importers() const
+    {
+        const std::shared_lock lock(configurationMutex_);
+        std::vector<std::shared_ptr<const ContentImporter>> components;
+        components.reserve(importers_.size());
+        for (const auto& [name, component] : importers_) { components.push_back(component); }
+        return components;
+    }
+
+    std::vector<std::shared_ptr<const ContentProcessor>>
+    ContentPipelineRegistry::Processors() const
+    {
+        const std::shared_lock lock(configurationMutex_);
+        std::vector<std::shared_ptr<const ContentProcessor>> components;
+        components.reserve(processors_.size());
+        for (const auto& [name, component] : processors_) { components.push_back(component); }
+        return components;
+    }
+
+    std::vector<std::shared_ptr<const ContentTypeWriter>>
+    ContentPipelineRegistry::Writers() const
+    {
+        const std::shared_lock lock(configurationMutex_);
+        std::vector<std::shared_ptr<const ContentTypeWriter>> components;
+        components.reserve(writers_.size());
+        for (const auto& [name, component] : writers_) { components.push_back(component); }
+        return components;
+    }
+
+    void ContentPipelineRegistry::DocumentAbsentWriter(const ContentOutputFormat format,
+                                                       const std::string& inputType,
+                                                       const std::string& reason)
+    {
+        const std::unique_lock lock(configurationMutex_);
+        RequireMutable();
+        if (inputType.empty())
+        {
+            throw std::invalid_argument(
+                "DocumentAbsentWriter(): the processed type must not be empty.");
+        }
+        if (reason.empty())
+        {
+            throw std::invalid_argument("DocumentAbsentWriter(): '" + inputType +
+                                        "' needs a reason; an undocumented absence is the thing "
+                                        "this exists to prevent.");
+        }
+        const std::pair<ContentOutputFormat, std::string> route{format, inputType};
+        const auto writer = writersByInputType_.find(route);
+        if (writer != writersByInputType_.end() && !writer->second.empty())
+        {
+            throw std::logic_error(std::string(ContentOutputFormatName(format)) +
+                                   " output of processed type '" + inputType +
+                                   "' has a writer, so its absence cannot be documented.");
+        }
+        if (!absentWriters_.emplace(route, reason).second)
+        {
+            throw std::logic_error(std::string(ContentOutputFormatName(format)) +
+                                   " output of processed type '" + inputType +
+                                   "' already documents why it has no writer.");
+        }
+    }
+
+    std::string ContentPipelineRegistry::AbsentWriterReason(
+        const ContentOutputFormat format, const std::string& inputType) const
+    {
+        const std::shared_lock lock(configurationMutex_);
+        const auto absence = absentWriters_.find({format, inputType});
+        return absence == absentWriters_.end() ? std::string{} : absence->second;
+    }
+
+    std::vector<std::tuple<ContentOutputFormat, std::string, std::string>>
+    ContentPipelineRegistry::AbsentWriters() const
+    {
+        const std::shared_lock lock(configurationMutex_);
+        std::vector<std::tuple<ContentOutputFormat, std::string, std::string>> absences;
+        absences.reserve(absentWriters_.size());
+        for (const auto& [route, reason] : absentWriters_)
+        {
+            absences.emplace_back(route.first, route.second, reason);
+        }
+        return absences;
     }
 
     namespace
@@ -1095,7 +1220,7 @@ namespace CNA::Content::Pipeline
             processor->ValidateParameters(request.parameters);
             ContentProcessorContext context(root, source, logicalName, processorIdentity.name,
                                             request.parameters, externalSourceRoots,
-                                            dependencies, logger);
+                                            dependencies, logger, request.outputFormat);
             processed = processor->Process(imported, context);
             if (processed.Empty())
             {
@@ -1117,7 +1242,8 @@ namespace CNA::Content::Pipeline
         std::shared_ptr<const ContentTypeWriter> writer;
         try
         {
-            writer = registry_->ResolveWriter(processed.StableType(), request.writer);
+            writer = registry_->ResolveWriter(processed.StableType(), request.writer,
+                                              request.outputFormat);
         }
         catch (...)
         {
@@ -1147,6 +1273,11 @@ namespace CNA::Content::Pipeline
             RequireDeclaredWriterOutput(writerSchemas, output.assetTypeId,
                                         output.assetTypeName, output.assetSchemaVersion,
                                         logicalName);
+            for (const std::string& warning : output.warnings)
+            {
+                EmitLog(logger, ContentLogLevel::Warning, source, logicalName,
+                        ContentPipelineStage::Write, writerIdentity.name, warning);
+            }
             if (output.additionalOutputs.size() >= MaxContentBuildOutputs)
             {
                 throw std::logic_error(
@@ -1203,6 +1334,7 @@ namespace CNA::Content::Pipeline
         result.importer = importerIdentity;
         result.processor = processorIdentity;
         result.writer = writerIdentity;
+        result.outputFormat = writer->OutputFormat();
         result.writerSchemas = std::move(writerSchemas);
         result.parameters = request.parameters;
         result.dependencies = dependencies.Dependencies();
