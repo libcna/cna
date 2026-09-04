@@ -367,6 +367,34 @@ at.
 
 ---
 
+## BINDFIX-035 — a `.cnb` model carries its skeleton and publishes no skins
+
+Found while adding the skinned content asset the owner asked for. `cna_tool_gltf_to_cnb`
+compiles `tests/assets/gltf/skin-four-weighted.gltf` into a model whose container holds an
+`MSKL` chunk of 792 bytes -- `cna_tool_cnb_info` lists it beside `MBON`, `MMSH` and the
+rest -- so the skeleton survives the format.
+
+The loaded model's skin collection does not. Measured through the C ABI with the same
+probe against both formats:
+
+| asset | `cna_model_get_skin_count_ext` | skeleton route |
+|---|---|---|
+| `tests/assets/gltf/skin-four-weighted.gltf` | 1 | publishes, twice |
+| `tests/assets/cnb/skinned/skinned_model.cnb` | 0 | nothing to ask |
+
+`ContentManager.cpp:4103` populates `setSkinsEXTProperty` on the glTF import path and
+nowhere else, and no CNB chunk carries the `ModelSkinEXT` triple -- a skin's name, its
+skeleton, and the meshes its palette drives. So for any model delivered as `.cnb`,
+`Model.SkinsEXT` is empty, `cna_model_get_skin_count_ext` answers zero and every skin
+route below it is unreachable. That is a format gap rather than a defect in a route: the
+data the collection describes is partly there (`MSKL`) and partly not (which meshes each
+skin poses).
+
+The asset is checked in as the fixture, so whoever closes it has the failing case and the
+working one side by side.
+
+---
+
 ## Fixed in this pass
 
 Three defects, each independently reported by two or more bindings, each one a place where

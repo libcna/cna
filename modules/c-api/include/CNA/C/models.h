@@ -2669,6 +2669,20 @@ CNA_C_API CNA_Result cna_skinning_data_set_skeleton_root_name_ext(
  *
  * The asset is cached by name exactly as every other load is, so a second call re-publishes handles
  * over the same underlying model rather than re-reading the file.
+ *
+ * **Source formats.** The asset name carries no extension and the content manager resolves it, so
+ * this one route opens all three of CNA's model formats: `.xnb`, `.cnb`, and **`.gltf`/`.glb`
+ * imported directly**. The glTF path is not a build step reached from C -- it is this call, and it
+ * is the only one that publishes a model's skin collection: a `.gltf` asset answers
+ * @ref cna_model_get_skin_count_ext with the skins it declares, and each of them publishes a
+ * skeleton through @ref cna_model_create_skin_skeleton_handle_ext.
+ *
+ * A `.cnb` model does not. The container carries the skeleton -- `cna_tool_gltf_to_cnb` writes an
+ * `MSKL` chunk for a skinned source, and `cna_tool_cnb_info` shows it -- but the loaded model's
+ * skin collection comes back empty, so the skins and their skeletons are unreachable through that
+ * format. `tests/assets/cnb/skinned/skinned_model.cnb` is that case, built from
+ * `tests/assets/gltf/skin-four-weighted.gltf`, and the gap is recorded as `BINDFIX-035` in
+ * `plans/plan_bindings_upstream.md`.
  */
 CNA_C_API CNA_Result cna_content_manager_load_model(
     CNA_Handle content_manager,
