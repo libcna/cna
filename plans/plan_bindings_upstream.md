@@ -38,6 +38,9 @@ CNA matches FNA faithfully in each case:
 - **`SoundEffectInstance::Apply3D`** refusing more than one listener, which
   `_bindings/fixcna-analysis.md` §2 already identified as a scope decision rather than a
   bug for the same reason.
+- **Display modes carrying a hardcoded `SurfaceFormat::Color`**, which `cna-ruby` and
+  `cna-swift` both recorded. `SurfaceFormat.Color // FIXME: Assumption!` is what FNA writes,
+  four times over, in `SDL3_FNAPlatform.cs` and `SDL2_FNAPlatform.cs`.
 - **`SpriteFont::MeasureString`** adding the last glyph's right side bearing unclamped.
   `cna-ts` (finding 27) and `cna-go` (Foundation 69) measured this independently, with
   tables, against XNA's IL, which keeps the bearing pending and adds `Math.Max(pendingZ, 0)`
@@ -199,30 +202,36 @@ separate CNA problems.
 device-selection information. An observer-only callback does not reproduce XNA's
 semantics.
 
-### Audit separately, after enumeration is fixed
+### The four separate audits — done, and none of them is a fix to take here
 
-- **`MonitorHandle`** answers `CNA_RESULT_NOT_SUPPORTED` and zero today, and CNA's own
-  value underneath is the display id cast to `uintptr_t` rather than an `HMONITOR`.
-  Do not fabricate one. Decide whether CNA can now supply a truthful native monitor
-  handle. Reported by `cna-ruby` and `cna-go`.
-- **`Revision` and `SubSystemId`** are hardcoded zero, which `display.h` documents as
-  "current CNA returns zero", beside a `vendor id`/`device id` pair that is read
-  truthfully from sysfs. Decide whether these are truthful constants, platform data CNA
-  cannot reach, or further defects. Reported by `cna-ruby` and `cna-go`.
-- **Display modes are hardcoded to `SurfaceFormat::Color`.** `queryDisplayModes` and
-  `queryCurrentDisplayMode` discard the platform's pixel format, and
-  `CNA::Platform::DisplayMode` carries no format field at all even though SDL3's
-  `SDL_DisplayMode` has one. `CNA_DisplayMode::format` already exists on the ABI and
-  would simply start carrying truthful values. Reported by `cna-ruby`.
-- **`IsProfileSupported` answers an unconditional `true`** on every renderer that supplies
-  no descriptor hook, which is all of them but D3D9. CNA documents this as deliberate —
-  the alternative was "a hardcoded table pretending to be a capability query" — so this
-  is a decision to confirm rather than an obvious defect.
-- **Every `cna_graphics_adapter_*` route is device-scoped**, validated through
-  `GetBorrowedGraphicsDevice`, so it answers only inside a live graphics-device callback.
-  XNA's `Adapters` and `DefaultAdapter` are statics usable before any `GraphicsDevice`
-  exists, which is their purpose: an adapter is what a device is chosen *from*. This is a
-  contract difference that survives the cache fix and needs its own answer.
+Asked after the enumeration was repaired, each against FNA, which `CLAUDE.md` makes the
+authoritative behavioural reference. All four come back the same way.
+
+- **`MonitorHandle`.** The question was whether CNA can now supply a truthful native
+  monitor handle. It cannot without diverging twice. `cna-ruby` observed that CNA's own
+  value underneath is the display id cast to `uintptr_t` rather than an `HMONITOR` — and
+  that is exactly FNA: `SDL3_FNAPlatform.GetMonitorHandle` is
+  `return new IntPtr(unchecked((int)displayIds[adapterIndex]));`. The route's
+  `CNA_RESULT_NOT_SUPPORTED` is the second, separate decision: this ABI does not disclose
+  native handles anywhere, which `display.h` states. Both halves are deliberate, and
+  fabricating an `HMONITOR` is what the row asked not to do.
+- **`Revision` and `SubSystemId`.** They answer a hardcoded zero and `display.h` says so.
+  FNA's answer is worse: both properties `throw new NotImplementedException()`. Neither
+  matches XNA, which reports real values; CNA's is the more useful of the two and is the
+  only one that is honest at the point of use. Supplying real ones means per-adapter PCI
+  data CNA does not read today.
+- **Display modes hardcoded to `SurfaceFormat::Color`.** `CNA::Platform::DisplayMode`
+  carries width, height and refresh rate and no format, so the graphics layer has nothing
+  to map. That is FNA again, and FNA is not comfortable about it either: `SurfaceFormat.Color
+  // FIXME: Assumption!` appears four times across `SDL3_FNAPlatform.cs` and
+  `SDL2_FNAPlatform.cs`. A neutral format on the platform struct, mapped in the SDL backends
+  and reported unknown by Headless, is the shape a fix would take — and it is a divergence
+  from FNA, so it belongs to the owner.
+- **Every `cna_graphics_adapter_*` route is device-scoped.** This one is a real contract
+  gap rather than an FNA match: XNA's `Adapters` and `DefaultAdapter` are statics usable
+  before any `GraphicsDevice` exists, because an adapter is what a device is chosen *from*.
+  Closing it means routes that answer with no device handle, which is an ABI addition and a
+  design decision, not a defect to repair. It survives the cache fix untouched.
 
 ---
 
