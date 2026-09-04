@@ -1237,6 +1237,29 @@ namespace CNA::Internal::Renderers::Vulkan
         CNAEXT [[nodiscard]] bool SupportsRenderTargetSurfaceFormatEXT(
             int surfaceFormatOrdinal) const;
 
+        /**
+         * @brief CNAEXT. XNA's Direct3D 9 pixel-centre correction, as a clip-space translation.
+         *
+         * plan_vulkan.md VULKAN-097. XNA 4.0 addresses pixel CENTRES with integer coordinates;
+         * Vulkan (like OpenGL and Direct3D 10+) addresses pixel corners. Without a correction the
+         * screen-space triangle `(x,y),(x+1,y),(x,y+1)` that XNA covers one pixel for lands
+         * entirely on an excluded fill edge and disappears -- which is exactly what
+         * `xna_pixel_center_contract_test.cpp` measured on the real XNA runtime and what this
+         * renderer used to fail.
+         *
+         * Post-multiply it into the world x view x projection product, XNA row-vector order, so it
+         * becomes `clip.xy += offset * clip.w`. The offset is the same slightly-under-half-pixel
+         * displacement EasyGL and Wine use, so the pixel centre stays inside the triangle under
+         * Direct3D's top-left fill rule; the margin is the whole design.
+         *
+         * Empty (identity) when the destination is multisampled: the correction is a GEOMETRY
+         * translation and that is only equivalent to what it means at one sample per pixel
+         * (REMED-GFX-235, and this renderer inherits the reasoning rather than the code).
+         *
+         * @return The clip-space translation, or identity where it must not be applied.
+         */
+        CNAEXT [[nodiscard]] Microsoft::Xna::Framework::Matrix XnaPixelCenterCorrectionEXT() const;
+
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void GetViewportSize(int& width, int& height) override;
@@ -1687,6 +1710,13 @@ namespace CNA::Internal::Renderers::Vulkan
         /// selection is made. `SupportsCapability` answers `MultipleRenderTargets` and (VULKAN-021)
         /// `MultiSampleAntiAliasing` from these rather than from a constant.
         VkPhysicalDeviceLimits deviceLimits_{};
+        /// plan_vulkan.md VULKAN-097: clip-space multiplier for XNA's slightly-less-than-half-
+        /// pixel centre correction. 63/64 in clip space is 63/128 of a viewport pixel, because
+        /// clip [-1,1] spans the viewport. Reduced at device creation if the device's
+        /// `subPixelPrecisionBits` cannot represent it below half a pixel -- rounding back UP to
+        /// exactly half would put the 1x1 triangle back on the excluded edge, which is the same
+        /// trap EasyGL hit on WebGL's four subpixel bits.
+        float xnaPixelCenterScale_ = 63.0f / 64.0f;
 
         // REMED-GFX-076: a cached effect descriptor set together with the sampled VkImageViews it
         // was written against. The seven per-frame effect descriptor caches below key on a *hash* of

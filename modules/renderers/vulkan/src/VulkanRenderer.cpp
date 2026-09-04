@@ -1913,6 +1913,43 @@ namespace CNA::Internal::Renderers::Vulkan
         return false;
     }
 
+    Matrix VulkanRenderer::XnaPixelCenterCorrectionEXT() const
+    {
+        // The destination's own extent, in the same order the pass itself resolves it: an explicit
+        // Viewport wins, then the bound render target, then the swapchain.
+        int vpW = 0;
+        int vpH = 0;
+        if (viewportSet_ && viewportW_ > 0 && viewportH_ > 0) {
+            vpW = static_cast<int>(viewportW_);
+            vpH = static_cast<int>(viewportH_);
+        } else if (currentRT_) {
+            vpW = currentRT_->GetWidth();
+            vpH = currentRT_->GetHeight();
+        } else {
+            vpW = static_cast<int>(swapchainExtent_.width);
+            vpH = static_cast<int>(swapchainExtent_.height);
+        }
+        if (vpW <= 0 || vpH <= 0)
+            return Matrix::getIdentityProperty();
+
+        // REMED-GFX-235's rule, for REMED-GFX-235's reason. At one sample the correction decides
+        // which side of the fill edge the pixel CENTRE lands on and the sub-half-pixel margin keeps
+        // it covered; at four samples the outer sample positions sit a quarter of a pixel out,
+        // inside that margin, so the same translation starts REMOVING coverage from the outermost
+        // row and column. EasyGL measured exactly 1/2 and 1/4 of the expected colour there.
+        if (currentRT_ && currentRT_->WantsMsaa())
+            return Matrix::getIdentityProperty();
+
+        // XNA row-vector order: post-multiplying the WVP by this gives clip.xy += offset * clip.w.
+        // The Y sign is EasyGL's unchanged, and that is not a coincidence to be tidied away: this
+        // renderer's vertex shaders negate clip.y themselves (`pos.y = -pos.y`, Vulkan NDC), and
+        // that negation cancels the NDC-direction difference, so the same offset produces the same
+        // half-pixel shift down-and-right on screen in both renderers.
+        return Matrix::CreateTranslation(xnaPixelCenterScale_ / static_cast<float>(vpW),
+                                         -xnaPixelCenterScale_ / static_cast<float>(vpH),
+                                         0.0f);
+    }
+
     bool VulkanRenderer::SupportsRenderTargetSurfaceFormatEXT(int surfaceFormatOrdinal) const
     {
         // Mirrors GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT exactly, including the
@@ -2437,6 +2474,16 @@ namespace CNA::Internal::Renderers::Vulkan
         // own limits, and it must answer for the device this loop actually selected -- which is not
         // necessarily GPU 0. Cached here, next to the selection, rather than re-queried per call.
         deviceLimits_ = p.limits;
+        // VULKAN-097: the pixel-centre correction must stay strictly BELOW half a pixel. A device
+        // whose rasterizer cannot represent 63/128 rounds it back up to exactly half, which puts
+        // XNA's 1x1 triangles on an excluded fill edge again -- the trap EasyGL hit on WebGL's four
+        // subpixel bits. Vulkan guarantees at least 4 bits; the upper guard mirrors EasyGL's.
+        const uint32_t subPixelBits = p.limits.subPixelPrecisionBits;
+        if (subPixelBits > 1 && subPixelBits < 24) {
+            const float representableBelowHalf =
+                1.0f - std::ldexp(1.0f, 1 - static_cast<int>(subPixelBits));
+            xnaPixelCenterScale_ = std::min(xnaPixelCenterScale_, representableBelowHalf);
+        }
         std::clog << "[Vulkan] GPU: " << p.deviceName << '\n';
     }
 
@@ -10945,7 +10992,8 @@ namespace CNA::Internal::Renderers::Vulkan
         std::size_t stride = vulkanVB.GetStride() > 0 ? vulkanVB.GetStride() : 16;
 
         Pending3DDraw d{};
-        const Matrix wvp = world * view * projection;
+        // VULKAN-097: XNA's D3D9 pixel-centre convention, post-multiplied in row-vector order.
+        const Matrix wvp = world * view * projection * XnaPixelCenterCorrectionEXT();
         wvp.ToColumnMajor(d.pushConst);
         // This path carries no BasicEffect diffuse/VertexColorEnabled (no GpuDrawParams at
         // all); preserve the historical behavior of outputting the raw vertex colors
@@ -10987,7 +11035,8 @@ namespace CNA::Internal::Renderers::Vulkan
         int vertexCount     = vulkanVB.GetVertexCount();
 
         Pending3DDraw d{};
-        const Matrix wvp = world * view * projection;
+        // VULKAN-097: XNA's D3D9 pixel-centre convention, post-multiplied in row-vector order.
+        const Matrix wvp = world * view * projection * XnaPixelCenterCorrectionEXT();
         wvp.ToColumnMajor(d.pushConst);
         // See DrawColoredPrimitives above: preserve the historical raw-vertex-color output
         // for this no-GpuDrawParams legacy path (Task 364).
@@ -11054,7 +11103,8 @@ namespace CNA::Internal::Renderers::Vulkan
                                      && !needsEnvMap && !needsSkinned && !needsPbr;
 
         Pending3DDraw d{};
-        const Matrix wvp = world * view * projection;
+        // VULKAN-097: XNA's D3D9 pixel-centre convention, post-multiplied in row-vector order.
+        const Matrix wvp = world * view * projection * XnaPixelCenterCorrectionEXT();
         if (needsAlphaTest) {
             FillAlphaTestPushConst(d.pushConst, wvp, params);
             d.useAlphaTest = true;
@@ -11335,7 +11385,8 @@ namespace CNA::Internal::Renderers::Vulkan
                                      && !needsEnvMap && !needsSkinned && !needsPbr;
 
         Pending3DDraw d{};
-        const Matrix wvp = world * view * projection;
+        // VULKAN-097: XNA's D3D9 pixel-centre convention, post-multiplied in row-vector order.
+        const Matrix wvp = world * view * projection * XnaPixelCenterCorrectionEXT();
         if (needsAlphaTest) {
             FillAlphaTestPushConst(d.pushConst, wvp, params);
             d.useAlphaTest = true;
@@ -11677,7 +11728,10 @@ namespace CNA::Internal::Renderers::Vulkan
         }
 
         Pending3DDraw d{};
-        FillInstancedPushConst(d.pushConst, view, projection, params);
+        // VULKAN-097: this route's world comes from the per-instance buffer, so the
+        // correction rides on the projection half of the view-projection product.
+        FillInstancedPushConst(d.pushConst, view,
+                               projection * XnaPixelCenterCorrectionEXT(), params);
 
         // Copy per-vertex data (all vertices)
         d.vbData.resize(static_cast<std::size_t>(vertexCount) * pvStride);
