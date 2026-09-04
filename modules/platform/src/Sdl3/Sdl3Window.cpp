@@ -11,6 +11,10 @@
 
 #include <SDL3/SDL.h>
 
+#if defined(__EMSCRIPTEN__)
+#include <emscripten/html5.h>
+#endif
+
 #include <cstring>
 
 namespace CNA::Platform::Sdl3 {
@@ -217,6 +221,59 @@ namespace CNA::Platform::Sdl3 {
         // renderer must size its swapchain from this one.
         RequireSdlSuccess(SDL_GetWindowSizeInPixels(window_, &size.width, &size.height),
                           "Window::GetPixelSize");
+
+#if defined(__EMSCRIPTEN__)
+        const bool fullscreen =
+            (SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0;
+        if (fullscreen)
+        {
+            wasWebFullscreen_ = true;
+            webDrawableOverrideActive_ = false;
+            return size;
+        }
+
+        // SDL's browser fullscreen callback grows window->w/window->h on entry, but an Esc-driven
+        // DOM fullscreen exit restores the canvas backing store before SDL updates that cached
+        // window size. SDL_GetWindowSizeInPixels() consequently keeps returning the old fullscreen
+        // dimensions and leaves the renderer viewport larger than the restored canvas. Query the
+        // actual backing store once on that transition, then retain it until SDL catches up. The
+        // transition guard matters in a pthread build: a DOM query from the game worker is a
+        // synchronous main-thread proxy and does not belong in every Present().
+        if (wasWebFullscreen_)
+        {
+            const SDL_PropertiesID properties = SDL_GetWindowProperties(window_);
+            const char* canvasId = properties != 0
+                ? SDL_GetStringProperty(
+                      properties, SDL_PROP_WINDOW_EMSCRIPTEN_CANVAS_ID_STRING, nullptr)
+                : nullptr;
+            int canvasWidth = 0;
+            int canvasHeight = 0;
+            if (canvasId != nullptr &&
+                emscripten_get_canvas_element_size(
+                    canvasId, &canvasWidth, &canvasHeight) == EMSCRIPTEN_RESULT_SUCCESS &&
+                canvasWidth > 0 && canvasHeight > 0)
+            {
+                wasWebFullscreen_ = false;
+                webDrawableOverride_ = WindowSize{canvasWidth, canvasHeight};
+                webDrawableOverrideActive_ =
+                    canvasWidth != size.width || canvasHeight != size.height;
+            }
+        }
+
+        if (webDrawableOverrideActive_)
+        {
+            if (size.width == webDrawableOverride_.width &&
+                size.height == webDrawableOverride_.height)
+            {
+                webDrawableOverrideActive_ = false;
+            }
+            else
+            {
+                return webDrawableOverride_;
+            }
+        }
+#endif
+
         return size;
     }
 

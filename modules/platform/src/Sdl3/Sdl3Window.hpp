@@ -130,6 +130,11 @@ namespace CNA::Platform::Sdl3 {
         // SDL's web backend may transiently fail a size query immediately after creation while
         // its canvas finishes asynchronously. Preserve the last good value across that tick.
         mutable WindowBounds lastKnownBounds_;
+#if defined(__EMSCRIPTEN__)
+        mutable bool wasWebFullscreen_ = false;
+        mutable bool webDrawableOverrideActive_ = false;
+        mutable WindowSize webDrawableOverride_;
+#endif
     };
 
 } // namespace CNA::Platform::Sdl3
