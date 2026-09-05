@@ -38,6 +38,16 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "System/NotSupportedException.hpp"
 
+// plans/plan_webgpu.md WEBGPU-201: `WGPUNativeFeature_TextureFormat16bitNorm`, which is what makes
+// `WGPUTextureFormat_RGBA16Unorm` -- CNA's `SurfaceFormat::Rgba64` -- usable at all, lives in
+// wgpu-native's own extras header rather than in the portable `webgpu.h`. The browser build uses
+// emdawnwebgpu, which has no such header and no such feature, so the include and everything that
+// depends on it are native-only. That split is the answer this row asks to be recorded per target.
+#if !defined(__EMSCRIPTEN__)
+#include <webgpu/wgpu.h>
+#define CNA_WEBGPU_HAS_NATIVE_EXTRAS 1
+#endif
+
 namespace CNA::Internal::Renderers::WebGPU
 {
     namespace
@@ -885,6 +895,7 @@ namespace CNA::Internal::Renderers::WebGPU
             case WGPUTextureFormat_RG16Float:
             case WGPUTextureFormat_R32Float:        return 4;
             case WGPUTextureFormat_RGBA16Float:
+            case WGPUTextureFormat_RGBA16Unorm:     // WEBGPU-201: four 16-bit UNORM channels.
             case WGPUTextureFormat_RG32Float:       return 8;
             case WGPUTextureFormat_RGBA32Float:     return 16;
             default:                                return 0;
@@ -901,9 +912,12 @@ namespace CNA::Internal::Renderers::WebGPU
         /// rather than a constant, and keeping it out of this table is what makes every existing
         /// `Color` target byte-identical to its pre-198 form.
         ///
-        /// `Rgba64` is absent for a different reason: WebGPU has no 16-bit UNORM colour format at
-        /// all, so there is nothing to map it to. That is `WEBGPU-201`'s subject and is reported as
-        /// a named refusal rather than silently substituted.
+        /// `Rgba64` maps to `RGBA16Unorm`, which is NOT core WebGPU: natively it needs
+        /// wgpu-native's `WGPUNativeFeature_TextureFormat16bitNorm`, and a browser would need the
+        /// newer `TextureFormatsTier2` if one ever exposes it. It is listed here unconditionally on
+        /// purpose -- whether it works is the PROBE's question, not this table's, which is the
+        /// separation `WEBGPU-198` was built around. On a device without the feature the probe
+        /// fails to create the texture and the format is refused by name (`WEBGPU-201`).
         ///
         /// @param surfaceFormat SurfaceFormat ordinal.
         /// @param out Receives the native format when the return value is true.
@@ -923,6 +937,7 @@ namespace CNA::Internal::Renderers::WebGPU
             // same choice the reference renderer states in its own map.
             case SurfaceFormat::HalfVector4:
             case SurfaceFormat::HdrBlendable: out = WGPUTextureFormat_RGBA16Float; return true;
+            case SurfaceFormat::Rgba64:       out = WGPUTextureFormat_RGBA16Unorm;  return true;
             default:                          return false;
             }
         }
@@ -3280,10 +3295,17 @@ namespace CNA::Internal::Renderers::WebGPU
         // sampler (`Float32Filterable`) and BLENDING into one (`Float32Blendable`). Asked for when
         // the adapter has them, and remembered either way so the paths that depend on them can say
         // which one was missing rather than degrading in silence.
+        // WEBGPU-201: RGBA16Unorm (SurfaceFormat::Rgba64) is not core WebGPU -- natively it needs
+        // wgpu-native's own TextureFormat16bitNorm, and a browser would need the newer
+        // TextureFormatsTier2 if and when one exposes it. Native-only by construction.
+#if defined(CNA_WEBGPU_HAS_NATIVE_EXTRAS)
+        rgba16UnormSupported_ = wgpuAdapterHasFeature(
+            adapter_, static_cast<WGPUFeatureName>(WGPUNativeFeature_TextureFormat16bitNorm)) != 0;
+#endif
         float32Filterable_ = wgpuAdapterHasFeature(adapter_, WGPUFeatureName_Float32Filterable) != 0;
         float32Blendable_ = wgpuAdapterHasFeature(adapter_, WGPUFeatureName_Float32Blendable) != 0;
 
-        std::array<WGPUFeatureName, 3> requiredFeatures{};
+        std::array<WGPUFeatureName, 4> requiredFeatures{};
         std::size_t requiredFeatureCount = 0;
         if (bcSupported_)
             requiredFeatures[requiredFeatureCount++] = WGPUFeatureName_TextureCompressionBC;
@@ -3291,6 +3313,12 @@ namespace CNA::Internal::Renderers::WebGPU
             requiredFeatures[requiredFeatureCount++] = WGPUFeatureName_Float32Filterable;
         if (float32Blendable_)
             requiredFeatures[requiredFeatureCount++] = WGPUFeatureName_Float32Blendable;
+#if defined(CNA_WEBGPU_HAS_NATIVE_EXTRAS)
+        if (rgba16UnormSupported_)
+            requiredFeatures[requiredFeatureCount++] =
+                static_cast<WGPUFeatureName>(WGPUNativeFeature_TextureFormat16bitNorm);
+#endif
+
 
         DeviceRequestState deviceState;
         WGPUDeviceDescriptor descriptor{};
@@ -7984,35 +8012,25 @@ namespace CNA::Internal::Renderers::WebGPU
 
     std::string_view WebGPURenderer::GetAdditionalLimitationsTextEXT() const
     {
-        // WEBGPU-200: the two float32 adapter features, when this device does not have them. Kept
-        // ahead of the sampler text below because a caller choosing a render-target format needs it
-        // before it chooses a sampler state. Both are ordinary optional features: R32/RG32/RGBA32
-        // Float stay RENDERABLE without either, so neither absence refuses the format itself.
-        if (!Float32FilterableEXT() || !Float32BlendableEXT())
-        {
-            if (!Float32FilterableEXT() && !Float32BlendableEXT())
-                return "This adapter has neither Float32Filterable nor Float32Blendable, so a "
-                       "32-bit float render target (Single, Vector2, Vector4) cannot be sampled "
-                       "with a filtering SamplerState and cannot be blended into. The formats "
-                       "themselves remain renderable, and a blend on one is refused by name rather "
-                       "than silently dropped.";
-            if (!Float32BlendableEXT())
-                return "This adapter has no Float32Blendable, so a non-opaque BlendState on a "
-                       "32-bit float render target (Single, Vector2, Vector4) is refused by name "
-                       "rather than silently rendered as an opaque overwrite. The formats remain "
-                       "renderable and drawable.";
-            return "This adapter has no Float32Filterable, so a 32-bit float texture (Single, "
-                   "Vector2, Vector4) may only be sampled with a non-filtering SamplerState. The "
-                   "formats remain renderable and readable back.";
-        }
+        // COMPOSED, not a chain of early returns. This function returns one string, and each
+        // paragraph below describes an independent boundary -- a device can have all of them at
+        // once. An earlier cut returned the first applicable clause and so hid every later one,
+        // caught by WebGPU_Float32Features check E once the Rgba64 clause was added in front of it.
+        // The result is cached because the inputs are fixed once the device exists.
+        if (!additionalLimitations_.empty()) return additionalLimitations_;
+
+        std::string text;
+        const auto add = [&text](const std::string& clause) {
+            if (!text.empty()) text += " ";
+            text += clause;
+        };
 
         // WEBGPU-205. SamplerState.MipMapLevelOfDetailBias IS implemented here -- WGPUSamplerDescriptor
         // carries no lodBias field, but WGSL's textureSampleBias applies XNA's semantic exactly, and
         // every stock 3D family does so. What this text exists for is the three routes that do NOT,
         // because the row's rule is that a route which cannot apply the state says so by name rather
         // than ignoring it quietly.
-        return
-            "SamplerState.MipMapLevelOfDetailBias is applied on every stock 3D effect route "
+        add("SamplerState.MipMapLevelOfDetailBias is applied on every stock 3D effect route "
             "(BasicEffect, AlphaTestEffect, DualTextureEffect -- both samplers -- EnvironmentMapEffect "
             "and SkinnedEffect) via WGSL textureSampleBias, and WGSL clamps a sample bias to roughly "
             "[-16, +16), so a larger magnitude saturates rather than extrapolating. Three routes do "
@@ -8020,7 +8038,43 @@ namespace CNA::Internal::Renderers::WebGPU
             "has no channel to carry the value (WEBGPU-205 records the two options); a custom CNAEXT "
             "ShaderEffect, which supplies its own WGSL and therefore its own sampling calls; and the "
             "metallic-roughness PbrEffect/SkinnedPbrEffect families, which are the glTF route rather "
-            "than an XNA stock effect. On those three the bias is accepted and has no effect.";
+            "than an XNA stock effect. On those three the bias is accepted and has no effect.");
+
+        // WEBGPU-201: Rgba64, the one entry here that is a platform boundary rather than a missing
+        // optional feature.
+        if (!rgba16UnormSupported_)
+        {
+            add("SurfaceFormat::Rgba64 is not available as a render target: it maps to "
+                "WGPUTextureFormat_RGBA16Unorm, which is not core WebGPU. Natively it needs "
+                "wgpu-native's TextureFormat16bitNorm, which this adapter does not offer; in a "
+                "browser it would need TextureFormatsTier2, which no browser exposes yet.");
+        }
+        else if (!ProbeRenderTargetFormatEXT(WGPUTextureFormat_RGBA16Unorm))
+        {
+            add("SurfaceFormat::Rgba64 is not available as a render target on this device. The "
+                "adapter DOES have wgpu-native's TextureFormat16bitNorm and the device requests it, "
+                "and RGBA16Unorm is usable here as a sampled texture -- what it is not granted is "
+                "RENDER_ATTACHMENT usage, measured by creating one rather than assumed. So this is "
+                "a usage boundary, not a missing feature.");
+        }
+
+        // WEBGPU-200: the two float32 target features, when absent. Both are optional; the formats
+        // stay renderable either way, so only the dependent operation is refused.
+        if (!Float32FilterableEXT())
+        {
+            add("This adapter has no Float32Filterable, so a 32-bit float texture (Single, Vector2, "
+                "Vector4) may only be sampled with a non-filtering SamplerState; a filtering one is "
+                "refused by name. The formats remain renderable and readable back.");
+        }
+        if (!Float32BlendableEXT())
+        {
+            add("This adapter has no Float32Blendable, so a non-opaque BlendState on a 32-bit float "
+                "render target (Single, Vector2, Vector4) is refused by name rather than silently "
+                "rendered as an opaque overwrite. The formats remain renderable and drawable.");
+        }
+
+        additionalLimitations_ = std::move(text);
+        return additionalLimitations_;
     }
 
     void WebGPURenderer::ApplySamplerMipState(int slot, int maxMipLevel, float lodBias)

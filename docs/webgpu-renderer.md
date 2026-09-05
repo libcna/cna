@@ -818,8 +818,19 @@ The map is the reference renderer's own eight-format set: `Single`→`R32Float`,
 `Vector2`→`RG32Float`, `Vector4`→`RGBA32Float`, `HalfSingle`→`R16Float`, `HalfVector2`→`RG16Float`,
 `HalfVector4`/`HdrBlendable`→`RGBA16Float`. `Color` is deliberately absent from it — it maps to the
 live `surfaceFormat_`, which keeps every existing `Color` target byte-identical to its earlier form.
-**`Rgba64` is absent for a different reason: WebGPU has no 16-bit UNORM colour format at all**, so
-there is nothing to map it to. That is a platform absence rather than an unimplemented path.
+`Rgba64` maps to `RGBA16Unorm`, which is **not** core WebGPU — natively it needs wgpu-native's
+`WGPUNativeFeature_TextureFormat16bitNorm` (which lives in `wgpu.h`, absent from the browser's
+emdawnwebgpu, so the whole path is native-only), and a browser would need `TextureFormatsTier2`,
+which none exposes yet. It is in the map unconditionally anyway: whether it *works* is the probe's
+question, not the table's.
+
+The measured answer here (`WEBGPU-201`) is worth stating exactly, because a feature check alone gets
+it wrong in both directions. **This adapter has `TextureFormat16bitNorm`** and the device requests
+it — so "the adapter lacks it" is false. And `RGBA16Unorm` still is not a render target here: with
+the feature enabled, creating one with `TextureBinding` usage succeeds while the same texture with
+`RenderAttachment` usage fails. So "the adapter has it, therefore it works" is false too. `Rgba64` is
+refused as a render target for a **usage** boundary, not a missing feature, and
+`GetAdditionalLimitationsTextEXT()` says which of the two applies.
 
 `CreateRenderTarget2DEXT` is overridden so the target is **allocated in the format it was asked
 for** — `IGraphicsRenderer`'s default forwards to the format-less overload and drops the argument,
@@ -850,7 +861,10 @@ absent, neither refuses the format: the targets stay renderable, drawable, clear
 and only the feature-dependent operation is refused, **by name**. A non-opaque `BlendState` on such a
 target throws naming `Float32Blendable`; a filtering sample throws naming `Float32Filterable` and
 says that `TextureFilter::Point` samples it without the feature.
-`GetAdditionalLimitationsTextEXT()` names whichever is missing.
+`GetAdditionalLimitationsTextEXT()` names whichever is missing. That text is **composed** from every
+applicable clause rather than returning the first one — it returns a single string, and a device can
+be subject to several of these boundaries at once; an early-return chain silently hid the float32
+clauses the moment the `Rgba64` one was added in front of them.
 
 Both refusals sit at the **public draw entry**, not in the pipeline builder. That distinction was
 found the hard way: a builder only runs on a cache miss, so a refusal written there fired for the

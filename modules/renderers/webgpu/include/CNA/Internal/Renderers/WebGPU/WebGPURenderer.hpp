@@ -2559,6 +2559,14 @@ namespace CNA::Internal::Renderers::WebGPU
         /// Without it a 32-bit float colour target may not be blended into; a blend state on such a
         /// target is refused by name rather than silently ignored.
         bool float32Blendable_ = false;
+        /// WEBGPU-201: whether the device was created with wgpu-native's TextureFormat16bitNorm,
+        /// which is what makes `RGBA16Unorm` (`SurfaceFormat::Rgba64`) usable. Always false in the
+        /// browser, where the feature does not exist.
+        bool rgba16UnormSupported_ = false;
+        /// Composed lazily by `GetAdditionalLimitationsTextEXT()`, which returns a `string_view` and
+        /// therefore needs storage that outlives the call. Its inputs are fixed once the device
+        /// exists, so it is built once.
+        mutable std::string additionalLimitations_;
         /// WEBGPU-200: test-only override making both float32 features report absent. See
         /// `DebugForceFloat32FeaturesAbsentEXT`.
         bool forceFloat32FeaturesAbsent_ = false;
