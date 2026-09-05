@@ -1069,6 +1069,17 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_declared_effect_layout
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plans/plan_vulkan.md VULKAN-156: what a stock family does when the stream does not supply
+        # one of its shader's inputs. Rendering the texel and refusing by name are both acceptable;
+        # rasterizing NOTHING and reporting success is not, and was invisible to the conformance
+        # suite that found it (it compares a family against itself, and nothing agrees with itself
+        # more perfectly than an empty picture).
+        cna_vulkan_test(cna_test_vulkan_unsupplied_input_contract
+                        vulkan_unsupplied_input_contract_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_UnsuppliedInputContract
+            COMMAND cna_test_vulkan_unsupplied_input_contract
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plans/plan_vulkan.md VULKAN-149 (F-15): the INSTANCED route's per-vertex layout, and the
         # choice between its two vertex shaders, come from the declaration rather than from
         # REMED-GFX-212's stride table. Every record carries a decoy colour at the offset that

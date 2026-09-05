@@ -1942,6 +1942,20 @@ namespace CNA::Internal::Renderers::Vulkan
         }
     }
 
+    void VulkanRenderer::RequireSkinnedStrideEXT(std::size_t stride) const
+    {
+        // VULKAN-156. GetOrCreatePipelineSkinned3D and its VertexLit sibling both reduce their
+        // binding stride to `(stride == 56) ? 56 : 52`, so ANY other stride was silently bound as
+        // 52. A 20-byte record then has vertex 1 fetched from byte 52 -- past the whole 120-byte
+        // copy of a six-vertex quad -- and the draw rasterizes nothing while reporting success.
+        // Refused by name instead, the way the PBR pair already refuses, because a family that
+        // draws nothing and says it succeeded is the one outcome a caller cannot act on.
+        if (stride != 52 && stride != 56)
+            throw std::runtime_error(
+                "Vulkan SkinnedEffect requires vertex stride 52 or 56, or a VertexDeclaration "
+                "supplying every input of its shader");
+    }
+
     Matrix VulkanRenderer::XnaPixelCenterCorrectionEXT(PrimitiveType primitive) const
     {
         // Filled primitives only. The correction compensates for Direct3D's top-left FILL rule by
@@ -7979,6 +7993,14 @@ namespace CNA::Internal::Renderers::Vulkan
         // CNB-67: stride 56 is the same layout with a per-vertex Color (normalized ubyte4)
         // appended at offset 52 -- mirrors EasyGLRenderer.cpp's own "case 56" precedent
         // (locations 0-4 identical to stride 52; location 5 = aColor is new).
+        // VULKAN-156: the reduction below is what made an unlistable stride silent. Refuse it
+        // here too, not only at the draw, so the refusal cannot move to Present() -- VULKAN-148
+        // learned that the hard way. A complete declaration says where each input lives and is
+        // not held to the list.
+        if (!vertexLayout.IsComplete() && stride != 52 && stride != 56)
+            throw std::runtime_error(
+                "Vulkan SkinnedEffect requires vertex stride 52 or 56, or a VertexDeclaration "
+                "supplying every input of its shader");
         const std::size_t skinnedStride = (stride == 56) ? 56 : 52;
         const bool colored = (skinnedStride == 56);
         PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(skinnedStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask, vertexLayout.Hash() };
@@ -8116,6 +8138,14 @@ namespace CNA::Internal::Renderers::Vulkan
 
         // CNB-67: see GetOrCreatePipelineSkinned3D's identical comment -- stride 56 selects the
         // per-vertex-color shader/attribute-layout variant.
+        // VULKAN-156: the reduction below is what made an unlistable stride silent. Refuse it
+        // here too, not only at the draw, so the refusal cannot move to Present() -- VULKAN-148
+        // learned that the hard way. A complete declaration says where each input lives and is
+        // not held to the list.
+        if (!vertexLayout.IsComplete() && stride != 52 && stride != 56)
+            throw std::runtime_error(
+                "Vulkan SkinnedEffect requires vertex stride 52 or 56, or a VertexDeclaration "
+                "supplying every input of its shader");
         const std::size_t skinnedStride = (stride == 56) ? 56 : 52;
         const bool colored = (skinnedStride == 56);
         PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(skinnedStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask, vertexLayout.Hash() };
@@ -11671,6 +11701,9 @@ namespace CNA::Internal::Renderers::Vulkan
         if ((d.usePbr || d.usePbrSkinned) && !declaredLayout.IsComplete())
             RequirePbrStrideEXT(stride, d.usePbrSkinned);
         d.useSkinned     = needsSkinned && !needsPbr;
+        // VULKAN-156: same rule as the PBR pair's -- the stride list judges a buffer whose
+        // declaration did not supply the shader's inputs. One that did says where they are.
+        if (d.useSkinned && !declaredLayout.IsComplete()) RequireSkinnedStrideEXT(stride);
         d.useLitTextured = needsLitTextured;
         // VULKAN-146: taken at DRAW time, above, because the record is replayed at Present(), by
         // which point the buffer may carry a different declaration entirely.
@@ -12000,6 +12033,9 @@ namespace CNA::Internal::Renderers::Vulkan
         if ((d.usePbr || d.usePbrSkinned) && !declaredLayout.IsComplete())
             RequirePbrStrideEXT(stride, d.usePbrSkinned);
         d.useSkinned     = needsSkinned && !needsPbr;
+        // VULKAN-156: same rule as the PBR pair's -- the stride list judges a buffer whose
+        // declaration did not supply the shader's inputs. One that did says where they are.
+        if (d.useSkinned && !declaredLayout.IsComplete()) RequireSkinnedStrideEXT(stride);
         d.useLitTextured = needsLitTextured;
         // VULKAN-146: taken at DRAW time, above, because the record is replayed at Present(), by
         // which point the buffer may carry a different declaration entirely.

@@ -1349,6 +1349,20 @@ namespace CNA::Internal::Renderers::Vulkan
          */
         void RequirePbrStrideEXT(std::size_t stride, bool skinned) const;
 
+        /**
+         * @brief Refuses a vertex stride the skinned family cannot bind, at the draw.
+         *
+         * plans/plan_vulkan.md `VULKAN-156`. `GetOrCreatePipelineSkinned3D` and its `VertexLit`
+         * sibling reduce their binding stride to `(stride == 56) ? 56 : 52`, so before this every
+         * other stride was bound as 52 and read past the record it was given -- a draw that
+         * rasterized nothing and reported success. Only called when the buffer's declaration did
+         * not supply every input of the shader; one that did is not held to the list.
+         *
+         * @param stride Byte stride of the vertex record.
+         * @throws std::runtime_error naming the strides this family accepts.
+         */
+        void RequireSkinnedStrideEXT(std::size_t stride) const;
+
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void GetViewportSize(int& width, int& height) override;
