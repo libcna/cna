@@ -7963,6 +7963,23 @@ namespace CNA::Internal::Renderers::WebGPU
         height = static_cast<int>(std::lround(viewport.logicalHeight));
     }
 
+    void WebGPURenderer::GetDefaultViewportRect(int& x, int& y, int& width, int& height)
+    {
+        // WEBGPU-162: ComputeLogicalViewport() already separates the two rectangles -- x/y/width/
+        // height are physical device pixels, logicalWidth/logicalHeight are the virtual resolution
+        // the game draws in. GetViewportSize() answers with the second; this answers with the
+        // first, which is what GraphicsDevice::UpdateViewportFromWindow() actually needs.
+        //
+        // For NativeBackBuffer, Stretch and FixedHeightDynamicWidth the physical rectangle IS the
+        // whole drawable (nothing is centred and no bars exist), so this differs from the inherited
+        // default only where it was wrong: Letterbox and Overscan.
+        const LogicalViewport viewport = ComputeLogicalViewport();
+        x = static_cast<int>(std::lround(viewport.x));
+        y = static_cast<int>(std::lround(viewport.y));
+        width = std::max(0, static_cast<int>(std::lround(viewport.width)));
+        height = std::max(0, static_cast<int>(std::lround(viewport.height)));
+    }
+
     void WebGPURenderer::SetVirtualResolution(int width, int height)
     {
         virtualWidth_ = width;

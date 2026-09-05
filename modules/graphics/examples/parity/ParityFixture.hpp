@@ -199,16 +199,19 @@ namespace CNA::Parity
          * @param width Backbuffer width in pixels.
          * @param height Backbuffer height in pixels.
          */
-        explicit ParityFixture(int width = kDefaultFixtureSize, int height = kDefaultFixtureSize)
+        explicit ParityFixture(int width = kDefaultFixtureSize, int height = kDefaultFixtureSize,
+                               Microsoft::Xna::Framework::PresentationMode presentation =
+                                   Microsoft::Xna::Framework::PresentationMode::NativeBackBuffer)
             : width_(width), height_(height)
         {
             using Microsoft::Xna::Framework::GraphicsDeviceManager;
-            using Microsoft::Xna::Framework::PresentationMode;
             gdm_ = std::make_unique<GraphicsDeviceManager>(this);
             gdm_->setPreferredBackBufferWidthProperty(width);
             gdm_->setPreferredBackBufferHeightProperty(height);
-            // No scaling: the fixture's pixel coordinates are the backbuffer's own.
-            gdm_->setPreferredPresentationModeProperty(PresentationMode::NativeBackBuffer);
+            // NativeBackBuffer by default: no scaling, so the fixture's pixel coordinates are the
+            // backbuffer's own and a parity verdict is never decided by a letterbox rectangle. A
+            // fixture whose SUBJECT is the presentation rectangle asks for another mode here.
+            gdm_->setPreferredPresentationModeProperty(presentation);
         }
 
         /** @brief The fixture's backbuffer width. @return Width in pixels. */

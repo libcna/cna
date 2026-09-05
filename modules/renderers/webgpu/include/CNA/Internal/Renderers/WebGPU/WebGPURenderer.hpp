@@ -1163,6 +1163,28 @@ namespace CNA::Internal::Renderers::WebGPU
         void Present() override;
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
         void GetViewportSize(int& width, int& height) override;
+        /**
+         * @brief plans/plan_webgpu.md WEBGPU-162: the PHYSICAL presentation rectangle.
+         *
+         * `IGraphicsRenderer`'s default returns `(0, 0, GetViewportSize())`, and this renderer's
+         * `GetViewportSize()` is the LOGICAL size -- so the inherited default handed
+         * `GraphicsDevice::UpdateViewportFromWindow()` a logical rectangle to use as physical
+         * pixels. Under Letterbox or Overscan after a resize that placed every draw in a
+         * logical-sized rectangle at the window ORIGIN instead of the computed, centred, scaled
+         * one: the game rendered into a corner while `Clear` (viewport-independent) covered the
+         * whole drawable. The reference renderer overrides this for exactly that reason, after a
+         * real report (galaxy-eggbert, 2026-08-21: resizing or going fullscreen did not enlarge
+         * the game).
+         *
+         * `GetViewportSize()` stays logical: the two answer different questions, and only this one
+         * is a rectangle in device pixels.
+         *
+         * @param x Receives the rectangle's physical left edge.
+         * @param y Receives the rectangle's physical top edge.
+         * @param width Receives the rectangle's physical width.
+         * @param height Receives the rectangle's physical height.
+         */
+        void GetDefaultViewportRect(int& x, int& y, int& width, int& height) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;
