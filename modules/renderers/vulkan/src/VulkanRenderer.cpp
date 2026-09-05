@@ -4965,6 +4965,13 @@ namespace CNA::Internal::Renderers::Vulkan
         constexpr StockProgramInput kPbrSkinnedColored[] = { kPos, kNormal, kTangent, kUv, kWeights,
                                                              kIndices, kUv1, kColor };
 
+        // VULKAN-150. DualTextureEffect's two coordinate sets. `kUv1` is a real shader input here,
+        // not a spelling of `kUv`: dual_texture3d.frag.glsl samples uTexture2 with it.
+        /// dual_texture3d, stride 20 (VertexPositionTexture).
+        constexpr StockProgramInput kDualTexture[]        = { kPos, kUv, kUv1 };
+        /// dual_texture_colored3d, stride 24 (VertexPositionColorTexture).
+        constexpr StockProgramInput kDualTextureColored[] = { kPos, kColor, kUv, kUv1 };
+
         // VULKAN-149. The instanced route's PER-VERTEX inputs only: locations 0 and 1 of
         // instanced3d.vert.glsl / instanced_colored3d.vert.glsl. Its per-instance matrix columns
         // sit at 4..7 on binding 1, are not declaration-derived and are appended after these.
@@ -4989,6 +4996,49 @@ namespace CNA::Internal::Renderers::Vulkan
         for (std::uint32_t i = 0; i < layout.attributeCount; ++i)
             attrs[i] = layout.attributes[i];
         attrCount = layout.attributeCount;
+    }
+
+    // VULKAN-150: DualTextureEffect's layout, with the one aliasing rule this family needs.
+    //
+    // XNA's DualTextureEffect samples `Texture2` with **TEXCOORD1**. This renderer's shader took
+    // one UV and used it for both samplers, and the only reason that never showed as a wrong
+    // picture is that the stride guard refused every record carrying an independent second set
+    // (F-20). With the shader fixed, `inUV1` is a real input that must be bound.
+    //
+    // **The aliasing rule, and why it is not a fudge.** A record that declares only
+    // `TextureCoordinate0` -- which is every stride-20 and stride-24 record this family has ever
+    // been given -- gets `inUV1` pointed at `TextureCoordinate0`'s own element. That reproduces the
+    // previous behaviour bit for bit rather than leaving a shader input unbound, and it is what
+    // XNA itself does in the sense that matters: an effect asked to use a coordinate set the vertex
+    // does not have has only one set to use. It is applied ONLY to `TextureCoordinate1`, only when
+    // `TextureCoordinate0` is present, and it never invents an offset -- it copies one the
+    // declaration supplied.
+    static VulkanVertexInputLayoutEXT BuildDualTextureVertexLayoutEXT(
+        const CNA::Internal::Graphics::DeclaredVertexLayout& declared, bool colored)
+    {
+        using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+        if (declared.IsEmpty()) return {};
+        const auto* inputs = colored ? StockInputs::kDualTextureColored : StockInputs::kDualTexture;
+        const std::size_t inputCount = colored ? std::size(StockInputs::kDualTextureColored)
+                                               : std::size(StockInputs::kDualTexture);
+        VulkanVertexInputLayoutEXT layout =
+            BuildVulkanVertexInputLayoutEXT(declared, inputs, inputCount);
+        // The UV1 input is the last one in both tables, and UV0 the one before it.
+        const std::uint32_t uv1Location = static_cast<std::uint32_t>(inputCount - 1);
+        const std::uint32_t uv0Location = static_cast<std::uint32_t>(inputCount - 2);
+        const bool uv1Missing = (layout.missingInputMask & (1u << uv1Location)) != 0;
+        if (!uv1Missing) return layout;
+        // Find UV0's own description; without it there is nothing to alias and the layout stays
+        // incomplete, which sends the draw back through the stride path and the fidelity guard.
+        for (std::uint32_t i = 0; i < layout.attributeCount; ++i) {
+            if (layout.attributes[i].location != uv0Location) continue;
+            VkVertexInputAttributeDescription aliased = layout.attributes[i];
+            aliased.location = uv1Location;
+            layout.attributes[layout.attributeCount++] = aliased;
+            layout.missingInputMask &= ~(1u << uv1Location);
+            break;
+        }
+        return layout;
     }
 
     // VULKAN-146: the input table for whichever of the four BasicEffect-family programs this draw
@@ -5984,14 +6034,26 @@ namespace CNA::Internal::Renderers::Vulkan
         std::size_t stride, VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
-        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
+        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt,
+        const VulkanVertexInputLayoutEXT& vertexLayout)
     {
         EnsureDualTexResources();
 
         // DualTexture uses stride=20 (VertexPositionTexture) by default, or stride=24
         // (VertexPositionColorTexture, Task 889) when VertexColorEnabled needs a color attribute.
         const std::size_t dualStride = (stride == 24) ? 24 : 20;
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(dualStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask };
+        // VULKAN-158: the same rule as the other converted factories -- the vertex BINDING's stride
+        // is the record's own whenever the declaration supplied every input, and the family's
+        // canonical 20/24 otherwise. This is the factory whose baked stride made VULKAN-150's own
+        // stride-40 fixture render black, before the dual-texture shader was even reached.
+        const uint32_t recordStride = vertexLayout.IsComplete()
+                                          ? static_cast<uint32_t>(stride)
+                                          : static_cast<uint32_t>(dualStride);
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(dualStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask, vertexLayout.Hash() };
+        // VULKAN-158: and the record stride reaches the key, so two declarations that differ only in
+        // stride cannot share a pipeline. Folded only when the layout is complete, which leaves
+        // every stride-derived key exactly as it was.
+        if (vertexLayout.IsComplete()) key.a = FoldPerVertexStrideIntoKey(key.a, recordStride);
         auto it = pipelinesDualTex3D_.find(key);
         if (it != pipelinesDualTex3D_.end()) return it->second;
 
@@ -6008,20 +6070,28 @@ namespace CNA::Internal::Renderers::Vulkan
             : CreateShaderModule(kDualTexture3dVertSpv,        kDualTexture3dVertSpv_size);
         VkShaderModule frag = CreateShaderModule(kDualTexture3dFragSpv,  kDualTexture3dFragSpv_size);
 
-        VkVertexInputBindingDescription bind{ 0, static_cast<uint32_t>(dualStride), VK_VERTEX_INPUT_RATE_VERTEX };
-        VkVertexInputAttributeDescription attrs[3]{};
+        VkVertexInputBindingDescription bind{ 0, recordStride, VK_VERTEX_INPUT_RATE_VERTEX };
+        VkVertexInputAttributeDescription attrs[4]{};
         uint32_t attrCount;
         if (colored) {
             // float3 pos + ubyte4 color + float2 uv (mirrors colored_textured3d's layout).
             attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0 };
             attrs[1] = { 1, 0, VK_FORMAT_R8G8B8A8_UNORM,   12 };
             attrs[2] = { 2, 0, VK_FORMAT_R32G32_SFLOAT,    16 };
-            attrCount = 3;
+            // VULKAN-150: this stride's record has ONE coordinate set, so the shader's second UV
+            // input reads the same element. That is exactly what the shader did before it had a
+            // second input, and it keeps every stride-24 draw byte-identical.
+            attrs[3] = { 3, 0, VK_FORMAT_R32G32_SFLOAT,    16 };
+            attrCount = 4;
         } else {
             attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0 };
             attrs[1] = { 1, 0, VK_FORMAT_R32G32_SFLOAT,    12 };
-            attrCount = 2;
+            attrs[2] = { 2, 0, VK_FORMAT_R32G32_SFLOAT,    12 };   // VULKAN-150, as above
+            attrCount = 3;
         }
+        // VULKAN-150: and the declaration's own offsets replace all of them when it supplied every
+        // input -- including a genuinely independent TextureCoordinate1.
+        ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, std::size(attrs), attrCount);
 
         VkPipelineVertexInputStateCreateInfo vis{};
         vis.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -9818,7 +9888,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 } else if (draw.useDualTexture) {
                     pipe = GetOrCreatePipelineDualTex3D(draw.stride, draw.topology,
                                                         draw.depthTest, draw.depthWrite,
-                                                        draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
+                                                        draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt, draw.vertexLayout);
                 } else if (draw.useEnvMap) {
                     pipe = GetOrCreatePipelineEnvMap3D(draw.stride, draw.topology,
                                                        draw.depthTest, draw.depthWrite,
@@ -11744,6 +11814,11 @@ namespace CNA::Internal::Renderers::Vulkan
             if (inputs != nullptr)
                 declaredLayout = BuildVulkanVertexInputLayoutEXT(
                     vb.GetDeclarationEXT(), inputs, inputCount);
+            // VULKAN-150: DualTextureEffect has its own builder rather than a table, because its
+            // second coordinate set is aliased onto the first when the record declares only one.
+            if (needsDualTex)
+                declaredLayout = BuildDualTextureVertexLayoutEXT(vb.GetDeclarationEXT(),
+                                                                stride == 24);
         }
         // VULKAN-146: the guard is for a route that infers its input from the stride. A family
         // this row converted, given a declaration that supplies every one of its inputs, no longer
@@ -12075,6 +12150,11 @@ namespace CNA::Internal::Renderers::Vulkan
             if (inputs != nullptr)
                 declaredLayout = BuildVulkanVertexInputLayoutEXT(
                     vb.GetDeclarationEXT(), inputs, inputCount);
+            // VULKAN-150: DualTextureEffect has its own builder rather than a table, because its
+            // second coordinate set is aliased onto the first when the record declares only one.
+            if (needsDualTex)
+                declaredLayout = BuildDualTextureVertexLayoutEXT(vb.GetDeclarationEXT(),
+                                                                stride == 24);
         }
         // VULKAN-146: the guard is for a route that infers its input from the stride. A family
         // this row converted, given a declaration that supplies every one of its inputs, no longer

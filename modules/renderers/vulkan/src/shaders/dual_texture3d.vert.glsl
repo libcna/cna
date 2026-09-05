@@ -10,10 +10,18 @@
 // its own vertex shader file, split off with identical MVP/diffuseColor logic.
 layout(location = 0) in vec3 inPos;
 layout(location = 1) in vec2 inUV;
+// plans/plan_vulkan.md VULKAN-150: DualTextureEffect's second sampler is addressed by
+// TEXCOORD1, not by TEXCOORD0. Before this input existed the fragment shader sampled both
+// textures with fragUV, so a declaration carrying an independent second UV set could not be
+// honoured -- and the stride guard refusing such a record was the only thing hiding it.
+// A record that declares no TextureCoordinate1 has this input pointed at TextureCoordinate0's
+// own element, which reproduces the previous behaviour exactly.
+layout(location = 2) in vec2 inUV1;
 
 layout(location = 0) out vec2 fragUV;
 layout(location = 1) out vec4 fragTint;
 layout(location = 2) out float fragFogFactor;
+layout(location = 3) out vec2 fragUV1;
 
 layout(push_constant) uniform PC {
     mat4  mvp;
@@ -37,6 +45,7 @@ void main() {
     gl_Position = pos;
     gl_PointSize = 1.0;
     fragUV   = inUV;
+    fragUV1  = inUV1;
     fragTint = pc.diffuseColor;
     // Task 899: fog factor from raw object-space Z. REMED-GFX-005: corrected to FNA/EasyGL Task-1111
     // form (z+FogEnd)/(FogEnd-FogStart); the prior Task 888/899 (FogEnd-z) formula was the

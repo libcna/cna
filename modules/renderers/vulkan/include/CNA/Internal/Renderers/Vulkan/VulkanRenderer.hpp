@@ -2812,7 +2812,8 @@ namespace CNA::Internal::Renderers::Vulkan
                                                 uint32_t colorAttachmentCount, bool wireframe,
                                                 bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
-                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {});
         // EnvironmentMapEffect
         void       EnsureEnvMapResources();
         /// REMED-GFX-169: `sampler2D`/`samplerCube` are the SamplerStates of slots 0 and 1, the

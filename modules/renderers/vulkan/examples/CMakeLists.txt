@@ -1079,6 +1079,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_record_stride_binding
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plans/plan_vulkan.md VULKAN-150 (F-20): DualTextureEffect samples Texture2 with TEXCOORD1.
+        # EasyGL's own SAMPLE-073 fixture, run here -- it was unrunnable before, because this
+        # renderer's shader had one UV input and used it for both samplers.
+        cna_vulkan_test(cna_test_vulkan_dualtextureeffect_independent_uv
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_dualtextureeffect_independent_uv_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DualTextureEffect_IndependentUV
+            COMMAND cna_test_vulkan_dualtextureeffect_independent_uv
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plans/plan_vulkan.md VULKAN-155 (F-24): the legacy DrawColoredPrimitives pair reaches the one
         # pipeline whose binding stride is hard-coded to 16, while both entry points copy the buffer
         # at its real stride. Of bind it / refuse it / mis-read it, this pins which one happens.

@@ -3,6 +3,8 @@
 layout(location = 0) in vec2 fragUV;
 layout(location = 1) in vec4 fragTint;
 layout(location = 2) in float fragFogFactor;
+// plans/plan_vulkan.md VULKAN-150: the second sampler's own coordinate set.
+layout(location = 3) in vec2 fragUV1;
 
 layout(location = 0) out vec4 outColor;
 
@@ -28,7 +30,7 @@ layout(set = 0, binding = 2) uniform FogParams {
 
 void main() {
     vec4 tex1 = texture(uTexture,  fragUV);
-    vec4 tex2 = texture(uTexture2, fragUV);
+    vec4 tex2 = texture(uTexture2, fragUV1);   // VULKAN-150: TEXCOORD1, not TEXCOORD0
     tex1.rgb *= 2.0;
     outColor  = tex1 * tex2 * fragTint;
     // Task 899: mix toward FogColor as fragFogFactor -> 0 (matches the established Task 888 formula).

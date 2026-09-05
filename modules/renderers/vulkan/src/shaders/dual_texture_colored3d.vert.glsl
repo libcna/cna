@@ -7,10 +7,14 @@
 layout(location = 0) in vec3 inPos;
 layout(location = 1) in vec4 inColor;   // normalized UNORM R8G8B8A8
 layout(location = 2) in vec2 inUV;
+// plans/plan_vulkan.md VULKAN-150: see dual_texture3d.vert.glsl -- TEXCOORD1 for the second
+// sampler, aliased onto TEXCOORD0's element when the record declares only one UV set.
+layout(location = 3) in vec2 inUV1;
 
 layout(location = 0) out vec2 fragUV;
 layout(location = 1) out vec4 fragTint;
 layout(location = 2) out float fragFogFactor;
+layout(location = 3) out vec2 fragUV1;
 
 layout(push_constant) uniform PC {
     mat4  mvp;
@@ -34,6 +38,7 @@ void main() {
     gl_Position = pos;
     gl_PointSize = 1.0;
     fragUV   = inUV;
+    fragUV1  = inUV1;
     fragTint = (pc.vertexColorEnabled > 0.5) ? inColor * pc.diffuseColor : pc.diffuseColor;
     // Task 899: fog factor from raw object-space Z. REMED-GFX-005: corrected to FNA/EasyGL Task-1111
     // form (z+FogEnd)/(FogEnd-FogStart); the prior Task 888/899 (FogEnd-z) formula was the
