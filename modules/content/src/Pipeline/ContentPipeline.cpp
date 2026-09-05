@@ -370,6 +370,17 @@ namespace CNA::Content::Pipeline
         }
     }
 
+    const char* ContentTargetPlatformName(const ContentTargetPlatform platform) noexcept
+    {
+        switch (platform)
+        {
+            case ContentTargetPlatform::Windows: return "Windows";
+            case ContentTargetPlatform::Xbox360: return "Xbox360";
+            case ContentTargetPlatform::WindowsPhone: return "WindowsPhone";
+        }
+        return "Windows";
+    }
+
     const char* ContentOutputFormatName(const ContentOutputFormat format) noexcept
     {
         return format == ContentOutputFormat::Xnb ? "xnb" : "cnb";
@@ -641,12 +652,18 @@ namespace CNA::Content::Pipeline
     ContentImporterContext::ContentImporterContext(
         std::filesystem::path sourceRoot, std::filesystem::path source, std::string logicalName,
         std::string component, const ContentSourceRootCapabilities& externalSourceRoots,
-        ContentDependencyCollector& dependencies, ContentBuildLogger& logger)
+        ContentDependencyCollector& dependencies, ContentBuildLogger& logger,
+        ContentBuildEnvironment environment)
         : sourceRoot_(std::move(sourceRoot)), source_(std::move(source)),
           logicalName_(std::move(logicalName)), component_(std::move(component)),
           dependencies_(&dependencies), logger_(&logger),
-          externalSourceRoots_(&externalSourceRoots)
+          externalSourceRoots_(&externalSourceRoots), environment_(std::move(environment))
     {
+    }
+
+    const ContentBuildEnvironment& ContentImporterContext::Environment() const noexcept
+    {
+        return environment_;
     }
 
     const std::filesystem::path& ContentImporterContext::SourceRoot() const noexcept
@@ -693,17 +710,73 @@ namespace CNA::Content::Pipeline
         std::string component, const ContentProcessorParameters& parameters,
         const ContentSourceRootCapabilities& externalSourceRoots,
         ContentDependencyCollector& dependencies, ContentBuildLogger& logger,
-        const ContentOutputFormat outputFormat)
+        const ContentOutputFormat outputFormat, ContentBuildEnvironment environment,
+        const ContentPipeline* pipeline)
         : sourceRoot_(std::move(sourceRoot)), source_(std::move(source)),
           logicalName_(std::move(logicalName)), component_(std::move(component)),
           parameters_(&parameters), dependencies_(&dependencies), logger_(&logger),
-          externalSourceRoots_(&externalSourceRoots), outputFormat_(outputFormat)
+          externalSourceRoots_(&externalSourceRoots), outputFormat_(outputFormat),
+          environment_(std::move(environment)), pipeline_(pipeline)
     {
     }
 
     const std::string& ContentProcessorContext::LogicalName() const noexcept
     {
         return logicalName_;
+    }
+
+    const std::filesystem::path& ContentProcessorContext::SourceRoot() const noexcept
+    {
+        return sourceRoot_;
+    }
+
+    const std::filesystem::path& ContentProcessorContext::SourcePath() const noexcept
+    {
+        return source_;
+    }
+
+    const ContentBuildEnvironment& ContentProcessorContext::Environment() const noexcept
+    {
+        return environment_;
+    }
+
+    const ContentSourceRootCapabilities& ContentProcessorContext::ExternalSourceRoots() const noexcept
+    {
+        return *externalSourceRoots_;
+    }
+
+    ContentDependencyCollector& ContentProcessorContext::Dependencies() const noexcept
+    {
+        return *dependencies_;
+    }
+
+    ContentBuildLogger& ContentProcessorContext::Logger() const noexcept
+    {
+        return *logger_;
+    }
+
+    const ContentPipeline* ContentProcessorContext::Pipeline() const noexcept
+    {
+        return pipeline_;
+    }
+
+    void ContentProcessorContext::AddNestedOutput(ContentAdditionalWriteOutput output)
+    {
+        if (output.logicalName.empty())
+        {
+            throw std::invalid_argument("AddNestedOutput(): the nested output needs a logical name.");
+        }
+        if (output.bytes.empty())
+        {
+            throw std::invalid_argument("AddNestedOutput(): nested output '" + output.logicalName +
+                                        "' has no bytes.");
+        }
+        nestedOutputs_.push_back(std::move(output));
+    }
+
+    const std::vector<ContentAdditionalWriteOutput>& ContentProcessorContext::NestedOutputs() const noexcept
+    {
+        return nestedOutputs_;
     }
 
     const ContentProcessorParameters& ContentProcessorContext::Parameters() const noexcept
@@ -1127,29 +1200,45 @@ namespace CNA::Content::Pipeline
         registry_->Freeze();
     }
 
-    ContentBuildResult ContentPipeline::Build(const ContentBuildRequest& request) const
+    const ContentPipelineRegistry& ContentPipeline::Registry() const noexcept
     {
-        std::filesystem::path source = request.source;
-        std::filesystem::path root = request.sourceRoot;
+        return *registry_;
+    }
+
+    struct ContentPipeline::StagedBuild
+    {
+        std::filesystem::path root;
+        std::filesystem::path source;
+        std::shared_ptr<const ContentImporter> importer;
+        std::shared_ptr<const ContentProcessor> processor;
+        ContentValue imported;
+        ContentValue processed;
+        std::vector<ContentAdditionalWriteOutput> nestedOutputs;
+    };
+
+    ContentPipeline::StagedBuild ContentPipeline::RunImportAndProcess(
+        const ContentBuildRequest& request, ContentDependencyCollector& dependencies,
+        ContentBuildLogger& logger, const bool nested) const
+    {
+        StagedBuild stage;
+        stage.source = request.source;
+        stage.root = request.sourceRoot;
         const std::string logicalName = request.logicalName;
         ContentSourceRootCapabilities externalSourceRoots;
-        ContentBuildLogger& downstreamLogger =
-            request.logger == nullptr ? NullLogger() : *request.logger;
-        RecordingContentBuildLogger logger(downstreamLogger);
 
         try
         {
-            if (root.empty()) { throw std::invalid_argument("sourceRoot must not be empty."); }
-            root = WeaklyCanonicalOrAbsolute(root);
+            if (stage.root.empty()) { throw std::invalid_argument("sourceRoot must not be empty."); }
+            stage.root = WeaklyCanonicalOrAbsolute(stage.root);
             externalSourceRoots =
-                ResolveContentSourceRootCapabilities(root, request.externalSourceRoots);
-            if (source.empty()) { throw std::invalid_argument("source must not be empty."); }
-            if (source.is_relative()) { source = root / source; }
-            source = RequireContained(root, source, "primary source");
-            if (!std::filesystem::is_regular_file(source))
+                ResolveContentSourceRootCapabilities(stage.root, request.externalSourceRoots);
+            if (stage.source.empty()) { throw std::invalid_argument("source must not be empty."); }
+            if (stage.source.is_relative()) { stage.source = stage.root / stage.source; }
+            stage.source = RequireContained(stage.root, stage.source, "primary source");
+            if (!std::filesystem::is_regular_file(stage.source))
             {
                 throw std::invalid_argument("primary source '" +
-                                            CNA::Internal::ContentPathToUtf8(source) +
+                                            CNA::Internal::ContentPathToUtf8(stage.source) +
                                             "' is not a regular file.");
             }
             const std::string logicalProblem = Cnb::CnbLogicalNameProblem(logicalName);
@@ -1161,83 +1250,121 @@ namespace CNA::Content::Pipeline
         }
         catch (...)
         {
-            RethrowWithContext(source, logicalName, ContentPipelineStage::Selection, {});
+            RethrowWithContext(stage.source, logicalName, ContentPipelineStage::Selection, {});
         }
 
-        std::shared_ptr<const ContentImporter> importer;
         try
         {
-            importer = registry_->ResolveImporter(source, request.importer);
+            stage.importer = registry_->ResolveImporter(stage.source, request.importer);
         }
         catch (...)
         {
-            RethrowWithContext(source, logicalName, ContentPipelineStage::Selection, {});
+            RethrowWithContext(stage.source, logicalName, ContentPipelineStage::Selection, {});
         }
 
-        ContentDependencyCollector dependencies;
-        dependencies.Add(ContentDependency{ContentDependencyKind::PrimarySource,
-                                           CNA::Internal::ContentPathToUtf8(source)});
+        // A nested build's source is one more file the outer node depends on, never a second
+        // primary source of it.
+        dependencies.Add(ContentDependency{
+            nested ? ContentDependencyKind::SourceFile : ContentDependencyKind::PrimarySource,
+            CNA::Internal::ContentPathToUtf8(stage.source)});
 
-        ContentValue imported;
-        const ContentComponentIdentity importerIdentity = importer->Identity();
+        const ContentComponentIdentity importerIdentity = stage.importer->Identity();
         try
         {
-            ContentImporterContext context(root, source, logicalName, importerIdentity.name,
-                                           externalSourceRoots, dependencies, logger);
-            imported = importer->Import(context);
-            if (imported.Empty())
+            ContentImporterContext context(stage.root, stage.source, logicalName,
+                                           importerIdentity.name, externalSourceRoots,
+                                           dependencies, logger, request.environment);
+            stage.imported = stage.importer->Import(context);
+            if (stage.imported.Empty())
             {
                 throw std::logic_error("importer returned an empty value.");
             }
-            const std::vector<std::string> outputTypes = importer->OutputTypes();
-            if (std::find(outputTypes.begin(), outputTypes.end(), imported.StableType()) ==
+            const std::vector<std::string> outputTypes = stage.importer->OutputTypes();
+            if (std::find(outputTypes.begin(), outputTypes.end(), stage.imported.StableType()) ==
                 outputTypes.end())
             {
                 throw std::logic_error("importer returned undeclared output type '" +
-                                       imported.StableType() + "'.");
+                                       stage.imported.StableType() + "'.");
             }
         }
         catch (...)
         {
-            RethrowWithContext(source, logicalName, ContentPipelineStage::Import,
+            RethrowWithContext(stage.source, logicalName, ContentPipelineStage::Import,
                                importerIdentity.name);
         }
 
-        std::shared_ptr<const ContentProcessor> processor;
         try
         {
-            processor = registry_->ResolveProcessor(imported.StableType(), request.processor);
+            // An importer may name the processor its output is meant for (XNA's
+            // ContentImporterAttribute.DefaultProcessor); an explicit request still wins.
+            stage.processor = registry_->ResolveProcessor(
+                stage.imported.StableType(),
+                request.processor.empty() ? stage.importer->DefaultProcessor() : request.processor);
         }
         catch (...)
         {
-            RethrowWithContext(source, logicalName, ContentPipelineStage::Selection, {});
+            RethrowWithContext(stage.source, logicalName, ContentPipelineStage::Selection, {});
         }
 
-        ContentValue processed;
-        const ContentComponentIdentity processorIdentity = processor->Identity();
+        const ContentComponentIdentity processorIdentity = stage.processor->Identity();
         try
         {
-            processor->ValidateParameters(request.parameters);
-            ContentProcessorContext context(root, source, logicalName, processorIdentity.name,
-                                            request.parameters, externalSourceRoots,
-                                            dependencies, logger, request.outputFormat);
-            processed = processor->Process(imported, context);
-            if (processed.Empty())
+            stage.processor->ValidateParameters(request.parameters);
+            ContentProcessorContext context(stage.root, stage.source, logicalName,
+                                            processorIdentity.name, request.parameters,
+                                            externalSourceRoots, dependencies, logger,
+                                            request.outputFormat, request.environment, this);
+            stage.processed = stage.processor->Process(stage.imported, context);
+            if (stage.processed.Empty())
             {
                 throw std::logic_error("processor returned an empty value.");
             }
-            if (processed.StableType() != processor->OutputType())
+            if (stage.processed.StableType() != stage.processor->OutputType())
             {
                 throw std::logic_error("processor declared output type '" +
-                                       processor->OutputType() + "' but returned '" +
-                                       processed.StableType() + "'.");
+                                       stage.processor->OutputType() + "' but returned '" +
+                                       stage.processed.StableType() + "'.");
             }
+            stage.nestedOutputs = std::move(context.nestedOutputs_);
         }
         catch (...)
         {
-            RethrowWithContext(source, logicalName, ContentPipelineStage::Process,
+            RethrowWithContext(stage.source, logicalName, ContentPipelineStage::Process,
                                processorIdentity.name);
         }
+        return stage;
+    }
+
+    ContentProcessResult ContentPipeline::ImportAndProcess(
+        const ContentBuildRequest& request, ContentDependencyCollector& dependencies) const
+    {
+        ContentBuildLogger& downstreamLogger =
+            request.logger == nullptr ? NullLogger() : *request.logger;
+        RecordingContentBuildLogger logger(downstreamLogger);
+        StagedBuild stage = RunImportAndProcess(request, dependencies, logger, true);
+        ContentProcessResult result;
+        result.source = std::move(stage.source);
+        result.logicalName = request.logicalName;
+        result.importer = stage.importer->Identity();
+        result.processor = stage.processor->Identity();
+        result.processed = std::move(stage.processed);
+        result.nestedOutputs = std::move(stage.nestedOutputs);
+        result.messages = logger.TakeMessages();
+        return result;
+    }
+
+    ContentBuildResult ContentPipeline::Build(const ContentBuildRequest& request) const
+    {
+        const std::string logicalName = request.logicalName;
+        ContentBuildLogger& downstreamLogger =
+            request.logger == nullptr ? NullLogger() : *request.logger;
+        RecordingContentBuildLogger logger(downstreamLogger);
+        ContentDependencyCollector dependencies;
+        StagedBuild stage = RunImportAndProcess(request, dependencies, logger, false);
+        std::filesystem::path source = std::move(stage.source);
+        const ContentComponentIdentity importerIdentity = stage.importer->Identity();
+        const ContentComponentIdentity processorIdentity = stage.processor->Identity();
+        ContentValue processed = std::move(stage.processed);
 
         std::shared_ptr<const ContentTypeWriter> writer;
         try
@@ -1320,6 +1447,23 @@ namespace CNA::Content::Pipeline
                                             additional.assetTypeName,
                                             additional.assetSchemaVersion,
                                             additional.logicalName);
+            }
+            // Nested builds the processor requested were validated by their own Build(); here
+            // they only have to keep the output names distinct and stay within the ceiling.
+            for (ContentAdditionalWriteOutput& nested : stage.nestedOutputs)
+            {
+                if (output.additionalOutputs.size() + 1u >= MaxContentBuildOutputs)
+                {
+                    throw std::logic_error(
+                        "nested builds pushed the node past the maximum of " +
+                        std::to_string(MaxContentBuildOutputs) + " outputs.");
+                }
+                if (!outputNames.insert(nested.logicalName).second)
+                {
+                    throw std::logic_error("nested build output '" + nested.logicalName +
+                                           "' collides with another output of this node.");
+                }
+                output.additionalOutputs.push_back(std::move(nested));
             }
         }
         catch (...)
