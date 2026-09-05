@@ -177,6 +177,41 @@ protected:
               std::to_string(ceiling) + " live samplers allowed; the sweep above used "
                   + std::to_string(afterSweep));
 
+        // ---- F: VULKAN-160. The bound holds, and the picture stays right. ------------------------
+        // Two assertions, and both are needed. A bound that evicted the sampler the next draw is
+        // about to use would satisfy the size one and fail the pixel one; a bound that never
+        // evicted would satisfy the pixel one and fail the size one.
+        {
+            const std::size_t bound = VulkanRenderer::GetSamplerCacheBoundEXT();
+            for (int i = 0; i < static_cast<int>(bound) * 2; ++i) {
+                SamplerState state = SamplerState::PointClamp;
+                state.setMipMapLevelOfDetailBiasProperty(1.0f + static_cast<float>(i) * 0.001f);
+                DrawWith(dev, state);
+            }
+            const std::size_t size = Renderer().GetSamplerCacheSizeEXT();
+            check(size <= bound + 16,
+                  "F sweeping twice the bound leaves the cache bounded, not doubled",
+                  std::to_string(bound * 2) + " distinct states swept, cache holds "
+                      + std::to_string(size) + " (bound " + std::to_string(bound)
+                      + ", plus up to 16 pinned device slots)");
+
+            // And the picture: a known state, a known texel. If eviction had taken a sampler a
+            // draw still needed, this reads black or garbage rather than the left texel.
+            SamplerState state = SamplerState::PointClamp;
+            DrawWith(dev, state);
+            Color got(0, 0, 0, 0);
+            const Rectangle at(kSize / 2, kSize / 2, 1, 1);
+            dev.GetBackBufferData(&at, &got, 0, 1);
+            const bool right = std::abs(int(got.getRProperty()) - 230) <= 24
+                            && std::abs(int(got.getGProperty()) - 30) <= 24
+                            && std::abs(int(got.getBProperty()) - 30) <= 24;
+            check(right,
+                  "F and a draw after all that eviction still samples the right texel",
+                  "(" + std::to_string(got.getRProperty()) + ","
+                      + std::to_string(got.getGProperty()) + ","
+                      + std::to_string(got.getBProperty()) + "), expected (230,30,30)");
+        }
+
         // ---- E: VULKAN-161. Exhaustion is loud, not white. ---------------------------------------
         // The device here allows 32768 live samplers, so reaching the branch for real would mean
         // creating tens of thousands of them -- slow, and on a driver that over-delivers,

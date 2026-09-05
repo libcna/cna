@@ -2153,8 +2153,8 @@ namespace CNA::Internal::Renderers::Vulkan
         texSamplerOverflowPools_.clear();
         if (descriptorSetLayout_ != VK_NULL_HANDLE) { vkDestroyDescriptorSetLayout(device_, descriptorSetLayout_, nullptr); descriptorSetLayout_ = VK_NULL_HANDLE; }
         texSamplerDescSets_.clear(); // descriptor sets freed with pools above
-        for (auto& [k, s] : samplerCache_)
-            if (s != VK_NULL_HANDLE) vkDestroySampler(device_, s, nullptr);
+        for (auto& [k, entry] : samplerCache_)
+            if (entry.sampler != VK_NULL_HANDLE) vkDestroySampler(device_, entry.sampler, nullptr);
         samplerCache_.clear();
         if (defaultSampler_      != VK_NULL_HANDLE) { vkDestroySampler(device_, defaultSampler_, nullptr);                  defaultSampler_      = VK_NULL_HANDLE; }
 
@@ -3744,7 +3744,10 @@ namespace CNA::Internal::Renderers::Vulkan
         const int addressV = key.addressV;
         const int maxAnisotropy = key.maxAnisotropy;
         auto it = samplerCache_.find(key);
-        if (it != samplerCache_.end()) return it->second;
+        if (it != samplerCache_.end()) {
+            it->second.lastUsed = ++samplerUseClock_;   // VULKAN-160: LRU, not arbitrary
+            return it->second.sampler;
+        }
 
         // XNA TextureFilter int values:
         //  0=Linear, 1=Point, 2=Anisotropic, 3=LinearMipPoint, 4=PointMipLinear,
@@ -3813,7 +3816,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 std::to_string(samplerCache_.size()) + " live samplers (this device allows " +
                 std::to_string(deviceLimits_.maxSamplerAllocationCount) +
                 "). Refused rather than drawing with a substituted sampler.");
-        samplerCache_[key] = sampler;
+        samplerCache_[key] = CachedSamplerEXT{ sampler, ++samplerUseClock_ };
         return sampler;
     }
 
@@ -10732,6 +10735,10 @@ namespace CNA::Internal::Renderers::Vulkan
         pendingClears_.clear();
         // REMED-GFX-151: the whole frame was just recorded, so no sampling dependency survives it.
         segmentSampledGroups_.clear();
+        // VULKAN-160: and this is the one instant at which a sampler can safely leave the cache.
+        // Both gates are open here: the pending queues are empty, so no CPU record still holds a
+        // sampler handle, and the GPU side is handled by retiring rather than destroying.
+        TrimSamplerCacheEXT();
 
         // If ReadBackbuffer queued a deferred readback, copy the swapchain image
         // to the staging buffer NOW — before vkQueuePresentKHR hands the image to
@@ -11535,6 +11542,86 @@ namespace CNA::Internal::Renderers::Vulkan
     // InFlight begins (slot reuse waits it), so `generation + MaxFramesInFlight < frameGeneration_`
     // is a safe, strictly-conservative free condition. `force` frees everything (teardown only,
     // after a full device wait). Runs once per frame at SubmitFrame's fence-wait sync point.
+    void VulkanRenderer::TrimSamplerCacheEXT()
+    {
+        // VULKAN-160. `VULKAN-395` measured why this is needed: two of `SamplerStateKey`'s seven
+        // fields are caller-supplied numbers, so the key space is unbounded and a game animating a
+        // LOD bias allocates a VkSampler per frame forever, until the device's
+        // maxSamplerAllocationCount is gone.
+        if (samplerCache_.size() <= kMaxCachedSamplers) return;
+
+        // Pinned: anything a device slot currently points at, and the renderer's own default.
+        // These are live handles the next draw will use, whatever their age.
+        const auto pinned = [this](VkSampler s) {
+            if (s == defaultSampler_) return true;
+            for (VkSampler slot : slotSamplers_) if (slot == s) return true;
+            return false;
+        };
+
+        // Oldest first. A linear sort is fine: this runs only when the bound is exceeded, which
+        // real content never does.
+        std::vector<std::pair<std::uint64_t, SamplerStateKey>> byAge;
+        byAge.reserve(samplerCache_.size());
+        for (const auto& [key, entry] : samplerCache_)
+            if (!pinned(entry.sampler)) byAge.emplace_back(entry.lastUsed, key);
+        std::sort(byAge.begin(), byAge.end(),
+                  [](const auto& a, const auto& b) { return a.first < b.first; });
+
+        RetiredResources into;
+        std::size_t remaining = samplerCache_.size();
+        for (const auto& [age, key] : byAge) {
+            if (remaining <= kMaxCachedSamplers) break;
+            const auto it = samplerCache_.find(key);
+            if (it == samplerCache_.end()) continue;
+            const VkSampler dying = it->second.sampler;
+            samplerCache_.erase(it);
+            --remaining;
+            if (dying == VK_NULL_HANDLE) continue;
+            into.samplers.push_back(dying);
+            // Every single-sampler descriptor set keyed on it dies with it -- the same reverse
+            // lookup EvictSampledViewFromCaches does for a dying view, with the other half of the
+            // key.
+            for (auto ds = texSamplerDescSets_.begin(); ds != texSamplerDescSets_.end(); ) {
+                if (ds->first.second == dying) {
+                    if (ds->second.set != VK_NULL_HANDLE)
+                        into.poolDescriptorSets.emplace_back(ds->second.pool, ds->second.set);
+                    ds = texSamplerDescSets_.erase(ds);
+                } else {
+                    ++ds;
+                }
+            }
+        }
+        if (into.samplers.empty()) return;
+
+        // The seven per-frame EFFECT caches are the one place a reverse lookup is impossible:
+        // `EffectDescSetEntry` records the views an entry references (REMED-GFX-076) but not the
+        // samplers, and the samplers are only hashed into the key. Rather than widen seven caches
+        // and their insert sites for a path that runs only in the pathological case, every entry is
+        // dropped when any sampler is evicted. It costs one frame of re-population, and only for a
+        // game that has already exceeded a 256-sampler bound.
+        const auto flush = [&into](EffectDescSetCache& cache, VkDescriptorPool pool) {
+            for (auto& perFrame : cache) {
+                for (auto& [hash, entry] : perFrame)
+                    if (entry.set != VK_NULL_HANDLE)
+                        into.poolDescriptorSets.emplace_back(pool, entry.set);
+                perFrame.clear();
+            }
+        };
+        flush(dualTexDescSets_,     descriptorPool2Tex_);
+        flush(envMapDescSets_,      descriptorPoolEnvMap_);
+        flush(litTexturedDescSets_, descriptorPoolLitTextured_);
+        flush(fogTex3DDescSets_,    descriptorPoolFogTex3D_);
+        flush(skinnedDescSets_,     descriptorPoolSkinned_);
+        flush(pbrDescSets_,         descriptorPoolPbr_);
+        flush(pbrSkinnedDescSets_,  descriptorPoolPbrSkinned_);
+
+        VkLifetimeTraceEXT("cache.trimSampler evicted=%zu remaining=%zu sets=%zu gen=%llu",
+                           into.samplers.size(), samplerCache_.size(),
+                           into.poolDescriptorSets.size(),
+                           static_cast<unsigned long long>(frameGeneration_));
+        RetireResources(std::move(into));
+    }
+
     void VulkanRenderer::ProcessRetiredResources(bool force)
     {
         if (device_ == VK_NULL_HANDLE) return;
@@ -11553,6 +11640,9 @@ namespace CNA::Internal::Renderers::Vulkan
             for (auto& ps : r.poolDescriptorSets)
                 if (ps.second != VK_NULL_HANDLE && ps.first != VK_NULL_HANDLE)
                     vkFreeDescriptorSets(device_, ps.first, 1, &ps.second);
+            // VULKAN-160: samplers evicted from the cache past its bound, destroyed only once the
+            // frame that could still reference them has provably completed.
+            for (VkSampler sm : r.samplers)          if (sm != VK_NULL_HANDLE) vkDestroySampler(device_, sm, nullptr);
             for (VkImageView v : r.imageViews)       if (v  != VK_NULL_HANDLE) vkDestroyImageView(device_, v, nullptr);
             for (VkImage im : r.images)              if (im != VK_NULL_HANDLE) vkDestroyImage(device_, im, nullptr);
             for (VkDeviceMemory m : r.memories)      if (m  != VK_NULL_HANDLE) vkFreeMemory(device_, m, nullptr);

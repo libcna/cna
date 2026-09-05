@@ -1506,6 +1506,11 @@ namespace CNA::Internal::Renderers::Vulkan
         {
             return samplerCache_.size();
         }
+        /// plan_vulkan.md `VULKAN-160` diagnostic: the bound `TrimSamplerCacheEXT` enforces.
+        CNAEXT [[nodiscard]] static constexpr std::size_t GetSamplerCacheBoundEXT() noexcept
+        {
+            return kMaxCachedSamplers;
+        }
         /// plan_vulkan.md `VULKAN-395`: the device's own ceiling on live samplers
         /// (`VkPhysicalDeviceLimits::maxSamplerAllocationCount`). Creating more fails, and until
         /// this row that failure was a silently substituted white texture.
@@ -1954,7 +1959,34 @@ namespace CNA::Internal::Renderers::Vulkan
                 return AsTuple() < o.AsTuple();
             }
         };
-        std::map<SamplerStateKey, VkSampler>                         samplerCache_;
+        /// plan_vulkan.md `VULKAN-160`: the cached sampler plus when it was last handed out.
+        ///
+        /// The stamp is what makes eviction *least-recently-used* rather than arbitrary. It matters
+        /// more than it looks: the pathological case this bound exists for is a game sweeping a LOD
+        /// bias, where the entries worth keeping are precisely the handful it keeps coming back to.
+        struct CachedSamplerEXT {
+            VkSampler     sampler  = VK_NULL_HANDLE;
+            std::uint64_t lastUsed = 0;
+        };
+        std::map<SamplerStateKey, CachedSamplerEXT>                  samplerCache_;
+        /// Monotonic clock for `CachedSamplerEXT::lastUsed`; ticks on every cache hit and insert.
+        std::uint64_t                                                samplerUseClock_ = 0;
+        /// plan_vulkan.md `VULKAN-160`: how many samplers this renderer keeps cached.
+        ///
+        /// Far above any real key space -- 9 filters x 3 address modes cubed x a few anisotropy
+        /// values is a few hundred, and a game that legitimately uses more than 256 distinct
+        /// sampler states in one scene does not exist -- and far below every device's
+        /// `maxSamplerAllocationCount` (32768 on the drivers measured here). So the bound never
+        /// bites on real content, and always bites on the unbounded float key `VULKAN-395`
+        /// measured.
+        static constexpr std::size_t kMaxCachedSamplers = 256;
+        /// plan_vulkan.md `VULKAN-160`: evict least-recently-used samplers past the bound.
+        ///
+        /// Called where the frame's pending queues are cleared, which is the only instant at which
+        /// both gates are open: no CPU record still references a sampler (the queues are empty) and
+        /// GPU references are handled by retiring the handle rather than destroying it. Samplers
+        /// currently bound to a device slot are pinned regardless of age.
+        void TrimSamplerCacheEXT();
         /// Returns the cached VkSampler for one XNA sampler state, creating it on first use.
         /// Shared by the per-slot ApplySampler* setters (which then own a slot) and by the
         /// compiled-effect route (which owns none -- an Effect's sampler_state block belongs to the
@@ -2645,6 +2677,10 @@ namespace CNA::Internal::Renderers::Vulkan
             // when a sampled view they reference dies. Unlike `descriptorSets` (all from
             // descriptorPool_), each is freed from its OWN pool, so the pool is carried with the set.
             std::vector<std::pair<VkDescriptorPool, VkDescriptorSet>> poolDescriptorSets;
+            /// plan_vulkan.md `VULKAN-160`: samplers evicted from `samplerCache_` when it passes its
+            /// bound. A `VkSampler` outlives its cache entry by as long as any recorded frame can
+            /// still reference it, which is what this queue is for.
+            std::vector<VkSampler>         samplers;
         };
         std::vector<RetiredResources>                                    retiredResources_;
         // MRT proxies are retired as whole objects: SetRenderTargets() replaces the live proxy
