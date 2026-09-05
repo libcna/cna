@@ -558,6 +558,23 @@ namespace Cna.Xna40.IntermediateOracle
             Serialize(directory, "attributes", new Attributes(), null);
             Serialize(directory, "packed_collections", new PackedCollections(), null);
             Serialize(directory, "both_sections", new Both(), null);
+            var opaque = new OpaqueDataDictionary();
+            opaque.Add("Count", 3);
+            opaque.Add("Name", "wall");
+            opaque.Add("Scale", new Vector3(1, 2, 3));
+            // OpaqueDataDictionary.Add(key, null) throws ArgumentNullException (measured: run 6 crashed on it).
+            Serialize(directory, "opaque_data_dictionary", opaque, null);
+            try
+            {
+                File.WriteAllText(Path.Combine(directory, "opaque_data_dictionary.getcontentasxml.txt"), opaque.GetContentAsXml());
+                Record("opaque_data_dictionary_getcontentasxml", typeof(OpaqueDataDictionary).AssemblyQualifiedName, "written", "the return value of OpaqueDataDictionary.GetContentAsXml()");
+            }
+            catch (Exception error)
+            {
+                Record("opaque_data_dictionary_getcontentasxml", typeof(OpaqueDataDictionary).AssemblyQualifiedName, "failed", error.GetType().Name + ": " + error.Message);
+            }
+            var opaqueEmpty = new OpaqueDataDictionary();
+            File.WriteAllText(Path.Combine(directory, "opaque_data_dictionary_empty.getcontentasxml.txt"), opaqueEmpty.GetContentAsXml());
             var a = new Node { Name = "a" }; var b = new Node { Name = "b" }; a.Next = b; b.Next = a;
             Serialize(directory, "shared_cycle", a, null);
             var self = new Node { Name = "self" }; self.Next = self;
