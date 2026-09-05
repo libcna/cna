@@ -710,137 +710,137 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Graphics.AnimationChannel": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::AnimationChannel",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/AnimationContent.hpp",
+   "note": "Ordered by time, with Add answering the insertion index and a keyframe placed after one that already holds its time; membership is by reference. All measured (animation/channel_*).",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "AnimationChannel()",
      "note": ""
     },
     "property:Count": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getCountProperty()",
      "note": ""
     },
     "indexer:Item[System.Int32]": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "operator[](intcs)",
+     "note": "keyframes are owned and compared by reference, so they travel as std::shared_ptr."
     },
     "method:Add(Microsoft.Xna.Framework.Content.Pipeline.Graphics.AnimationKeyframe)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Add(const std::shared_ptr<AnimationKeyframe>&)",
+     "note": "keyframes are owned and compared by reference, so they travel as std::shared_ptr."
     },
     "method:Clear()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Clear()",
      "note": ""
     },
     "method:Contains(Microsoft.Xna.Framework.Content.Pipeline.Graphics.AnimationKeyframe)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Contains(const std::shared_ptr<AnimationKeyframe>&)",
+     "note": "keyframes are owned and compared by reference, so they travel as std::shared_ptr."
     },
     "method:GetEnumerator()": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "begin() / end()",
+     "note": "C++ traverses a collection with iterators, so the enumerator is the pair a range-based for loop uses."
     },
     "method:IndexOf(Microsoft.Xna.Framework.Content.Pipeline.Graphics.AnimationKeyframe)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "IndexOf(const std::shared_ptr<AnimationKeyframe>&)",
+     "note": "keyframes are owned and compared by reference, so they travel as std::shared_ptr."
     },
     "method:Remove(Microsoft.Xna.Framework.Content.Pipeline.Graphics.AnimationKeyframe)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Remove(const std::shared_ptr<AnimationKeyframe>&)",
+     "note": "keyframes are owned and compared by reference, so they travel as std::shared_ptr."
     },
     "method:RemoveAt(System.Int32)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "RemoveAt(intcs)",
      "note": ""
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Graphics.AnimationChannelDictionary": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::AnimationChannelDictionary",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/AnimationContent.hpp",
    "note": "",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "AnimationChannelDictionary()",
      "note": ""
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Graphics.AnimationContent": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::AnimationContent",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/AnimationContent.hpp",
    "note": "",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "AnimationContent()",
      "note": ""
     },
     "property:Channels": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getChannelsProperty()",
      "note": ""
     },
     "property:Duration": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getDurationProperty() / setDurationProperty()",
      "note": ""
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Graphics.AnimationContentDictionary": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::AnimationContentDictionary",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/AnimationContent.hpp",
    "note": "",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "AnimationContentDictionary()",
      "note": ""
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Graphics.AnimationKeyframe": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::AnimationKeyframe",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/AnimationContent.hpp",
+   "note": "Carries one CNAEXT member the inventory does not list: a public parameterless constructor, which the intermediate serializer needs where XNA's reflection reaches a private one. Both properties carry [ContentSerializerIgnore] in XNA and are written all the same, because the channel writes them itself (measured, animation/serialize_content).",
    "members": {
     "constructor:.ctor(System.TimeSpan, Microsoft.Xna.Framework.Matrix)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "AnimationKeyframe(System::TimeSpan, Matrix)",
      "note": ""
     },
     "property:Time": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getTimeProperty()",
      "note": ""
     },
     "property:Transform": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getTransformProperty() / setTransformProperty()",
      "note": ""
     },
     "method:CompareTo(Microsoft.Xna.Framework.Content.Pipeline.Graphics.AnimationKeyframe)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "CompareTo(const AnimationKeyframe&)",
+     "note": "IComparable<T>.CompareTo takes a reference here rather than a nullable one; XNA's throws NullReferenceException for null (measured, animation/keyframe_compare_null), which a reference parameter makes unreachable."
     }
    }
   },

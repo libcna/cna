@@ -16,6 +16,7 @@
 
 #include "Microsoft/Xna/Framework/BoundingBox.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/TextureReferenceDictionary.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/detail/AnimationChannelSerializer.hpp"
 #include "Microsoft/Xna/Framework/BoundingSphere.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Curve.hpp"
@@ -1495,6 +1496,20 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
         // ...and its value type, which the dictionary looks up by type rather than instantiating,
         // so the on-demand factory would never have run for it.
         IntermediateSerializer::TypeSerializerFor<ExternalReference<Graphics::TextureContent>>();
+        // The animation dictionaries, whose entries are <Channel Key="…"> and <Animation Key="…">
+        // (measured, tests/reference/xna40/graphics animation/serialize_content and
+        // animation/serialize_dictionary), and the channel itself, which is a collection of
+        // keyframes rather than a described type.
+        RegisterTypeSerializer(std::make_unique<Graphics::detail::AnimationChannelSerializer>());
+        IntermediateSerializer::TypeSerializerFor<Graphics::AnimationContent>();
+        RegisterTypeSerializer(
+            std::make_unique<NamedValueDictionarySerializer<Graphics::AnimationChannelDictionary,
+                                                            std::shared_ptr<Graphics::AnimationChannel>>>(
+                std::string(Graphics::AnimationChannelDictionary::CollectionItemName)));
+        RegisterTypeSerializer(
+            std::make_unique<NamedValueDictionarySerializer<Graphics::AnimationContentDictionary,
+                                                            std::shared_ptr<Graphics::AnimationContent>>>(
+                std::string(Graphics::AnimationContentDictionary::CollectionItemName)));
         ContentTypeSerializerBase& object = RegisterTypeSerializer(std::make_unique<ObjectSerializer>());
         {
             Registry& registry = TheRegistry();

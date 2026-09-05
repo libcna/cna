@@ -10,8 +10,8 @@
 
 | Quantity | Implemented (EXACT + SEMANTIC + HOST_SUBSTITUTION) | EXTERNAL_BLOCKED | MISSING |
 |---|---|---:|---:|
-| public/protected types | 58/128 (45.3%) | 0 | 70 |
-| public/protected members | 362/705 (51.3%) | 0 | 343 |
+| public/protected types | 63/128 (49.2%) | 0 | 65 |
+| public/protected members | 381/705 (54.0%) | 0 | 324 |
 | enum values | 6/27 (22.2%) | 0 | 21 |
 | built-in importers | 0/10 (0.0%) | 0 | 10 |
 | built-in processors | 0/12 (0.0%) | 0 | 12 |
@@ -19,8 +19,8 @@
 
 Status vocabulary: EXACT_EQUIVALENT, SEMANTIC_EQUIVALENT (spelling differs, capability identical; note says how),
 HOST_SUBSTITUTION (Microsoft-host mechanism replaced; note says how), EXTERNAL_BLOCKED (note names the
-unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 30, SEMANTIC_EQUIVALENT 27, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 70.
-Member status by value: EXACT_EQUIVALENT 242, SEMANTIC_EQUIVALENT 115, HOST_SUBSTITUTION 5, EXTERNAL_BLOCKED 0, MISSING 343.
+unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 33, SEMANTIC_EQUIVALENT 29, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 65.
+Member status by value: EXACT_EQUIVALENT 254, SEMANTIC_EQUIVALENT 122, HOST_SUBSTITUTION 5, EXTERNAL_BLOCKED 0, MISSING 324.
 
 Rules applied mechanically: 3 delegate plumbing members are listed in section 7 and not counted; 3 exception
 serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serialization has no C++ counterpart).
@@ -31,7 +31,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 |---|---:|---:|---:|---:|
 | `Microsoft.Xna.Framework.Content.Pipeline.Audio` | 5 | 0 | 0 | 5 |
 | `Microsoft.Xna.Framework.Content.Pipeline` | 32 | 21 | 0 | 11 |
-| `Microsoft.Xna.Framework.Content.Pipeline.Graphics` | 47 | 24 | 0 | 23 |
+| `Microsoft.Xna.Framework.Content.Pipeline.Graphics` | 47 | 29 | 0 | 18 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Processors` | 28 | 1 | 0 | 27 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler` | 5 | 5 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate` | 7 | 7 | 0 | 0 |
@@ -61,11 +61,11 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `…` | `FbxImporter` | class | MISSING |  |  |
 | `…` | `FontDescriptionImporter` | class | MISSING |  |  |
 | `….Graphics` | `AlphaTestMaterialContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::AlphaTestMaterialContent` | Adds no state: every property is a view over the base's OpaqueData or Textures, verified entry by entry against tests/reference/xna40/graphics (case material/alphatest_properties or material/basic_properties). |
-| `….Graphics` | `AnimationChannel` | class | MISSING |  |  |
-| `….Graphics` | `AnimationChannelDictionary` | class | MISSING |  |  |
-| `….Graphics` | `AnimationContent` | class | MISSING |  |  |
-| `….Graphics` | `AnimationContentDictionary` | class | MISSING |  |  |
-| `….Graphics` | `AnimationKeyframe` | class | MISSING |  |  |
+| `….Graphics` | `AnimationChannel` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::AnimationChannel` | Ordered by time, with Add answering the insertion index and a keyframe placed after one that already holds its time; membership is by reference. All measured (animation/channel_*). |
+| `….Graphics` | `AnimationChannelDictionary` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::AnimationChannelDictionary` |  |
+| `….Graphics` | `AnimationContent` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::AnimationContent` |  |
+| `….Graphics` | `AnimationContentDictionary` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::AnimationContentDictionary` |  |
+| `….Graphics` | `AnimationKeyframe` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::AnimationKeyframe` | Carries one CNAEXT member the inventory does not list: a public parameterless constructor, which the intermediate serializer needs where XNA's reflection reaches a private one. Both properties carry [ContentSerializerIgnore] in XNA and are written all the same, because the channel writes them itself (measured, animation/serialize_content). |
 | `….Graphics` | `BasicMaterialContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::BasicMaterialContent` | Adds no state: every property is a view over the base's OpaqueData or Textures, verified entry by entry against tests/reference/xna40/graphics (case material/basic_properties or material/basic_properties). |
 | `….Graphics` | `BitmapContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::BitmapContent` | All 13 members present. The copy protocol runs in XNA's order -- argument validation, zero-size no-op, same-instance snapshot, destination TryCopyFrom, source TryCopyTo, then the Vector4 intermediate -- verified against tests/reference/xna40/graphics. |
 | `….Graphics` | `BoneContent` | class | MISSING |  |  |
@@ -367,25 +367,25 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `AlphaTestMaterialContent` | property | `ReferenceAlpha` | EXACT_EQUIVALENT | `getReferenceAlphaProperty() / setReferenceAlphaProperty()` | Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured. |
 | `AlphaTestMaterialContent` | property | `Texture` | SEMANTIC_EQUIVALENT | `getTextureProperty() / setTextureProperty()` | the external reference is an owned shared_ptr; a null one removes the entry, as measured. |
 | `AlphaTestMaterialContent` | property | `VertexColorEnabled` | EXACT_EQUIVALENT | `getVertexColorEnabledProperty() / setVertexColorEnabledProperty()` | Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured. |
-| `AnimationChannel` | constructor | `.ctor()` | MISSING |  |  |
-| `AnimationChannel` | property | `Count` | MISSING |  |  |
-| `AnimationChannel` | indexer | `Item[System.Int32]` | MISSING |  |  |
-| `AnimationChannel` | method | `Add(Microsoft.Xna.Framework.Content.Pipeline.Graphics.AnimationKeyframe)` | MISSING |  |  |
-| `AnimationChannel` | method | `Clear()` | MISSING |  |  |
-| `AnimationChannel` | method | `Contains(Microsoft.Xna.Framework.Content.Pipeline.Graphics.AnimationKeyframe)` | MISSING |  |  |
-| `AnimationChannel` | method | `GetEnumerator()` | MISSING |  |  |
-| `AnimationChannel` | method | `IndexOf(Microsoft.Xna.Framework.Content.Pipeline.Graphics.AnimationKeyframe)` | MISSING |  |  |
-| `AnimationChannel` | method | `Remove(Microsoft.Xna.Framework.Content.Pipeline.Graphics.AnimationKeyframe)` | MISSING |  |  |
-| `AnimationChannel` | method | `RemoveAt(System.Int32)` | MISSING |  |  |
-| `AnimationChannelDictionary` | constructor | `.ctor()` | MISSING |  |  |
-| `AnimationContent` | constructor | `.ctor()` | MISSING |  |  |
-| `AnimationContent` | property | `Channels` | MISSING |  |  |
-| `AnimationContent` | property | `Duration` | MISSING |  |  |
-| `AnimationContentDictionary` | constructor | `.ctor()` | MISSING |  |  |
-| `AnimationKeyframe` | constructor | `.ctor(System.TimeSpan, Microsoft.Xna.Framework.Matrix)` | MISSING |  |  |
-| `AnimationKeyframe` | property | `Time` | MISSING |  |  |
-| `AnimationKeyframe` | property | `Transform` | MISSING |  |  |
-| `AnimationKeyframe` | method | `CompareTo(Microsoft.Xna.Framework.Content.Pipeline.Graphics.AnimationKeyframe)` | MISSING |  |  |
+| `AnimationChannel` | constructor | `.ctor()` | EXACT_EQUIVALENT | `AnimationChannel()` |  |
+| `AnimationChannel` | property | `Count` | EXACT_EQUIVALENT | `getCountProperty()` |  |
+| `AnimationChannel` | indexer | `Item[System.Int32]` | SEMANTIC_EQUIVALENT | `operator[](intcs)` | keyframes are owned and compared by reference, so they travel as std::shared_ptr. |
+| `AnimationChannel` | method | `Add(Microsoft.Xna.Framework.Content.Pipeline.Graphics.AnimationKeyframe)` | SEMANTIC_EQUIVALENT | `Add(const std::shared_ptr<AnimationKeyframe>&)` | keyframes are owned and compared by reference, so they travel as std::shared_ptr. |
+| `AnimationChannel` | method | `Clear()` | EXACT_EQUIVALENT | `Clear()` |  |
+| `AnimationChannel` | method | `Contains(Microsoft.Xna.Framework.Content.Pipeline.Graphics.AnimationKeyframe)` | SEMANTIC_EQUIVALENT | `Contains(const std::shared_ptr<AnimationKeyframe>&)` | keyframes are owned and compared by reference, so they travel as std::shared_ptr. |
+| `AnimationChannel` | method | `GetEnumerator()` | SEMANTIC_EQUIVALENT | `begin() / end()` | C++ traverses a collection with iterators, so the enumerator is the pair a range-based for loop uses. |
+| `AnimationChannel` | method | `IndexOf(Microsoft.Xna.Framework.Content.Pipeline.Graphics.AnimationKeyframe)` | SEMANTIC_EQUIVALENT | `IndexOf(const std::shared_ptr<AnimationKeyframe>&)` | keyframes are owned and compared by reference, so they travel as std::shared_ptr. |
+| `AnimationChannel` | method | `Remove(Microsoft.Xna.Framework.Content.Pipeline.Graphics.AnimationKeyframe)` | SEMANTIC_EQUIVALENT | `Remove(const std::shared_ptr<AnimationKeyframe>&)` | keyframes are owned and compared by reference, so they travel as std::shared_ptr. |
+| `AnimationChannel` | method | `RemoveAt(System.Int32)` | EXACT_EQUIVALENT | `RemoveAt(intcs)` |  |
+| `AnimationChannelDictionary` | constructor | `.ctor()` | EXACT_EQUIVALENT | `AnimationChannelDictionary()` |  |
+| `AnimationContent` | constructor | `.ctor()` | EXACT_EQUIVALENT | `AnimationContent()` |  |
+| `AnimationContent` | property | `Channels` | EXACT_EQUIVALENT | `getChannelsProperty()` |  |
+| `AnimationContent` | property | `Duration` | EXACT_EQUIVALENT | `getDurationProperty() / setDurationProperty()` |  |
+| `AnimationContentDictionary` | constructor | `.ctor()` | EXACT_EQUIVALENT | `AnimationContentDictionary()` |  |
+| `AnimationKeyframe` | constructor | `.ctor(System.TimeSpan, Microsoft.Xna.Framework.Matrix)` | EXACT_EQUIVALENT | `AnimationKeyframe(System::TimeSpan, Matrix)` |  |
+| `AnimationKeyframe` | property | `Time` | EXACT_EQUIVALENT | `getTimeProperty()` |  |
+| `AnimationKeyframe` | property | `Transform` | EXACT_EQUIVALENT | `getTransformProperty() / setTransformProperty()` |  |
+| `AnimationKeyframe` | method | `CompareTo(Microsoft.Xna.Framework.Content.Pipeline.Graphics.AnimationKeyframe)` | SEMANTIC_EQUIVALENT | `CompareTo(const AnimationKeyframe&)` | IComparable<T>.CompareTo takes a reference here rather than a nullable one; XNA's throws NullReferenceException for null (measured, animation/keyframe_compare_null), which a reference parameter makes unreachable. |
 | `BasicMaterialContent` | constant | `AlphaKey` | SEMANTIC_EQUIVALENT | `BasicMaterialContent::AlphaKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
 | `BasicMaterialContent` | constant | `DiffuseColorKey` | SEMANTIC_EQUIVALENT | `BasicMaterialContent::DiffuseColorKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
 | `BasicMaterialContent` | constant | `EmissiveColorKey` | SEMANTIC_EQUIVALENT | `BasicMaterialContent::EmissiveColorKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |

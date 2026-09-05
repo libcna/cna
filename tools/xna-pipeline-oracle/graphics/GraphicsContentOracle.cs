@@ -905,6 +905,160 @@ namespace Cna.Xna40.GraphicsOracle
             Record("compiledeffect/serialize", () => SerializeIntermediate(new CompiledEffectContent(new byte[] { 1, 2, 3 })));
             Record("effectcontent/serialize_null_code", () => SerializeIntermediate(new EffectContent()));
 
+            // ---- Animation content -----------------------------------------------------------------
+            Record("animation/keyframe_members", () =>
+            {
+                var k = new AnimationKeyframe(TimeSpan.FromSeconds(1.5), Matrix.Identity);
+                return "time=" + k.Time + " transform=" + k.Transform.M11 + "," + k.Transform.M44;
+            });
+            Record("animation/keyframe_set_transform", () =>
+            {
+                var k = new AnimationKeyframe(TimeSpan.Zero, Matrix.Identity);
+                k.Transform = Matrix.CreateTranslation(1, 2, 3);
+                return "transform=" + k.Transform.M41 + "," + k.Transform.M42 + "," + k.Transform.M43;
+            });
+            Record("animation/keyframe_compare", () =>
+            {
+                var early = new AnimationKeyframe(TimeSpan.FromSeconds(1), Matrix.Identity);
+                var late = new AnimationKeyframe(TimeSpan.FromSeconds(2), Matrix.Identity);
+                var same = new AnimationKeyframe(TimeSpan.FromSeconds(1), Matrix.CreateScale(2));
+                return "early_vs_late=" + early.CompareTo(late) + " late_vs_early=" + late.CompareTo(early) +
+                       " same=" + early.CompareTo(same) + " equals=" + early.Equals(same);
+            });
+            Record("animation/keyframe_compare_null", () => "result=" + new AnimationKeyframe(TimeSpan.Zero, Matrix.Identity).CompareTo(null));
+            Record("animation/channel_sorted", () =>
+            {
+                var channel = new AnimationChannel();
+                int third = channel.Add(new AnimationKeyframe(TimeSpan.FromSeconds(3), Matrix.Identity));
+                int first = channel.Add(new AnimationKeyframe(TimeSpan.FromSeconds(1), Matrix.Identity));
+                int second = channel.Add(new AnimationKeyframe(TimeSpan.FromSeconds(2), Matrix.Identity));
+                var times = new StringBuilder();
+                foreach (AnimationKeyframe frame in channel) { if (times.Length > 0) times.Append(' '); times.Append(frame.Time.TotalSeconds); }
+                return "indices=" + third + "," + first + "," + second + " count=" + channel.Count + " times=" + times;
+            });
+            Record("animation/channel_duplicate_time", () =>
+            {
+                var channel = new AnimationChannel();
+                channel.Add(new AnimationKeyframe(TimeSpan.FromSeconds(1), Matrix.Identity));
+                int again = channel.Add(new AnimationKeyframe(TimeSpan.FromSeconds(1), Matrix.CreateScale(2)));
+                return "index=" + again + " count=" + channel.Count + " first_m11=" + channel[0].Transform.M11 + " second_m11=" + channel[1].Transform.M11;
+            });
+            Record("animation/channel_add_null", () => { var channel = new AnimationChannel(); channel.Add(null); return "count=" + channel.Count; });
+            Record("animation/channel_indexer_out_of_range", () => new AnimationChannel()[0].Time.ToString());
+            Record("animation/channel_contains_and_indexof", () =>
+            {
+                var channel = new AnimationChannel();
+                var frame = new AnimationKeyframe(TimeSpan.FromSeconds(1), Matrix.Identity);
+                channel.Add(frame);
+                var equal = new AnimationKeyframe(TimeSpan.FromSeconds(1), Matrix.Identity);
+                return "contains_same=" + channel.Contains(frame) + " contains_equal=" + channel.Contains(equal) +
+                       " indexof_same=" + channel.IndexOf(frame) + " indexof_equal=" + channel.IndexOf(equal) +
+                       " indexof_missing=" + channel.IndexOf(new AnimationKeyframe(TimeSpan.FromSeconds(9), Matrix.Identity));
+            });
+            Record("animation/channel_remove", () =>
+            {
+                var channel = new AnimationChannel();
+                var frame = new AnimationKeyframe(TimeSpan.FromSeconds(1), Matrix.Identity);
+                channel.Add(frame);
+                channel.Add(new AnimationKeyframe(TimeSpan.FromSeconds(2), Matrix.Identity));
+                bool removed = channel.Remove(frame);
+                bool missing = channel.Remove(new AnimationKeyframe(TimeSpan.FromSeconds(9), Matrix.Identity));
+                channel.RemoveAt(0);
+                return "removed=" + removed + " missing=" + missing + " count=" + channel.Count;
+            });
+            Record("animation/channel_remove_at_out_of_range", () => { var channel = new AnimationChannel(); channel.RemoveAt(0); return "accepted"; });
+            Record("animation/channel_clear", () =>
+            {
+                var channel = new AnimationChannel();
+                channel.Add(new AnimationKeyframe(TimeSpan.FromSeconds(1), Matrix.Identity));
+                channel.Clear();
+                return "count=" + channel.Count;
+            });
+            Record("animation/content_defaults", () =>
+            {
+                var animation = new AnimationContent();
+                return "duration=" + animation.Duration + " channels=" + animation.Channels.Count + " name=\"" + animation.Name + "\"";
+            });
+            Record("animation/content_members", () =>
+            {
+                var animation = new AnimationContent();
+                animation.Duration = TimeSpan.FromSeconds(2.5);
+                var channel = new AnimationChannel();
+                channel.Add(new AnimationKeyframe(TimeSpan.Zero, Matrix.Identity));
+                animation.Channels.Add("Bone1", channel);
+                return "duration=" + animation.Duration + " channels=" + animation.Channels.Count +
+                       " keys=" + animation.Channels["Bone1"].Count;
+            });
+            Record("animation/channel_dictionary_null", () => { var d = new AnimationChannelDictionary(); d.Add("A", null); return "count=" + d.Count; });
+            Record("animation/content_dictionary_null", () => { var d = new AnimationContentDictionary(); d.Add("A", null); return "count=" + d.Count; });
+            Record("animation/serialize_content", () =>
+            {
+                var animation = new AnimationContent();
+                animation.Name = "Walk";
+                animation.Duration = TimeSpan.FromSeconds(2);
+                var channel = new AnimationChannel();
+                channel.Add(new AnimationKeyframe(TimeSpan.Zero, Matrix.Identity));
+                channel.Add(new AnimationKeyframe(TimeSpan.FromSeconds(1), Matrix.CreateTranslation(1, 0, 0)));
+                animation.Channels.Add("Root", channel);
+                return SerializeIntermediate(animation);
+            });
+            Record("animation/serialize_empty_content", () => SerializeIntermediate(new AnimationContent()));
+            Record("animation/serialize_dictionary", () =>
+            {
+                var dictionary = new AnimationContentDictionary();
+                var animation = new AnimationContent();
+                animation.Duration = TimeSpan.FromSeconds(1);
+                dictionary.Add("Walk", animation);
+                return SerializeIntermediate(dictionary);
+            });
+            Record("animation/deserialize_content", () =>
+            {
+                var animation = DeserializeIntermediate<AnimationContent>(
+                    "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n" +
+                    "<XnaContent xmlns:Graphics=\"Microsoft.Xna.Framework.Content.Pipeline.Graphics\">\r\n" +
+                    "  <Asset Type=\"Graphics:AnimationContent\">\r\n" +
+                    "    <Name>Walk</Name>\r\n" +
+                    "    <Duration>PT2S</Duration>\r\n" +
+                    "    <Channels>\r\n" +
+                    "      <Channel Key=\"Root\">\r\n" +
+                    "        <Keyframe>\r\n" +
+                    "          <Time>PT1S</Time>\r\n" +
+                    "          <Transform>1 0 0 0 0 1 0 0 0 0 1 0 1 0 0 1</Transform>\r\n" +
+                    "        </Keyframe>\r\n" +
+                    "        <Keyframe>\r\n" +
+                    "          <Time>PT0S</Time>\r\n" +
+                    "          <Transform>1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1</Transform>\r\n" +
+                    "        </Keyframe>\r\n" +
+                    "      </Channel>\r\n" +
+                    "    </Channels>\r\n" +
+                    "  </Asset>\r\n" +
+                    "</XnaContent>\r\n");
+                var times = new StringBuilder();
+                foreach (AnimationKeyframe frame in animation.Channels["Root"]) { if (times.Length > 0) times.Append(' '); times.Append(frame.Time.TotalSeconds); }
+                return "name=\"" + animation.Name + "\" duration=" + animation.Duration + " channels=" + animation.Channels.Count + " times=" + times +
+                       " m41=" + animation.Channels["Root"][1].Transform.M41;
+            });
+            Record("animation/deserialize_no_duration", () => DeserializeIntermediate<AnimationContent>(
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n" +
+                "<XnaContent xmlns:Graphics=\"Microsoft.Xna.Framework.Content.Pipeline.Graphics\">\r\n" +
+                "  <Asset Type=\"Graphics:AnimationContent\">\r\n" +
+                "    <Channels />\r\n" +
+                "  </Asset>\r\n" +
+                "</XnaContent>\r\n").Duration.ToString());
+            Record("animation/deserialize_keyframe_no_time", () => DeserializeIntermediate<AnimationContent>(
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n" +
+                "<XnaContent xmlns:Graphics=\"Microsoft.Xna.Framework.Content.Pipeline.Graphics\">\r\n" +
+                "  <Asset Type=\"Graphics:AnimationContent\">\r\n" +
+                "    <Duration>PT2S</Duration>\r\n" +
+                "    <Channels>\r\n" +
+                "      <Channel Key=\"Root\">\r\n" +
+                "        <Keyframe><Transform>1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1</Transform></Keyframe>\r\n" +
+                "      </Channel>\r\n" +
+                "    </Channels>\r\n" +
+                "  </Asset>\r\n" +
+                "</XnaContent>\r\n").Channels["Root"].Count.ToString());
+            Record("animation/tostring", () => new AnimationContent() + "|" + new AnimationChannel() + "|" + new AnimationChannelDictionary() + "|" + new AnimationKeyframe(TimeSpan.Zero, Matrix.Identity));
+
             // ---- TextureReferenceDictionary ------------------------------------------------------
             Record("texturereferencedictionary/default", () => { var d = new TextureReferenceDictionary(); return "count=" + d.Count + " ToString=\"" + d + "\""; });
 

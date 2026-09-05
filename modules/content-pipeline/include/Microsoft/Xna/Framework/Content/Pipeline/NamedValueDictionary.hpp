@@ -9,6 +9,7 @@
 #include "CNA/CNAHelper.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 #include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/Collections/Generic/IDictionary.hpp"
 #include "System/Collections/Generic/IEnumerator.hpp"
 #include "System/Collections/Generic/KeyNotFoundException.hpp"
@@ -230,11 +231,36 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         virtual void AddItem(const std::string& key, const T& value)
         {
             if (key.empty()) { throw System::ArgumentException("The dictionary key must not be empty.", "key"); }
+            RequireValue(value);
             if (Find(key) != entries_.end())
             {
                 throw System::ArgumentException("An item with the same key has already been added: '" + key + "'.", "key");
             }
             entries_.emplace_back(key, value);
+        }
+
+
+        /**
+         * @brief Refuses a null value, as the runtime does for every named-value dictionary
+         *        (measured, tests/reference/xna40/graphics case animation/channel_dictionary_null:
+         *        `ArgumentNullException`, parameter `value`).
+         *
+         * @param value The value being stored.
+         * @throws System::ArgumentNullException when a reference-typed value is null.
+         */
+        static void RequireValue(const T& value)
+        {
+            if constexpr (requires { value == nullptr; })
+            {
+                if (value == nullptr)
+                {
+                    throw System::ArgumentNullException("value");
+                }
+            }
+            else
+            {
+                (void)value;
+            }
         }
 
         /** @brief Removes all elements. */
@@ -266,6 +292,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          */
         virtual void SetItem(const std::string& key, const T& value)
         {
+            RequireValue(value);
             auto it = Find(key);
             if (it == entries_.end())
             {
