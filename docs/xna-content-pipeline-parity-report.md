@@ -10,17 +10,17 @@
 
 | Quantity | Implemented (EXACT + SEMANTIC + HOST_SUBSTITUTION) | EXTERNAL_BLOCKED | MISSING |
 |---|---|---:|---:|
-| public/protected types | 114/128 (89.1%) | 0 | 14 |
-| public/protected members | 624/705 (88.5%) | 1 | 80 |
+| public/protected types | 115/128 (89.8%) | 0 | 13 |
+| public/protected members | 626/705 (88.8%) | 1 | 78 |
 | enum values | 27/27 (100.0%) | 0 | 0 |
-| built-in importers | 2/10 (20.0%) | 0 | 8 |
+| built-in importers | 3/10 (30.0%) | 0 | 7 |
 | built-in processors | 11/12 (91.7%) | 0 | 1 |
 | processor properties | 46/47 (97.9%) | 0 | 1 |
 
 Status vocabulary: EXACT_EQUIVALENT, SEMANTIC_EQUIVALENT (spelling differs, capability identical; note says how),
 HOST_SUBSTITUTION (Microsoft-host mechanism replaced; note says how), EXTERNAL_BLOCKED (note names the
-unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 45, SEMANTIC_EQUIVALENT 68, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 14.
-Member status by value: EXACT_EQUIVALENT 402, SEMANTIC_EQUIVALENT 216, HOST_SUBSTITUTION 6, EXTERNAL_BLOCKED 1, MISSING 80.
+unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 45, SEMANTIC_EQUIVALENT 69, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 13.
+Member status by value: EXACT_EQUIVALENT 403, SEMANTIC_EQUIVALENT 217, HOST_SUBSTITUTION 6, EXTERNAL_BLOCKED 1, MISSING 78.
 
 Rules applied mechanically: 3 delegate plumbing members are listed in section 7 and not counted; 3 exception
 serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serialization has no C++ counterpart).
@@ -30,7 +30,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | Namespace | Types | Implemented | Blocked | Missing |
 |---|---:|---:|---:|---:|
 | `Microsoft.Xna.Framework.Content.Pipeline.Audio` | 5 | 5 | 0 | 0 |
-| `Microsoft.Xna.Framework.Content.Pipeline` | 32 | 23 | 0 | 9 |
+| `Microsoft.Xna.Framework.Content.Pipeline` | 32 | 24 | 0 | 8 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Graphics` | 47 | 47 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Processors` | 28 | 27 | 0 | 1 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler` | 5 | 5 | 0 | 0 |
@@ -56,7 +56,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `…` | `ContentProcessorAttribute` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::ContentProcessorAttribute` | C++ has no CLR attributes: the same-named descriptor object is passed to RegisterXnaProcessor<T>(). |
 | `…` | `ContentProcessorContext` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::ContentProcessorContext` |  |
 | `…` | `ContentProcessor<TInput, TOutput>` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::ContentProcessor<TInput, TOutput>` |  |
-| `…` | `EffectImporter` | class | MISSING |  |  |
+| `…` | `EffectImporter` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::EffectImporter` | the effect is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). |
 | `…` | `ExternalReference<T>` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::ExternalReference<T>` |  |
 | `…` | `FbxImporter` | class | MISSING |  |  |
 | `…` | `FontDescriptionImporter` | class | MISSING |  |  |
@@ -174,7 +174,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 
 | XNA importer | Extensions | Default processor | Status | CNA type | Note |
 |---|---|---|---|---|---|
-| `EffectImporter` | .fx | `EffectProcessor` | MISSING |  |  |
+| `EffectImporter` | .fx | `EffectProcessor` | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::EffectImporter` | the effect is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). |
 | `FbxImporter` | .fbx | `ModelProcessor` | MISSING |  |  |
 | `FontDescriptionImporter` | .spritefont | `FontDescriptionProcessor` | MISSING |  |  |
 | `Mp3Importer` | .mp3 | `SongProcessor` | MISSING |  |  |
@@ -344,8 +344,8 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `ContentProcessorContext` | method | `Convert<TInput, TOutput>(TInput, System.String, Microsoft.Xna.Framework.Content.Pipeline.OpaqueDataDictionary)` | SEMANTIC_EQUIVALENT | `Convert<TInput, TOutput>(const Carrier<TInput>&, const std::string&, const OpaqueDataDictionary&)` | a generic method cannot be virtual in C++: the member template forwards to the non-template virtual ConvertCore carrying the type names. |
 | `ContentProcessor<TInput, TOutput>` | constructor | `.ctor()` | EXACT_EQUIVALENT | `ContentProcessor()` |  |
 | `ContentProcessor<TInput, TOutput>` | method | `Process(TInput, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | EXACT_EQUIVALENT | `Process(TInput, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` |  |
-| `EffectImporter` | constructor | `.ctor()` | MISSING |  |  |
-| `EffectImporter` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | MISSING |  |  |
+| `EffectImporter` | constructor | `.ctor()` | EXACT_EQUIVALENT | `EffectImporter()` |  |
+| `EffectImporter` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | SEMANTIC_EQUIVALENT | `Import(const std::string&, ContentImporterContext&) -> std::shared_ptr<EffectContent>` | the effect is answered by shared pointer; the text is read verbatim, the identity carries the file and the tool name EffectImporter, no dependency is recorded even for an include, and a missing file carries XNA's own doubled message. |
 | `ExternalReference<T>` | constructor | `.ctor()` | EXACT_EQUIVALENT | `ExternalReference()` |  |
 | `ExternalReference<T>` | constructor | `.ctor(System.String)` | EXACT_EQUIVALENT | `ExternalReference(System.String)` |  |
 | `ExternalReference<T>` | constructor | `.ctor(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentIdentity)` | EXACT_EQUIVALENT | `ExternalReference(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentIdentity)` |  |

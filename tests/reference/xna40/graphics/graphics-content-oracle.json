@@ -544,6 +544,10 @@
   {"case": "meshbuilder/channel_data_persistence", "result": "name=Mesh positions=3[(0,0,0) (1,0,0) (0,1,0)] geometry=1 {vertices=3 positionIndices=[0,1,2] indices=[0,1,2] material=null opaque=0 channel=Normal0:Vector3[(0,0,1) (0,0,1) (0,0,1)] channel=TextureCoordinate0:Vector2[(5,6) (5,6) (7,8)]}"},
   {"case": "meshbuilder/finish_twice", "result": "same=True first=name=Mesh positions=3[(0,0,0) (1,0,0) (0,1,0)] geometry=1 {vertices=3 positionIndices=[0,1,2] indices=[0,1,2] material=null opaque=0 channel=Normal0:Vector3[(0,0,-1) (0,0,-1) (0,0,-1)]} second=name=Mesh positions=3[(0,0,0) (1,0,0) (0,1,0)] geometry=1 {vertices=3 positionIndices=[0,1,2] indices=[0,1,2] material=null opaque=0 channel=Normal0:Vector3[(0,0,-1) (0,0,-1) (0,0,-1)]}"},
   {"case": "meshbuilder/no_triangles", "result": "name=Empty positions=1[(0,0,0)] geometry=0"},
+  {"case": "effectprocessor/debugmode", "result": "auto_debug=796 auto_release=696 debug_release=796 optimize_debug=696"},
+  {"case": "effectimporter/source", "result": "type=EffectContent dependencies=0 identity=simple.fx/EffectImporter name=null codeIsSource=True codeLength=116"},
+  {"case": "effectimporter/include", "result": "dependencies=0 codeStartsWithInclude=True"},
+  {"case": "effectimporter/refusals", "result": "missing=FileNotFoundException: There was an error importing \"Z:\\rv\\data\\development\\github.com\\openeggbert\\cnatmp\\build\\xna-pipeline-oracle\\graphics\\out\\work\\no_such.fx\". The file could not be found. Looked for \"Z:\\rv\\data\\development\\github.com\\openeggbert\\cnatmp\\build\\xna-pipeline-oracle\\graphics\\out\\work\\no_such.fx\". empty=accepted:0 binary=accepted:5"},
   {"case": "texturereferencedictionary/default", "result": "count=0 ToString=\"Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureReferenceDictionary\""}
  ]
 }

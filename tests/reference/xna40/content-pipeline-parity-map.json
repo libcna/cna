@@ -555,20 +555,20 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.EffectImporter": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::EffectImporter",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/EffectImporter.hpp",
+   "note": "the effect is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute().",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "EffectImporter()",
      "note": ""
     },
     "method:Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Import(const std::string&, ContentImporterContext&) -> std::shared_ptr<EffectContent>",
+     "note": "the effect is answered by shared pointer; the text is read verbatim, the identity carries the file and the tool name EffectImporter, no dependency is recorded even for an include, and a missing file carries XNA's own doubled message."
     }
    }
   },

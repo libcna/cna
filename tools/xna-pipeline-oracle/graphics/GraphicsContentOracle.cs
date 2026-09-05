@@ -2614,6 +2614,100 @@ namespace Cna.Xna40.GraphicsOracle
                 return DescribeMeshFull(builder.FinishMesh());
             });
 
+            Record("effectprocessor/debugmode", () =>
+            {
+                // DebugMode.Auto is documented as "optimise unless the build configuration is
+                // Debug"; whether the answer actually differs is what this measures, against the
+                // two explicit modes as controls.
+                string source = "float4 Tint;\nfloat4 PS() : COLOR0 { float4 c = Tint * 2; return c + Tint; }\n" +
+                                "technique T { pass P { PixelShader = compile ps_2_0 PS(); } }\n";
+                var builder = new StringBuilder();
+                Action<string, EffectProcessorDebugMode, string> probe =
+                    delegate(string label, EffectProcessorDebugMode mode, string configuration)
+                {
+                    if (builder.Length > 0) builder.Append(' ');
+                    try
+                    {
+                        var processor = new EffectProcessor();
+                        processor.DebugMode = mode;
+                        var effect = new EffectContent();
+                        effect.EffectCode = source;
+                        effect.Identity = new ContentIdentity("shader.fx");
+                        CompiledEffectContent compiled =
+                            processor.Process(effect, new RecordingProcessorContext(configuration));
+                        byte[] code = compiled.GetEffectCode();
+                        builder.Append(label + "=" + code.Length);
+                    }
+                    catch (Exception error) { builder.Append(label + "=" + error.GetType().Name); }
+                };
+                probe("auto_debug", EffectProcessorDebugMode.Auto, "Debug");
+                probe("auto_release", EffectProcessorDebugMode.Auto, "Release");
+                probe("debug_release", EffectProcessorDebugMode.Debug, "Release");
+                probe("optimize_debug", EffectProcessorDebugMode.Optimize, "Debug");
+                return builder.ToString();
+            });
+
+            // ---- EffectImporter ------------------------------------------------------------------
+            Record("effectimporter/source", () =>
+            {
+                string directory = Path.Combine(outputDirectory, "work");
+                Directory.CreateDirectory(directory);
+                string path = Path.Combine(directory, "simple.fx");
+                string source = "float4 Main() : COLOR { return float4(1,0,0,1); }\r\n" +
+                                "technique T { pass P { PixelShader = compile ps_2_0 Main(); } }\r\n";
+                File.WriteAllText(path, source);
+                var importer = new EffectImporter();
+                var context = new ProbeImporterContext();
+                EffectContent content = importer.Import(path, context);
+                return "type=" + content.GetType().Name + " dependencies=" + context.Dependencies.Count +
+                       " identity=" + (content.Identity == null ? "null" : Path.GetFileName(content.Identity.SourceFilename ?? "") + "/" + (content.Identity.SourceTool ?? "null")) +
+                       " name=" + (content.Name == null ? "null" : "\"" + content.Name + "\"") +
+                       " codeIsSource=" + (content.EffectCode == source) +
+                       " codeLength=" + (content.EffectCode == null ? -1 : content.EffectCode.Length);
+            });
+            Record("effectimporter/include", () =>
+            {
+                string directory = Path.Combine(outputDirectory, "work");
+                Directory.CreateDirectory(directory);
+                File.WriteAllText(Path.Combine(directory, "shared.fxh"), "float4 Tint;\r\n");
+                string path = Path.Combine(directory, "uses_include.fx");
+                File.WriteAllText(path, "#include \"shared.fxh\"\r\nfloat4 Main() : COLOR { return Tint; }\r\n" +
+                                        "technique T { pass P { PixelShader = compile ps_2_0 Main(); } }\r\n");
+                var importer = new EffectImporter();
+                var context = new ProbeImporterContext();
+                EffectContent content = importer.Import(path, context);
+                var builder = new StringBuilder("dependencies=" + context.Dependencies.Count);
+                foreach (string dependency in context.Dependencies)
+                    builder.Append(" dependency=" + Path.GetFileName(dependency));
+                builder.Append(" codeStartsWithInclude=" + (content.EffectCode != null && content.EffectCode.StartsWith("#include")));
+                return builder.ToString();
+            });
+            Record("effectimporter/refusals", () =>
+            {
+                string directory = Path.Combine(outputDirectory, "work");
+                Directory.CreateDirectory(directory);
+                var builder = new StringBuilder();
+                Action<string, string> probe = delegate(string label, string path)
+                {
+                    if (builder.Length > 0) builder.Append(' ');
+                    try
+                    {
+                        var importer = new EffectImporter();
+                        EffectContent content = importer.Import(path, new ProbeImporterContext());
+                        builder.Append(label + "=" + (content == null ? "null" : "accepted:" + (content.EffectCode == null ? "null-code" : content.EffectCode.Length.ToString())));
+                    }
+                    catch (Exception error) { builder.Append(label + "=" + error.GetType().Name + ": " + error.Message); }
+                };
+                probe("missing", Path.Combine(directory, "no_such.fx"));
+                string empty = Path.Combine(directory, "empty.fx");
+                File.WriteAllText(empty, "");
+                probe("empty", empty);
+                string binary = Path.Combine(directory, "binary.fx");
+                File.WriteAllBytes(binary, new byte[] { 0, 1, 2, 3, 255 });
+                probe("binary", binary);
+                return builder.ToString();
+            });
+
             // ---- TextureReferenceDictionary ------------------------------------------------------
             Record("texturereferencedictionary/default", () => { var d = new TextureReferenceDictionary(); return "count=" + d.Count + " ToString=\"" + d + "\""; });
 
@@ -2735,8 +2829,11 @@ namespace Cna.Xna40.GraphicsOracle
             private readonly OpaqueDataDictionary parameters = new OpaqueDataDictionary();
             private readonly ContentBuildLogger logger = new ProbeLogger();
             private readonly StringBuilder built = new StringBuilder();
+            private readonly string configuration;
+            public RecordingProcessorContext() { configuration = "Debug"; }
+            public RecordingProcessorContext(string buildConfiguration) { configuration = buildConfiguration; }
             public string Built { get { return "[" + built + "]"; } }
-            public override string BuildConfiguration { get { return "Debug"; } }
+            public override string BuildConfiguration { get { return configuration; } }
             public override string IntermediateDirectory { get { return "obj"; } }
             public override ContentBuildLogger Logger { get { return logger; } }
             public override string OutputDirectory { get { return "bin"; } }
@@ -2803,6 +2900,17 @@ namespace Cna.Xna40.GraphicsOracle
             { throw new NotSupportedException("BuildAsset"); }
             public override TOutput Convert<TInput, TOutput>(TInput input, string processorName, OpaqueDataDictionary processorParameters)
             { throw new NotSupportedException("Convert"); }
+        }
+
+        /// The least an importer needs: a context that logs nothing and keeps what it is told.
+        private sealed class ProbeImporterContext : ContentImporterContext
+        {
+            private readonly ContentBuildLogger logger = new ProbeLogger();
+            public readonly List<string> Dependencies = new List<string>();
+            public override string IntermediateDirectory { get { return "obj"; } }
+            public override ContentBuildLogger Logger { get { return logger; } }
+            public override string OutputDirectory { get { return "bin"; } }
+            public override void AddDependency(string filename) { Dependencies.Add(filename); }
         }
 
         private sealed class ProbeLogger : ContentBuildLogger

@@ -38,6 +38,8 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/MeshBuilder.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/StockMaterials.hpp"
 #include "CNA/Content/Pipeline/EffectCompilerService.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/ContentImporterContext.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/EffectImporter.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/EffectProcessor.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/VertexChannelNames.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/FontProcessors.hpp"
@@ -53,6 +55,7 @@
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
 #include "System/ArgumentNullException.hpp"
+#include "System/IO/FileNotFoundException.hpp"
 #include "System/DateTime.hpp"
 #include "System/NotSupportedException.hpp"
 
@@ -298,7 +301,7 @@ namespace
     /**
      * @brief A context that records what it is asked to build, as the oracle's driver does.
      */
-    class RecordingContext final : public ContentProcessorContext
+    class RecordingContext : public ContentProcessorContext
     {
     public:
         [[nodiscard]] std::string getBuildConfigurationProperty() const override { return "Debug"; }
@@ -1902,4 +1905,184 @@ TEST(XnaModelPipeline, AProcessorsOwnSceneBecomesAnXnbCnaReadsBack)
     EXPECT_FLOAT_EQ(effect.diffuseColor.X, 0.5f);
     EXPECT_FLOAT_EQ(effect.diffuseColor.Y, 0.25f);
     EXPECT_FLOAT_EQ(effect.diffuseColor.Z, 0.125f);
+}
+
+
+// ---- XNAPP-190: the effect importer, and what DebugMode.Auto decides --------------------------
+
+namespace
+{
+    /** @brief An importer context that records what it is told, as the oracle's driver does. */
+    class ProbeImporterContext final : public Xna::ContentImporterContext
+    {
+    public:
+        std::vector<std::string> dependencies;
+        [[nodiscard]] std::string getIntermediateDirectoryProperty() const override { return "obj"; }
+        [[nodiscard]] Xna::ContentBuildLogger& getLoggerProperty() const override
+        {
+            return const_cast<SilentLogger&>(logger_);
+        }
+        [[nodiscard]] std::string getOutputDirectoryProperty() const override { return "bin"; }
+        void AddDependency(const std::string& filename) override { dependencies.push_back(filename); }
+
+    private:
+        class SilentLogger final : public Xna::ContentBuildLogger
+        {
+        protected:
+            void LogMessage(const std::string&) override {}
+            void LogImportantMessage(const std::string&) override {}
+            void LogWarning(const std::string&, const Xna::ContentIdentity&, const std::string&) override {}
+        };
+
+        SilentLogger logger_;
+    };
+
+    /** @brief A recording context whose build configuration the caller chooses. */
+    class ConfiguredContext final : public RecordingContext
+    {
+    public:
+        explicit ConfiguredContext(std::string configuration) : configuration_(std::move(configuration)) {}
+        [[nodiscard]] std::string getBuildConfigurationProperty() const override { return configuration_; }
+
+    private:
+        std::string configuration_;
+    };
+
+    /** @brief A directory the effect tests write their sources into. */
+    class EffectScratch
+    {
+    public:
+        EffectScratch()
+            : path_(std::filesystem::temp_directory_path() /
+                    ("cna_xnapp190_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
+        {
+            std::filesystem::create_directories(path_);
+        }
+        ~EffectScratch()
+        {
+            std::error_code error;
+            std::filesystem::remove_all(path_, error);
+        }
+        EffectScratch(const EffectScratch&) = delete;
+        EffectScratch& operator=(const EffectScratch&) = delete;
+        [[nodiscard]] std::string Write(const std::string& name, const std::string& text) const
+        {
+            const std::filesystem::path file = path_ / name;
+            std::ofstream out(file, std::ios::binary);
+            out.write(text.data(), static_cast<std::streamsize>(text.size()));
+            return file.string();
+        }
+        [[nodiscard]] const std::filesystem::path& Path() const { return path_; }
+
+    private:
+        std::filesystem::path path_;
+    };
+}
+
+TEST(XnaEffectImporter, ReadsTheSourceAsXnaDoes)
+{
+    const EffectScratch scratch;
+    const std::string source =
+        "float4 Main() : COLOR { return float4(1,0,0,1); }\r\ntechnique T { pass P { PixelShader = compile "
+        "ps_2_0 Main(); } }\r\n";
+    const std::string path = scratch.Write("simple.fx", source);
+    Xna::EffectImporter importer;
+    ProbeImporterContext context;
+    const std::shared_ptr<Graphics::EffectContent> content = importer.Import(path, context);
+    ASSERT_NE(content, nullptr);
+    ASSERT_TRUE(content->getEffectCodeProperty().has_value());
+    EXPECT_EQ("type=EffectContent dependencies=" + std::to_string(context.dependencies.size()) + " identity=" +
+                  std::filesystem::path(content->getIdentityProperty().getSourceFilenameProperty())
+                      .filename()
+                      .string() +
+                  "/" + content->getIdentityProperty().getSourceToolProperty() + " name=" +
+                  (content->getNameProperty().empty() ? "null" : "set") + " codeIsSource=" +
+                  (*content->getEffectCodeProperty() == source ? "True" : "False") + " codeLength=" +
+                  std::to_string(content->getEffectCodeProperty()->size()),
+              Expected("effectimporter/source"));
+}
+
+TEST(XnaEffectImporter, AnIncludeIsLeftToTheCompiler)
+{
+    const EffectScratch scratch;
+    (void)scratch.Write("shared.fxh", "float4 Tint;\r\n");
+    const std::string path =
+        scratch.Write("uses_include.fx",
+                      "#include \"shared.fxh\"\r\nfloat4 Main() : COLOR { return Tint; }\r\ntechnique T { pass P "
+                      "{ PixelShader = compile ps_2_0 Main(); } }\r\n");
+    Xna::EffectImporter importer;
+    ProbeImporterContext context;
+    const std::shared_ptr<Graphics::EffectContent> content = importer.Import(path, context);
+    ASSERT_TRUE(content->getEffectCodeProperty().has_value());
+    EXPECT_EQ("dependencies=" + std::to_string(context.dependencies.size()) + " codeStartsWithInclude=" +
+                  (content->getEffectCodeProperty()->rfind("#include", 0) == 0 ? "True" : "False"),
+              Expected("effectimporter/include"));
+}
+
+TEST(XnaEffectImporter, RefusalsMatchXna)
+{
+    const EffectScratch scratch;
+    Xna::EffectImporter importer;
+    ProbeImporterContext context;
+    const std::string empty = scratch.Write("empty.fx", "");
+    const std::string binary = scratch.Write("binary.fx", std::string("\0\1\2\3\xFF", 5));
+    const auto describe = [&importer, &context](const std::string& label, const std::string& path)
+    {
+        try
+        {
+            const std::shared_ptr<Graphics::EffectContent> content = importer.Import(path, context);
+            return label + "=accepted:" +
+                   (content->getEffectCodeProperty().has_value()
+                        ? std::to_string(content->getEffectCodeProperty()->size())
+                        : std::string("null-code"));
+        }
+        catch (const System::IO::FileNotFoundException&)
+        {
+            return label + "=FileNotFoundException";
+        }
+    };
+    const std::string expected = Expected("effectimporter/refusals");
+    EXPECT_EQ(expected.substr(0, std::string("missing=FileNotFoundException").size()),
+              "missing=FileNotFoundException");
+    EXPECT_THROW((void)importer.Import((scratch.Path() / "no_such.fx").string(), context),
+                 System::IO::FileNotFoundException);
+    // An empty file and a binary one are both accepted, with exactly the bytes they hold.
+    EXPECT_EQ(describe("empty", empty) + " " + describe("binary", binary),
+              expected.substr(expected.find("empty=")));
+}
+
+TEST(XnaEffectProcessor, DebugModeAutoFollowsTheBuildConfiguration)
+{
+    // Measured, effectprocessor/debugmode: Auto answers what Debug answers when the configuration
+    // is Debug and what Optimize answers otherwise, and an explicit mode wins over both.
+    const std::string expected = Expected("effectprocessor/debugmode");
+    const std::size_t debugBytes = expected.find("auto_debug=") + std::string("auto_debug=").size();
+    const std::size_t releaseBytes = expected.find("auto_release=") + std::string("auto_release=").size();
+    EXPECT_NE(expected.substr(debugBytes, 3), expected.substr(releaseBytes, 3));
+
+    struct Case
+    {
+        Processors::EffectProcessorDebugMode mode;
+        std::string configuration;
+        bool debugInformation;
+    };
+    for (const Case& probe : std::vector<Case>{
+             {Processors::EffectProcessorDebugMode::Auto, "Debug", true},
+             {Processors::EffectProcessorDebugMode::Auto, "Release", false},
+             {Processors::EffectProcessorDebugMode::Debug, "Release", true},
+             {Processors::EffectProcessorDebugMode::Optimize, "Debug", false}})
+    {
+        const auto compiler = std::make_shared<ScriptedCompiler>();
+        compiler->result.succeeded = true;
+        compiler->result.bytecode = {1, 2, 3, 4};
+        Processors::EffectProcessor processor(compiler);
+        processor.setDebugModeProperty(probe.mode);
+        auto effect = std::make_shared<Graphics::EffectContent>();
+        effect->setEffectCodeProperty("technique T { }");
+        effect->setIdentityProperty(Xna::ContentIdentity("shader.fx"));
+        ConfiguredContext context(probe.configuration);
+        (void)processor.Process(effect, context);
+        EXPECT_EQ(compiler->request.debugInformation, probe.debugInformation)
+            << probe.configuration << " with mode " << static_cast<int>(probe.mode);
+    }
 }

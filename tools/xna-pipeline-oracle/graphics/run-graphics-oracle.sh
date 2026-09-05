@@ -30,7 +30,8 @@ mkdir -p "$build" "$out"
 # The Microsoft assemblies are copied only into the ignored build directory, beside the driver,
 # so the CLR finds them without a GAC; nothing Microsoft owns reaches the repository.
 cp "$refs/Microsoft.Xna.Framework.dll" "$refs/Microsoft.Xna.Framework.Graphics.dll" \
-   "$refs/Microsoft.Xna.Framework.Content.Pipeline.dll" "$build/"
+   "$refs/Microsoft.Xna.Framework.Content.Pipeline.dll" \
+   "$refs/Microsoft.Xna.Framework.Content.Pipeline.EffectImporter.dll" "$build/"
 # The pipeline's native helper (texture resampling, format conversion, DXT) lives beside the
 # managed assembly in the installed framework; without it those operations report
 # "Specified method is not supported", which is an environment artifact, not XNA behaviour.
@@ -39,7 +40,8 @@ native="${CNA_XNA40_NATIVE:-$prefix/drive_c/Program Files/Common Files/Microsoft
 cp "$native" "$build/"
 mcs -sdk:4 -platform:x86 -target:exe -nologo -out:"$build/GraphicsContentOracle.exe" \
     -r:"$build/Microsoft.Xna.Framework.dll" -r:"$build/Microsoft.Xna.Framework.Graphics.dll" \
-    -r:"$build/Microsoft.Xna.Framework.Content.Pipeline.dll" -r:System.Xml -r:System.Core \
+    -r:"$build/Microsoft.Xna.Framework.Content.Pipeline.dll" \
+    -r:"$build/Microsoft.Xna.Framework.Content.Pipeline.EffectImporter.dll" -r:System.Xml -r:System.Core \
     "$here/GraphicsContentOracle.cs"
 
 win_out="$(env WINEPREFIX="$prefix" WINEDEBUG=-all wine winepath -w "$build/out" 2>/dev/null)"
