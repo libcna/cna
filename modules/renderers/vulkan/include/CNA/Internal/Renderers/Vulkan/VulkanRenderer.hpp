@@ -1709,6 +1709,23 @@ namespace CNA::Internal::Renderers::Vulkan
         CNAEXT static void SetSamplerCreationFailuresForTestEXT(std::uint32_t count) noexcept;
 
         /**
+         * @brief Test-only: report `VK_ERROR_OUT_OF_DATE_KHR` from the next @p count acquires.
+         *
+         * plans/plan_vulkan.md `VULKAN-026`. The out-of-date swapchain is a real state this
+         * renderer already handles -- `GetBackBufferData`'s own comment calls it "common on first
+         * frame under Wayland/RADV" -- but it arrives when the window manager decides, so a test
+         * cannot reach it by resizing a window under a virtual display. Injected instead, exactly
+         * as `SetSamplerCreationFailuresForTestEXT` does for samplers.
+         *
+         * The injection replaces the acquire rather than following it, so no image is handed over
+         * and the image-available semaphore is left unsignalled -- the same shape a real
+         * out-of-date acquire produces.
+         *
+         * @param count How many acquires to report out of date; 0 disables injection.
+         */
+        CNAEXT static void SetSwapchainOutOfDateForTestEXT(std::uint32_t count) noexcept;
+
+        /**
          * @brief Reports whether the Khronos validation layer is actually active.
          *
          * False once CreateInstance() has found the layer missing, so a validation regression can
@@ -1720,6 +1737,35 @@ namespace CNA::Internal::Renderers::Vulkan
 
         /** @brief Number of vkAcquireNextImageKHR calls that returned an image. */
         CNAEXT [[nodiscard]] uint64_t GetAcquireCountEXT() const noexcept { return acquireCountEXT_; }
+        /**
+         * @brief Test-only: how many deferred 3D draws are still queued for the next submit.
+         *
+         * plans/plan_vulkan.md `VULKAN-026`. The queue is cleared inside `RecordCommandBuffer`,
+         * so a frame whose acquire failed never clears it. Whether that retention is visible in
+         * the next frame's pixels depends on replay ordering against that frame's clear; this
+         * counter answers the retention question directly instead, so the test does not have to
+         * infer it from a colour.
+         *
+         * @return Number of queued deferred draws.
+         */
+        CNAEXT [[nodiscard]] std::size_t GetPendingDrawCountEXT() const noexcept
+        {
+            return pending3D_.size();
+        }
+        /**
+         * @brief Test-only: how many deferred SpriteBatch batches are queued for the next submit.
+         *
+         * plans/plan_vulkan.md `VULKAN-026`. 2D and 3D work live in two separate queues
+         * (`activeBatches_`, `pending3D_`), and a test that measures only one of them reports
+         * "nothing is queued" for work that is. Both are needed to answer what a dropped frame
+         * leaves behind.
+         *
+         * @return Number of queued deferred sprite batches.
+         */
+        CNAEXT [[nodiscard]] std::size_t GetPendingBatchCountEXT() const noexcept
+        {
+            return activeBatches_.size();
+        }
         /** @brief Number of per-frame vkQueueSubmit calls made by SubmitFrame. */
         CNAEXT [[nodiscard]] uint64_t GetFrameSubmitCountEXT() const noexcept { return frameSubmitCountEXT_; }
         /** @brief Number of vkQueuePresentKHR calls, deferred presents included. */

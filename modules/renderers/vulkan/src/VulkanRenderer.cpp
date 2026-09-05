@@ -214,6 +214,14 @@ namespace CNA::Internal::Renderers::Vulkan
     // every production run. Exhausting `maxSamplerAllocationCount` for real would mean creating
     // tens of thousands of samplers, which is a slow way to reach one branch.
     static std::uint32_t sSamplerCreationFailuresToInject = 0;
+    // plan_vulkan.md VULKAN-026: how many more swapchain acquires a test wants to report
+    // VK_ERROR_OUT_OF_DATE_KHR. 0 in every production run. The state is real and reachable --
+    // GetBackBufferData's own comment calls it "common on first frame under Wayland/RADV" -- but
+    // it arrives when the window manager decides, not when a test asks, so it cannot be driven
+    // by a resize under Xvfb. Injected INSTEAD OF the acquire rather than after it, because a
+    // successful acquire that is then reported out of date would leave the image-available
+    // semaphore signalled with no waiter.
+    static std::uint32_t sSwapchainOutOfDateToInject = 0;
 
     // VULKAN-390: one allocation attempt, with the test-only failure injection folded in so every
     // call site sees the same behaviour a real VK_ERROR_OUT_OF_POOL_MEMORY would produce.
@@ -3679,6 +3687,11 @@ namespace CNA::Internal::Renderers::Vulkan
     void VulkanRenderer::SetSamplerCreationFailuresForTestEXT(std::uint32_t count) noexcept
     {
         sSamplerCreationFailuresToInject = count;
+    }
+
+    void VulkanRenderer::SetSwapchainOutOfDateForTestEXT(std::uint32_t count) noexcept
+    {
+        sSwapchainOutOfDateToInject = count;
     }
 
     void VulkanRenderer::CreateDescriptorPool()
@@ -10993,8 +11006,18 @@ namespace CNA::Internal::Renderers::Vulkan
         ProcessRetiredResources(false);
 
         uint32_t imageIndex = 0;
-        VkResult result = vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX,
-            imageAvailableSemaphores_[currentFrame_], VK_NULL_HANDLE, &imageIndex);
+        // VULKAN-026: the injected arm replaces the acquire, it does not follow it -- an image
+        // handed over and then declared stale would leave imageAvailableSemaphores_[currentFrame_]
+        // signalled with nothing waiting on it, which is a different defect than the one under
+        // test and would be reported as a synchronization hazard rather than this branch.
+        VkResult result;
+        if (sSwapchainOutOfDateToInject > 0) {
+            --sSwapchainOutOfDateToInject;
+            result = VK_ERROR_OUT_OF_DATE_KHR;
+        } else {
+            result = vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX,
+                imageAvailableSemaphores_[currentFrame_], VK_NULL_HANDLE, &imageIndex);
+        }
         if (result == VK_ERROR_OUT_OF_DATE_KHR) { RecreateSwapchain(); return false; }
         if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
             throw std::runtime_error("vkAcquireNextImageKHR failed");
