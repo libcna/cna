@@ -3710,186 +3710,186 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentCompiler": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler::ContentCompiler",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Serialization/Compiler/ContentCompiler.hpp",
    "note": "",
    "members": {
     "method:GetTypeWriter(System.Type)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "GetTypeWriter(System.Type)",
      "note": ""
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentTypeWriter": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler::ContentTypeWriterBase",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Serialization/Compiler/ContentTypeWriter.hpp",
+   "note": "C++ cannot give a class and a class template the same name, so the non-generic base is ContentTypeWriterBase -- the spelling CNA's runtime already uses for ContentTypeReaderBase beside ContentTypeReader<T>.",
    "members": {
     "constructor:.ctor(System.Type)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ContentTypeWriter(System.Type)",
      "note": ""
     },
     "property:CanDeserializeIntoExistingObject": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getCanDeserializeIntoExistingObjectProperty()",
      "note": ""
     },
     "property:TargetType": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getTargetTypeProperty()",
      "note": ""
     },
     "property:TypeVersion": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getTypeVersionProperty()",
      "note": ""
     },
     "method:GetRuntimeReader(Microsoft.Xna.Framework.Content.Pipeline.TargetPlatform)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "GetRuntimeReader(Microsoft.Xna.Framework.Content.Pipeline.TargetPlatform)",
      "note": ""
     },
     "method:GetRuntimeType(Microsoft.Xna.Framework.Content.Pipeline.TargetPlatform)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "GetRuntimeType(Microsoft.Xna.Framework.Content.Pipeline.TargetPlatform)",
      "note": ""
     },
     "method:Initialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentCompiler)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Initialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentCompiler)",
      "note": ""
     },
     "method:ShouldCompressContent(Microsoft.Xna.Framework.Content.Pipeline.TargetPlatform, System.Object)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "ShouldCompressContent(TargetPlatform, const ContentObject&)",
+     "note": "object is ContentObject, the canonical type-erased box."
     },
     "method:Write(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentWriter, System.Object)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Write(ContentWriter&, const ContentObject&)",
+     "note": "object is ContentObject; protected internal becomes protected plus the CNAEXT InvokeWrite the compiler drives it through."
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentTypeWriterAttribute": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler::ContentTypeWriterAttribute",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Serialization/Compiler/ContentTypeWriterAttribute.hpp",
+   "note": "C++ has no CLR attributes: the same-named descriptor is passed to ContentCompiler::AddTypeWriter<TWriter>().",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ContentTypeWriterAttribute()",
      "note": ""
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentTypeWriter`1": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler::ContentTypeWriter<T>",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Serialization/Compiler/ContentTypeWriter.hpp",
    "note": "",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ContentTypeWriter()",
      "note": ""
     },
     "method:Write(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentWriter, System.Object)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Write(ContentWriter&, const ContentObject&)",
+     "note": "object is ContentObject; unboxes and forwards to the typed Write."
     },
     "method:Write(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentWriter, T)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Write(ContentWriter&, const Carrier<T>&)",
      "note": ""
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentWriter": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler::ContentWriter",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Serialization/Compiler/ContentWriter.hpp",
    "note": "",
    "members": {
     "property:TargetPlatform": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getTargetPlatformProperty()",
      "note": ""
     },
     "property:TargetProfile": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getTargetProfileProperty()",
      "note": ""
     },
     "method:Dispose(System.Boolean)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Dispose(System.Boolean)",
      "note": ""
     },
     "method:Write(Microsoft.Xna.Framework.Color)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Write(Microsoft.Xna.Framework.Color)",
      "note": ""
     },
     "method:Write(Microsoft.Xna.Framework.Matrix)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Write(Microsoft.Xna.Framework.Matrix)",
      "note": ""
     },
     "method:Write(Microsoft.Xna.Framework.Quaternion)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Write(Microsoft.Xna.Framework.Quaternion)",
      "note": ""
     },
     "method:Write(Microsoft.Xna.Framework.Vector2)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Write(Microsoft.Xna.Framework.Vector2)",
      "note": ""
     },
     "method:Write(Microsoft.Xna.Framework.Vector3)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Write(Microsoft.Xna.Framework.Vector3)",
      "note": ""
     },
     "method:Write(Microsoft.Xna.Framework.Vector4)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Write(Microsoft.Xna.Framework.Vector4)",
      "note": ""
     },
     "method:WriteExternalReference<T>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<T>)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "WriteExternalReference<T>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<T>)",
      "note": ""
     },
     "method:WriteObject<T>(T)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "WriteObject<T>(T)",
      "note": ""
     },
     "method:WriteObject<T>(T, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentTypeWriter)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "WriteObject<T>(const Carrier<T>&, ContentTypeWriterBase&)",
      "note": ""
     },
     "method:WriteRawObject<T>(T)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "WriteRawObject<T>(T)",
      "note": ""
     },
     "method:WriteRawObject<T>(T, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentTypeWriter)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "WriteRawObject<T>(const Carrier<T>&, ContentTypeWriterBase&)",
      "note": ""
     },
     "method:WriteSharedResource<T>(T)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "WriteSharedResource<T>(T)",
      "note": ""
     }
    }

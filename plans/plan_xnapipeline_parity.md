@@ -532,7 +532,7 @@ Filled by `parity_report.py` into `docs/xna-content-pipeline-parity-report.md` a
 each phase close. The member denominator the report counts is 705: the inventory's 708 minus the
 3 delegate-plumbing members the report lists separately (§5).
 
-**Current (2026-09-05, after Phase 3): types 21/128, members 123/705, enum values 3/27,
+**Current (2026-09-05, after Phase 4): types 26/128, members 152/705, enum values 3/27,
 importers 0/10, extensions 0/18, processors 0/12, properties 0/47, intermediate-serializer
 features 0/§13, targets verified 0/3, black-box-verified families 0.** The previous plan's routes
 exist and work, but by this plan's definition only XNA-namespaced types with tested behaviour
@@ -614,10 +614,10 @@ module) with `src/Xna/`; `ContentSerializer*` descriptors in `modules/content/in
 
 | ID | Task | State |
 |---|---|---|
-| `XNAPP-060` | `ContentWriter` façade (15 members: `Write` overloads for `Vector2/3/4`, `Matrix`, `Quaternion`, `Color`, `WriteObject<T>` ×2, `WriteRawObject<T>` ×2, `WriteSharedResource<T>`, `WriteExternalReference<T>`, `TargetPlatform`, `TargetProfile`, `Dispose(bool)`) over `XnbWriter`. | [ ] |
-| `XNAPP-061` | `ContentTypeWriter` (9) and `ContentTypeWriter<T>` (3) compatibility bases: `GetRuntimeReader`, `GetRuntimeType`, `ShouldCompressContent`, `TypeVersion`, `CanDeserializeIntoExistingObject`, `Initialize`, `Write`; adapter to `XnbTypeWriter`. | [ ] |
-| `XNAPP-062` | `ContentTypeWriterAttribute` descriptor + `ContentCompiler::GetTypeWriter(Type)` over the registry. | [ ] |
-| `XNAPP-063` | A user-defined `ContentTypeWriter<T>` round-trips through the real `.xnb` route and loads in CNA's reader; compile-parity tests. | [ ] |
+| `XNAPP-060` | `ContentWriter` façade (15 members: `Write` overloads for `Vector2/3/4`, `Matrix`, `Quaternion`, `Color`, `WriteObject<T>` ×2, `WriteRawObject<T>` ×2, `WriteSharedResource<T>`, `WriteExternalReference<T>`, `TargetPlatform`, `TargetProfile`, `Dispose(bool)`) over `XnbWriter`. | [x] Derives sharp-runtime's `BinaryWriter` as XNA's derives .NET's, with every primitive overload overridden to write through the one canonical `XnbWriter` (the placeholder base stream stays empty). `WriteObject` dispatches a reference on its **dynamic** type, as .NET does; `WriteSharedResource` writes one resource however many references name it; `WriteExternalReference` spells the path relative to the asset's output directory without the extension. Two additive canonical hooks: `XnbWriter::WriteObject/WriteRawObject/AddSharedResource` taking an explicit type writer (XNA's writer-worker overloads), and **a fix to `XnbWriter::WriteExternalReference`**, whose containment check started counting at the content root while `ContentReader::ReadExternalReference` resolves relative to the asset's own directory -- so an asset in a subdirectory could never reference a sibling directory. It now starts at the asset's directory depth. |
+| `XNAPP-061` | `ContentTypeWriter` (9) and `ContentTypeWriter<T>` (3) compatibility bases: `GetRuntimeReader`, `GetRuntimeType`, `ShouldCompressContent`, `TypeVersion`, `CanDeserializeIntoExistingObject`, `Initialize`, `Write`; adapter to `XnbTypeWriter`. | [x] The non-generic base is `ContentTypeWriterBase` (a class and a class template cannot share a name; CNA's runtime spells `ContentTypeReaderBase` the same way -- `SEMANTIC_EQUIVALENT`, recorded). `GetRuntimeReader` is written verbatim into the type-reader table, `TypeVersion` beside it; the compiler's adapter turns a user writer into a canonical `XnbTypeWriterBase` per target platform, so `GetRuntimeReader(platform)` can differ per platform as XNA allows. |
+| `XNAPP-062` | `ContentTypeWriterAttribute` descriptor + `ContentCompiler::GetTypeWriter(Type)` over the registry. | [x] `ContentCompiler` is constructible here (XNA's is host-created), owns one frozen canonical `XnbTypeWriterRegistry` per platform -- the built-in writers plus every `AddTypeWriter<TWriter>()` -- and answers `GetTypeWriter` for built-ins (37 types, including the registered `List<>`/`Dictionary<,>` instantiations) and user writers alike. `Compile<T>()`/`CompileObject()` are the C++ form of XNA's internal `Compile`; a root writer's `ShouldCompressContent` veto is honoured. `ContentValue` gained `CppType()`/`RawData()` so the compiler can dispatch on a box without knowing `T`. |
+| `XNAPP-063` | A user-defined `ContentTypeWriter<T>` round-trips through the real `.xnb` route and loads in CNA's reader; compile-parity tests. | [x] `XnaSerializationCompilerTests.cpp`: three user writers (one for a derived type, dispatched on the dynamic type of a base-typed reference), shared resources referenced twice, an external reference, raw and dispatched objects, the 7-bit int, a platform-dependent reader name and the HiDef bit -- all read back by CNA's reader with matching custom `ContentTypeReader`s, `TypeVersion` enforced. `RegisterXnaXnbOutput()` registers a canonical `.xnb` writer per type the compiler knows (`XnbOutputAssetId::XnaObject`, told apart by type name), and a canonical `ContentTypeWriter::Write(input, name, environment)` overload -- defaulting to the old one -- carries the output directory to it, so an XNA-shaped route builds to `.xnb` through the real coordinator. A reference whose dynamic type has no writer is refused rather than written with a base writer: XNA gives such a type the reflective writer, which is `XNAPP-070`. |
 
 ### Phase 5 — Serialization.Intermediate parity
 
@@ -824,9 +824,8 @@ failures `plan_xnapipeline.md` §0.4 recorded do not occur here: this machine ha
 Session 1 (2026-09-05): Phases 0–1 done except `XNAPP-008`/`015`/`016`; Phase 3 done except
 `XNAPP-043` (`VideoContent`, with Phase 14), with `032`/`045` partial as their rows say. The parity map
 is edited through `tools/xna-pipeline-oracle/parity_map_edit.py` with a decision document, never
-by hand, and the report regenerates with `parity_report.py`. Next: Phase 4
-(`ContentWriter`/`ContentTypeWriter<T>` over `XnbWriter`, and canonical XNB writers keyed by the
-façade's type names so an XNA-shaped processor's output reaches `.xnb`), then Phase 6/7 in ID
+by hand, and the report regenerates with `parity_report.py`. Phase 4 done. Next: Phase 5 (the intermediate serializer and the type-description
+system, which also supplies the automatic XNB writer for undecorated types), then Phase 6/7 in ID
 order.
 The build directory is `cmake-build-debug/`; **this session builds with `-j3` at the owner's
 request** (a per-session cap, not a repository rule); the oracle regenerates with

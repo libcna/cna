@@ -10,8 +10,8 @@
 
 | Quantity | Implemented (EXACT + SEMANTIC + HOST_SUBSTITUTION) | EXTERNAL_BLOCKED | MISSING |
 |---|---|---:|---:|
-| public/protected types | 21/128 (16.4%) | 0 | 107 |
-| public/protected members | 123/705 (17.4%) | 0 | 582 |
+| public/protected types | 26/128 (20.3%) | 0 | 102 |
+| public/protected members | 152/705 (21.6%) | 0 | 553 |
 | enum values | 3/27 (11.1%) | 0 | 24 |
 | built-in importers | 0/10 (0.0%) | 0 | 10 |
 | built-in processors | 0/12 (0.0%) | 0 | 12 |
@@ -19,8 +19,8 @@
 
 Status vocabulary: EXACT_EQUIVALENT, SEMANTIC_EQUIVALENT (spelling differs, capability identical; note says how),
 HOST_SUBSTITUTION (Microsoft-host mechanism replaced; note says how), EXTERNAL_BLOCKED (note names the
-unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 16, SEMANTIC_EQUIVALENT 4, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 107.
-Member status by value: EXACT_EQUIVALENT 88, SEMANTIC_EQUIVALENT 30, HOST_SUBSTITUTION 5, EXTERNAL_BLOCKED 0, MISSING 582.
+unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 19, SEMANTIC_EQUIVALENT 6, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 102.
+Member status by value: EXACT_EQUIVALENT 114, SEMANTIC_EQUIVALENT 33, HOST_SUBSTITUTION 5, EXTERNAL_BLOCKED 0, MISSING 553.
 
 Rules applied mechanically: 3 delegate plumbing members are listed in section 7 and not counted; 3 exception
 serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serialization has no C++ counterpart).
@@ -33,7 +33,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `Microsoft.Xna.Framework.Content.Pipeline` | 32 | 21 | 0 | 11 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Graphics` | 47 | 0 | 0 | 47 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Processors` | 28 | 0 | 0 | 28 |
-| `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler` | 5 | 0 | 0 | 5 |
+| `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler` | 5 | 5 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate` | 7 | 0 | 0 | 7 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Tasks` | 4 | 0 | 0 | 4 |
 
@@ -145,11 +145,11 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `….Processors` | `VertexBufferContent` | class | MISSING |  |  |
 | `….Processors` | `VertexDeclarationContent` | class | MISSING |  |  |
 | `….Processors` | `VideoProcessor` | class | MISSING |  |  |
-| `….Serialization.Compiler` | `ContentCompiler` | class | MISSING |  |  |
-| `….Serialization.Compiler` | `ContentTypeWriter` | class | MISSING |  |  |
-| `….Serialization.Compiler` | `ContentTypeWriterAttribute` | class | MISSING |  |  |
-| `….Serialization.Compiler` | `ContentTypeWriter<T>` | class | MISSING |  |  |
-| `….Serialization.Compiler` | `ContentWriter` | class | MISSING |  |  |
+| `….Serialization.Compiler` | `ContentCompiler` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler::ContentCompiler` |  |
+| `….Serialization.Compiler` | `ContentTypeWriter` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler::ContentTypeWriterBase` | C++ cannot give a class and a class template the same name, so the non-generic base is ContentTypeWriterBase -- the spelling CNA's runtime already uses for ContentTypeReaderBase beside ContentTypeReader<T>. |
+| `….Serialization.Compiler` | `ContentTypeWriterAttribute` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler::ContentTypeWriterAttribute` | C++ has no CLR attributes: the same-named descriptor is passed to ContentCompiler::AddTypeWriter<TWriter>(). |
+| `….Serialization.Compiler` | `ContentTypeWriter<T>` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler::ContentTypeWriter<T>` |  |
+| `….Serialization.Compiler` | `ContentWriter` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler::ContentWriter` |  |
 | `….Serialization.Intermediate` | `ContentTypeSerializer` | class | MISSING |  |  |
 | `….Serialization.Intermediate` | `ContentTypeSerializer+ChildCallback` | delegate | MISSING |  |  |
 | `….Serialization.Intermediate` | `ContentTypeSerializerAttribute` | class | MISSING |  |  |
@@ -836,35 +836,35 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `VideoProcessor` | constructor | `.ctor()` | MISSING |  |  |
 | `VideoProcessor` | property | `VideoSoundtrackType` | MISSING |  |  |
 | `VideoProcessor` | method | `Process(Microsoft.Xna.Framework.Content.Pipeline.VideoContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | MISSING |  |  |
-| `ContentCompiler` | method | `GetTypeWriter(System.Type)` | MISSING |  |  |
-| `ContentTypeWriter` | constructor | `.ctor(System.Type)` | MISSING |  |  |
-| `ContentTypeWriter` | property | `CanDeserializeIntoExistingObject` | MISSING |  |  |
-| `ContentTypeWriter` | property | `TargetType` | MISSING |  |  |
-| `ContentTypeWriter` | property | `TypeVersion` | MISSING |  |  |
-| `ContentTypeWriter` | method | `GetRuntimeReader(Microsoft.Xna.Framework.Content.Pipeline.TargetPlatform)` | MISSING |  |  |
-| `ContentTypeWriter` | method | `GetRuntimeType(Microsoft.Xna.Framework.Content.Pipeline.TargetPlatform)` | MISSING |  |  |
-| `ContentTypeWriter` | method | `Initialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentCompiler)` | MISSING |  |  |
-| `ContentTypeWriter` | method | `ShouldCompressContent(Microsoft.Xna.Framework.Content.Pipeline.TargetPlatform, System.Object)` | MISSING |  |  |
-| `ContentTypeWriter` | method | `Write(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentWriter, System.Object)` | MISSING |  |  |
-| `ContentTypeWriterAttribute` | constructor | `.ctor()` | MISSING |  |  |
-| `ContentTypeWriter<T>` | constructor | `.ctor()` | MISSING |  |  |
-| `ContentTypeWriter<T>` | method | `Write(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentWriter, System.Object)` | MISSING |  |  |
-| `ContentTypeWriter<T>` | method | `Write(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentWriter, T)` | MISSING |  |  |
-| `ContentWriter` | property | `TargetPlatform` | MISSING |  |  |
-| `ContentWriter` | property | `TargetProfile` | MISSING |  |  |
-| `ContentWriter` | method | `Dispose(System.Boolean)` | MISSING |  |  |
-| `ContentWriter` | method | `Write(Microsoft.Xna.Framework.Color)` | MISSING |  |  |
-| `ContentWriter` | method | `Write(Microsoft.Xna.Framework.Matrix)` | MISSING |  |  |
-| `ContentWriter` | method | `Write(Microsoft.Xna.Framework.Quaternion)` | MISSING |  |  |
-| `ContentWriter` | method | `Write(Microsoft.Xna.Framework.Vector2)` | MISSING |  |  |
-| `ContentWriter` | method | `Write(Microsoft.Xna.Framework.Vector3)` | MISSING |  |  |
-| `ContentWriter` | method | `Write(Microsoft.Xna.Framework.Vector4)` | MISSING |  |  |
-| `ContentWriter` | method | `WriteExternalReference<T>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<T>)` | MISSING |  |  |
-| `ContentWriter` | method | `WriteObject<T>(T)` | MISSING |  |  |
-| `ContentWriter` | method | `WriteObject<T>(T, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentTypeWriter)` | MISSING |  |  |
-| `ContentWriter` | method | `WriteRawObject<T>(T)` | MISSING |  |  |
-| `ContentWriter` | method | `WriteRawObject<T>(T, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentTypeWriter)` | MISSING |  |  |
-| `ContentWriter` | method | `WriteSharedResource<T>(T)` | MISSING |  |  |
+| `ContentCompiler` | method | `GetTypeWriter(System.Type)` | EXACT_EQUIVALENT | `GetTypeWriter(System.Type)` |  |
+| `ContentTypeWriter` | constructor | `.ctor(System.Type)` | EXACT_EQUIVALENT | `ContentTypeWriter(System.Type)` |  |
+| `ContentTypeWriter` | property | `CanDeserializeIntoExistingObject` | EXACT_EQUIVALENT | `getCanDeserializeIntoExistingObjectProperty()` |  |
+| `ContentTypeWriter` | property | `TargetType` | EXACT_EQUIVALENT | `getTargetTypeProperty()` |  |
+| `ContentTypeWriter` | property | `TypeVersion` | EXACT_EQUIVALENT | `getTypeVersionProperty()` |  |
+| `ContentTypeWriter` | method | `GetRuntimeReader(Microsoft.Xna.Framework.Content.Pipeline.TargetPlatform)` | EXACT_EQUIVALENT | `GetRuntimeReader(Microsoft.Xna.Framework.Content.Pipeline.TargetPlatform)` |  |
+| `ContentTypeWriter` | method | `GetRuntimeType(Microsoft.Xna.Framework.Content.Pipeline.TargetPlatform)` | EXACT_EQUIVALENT | `GetRuntimeType(Microsoft.Xna.Framework.Content.Pipeline.TargetPlatform)` |  |
+| `ContentTypeWriter` | method | `Initialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentCompiler)` | EXACT_EQUIVALENT | `Initialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentCompiler)` |  |
+| `ContentTypeWriter` | method | `ShouldCompressContent(Microsoft.Xna.Framework.Content.Pipeline.TargetPlatform, System.Object)` | SEMANTIC_EQUIVALENT | `ShouldCompressContent(TargetPlatform, const ContentObject&)` | object is ContentObject, the canonical type-erased box. |
+| `ContentTypeWriter` | method | `Write(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentWriter, System.Object)` | SEMANTIC_EQUIVALENT | `Write(ContentWriter&, const ContentObject&)` | object is ContentObject; protected internal becomes protected plus the CNAEXT InvokeWrite the compiler drives it through. |
+| `ContentTypeWriterAttribute` | constructor | `.ctor()` | EXACT_EQUIVALENT | `ContentTypeWriterAttribute()` |  |
+| `ContentTypeWriter<T>` | constructor | `.ctor()` | EXACT_EQUIVALENT | `ContentTypeWriter()` |  |
+| `ContentTypeWriter<T>` | method | `Write(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentWriter, System.Object)` | SEMANTIC_EQUIVALENT | `Write(ContentWriter&, const ContentObject&)` | object is ContentObject; unboxes and forwards to the typed Write. |
+| `ContentTypeWriter<T>` | method | `Write(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentWriter, T)` | EXACT_EQUIVALENT | `Write(ContentWriter&, const Carrier<T>&)` |  |
+| `ContentWriter` | property | `TargetPlatform` | EXACT_EQUIVALENT | `getTargetPlatformProperty()` |  |
+| `ContentWriter` | property | `TargetProfile` | EXACT_EQUIVALENT | `getTargetProfileProperty()` |  |
+| `ContentWriter` | method | `Dispose(System.Boolean)` | EXACT_EQUIVALENT | `Dispose(System.Boolean)` |  |
+| `ContentWriter` | method | `Write(Microsoft.Xna.Framework.Color)` | EXACT_EQUIVALENT | `Write(Microsoft.Xna.Framework.Color)` |  |
+| `ContentWriter` | method | `Write(Microsoft.Xna.Framework.Matrix)` | EXACT_EQUIVALENT | `Write(Microsoft.Xna.Framework.Matrix)` |  |
+| `ContentWriter` | method | `Write(Microsoft.Xna.Framework.Quaternion)` | EXACT_EQUIVALENT | `Write(Microsoft.Xna.Framework.Quaternion)` |  |
+| `ContentWriter` | method | `Write(Microsoft.Xna.Framework.Vector2)` | EXACT_EQUIVALENT | `Write(Microsoft.Xna.Framework.Vector2)` |  |
+| `ContentWriter` | method | `Write(Microsoft.Xna.Framework.Vector3)` | EXACT_EQUIVALENT | `Write(Microsoft.Xna.Framework.Vector3)` |  |
+| `ContentWriter` | method | `Write(Microsoft.Xna.Framework.Vector4)` | EXACT_EQUIVALENT | `Write(Microsoft.Xna.Framework.Vector4)` |  |
+| `ContentWriter` | method | `WriteExternalReference<T>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<T>)` | EXACT_EQUIVALENT | `WriteExternalReference<T>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<T>)` |  |
+| `ContentWriter` | method | `WriteObject<T>(T)` | EXACT_EQUIVALENT | `WriteObject<T>(T)` |  |
+| `ContentWriter` | method | `WriteObject<T>(T, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentTypeWriter)` | EXACT_EQUIVALENT | `WriteObject<T>(const Carrier<T>&, ContentTypeWriterBase&)` |  |
+| `ContentWriter` | method | `WriteRawObject<T>(T)` | EXACT_EQUIVALENT | `WriteRawObject<T>(T)` |  |
+| `ContentWriter` | method | `WriteRawObject<T>(T, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentTypeWriter)` | EXACT_EQUIVALENT | `WriteRawObject<T>(const Carrier<T>&, ContentTypeWriterBase&)` |  |
+| `ContentWriter` | method | `WriteSharedResource<T>(T)` | EXACT_EQUIVALENT | `WriteSharedResource<T>(T)` |  |
 | `ContentTypeSerializer` | constructor | `.ctor(System.Type)` | MISSING |  |  |
 | `ContentTypeSerializer` | constructor | `.ctor(System.Type, System.String)` | MISSING |  |  |
 | `ContentTypeSerializer` | property | `CanDeserializeIntoExistingObject` | MISSING |  |  |
