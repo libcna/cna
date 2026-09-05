@@ -8,8 +8,6 @@ namespace Microsoft::Devices
 {
     DeviceType Environment::getDeviceTypeProperty()
     {
-        return CNA::getCurrentPlatform() == CNA::TargetPlatform::Web
-            ? DeviceType::Emulator
-            : DeviceType::Device;
+        return CNA::isMobilePlatform() ? DeviceType::Device : DeviceType::Emulator;
     }
 }

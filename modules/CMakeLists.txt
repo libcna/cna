@@ -257,6 +257,11 @@ if(EMSCRIPTEN)
         target_link_options(cna_build_config INTERFACE
             -pthread
             -sOFFSCREEN_FRAMEBUFFER=1
+            # Legacy JS FS proxies every pthread syscall to the browser main thread. That can
+            # deadlock a background Content.Load while the game loop is active (notably in
+            # Firefox). WasmFS keeps preloaded-file stat/open/read operations inside Wasm and is
+            # the Emscripten filesystem designed for multithreaded builds.
+            -sWASMFS=1
             -Wno-pthreads-mem-growth)
     endif()
 endif()
