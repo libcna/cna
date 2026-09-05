@@ -63,6 +63,7 @@
 #include "CNA/RendererTestGate.hpp"
 
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/RendererCapabilityProfile.hpp"
 #include "System/NotSupportedException.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
@@ -298,16 +299,30 @@ TEST(WebGpuWireFrameContract, CapabilityQueryAnswersForWireFrame)
         << "WebGPU under-reports WireFrame -- the edge-expansion implementation is still here "
            "while the capability says the renderer cannot do it";
 
-    // The surrounding capability answers must not move with it. MultiStreamVertexInput is the only
-    // entry this renderer still reports false for (REMED-GFX-201's shared default; WEBGPU-172 owns
-    // it). OcclusionQuery is true (WEBGPU-84) and MultipleRenderTargets too (WEBGPU-85/86/87).
+    // The surrounding capability answers must not move with it. OcclusionQuery is true
+    // (WEBGPU-84), MultipleRenderTargets too (WEBGPU-85/86/87), and MultiStreamVertexInput became
+    // true in WEBGPU-172, which built one WGPUVertexBufferLayout per resolved stream on every stock
+    // family, ordinary and instanced. It is asserted here rather than deleted because this check
+    // exists to catch a capability moving as a SIDE EFFECT of a change to another one.
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::ThreeD));
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::DepthStencilBuffer));
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::MultipleRenderTargets));
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::OcclusionQuery));
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::CustomEffects));
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::Texture3D));
-    EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::MultiStreamVertexInput));
+    EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::MultiStreamVertexInput));
+
+    // WEBGPU-172: and the width the capability is worth. GetMaxVertexStreams() is the device's own
+    // maxVertexBuffers less the slot reserved for the neutral record, clamped to the resolver's
+    // table -- never a constant, and never larger than what a draw can actually bind.
+    const CNA::RendererLimitValue maxStreams =
+        gd.GetRendererCapabilityProfileEXT().GetLimit(CNA::RendererLimit::MaxVertexStreams);
+    std::cout << "[WEBGPU-172] MaxVertexStreams == " << maxStreams.value
+              << (maxStreams.known ? "" : " (unknown)") << std::endl;
+    EXPECT_TRUE(maxStreams.known);
+    EXPECT_GE(maxStreams.value, 2u)
+        << "a renderer that claims MultiStreamVertexInput must accept at least two streams";
+    EXPECT_LE(maxStreams.value, 16u) << "XNA 4.0 HiDef binds at most 16 vertex streams";
 }
 
 // ---------------------------------------------------------------------------
@@ -1203,6 +1218,91 @@ TEST(WebGpuWireFrameContract, OnlyPolygonTopologiesAreExpanded)
             EXPECT_EQ(1u, wire.NativeDraws()) << wire.afterFlush.Describe();
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// 10. THE MULTI-STREAM WIREFRAME. plans/plan_webgpu.md WEBGPU-154/172.
+//
+// WEBGPU-154 recorded a defect in the reference renderer: EasyGL gates its own edge expansion on
+// `!multiStream`, so once a draw binds several VertexBufferBindings its wireframe request is
+// silently served as a solid fill while the capability still says true. WEBGPU-172 turned this
+// renderer's own MultiStreamVertexInput capability on, which is exactly the moment that defect
+// becomes possible to clone.
+//
+// It is not cloned, and this test is the measurement rather than the argument: the expansion
+// rewrites INDICES only and never reads the vertex data, so the number of bound streams cannot
+// reach it. The same triangle is drawn twice -- once from one packed stride-16 buffer, once split
+// into a position-only (stride 12) and a colour-only (stride 4) pair -- and both must produce the
+// same wireframe, with an empty interior.
+// ---------------------------------------------------------------------------
+TEST(WebGpuWireFrameContract, AMultiStreamDrawWireframesLikeASingleStreamOne)
+{
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
+    GraphicsDevice gd;
+    ASSERT_TRUE(gd.SupportsCapability(GraphicsCapability::MultiStreamVertexInput))
+        << "WEBGPU-172 turned this on; without it this test measures nothing";
+
+    const auto runSplit = [&gd](FillMode fill, Frame& out) {
+        RenderTarget2D target(gd, kSize, kSize, false, SurfaceFormat::Color,
+                              DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
+        const std::array<VertexPositionColor, 3> verts = TriangleVertices();
+
+        // The same three vertices, split by semantic across two bindings. Neither stride is a
+        // layout any renderer recognises alone, so a dropped second stream cannot draw this.
+        std::array<float, 9> positions{};
+        std::array<std::uint32_t, 3> colors{};
+        for (std::size_t i = 0; i < verts.size(); ++i)
+        {
+            positions[i * 3 + 0] = verts[i].Position.X;
+            positions[i * 3 + 1] = verts[i].Position.Y;
+            positions[i * 3 + 2] = verts[i].Position.Z;
+            colors[i] = verts[i].Color.getPackedValueProperty();
+        }
+        const VertexDeclaration positionOnly(12, {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0)});
+        const VertexDeclaration colorOnly(4, {
+            VertexElement(0, VertexElementFormat::Color, VertexElementUsage::Color, 0)});
+        VertexBuffer positionVb(gd, positionOnly, 3, BufferUsage::None);
+        positionVb.SetDataRaw(positions.data(), 3, 12);
+        VertexBuffer colorVb(gd, colorOnly, 3, BufferUsage::None);
+        colorVb.SetDataRaw(colors.data(), 3, 4);
+
+        ApplyFixtureState(gd, fill);
+        BasicEffect effect(gd);
+        ApplyFixtureEffect(effect);
+
+        gd.SetRenderTarget(&target);
+        gd.setScissorRectangleProperty(Rectangle(0, 0, kSize, kSize));
+        gd.Clear(Color(kClear[0], kClear[1], kClear[2], kClear[3]));
+        effect.Apply();
+        gd.SetVertexBuffers({VertexBufferBinding(&positionVb), VertexBufferBinding(&colorVb)});
+        EXPECT_NO_THROW(gd.DrawPrimitives(PrimitiveType::TriangleList, 0, 1));
+        gd.SetVertexBuffer(nullptr);
+        gd.SetRenderTarget(nullptr);
+        ReadTarget(target, out);
+    };
+
+    Frame splitSolid = ClearFrame();
+    Frame splitWire = ClearFrame();
+    runSplit(FillMode::Solid, splitSolid);
+    runSplit(FillMode::WireFrame, splitWire);
+
+    // The split draw renders at all -- without this, everything below would pass on an empty frame.
+    EXPECT_GT(splitSolid.LitTotal(), 0)
+        << "the split-vertex solid draw rendered nothing -- " << splitSolid.Describe();
+    ExpectWireFrameFrame(splitWire, "the split-vertex wireframe draw");
+    EXPECT_LT(splitWire.LitTotal() * 4, splitSolid.LitTotal())
+        << "a multi-stream WireFrame draw covered " << splitWire.LitTotal()
+        << " pixels against Solid's " << splitSolid.LitTotal()
+        << " -- the silent solid fill this test exists to catch";
+
+    // And it is the SAME wireframe the one-buffer draw produces, byte for byte: the streams
+    // changed where the bytes came from, not which pixels the edges cover.
+    const RouteRun single = RunOrdinaryRoute(gd, FillMode::WireFrame);
+    ASSERT_TRUE(single.accepted) << single.rejection;
+    EXPECT_TRUE(splitWire.pixels == single.frame.pixels)
+        << "the split-vertex wireframe differs from the single-buffer one -- "
+        << splitWire.Describe() << " vs " << single.frame.Describe();
 }
 
 #endif  // CNA_RENDERER_WEBGPU

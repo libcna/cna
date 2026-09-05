@@ -110,6 +110,7 @@ exactly 1 or 0, a point-sampled texel).
 | `lit_vertex_color` | `WEBGPU-157` | The stock `ModelProcessor`'s stride-36 `Position+Normal+Color+TextureCoordinate` vertex renders lit, with `VertexColorEnabled` gating the tint. |
 | `unlit_position_color` | `WEBGPU-158` | A stride-32 declaration with no `Normal` renders unlit and keeps its colour, while a real `VertexPositionNormalTexture` at the same stride still lights. |
 | `dual_texture_uv1` | `WEBGPU-159` | `DualTextureEffect` samples its two textures with `TEXCOORD0` and `TEXCOORD1` independently, and an absent `TEXCOORD1` reads `(0,0)`. |
+| `multi_stream_split` | `WEBGPU-172` | A vertex split across two `VertexBufferBinding`s (position-only at stride 12, colour-only at stride 4) renders the same picture as the same vertex in one packed stride-16 buffer, and each binding's `VertexOffset` is converted with its own stride. |
 | `fill_mode_wireframe` | `WEBGPU-153` | `FillMode::WireFrame` draws all three triangle edges and leaves the interior empty, while `FillMode::Solid` fills it. |
 
 ## Adding a renderer

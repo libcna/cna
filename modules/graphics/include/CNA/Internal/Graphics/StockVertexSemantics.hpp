@@ -153,6 +153,47 @@ namespace CNA::Internal::Graphics
         int shaderLocation = 0;
         /** @brief True when the declaration does not name this semantic and the neutral record supplies it. */
         bool defaulted = false;
+        /**
+         * @brief Which resolved stream supplies this input -- an index into
+         *        @ref ResolvedStockVertexLayoutEXT::streams, not a public `SetVertexBuffers` slot.
+         *
+         * 0 for every single-stream draw, which is why adding it moved nothing. Meaningless when
+         * @ref defaulted is true: a defaulted input reads the neutral record, which is not a stream.
+         */
+        int streamIndex = 0;
+    };
+
+    /**
+     * @brief One vertex stream offered to the resolver: a declaration, its stride, its input rate.
+     *
+     * XNA's `SetVertexBuffers` binds up to 16 of these and a vertex's elements may be split across
+     * them; each carries its OWN `VertexDeclaration`, so an element's offset is stream-local and a
+     * semantic is looked for in every stream rather than only in the first.
+     */
+    struct StockVertexStreamEXT
+    {
+        /** @brief This stream's declaration elements. Never null. */
+        const std::vector<VertexElement>* elements = nullptr;
+        /** @brief This stream's own byte stride. Never another stream's. */
+        int stride = 0;
+        /** @brief `VertexBufferBinding.InstanceFrequency`; 0 means a per-vertex stream. */
+        int instanceFrequency = 0;
+    };
+
+    /** @brief The most streams one stock program's inputs can come from -- one per input. */
+    inline constexpr std::size_t kMaxStockVertexStreamsEXT = kMaxStockVertexAttributes;
+
+    /**
+     * @brief A stream that survived resolution, in the order the native binding wants it.
+     */
+    struct ResolvedStockStreamEXT
+    {
+        /** @brief The stream's index in the caller's own stream list -- its public binding slot. */
+        int sourceIndex = 0;
+        /** @brief The stream's byte stride, which becomes its native array stride. */
+        int stride = 0;
+        /** @brief `InstanceFrequency`; 0 means per-vertex. */
+        int instanceFrequency = 0;
     };
 
     /**
@@ -164,12 +205,31 @@ namespace CNA::Internal::Graphics
         std::array<ResolvedStockAttributeEXT, kMaxStockVertexAttributes> attributes{};
         /** @brief How many entries of @ref attributes are valid. */
         std::size_t count = 0;
-        /** @brief The vertex record's byte stride -- the only thing the stride is still used for. */
+        /**
+         * @brief Stream 0's byte stride.
+         *
+         * Kept under its original name because it is what a single-stream draw means by "the
+         * stride", and every existing caller reads it. A multi-stream draw must read
+         * @ref streams instead -- stream 1's stride is not this one.
+         */
         int stride = 0;
         /** @brief Whether any input fell back to the neutral record. */
         bool usesNeutralRecord = false;
         /** @brief Whether this layout came from a real declaration at all. */
         bool fromDeclaration = false;
+        /**
+         * @brief The streams the resolved inputs actually read from, densely packed.
+         *
+         * A stream that supplies no input the chosen program consumes does not appear here at all,
+         * so `streams.size()` is the number of native vertex buffers the draw needs -- not the
+         * caller's binding count, and not the highest public slot it used. That distinction is the
+         * whole point: XNA lets a draw bind slots 0 and 15 while using two streams, and a renderer
+         * that took the public slot as its native index would need sixteen native buffers to
+         * describe a two-buffer draw.
+         */
+        std::array<ResolvedStockStreamEXT, kMaxStockVertexStreamsEXT> streams{};
+        /** @brief How many entries of @ref streams are valid. Always >= 1 for a resolved layout. */
+        std::size_t streamCount = 0;
     };
 
     /**
@@ -214,16 +274,194 @@ namespace CNA::Internal::Graphics
     }
 
     /**
-     * @brief Resolves a stock program's inputs against a declaration, by semantic.
+     * @brief Whether ANY of the bound streams names a semantic, at any usage index.
      *
-     * Each input is located by `(usage, usageIndex)` and bound at the declared element's OWN offset
-     * and format; an input the declaration does not name is bound to the neutral record instead.
-     * Declaration order and byte offsets are deliberately unrestricted, and elements the program
-     * does not consume are ignored -- both are legal in XNA and both occur in real XNB model data.
+     * The multi-stream spelling of @ref DeclarationNamesUsageEXT, and the question a renderer's
+     * stock-program SELECTION has to ask once a draw may split its vertex across bindings: "is this
+     * a lit vertex?" is "does *some* bound stream declare a Normal?". Asking only stream 0 picks an
+     * unlit program for a mesh whose normals are simply in another buffer.
+     *
+     * @param streams The bound streams, in public binding order. May be null.
+     * @param streamCount How many entries @p streams holds.
+     * @param usage The semantic to look for.
+     * @return True when at least one stream carries @p usage.
+     */
+    [[nodiscard]] inline bool AnyStreamNamesUsageEXT(
+        const StockVertexStreamEXT* streams, std::size_t streamCount,
+        VertexElementUsage usage) noexcept
+    {
+        if (streams == nullptr) return false;
+        for (std::size_t i = 0; i < streamCount; ++i)
+        {
+            if (streams[i].elements != nullptr &&
+                DeclarationNamesUsageEXT(*streams[i].elements, usage))
+                return true;
+        }
+        return false;
+    }
+
+    /**
+     * @brief Whether any bound stream names one exact semantic.
+     *
+     * The multi-stream spelling of @ref FindDeclaredSemanticEXT, for the presence questions a
+     * renderer's program selection asks about a specific `(usage, usageIndex)` pair.
+     *
+     * @param streams The bound streams, in public binding order. May be null.
+     * @param streamCount How many entries @p streams holds.
+     * @param usage The semantic to look for.
+     * @param usageIndex The semantic's usage index.
+     * @return True when some stream declares it.
+     */
+    [[nodiscard]] inline bool AnyStreamNamesSemanticEXT(
+        const StockVertexStreamEXT* streams, std::size_t streamCount,
+        VertexElementUsage usage, int usageIndex) noexcept
+    {
+        if (streams == nullptr) return false;
+        for (std::size_t i = 0; i < streamCount; ++i)
+        {
+            if (streams[i].elements != nullptr &&
+                FindDeclaredSemanticEXT(*streams[i].elements, usage, usageIndex) != nullptr)
+                return true;
+        }
+        return false;
+    }
+
+    /**
+     * @brief Whether any bound stream declares anything at all.
+     *
+     * @param streams The bound streams. May be null.
+     * @param streamCount How many entries @p streams holds.
+     * @return True when at least one stream has a non-empty declaration.
+     */
+    [[nodiscard]] inline bool AnyStreamDeclaresEXT(
+        const StockVertexStreamEXT* streams, std::size_t streamCount) noexcept
+    {
+        if (streams == nullptr) return false;
+        for (std::size_t i = 0; i < streamCount; ++i)
+        {
+            if (streams[i].elements != nullptr && !streams[i].elements->empty()) return true;
+        }
+        return false;
+    }
+
+    /**
+     * @brief Resolves a stock program's inputs against a SET of declarations, by semantic.
+     *
+     * Each input is located by `(usage, usageIndex)` -- searched across every stream, because
+     * `SetVertexBuffers` lets a vertex's elements be split across bindings -- and bound at the
+     * declared element's OWN stream-local offset and format; an input no stream names is bound to
+     * the neutral record instead. Declaration order and byte offsets are deliberately unrestricted,
+     * and elements the program does not consume are ignored -- all legal in XNA, and all present in
+     * real XNB model data.
      *
      * Format compatibility is NOT checked here: `RequireDeclarationMatchesStockProgram` in
      * `VertexDeclarationFidelity.hpp` is the one place that raises that diagnostic, and a renderer
      * calls it before resolving so a rejected draw creates nothing.
+     *
+     * @param streams The bound streams, in public binding order. Never null.
+     * @param streamCount How many entries @p streams holds; clamped to @ref kMaxStockVertexStreamsEXT.
+     * @param inputs The selected stock program's inputs, in shader-location order.
+     * @param inputCount How many entries @p inputs holds.
+     * @return The resolved layout; @c fromDeclaration is false when no stream declares anything.
+     */
+    [[nodiscard]] inline ResolvedStockVertexLayoutEXT ResolveStockVertexLayoutAcrossStreamsEXT(
+        const StockVertexStreamEXT* streams,
+        std::size_t streamCount,
+        const StockProgramInput* inputs,
+        std::size_t inputCount)
+    {
+        ResolvedStockVertexLayoutEXT resolved;
+        if (streams == nullptr || streamCount == 0) return resolved;
+        if (streamCount > kMaxStockVertexStreamsEXT) streamCount = kMaxStockVertexStreamsEXT;
+        resolved.stride = streams[0].stride;
+        if (inputs == nullptr || inputCount == 0) return resolved;
+        if (inputCount > kMaxStockVertexAttributes) inputCount = kMaxStockVertexAttributes;
+        resolved.count = inputCount;
+
+        for (std::size_t i = 0; i < streamCount; ++i)
+        {
+            if (streams[i].elements != nullptr && !streams[i].elements->empty())
+            {
+                resolved.fromDeclaration = true;
+                break;
+            }
+        }
+
+        // Which streams end up in the native binding is decided by what the chosen program reads,
+        // not by what the caller bound. A stream nothing consumes is dropped, and the survivors are
+        // renumbered densely in caller order -- see ResolvedStockVertexLayoutEXT::streams.
+        std::array<int, kMaxStockVertexStreamsEXT> resolvedIndexOfSource;
+        resolvedIndexOfSource.fill(-1);
+
+        for (std::size_t location = 0; location < inputCount; ++location)
+        {
+            const StockProgramInput& input = inputs[location];
+            ResolvedStockAttributeEXT& attribute = resolved.attributes[location];
+            attribute.usage = input.usage;
+            attribute.usageIndex = input.usageIndex;
+            attribute.shaderLocation = input.explicitLocation >= 0
+                ? input.explicitLocation : static_cast<int>(location);
+
+            const VertexElement* element = nullptr;
+            std::size_t source = 0;
+            if (resolved.fromDeclaration)
+            {
+                // First stream that names the semantic wins. XNA has no way to bind the same
+                // semantic twice across streams -- a declaration set that did would be malformed --
+                // so "first" is a tie-break that never fires rather than a policy choice.
+                for (source = 0; source < streamCount; ++source)
+                {
+                    if (streams[source].elements == nullptr) continue;
+                    element = FindDeclaredSemanticEXT(*streams[source].elements,
+                                                      input.usage, input.usageIndex);
+                    if (element != nullptr) break;
+                }
+            }
+
+            if (element != nullptr)
+            {
+                attribute.format = element->getVertexElementFormatProperty();
+                attribute.offset = element->getOffsetProperty();
+                attribute.defaulted = false;
+                if (resolvedIndexOfSource[source] < 0)
+                {
+                    ResolvedStockStreamEXT& kept = resolved.streams[resolved.streamCount];
+                    kept.sourceIndex = static_cast<int>(source);
+                    kept.stride = streams[source].stride;
+                    kept.instanceFrequency = streams[source].instanceFrequency;
+                    resolvedIndexOfSource[source] = static_cast<int>(resolved.streamCount);
+                    ++resolved.streamCount;
+                }
+                attribute.streamIndex = resolvedIndexOfSource[source];
+            }
+            else
+            {
+                attribute.format = NeutralFormatForStockInputEXT(input.format);
+                attribute.offset = 0;
+                attribute.defaulted = true;
+                attribute.streamIndex = 0;
+                resolved.usesNeutralRecord = true;
+            }
+        }
+
+        // A program every one of whose inputs defaulted still reads its vertex count from a bound
+        // buffer, so stream 0 stays in the table even when nothing was found in it. This also keeps
+        // `streamCount >= 1` true for every resolved layout, which the native builders rely on.
+        if (resolved.streamCount == 0)
+        {
+            resolved.streams[0].sourceIndex = 0;
+            resolved.streams[0].stride = streams[0].stride;
+            resolved.streams[0].instanceFrequency = streams[0].instanceFrequency;
+            resolved.streamCount = 1;
+        }
+        return resolved;
+    }
+
+    /**
+     * @brief The single-stream spelling of @ref ResolveStockVertexLayoutAcrossStreamsEXT.
+     *
+     * Every existing caller binds one buffer, and this is that call unchanged: one stream, at
+     * per-vertex rate, whose elements are the declaration's own.
      *
      * @param declaredElements The declaration's elements.
      * @param stride The declaration's byte stride, which becomes the native array stride.
@@ -237,39 +475,8 @@ namespace CNA::Internal::Graphics
         const StockProgramInput* inputs,
         std::size_t inputCount)
     {
-        ResolvedStockVertexLayoutEXT resolved;
-        resolved.stride = stride;
-        if (inputs == nullptr || inputCount == 0) return resolved;
-        if (inputCount > kMaxStockVertexAttributes) inputCount = kMaxStockVertexAttributes;
-        resolved.count = inputCount;
-        resolved.fromDeclaration = !declaredElements.empty();
-
-        for (std::size_t location = 0; location < inputCount; ++location)
-        {
-            const StockProgramInput& input = inputs[location];
-            ResolvedStockAttributeEXT& attribute = resolved.attributes[location];
-            attribute.usage = input.usage;
-            attribute.usageIndex = input.usageIndex;
-            attribute.shaderLocation = static_cast<int>(location);
-
-            const VertexElement* element = resolved.fromDeclaration
-                ? FindDeclaredSemanticEXT(declaredElements, input.usage, input.usageIndex)
-                : nullptr;
-            if (element != nullptr)
-            {
-                attribute.format = element->getVertexElementFormatProperty();
-                attribute.offset = element->getOffsetProperty();
-                attribute.defaulted = false;
-            }
-            else
-            {
-                attribute.format = NeutralFormatForStockInputEXT(input.format);
-                attribute.offset = 0;
-                attribute.defaulted = true;
-                resolved.usesNeutralRecord = true;
-            }
-        }
-        return resolved;
+        const StockVertexStreamEXT single{&declaredElements, stride, 0};
+        return ResolveStockVertexLayoutAcrossStreamsEXT(&single, 1, inputs, inputCount);
     }
 
     /**
@@ -299,6 +506,25 @@ namespace CNA::Internal::Graphics
             mix(static_cast<std::uint64_t>(a.format));
             mix(static_cast<std::uint64_t>(a.shaderLocation));
             mix(a.defaulted ? 1u : 0u);
+            mix(static_cast<std::uint64_t>(a.streamIndex));
+        }
+        // The stream table is part of the native vertex state -- one buffer layout per entry, with
+        // its own array stride and step mode -- so two draws that read the same offsets from a
+        // different number of buffers must not share a pipeline. A single-stream layout hashes one
+        // entry whose stride is `layout.stride`, so this changes no existing key's meaning, only
+        // its value, and a pipeline cache is rebuilt per process anyway.
+        mix(layout.streamCount);
+        for (std::size_t i = 0; i < layout.streamCount; ++i)
+        {
+            const ResolvedStockStreamEXT& stream = layout.streams[i];
+            mix(static_cast<std::uint64_t>(stream.stride));
+            // The INPUT RATE, not the frequency. A native vertex-buffer layout has a step mode
+            // (per-vertex or per-instance) and nothing finer, so a renderer that honours
+            // `InstanceFrequency` by preparing the records the draw reads must not let the
+            // frequency reach the pipeline key -- drawing the same geometry at frequency 1 and
+            // frequency 2 would otherwise compile a second identical pipeline. Measured by
+            // `WebGPU_InstancedOffsetFrequency_Cardinality`, which counts pipeline variants.
+            mix(stream.instanceFrequency > 0 ? 1u : 0u);
         }
         return hash;
     }

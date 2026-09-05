@@ -1177,6 +1177,17 @@ namespace CNA::Internal::Renderers::WebGPU
          */
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
 
+        /**
+         * @brief WEBGPU-172: how many `VertexBufferBinding`s of one input rate this device takes.
+         *
+         * Derived from the device's own `maxVertexBuffers` limit, less the one slot reserved for
+         * the neutral record, and clamped to the resolver's stream table so a binding array is
+         * never silently truncated.
+         *
+         * @return The maximum number of streams of a single input rate.
+         */
+        [[nodiscard]] int GetMaxVertexStreams() const override;
+
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
@@ -1939,23 +1950,151 @@ namespace CNA::Internal::Renderers::WebGPU
             DualTextured,        ///< Position + TexCoord0 + TexCoord1.
             DualTexturedColored, ///< Position + Color + TexCoord0 + TexCoord1.
             EnvMapped,           ///< Position + Normal + TexCoord0, reflection-mapped.
-            /// Not converted by WEBGPU-155: skinned, PBR and instanced draws keep the stride-derived
-            /// layout and the REMED-GFX-DECL-GUARD refusal that makes it safe. See WEBGPU-172/177.
+            /// WEBGPU-172: Position + the per-instance world matrix as TEXCOORD1..TEXCOORD4.
+            ///
+            /// Never returned by `SelectStockVertexShapeEXT` -- the instanced route is entered
+            /// through `DrawInstancedPrimitivesEx`, not chosen from a declaration -- but resolved by
+            /// exactly the same code as every other family, which is what lets an instance stream
+            /// be split across bindings.
+            Instanced,
+            InstancedColored,    ///< The Instanced family with a per-vertex COLOR0.
+            /// Not converted by WEBGPU-155: skinned and PBR draws keep the stride-derived layout
+            /// and the REMED-GFX-DECL-GUARD refusal that makes it safe. See WEBGPU-177.
             StrideDerived
         };
 
         /**
          * @brief WEBGPU-155: picks the stock family for a draw from its declaration and effect state.
          *
-         * @param declaredElements The vertex buffer's declaration elements; empty when none was propagated.
-         * @param stride The buffer's byte stride, used only for the families this task did not convert.
+         * WEBGPU-172 widened the question from one declaration to the whole bound set: a semantic
+         * counts as present when ANY per-vertex stream declares it, because `SetVertexBuffers` lets
+         * a vertex's elements be split across bindings and asking only slot 0 would pick an unlit
+         * program for a mesh whose normals are simply in another buffer.
+         *
+         * @param streams The draw's per-vertex streams, in public binding order. Never null.
+         * @param streamCount How many entries @p streams holds; at least 1.
+         * @param stride Stream 0's byte stride, used only for the families this task did not convert.
          * @param params The draw's effect state.
          * @return The selected family, or `StrideDerived` when the draw belongs to an unconverted route.
          */
         [[nodiscard]] static StockVertexShapeEXT SelectStockVertexShapeEXT(
-            const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaredElements,
+            const CNA::Internal::Graphics::StockVertexStreamEXT* streams,
+            std::size_t streamCount,
             std::size_t stride,
             const GpuDrawParams& params);
+
+        /**
+         * @brief WEBGPU-172: one bound per-vertex stream, as the queue path needs it.
+         *
+         * The resolver only wants a declaration and a stride; capturing the bytes also needs the
+         * buffer itself and the binding's own `VertexOffset`, so both views are collected together
+         * and stay index-aligned.
+         */
+        /**
+         * @brief WEBGPU-172: one bound vertex stream, captured at queue time.
+         *
+         * This renderer is deferred: a queued draw owns a copy of the bytes it will read, because
+         * the public buffer may be written again before the frame is flushed. A multi-stream draw
+         * therefore needs one copy per stream, each already sliced by ITS own stride and
+         * `VertexBufferBinding.VertexOffset` -- which is also why the replay binds every stream at
+         * native byte offset zero and needs no per-binding offset channel.
+         */
+        struct CapturedVertexStreamEXT
+        {
+            /** @brief The stream's bytes, from its own first selected record onward. */
+            std::vector<std::uint8_t> data;
+            /** @brief The stream's own byte stride. Never another stream's. */
+            std::uint32_t stride = 0;
+        };
+
+        struct PerVertexStreamSourceEXT
+        {
+            const WebGPUVertexBufferRenderer* buffer = nullptr;  ///< The stream's buffer. Never null.
+            int stride = 0;              ///< The binding's own stride.
+            int vertexOffset = 0;        ///< `VertexBufferBinding.VertexOffset`, in elements.
+            int slot = 0;                ///< The public `SetVertexBuffers` slot, for diagnostics.
+            int instanceFrequency = 0;   ///< `InstanceFrequency`; 0 means the stream steps per vertex.
+            int vertexCount = 0;         ///< Records the stream's buffer holds, for the range gate.
+        };
+
+        /** @brief WEBGPU-172: every per-vertex stream of one draw, in public binding order. */
+        struct DrawVertexStreamsEXT
+        {
+            /// The declarations, as `ResolveStockVertexLayoutAcrossStreamsEXT` wants them.
+            std::array<CNA::Internal::Graphics::StockVertexStreamEXT,
+                       CNA::Internal::Graphics::kMaxStockVertexStreamsEXT> declarations{};
+            /// The matching buffers and offsets, at the same indices.
+            std::array<PerVertexStreamSourceEXT,
+                       CNA::Internal::Graphics::kMaxStockVertexStreamsEXT> sources{};
+            /**
+             * @brief Storage for a stream whose buffer carries no declaration of its own.
+             *
+             * The low-level `IGraphicsRenderer::CreateVertexBuffer(count)` entry point makes
+             * buffers with no declaration at all, and the instanced examples use it. When a stream
+             * arrives that way a canonical declaration is synthesized here and
+             * `declarations[i].elements` points at this entry, which is why this struct is filled
+             * through an out-parameter and never returned by value: moving it would move the vector
+             * objects these pointers name.
+             */
+            std::array<std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>,
+                       CNA::Internal::Graphics::kMaxStockVertexStreamsEXT> synthesized{};
+            /// How many entries of the arrays are valid; at least 1.
+            std::size_t count = 0;
+        };
+
+        /**
+         * @brief WEBGPU-172: collects a draw's per-vertex streams.
+         *
+         * A draw that bound no `GpuDrawParams` -- the legacy `DrawColoredPrimitives` entry points --
+         * has exactly one stream, which is @p vb itself; that is the single-stream shape this
+         * renderer has always had, spelled through the same type so there is one code path.
+         *
+         * @param vb The buffer named by the draw call, which is always stream 0.
+         * @param params The draw's parameters, or null for a legacy entry point.
+         * @param includePerInstance Whether per-INSTANCE bindings are collected too. False on the
+         *        ordinary routes, whose pipelines have no instance step mode at all; true on the
+         *        instanced route, where an instance binding is simply a stream whose
+         *        `InstanceFrequency` is greater than zero.
+         * @return The collected streams; `count` is at least 1.
+         */
+        static void CollectPerVertexStreamsEXT(
+            const WebGPUVertexBufferRenderer& vb, const GpuDrawParams* params,
+            DrawVertexStreamsEXT& out, bool includePerInstance = false);
+
+        /**
+         * @brief WEBGPU-172: fills in a canonical declaration for any stream that carries none.
+         *
+         * Only the instanced route needs this, and only because its examples build their buffers
+         * through the low-level `CreateVertexBuffer(count)` entry point, which propagates no
+         * declaration. A per-vertex stream gets the canonical layout for its stride (position-only
+         * for a stride the table does not list, which is what this route has always assumed); a
+         * per-instance stream gets the four `Vector4` world-matrix columns at 0/16/32/48, which is
+         * exactly the attribute array the family used to hardcode.
+         *
+         * @param streams The collected streams, modified in place.
+         */
+        static void SynthesizeMissingStreamDeclarationsEXT(DrawVertexStreamsEXT& streams);
+
+        /**
+         * @brief WEBGPU-172: the instanced family's resolved layout.
+         *
+         * Its per-VERTEX inputs are resolved by semantic like every other family. Its per-INSTANCE
+         * columns are **not**: they are taken positionally, the k-th element across the
+         * concatenated per-instance declarations feeding world-matrix column k. That is the
+         * reference renderer's own rule (`EasyGLRenderer::PlaceInstanceStreams` assigns consecutive
+         * locations from `kStockInstanceBaseLocation` in declaration order, whatever semantic each
+         * element names), and it is the only rule both existing corpora satisfy: the shared oracle
+         * spells the columns `TEXCOORD1`-`TEXCOORD4` while this renderer's own instanced examples
+         * spell them `POSITION1`-`POSITION4`. A world matrix has no XNA-defined semantic to be
+         * faithful to, so matching the reference is the answer rather than picking one spelling and
+         * breaking the other.
+         *
+         * @param streams The collected streams, already given synthesized declarations.
+         * @param hasVertexColor Whether a per-vertex stream declares COLOR0.
+         * @return The resolved layout.
+         */
+        [[nodiscard]] static CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT
+        ResolveInstancedVertexLayoutEXT(const DrawVertexStreamsEXT& streams, bool hasVertexColor);
 
         /**
          * @brief WEBGPU-155: the ordered input list one stock family declares.
@@ -1979,23 +2118,83 @@ namespace CNA::Internal::Renderers::WebGPU
          * buffer that carries no declaration keeps this renderer's historical stride-derived layout,
          * which is what every existing stock draw already relies on.
          *
-         * @param vb The draw's vertex buffer.
+         * @param vb The draw's vertex buffer -- stream 0, and the only stream of a legacy draw.
+         * @param streams The draw's per-vertex streams, from `CollectPerVertexStreamsEXT`.
+         * @param streamCount How many entries @p streams holds.
          * @param shape The selected stock family.
          * @return The resolved layout.
          */
         [[nodiscard]] CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT ResolveStockVertexLayoutForDrawEXT(
-            const WebGPUVertexBufferRenderer& vb, StockVertexShapeEXT shape) const;
+            const WebGPUVertexBufferRenderer& vb,
+            const CNA::Internal::Graphics::StockVertexStreamEXT* streams,
+            std::size_t streamCount,
+            StockVertexShapeEXT shape) const;
+
+        /**
+         * @brief WEBGPU-172: copies each resolved stream's own bytes into a queued draw.
+         *
+         * Stream 0 lands in @p stream0Data, exactly as before this task, so a single-stream draw's
+         * captured bytes are byte-identical to their pre-172 form and @p extra stays empty. Every
+         * further resolved stream is sliced by ITS own stride and `VertexOffset`, so the replay can
+         * bind all of them at native byte offset zero.
+         *
+         * @param layout The draw's resolved layout, whose stream table says which bindings are read.
+         * @param streams The draw's collected per-vertex streams.
+         * @param vertexStart The draw's shared first-vertex, already folded out of the per-stream
+         *        offsets by `GraphicsDevice`.
+         * @param stream0Data Receives the bytes of the layout's first resolved stream.
+         * @param extra Receives one entry per further resolved stream, in native slot order.
+         * @param instanceCount How many instances the draw submits. A per-instance stream is
+         *        materialized as exactly this many records, because WebGPU's `Instance` step mode
+         *        has an implicit divisor of one and no step rate: XNA's `InstanceFrequency` is
+         *        honoured by repeating each source record @c frequency times here, which keeps the
+         *        divisor a data-preparation concern that never reaches the pipeline or its key.
+         */
+        static void CaptureStockVertexStreamsEXT(
+            const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& layout,
+            const DrawVertexStreamsEXT& streams,
+            int vertexStart,
+            std::vector<std::uint8_t>& stream0Data,
+            std::vector<CapturedVertexStreamEXT>& extra,
+            int instanceCount = 1);
+
+        /**
+         * @brief WEBGPU-172: binds a replayed draw's further vertex streams at slots 1..n.
+         *
+         * Slot 0 is bound by the caller, which already owns the transient buffer for it. Each
+         * further stream gets its own transient buffer here, released with the frame like every
+         * other deferred allocation.
+         *
+         * @param pass The render pass encoder being recorded.
+         * @param label A debug label for the created buffers.
+         * @param extra The draw's captured further streams; empty for a single-stream draw.
+         */
+        void BindExtraVertexStreamsEXT(WGPURenderPassEncoder pass, const char* label,
+                                       const std::vector<CapturedVertexStreamEXT>& extra);
 
         /// WEBGPU-155: the assembled native vertex state for one resolved layout. Two buffer slots:
         /// slot 0 is the draw's own vertex record, slot 1 the zero-stride neutral record that
         /// supplies any semantic the declaration does not name.
         struct StockVertexStateEXT
         {
-            std::array<WGPUVertexAttribute, CNA::Internal::Graphics::kMaxStockVertexAttributes> recordAttributes{};
-            std::array<WGPUVertexAttribute, CNA::Internal::Graphics::kMaxStockVertexAttributes> neutralAttributes{};
-            std::array<WGPUVertexBufferLayout, 2> buffers{};
+            /**
+             * @brief Every record attribute, grouped by the native slot that reads it.
+             *
+             * WEBGPU-172: one `WGPUVertexBufferLayout` may only point at a contiguous run of
+             * attributes, so the attributes are grouped here rather than kept in shader-location
+             * order. A single-stream draw has exactly one group and is therefore laid out
+             * identically to its pre-172 form.
+             */
+            std::array<WGPUVertexAttribute,
+                       CNA::Internal::Graphics::kMaxStockVertexAttributes> recordAttributes{};
+            std::array<WGPUVertexAttribute,
+                       CNA::Internal::Graphics::kMaxStockVertexAttributes> neutralAttributes{};
+            /// One per resolved stream, plus one for the neutral record when the draw needs it.
+            std::array<WGPUVertexBufferLayout,
+                       CNA::Internal::Graphics::kMaxStockVertexStreamsEXT + 1> buffers{};
             std::size_t bufferCount = 0;
         };
+
 
         /**
          * @brief WEBGPU-155: turns a resolved layout into `WGPUVertexBufferLayout`s for a pipeline.
@@ -2019,7 +2218,12 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] WGPUBuffer GetOrCreateNeutralVertexBufferEXT();
 
         /**
-         * @brief WEBGPU-155: binds slot 1 to the neutral record when a draw's layout needs it.
+         * @brief WEBGPU-155: binds the neutral record when a draw's layout needs it.
+         *
+         * WEBGPU-172: at the slot AFTER the draw's real streams, not at slot 1 -- a two-stream draw
+         * uses slots 0 and 1 for its own buffers, so the neutral record moves to slot 2. Its slot is
+         * `layout.streamCount`, which is 1 for every single-stream draw and therefore leaves that
+         * case exactly where it was.
          *
          * @param pass The render pass encoder being recorded.
          * @param layout The draw's resolved layout.
@@ -2173,6 +2377,9 @@ namespace CNA::Internal::Renderers::WebGPU
         WGPUAdapter adapter_ = nullptr;
         WGPUDevice device_ = nullptr;
         WGPUQueue queue_ = nullptr;
+        /// WEBGPU-172: the device's own `maxVertexBuffers` limit, read once at device creation.
+        /// 8 is WebGPU's guaranteed floor and stands in until the real value is known.
+        int maxVertexBuffers_ = 8;
         /// WEBGPU-144: true when the adapter advertised WGPUFeatureName_TextureCompressionBC and it
         /// was requested at device creation, so BC1/2/3/7 textures upload natively.
         bool bcSupported_ = false;
@@ -2519,6 +2726,15 @@ namespace CNA::Internal::Renderers::WebGPU
             /// SetVertexBuffer must not retroactively relayout an already-queued draw.
             CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout{};
             std::vector<std::uint8_t> vertexData;
+            /**
+             * @brief WEBGPU-172: the draw's SECOND and further per-vertex streams, if any.
+             *
+             * Empty for every single-stream draw, which is all this renderer accepted before this
+             * task; `vertexData` above is always the first resolved stream, so nothing about the
+             * one-buffer case moved. Each entry is already sliced by its own stride and
+             * `VertexOffset`, so the replay binds it at native byte offset zero.
+             */
+            std::vector<CapturedVertexStreamEXT> extraStreams;
             std::vector<std::uint8_t> indexData;   ///< empty for a non-indexed draw
             bool indexed = false;
             bool index32 = false;
@@ -2576,6 +2792,15 @@ namespace CNA::Internal::Renderers::WebGPU
             StencilKeyParams stencil{};
             int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
+            /**
+             * @brief WEBGPU-172: the draw's SECOND and further per-vertex streams, if any.
+             *
+             * Empty for every single-stream draw, which is all this renderer accepted before this
+             * task; `vertexData` above is always the first resolved stream, so nothing about the
+             * one-buffer case moved. Each entry is already sliced by its own stride and
+             * `VertexOffset`, so the replay binds it at native byte offset zero.
+             */
+            std::vector<CapturedVertexStreamEXT> extraStreams;
             std::vector<std::uint8_t> indexData;
             bool indexed = false;
             bool index32 = false;
@@ -2712,6 +2937,15 @@ namespace CNA::Internal::Renderers::WebGPU
             StencilKeyParams stencil{};
             int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
+            /**
+             * @brief WEBGPU-172: the draw's SECOND and further per-vertex streams, if any.
+             *
+             * Empty for every single-stream draw, which is all this renderer accepted before this
+             * task; `vertexData` above is always the first resolved stream, so nothing about the
+             * one-buffer case moved. Each entry is already sliced by its own stride and
+             * `VertexOffset`, so the replay binds it at native byte offset zero.
+             */
+            std::vector<CapturedVertexStreamEXT> extraStreams;
             std::vector<std::uint8_t> indexData;
             bool indexed = false;
             bool index32 = false;
@@ -2822,6 +3056,15 @@ namespace CNA::Internal::Renderers::WebGPU
             StencilKeyParams stencil{};
             int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
+            /**
+             * @brief WEBGPU-172: the draw's SECOND and further per-vertex streams, if any.
+             *
+             * Empty for every single-stream draw, which is all this renderer accepted before this
+             * task; `vertexData` above is always the first resolved stream, so nothing about the
+             * one-buffer case moved. Each entry is already sliced by its own stride and
+             * `VertexOffset`, so the replay binds it at native byte offset zero.
+             */
+            std::vector<CapturedVertexStreamEXT> extraStreams;
             std::vector<std::uint8_t> indexData;
             bool indexed = false;
             bool index32 = false;
@@ -2909,6 +3152,15 @@ namespace CNA::Internal::Renderers::WebGPU
             StencilKeyParams stencil{};
             int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
+            /**
+             * @brief WEBGPU-172: the draw's SECOND and further per-vertex streams, if any.
+             *
+             * Empty for every single-stream draw, which is all this renderer accepted before this
+             * task; `vertexData` above is always the first resolved stream, so nothing about the
+             * one-buffer case moved. Each entry is already sliced by its own stride and
+             * `VertexOffset`, so the replay binds it at native byte offset zero.
+             */
+            std::vector<CapturedVertexStreamEXT> extraStreams;
             std::vector<std::uint8_t> indexData;
             bool indexed = false;
             bool index32 = false;
@@ -3019,6 +3271,15 @@ namespace CNA::Internal::Renderers::WebGPU
             StencilKeyParams stencil{};
             int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
+            /**
+             * @brief WEBGPU-172: the draw's SECOND and further per-vertex streams, if any.
+             *
+             * Empty for every single-stream draw, which is all this renderer accepted before this
+             * task; `vertexData` above is always the first resolved stream, so nothing about the
+             * one-buffer case moved. Each entry is already sliced by its own stride and
+             * `VertexOffset`, so the replay binds it at native byte offset zero.
+             */
+            std::vector<CapturedVertexStreamEXT> extraStreams;
             std::vector<std::uint8_t> indexData;
             bool indexed = false;
             bool index32 = false;
@@ -3134,7 +3395,21 @@ namespace CNA::Internal::Renderers::WebGPU
             int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
             std::vector<std::uint8_t> indexData;
-            std::vector<std::uint8_t> instVbData;
+            /**
+             * @brief WEBGPU-172: every stream after the first, per-vertex and per-instance alike.
+             *
+             * The classic instanced draw resolves to exactly two streams -- the geometry buffer
+             * and the world-matrix buffer -- so `vertexData` is the geometry and `extraStreams[0]`
+             * is the instance data, at native slots 0 and 1, which is precisely where this family
+             * has always bound them. What is new is only that a THIRD stream is now possible, and
+             * that the slot each stream lands in is decided by the resolved layout rather than by
+             * the pair of names this struct used to carry.
+             */
+            std::vector<CapturedVertexStreamEXT> extraStreams;
+            /// WEBGPU-172: the semantic layout the pipeline and every binding are built from.
+            CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout{};
+            /// WEBGPU-172: whether the resolved layout supplies COLOR0, which picks the WGSL module.
+            bool instancedHasColor = false;
             bool indexed = false;
             bool index32 = false;
             std::uint32_t vertexCount = 0;
@@ -3150,7 +3425,6 @@ namespace CNA::Internal::Renderers::WebGPU
             /// only because every existing caller happens to always use a plain mat4-only instance
             /// declaration).
             std::size_t pvStride = 16;
-            std::size_t instVbStride = 64;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
             /// WEBGPU-205: 44 floats. The 40-float block was exactly full (128 base
             /// + 32 fog tail), and the per-slot LOD bias needs a channel of its own.
@@ -3174,7 +3448,9 @@ namespace CNA::Internal::Renderers::WebGPU
         };
         void CreateInstancedResources();
         void DestroyInstancedResources();
-        [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineInstanced3D(std::size_t pvStride, std::size_t instVbStride,
+        [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineInstanced3D(
+                                                                         const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
+                                                                         bool hasVertexColor,
                                                                          WGPUPrimitiveTopology topology,
                                                                          WGPUIndexFormat stripIndexFormat,
                                                                          bool depthTest, bool depthWrite, int depthFunc,

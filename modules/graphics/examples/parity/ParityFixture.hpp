@@ -283,6 +283,24 @@ namespace CNA::Parity
         }
 
         /**
+         * @brief Asserts a precondition the fixture needs before it draws anything.
+         *
+         * plans/plan_webgpu.md WEBGPU-172. A fixture that requires a capability asserts it rather
+         * than skipping on it: every renderer this harness runs against is expected to have it, so
+         * a renderer that stopped supporting it is the finding, and a silent skip would hide it.
+         *
+         * @param condition The precondition.
+         * @param label What the precondition is, for the PASS/FAIL line.
+         * @return Whether the precondition held.
+         */
+        bool Require(bool condition, const char* label)
+        {
+            std::printf("[%s] precondition: %s\n", condition ? "PASS" : "FAIL", label);
+            if (!condition) MarkFailedEXT();
+            return condition;
+        }
+
+        /**
          * @brief Asserts a region's mean colour, RGB only, within a tolerance.
          *
          * @param label What this check proves, for the PASS/FAIL line.

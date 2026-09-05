@@ -656,13 +656,83 @@ the specular term is added), and both dual-texture families gained `TEXCOORD1` s
 sampled with its own UV set.
 
 **What was deliberately NOT converted**, and still selects its attribute array from the stride with
-`REMED-GFX-DECL-GUARD`'s refusal keeping it safe: the **skinned**, **PBR** and **instanced** routes.
-`WEBGPU-172` and `WEBGPU-177` own their conversion. A declaration those routes cannot represent is
-refused by name, exactly as before.
+`REMED-GFX-DECL-GUARD`'s refusal keeping it safe: the **skinned** and **PBR** routes. `WEBGPU-177`
+owns their conversion. A declaration those routes cannot represent is refused by name, exactly as
+before. (The **instanced** route was on this list until `WEBGPU-172` converted it — see below.)
 
 Verified by the shared EasyGL↔WebGPU parity fixtures (`WEBGPU-207`, see
 [`cross-renderer-parity-fixtures.md`](cross-renderer-parity-fixtures.md)) plus the renderer-neutral
 `VertexDeclarationLayoutTests`, where WebGPU moved from the refusing arm to the translating one.
+
+## Multiple vertex streams (2026-09-05, `WEBGPU-172`)
+
+`GraphicsCapability::MultiStreamVertexInput` is **true**. XNA's `SetVertexBuffers` takes an array
+because a vertex's elements may live in several buffers, each with its own `VertexDeclaration`,
+stride, `VertexOffset` and `InstanceFrequency`; until this task the capability fell through to the
+shared `false` default and `GraphicsDevice::ValidateVertexStreamCapability()` refused such a draw
+before submission — truthful, but a refusal of an ordinary XNA shape.
+
+The implementation is WebGPU's native model rather than an emulation: one `WGPUVertexBufferLayout`
+per **resolved** stream, each with that stream's own `arrayStride` and step mode. The resolver
+(`ResolveStockVertexLayoutAcrossStreamsEXT`) searches every bound declaration for each of the chosen
+program's inputs, so an input is bound to whichever buffer declares its semantic, and a stream that
+supplies nothing the program consumes never reaches the pipeline at all. Native slots are therefore
+assigned **densely over the streams a draw actually reads**, not by public binding slot: XNA lets a
+draw bind slots 0 and 15 while using two streams, and taking the public slot as the native index
+would need sixteen native buffers to describe a two-buffer draw. The neutral record moves to the
+slot after the real streams (slot 1 for a single-stream draw, exactly where it was).
+
+Program **selection** widened with it: "is this a lit vertex?" is now "does *some* bound stream
+declare a `Normal`?". Asking only slot 0 picks an unlit program for a mesh whose normals are simply
+in another buffer — and for the canonical split (position-only at stride 12, colour-only at stride 4)
+neither stream alone is a layout any renderer recognises.
+
+The **instanced** route was converted in the same task, with one deliberate asymmetry. Its
+per-vertex inputs (`POSITION0`, and `COLOR0` when a stream declares one) are resolved by semantic
+like every other family. Its per-instance world-matrix columns are resolved **positionally** — the
+k-th element across the concatenated per-instance declarations feeds column k. That is the reference
+renderer's own rule (`EasyGLRenderer::PlaceInstanceStreams` assigns consecutive locations from
+`kStockInstanceBaseLocation` in declaration order, whatever semantic each element names), and it is
+the only rule both existing corpora satisfy: the shared oracle spells the columns
+`TEXCOORD1`–`TEXCOORD4` while this renderer's own instanced examples spell them
+`POSITION1`–`POSITION4`. A world matrix has no XNA-defined semantic to be faithful to, so matching
+the reference is the answer rather than picking one spelling and breaking the other. The columns may
+still be split across buffers — the shared oracle splits them 48 + 16 bytes. A classic instanced
+draw resolves to exactly two streams and produces the same binding pair the family always built by
+hand, geometry at slot 0 and the matrix at slot 1.
+
+A buffer made through the low-level `IGraphicsRenderer::CreateVertexBuffer(count)` entry point
+carries no declaration at all, which this renderer's own instanced examples rely on.
+`SynthesizeMissingStreamDeclarationsEXT` gives such a stream the canonical layout for its stride —
+position-only for a stride the table does not list, which is what this route has always assumed —
+and a per-instance one the four `Vector4` columns at 0/16/32/48, exactly the attribute array the
+family used to hardcode.
+
+`InstanceFrequency` greater than one has no native counterpart — in wgpu-native v29.0.1.1
+`WGPUVertexBufferLayout` carries only `nextInChain`/`stepMode`/`arrayStride`/`attributes`,
+`WGPUVertexStepMode` offers only `Vertex` and `Instance`, and no `WGPUNativeFeature` adds a step
+rate. It is honoured by **materializing** the records the draw will read: instance *i* reads source
+record `VertexOffset + i / frequency`, so each source record is repeated `frequency` times at queue
+time and a divisor-of-one binding reads exactly what a divisor-of-`frequency` one would. The
+frequency therefore never reaches the pipeline or its cache key.
+
+`GetMaxVertexStreams()` is the device's own `maxVertexBuffers` limit less the one slot reserved for
+the neutral record, clamped to the resolver's stream table — 7 on the development machine, and never
+a constant.
+
+The pipeline cache key carries each stream's **input rate**, never its frequency: a native
+vertex-buffer layout has a step mode and nothing finer, so letting the frequency into the key would
+compile a second identical pipeline for the same geometry at frequency 2.
+`WebGPU_InstancedOffsetFrequency_Cardinality` counts pipeline variants and is what measures it.
+
+**Still refused, by name:** a draw that splits its vertex across bindings on the **skinned**/**PBR**
+families or under a custom WGSL `ShaderEffect`. Those routes still derive their layout from one byte
+stride, so they would read a split vertex from the first stream alone; `RequireSingleStreamRouteEXT`
+says so rather than rendering a subset of the bound streams. `WEBGPU-177` converts the first pair.
+
+Verified by the two shared multi-stream oracles (`OrdinaryDrawMultiStreamTests`,
+`InstancedDrawMultiStreamTests`, 48 cases) and by the `multi_stream_split` parity fixture, whose
+EasyGL and WebGPU frames are byte-identical.
 
 ## Important limitations
 
