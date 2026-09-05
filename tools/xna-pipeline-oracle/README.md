@@ -85,6 +85,22 @@ The result is the format specification `docs/xna-intermediate-xml-format.md`; th
 `manifest.json` lists every case with its verdict. Extend the driver when a question about the
 format comes up — the document only states what a case in the corpus shows.
 
+## Graphics content behaviour oracle (`graphics/`)
+
+`graphics/GraphicsContentOracle.cs` runs the genuine `Microsoft.Xna.Framework.Content.Pipeline.Graphics`
+object model -- `BitmapContent`, every `PixelBitmapContent<T>`, the DXT bitmaps, `MipmapChain`,
+the `TextureContent` family, `VectorConverter` -- and records what it does: pixel layouts,
+conversion rounding, resize and mipmap results, DXT sizes, validation messages, converter tables.
+
+```sh
+tools/xna-pipeline-oracle/graphics/run-graphics-oracle.sh   # writes tests/reference/xna40/graphics/graphics-content-oracle.json
+```
+
+The texture paths create a Direct3D device, so the driver needs the pipeline's native helper
+(`XnaNative.dll`, copied from the installed framework into the ignored build directory) **and an
+X display** (`CNA_XNA40_DISPLAY`, `:99` by default); without either, every resampling, DXT and
+mipmap case reports "Specified method is not supported", which is the environment, not XNA.
+
 ## Not committed
 
 The Microsoft assemblies, the compiled oracles and the Wine-side temporaries live only under the
