@@ -4,12 +4,106 @@
 #include <cmath>
 #include <stdexcept>
 
+#include "CNA/Content/Pipeline/XnbOutputContentPipeline.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/PipelineException.hpp"
 #include "System/NotSupportedException.hpp"
 
 namespace CNA::Content::Pipeline
 {
+    namespace
+    {
+        /// A canonical writer that compiles one façade-typed processed value through the
+        /// ContentCompiler. Platform and profile are the build's; the container options are the
+        /// registration's.
+        class XnaObjectXnbWriter final : public ContentTypeWriter
+        {
+        public:
+            XnaObjectXnbWriter(std::string typeName,
+                               std::shared_ptr<const Xna::Serialization::Compiler::ContentCompiler> compiler,
+                               CNA::Internal::Xnb::XnbFileOptions options)
+                : typeName_(std::move(typeName)), compiler_(std::move(compiler)), options_(std::move(options))
+            {
+            }
+
+            [[nodiscard]] ContentComponentIdentity Identity() const override
+            {
+                return ContentComponentIdentity{"CNA.XnaObjectXnbWriter[" + typeName_ + "]",
+                                                "1;" + XnbOutputOptionsDigest(options_)};
+            }
+
+            [[nodiscard]] ContentOutputFormat OutputFormat() const override { return ContentOutputFormat::Xnb; }
+
+            [[nodiscard]] std::vector<ContentWriterSchemaIdentity> OutputSchemaIdentities() const override
+            {
+                ContentWriterSchemaIdentity identity;
+                identity.assetTypeId = static_cast<std::uint32_t>(XnbOutputAssetId::XnaObject);
+                identity.assetSchemaVersion = 1u;
+                identity.assetTypeName = typeName_;
+                identity.codec = ContentComponentIdentity{"CNA.XnaObjectXnb", "1"};
+                return {identity};
+            }
+
+            [[nodiscard]] std::string InputType() const override { return typeName_; }
+
+            [[nodiscard]] ContentWriteResult Write(const ContentValue& input, const std::string& logicalName) const override
+            {
+                return Write(input, logicalName, ContentBuildEnvironment{});
+            }
+
+            [[nodiscard]] ContentWriteResult Write(const ContentValue& input, const std::string& logicalName,
+                                                   const ContentBuildEnvironment& environment) const override
+            {
+                Xna::Serialization::Compiler::CompileOptions compile;
+                compile.container = options_;
+                compile.assetName = logicalName;
+                compile.outputDirectory = environment.outputDirectory;
+                compile.compressContent = options_.compression == CNA::Internal::Xnb::XnbOutputCompression::Lzx;
+                switch (options_.platform)
+                {
+                    case CNA::Internal::Xnb::XnbTargetPlatform::Xbox360: compile.targetPlatform = Xna::TargetPlatform::Xbox360; break;
+                    case CNA::Internal::Xnb::XnbTargetPlatform::WindowsPhone: compile.targetPlatform = Xna::TargetPlatform::WindowsPhone; break;
+                    default: compile.targetPlatform = Xna::TargetPlatform::Windows; break;
+                }
+                compile.targetProfile = options_.graphicsProfile == CNA::Internal::Xnb::XnbGraphicsProfile::HiDef
+                                            ? Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef
+                                            : Microsoft::Xna::Framework::Graphics::GraphicsProfile::Reach;
+                const CNA::Internal::Xnb::XnbAssetWriteResult written = compiler_->CompileObject(input, compile);
+                ContentWriteResult result;
+                result.bytes = written.bytes;
+                result.assetTypeId = static_cast<std::uint32_t>(XnbOutputAssetId::XnaObject);
+                result.assetSchemaVersion = 1u;
+                result.assetTypeName = typeName_;
+                result.rootReaderName = written.rootReaderName;
+                return result;
+            }
+
+        private:
+            std::string typeName_;
+            std::shared_ptr<const Xna::Serialization::Compiler::ContentCompiler> compiler_;
+            CNA::Internal::Xnb::XnbFileOptions options_;
+        };
+    }
+
+    void RegisterXnaXnbOutput(ContentPipelineRegistry& registry,
+                              std::shared_ptr<const Xna::Serialization::Compiler::ContentCompiler> compiler,
+                              const CNA::Internal::Xnb::XnbFileOptions& options)
+    {
+        if (compiler == nullptr) { throw std::invalid_argument("RegisterXnaXnbOutput(): compiler must not be null."); }
+        for (const std::string& typeName : compiler->KnownTypeNames())
+        {
+            bool taken = false;
+            try
+            {
+                (void)registry.ResolveWriter(typeName, {}, ContentOutputFormat::Xnb);
+                taken = true;
+            }
+            catch (const std::logic_error&) {}
+            if (taken) { continue; }
+            registry.RegisterWriter(std::make_shared<const XnaObjectXnbWriter>(typeName, compiler, options));
+        }
+    }
+
     Xna::TargetPlatform ToXnaTargetPlatform(const ContentTargetPlatform platform) noexcept
     {
         switch (platform)

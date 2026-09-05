@@ -20,6 +20,7 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentProcessorContext.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/OpaqueDataDictionary.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ProcessorParameter.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Serialization/Compiler/ContentCompiler.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/TargetPlatform.hpp"
 
 /**
@@ -428,6 +429,25 @@ namespace CNA::Content::Pipeline
         std::string catalog_;
         Xna::ProcessorParameterBindings<TProcessor> bindings_;
     };
+
+    /**
+     * @brief Registers a canonical `.xnb` writer for every type a `ContentCompiler` can write, so
+     *        an XNA-shaped processor's output reaches `.xnb` through the one pipeline
+     *        (plans/plan_xnapipeline_parity.md `XNAPP-063`).
+     *
+     * One canonical writer is registered per known .NET type name (its stable processed type);
+     * each compiles the boxed value with the compiler under the given platform/profile/container
+     * options. A type that already has a canonical XNB writer (the built-in routes' processed
+     * types are named differently, so none collides today) is skipped rather than duplicated.
+     *
+     * @param registry The registry to configure before builds begin.
+     * @param compiler The compiler, shared with the writers; add user type writers before calling.
+     * @param options Container options every registered writer emits; platform and profile come
+     *        from the build environment at write time.
+     */
+    void RegisterXnaXnbOutput(ContentPipelineRegistry& registry,
+                              std::shared_ptr<const Xna::Serialization::Compiler::ContentCompiler> compiler,
+                              const CNA::Internal::Xnb::XnbFileOptions& options);
 
     /**
      * @brief Registers an XNA-shaped importer class with a canonical registry.

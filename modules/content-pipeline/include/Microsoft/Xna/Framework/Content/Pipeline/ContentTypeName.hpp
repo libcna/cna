@@ -25,6 +25,7 @@ namespace Microsoft::Xna::Framework
     struct Point;
     struct BoundingBox;
     struct BoundingSphere;
+    class BoundingFrustum;
     struct Ray;
     struct Plane;
     class Curve;
@@ -34,6 +35,8 @@ namespace System
 {
     class Object;
     struct TimeSpan;
+    struct DateTime;
+    struct Decimal;
 }
 
 namespace Microsoft::Xna::Framework::Content::Pipeline
@@ -155,6 +158,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
     CNA_XNA_CONTENT_TYPE_NAME(Microsoft::Xna::Framework::Ray, "Microsoft.Xna.Framework.Ray");
     CNA_XNA_CONTENT_TYPE_NAME(Microsoft::Xna::Framework::Plane, "Microsoft.Xna.Framework.Plane");
     CNA_XNA_CONTENT_TYPE_NAME(Microsoft::Xna::Framework::Curve, "Microsoft.Xna.Framework.Curve");
+    CNA_XNA_CONTENT_TYPE_NAME(Microsoft::Xna::Framework::BoundingFrustum, "Microsoft.Xna.Framework.BoundingFrustum");
+    CNA_XNA_CONTENT_TYPE_NAME(System::DateTime, "System.DateTime");
+    CNA_XNA_CONTENT_TYPE_NAME(System::Decimal, "System.Decimal");
 
     /**
      * @brief Selects how a value of type @p T travels through the pipeline
