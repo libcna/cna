@@ -224,17 +224,26 @@ protected:
             // irrelevant to the leg -- what is measured is whether the BINDING is acknowledged.
             std::string vert, frag;
             ShaderEffect effect(dev, vert, frag);
-            std::string how = "accepted and ignored";
-            try {
-                effect.SetTexture(0, volume);
-            } catch (const std::exception& e) {
-                how = std::string("refused: ") + e.what();
-            }
-            check(how == "accepted and ignored",
-                  "C TODAY: binding a Texture3D to a ShaderEffect is accepted and does nothing -- "
-                  "IGraphicsRenderer::BindTexture3D is a `{}` default this renderer never overrode "
-                  "(finding F-31, owned by VULKAN-163)",
-                  how);
+            const auto refusal = [](auto&& call) {
+                try { call(); } catch (const std::exception& e) { return std::string(e.what()); }
+                return std::string("accepted and ignored");
+            };
+            const std::string vol = refusal([&] { effect.SetTexture(0, volume); });
+            check(vol.find("cannot be given a Texture3D") != std::string::npos
+                      && vol.find("Refused rather than silently ignored") != std::string::npos,
+                  "C VULKAN-163: binding a Texture3D to a ShaderEffect is refused BY NAME, not "
+                  "accepted and discarded", vol);
+
+            // The same missing override covered all three overloads, so all three are asserted --
+            // finding the 2D and cube holes was the point of looking, and a test that only covered
+            // the one the row named would leave the other two to be rediscovered.
+            Texture2D flat(dev, 1, 1);
+            const Color one = kLeft;
+            flat.SetData(&one, 1);
+            const std::string tex2d = refusal([&] { effect.SetTexture(0, flat); });
+            check(tex2d.find("cannot be given a Texture2D") != std::string::npos,
+                  "C and so is a Texture2D -- the same `{}` default, silently discarded until now",
+                  tex2d);
         }
 
         const auto& messages = Renderer().GetValidationMessagesEXT();

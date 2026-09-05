@@ -377,6 +377,30 @@ namespace CNA::Internal::Renderers::Vulkan
         void SetUniformFloat(const char* name, float value) override;
         void SetUniformInt(const char* name, int value) override;
 
+        /**
+         * @brief Refuses a per-unit texture binding, by name.
+         *
+         * plans/plan_vulkan.md `VULKAN-163` (finding F-31). `IEffectRenderer`'s three `Bind*`
+         * methods have `{}` bodies, EasyGL overrides all three, and this renderer overrode none --
+         * so `ShaderEffect::SetTexture(unit, ...)` was accepted and silently discarded for 2D,
+         * cube AND volume textures alike, and the shader sampled whatever happened to be bound.
+         *
+         * This renderer supplies a custom effect's texture from the `SpriteBatch` draw that uses
+         * it; there is no per-unit binding path. Saying so is the difference between a caller
+         * finding out now and finding out from a screenshot.
+         *
+         * @param unit    The sampler unit the caller asked for.
+         * @param texture Ignored; the call never succeeds.
+         * @throws System::NotSupportedException always.
+         */
+        void BindTexture(int unit, CNA::Internal::Renderers::ITextureRenderer* texture) override;
+        /** @brief As @ref BindTexture, for a cube map. @throws System::NotSupportedException always. */
+        void BindTextureCube(int unit,
+                             CNA::Internal::Renderers::ITextureCubeRenderer* texture) override;
+        /** @brief As @ref BindTexture, for a volume. @throws System::NotSupportedException always. */
+        void BindTexture3D(int unit,
+                           CNA::Internal::Renderers::ITexture3DRenderer* texture) override;
+
         VkPipeline GetOrCreatePipeline(uint32_t colorAttachmentCount,
                                        VkSampleCountFlagBits sampleCount,
                                        VkFormat depthFormat,

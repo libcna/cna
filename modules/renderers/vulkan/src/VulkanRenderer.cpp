@@ -4059,6 +4059,42 @@ namespace CNA::Internal::Renderers::Vulkan
         pushConst_[24] = value;
     }
 
+    // VULKAN-163 (F-31). One refusal for the whole family, because it is one cause: `IEffectRenderer`
+    // declares three `Bind*` methods with `{}` bodies, EasyGL overrides all three, and this renderer
+    // overrode none -- so every `ShaderEffect::SetTexture` overload was accepted and discarded.
+    //
+    // The row's own note wondered whether a sibling hole deserved its own row. It does not: the
+    // siblings are not separate defects, they are the same missing override, and one fix closes all
+    // three. Splitting them would have produced three rows describing one line of code.
+    namespace {
+        [[noreturn]] void RefuseEffectTextureBindEXT(const char* kind, int unit)
+        {
+            throw System::NotSupportedException(
+                std::string("CNA Vulkan: a ShaderEffect cannot be given a ") + kind +
+                " for sampler unit " + std::to_string(unit) + " on this renderer. It supplies a "
+                "custom effect's texture from the SpriteBatch draw that uses it; there is no "
+                "per-unit binding path. Refused rather than silently ignored.");
+        }
+    }
+
+    void VulkanEffectRenderer::BindTexture(int unit,
+                                           CNA::Internal::Renderers::ITextureRenderer*)
+    {
+        RefuseEffectTextureBindEXT("Texture2D", unit);
+    }
+
+    void VulkanEffectRenderer::BindTextureCube(int unit,
+                                               CNA::Internal::Renderers::ITextureCubeRenderer*)
+    {
+        RefuseEffectTextureBindEXT("TextureCube", unit);
+    }
+
+    void VulkanEffectRenderer::BindTexture3D(int unit,
+                                             CNA::Internal::Renderers::ITexture3DRenderer*)
+    {
+        RefuseEffectTextureBindEXT("Texture3D", unit);
+    }
+
     void VulkanEffectRenderer::SetUniformInt(const char* /*name*/, int value)
     {
         pushConst_[24] = static_cast<float>(value);
