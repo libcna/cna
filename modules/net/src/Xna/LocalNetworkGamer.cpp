@@ -6,6 +6,23 @@
 
 namespace Microsoft::Xna::Framework::Net
 {
+    namespace
+    {
+        std::vector<SharpRuntime::bytecs> TakePacket(PacketWriter& data)
+        {
+            auto* stream = dynamic_cast<System::IO::MemoryStream*>(data.getBaseStreamProperty());
+            std::vector<SharpRuntime::bytecs> packet =
+                stream != nullptr ? stream->ToArray() : std::vector<SharpRuntime::bytecs>{};
+
+            // PacketWriter is deliberately reusable: XNA sends only the bytes before its current
+            // Position and then rewinds it. MemoryStream::ToArray() reflects Length, which may
+            // still include a previous, longer packet after the writer has been rewound.
+            packet.resize(static_cast<std::size_t>(data.getPositionProperty()));
+            data.setPositionProperty(0);
+            return packet;
+        }
+    }
+
     LocalNetworkGamer::LocalNetworkGamer(GamerServices::SignedInGamer* gamer, NetworkSession* session)
         : NetworkGamer(session)
         , signedInGamer_(gamer)
@@ -162,9 +179,7 @@ namespace Microsoft::Xna::Framework::Net
 
     void LocalNetworkGamer::SendData(PacketWriter& data, SendDataOptions options)
     {
-        auto* mem = dynamic_cast<System::IO::MemoryStream*>(data.getBaseStreamProperty());
-        std::vector<SharpRuntime::bytecs> packet = mem ? mem->ToArray() : std::vector<SharpRuntime::bytecs>{};
-        data.setPositionProperty(0);
+        std::vector<SharpRuntime::bytecs> packet = TakePacket(data);
 
         for (NetworkGamer* gamer : getSessionProperty()->getAllGamersProperty())
         {
@@ -180,9 +195,7 @@ namespace Microsoft::Xna::Framework::Net
 
     void LocalNetworkGamer::SendData(PacketWriter& data, SendDataOptions options, NetworkGamer* recipient)
     {
-        auto* mem = dynamic_cast<System::IO::MemoryStream*>(data.getBaseStreamProperty());
-        std::vector<SharpRuntime::bytecs> packet = mem ? mem->ToArray() : std::vector<SharpRuntime::bytecs>{};
-        data.setPositionProperty(0);
+        std::vector<SharpRuntime::bytecs> packet = TakePacket(data);
 
         NetworkSession::NetworkEvent evt;
         evt.Type = NetworkSession::NetworkEventType::PacketSend;
