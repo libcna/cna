@@ -56,6 +56,8 @@ env -u WAYLAND_DISPLAY DISPLAY="${CNA_XNA40_DISPLAY:-:99}" WINEPREFIX="$prefix" 
 # Publish: strip CRLF so the fixtures are byte-stable across hosts, keep everything else verbatim.
 find "$out" -maxdepth 1 -type f \( -name '*.json' -o -name '*.bin' \) -delete
 for f in "$build"/out/*; do
+    # The importer probes keep their fixtures in out/work; only the measurements are published.
+    [ -f "$f" ] || continue
     tr -d '\r' < "$f" > "$out/$(basename "$f")"
 done
 echo "run-graphics-oracle: wrote $(ls "$out" | wc -l) files to $out"
