@@ -10,8 +10,8 @@
 
 | Quantity | Implemented (EXACT + SEMANTIC + HOST_SUBSTITUTION) | EXTERNAL_BLOCKED | MISSING |
 |---|---|---:|---:|
-| public/protected types | 33/128 (25.8%) | 0 | 95 |
-| public/protected members | 201/705 (28.5%) | 0 | 504 |
+| public/protected types | 47/128 (36.7%) | 0 | 81 |
+| public/protected members | 265/705 (37.6%) | 0 | 440 |
 | enum values | 3/27 (11.1%) | 0 | 24 |
 | built-in importers | 0/10 (0.0%) | 0 | 10 |
 | built-in processors | 0/12 (0.0%) | 0 | 12 |
@@ -19,8 +19,8 @@
 
 Status vocabulary: EXACT_EQUIVALENT, SEMANTIC_EQUIVALENT (spelling differs, capability identical; note says how),
 HOST_SUBSTITUTION (Microsoft-host mechanism replaced; note says how), EXTERNAL_BLOCKED (note names the
-unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 23, SEMANTIC_EQUIVALENT 9, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 95.
-Member status by value: EXACT_EQUIVALENT 152, SEMANTIC_EQUIVALENT 44, HOST_SUBSTITUTION 5, EXTERNAL_BLOCKED 0, MISSING 504.
+unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 29, SEMANTIC_EQUIVALENT 17, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 81.
+Member status by value: EXACT_EQUIVALENT 196, SEMANTIC_EQUIVALENT 64, HOST_SUBSTITUTION 5, EXTERNAL_BLOCKED 0, MISSING 440.
 
 Rules applied mechanically: 3 delegate plumbing members are listed in section 7 and not counted; 3 exception
 serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serialization has no C++ counterpart).
@@ -31,7 +31,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 |---|---:|---:|---:|---:|
 | `Microsoft.Xna.Framework.Content.Pipeline.Audio` | 5 | 0 | 0 | 5 |
 | `Microsoft.Xna.Framework.Content.Pipeline` | 32 | 21 | 0 | 11 |
-| `Microsoft.Xna.Framework.Content.Pipeline.Graphics` | 47 | 0 | 0 | 47 |
+| `Microsoft.Xna.Framework.Content.Pipeline.Graphics` | 47 | 14 | 0 | 33 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Processors` | 28 | 0 | 0 | 28 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler` | 5 | 5 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate` | 7 | 7 | 0 | 0 |
@@ -67,15 +67,15 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `….Graphics` | `AnimationContentDictionary` | class | MISSING |  |  |
 | `….Graphics` | `AnimationKeyframe` | class | MISSING |  |  |
 | `….Graphics` | `BasicMaterialContent` | class | MISSING |  |  |
-| `….Graphics` | `BitmapContent` | class | MISSING |  |  |
+| `….Graphics` | `BitmapContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::BitmapContent` | All 13 members present. The copy protocol runs in XNA's order -- argument validation, zero-size no-op, same-instance snapshot, destination TryCopyFrom, source TryCopyTo, then the Vector4 intermediate -- verified against tests/reference/xna40/graphics. |
 | `….Graphics` | `BoneContent` | class | MISSING |  |  |
 | `….Graphics` | `BoneWeight` | struct | MISSING |  |  |
 | `….Graphics` | `BoneWeightCollection` | class | MISSING |  |  |
 | `….Graphics` | `DualTextureMaterialContent` | class | MISSING |  |  |
-| `….Graphics` | `Dxt1BitmapContent` | class | MISSING |  |  |
-| `….Graphics` | `Dxt3BitmapContent` | class | MISSING |  |  |
-| `….Graphics` | `Dxt5BitmapContent` | class | MISSING |  |  |
-| `….Graphics` | `DxtBitmapContent` | class | MISSING |  |  |
+| `….Graphics` | `Dxt1BitmapContent` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::Dxt1BitmapContent` |  |
+| `….Graphics` | `Dxt3BitmapContent` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::Dxt3BitmapContent` |  |
+| `….Graphics` | `Dxt5BitmapContent` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::Dxt5BitmapContent` |  |
+| `….Graphics` | `DxtBitmapContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::DxtBitmapContent` | Block storage sized as XNA sizes it (ceil(w/4) * ceil(h/4) * blockSize). Decode/Encode are CNAEXT hooks over CNA's existing BC codec; XNA reaches D3DX for the same step. |
 | `….Graphics` | `EffectContent` | class | MISSING |  |  |
 | `….Graphics` | `EffectMaterialContent` | class | MISSING |  |  |
 | `….Graphics` | `EnvironmentMapMaterialContent` | class | MISSING |  |  |
@@ -89,19 +89,19 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `….Graphics` | `MeshBuilder` | class | MISSING |  |  |
 | `….Graphics` | `MeshContent` | class | MISSING |  |  |
 | `….Graphics` | `MeshHelper` | class | MISSING |  |  |
-| `….Graphics` | `MipmapChain` | class | MISSING |  |  |
-| `….Graphics` | `MipmapChainCollection` | class | MISSING |  |  |
+| `….Graphics` | `MipmapChain` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::MipmapChain` | A Collection<BitmapContent> of shared_ptr elements; the null check XNA's InsertItem/SetItem perform is kept (ArgumentNullException, parameter name item). |
+| `….Graphics` | `MipmapChainCollection` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::MipmapChainCollection` | Carries XNA's fixed-size flag: a Texture2DContent has one face and a TextureCubeContent six, and resizing either refuses with XNA's NotSupportedException text. |
 | `….Graphics` | `NodeContent` | class | MISSING |  |  |
 | `….Graphics` | `NodeContentCollection` | class | MISSING |  |  |
-| `….Graphics` | `PixelBitmapContent<T>` | class | MISSING |  |  |
+| `….Graphics` | `PixelBitmapContent<T>` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::PixelBitmapContent<T>` | T is constrained by a concept to the 22 pixel types XNA permits (detail/PixelTraits.hpp), where XNA discovers them through VectorConverter at run time. |
 | `….Graphics` | `PositionCollection` | class | MISSING |  |  |
 | `….Graphics` | `SkinnedMaterialContent` | class | MISSING |  |  |
-| `….Graphics` | `Texture2DContent` | class | MISSING |  |  |
-| `….Graphics` | `Texture3DContent` | class | MISSING |  |  |
-| `….Graphics` | `TextureContent` | class | MISSING |  |  |
-| `….Graphics` | `TextureCubeContent` | class | MISSING |  |  |
-| `….Graphics` | `TextureReferenceDictionary` | class | MISSING |  |  |
-| `….Graphics` | `VectorConverter` | class | MISSING |  |  |
+| `….Graphics` | `Texture2DContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::Texture2DContent` | The Mipmaps property is the single fixed face, so the setter takes the owning shared_ptr that replaces it rather than assigning a value; everything else is the direct translation. |
+| `….Graphics` | `Texture3DContent` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::Texture3DContent` | The one texture whose face collection is resizable, and whose mipmap generation halves the depth as well. |
+| `….Graphics` | `TextureContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::TextureContent` | Validate's refusal texts, the mipmap halving rule and ConvertBitmapType are pinned to tests/reference/xna40/graphics. |
+| `….Graphics` | `TextureCubeContent` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::TextureCubeContent` |  |
+| `….Graphics` | `TextureReferenceDictionary` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::TextureReferenceDictionary` | A NamedValueDictionary<ExternalReference<TextureContent>>, as XNA's is. |
+| `….Graphics` | `VectorConverter` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::VectorConverter` | The 22-entry surface/vertex format table is pinned to tests/reference/xna40/graphics case by case. |
 | `….Graphics` | `VertexChannel` | class | MISSING |  |  |
 | `….Graphics` | `VertexChannelCollection` | class | MISSING |  |  |
 | `….Graphics` | `VertexChannelNames` | class | MISSING |  |  |
@@ -401,19 +401,19 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `BasicMaterialContent` | property | `SpecularPower` | MISSING |  |  |
 | `BasicMaterialContent` | property | `Texture` | MISSING |  |  |
 | `BasicMaterialContent` | property | `VertexColorEnabled` | MISSING |  |  |
-| `BitmapContent` | constructor | `.ctor()` | MISSING |  |  |
-| `BitmapContent` | constructor | `.ctor(System.Int32, System.Int32)` | MISSING |  |  |
-| `BitmapContent` | property | `Height` | MISSING |  |  |
-| `BitmapContent` | property | `Width` | MISSING |  |  |
-| `BitmapContent` | method | `Copy(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent)` | MISSING |  |  |
-| `BitmapContent` | method | `Copy(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle)` | MISSING |  |  |
-| `BitmapContent` | method | `GetPixelData()` | MISSING |  |  |
-| `BitmapContent` | method | `SetPixelData(System.Byte[])` | MISSING |  |  |
-| `BitmapContent` | method | `ToString()` | MISSING |  |  |
-| `BitmapContent` | method | `TryCopyFrom(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Rectangle)` | MISSING |  |  |
-| `BitmapContent` | method | `TryCopyTo(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Rectangle)` | MISSING |  |  |
-| `BitmapContent` | method | `TryGetFormat(out Microsoft.Xna.Framework.Graphics.SurfaceFormat)` | MISSING |  |  |
-| `BitmapContent` | method | `ValidateCopyArguments(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle)` | MISSING |  |  |
+| `BitmapContent` | constructor | `.ctor()` | EXACT_EQUIVALENT | `BitmapContent()` |  |
+| `BitmapContent` | constructor | `.ctor(System.Int32, System.Int32)` | EXACT_EQUIVALENT | `BitmapContent(intcs, intcs)` |  |
+| `BitmapContent` | property | `Height` | EXACT_EQUIVALENT | `getHeightProperty() / setHeightProperty()` |  |
+| `BitmapContent` | property | `Width` | EXACT_EQUIVALENT | `getWidthProperty() / setWidthProperty()` |  |
+| `BitmapContent` | method | `Copy(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent)` | SEMANTIC_EQUIVALENT | `Copy(const std::shared_ptr<BitmapContent>&, const std::shared_ptr<BitmapContent>&)` | reference parameters are shared_ptr carriers: a BitmapContent is polymorphic and owned, so CNA passes std::shared_ptr<BitmapContent> where XNA passes the reference itself. |
+| `BitmapContent` | method | `Copy(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle)` | SEMANTIC_EQUIVALENT | `Copy(const std::shared_ptr<BitmapContent>&, Rectangle, const std::shared_ptr<BitmapContent>&, Rectangle)` | reference parameters are shared_ptr carriers: a BitmapContent is polymorphic and owned, so CNA passes std::shared_ptr<BitmapContent> where XNA passes the reference itself. |
+| `BitmapContent` | method | `GetPixelData()` | EXACT_EQUIVALENT | `GetPixelData()` | byte[] is std::vector<bytecs>; measured to be a snapshot, not the bitmap's storage (color/get_pixel_data_is_snapshot). |
+| `BitmapContent` | method | `SetPixelData(System.Byte[])` | EXACT_EQUIVALENT | `SetPixelData(const std::vector<bytecs>&)` |  |
+| `BitmapContent` | method | `ToString()` | EXACT_EQUIVALENT | `ToString()` |  |
+| `BitmapContent` | method | `TryCopyFrom(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Rectangle)` | SEMANTIC_EQUIVALENT | `TryCopyFrom(const std::shared_ptr<BitmapContent>&, Rectangle, Rectangle)` | reference parameters are shared_ptr carriers: a BitmapContent is polymorphic and owned, so CNA passes std::shared_ptr<BitmapContent> where XNA passes the reference itself. Protected in both. |
+| `BitmapContent` | method | `TryCopyTo(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Rectangle)` | SEMANTIC_EQUIVALENT | `TryCopyTo(const std::shared_ptr<BitmapContent>&, Rectangle, Rectangle)` | reference parameters are shared_ptr carriers: a BitmapContent is polymorphic and owned, so CNA passes std::shared_ptr<BitmapContent> where XNA passes the reference itself. Protected in both. |
+| `BitmapContent` | method | `TryGetFormat(out Microsoft.Xna.Framework.Graphics.SurfaceFormat)` | EXACT_EQUIVALENT | `TryGetFormat(SurfaceFormat&)` |  |
+| `BitmapContent` | method | `ValidateCopyArguments(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle)` | SEMANTIC_EQUIVALENT | `ValidateCopyArguments(const std::shared_ptr<BitmapContent>&, Rectangle, const std::shared_ptr<BitmapContent>&, Rectangle)` | reference parameters are shared_ptr carriers: a BitmapContent is polymorphic and owned, so CNA passes std::shared_ptr<BitmapContent> where XNA passes the reference itself. |
 | `BoneContent` | constructor | `.ctor()` | MISSING |  |  |
 | `BoneWeight` | constructor | `.ctor(System.String, System.Single)` | MISSING |  |  |
 | `BoneWeight` | property | `BoneName` | MISSING |  |  |
@@ -432,18 +432,18 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `DualTextureMaterialContent` | property | `Texture` | MISSING |  |  |
 | `DualTextureMaterialContent` | property | `Texture2` | MISSING |  |  |
 | `DualTextureMaterialContent` | property | `VertexColorEnabled` | MISSING |  |  |
-| `Dxt1BitmapContent` | constructor | `.ctor(System.Int32, System.Int32)` | MISSING |  |  |
-| `Dxt1BitmapContent` | method | `TryGetFormat(out Microsoft.Xna.Framework.Graphics.SurfaceFormat)` | MISSING |  |  |
-| `Dxt3BitmapContent` | constructor | `.ctor(System.Int32, System.Int32)` | MISSING |  |  |
-| `Dxt3BitmapContent` | method | `TryGetFormat(out Microsoft.Xna.Framework.Graphics.SurfaceFormat)` | MISSING |  |  |
-| `Dxt5BitmapContent` | constructor | `.ctor(System.Int32, System.Int32)` | MISSING |  |  |
-| `Dxt5BitmapContent` | method | `TryGetFormat(out Microsoft.Xna.Framework.Graphics.SurfaceFormat)` | MISSING |  |  |
-| `DxtBitmapContent` | constructor | `.ctor(System.Int32)` | MISSING |  |  |
-| `DxtBitmapContent` | constructor | `.ctor(System.Int32, System.Int32, System.Int32)` | MISSING |  |  |
-| `DxtBitmapContent` | method | `GetPixelData()` | MISSING |  |  |
-| `DxtBitmapContent` | method | `SetPixelData(System.Byte[])` | MISSING |  |  |
-| `DxtBitmapContent` | method | `TryCopyFrom(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Rectangle)` | MISSING |  |  |
-| `DxtBitmapContent` | method | `TryCopyTo(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Rectangle)` | MISSING |  |  |
+| `Dxt1BitmapContent` | constructor | `.ctor(System.Int32, System.Int32)` | EXACT_EQUIVALENT | `Dxt1BitmapContent(intcs, intcs)` |  |
+| `Dxt1BitmapContent` | method | `TryGetFormat(out Microsoft.Xna.Framework.Graphics.SurfaceFormat)` | EXACT_EQUIVALENT | `TryGetFormat(SurfaceFormat&)` | SurfaceFormat::Dxt1 |
+| `Dxt3BitmapContent` | constructor | `.ctor(System.Int32, System.Int32)` | EXACT_EQUIVALENT | `Dxt3BitmapContent(intcs, intcs)` |  |
+| `Dxt3BitmapContent` | method | `TryGetFormat(out Microsoft.Xna.Framework.Graphics.SurfaceFormat)` | EXACT_EQUIVALENT | `TryGetFormat(SurfaceFormat&)` | SurfaceFormat::Dxt3 |
+| `Dxt5BitmapContent` | constructor | `.ctor(System.Int32, System.Int32)` | EXACT_EQUIVALENT | `Dxt5BitmapContent(intcs, intcs)` |  |
+| `Dxt5BitmapContent` | method | `TryGetFormat(out Microsoft.Xna.Framework.Graphics.SurfaceFormat)` | EXACT_EQUIVALENT | `TryGetFormat(SurfaceFormat&)` | SurfaceFormat::Dxt5 |
+| `DxtBitmapContent` | constructor | `.ctor(System.Int32)` | EXACT_EQUIVALENT | `DxtBitmapContent(intcs)` |  |
+| `DxtBitmapContent` | constructor | `.ctor(System.Int32, System.Int32, System.Int32)` | EXACT_EQUIVALENT | `DxtBitmapContent(intcs, intcs, intcs)` |  |
+| `DxtBitmapContent` | method | `GetPixelData()` | EXACT_EQUIVALENT | `GetPixelData()` |  |
+| `DxtBitmapContent` | method | `SetPixelData(System.Byte[])` | EXACT_EQUIVALENT | `SetPixelData(const std::vector<bytecs>&)` |  |
+| `DxtBitmapContent` | method | `TryCopyFrom(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Rectangle)` | SEMANTIC_EQUIVALENT | `TryCopyFrom(const std::shared_ptr<BitmapContent>&, Rectangle, Rectangle)` | reference parameters are shared_ptr carriers: a BitmapContent is polymorphic and owned, so CNA passes std::shared_ptr<BitmapContent> where XNA passes the reference itself. |
+| `DxtBitmapContent` | method | `TryCopyTo(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Rectangle)` | SEMANTIC_EQUIVALENT | `TryCopyTo(const std::shared_ptr<BitmapContent>&, Rectangle, Rectangle)` | reference parameters are shared_ptr carriers: a BitmapContent is polymorphic and owned, so CNA passes std::shared_ptr<BitmapContent> where XNA passes the reference itself. |
 | `EffectContent` | constructor | `.ctor()` | MISSING |  |  |
 | `EffectContent` | property | `EffectCode` | MISSING |  |  |
 | `EffectMaterialContent` | constant | `CompiledEffectKey` | MISSING |  |  |
@@ -529,15 +529,15 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `MeshHelper` | method | `OptimizeForCache(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshContent)` | MISSING |  |  |
 | `MeshHelper` | method | `SwapWindingOrder(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshContent)` | MISSING |  |  |
 | `MeshHelper` | method | `TransformScene(Microsoft.Xna.Framework.Content.Pipeline.Graphics.NodeContent, Microsoft.Xna.Framework.Matrix)` | MISSING |  |  |
-| `MipmapChain` | constructor | `.ctor()` | MISSING |  |  |
-| `MipmapChain` | constructor | `.ctor(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent)` | MISSING |  |  |
-| `MipmapChain` | method | `InsertItem(System.Int32, Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent)` | MISSING |  |  |
-| `MipmapChain` | method | `SetItem(System.Int32, Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent)` | MISSING |  |  |
-| `MipmapChain` | operator | `op_Implicit(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent)` | MISSING |  |  |
-| `MipmapChainCollection` | method | `ClearItems()` | MISSING |  |  |
-| `MipmapChainCollection` | method | `InsertItem(System.Int32, Microsoft.Xna.Framework.Content.Pipeline.Graphics.MipmapChain)` | MISSING |  |  |
-| `MipmapChainCollection` | method | `RemoveItem(System.Int32)` | MISSING |  |  |
-| `MipmapChainCollection` | method | `SetItem(System.Int32, Microsoft.Xna.Framework.Content.Pipeline.Graphics.MipmapChain)` | MISSING |  |  |
+| `MipmapChain` | constructor | `.ctor()` | EXACT_EQUIVALENT | `MipmapChain()` |  |
+| `MipmapChain` | constructor | `.ctor(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent)` | SEMANTIC_EQUIVALENT | `MipmapChain(std::shared_ptr<BitmapContent>)` | reference parameters are shared_ptr carriers: a BitmapContent is polymorphic and owned, so CNA passes std::shared_ptr<BitmapContent> where XNA passes the reference itself. |
+| `MipmapChain` | method | `InsertItem(System.Int32, Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent)` | SEMANTIC_EQUIVALENT | `InsertItem(intcs, const std::shared_ptr<BitmapContent>&)` | reference parameters are shared_ptr carriers: a BitmapContent is polymorphic and owned, so CNA passes std::shared_ptr<BitmapContent> where XNA passes the reference itself. |
+| `MipmapChain` | method | `SetItem(System.Int32, Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent)` | SEMANTIC_EQUIVALENT | `SetItem(intcs, const std::shared_ptr<BitmapContent>&)` | reference parameters are shared_ptr carriers: a BitmapContent is polymorphic and owned, so CNA passes std::shared_ptr<BitmapContent> where XNA passes the reference itself. |
+| `MipmapChain` | operator | `op_Implicit(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent)` | SEMANTIC_EQUIVALENT | `MipmapChain(std::shared_ptr<BitmapContent>)` | C#'s implicit conversion operator is C++'s converting constructor, which is what makes chain = bitmap compile in both. |
+| `MipmapChainCollection` | method | `ClearItems()` | EXACT_EQUIVALENT | `ClearItems()` |  |
+| `MipmapChainCollection` | method | `InsertItem(System.Int32, Microsoft.Xna.Framework.Content.Pipeline.Graphics.MipmapChain)` | SEMANTIC_EQUIVALENT | `InsertItem(intcs, const std::shared_ptr<MipmapChain>&)` | elements are shared_ptr carriers, as everywhere a chain is owned and shared. |
+| `MipmapChainCollection` | method | `RemoveItem(System.Int32)` | EXACT_EQUIVALENT | `RemoveItem(intcs)` |  |
+| `MipmapChainCollection` | method | `SetItem(System.Int32, Microsoft.Xna.Framework.Content.Pipeline.Graphics.MipmapChain)` | SEMANTIC_EQUIVALENT | `SetItem(intcs, const std::shared_ptr<MipmapChain>&)` | elements are shared_ptr carriers, as everywhere a chain is owned and shared. |
 | `NodeContent` | constructor | `.ctor()` | MISSING |  |  |
 | `NodeContent` | property | `AbsoluteTransform` | MISSING |  |  |
 | `NodeContent` | property | `Animations` | MISSING |  |  |
@@ -546,18 +546,18 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `NodeContent` | property | `Transform` | MISSING |  |  |
 | `NodeContentCollection` | method | `GetParent(Microsoft.Xna.Framework.Content.Pipeline.Graphics.NodeContent)` | MISSING |  |  |
 | `NodeContentCollection` | method | `SetParent(Microsoft.Xna.Framework.Content.Pipeline.Graphics.NodeContent, Microsoft.Xna.Framework.Content.Pipeline.Graphics.NodeContent)` | MISSING |  |  |
-| `PixelBitmapContent<T>` | constructor | `.ctor()` | MISSING |  |  |
-| `PixelBitmapContent<T>` | constructor | `.ctor(System.Int32, System.Int32)` | MISSING |  |  |
-| `PixelBitmapContent<T>` | method | `GetPixel(System.Int32, System.Int32)` | MISSING |  |  |
-| `PixelBitmapContent<T>` | method | `GetPixelData()` | MISSING |  |  |
-| `PixelBitmapContent<T>` | method | `GetRow(System.Int32)` | MISSING |  |  |
-| `PixelBitmapContent<T>` | method | `ReplaceColor(T, T)` | MISSING |  |  |
-| `PixelBitmapContent<T>` | method | `SetPixel(System.Int32, System.Int32, T)` | MISSING |  |  |
-| `PixelBitmapContent<T>` | method | `SetPixelData(System.Byte[])` | MISSING |  |  |
-| `PixelBitmapContent<T>` | method | `ToString()` | MISSING |  |  |
-| `PixelBitmapContent<T>` | method | `TryCopyFrom(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Rectangle)` | MISSING |  |  |
-| `PixelBitmapContent<T>` | method | `TryCopyTo(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Rectangle)` | MISSING |  |  |
-| `PixelBitmapContent<T>` | method | `TryGetFormat(out Microsoft.Xna.Framework.Graphics.SurfaceFormat)` | MISSING |  |  |
+| `PixelBitmapContent<T>` | constructor | `.ctor()` | MISSING |  | Not implemented. XNA's parameterless constructor leaves a 0x0 bitmap for reflection to fill; CNA's derived types and its type registry construct through the sized constructor, which refuses a zero dimension as XNA's does. |
+| `PixelBitmapContent<T>` | constructor | `.ctor(System.Int32, System.Int32)` | EXACT_EQUIVALENT | `PixelBitmapContent(intcs, intcs)` |  |
+| `PixelBitmapContent<T>` | method | `GetPixel(System.Int32, System.Int32)` | EXACT_EQUIVALENT | `GetPixel(intcs, intcs)` |  |
+| `PixelBitmapContent<T>` | method | `GetPixelData()` | EXACT_EQUIVALENT | `GetPixelData()` |  |
+| `PixelBitmapContent<T>` | method | `GetRow(System.Int32)` | SEMANTIC_EQUIVALENT | `GetRow(intcs) -> std::span<T> / std::span<const T>` | XNA returns the bitmap's own row array, so writing through it changes the bitmap (measured, color/get_row_is_live). A std::span keeps that aliasing where a std::vector copy would silently lose it. |
+| `PixelBitmapContent<T>` | method | `ReplaceColor(T, T)` | EXACT_EQUIVALENT | `ReplaceColor(const T&, const T&)` |  |
+| `PixelBitmapContent<T>` | method | `SetPixel(System.Int32, System.Int32, T)` | EXACT_EQUIVALENT | `SetPixel(intcs, intcs, const T&)` |  |
+| `PixelBitmapContent<T>` | method | `SetPixelData(System.Byte[])` | EXACT_EQUIVALENT | `SetPixelData(const std::vector<bytecs>&)` |  |
+| `PixelBitmapContent<T>` | method | `ToString()` | SEMANTIC_EQUIVALENT | `ToString()` | Inherited from BitmapContent, which composes the display name a virtual TypeDisplayName() supplies; C++ has no run-time generic type name to format as XNA's override does. The text matches (PixelBitmapContent<Color>, 3x2). |
+| `PixelBitmapContent<T>` | method | `TryCopyFrom(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Rectangle)` | SEMANTIC_EQUIVALENT | `TryCopyFrom(const std::shared_ptr<BitmapContent>&, Rectangle, Rectangle)` | reference parameters are shared_ptr carriers: a BitmapContent is polymorphic and owned, so CNA passes std::shared_ptr<BitmapContent> where XNA passes the reference itself. |
+| `PixelBitmapContent<T>` | method | `TryCopyTo(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Rectangle)` | SEMANTIC_EQUIVALENT | `TryCopyTo(const std::shared_ptr<BitmapContent>&, Rectangle, Rectangle)` | reference parameters are shared_ptr carriers: a BitmapContent is polymorphic and owned, so CNA passes std::shared_ptr<BitmapContent> where XNA passes the reference itself. |
+| `PixelBitmapContent<T>` | method | `TryGetFormat(out Microsoft.Xna.Framework.Graphics.SurfaceFormat)` | EXACT_EQUIVALENT | `TryGetFormat(SurfaceFormat&)` |  |
 | `PositionCollection` | constructor | `.ctor()` | MISSING |  |  |
 | `SkinnedMaterialContent` | constant | `AlphaKey` | MISSING |  |  |
 | `SkinnedMaterialContent` | constant | `DiffuseColorKey` | MISSING |  |  |
@@ -574,25 +574,25 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `SkinnedMaterialContent` | property | `SpecularPower` | MISSING |  |  |
 | `SkinnedMaterialContent` | property | `Texture` | MISSING |  |  |
 | `SkinnedMaterialContent` | property | `WeightsPerVertex` | MISSING |  |  |
-| `Texture2DContent` | constructor | `.ctor()` | MISSING |  |  |
-| `Texture2DContent` | property | `Mipmaps` | MISSING |  |  |
-| `Texture2DContent` | method | `Validate(System.Nullable<Microsoft.Xna.Framework.Graphics.GraphicsProfile>)` | MISSING |  |  |
-| `Texture3DContent` | constructor | `.ctor()` | MISSING |  |  |
-| `Texture3DContent` | method | `GenerateMipmaps(System.Boolean)` | MISSING |  |  |
-| `Texture3DContent` | method | `Validate(System.Nullable<Microsoft.Xna.Framework.Graphics.GraphicsProfile>)` | MISSING |  |  |
-| `TextureContent` | constructor | `.ctor(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MipmapChainCollection)` | MISSING |  |  |
-| `TextureContent` | property | `Faces` | MISSING |  |  |
-| `TextureContent` | method | `ConvertBitmapType(System.Type)` | MISSING |  |  |
-| `TextureContent` | method | `GenerateMipmaps(System.Boolean)` | MISSING |  |  |
-| `TextureContent` | method | `Validate(System.Nullable<Microsoft.Xna.Framework.Graphics.GraphicsProfile>)` | MISSING |  |  |
-| `TextureCubeContent` | constructor | `.ctor()` | MISSING |  |  |
-| `TextureCubeContent` | method | `Validate(System.Nullable<Microsoft.Xna.Framework.Graphics.GraphicsProfile>)` | MISSING |  |  |
-| `TextureReferenceDictionary` | constructor | `.ctor()` | MISSING |  |  |
-| `VectorConverter` | method | `GetConverter<TInput, TOutput>()` | MISSING |  |  |
-| `VectorConverter` | method | `TryGetSurfaceFormat(System.Type, out Microsoft.Xna.Framework.Graphics.SurfaceFormat)` | MISSING |  |  |
-| `VectorConverter` | method | `TryGetVectorType(Microsoft.Xna.Framework.Graphics.SurfaceFormat, out System.Type)` | MISSING |  |  |
-| `VectorConverter` | method | `TryGetVectorType(Microsoft.Xna.Framework.Graphics.VertexElementFormat, out System.Type)` | MISSING |  |  |
-| `VectorConverter` | method | `TryGetVertexElementFormat(System.Type, out Microsoft.Xna.Framework.Graphics.VertexElementFormat)` | MISSING |  |  |
+| `Texture2DContent` | constructor | `.ctor()` | EXACT_EQUIVALENT | `Texture2DContent()` |  |
+| `Texture2DContent` | property | `Mipmaps` | SEMANTIC_EQUIVALENT | `getMipmapsProperty() / setMipmapsProperty(std::shared_ptr<MipmapChain>)` | the getter answers a reference to the single face, the setter takes the owning shared_ptr that replaces it. |
+| `Texture2DContent` | method | `Validate(System.Nullable<Microsoft.Xna.Framework.Graphics.GraphicsProfile>)` | EXACT_EQUIVALENT | `Validate(std::optional<GraphicsProfile>)` |  |
+| `Texture3DContent` | constructor | `.ctor()` | EXACT_EQUIVALENT | `Texture3DContent()` |  |
+| `Texture3DContent` | method | `GenerateMipmaps(System.Boolean)` | EXACT_EQUIVALENT | `GenerateMipmaps(bool)` |  |
+| `Texture3DContent` | method | `Validate(System.Nullable<Microsoft.Xna.Framework.Graphics.GraphicsProfile>)` | EXACT_EQUIVALENT | `Validate(std::optional<GraphicsProfile>)` |  |
+| `TextureContent` | constructor | `.ctor(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MipmapChainCollection)` | SEMANTIC_EQUIVALENT | `TextureContent(std::shared_ptr<MipmapChainCollection>)` | the face collection is an owned shared_ptr; protected in both. |
+| `TextureContent` | property | `Faces` | EXACT_EQUIVALENT | `getFacesProperty()` |  |
+| `TextureContent` | method | `ConvertBitmapType(System.Type)` | EXACT_EQUIVALENT | `ConvertBitmapType(System::Type)` | the target type is looked up in CNA's own bitmap-type registry, which RegisterBitmapType<T>() fills, where XNA reflects over the assembly. |
+| `TextureContent` | method | `GenerateMipmaps(System.Boolean)` | EXACT_EQUIVALENT | `GenerateMipmaps(bool)` |  |
+| `TextureContent` | method | `Validate(System.Nullable<Microsoft.Xna.Framework.Graphics.GraphicsProfile>)` | EXACT_EQUIVALENT | `Validate(std::optional<GraphicsProfile>)` |  |
+| `TextureCubeContent` | constructor | `.ctor()` | EXACT_EQUIVALENT | `TextureCubeContent()` |  |
+| `TextureCubeContent` | method | `Validate(System.Nullable<Microsoft.Xna.Framework.Graphics.GraphicsProfile>)` | EXACT_EQUIVALENT | `Validate(std::optional<GraphicsProfile>)` |  |
+| `TextureReferenceDictionary` | constructor | `.ctor()` | EXACT_EQUIVALENT | `TextureReferenceDictionary()` |  |
+| `VectorConverter` | method | `GetConverter<TInput, TOutput>()` | SEMANTIC_EQUIVALENT | `GetConverter<TInput, TOutput>() -> std::function<TOutput(TInput)>` | Converter<TInput,TOutput> is a delegate; std::function is its C++ carrier. XNA answers null for an unsupported pair at run time, where the C++ template refuses at compile time through a concept. |
+| `VectorConverter` | method | `TryGetSurfaceFormat(System.Type, out Microsoft.Xna.Framework.Graphics.SurfaceFormat)` | EXACT_EQUIVALENT | `TryGetSurfaceFormat(System::Type, SurfaceFormat&)` |  |
+| `VectorConverter` | method | `TryGetVectorType(Microsoft.Xna.Framework.Graphics.SurfaceFormat, out System.Type)` | EXACT_EQUIVALENT | `TryGetVectorType(SurfaceFormat, System::Type&)` |  |
+| `VectorConverter` | method | `TryGetVectorType(Microsoft.Xna.Framework.Graphics.VertexElementFormat, out System.Type)` | EXACT_EQUIVALENT | `TryGetVectorType(VertexElementFormat, System::Type&)` |  |
+| `VectorConverter` | method | `TryGetVertexElementFormat(System.Type, out Microsoft.Xna.Framework.Graphics.VertexElementFormat)` | EXACT_EQUIVALENT | `TryGetVertexElementFormat(System::Type, VertexElementFormat&)` |  |
 | `VertexChannel` | property | `Count` | MISSING |  |  |
 | `VertexChannel` | property | `ElementType` | MISSING |  |  |
 | `VertexChannel` | property | `Name` | MISSING |  |  |

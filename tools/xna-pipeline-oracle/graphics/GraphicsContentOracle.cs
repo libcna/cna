@@ -236,6 +236,25 @@ namespace Cna.Xna40.GraphicsOracle
             });
             Record("color/get_pixel_out_of_range", () => new PixelBitmapContent<Color>(2, 1).GetPixel(2, 0).ToString());
             Record("color/set_pixel_out_of_range", () => { new PixelBitmapContent<Color>(2, 1).SetPixel(0, 1, Color.Red); return "accepted"; });
+            // Does GetRow hand out the bitmap's own row, or a copy? Writing through the returned
+            // array and reading the pixel back is the only way to tell from outside.
+            Record("color/get_row_is_live", () =>
+            {
+                var bitmap = new PixelBitmapContent<Color>(2, 1);
+                bitmap.SetPixel(0, 0, Color.Red);
+                Color[] row = bitmap.GetRow(0);
+                row[0] = Color.Lime;
+                return "row=" + row.Length + " pixel=" + bitmap.GetPixel(0, 0);
+            });
+            // ...and the same question for the pixel data: is GetPixelData a snapshot?
+            Record("color/get_pixel_data_is_snapshot", () =>
+            {
+                var bitmap = new PixelBitmapContent<Color>(1, 1);
+                bitmap.SetPixel(0, 0, Color.Red);
+                byte[] data = bitmap.GetPixelData();
+                data[0] = 0x7F;
+                return "pixel=" + bitmap.GetPixel(0, 0);
+            });
             Record("color/get_row_out_of_range", () => new PixelBitmapContent<Color>(2, 1).GetRow(1).Length.ToString());
             Record("color/replace_color", () =>
             {

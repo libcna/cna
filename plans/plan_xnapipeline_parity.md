@@ -540,10 +540,11 @@ Filled by `parity_report.py` into `docs/xna-content-pipeline-parity-report.md` a
 each phase close. The member denominator the report counts is 705: the inventory's 708 minus the
 3 delegate-plumbing members the report lists separately (§5).
 
-**Current (2026-09-05, after Phase 5): types 33/128, members 201/705, enum values 3/27,
-importers 0/10, extensions 0/18, processors 0/12, properties 0/47, intermediate-serializer
-features §13 complete against the 254-case corpus, targets verified 0/3, black-box-verified
-families 1 (intermediate XML, byte for byte).** The previous plan's routes
+**Current (2026-09-05, after Phase 5 and the texture side of Phase 6): types 47/128,
+members 265/705, enum values 3/27, importers 0/10, extensions 0/18, processors 0/12,
+properties 0/47, intermediate-serializer features §13 complete against the 254-case corpus,
+targets verified 0/3, black-box-verified families 3 (intermediate XML byte for byte; the graphics
+content object model against 266 measurements; the framework's float packing against 68).** The previous plan's routes
 exist and work, but by this plan's definition only XNA-namespaced types with tested behaviour
 count; the input/processor counts stay at zero until a row passes the `IMPLEMENTED+TESTED` bar,
 which requires a fixture, an importer test, a processor test, both output tests and a
@@ -643,15 +644,15 @@ module) with `src/Xna/`; `ContentSerializer*` descriptors in `modules/content/in
 
 | ID | Task | State |
 |---|---|---|
-| `XNAPP-090` | `BitmapContent` (13), `PixelBitmapContent<T>` (12, all XNA-permitted `T`: `Color`, `Vector4`, `Single`, `Byte`, `Rgba64`, `Bgr565`, …), `Copy`/`TryCopyFrom`/`TryCopyTo`/`GetPixelData`/`SetPixelData`, `ReplaceColor`. | [ ] |
-| `XNAPP-091` | `DxtBitmapContent` + `Dxt1/3/5` (using the existing BC encoder/decoder). | [ ] |
-| `XNAPP-092` | `MipmapChain` (implicit conversion from `BitmapContent`), `MipmapChainCollection`, `TextureContent` (`Faces`, `ConvertBitmapType`, `GenerateMipmaps`, `Validate`), `Texture2DContent` (`Mipmaps`), `Texture3DContent`, `TextureCubeContent`, `TextureReferenceDictionary`. | [ ] |
+| `XNAPP-090` | `BitmapContent` (13), `PixelBitmapContent<T>` (12, all XNA-permitted `T`: `Color`, `Vector4`, `Single`, `Byte`, `Rgba64`, `Bgr565`, …), `Copy`/`TryCopyFrom`/`TryCopyTo`/`GetPixelData`/`SetPixelData`, `ReplaceColor`. | [x] `BitmapContent.hpp`/`.cpp` and `PixelBitmapContent.hpp`, with `detail/PixelTraits.hpp` giving each of the 22 permitted pixel types its size, name, surface/vertex format and `Vector4` conversion (a concept refuses the rest at compile time, where XNA asks `VectorConverter` at run time). `Copy` runs XNA's measured protocol in order: null checks, `ValidateCopyArguments` (its two `ArgumentOutOfRangeException` parameter names included), the zero-size no-op, the same-instance snapshot, the destination's `TryCopyFrom`, the source's `TryCopyTo`, then the `Vector4` intermediate; resizing enlarges bilinearly and reduces by box filter, within 8 channel units of D3DX on the corpus. `GetRow` answers a `std::span` aliasing the bitmap, because XNA's `T[]` is the bitmap's own row (measured, `color/get_row_is_live`), while `GetPixelData` is a snapshot. A CNAEXT bitmap-type registry stands in for XNA's reflection over the assembly. `PixelBitmapContent<T>`'s parameterless constructor is the one member not implemented (map note). |
+| `XNAPP-091` | `DxtBitmapContent` + `Dxt1/3/5` (using the existing BC encoder/decoder). | [x] `DxtBitmapContent.hpp`/`.cpp`: block storage sized `ceil(w/4) * ceil(h/4) * blockSize` as measured, `SetPixelData` accepting any length as XNA does, and `Decode`/`Encode` over the canonical `DxtUtil` decoder and `EncodeBlockCompressedImage` encoder -- no second codec. XNA's blocks come out of D3DX, so the corpus is compared by decoding XNA's blocks with CNA's decoder (within 3 channel units), not byte for byte. |
+| `XNAPP-092` | `MipmapChain` (implicit conversion from `BitmapContent`), `MipmapChainCollection`, `TextureContent` (`Faces`, `ConvertBitmapType`, `GenerateMipmaps`, `Validate`), `Texture2DContent` (`Mipmaps`), `Texture3DContent`, `TextureCubeContent`, `TextureReferenceDictionary`. | [x] `MipmapChain`/`MipmapChainCollection`/`TextureContent`/`TextureReferenceDictionary` (+ `VectorConverter`, `XNAPP-096`'s row keeps the rest of that task). The face collection carries XNA's fixed-size flag -- 1 face for `Texture2DContent`, 6 for `TextureCubeContent`, resizable only for `Texture3DContent` -- and refuses a resize with XNA's own `NotSupportedException` text. `GenerateMipmaps` halves with a floor of 1 and leaves an existing chain alone unless told to overwrite; the 3D form halves the depth too. Every `Validate` refusal text is the measured one, including the Reach size and format limits and the cubemap squareness check. |
 | `XNAPP-093` | `FontDescription` (3 ctors, 7 properties incl. `Characters` collection), `FontDescriptionStyle` (3 values). | [ ] |
 | `XNAPP-094` | `MaterialContent` (`Textures`, `GetTexture`/`SetTexture`, `GetReferenceTypeProperty`/`GetValueTypeProperty`/`SetProperty`) + the six stock material contents with their string constants and typed properties; `EffectContent`. | [ ] |
 | `XNAPP-095` | `NodeContent` (Transform, AbsoluteTransform, Parent, Children, Animations), `NodeContentCollection`, `BoneContent`, `MeshContent` (Geometry, Positions), `GeometryContent` (Indices, Material, Vertices, Parent), `GeometryContentCollection`. | [ ] |
 | `XNAPP-096` | `VertexContent` (Channels, PositionIndices, Positions, VertexCount, Add/Insert/Remove/ConvertToVertexBufferContent), `VertexChannel`/`<T>`, `VertexChannelCollection` (20), `VertexChannelNames` (13), `PositionCollection`, `IndirectPositionCollection`, `IndexCollection`, `BoneWeight`, `BoneWeightCollection` (`NormalizeWeights` ×2), `VectorConverter` (5). | [ ] |
 | `XNAPP-097` | `AnimationContent`, `AnimationContentDictionary`, `AnimationChannel` (10), `AnimationChannelDictionary`, `AnimationKeyframe` (`IComparable`). | [ ] |
-| `XNAPP-098` | Compile-parity and behaviour tests for every Phase 6 type. | [ ] |
+| `XNAPP-098` | Compile-parity and behaviour tests for every Phase 6 type. | [~] `XnaGraphicsBitmapTests.cpp`: 11 tests over the texture side (`XNAPP-090`–`092`), each comparing against `tests/reference/xna40/graphics/graphics-content-oracle.json` -- layouts, pixel data, conversions and the 22-type converter table exactly; resampled pixels and DXT blocks within the tolerances the row above names. The oracle driver is `tools/xna-pipeline-oracle/graphics/`. The font, material, node, vertex and animation types (`XNAPP-093`–`097`) still need both their implementation and their measurements. |
 | `XNAPP-099` | The framework packing rule Phase 6 depends on: measure how XNA turns a float channel into an integer one, and make CNA agree. | [x] `tools/xna-pipeline-oracle/framework/` (driver + `run-framework-oracle.sh`), 68 measurements committed as `tests/reference/xna40/framework/framework-packing-oracle.json`. XNA saturates and rounds every float channel to the nearest integer **with ties to even**, packs a NaN channel as 0, and truncates only in `Color.Lerp`/`Color.Multiply`. CNA truncated in the `Color` float constructors, rounded ties away from zero in the normalized packed types, used `+ 0.5f` in the colour layouts, and let `Color.PackFromVector4` wrap instead of saturate (all of it faithful to FNA, none of it XNA). Fixed through one shared helper, `CNA::Internal::ClampAndRound` (`modules/core/include/CNA/Internal/PackedRounding.hpp`), in `Color` and the fourteen packing headers; `XnaFrameworkPackingTests.cpp` reproduces all 68 cases and fails if a measured case gains no reproduction. Recorded as `XNAPACK-001` in `plans/plan_bindings_upstream.md`; the `REMED-CORE-004` pins that asserted the FNA behaviour were rewritten against the measurements. Measured gap left open: XNA's packed-vector structs override `ToString()` (packed value as hex) and CNA's seventeen do not. | 
 
 ### Phase 7 — processors namespace and property/default parity (28 types)
@@ -835,12 +836,16 @@ Session 1 (2026-09-05): Phases 0–1 done except `XNAPP-008`/`015`/`016`; Phase 
 `XNAPP-043` (`VideoContent`, with Phase 14), with `032`/`045` partial as their rows say. The parity map
 is edited through `tools/xna-pipeline-oracle/parity_map_edit.py` with a decision document, never
 by hand, and the report regenerates with `parity_report.py`. Phases 4 and 5 done (only the
-`XmlImporter` leg of `074` remains, as `XNAPP-230`). The intermediate serializer is
+`XmlImporter` leg of `074` remains, as `XNAPP-230`). Phase 6's texture side is done
+(`XNAPP-090`–`092`, `099`, `098` partial); its remaining types are `XNAPP-093`–`097` (fonts,
+materials, nodes, vertices, animation), which need their measurements before their code -- extend
+`tools/xna-pipeline-oracle/graphics/GraphicsContentOracle.cs` the way the texture side was
+measured. The intermediate serializer is
 verified byte for byte against `tests/reference/xna40/intermediate/`; extend the oracle
 (`tools/xna-pipeline-oracle/intermediate/run-intermediate-oracle.sh`) before asserting anything
 about the format that the corpus does not show. sharp-runtime (`next`, sibling checkout
 `sharp-runtimenext`) carries the XML fixes this phase needed; another session works in that
-checkout concurrently, so stage only your own hunks there. Next: Phase 6/7 in ID order (the graphics intermediate types, then processors), then `XNAPP-230` (`XmlImporter`)
+checkout concurrently, so stage only your own hunks there. Next: the rest of Phase 6 and then Phase 7 in ID order, then `XNAPP-230` (`XmlImporter`)
 over this serializer. The owner asked for continuous commits and pushes (2026-09-05).
 The build directory is `cmake-build-debug/`; **this session builds with `-j3` at the owner's
 request** (a per-session cap, not a repository rule); the oracle regenerates with

@@ -220,3 +220,40 @@ The C# spelling `ContentTypeSerializer` (base) and `ContentTypeSerializer<T>` fo
 `ContentTypeWriterBase` precedent: the base is `ContentTypeSerializerBase`. Everything else in
 the namespace keeps XNA's names; the `protected internal` members are `protected` with
 `Invoke*` entry points for the reader and writer.
+
+## 9. Bitmaps and textures without reflection
+
+`Microsoft::Xna::Framework::Content::Pipeline::Graphics` gives the texture object model the same
+treatment: XNA's shape, with the two places that depend on the CLR replaced by something a C++
+program can carry.
+
+* **The pixel type is a compile-time trait, not a run-time lookup.** XNA lets
+  `PixelBitmapContent<T>` accept any `T` `VectorConverter` knows, and fails at run time otherwise.
+  CNA states the same 22 types in `Graphics/detail/PixelTraits.hpp` -- size, .NET name, surface
+  and vertex format, and the conversion to and from `Vector4` -- and a concept refuses the rest
+  at compile time. `VectorConverter`'s tables are that same trait read back, so the two cannot
+  drift.
+* **A bitmap-type registry stands in for reflection.** `ConvertBitmapType(Type)` and the copy
+  path need to build a bitmap of a type named at run time, which XNA does by reflecting over the
+  assembly. `BitmapContent::RegisterBitmapType<TBitmap>("Microsoft.Xna.Framework.…")` records a
+  factory under the .NET name, and `CreateBitmap(Type, width, height)` uses it. Every stock
+  bitmap registers itself; a game's own bitmap type registers once, beside where it is defined.
+
+Two behaviours are worth knowing because they are easy to get wrong and were measured rather than
+assumed (`tests/reference/xna40/graphics/graphics-content-oracle.json`):
+
+* `BitmapContent::Copy` is a protocol, not a memcpy, and its order is observable: arguments are
+  validated first (`ArgumentOutOfRangeException` naming `sourceRegion` or `destinationRegion`),
+  a zero-size region is a no-op, a copy from a bitmap to itself goes through a snapshot, then the
+  destination is offered the copy (`TryCopyFrom`), then the source (`TryCopyTo`), and only if both
+  decline does the `Vector4` intermediate run. A custom bitmap type participates by overriding
+  those two.
+* `GetRow` hands out the bitmap's own row -- writing through it changes the bitmap -- so CNA
+  answers a `std::span<T>` rather than a copy. `GetPixelData` is the opposite: a snapshot, whose
+  bytes are yours to modify.
+
+Resampling is where CNA is deliberately not byte-exact: XNA resizes through D3DX's undocumented
+kernel, CNA enlarges bilinearly and reduces with a box filter, and the corpus tests allow the
+measured difference (at most 8 channel units on the cases they cover) rather than pretending the
+filters are the same. DXT blocks are compared by decoding XNA's blocks with CNA's decoder for the
+same reason.

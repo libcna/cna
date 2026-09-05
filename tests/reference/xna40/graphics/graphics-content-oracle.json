@@ -8,6 +8,8 @@
   {"case": "color/set_pixel_data_wrong_length", "result": "throws ArgumentException: The sourceData array has length 7, but bitmap pixel data size should be 8."},
   {"case": "color/get_pixel_out_of_range", "result": "throws ArgumentOutOfRangeException: Specified argument was out of the range of valid values.\r\nParameter name: x"},
   {"case": "color/set_pixel_out_of_range", "result": "throws ArgumentOutOfRangeException: Specified argument was out of the range of valid values.\r\nParameter name: y"},
+  {"case": "color/get_row_is_live", "result": "row=2 pixel={R:0 G:255 B:0 A:255}"},
+  {"case": "color/get_pixel_data_is_snapshot", "result": "pixel={R:255 G:0 B:0 A:255}"},
   {"case": "color/get_row_out_of_range", "result": "throws ArgumentOutOfRangeException: Specified argument was out of the range of valid values.\r\nParameter name: y"},
   {"case": "color/replace_color", "result": "00000000 04030201 8000FF00 281E140A"},
   {"case": "color/ctor_zero_size", "result": "throws ArgumentOutOfRangeException: Bitmap size must be greater than zero.\r\nParameter name: width"},
