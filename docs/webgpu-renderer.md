@@ -837,6 +837,15 @@ for** — `IGraphicsRenderer`'s default forwards to the format-less overload and
 which is exactly what would let a target be classified in one format and allocated in another — and
 an `Unsupported` format is refused there by name.
 
+**Every render-target transfer is sized from the format** (`WEBGPU-202`), and the pipeline key covers
+**every** MRT slot's format, not slot 0's alone — two sets differing only in slot 1 would otherwise
+share a pipeline, which the native layer rejects outright (`"Incompatible color attachments at
+indices [1]"`). Clear values needed no work: `WGPURenderPassColorAttachment.clearValue` is four
+doubles, so a 2.0 clear reaches an RGBA16Float target unclamped. Resolve needed none either — a
+multisampled float target resolves here. `UpdatePixelsLevel()`'s fixed four-byte texel is left alone
+deliberately: it belongs to a plain `Texture2D`, and `Texture::ValidateFormat` still admits `Color`
+alone for those on every renderer, so widening it would be unreachable code.
+
 **The readback is typed by the target's format.** It assumed four UNORM8 bytes per texel, which held
 only while a render target could only be `Color`; the width now comes from the format (2/4/8/16) and
 the BGRA swizzle applies to BGRA8 alone, since reordering a float texel's bytes would corrupt it.

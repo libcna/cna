@@ -984,6 +984,10 @@ namespace CNA::Internal::Renderers::WebGPU
         // Mirrors VulkanRenderer::Make3DKey()/PackBlendBits()'s own role: when blend is
         // disabled, the (irrelevant) blend factors always collapse to the same bits so different
         // disabled BlendStates don't create duplicate pipelines.
+        /// WEBGPU-202: the default extra-MRT-slot formats for a single-target draw -- never read,
+        /// because the loop that consumes them runs only when `colorAttachmentCount > 1`.
+        inline constexpr std::array<WGPUTextureFormat, 4> kNoMrtColorFormatsEXT{};
+
         [[nodiscard]] std::uint64_t Make3DPipelineKey(
             WGPUPrimitiveTopology topology,
             WGPUIndexFormat stripIndexFormat,
@@ -1002,7 +1006,8 @@ namespace CNA::Internal::Renderers::WebGPU
             int colorAttachmentCount = 1,
             WGPUTextureFormat depthFormat = WGPUTextureFormat_Depth24PlusStencil8,
             WGPUTextureFormat colorFormat = WGPUTextureFormat_Undefined,
-            std::uint32_t sampleCount = 0)
+            std::uint32_t sampleCount = 0,
+            const std::array<WGPUTextureFormat, 4>& mrtColorFormats = kNoMrtColorFormatsEXT)
         {
             std::uint64_t key = static_cast<std::uint64_t>(topology);
             // REMED-GFX-105: RequiredStripIndexFormat() canonicalizes this to Undefined for
@@ -1053,6 +1058,13 @@ namespace CNA::Internal::Renderers::WebGPU
             // in one pass sees the same pair, so no cardinality test gains a variant.
             key = key * 31u + static_cast<std::uint64_t>(colorFormat);
             key = key * 31u + static_cast<std::uint64_t>(sampleCount);
+            // WEBGPU-202: and every EXTRA MRT slot's format, not slot 0 alone. WebGPU permits an MRT
+            // set whose attachments differ in format, but a pipeline's `targets[]` must match the
+            // bound set exactly -- so two sets differing only in slot 1 would otherwise share one
+            // pipeline and fail validation on the second. Folded only when there are extra slots,
+            // so every single-target key is unchanged.
+            for (int slot = 1; slot < colorAttachmentCount && slot < 4; ++slot)
+                key = key * 31u + static_cast<std::uint64_t>(mrtColorFormats[slot]);
             return key;
         }
 
@@ -4591,7 +4603,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
-                                                     replayColorFormat_, replaySampleCount_)
+                                                     replayColorFormat_, replaySampleCount_,
+                                                     replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         if (auto it = coloredPipelines_.find(key); it != coloredPipelines_.end())
             return it->second;
@@ -4720,7 +4733,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
-                                                     replayColorFormat_, replaySampleCount_)
+                                                     replayColorFormat_, replaySampleCount_,
+                                                     replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         if (auto it = texturedPipelines_.find(key); it != texturedPipelines_.end())
             return it->second;
@@ -4766,7 +4780,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
-                                                     replayColorFormat_, replaySampleCount_)
+                                                     replayColorFormat_, replaySampleCount_,
+                                                     replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         if (auto it = coloredTexturedPipelines_.find(key); it != coloredTexturedPipelines_.end())
             return it->second;
@@ -4907,7 +4922,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
-                                                     replayColorFormat_, replaySampleCount_)
+                                                     replayColorFormat_, replaySampleCount_,
+                                                     replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         if (auto it = litTexturedPipelines_.find(key); it != litTexturedPipelines_.end())
             return it->second;
@@ -4952,7 +4968,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
-                                                     replayColorFormat_, replaySampleCount_)
+                                                     replayColorFormat_, replaySampleCount_,
+                                                     replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         if (auto it = litTexturedVertexLitPipelines_.find(key); it != litTexturedVertexLitPipelines_.end())
             return it->second;
@@ -5061,7 +5078,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias,
                                                      CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
-                                                     replayColorFormat_, replaySampleCount_)
+                                                     replayColorFormat_, replaySampleCount_,
+                                                     replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         auto& cache = colored ? alphaTestColoredPipelines_ : alphaTestPipelines_;
         if (auto it = cache.find(key); it != cache.end())
@@ -5212,7 +5230,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias,
                                                      CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
-                                                     replayColorFormat_, replaySampleCount_)
+                                                     replayColorFormat_, replaySampleCount_,
+                                                     replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         auto& cache = colored ? dualTextureColoredPipelines_ : dualTexturePipelines_;
         if (auto it = cache.find(key); it != cache.end())
@@ -5391,7 +5410,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
-                                                     replayColorFormat_, replaySampleCount_)
+                                                     replayColorFormat_, replaySampleCount_,
+                                                     replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         if (auto it = envMapPipelines_.find(key); it != envMapPipelines_.end())
             return it->second;
@@ -5738,7 +5758,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias, salt, colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
-                                                     replayColorFormat_, replaySampleCount_)
+                                                     replayColorFormat_, replaySampleCount_,
+                                                     replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         if (auto it = instancedPipelines_.find(key); it != instancedPipelines_.end())
             return it->second;
@@ -10972,7 +10993,8 @@ namespace
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
-                                                     replayColorFormat_, replaySampleCount_)
+                                                     replayColorFormat_, replaySampleCount_,
+                                                     replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         auto& cache = colored ? pbrColorPipelines_ : pbrPipelines_;
         if (auto it = cache.find(key); it != cache.end())
@@ -11464,7 +11486,8 @@ namespace
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
-                                                     replayColorFormat_, replaySampleCount_)
+                                                     replayColorFormat_, replaySampleCount_,
+                                                     replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         auto& cache = preferVertexLit
             ? (hasVertexColor ? skinnedVertexLitColorPipelines_ : skinnedVertexLitPipelines_)
@@ -11869,7 +11892,8 @@ namespace
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
-                                                     replayColorFormat_, replaySampleCount_)
+                                                     replayColorFormat_, replaySampleCount_,
+                                                     replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         auto& cache = colored ? skinnedPbrColorPipelines_ : skinnedPbrPipelines_;
         if (auto it = cache.find(key); it != cache.end())
