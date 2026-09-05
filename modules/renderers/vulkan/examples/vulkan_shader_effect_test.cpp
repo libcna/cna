@@ -26,6 +26,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <cstdio>
 #include <cstdint>
@@ -244,7 +245,36 @@ protected:
         const bool centOk = (centPx.getRProperty() >= 200 && centPx.getGProperty() <= 50);
         const bool bgOk   = (bgPx.getGProperty()   >= 200 && bgPx.getRProperty()   <= 50);
 
-        if (centOk && bgOk)
+        // plan_vulkan.md VULKAN-265: the four array uniform setters must REFUSE, not fall
+        // silent. The centre-pixel check above is this leg's control: it proves the very same
+        // `fx` still reaches the shader through SetUniformVec4, so four throws cannot be
+        // explained away by an effect that is broken end to end.
+        const float payload[16] = {};
+        bool refusalsOk = true;
+        auto expectRefusal = [&refusalsOk](const char* setter, auto&& call) {
+            try {
+                call();
+                std::printf("[FAIL] VulkanShaderEffect: %s was accepted and silently ignored\n",
+                            setter);
+                refusalsOk = false;
+            } catch (const System::NotSupportedException& e) {
+                std::printf("[ok]   %s refused: %s\n", setter, e.what());
+            } catch (...) {
+                std::printf("[FAIL] VulkanShaderEffect: %s threw the wrong exception type\n",
+                            setter);
+                refusalsOk = false;
+            }
+        };
+        expectRefusal("SetUniformFloatArray",
+                      [&] { fx.SetUniformFloatArray("uWeights", payload, 4); });
+        expectRefusal("SetUniformVec2Array",
+                      [&] { fx.SetUniformVec2Array("uOffsets", payload, 2); });
+        expectRefusal("SetUniformVec3Array",
+                      [&] { fx.SetUniformVec3Array("uLightDirs", payload, 2); });
+        expectRefusal("SetUniformMat4Array",
+                      [&] { fx.SetUniformMat4Array("uBones", payload, 1); });
+
+        if (centOk && bgOk && refusalsOk)
         {
             std::printf("[PASS] VulkanShaderEffect: centre=(%d,%d,%d) bg=(%d,%d,%d)\n",
                         centPx.getRProperty(), centPx.getGProperty(), centPx.getBProperty(),
@@ -253,10 +283,12 @@ protected:
         }
         else
         {
-            std::printf("[FAIL] VulkanShaderEffect: centre=(%d,%d,%d) bg=(%d,%d,%d)\n"
-                        "       expected: centre=red, bg=green\n",
+            std::printf("[FAIL] VulkanShaderEffect: centre=(%d,%d,%d) bg=(%d,%d,%d)"
+                        " refusals=%s\n"
+                        "       expected: centre=red, bg=green, all four array setters refused\n",
                         centPx.getRProperty(), centPx.getGProperty(), centPx.getBProperty(),
-                        bgPx.getRProperty(),   bgPx.getGProperty(),   bgPx.getBProperty());
+                        bgPx.getRProperty(),   bgPx.getGProperty(),   bgPx.getBProperty(),
+                        refusalsOk ? "ok" : "FAILED");
         }
         Exit();
     }

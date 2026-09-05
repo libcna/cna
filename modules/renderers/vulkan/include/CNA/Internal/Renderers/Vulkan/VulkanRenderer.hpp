@@ -378,6 +378,33 @@ namespace CNA::Internal::Renderers::Vulkan
         void SetUniformInt(const char* name, int value) override;
 
         /**
+         * @brief Refuses an array uniform upload, by name.
+         *
+         * plans/plan_vulkan.md `VULKAN-265`, opened by `VULKAN-027`'s interface contract table.
+         * `IEffectRenderer`'s four array setters have `{}` bodies and EasyGL overrides all four,
+         * so before this they were accepted here and discarded without a word -- reachable from
+         * ordinary game code, because `ShaderEffect` carries the `CNAEXT` marker but no
+         * `CNA_CNAEXT` build guard.
+         *
+         * A `ShaderEffect` on this renderer is driven by a fixed 128-byte push-constant block
+         * with fixed slots -- one `mat4`, one `vec4` and eight floats -- and no shader
+         * reflection, so an array of arbitrary length has nowhere to go. That is a real limit,
+         * not an oversight, which is why it is stated rather than papered over.
+         *
+         * @param name   The uniform the caller asked for; used only in the message.
+         * @param values Ignored; the call never succeeds.
+         * @param count  Number of elements the caller offered; used only in the message.
+         * @throws System::NotSupportedException always.
+         */
+        void SetUniformFloatArray(const char* name, const float* values, int count) override;
+        /** @brief As @ref SetUniformFloatArray, for `vec2` elements. @throws System::NotSupportedException always. */
+        void SetUniformVec2Array(const char* name, const float* values, int count) override;
+        /** @brief As @ref SetUniformFloatArray, for `vec3` elements. @throws System::NotSupportedException always. */
+        void SetUniformVec3Array(const char* name, const float* values, int count) override;
+        /** @brief As @ref SetUniformFloatArray, for `mat4` elements. @throws System::NotSupportedException always. */
+        void SetUniformMat4Array(const char* name, const float* matrices, int count) override;
+
+        /**
          * @brief Refuses a per-unit texture binding, by name.
          *
          * plans/plan_vulkan.md `VULKAN-163` (finding F-31). `IEffectRenderer`'s three `Bind*`

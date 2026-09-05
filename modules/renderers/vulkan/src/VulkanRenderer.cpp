@@ -4067,6 +4067,23 @@ namespace CNA::Internal::Renderers::Vulkan
     // siblings are not separate defects, they are the same missing override, and one fix closes all
     // three. Splitting them would have produced three rows describing one line of code.
     namespace {
+        /// plan_vulkan.md VULKAN-265: the array counterpart of RefuseEffectTextureBindEXT.
+        /// Named separately because the reason differs -- a texture has no per-unit path here,
+        /// an array has no room in a fixed 128-byte push-constant block -- and a caller who
+        /// reads only the message should still learn which limit it hit.
+        [[noreturn]] void RefuseEffectUniformArrayEXT(const char* setter,
+                                                      const char* name,
+                                                      int count)
+        {
+            throw System::NotSupportedException(
+                std::string("CNA Vulkan: ShaderEffect::") + setter + "(\"" +
+                (name ? name : "<null>") + "\", ..., " + std::to_string(count) +
+                ") is not available on this renderer. A ShaderEffect here is driven by a fixed "
+                "128-byte push-constant block with fixed slots -- one mat4, one vec4 and eight "
+                "floats -- and no shader reflection, so an array of arbitrary length has nowhere "
+                "to go. Refused rather than silently ignored.");
+        }
+
         [[noreturn]] void RefuseEffectTextureBindEXT(const char* kind, int unit)
         {
             throw System::NotSupportedException(
@@ -4098,6 +4115,26 @@ namespace CNA::Internal::Renderers::Vulkan
     void VulkanEffectRenderer::SetUniformInt(const char* /*name*/, int value)
     {
         pushConst_[24] = static_cast<float>(value);
+    }
+
+    void VulkanEffectRenderer::SetUniformFloatArray(const char* name, const float*, int count)
+    {
+        RefuseEffectUniformArrayEXT("SetUniformFloatArray", name, count);
+    }
+
+    void VulkanEffectRenderer::SetUniformVec2Array(const char* name, const float*, int count)
+    {
+        RefuseEffectUniformArrayEXT("SetUniformVec2Array", name, count);
+    }
+
+    void VulkanEffectRenderer::SetUniformVec3Array(const char* name, const float*, int count)
+    {
+        RefuseEffectUniformArrayEXT("SetUniformVec3Array", name, count);
+    }
+
+    void VulkanEffectRenderer::SetUniformMat4Array(const char* name, const float*, int count)
+    {
+        RefuseEffectUniformArrayEXT("SetUniformMat4Array", name, count);
     }
 
     std::unique_ptr<IEffectRenderer> VulkanRenderer::CreateEffectRenderer(
