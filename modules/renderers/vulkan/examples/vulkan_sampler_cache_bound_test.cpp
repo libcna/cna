@@ -177,6 +177,44 @@ protected:
               std::to_string(ceiling) + " live samplers allowed; the sweep above used "
                   + std::to_string(afterSweep));
 
+        // ---- E: VULKAN-161. Exhaustion is loud, not white. ---------------------------------------
+        // The device here allows 32768 live samplers, so reaching the branch for real would mean
+        // creating tens of thousands of them -- slow, and on a driver that over-delivers,
+        // unreachable. Injected instead, the same way VULKAN-390 reaches the descriptor-pool arm.
+        {
+            const std::size_t before = Renderer().GetSamplerCacheSizeEXT();
+            VulkanRenderer::SetSamplerCreationFailuresForTestEXT(1);
+            std::string how = "the draw SUCCEEDED with a sampler creation failure injected";
+            try {
+                SamplerState state = SamplerState::PointClamp;
+                state.setMipMapLevelOfDetailBiasProperty(-7.25f);   // a key nothing has cached
+                DrawWith(dev, state);
+            } catch (const std::exception& e) {
+                how = e.what();
+            }
+            VulkanRenderer::SetSamplerCreationFailuresForTestEXT(0);
+            check(how.find("vkCreateSampler failed") != std::string::npos
+                      && how.find("Refused rather than drawing with a substituted sampler")
+                             != std::string::npos,
+                  "E a device out of samplers refuses by name instead of drawing white", how);
+            check(Renderer().GetSamplerCacheSizeEXT() == before,
+                  "E and the failed creation left nothing behind in the cache",
+                  std::to_string(before) + " -> "
+                      + std::to_string(Renderer().GetSamplerCacheSizeEXT()));
+
+            // The refusal must not have broken the renderer: the same draw succeeds once the
+            // injection is disarmed. Without this a test could pass by leaving it wedged.
+            std::string after = "drew";
+            try {
+                SamplerState state = SamplerState::PointClamp;
+                state.setMipMapLevelOfDetailBiasProperty(-7.25f);
+                DrawWith(dev, state);
+            } catch (const std::exception& e) {
+                after = std::string("still refused: ") + e.what();
+            }
+            check(after == "drew", "E the refusal left the renderer usable", after);
+        }
+
         const auto& messages = Renderer().GetValidationMessagesEXT();
         check(messages.empty(), "D no validation messages",
               messages.empty() ? "0 captured"

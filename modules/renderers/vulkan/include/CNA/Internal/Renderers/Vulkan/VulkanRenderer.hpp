@@ -1641,6 +1641,18 @@ namespace CNA::Internal::Renderers::Vulkan
             std::uint32_t count, std::uint32_t skipFirst = 0) noexcept;
 
         /**
+         * @brief Test-only: fail the next @p count `vkCreateSampler` calls.
+         *
+         * plans/plan_vulkan.md `VULKAN-161`. Exhausting `maxSamplerAllocationCount` for real means
+         * creating tens of thousands of samplers, which is a slow way to reach one branch — and on
+         * a driver that over-delivers, an unreachable one. Injected instead, exactly as
+         * `SetDescriptorAllocationFailuresForTestEXT` does for descriptor sets.
+         *
+         * @param count How many creations to fail; 0 disables injection.
+         */
+        CNAEXT static void SetSamplerCreationFailuresForTestEXT(std::uint32_t count) noexcept;
+
+        /**
          * @brief Reports whether the Khronos validation layer is actually active.
          *
          * False once CreateInstance() has found the layer missing, so a validation regression can

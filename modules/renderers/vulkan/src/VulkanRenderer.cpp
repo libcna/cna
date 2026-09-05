@@ -210,6 +210,10 @@ namespace CNA::Internal::Renderers::Vulkan
     // and the arm under test never runs. Measured: a test written without this asserted a refusal
     // and got a successful draw.
     static std::uint32_t sDescriptorAllocSkipsBeforeInjection = 0;
+    // plan_vulkan.md VULKAN-161: how many more `vkCreateSampler` calls a test wants to fail. 0 in
+    // every production run. Exhausting `maxSamplerAllocationCount` for real would mean creating
+    // tens of thousands of samplers, which is a slow way to reach one branch.
+    static std::uint32_t sSamplerCreationFailuresToInject = 0;
 
     // VULKAN-390: one allocation attempt, with the test-only failure injection folded in so every
     // call site sees the same behaviour a real VK_ERROR_OUT_OF_POOL_MEMORY would produce.
@@ -3657,6 +3661,11 @@ namespace CNA::Internal::Renderers::Vulkan
         sDescriptorAllocSkipsBeforeInjection = skipFirst;
     }
 
+    void VulkanRenderer::SetSamplerCreationFailuresForTestEXT(std::uint32_t count) noexcept
+    {
+        sSamplerCreationFailuresToInject = count;
+    }
+
     void VulkanRenderer::CreateDescriptorPool()
     {
         VkDescriptorPoolSize ps{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MaxDescriptorSets };
@@ -3722,8 +3731,10 @@ namespace CNA::Internal::Renderers::Vulkan
 
     void VulkanRenderer::RebuildSlotSamplerEXT(int slot)
     {
-        const VkSampler sampler = GetOrCreateSamplerEXT(samplerSlotState_[slot]);
-        if (sampler != VK_NULL_HANDLE) slotSamplers_[slot] = sampler;
+        // VULKAN-161: GetOrCreateSamplerEXT either returns a real sampler or throws, so the old
+        // `if (sampler != VK_NULL_HANDLE)` guard is gone. It was not harmless: keeping the previous
+        // slot sampler meant the sampler state the game had just assigned silently did not apply.
+        slotSamplers_[slot] = GetOrCreateSamplerEXT(samplerSlotState_[slot]);
     }
 
     VkSampler VulkanRenderer::GetOrCreateSamplerEXT(const SamplerStateKey& key)
@@ -3786,8 +3797,22 @@ namespace CNA::Internal::Renderers::Vulkan
         }
 
         VkSampler sampler = VK_NULL_HANDLE;
-        if (vkCreateSampler(device_, &ci, nullptr, &sampler) != VK_SUCCESS)
-            return VK_NULL_HANDLE; // caller keeps whatever it already had
+        // VULKAN-161: this used to `return VK_NULL_HANDLE; // caller keeps whatever it already had`,
+        // and every one of the three callers turned that null into a resource the game did not ask
+        // for -- the descriptor path into `defaultWhiteDescSet_`, the slot setter into the PREVIOUS
+        // slot sampler (so the new filtering silently did not take effect), and the compiled-effect
+        // path into `defaultSampler_`. That is F-06's shape, one layer below where VULKAN-390 and
+        // VULKAN-391 removed it. A device out of samplers now says so.
+        const VkResult created = (sSamplerCreationFailuresToInject > 0)
+            ? (--sSamplerCreationFailuresToInject, VK_ERROR_TOO_MANY_OBJECTS)
+            : vkCreateSampler(device_, &ci, nullptr, &sampler);
+        if (created != VK_SUCCESS)
+            throw std::runtime_error(
+                "The Vulkan renderer: vkCreateSampler failed with " +
+                std::to_string(static_cast<int>(created)) + " after " +
+                std::to_string(samplerCache_.size()) + " live samplers (this device allows " +
+                std::to_string(deviceLimits_.maxSamplerAllocationCount) +
+                "). Refused rather than drawing with a substituted sampler.");
         samplerCache_[key] = sampler;
         return sampler;
     }
@@ -3795,6 +3820,14 @@ namespace CNA::Internal::Renderers::Vulkan
     VkDescriptorSet VulkanRenderer::GetOrCreateTexSamplerDescSet(VkImageView view,
                                                                          VkSampler sampler)
     {
+        // VULKAN-161: these two nulls mean different things, and neither is an allocation failure
+        // any more -- `GetOrCreateSamplerEXT` throws now, so a null sampler cannot arrive from a
+        // device out of samplers. A null VIEW is an untextured draw, and white is the intended
+        // answer. A null SAMPLER means this slot has never been given a sampler state
+        // (`slotSamplers_` is zero-initialised and only `ApplySampler*` fills it), which is a
+        // renderer-state question rather than a resource one. Kept as one branch because both want
+        // the same answer; separated in this comment because a future reader must not read it as
+        // "any problem here draws white".
         if (view == VK_NULL_HANDLE || sampler == VK_NULL_HANDLE)
             return defaultWhiteDescSet_;
 
@@ -7291,8 +7324,9 @@ namespace CNA::Internal::Renderers::Vulkan
                 // GraphicsDevice.SamplerStates[slot], recorded whole in samplerSlotState_.
                 samplerKey = samplerSlotState_[slot];
             }
-            VkSampler sampler = GetOrCreateSamplerEXT(samplerKey);
-            if (sampler == VK_NULL_HANDLE) sampler = defaultSampler_;
+            // VULKAN-161: no null branch -- a failed creation throws now, and substituting
+            // `defaultSampler_` here would have run the pass with filtering it did not ask for.
+            const VkSampler sampler = GetOrCreateSamplerEXT(samplerKey);
             compiled.samplerViews.push_back(view);
             compiled.samplerBindings.push_back(slot);
             compiled.samplers.push_back(sampler);
