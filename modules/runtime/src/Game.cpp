@@ -780,11 +780,16 @@ namespace Microsoft::Xna::Framework
     void Game::Draw(const GameTime& gameTime)
     {
         currentlyDrawingComponents_.clear();
-        currentlyDrawingComponents_.insert(
-            currentlyDrawingComponents_.end(),
-            drawableComponents_.begin(),
-            drawableComponents_.end()
-        );
+        {
+            // A background loading thread may be adding components right now; take the snapshot
+            // under the lock and release it before running any component's own Draw().
+            const std::lock_guard<std::recursive_mutex> lock(componentListsMutex_);
+            currentlyDrawingComponents_.insert(
+                currentlyDrawingComponents_.end(),
+                drawableComponents_.begin(),
+                drawableComponents_.end()
+            );
+        }
 
         for (IDrawable* drawable : currentlyDrawingComponents_)
         {
@@ -800,11 +805,14 @@ namespace Microsoft::Xna::Framework
     void Game::Update(GameTime& gameTime)
     {
         currentlyUpdatingComponents_.clear();
-        currentlyUpdatingComponents_.insert(
-            currentlyUpdatingComponents_.end(),
-            updateableComponents_.begin(),
-            updateableComponents_.end()
-        );
+        {
+            const std::lock_guard<std::recursive_mutex> lock(componentListsMutex_);
+            currentlyUpdatingComponents_.insert(
+                currentlyUpdatingComponents_.end(),
+                updateableComponents_.begin(),
+                updateableComponents_.end()
+            );
+        }
 
         for (IUpdateable* updateable : currentlyUpdatingComponents_)
         {
@@ -909,8 +917,11 @@ namespace Microsoft::Xna::Framework
 
         Initialize();
 
-        updateableComponents_.clear();
-        drawableComponents_.clear();
+        {
+            const std::lock_guard<std::recursive_mutex> lock(componentListsMutex_);
+            updateableComponents_.clear();
+            drawableComponents_.clear();
+        }
 
         for (SharpRuntime::intcs i = 0; i < Components_.getCountProperty(); ++i)
         {
@@ -933,6 +944,10 @@ namespace Microsoft::Xna::Framework
         {
             return;
         }
+
+        // Also covers the two token maps below: a component added from a loading thread writes
+        // them while a component removed on the game thread reads and erases them.
+        const std::lock_guard<std::recursive_mutex> lock(componentListsMutex_);
 
         if (auto* updateable = dynamic_cast<IUpdateable*>(component))
         {
@@ -958,6 +973,7 @@ namespace Microsoft::Xna::Framework
             return;
         }
 
+        const std::lock_guard<std::recursive_mutex> lock(componentListsMutex_);
         RemoveUpdateable(updateableComponents_, updateable);
 
         const auto it = std::find_if(
@@ -980,6 +996,7 @@ namespace Microsoft::Xna::Framework
             return;
         }
 
+        const std::lock_guard<std::recursive_mutex> lock(componentListsMutex_);
         RemoveDrawable(drawableComponents_, drawable);
 
         const auto it = std::find_if(
@@ -1346,9 +1363,25 @@ namespace Microsoft::Xna::Framework
             return;
         }
 
+        const std::lock_guard<std::recursive_mutex> lock(componentListsMutex_);
+
         if (auto* updateable = dynamic_cast<IUpdateable*>(component))
         {
             RemoveUpdateable(updateableComponents_, updateable);
+            // A component removed while a frame is in flight must also disappear from that
+            // frame's snapshot. XNA can leave it there because the snapshot holds a strong
+            // reference and the object stays alive; these are raw pointers, and whoever removed
+            // the component usually owns and frees it in the same breath -- which is exactly what
+            // a screen manager does when the update it is running drops the screen that owns the
+            // components. Nulling rather than erasing keeps Update()'s own iteration valid; both
+            // loops already skip a null entry.
+            for (IUpdateable*& queued : currentlyUpdatingComponents_)
+            {
+                if (queued == updateable)
+                {
+                    queued = nullptr;
+                }
+            }
             const auto it = updateOrderChangedTokens_.find(updateable);
             if (it != updateOrderChangedTokens_.end())
             {
@@ -1360,6 +1393,13 @@ namespace Microsoft::Xna::Framework
         if (auto* drawable = dynamic_cast<IDrawable*>(component))
         {
             RemoveDrawable(drawableComponents_, drawable);
+            for (IDrawable*& queued : currentlyDrawingComponents_)
+            {
+                if (queued == drawable)
+                {
+                    queued = nullptr;
+                }
+            }
             const auto it = drawOrderChangedTokens_.find(drawable);
             if (it != drawOrderChangedTokens_.end())
             {

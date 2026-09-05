@@ -5,6 +5,7 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -397,6 +398,16 @@ namespace Microsoft::Xna::Framework
         std::vector<IUpdateable*> currentlyUpdatingComponents_;
         std::vector<IDrawable*> drawableComponents_;
         std::vector<IDrawable*> currentlyDrawingComponents_;
+
+        // The XNA pattern for a loading screen is a background thread that builds the next
+        // screen's components and adds them to Game.Components (NinjAcademy's and MarbleMaze's
+        // LoadingScreen both do exactly that), so these two ordered lists are written from a
+        // thread other than the one Update()/Draw() run on. Only the lists are guarded: each
+        // frame copies them under the lock and then runs the components' own Update()/Draw()
+        // without it, so game code never executes while the lock is held. Recursive because
+        // categorizing a component sorts it, and a component's own order-changed event re-enters
+        // through the same path.
+        mutable std::recursive_mutex componentListsMutex_;
 
         Graphics::IGraphicsDeviceService* graphicsDeviceService_;
         IGraphicsDeviceManager* graphicsDeviceManager_;
