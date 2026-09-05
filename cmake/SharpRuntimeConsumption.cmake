@@ -29,6 +29,7 @@ set(CNA_SHARP_RUNTIME_DEFAULT_COMPONENTS
     Globalization
     Storage
     Security.Cryptography
+    Xml
 )
 
 function(cna_detect_sharp_runtime_shape)

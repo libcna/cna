@@ -26,6 +26,14 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
      */
     CNAEXT using ContentObject = CNA::Content::Pipeline::ContentValue;
 
+    /** @brief An `object` payload is named as `System.Object`. */
+    template<>
+    struct CNAEXT ContentTypeName<ContentObject>
+    {
+        /** @brief Returns `System.Object`. */
+        [[nodiscard]] static std::string Name() { return "System.Object"; }
+    };
+
     /**
      * @brief Boxes a typed carrier into a @ref ContentObject under its .NET type name.
      *

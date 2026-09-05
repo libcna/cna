@@ -187,6 +187,27 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
     };
 
     /** @brief Convenience alias for @ref ContentCarrier. */
+    /** @brief .NET value types travel by value even where sharp-runtime models them as objects. */
+    template<>
+    struct CNAEXT ContentCarrier<System::DateTime>
+    {
+        using type = System::DateTime;
+    };
+
+    /** @brief .NET value types travel by value even where sharp-runtime models them as objects. */
+    template<>
+    struct CNAEXT ContentCarrier<System::TimeSpan>
+    {
+        using type = System::TimeSpan;
+    };
+
+    /** @brief .NET value types travel by value even where sharp-runtime models them as objects. */
+    template<>
+    struct CNAEXT ContentCarrier<System::Decimal>
+    {
+        using type = System::Decimal;
+    };
+
     template<typename T>
     using Carrier = typename ContentCarrier<T>::type;
 }

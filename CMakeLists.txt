@@ -164,6 +164,18 @@ if(NOT DEFINED SHARP_RUNTIME_COMPONENTS OR SHARP_RUNTIME_COMPONENTS STREQUAL "")
     set(SHARP_RUNTIME_COMPONENTS "${CNA_SHARP_RUNTIME_DEFAULT_COMPONENTS}" CACHE STRING
         "Sharp Runtime components required by CNA")
 endif()
+# A build directory configured before a component joined the closure keeps the old list in its
+# cache; merge the closure into it so an incremental reconfigure enables the new component
+# (plans/plan_xnapipeline_parity.md XNAPP-071 added Xml) instead of failing at link time.
+set(_cna_sharp_runtime_components "${SHARP_RUNTIME_COMPONENTS}")
+foreach(_cna_component IN LISTS CNA_SHARP_RUNTIME_DEFAULT_COMPONENTS)
+    if(NOT _cna_component IN_LIST _cna_sharp_runtime_components)
+        list(APPEND _cna_sharp_runtime_components "${_cna_component}")
+    endif()
+endforeach()
+set(SHARP_RUNTIME_COMPONENTS "${_cna_sharp_runtime_components}" CACHE STRING
+    "Sharp Runtime components required by CNA" FORCE)
+unset(_cna_sharp_runtime_components)
 # sharp-runtime is a SIBLING repository checkout, not a git submodule of this
 # repo (Task DEV-BUILD-001) -- `git submodule update --init` cannot fetch it.
 # It must be cloned next to this repo's own directory, so that
