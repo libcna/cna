@@ -175,381 +175,381 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.ChildCollection`2": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::ChildCollection<TParent, TChild>",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/ChildCollection.hpp",
    "note": "",
    "members": {
     "constructor:.ctor(TParent)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ChildCollection(TParent)",
      "note": ""
     },
     "method:ClearItems()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ClearItems()",
      "note": ""
     },
     "method:GetParent(TChild)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "GetParent(const std::shared_ptr<TChild>&) -> TParent*",
+     "note": "children are shared pointers and the parent back reference a raw pointer valid while the child is in the collection -- the lifetime a .NET reference gives it."
     },
     "method:InsertItem(System.Int32, TChild)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "InsertItem(System.Int32, TChild)",
      "note": ""
     },
     "method:RemoveItem(System.Int32)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "RemoveItem(System.Int32)",
      "note": ""
     },
     "method:SetItem(System.Int32, TChild)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "SetItem(System.Int32, TChild)",
      "note": ""
     },
     "method:SetParent(TChild, TParent)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "SetParent(const std::shared_ptr<TChild>&, TParent*)",
+     "note": "same carrier rule as GetParent."
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.ContentBuildLogger": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::ContentBuildLogger",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/ContentBuildLogger.hpp",
    "note": "",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ContentBuildLogger()",
      "note": ""
     },
     "property:LoggerRootDirectory": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getLoggerRootDirectoryProperty() / setLoggerRootDirectoryProperty()",
      "note": ""
     },
     "method:GetCurrentFilename(Microsoft.Xna.Framework.Content.Pipeline.ContentIdentity)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "GetCurrentFilename(Microsoft.Xna.Framework.Content.Pipeline.ContentIdentity)",
      "note": ""
     },
     "method:LogImportantMessage(System.String, System.Object[])": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "LogImportantMessage(std::string_view, Args&&...)",
+     "note": "params object[] becomes a variadic std::format template forwarding to the non-template virtual LogImportantMessage(const std::string&)."
     },
     "method:LogMessage(System.String, System.Object[])": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "LogMessage(std::string_view, Args&&...)",
+     "note": "params object[] becomes a variadic std::format template forwarding to the non-template virtual LogMessage(const std::string&)."
     },
     "method:LogWarning(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentIdentity, System.String, System.Object[])": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "LogWarning(const std::string&, const ContentIdentity&, std::string_view, Args&&...)",
+     "note": "params object[] becomes a variadic std::format template forwarding to the non-template virtual LogWarning(helpLink, identity, const std::string&)."
     },
     "method:PopFile()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "PopFile()",
      "note": ""
     },
     "method:PushFile(System.String)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "PushFile(System.String)",
      "note": ""
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.ContentIdentity": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::ContentIdentity",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/ContentIdentity.hpp",
    "note": "",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ContentIdentity()",
      "note": ""
     },
     "constructor:.ctor(System.String)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ContentIdentity(System.String)",
      "note": ""
     },
     "constructor:.ctor(System.String, System.String)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ContentIdentity(System.String, System.String)",
      "note": ""
     },
     "constructor:.ctor(System.String, System.String, System.String)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ContentIdentity(System.String, System.String, System.String)",
      "note": ""
     },
     "property:FragmentIdentifier": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getFragmentIdentifierProperty() / setFragmentIdentifierProperty()",
      "note": ""
     },
     "property:SourceFilename": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getSourceFilenameProperty() / setSourceFilenameProperty()",
      "note": ""
     },
     "property:SourceTool": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getSourceToolProperty() / setSourceToolProperty()",
      "note": ""
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.ContentImporterAttribute": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::ContentImporterAttribute",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/ContentImporterAttribute.hpp",
+   "note": "C++ has no CLR attributes: the same-named descriptor object is passed to RegisterXnaImporter<T>() instead of being attached to the class.",
    "members": {
     "constructor:.ctor(System.String)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ContentImporterAttribute(System.String)",
      "note": ""
     },
     "constructor:.ctor(System.String[])": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ContentImporterAttribute(System.String[])",
      "note": ""
     },
     "property:CacheImportedData": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getCacheImportedDataProperty() / setCacheImportedDataProperty()",
      "note": ""
     },
     "property:DefaultProcessor": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getDefaultProcessorProperty() / setDefaultProcessorProperty()",
      "note": ""
     },
     "property:DisplayName": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getDisplayNameProperty() / setDisplayNameProperty()",
      "note": ""
     },
     "property:FileExtensions": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getFileExtensionsProperty()",
+     "note": "IEnumerable<string> is returned as const std::vector<std::string>&."
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::ContentImporterContext",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/ContentImporterContext.hpp",
    "note": "",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ContentImporterContext()",
      "note": ""
     },
     "property:IntermediateDirectory": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getIntermediateDirectoryProperty()",
      "note": ""
     },
     "property:Logger": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getLoggerProperty()",
      "note": ""
     },
     "property:OutputDirectory": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getOutputDirectoryProperty()",
      "note": ""
     },
     "method:AddDependency(System.String)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "AddDependency(System.String)",
      "note": ""
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.ContentImporter`1": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::ContentImporter<T>",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/ContentImporter.hpp",
    "note": "",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ContentImporter()",
      "note": ""
     },
     "method:Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)",
      "note": ""
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.ContentItem": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::ContentItem",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/ContentItem.hpp",
    "note": "",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ContentItem()",
      "note": ""
     },
     "property:Identity": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getIdentityProperty() / setIdentityProperty()",
      "note": ""
     },
     "property:Name": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getNameProperty() / setNameProperty()",
      "note": ""
     },
     "property:OpaqueData": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getOpaqueDataProperty()",
      "note": ""
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorAttribute": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::ContentProcessorAttribute",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/ContentProcessorAttribute.hpp",
+   "note": "C++ has no CLR attributes: the same-named descriptor object is passed to RegisterXnaProcessor<T>().",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ContentProcessorAttribute()",
      "note": ""
     },
     "property:DisplayName": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getDisplayNameProperty() / setDisplayNameProperty()",
      "note": ""
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::ContentProcessorContext",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/ContentProcessorContext.hpp",
    "note": "",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ContentProcessorContext()",
      "note": ""
     },
     "property:BuildConfiguration": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getBuildConfigurationProperty()",
      "note": ""
     },
     "property:IntermediateDirectory": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getIntermediateDirectoryProperty()",
      "note": ""
     },
     "property:Logger": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getLoggerProperty()",
      "note": ""
     },
     "property:OutputDirectory": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getOutputDirectoryProperty()",
      "note": ""
     },
     "property:OutputFilename": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getOutputFilenameProperty()",
      "note": ""
     },
     "property:Parameters": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getParametersProperty()",
      "note": ""
     },
     "property:TargetPlatform": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getTargetPlatformProperty()",
      "note": ""
     },
     "property:TargetProfile": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getTargetProfileProperty()",
      "note": ""
     },
     "method:AddDependency(System.String)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "AddDependency(System.String)",
      "note": ""
     },
     "method:AddOutputFile(System.String)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "AddOutputFile(System.String)",
      "note": ""
     },
     "method:BuildAndLoadAsset<TInput, TOutput>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<TInput>, System.String)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "BuildAndLoadAsset<TInput, TOutput>(const ExternalReference<TInput>&, const std::string&)",
+     "note": "the two-argument overload is the four-argument template with defaulted empty parameters and importer name."
     },
     "method:BuildAndLoadAsset<TInput, TOutput>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<TInput>, System.String, Microsoft.Xna.Framework.Content.Pipeline.OpaqueDataDictionary, System.String)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "BuildAndLoadAsset<TInput, TOutput>(const ExternalReference<TInput>&, const std::string&, const OpaqueDataDictionary&, const std::string&)",
+     "note": "a generic method cannot be virtual in C++: the member template forwards to the non-template virtual BuildAndLoadAssetCore carrying the type names; the nested import/process runs on the canonical pipeline and its dependencies merge into the outer node."
     },
     "method:BuildAsset<TInput, TOutput>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<TInput>, System.String)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "BuildAsset<TInput, TOutput>(const ExternalReference<TInput>&, const std::string&)",
+     "note": "the two-argument overload is the five-argument template with defaulted empty parameters, importer name and asset name."
     },
     "method:BuildAsset<TInput, TOutput>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<TInput>, System.String, Microsoft.Xna.Framework.Content.Pipeline.OpaqueDataDictionary, System.String, System.String)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "BuildAsset<TInput, TOutput>(const ExternalReference<TInput>&, const std::string&, const OpaqueDataDictionary&, const std::string&, const std::string&)",
+     "note": "a generic method cannot be virtual in C++: the member template forwards to the non-template virtual BuildAssetCore; the nested build runs through the canonical pipeline and its compiled output becomes an additional output of the current node, owned and fingerprinted like any other artifact."
     },
     "method:Convert<TInput, TOutput>(TInput, System.String)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Convert<TInput, TOutput>(const Carrier<TInput>&, const std::string&)",
+     "note": "the two-argument overload is the three-argument template with a defaulted empty OpaqueDataDictionary."
     },
     "method:Convert<TInput, TOutput>(TInput, System.String, Microsoft.Xna.Framework.Content.Pipeline.OpaqueDataDictionary)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Convert<TInput, TOutput>(const Carrier<TInput>&, const std::string&, const OpaqueDataDictionary&)",
+     "note": "a generic method cannot be virtual in C++: the member template forwards to the non-template virtual ConvertCore carrying the type names."
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.ContentProcessor`2": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::ContentProcessor<TInput, TOutput>",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/ContentProcessor.hpp",
    "note": "",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ContentProcessor()",
      "note": ""
     },
     "method:Process(TInput, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Process(TInput, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)",
      "note": ""
     }
    }
@@ -573,29 +573,29 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.ExternalReference`1": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::ExternalReference<T>",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/ExternalReference.hpp",
    "note": "",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ExternalReference()",
      "note": ""
     },
     "constructor:.ctor(System.String)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ExternalReference(System.String)",
      "note": ""
     },
     "constructor:.ctor(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentIdentity)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ExternalReference(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentIdentity)",
      "note": ""
     },
     "property:Filename": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getFilenameProperty() / setFilenameProperty()",
      "note": ""
     }
    }
@@ -2506,75 +2506,85 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.IContentImporter": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::IContentImporter",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/IContentImporter.hpp",
+   "note": "The explicit interface implementation object IContentImporter.Import(...) is a non-virtual Import returning ContentObject, reachable only through the interface; the typed ContentImporter<T>::Import hides it exactly as C# does.",
    "members": {
     "method:Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Import(const std::string&, ContentImporterContext&) -> ContentObject",
+     "note": "object is ContentObject (the canonical type-erased box); non-virtual, dispatching to the protected virtual ImportObject."
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.IContentProcessor": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::IContentProcessor",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/IContentProcessor.hpp",
+   "note": "The explicit interface implementation object IContentProcessor.Process(object, ...) is a non-virtual Process over ContentObject, reachable only through the interface.",
    "members": {
     "property:InputType": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getInputTypeProperty()",
      "note": ""
     },
     "property:OutputType": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getOutputTypeProperty()",
      "note": ""
     },
     "method:Process(System.Object, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Process(const ContentObject&, ContentProcessorContext&) -> ContentObject",
+     "note": "object is ContentObject; non-virtual, dispatching to the protected virtual ProcessObject."
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.InvalidContentException": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::InvalidContentException",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp",
    "note": "",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "InvalidContentException()",
      "note": ""
     },
     "constructor:.ctor(System.String)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "InvalidContentException(System.String)",
      "note": ""
     },
     "constructor:.ctor(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentIdentity)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "InvalidContentException(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentIdentity)",
      "note": ""
     },
     "constructor:.ctor(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentIdentity, System.Exception)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "InvalidContentException(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentIdentity, System.Exception)",
      "note": ""
     },
     "constructor:.ctor(System.String, System.Exception)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "InvalidContentException(System.String, System.Exception)",
      "note": ""
     },
     "property:ContentIdentity": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getContentIdentityProperty() / setContentIdentityProperty()",
+     "note": ""
+    },
+    "constructor:.ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)": {
+     "status": "EXACT_EQUIVALENT",
+     "cna": "InvalidContentException(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)",
+     "note": ""
+    },
+    "method:GetObjectData(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)": {
+     "status": "EXACT_EQUIVALENT",
+     "cna": "GetObjectData(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)",
      "note": ""
     }
    }
@@ -2598,284 +2608,289 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.NamedValueDictionary`1": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::NamedValueDictionary<T>",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/NamedValueDictionary.hpp",
    "note": "",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "NamedValueDictionary()",
      "note": ""
     },
     "property:Count": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getCountProperty()",
      "note": ""
     },
     "property:DefaultSerializerType": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getDefaultSerializerTypeProperty()",
+     "note": "protected internal getter becomes a protected virtual returning System::Type."
     },
     "property:Keys": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getKeysProperty()",
+     "note": "ICollection<string> is returned as std::vector<std::string> (sharp-runtime Dictionary precedent)."
     },
     "property:Values": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getValuesProperty()",
+     "note": "ICollection<T> is returned as std::vector<T>."
     },
     "indexer:Item[System.String]": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "operator[] / Set()",
+     "note": "the C# indexer getter is operator[]; its add-or-replace setter is Set(key, value) because operator[] cannot add a key without a value."
     },
     "method:Add(System.String, T)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Add(System.String, T)",
      "note": ""
     },
     "method:AddItem(System.String, T)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "AddItem(System.String, T)",
      "note": ""
     },
     "method:Clear()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Clear()",
      "note": ""
     },
     "method:ClearItems()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ClearItems()",
      "note": ""
     },
     "method:ContainsKey(System.String)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ContainsKey(System.String)",
      "note": ""
     },
     "method:GetEnumerator()": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "GetEnumerator() / begin(), end()",
+     "note": "IEnumerator<KeyValuePair<string,T>> is a heap-allocated sharp-runtime enumerator the caller owns; range-for over std::pair is the idiomatic form."
     },
     "method:Remove(System.String)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Remove(System.String)",
      "note": ""
     },
     "method:RemoveItem(System.String)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "RemoveItem(System.String)",
      "note": ""
     },
     "method:SetItem(System.String, T)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "SetItem(System.String, T)",
      "note": ""
     },
     "method:TryGetValue(System.String, out T)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "TryGetValue(System.String, out T)",
      "note": ""
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.OpaqueDataDictionary": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::OpaqueDataDictionary",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/OpaqueDataDictionary.hpp",
    "note": "",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "OpaqueDataDictionary()",
      "note": ""
     },
     "property:DefaultSerializerType": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getDefaultSerializerTypeProperty()",
+     "note": "protected internal getter becomes a protected virtual returning System::Type::From<System::Object>()."
     },
     "method:AddItem(System.String, System.Object)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "AddItem(System.String, System.Object)",
      "note": ""
     },
     "method:ClearItems()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ClearItems()",
      "note": ""
     },
     "method:GetContentAsXml()": {
      "status": "MISSING",
      "cna": "",
-     "note": ""
+     "note": "needs the intermediate serializer (XNAPP-072); throws NotSupportedException until then"
     },
     "method:GetValue<T>(System.String, T)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "GetValue<T>(System.String, T)",
      "note": ""
     },
     "method:RemoveItem(System.String)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "RemoveItem(System.String)",
      "note": ""
     },
     "method:SetItem(System.String, System.Object)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "SetItem(System.String, System.Object)",
      "note": ""
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.PipelineComponentScanner": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "HOST_SUBSTITUTION",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::PipelineComponentScanner",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/PipelineComponentScanner.hpp",
+   "note": "Assembly scanning has no C++ counterpart; the scanner enumerates the XNA-shaped components registered in a ContentPipelineRegistry, grouped by catalog name.",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "PipelineComponentScanner()",
      "note": ""
     },
     "property:Errors": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getErrorsProperty()",
+     "note": "IList<string> is returned as const std::vector<std::string>&."
     },
     "property:ImporterAttributes": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getImporterAttributesProperty()",
+     "note": "IDictionary<string, X> is returned as const std::map<std::string, X>&."
     },
     "property:ImporterNames": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getImporterNamesProperty()",
+     "note": "IEnumerable<string> is returned as std::vector<std::string>."
     },
     "property:ImporterOutputTypes": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getImporterOutputTypesProperty()",
+     "note": "IDictionary<string, X> is returned as const std::map<std::string, X>&."
     },
     "property:ProcessorAttributes": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getProcessorAttributesProperty()",
+     "note": "IDictionary<string, X> is returned as const std::map<std::string, X>&."
     },
     "property:ProcessorInputTypes": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getProcessorInputTypesProperty()",
+     "note": "IDictionary<string, X> is returned as const std::map<std::string, X>&."
     },
     "property:ProcessorNames": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getProcessorNamesProperty()",
+     "note": "IEnumerable<string> is returned as std::vector<std::string>."
     },
     "property:ProcessorOutputTypes": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getProcessorOutputTypesProperty()",
+     "note": "IDictionary<string, X> is returned as const std::map<std::string, X>&."
     },
     "property:ProcessorParameters": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getProcessorParametersProperty()",
+     "note": "IDictionary<string, X> is returned as const std::map<std::string, X>&."
     },
     "method:Update(System.Collections.Generic.IEnumerable<System.String>)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "HOST_SUBSTITUTION",
+     "cna": "Update(const std::vector<std::string>&)",
+     "note": "XNA loads pipeline assemblies from the given paths; CNA loads no code dynamically, so the names select registered component catalogs and an unknown name is reported in Errors exactly as an unloadable assembly is."
     },
     "method:Update(System.Collections.Generic.IEnumerable<System.String>, System.Collections.Generic.IEnumerable<System.String>)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "HOST_SUBSTITUTION",
+     "cna": "Update(const std::vector<std::string>&, const std::vector<std::string>&)",
+     "note": "XNA loads pipeline assemblies from the given paths; CNA loads no code dynamically, so the names select registered component catalogs and an unknown name is reported in Errors exactly as an unloadable assembly is."
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.PipelineException": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::PipelineException",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/PipelineException.hpp",
    "note": "",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "PipelineException()",
      "note": ""
     },
     "constructor:.ctor(System.String)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "PipelineException(System.String)",
      "note": ""
     },
     "constructor:.ctor(System.String, System.Exception)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "PipelineException(System.String, System.Exception)",
      "note": ""
     },
     "constructor:.ctor(System.String, System.Object[])": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "PipelineException(std::string_view, Args&&...)",
+     "note": "params object[] becomes a variadic std::format constructor."
+    },
+    "constructor:.ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)": {
+     "status": "EXACT_EQUIVALENT",
+     "cna": "PipelineException(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)",
      "note": ""
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.ProcessorParameter": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::ProcessorParameter",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/ProcessorParameter.hpp",
    "note": "",
    "members": {
     "property:DefaultValue": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getDefaultValueProperty()",
      "note": ""
     },
     "property:Description": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getDescriptionProperty()",
      "note": ""
     },
     "property:DisplayName": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getDisplayNameProperty()",
      "note": ""
     },
     "property:IsEnum": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getIsEnumProperty()",
      "note": ""
     },
     "property:PossibleEnumValues": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getPossibleEnumValuesProperty()",
      "note": ""
     },
     "property:PropertyName": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getPropertyNameProperty()",
      "note": ""
     },
     "property:PropertyType": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getPropertyTypeProperty()",
      "note": ""
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.ProcessorParameterCollection": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::ProcessorParameterCollection",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/ProcessorParameter.hpp",
    "note": "",
    "members": {}
   },
@@ -4176,23 +4191,23 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.TargetPlatform": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::TargetPlatform",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/TargetPlatform.hpp",
    "note": "",
    "members": {},
    "enumValues": {
     "Windows": {
-     "status": "MISSING",
-     "cna": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "TargetPlatform::Windows"
     },
     "Xbox360": {
-     "status": "MISSING",
-     "cna": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "TargetPlatform::Xbox360"
     },
     "WindowsPhone": {
-     "status": "MISSING",
-     "cna": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "TargetPlatform::WindowsPhone"
     }
    }
   },

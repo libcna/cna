@@ -529,13 +529,16 @@ decoder is legally unavailable (to be established, not assumed, for WMA/WMV). "D
 ## 31. Exact final denominator and coverage counts
 
 Filled by `parity_report.py` into `docs/xna-content-pipeline-parity-report.md` and quoted here at
-each phase close. **Current (2026-09-05): types 0/128, members 0/708 (+0/27 enum values),
+each phase close. The member denominator the report counts is 705: the inventory's 708 minus the
+3 delegate-plumbing members the report lists separately (§5).
+
+**Current (2026-09-05, after Phase 3): types 21/128, members 123/705, enum values 3/27,
 importers 0/10, extensions 0/18, processors 0/12, properties 0/47, intermediate-serializer
-features 0/§13, targets verified 0/3, black-box-verified families 0.** The previous plan's
-routes exist and work, but no XNA-namespaced type exists yet, so by this plan's definition the
-API counts start at zero; the input/processor counts start at zero because no row has yet passed
-this plan's `IMPLEMENTED+TESTED` bar, which requires a fixture, an importer test, a processor
-test, both output tests and a malformed-input test *for that extension*.
+features 0/§13, targets verified 0/3, black-box-verified families 0.** The previous plan's routes
+exist and work, but by this plan's definition only XNA-namespaced types with tested behaviour
+count; the input/processor counts stay at zero until a row passes the `IMPLEMENTED+TESTED` bar,
+which requires a fixture, an importer test, a processor test, both output tests and a
+malformed-input test *for that extension*.
 
 ---
 
@@ -590,22 +593,22 @@ module) with `src/Xna/`; `ContentSerializer*` descriptors in `modules/content/in
 
 | ID | Task | State |
 |---|---|---|
-| `XNAPP-030` | Façade design note in `docs/xna-content-pipeline-compat-api.md`: property convention, attribute→descriptor, generics, `IEnumerable<T>`→ranges, delegates→callables, nullable→`std::optional`, how an XNA-style importer/processor is adapted into the canonical registry, and what a C++ user must write. | [ ] |
-| `XNAPP-031` | `ContentIdentity` (4 ctors, 3 properties), `ContentItem` (Identity, Name, OpaqueData). | [ ] |
-| `XNAPP-032` | `OpaqueDataDictionary` (+ `NamedValueDictionary<T>` generic base, 16 members) and `GetValue<T>(key, default)`. | [ ] |
-| `XNAPP-033` | `ChildCollection<TParent,TChild>` (parent back-pointer semantics, `GetParent`/`SetParent` protected). | [ ] |
-| `XNAPP-034` | `InvalidContentException` (6 ctors, `ContentIdentity`, `GetObjectData` as `HOST_SUBSTITUTION`), `PipelineException` (5 ctors incl. format overload). | [ ] |
-| `XNAPP-035` | `ContentBuildLogger` (LoggerRootDirectory, LogMessage/LogImportantMessage/LogWarning, PushFile/PopFile, GetCurrentFilename) bridged to `CNA::Content::Pipeline::ContentBuildLogger`. | [ ] |
-| `XNAPP-036` | `TargetPlatform` enum (3 values, exact numbering) mapped to `XnbTargetPlatform`. | [ ] |
-| `XNAPP-037` | `ContentImporterAttribute`, `ContentProcessorAttribute` descriptors; `IContentImporter`, `IContentProcessor`. | [ ] |
-| `XNAPP-038` | `ContentImporter<T>` and `ContentProcessor<TInput,TOutput>` compatibility bases with the exact `Import(filename, context)` / `Process(input, context)` shape, adapted into the canonical `ContentImporter`/`ContentProcessor` by a generic bridge (stable type identity derived from a descriptor, not RTTI). | [ ] |
-| `XNAPP-039` | `ContentImporterContext` (IntermediateDirectory, Logger, OutputDirectory, AddDependency). | [ ] |
-| `XNAPP-040` | `ContentProcessorContext` (17 members): `AddDependency`, `AddOutputFile`, `BuildAsset`/`BuildAndLoadAsset`/`Convert` with nested-build semantics on the canonical build graph, `Parameters` (`OpaqueDataDictionary`), platform/profile/configuration/directories/filename. | [ ] |
-| `XNAPP-041` | `ExternalReference<T>` (3 ctors, Filename; relative-path resolution against the referencing identity). | [ ] |
-| `XNAPP-042` | `ProcessorParameter` (7), `ProcessorParameterCollection`; `PipelineComponentScanner` (12) as the explicit registry's enumeration view. | [ ] |
-| `XNAPP-043` | `VideoContent` (7 properties, `Dispose`). | [ ] |
-| `XNAPP-044` | Nested build semantics: circular dependency detection, nested output naming (`OutputFilename`), caching within one build, `ContentIdentity` propagation into diagnostics. | [ ] |
-| `XNAPP-045` | Compile-parity tests for every Phase 3 type (construct/derive/static_assert), plus behaviour tests. | [ ] |
+| `XNAPP-030` | Façade design note in `docs/xna-content-pipeline-compat-api.md`: property convention, attribute→descriptor, generics, `IEnumerable<T>`→ranges, delegates→callables, nullable→`std::optional`, how an XNA-style importer/processor is adapted into the canonical registry, and what a C++ user must write. | [x] Written; §7 says what counts as `EXACT_EQUIVALENT` (the carrier and property conventions are the baseline C++ spelling, not substitutions). |
+| `XNAPP-031` | `ContentIdentity` (4 ctors, 3 properties), `ContentItem` (Identity, Name, OpaqueData). | [x] `ContentIdentity` is a value class whose all-empty state stands for null; `ContentItem` derives `System::Object` so it travels as a shared, mutable reference. |
+| `XNAPP-032` | `OpaqueDataDictionary` (+ `NamedValueDictionary<T>` generic base, 16 members) and `GetValue<T>(key, default)`. | [~] All members but `GetContentAsXml()`, which needs the intermediate serializer (`XNAPP-072`) and is recorded `MISSING`. Insertion order is kept, because that is the order XNA's XML lists entries in; the C# indexer setter is `Set()` since `operator[]` cannot add a key without a value. |
+| `XNAPP-033` | `ChildCollection<TParent,TChild>` (parent back-pointer semantics, `GetParent`/`SetParent` protected). | [x] Over sharp-runtime's `Collection<std::shared_ptr<TChild>>`; a child already owned is refused, `setItem` detaches the old child and attaches the new. **The `collection[i] = child` spelling bypasses the virtual hook in sharp-runtime's `Collection<T>`** (its `operator[]` returns an element reference); the .NET indexer setter is `setItem(i, child)`, and the design note says so. |
+| `XNAPP-034` | `InvalidContentException` (6 ctors, `ContentIdentity`, `GetObjectData` as `HOST_SUBSTITUTION`), `PipelineException` (5 ctors incl. format overload). | [x] Both derive `System::Exception`; inner exceptions are `std::exception_ptr` as sharp-runtime spells them; the `params object[]` constructor is a variadic `std::format` template accepting both `{0}` and `{}`. |
+| `XNAPP-035` | `ContentBuildLogger` (LoggerRootDirectory, LogMessage/LogImportantMessage/LogWarning, PushFile/PopFile, GetCurrentFilename) bridged to `CNA::Content::Pipeline::ContentBuildLogger`. | [x] Variadic `std::format` overloads forward to non-template virtuals; `XnaBridgeLogger` reports through the canonical context so XNA-shaped components land in the same build log. A subclass overriding the virtuals must `using` the base overloads to keep them visible on its own type -- documented. |
+| `XNAPP-036` | `TargetPlatform` enum (3 values, exact numbering) mapped to `XnbTargetPlatform`. | [x] Mapped to the new format-neutral `CNA::Content::Pipeline::ContentTargetPlatform` (`XNAPP-040`); the XNB writer's own platform byte mapping is `XNAPP-062`'s. `TryParseTargetPlatform` accepts the MSBuild spellings `Xbox 360` / `Windows Phone`. |
+| `XNAPP-037` | `ContentImporterAttribute`, `ContentProcessorAttribute` descriptors; `IContentImporter`, `IContentProcessor`. | [x] Descriptors derive `System::Attribute` and are passed at registration. The explicit interface implementations are non-virtual `Import`/`Process` returning `ContentObject`, reachable only through the interface -- the C++ shape of what C# does. |
+| `XNAPP-038` | `ContentImporter<T>` and `ContentProcessor<TInput,TOutput>` compatibility bases with the exact `Import(filename, context)` / `Process(input, context)` shape, adapted into the canonical `ContentImporter`/`ContentProcessor` by a generic bridge (stable type identity derived from a descriptor, not RTTI). | [x] `CNA/Content/Pipeline/XnaPipelineBridge.hpp`: `XnaImporterComponent<T>`/`XnaProcessorComponent<T>` construct a fresh component per asset (as `BuildContent` does), take the identity from the XNA class name + version, the extensions from the descriptor and the stable types from `ContentTypeName<T>`. The canonical `ContentImporter` gained `DefaultProcessor()` and `Build()` honours it when the request names none -- XNA's `DefaultProcessor` semantics, unchanged for every built-in CNA importer (they return empty). |
+| `XNAPP-039` | `ContentImporterContext` (IntermediateDirectory, Logger, OutputDirectory, AddDependency). | [x] Abstract, as in XNA; `XnaBridgeImporterContext` implements it over the canonical context (`AddDependency` records through `ResolveSourceDependency`, so containment still applies). |
+| `XNAPP-040` | `ContentProcessorContext` (17 members): `AddDependency`, `AddOutputFile`, `BuildAsset`/`BuildAndLoadAsset`/`Convert` with nested-build semantics on the canonical build graph, `Parameters` (`OpaqueDataDictionary`), platform/profile/configuration/directories/filename. | [x] All 17. The canonical engine gained, additively, `ContentBuildEnvironment` (target platform, graphics profile, build configuration, output and intermediate directories) on `ContentBuildRequest` and both contexts, plus `SourceRoot()/SourcePath()/ExternalSourceRoots()/Dependencies()/Logger()/Pipeline()` on the processor context and `ContentPipeline::Registry()`. `Convert` runs a registered processor in-process through the pipeline pointer; `AddOutputFile` is a canonical deployment file; the three generic methods are templates over `*Core` virtuals (`SEMANTIC_EQUIVALENT`). Nested builds are `XNAPP-044`. |
+| `XNAPP-041` | `ExternalReference<T>` (3 ctors, Filename; relative-path resolution against the referencing identity). | [x] A relative name resolves against the referencing identity's source directory; an empty name, or a relative one with no source to resolve against, is refused. |
+| `XNAPP-042` | `ProcessorParameter` (7), `ProcessorParameterCollection`; `PipelineComponentScanner` (12) as the explicit registry's enumeration view. | [x] Processors declare parameters through `ProcessorParameterBindings<T>` (`DescribeParameters`) with typed text/object conversion for bool, integers, float/double, string, char, `Color`, `Vector2/3/4` and enums by spelling; the bridge validates and assigns them per asset. The scanner enumerates a registry by catalog name (`HOST_SUBSTITUTION` for assembly scanning) and reports unknown catalogs in `Errors`. |
+| `XNAPP-043` | `VideoContent` (7 properties, `Dispose`). | [ ] Needs a build-time video probe (duration, bit rate, frame rate, size); done with Phase 14 (`XNAPP-210`), where the probe is decided. |
+| `XNAPP-044` | Nested build semantics: circular dependency detection, nested output naming (`OutputFilename`), caching within one build, `ContentIdentity` propagation into diagnostics. | [x] Two additive engine changes: `ContentPipeline::ImportAndProcess()` (the in-process half of a build, recording into a caller-supplied collector so the outer node depends on the nested source **as a source file, never as a second primary**) and `ContentProcessorContext::AddNestedOutput()`, whose outputs `Build()` appends after the writer's own once names are distinct -- so a `BuildAsset` result is owned, fingerprinted, published and cleaned like every other artifact. The bridge derives the asset name from the source path relative to the content root without its extension, as XNA does, returns the output path below `OutputDirectory`, merges the nested node's dependencies, runtime references and deployment files into the outer node, and refuses one name built from two different sources or processings while returning the same reference for a repeat. A nested failure is rethrown as `InvalidContentException` carrying the referencing identity. Cycles cannot form: a nested build is a fresh `Build()` of another source, and a source that nests itself recurses into the canonical containment and depth ceilings rather than into a graph. Tested end to end through the real coordinator with a canonical writer. |
+| `XNAPP-045` | Compile-parity tests for every Phase 3 type (construct/derive/static_assert), plus behaviour tests. | [~] `XnaPipelineCoreTests.cpp`: 19 tests over every type landed so far, including an XNA-shaped importer + processor registered into a canonical registry and driven through canonical contexts, `DefaultProcessor` through `Build()`, `Convert`, the scanner, and parameter conversion edges. `VideoContent` and the nested-build members follow their tasks. |
 
 ### Phase 4 — Serialization.Compiler parity
 
@@ -818,7 +821,13 @@ failures `plan_xnapipeline.md` §0.4 recorded do not occur here: this machine ha
 
 ### 33.2 Handoff
 
-Session 1 (2026-09-05): Phases 0–1 done except `XNAPP-006`/`008`/`014`–`016`. Next: `XNAPP-006`
-(baseline), `XNAPP-014` (parity map + report generator — the coverage numbers depend on it), then
-Phase 3 in ID order. The build directory is `cmake-build-debug/` (see `XNAPP-005` for the exact
-configuration); the oracle regenerates with `tools/xna-pipeline-oracle/run-oracle.sh`.
+Session 1 (2026-09-05): Phases 0–1 done except `XNAPP-008`/`015`/`016`; Phase 3 done except
+`XNAPP-043` (`VideoContent`, with Phase 14), with `032`/`045` partial as their rows say. The parity map
+is edited through `tools/xna-pipeline-oracle/parity_map_edit.py` with a decision document, never
+by hand, and the report regenerates with `parity_report.py`. Next: Phase 4
+(`ContentWriter`/`ContentTypeWriter<T>` over `XnbWriter`, and canonical XNB writers keyed by the
+façade's type names so an XNA-shaped processor's output reaches `.xnb`), then Phase 6/7 in ID
+order.
+The build directory is `cmake-build-debug/`; **this session builds with `-j3` at the owner's
+request** (a per-session cap, not a repository rule); the oracle regenerates with
+`tools/xna-pipeline-oracle/run-oracle.sh`.

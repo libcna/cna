@@ -10,17 +10,17 @@
 
 | Quantity | Implemented (EXACT + SEMANTIC + HOST_SUBSTITUTION) | EXTERNAL_BLOCKED | MISSING |
 |---|---|---:|---:|
-| public/protected types | 0/128 (0.0%) | 0 | 128 |
-| public/protected members | 3/705 (0.4%) | 0 | 702 |
-| enum values | 0/27 (0.0%) | 0 | 27 |
+| public/protected types | 21/128 (16.4%) | 0 | 107 |
+| public/protected members | 123/705 (17.4%) | 0 | 582 |
+| enum values | 3/27 (11.1%) | 0 | 24 |
 | built-in importers | 0/10 (0.0%) | 0 | 10 |
 | built-in processors | 0/12 (0.0%) | 0 | 12 |
 | processor properties | 0/47 (0.0%) | 0 | 47 |
 
 Status vocabulary: EXACT_EQUIVALENT, SEMANTIC_EQUIVALENT (spelling differs, capability identical; note says how),
 HOST_SUBSTITUTION (Microsoft-host mechanism replaced; note says how), EXTERNAL_BLOCKED (note names the
-unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 0, SEMANTIC_EQUIVALENT 0, HOST_SUBSTITUTION 0, EXTERNAL_BLOCKED 0, MISSING 128.
-Member status by value: EXACT_EQUIVALENT 0, SEMANTIC_EQUIVALENT 0, HOST_SUBSTITUTION 3, EXTERNAL_BLOCKED 0, MISSING 702.
+unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 16, SEMANTIC_EQUIVALENT 4, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 107.
+Member status by value: EXACT_EQUIVALENT 88, SEMANTIC_EQUIVALENT 30, HOST_SUBSTITUTION 5, EXTERNAL_BLOCKED 0, MISSING 582.
 
 Rules applied mechanically: 3 delegate plumbing members are listed in section 7 and not counted; 3 exception
 serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serialization has no C++ counterpart).
@@ -30,7 +30,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | Namespace | Types | Implemented | Blocked | Missing |
 |---|---:|---:|---:|---:|
 | `Microsoft.Xna.Framework.Content.Pipeline.Audio` | 5 | 0 | 0 | 5 |
-| `Microsoft.Xna.Framework.Content.Pipeline` | 32 | 0 | 0 | 32 |
+| `Microsoft.Xna.Framework.Content.Pipeline` | 32 | 21 | 0 | 11 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Graphics` | 47 | 0 | 0 | 47 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Processors` | 28 | 0 | 0 | 28 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler` | 5 | 0 | 0 | 5 |
@@ -46,18 +46,18 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `….Audio` | `AudioFormat` | class | MISSING |  |  |
 | `….Audio` | `ConversionFormat` | enum | MISSING |  |  |
 | `….Audio` | `ConversionQuality` | enum | MISSING |  |  |
-| `…` | `ChildCollection<TParent, TChild>` | class | MISSING |  |  |
-| `…` | `ContentBuildLogger` | class | MISSING |  |  |
-| `…` | `ContentIdentity` | class | MISSING |  |  |
-| `…` | `ContentImporterAttribute` | class | MISSING |  |  |
-| `…` | `ContentImporterContext` | class | MISSING |  |  |
-| `…` | `ContentImporter<T>` | class | MISSING |  |  |
-| `…` | `ContentItem` | class | MISSING |  |  |
-| `…` | `ContentProcessorAttribute` | class | MISSING |  |  |
-| `…` | `ContentProcessorContext` | class | MISSING |  |  |
-| `…` | `ContentProcessor<TInput, TOutput>` | class | MISSING |  |  |
+| `…` | `ChildCollection<TParent, TChild>` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::ChildCollection<TParent, TChild>` |  |
+| `…` | `ContentBuildLogger` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::ContentBuildLogger` |  |
+| `…` | `ContentIdentity` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::ContentIdentity` |  |
+| `…` | `ContentImporterAttribute` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::ContentImporterAttribute` | C++ has no CLR attributes: the same-named descriptor object is passed to RegisterXnaImporter<T>() instead of being attached to the class. |
+| `…` | `ContentImporterContext` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::ContentImporterContext` |  |
+| `…` | `ContentImporter<T>` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::ContentImporter<T>` |  |
+| `…` | `ContentItem` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::ContentItem` |  |
+| `…` | `ContentProcessorAttribute` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::ContentProcessorAttribute` | C++ has no CLR attributes: the same-named descriptor object is passed to RegisterXnaProcessor<T>(). |
+| `…` | `ContentProcessorContext` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::ContentProcessorContext` |  |
+| `…` | `ContentProcessor<TInput, TOutput>` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::ContentProcessor<TInput, TOutput>` |  |
 | `…` | `EffectImporter` | class | MISSING |  |  |
-| `…` | `ExternalReference<T>` | class | MISSING |  |  |
+| `…` | `ExternalReference<T>` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::ExternalReference<T>` |  |
 | `…` | `FbxImporter` | class | MISSING |  |  |
 | `…` | `FontDescriptionImporter` | class | MISSING |  |  |
 | `….Graphics` | `AlphaTestMaterialContent` | class | MISSING |  |  |
@@ -107,16 +107,16 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `….Graphics` | `VertexChannelNames` | class | MISSING |  |  |
 | `….Graphics` | `VertexChannel<T>` | class | MISSING |  |  |
 | `….Graphics` | `VertexContent` | class | MISSING |  |  |
-| `…` | `IContentImporter` | interface | MISSING |  |  |
-| `…` | `IContentProcessor` | interface | MISSING |  |  |
-| `…` | `InvalidContentException` | class | MISSING |  |  |
+| `…` | `IContentImporter` | interface | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::IContentImporter` | The explicit interface implementation object IContentImporter.Import(...) is a non-virtual Import returning ContentObject, reachable only through the interface; the typed ContentImporter<T>::Import hides it exactly as C# does. |
+| `…` | `IContentProcessor` | interface | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::IContentProcessor` | The explicit interface implementation object IContentProcessor.Process(object, ...) is a non-virtual Process over ContentObject, reachable only through the interface. |
+| `…` | `InvalidContentException` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::InvalidContentException` |  |
 | `…` | `Mp3Importer` | class | MISSING |  |  |
-| `…` | `NamedValueDictionary<T>` | class | MISSING |  |  |
-| `…` | `OpaqueDataDictionary` | class | MISSING |  |  |
-| `…` | `PipelineComponentScanner` | class | MISSING |  |  |
-| `…` | `PipelineException` | class | MISSING |  |  |
-| `…` | `ProcessorParameter` | class | MISSING |  |  |
-| `…` | `ProcessorParameterCollection` | class | MISSING |  |  |
+| `…` | `NamedValueDictionary<T>` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::NamedValueDictionary<T>` |  |
+| `…` | `OpaqueDataDictionary` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::OpaqueDataDictionary` |  |
+| `…` | `PipelineComponentScanner` | class | HOST_SUBSTITUTION | `Microsoft::Xna::Framework::Content::Pipeline::PipelineComponentScanner` | Assembly scanning has no C++ counterpart; the scanner enumerates the XNA-shaped components registered in a ContentPipelineRegistry, grouped by catalog name. |
+| `…` | `PipelineException` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::PipelineException` |  |
+| `…` | `ProcessorParameter` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::ProcessorParameter` |  |
+| `…` | `ProcessorParameterCollection` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::ProcessorParameterCollection` |  |
 | `….Processors` | `CompiledEffectContent` | class | MISSING |  |  |
 | `….Processors` | `EffectProcessor` | class | MISSING |  |  |
 | `….Processors` | `EffectProcessorDebugMode` | enum | MISSING |  |  |
@@ -157,7 +157,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `….Serialization.Intermediate` | `IntermediateReader` | class | MISSING |  |  |
 | `….Serialization.Intermediate` | `IntermediateSerializer` | class | MISSING |  |  |
 | `….Serialization.Intermediate` | `IntermediateWriter` | class | MISSING |  |  |
-| `…` | `TargetPlatform` | enum | MISSING |  |  |
+| `…` | `TargetPlatform` | enum | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::TargetPlatform` |  |
 | `….Tasks` | `BuildContent` | class | MISSING |  |  |
 | `….Tasks` | `BuildXact` | class | MISSING |  |  |
 | `….Tasks` | `CleanContent` | class | MISSING |  |  |
@@ -284,72 +284,72 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `ConversionQuality` | enum value | `Low = 0` | MISSING |  |  |
 | `ConversionQuality` | enum value | `Medium = 1` | MISSING |  |  |
 | `ConversionQuality` | enum value | `Best = 2` | MISSING |  |  |
-| `ChildCollection<TParent, TChild>` | constructor | `.ctor(TParent)` | MISSING |  |  |
-| `ChildCollection<TParent, TChild>` | method | `ClearItems()` | MISSING |  |  |
-| `ChildCollection<TParent, TChild>` | method | `GetParent(TChild)` | MISSING |  |  |
-| `ChildCollection<TParent, TChild>` | method | `InsertItem(System.Int32, TChild)` | MISSING |  |  |
-| `ChildCollection<TParent, TChild>` | method | `RemoveItem(System.Int32)` | MISSING |  |  |
-| `ChildCollection<TParent, TChild>` | method | `SetItem(System.Int32, TChild)` | MISSING |  |  |
-| `ChildCollection<TParent, TChild>` | method | `SetParent(TChild, TParent)` | MISSING |  |  |
-| `ContentBuildLogger` | constructor | `.ctor()` | MISSING |  |  |
-| `ContentBuildLogger` | property | `LoggerRootDirectory` | MISSING |  |  |
-| `ContentBuildLogger` | method | `GetCurrentFilename(Microsoft.Xna.Framework.Content.Pipeline.ContentIdentity)` | MISSING |  |  |
-| `ContentBuildLogger` | method | `LogImportantMessage(System.String, System.Object[])` | MISSING |  |  |
-| `ContentBuildLogger` | method | `LogMessage(System.String, System.Object[])` | MISSING |  |  |
-| `ContentBuildLogger` | method | `LogWarning(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentIdentity, System.String, System.Object[])` | MISSING |  |  |
-| `ContentBuildLogger` | method | `PopFile()` | MISSING |  |  |
-| `ContentBuildLogger` | method | `PushFile(System.String)` | MISSING |  |  |
-| `ContentIdentity` | constructor | `.ctor()` | MISSING |  |  |
-| `ContentIdentity` | constructor | `.ctor(System.String)` | MISSING |  |  |
-| `ContentIdentity` | constructor | `.ctor(System.String, System.String)` | MISSING |  |  |
-| `ContentIdentity` | constructor | `.ctor(System.String, System.String, System.String)` | MISSING |  |  |
-| `ContentIdentity` | property | `FragmentIdentifier` | MISSING |  |  |
-| `ContentIdentity` | property | `SourceFilename` | MISSING |  |  |
-| `ContentIdentity` | property | `SourceTool` | MISSING |  |  |
-| `ContentImporterAttribute` | constructor | `.ctor(System.String)` | MISSING |  |  |
-| `ContentImporterAttribute` | constructor | `.ctor(System.String[])` | MISSING |  |  |
-| `ContentImporterAttribute` | property | `CacheImportedData` | MISSING |  |  |
-| `ContentImporterAttribute` | property | `DefaultProcessor` | MISSING |  |  |
-| `ContentImporterAttribute` | property | `DisplayName` | MISSING |  |  |
-| `ContentImporterAttribute` | property | `FileExtensions` | MISSING |  |  |
-| `ContentImporterContext` | constructor | `.ctor()` | MISSING |  |  |
-| `ContentImporterContext` | property | `IntermediateDirectory` | MISSING |  |  |
-| `ContentImporterContext` | property | `Logger` | MISSING |  |  |
-| `ContentImporterContext` | property | `OutputDirectory` | MISSING |  |  |
-| `ContentImporterContext` | method | `AddDependency(System.String)` | MISSING |  |  |
-| `ContentImporter<T>` | constructor | `.ctor()` | MISSING |  |  |
-| `ContentImporter<T>` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | MISSING |  |  |
-| `ContentItem` | constructor | `.ctor()` | MISSING |  |  |
-| `ContentItem` | property | `Identity` | MISSING |  |  |
-| `ContentItem` | property | `Name` | MISSING |  |  |
-| `ContentItem` | property | `OpaqueData` | MISSING |  |  |
-| `ContentProcessorAttribute` | constructor | `.ctor()` | MISSING |  |  |
-| `ContentProcessorAttribute` | property | `DisplayName` | MISSING |  |  |
-| `ContentProcessorContext` | constructor | `.ctor()` | MISSING |  |  |
-| `ContentProcessorContext` | property | `BuildConfiguration` | MISSING |  |  |
-| `ContentProcessorContext` | property | `IntermediateDirectory` | MISSING |  |  |
-| `ContentProcessorContext` | property | `Logger` | MISSING |  |  |
-| `ContentProcessorContext` | property | `OutputDirectory` | MISSING |  |  |
-| `ContentProcessorContext` | property | `OutputFilename` | MISSING |  |  |
-| `ContentProcessorContext` | property | `Parameters` | MISSING |  |  |
-| `ContentProcessorContext` | property | `TargetPlatform` | MISSING |  |  |
-| `ContentProcessorContext` | property | `TargetProfile` | MISSING |  |  |
-| `ContentProcessorContext` | method | `AddDependency(System.String)` | MISSING |  |  |
-| `ContentProcessorContext` | method | `AddOutputFile(System.String)` | MISSING |  |  |
-| `ContentProcessorContext` | method | `BuildAndLoadAsset<TInput, TOutput>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<TInput>, System.String)` | MISSING |  |  |
-| `ContentProcessorContext` | method | `BuildAndLoadAsset<TInput, TOutput>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<TInput>, System.String, Microsoft.Xna.Framework.Content.Pipeline.OpaqueDataDictionary, System.String)` | MISSING |  |  |
-| `ContentProcessorContext` | method | `BuildAsset<TInput, TOutput>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<TInput>, System.String)` | MISSING |  |  |
-| `ContentProcessorContext` | method | `BuildAsset<TInput, TOutput>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<TInput>, System.String, Microsoft.Xna.Framework.Content.Pipeline.OpaqueDataDictionary, System.String, System.String)` | MISSING |  |  |
-| `ContentProcessorContext` | method | `Convert<TInput, TOutput>(TInput, System.String)` | MISSING |  |  |
-| `ContentProcessorContext` | method | `Convert<TInput, TOutput>(TInput, System.String, Microsoft.Xna.Framework.Content.Pipeline.OpaqueDataDictionary)` | MISSING |  |  |
-| `ContentProcessor<TInput, TOutput>` | constructor | `.ctor()` | MISSING |  |  |
-| `ContentProcessor<TInput, TOutput>` | method | `Process(TInput, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | MISSING |  |  |
+| `ChildCollection<TParent, TChild>` | constructor | `.ctor(TParent)` | EXACT_EQUIVALENT | `ChildCollection(TParent)` |  |
+| `ChildCollection<TParent, TChild>` | method | `ClearItems()` | EXACT_EQUIVALENT | `ClearItems()` |  |
+| `ChildCollection<TParent, TChild>` | method | `GetParent(TChild)` | SEMANTIC_EQUIVALENT | `GetParent(const std::shared_ptr<TChild>&) -> TParent*` | children are shared pointers and the parent back reference a raw pointer valid while the child is in the collection -- the lifetime a .NET reference gives it. |
+| `ChildCollection<TParent, TChild>` | method | `InsertItem(System.Int32, TChild)` | EXACT_EQUIVALENT | `InsertItem(System.Int32, TChild)` |  |
+| `ChildCollection<TParent, TChild>` | method | `RemoveItem(System.Int32)` | EXACT_EQUIVALENT | `RemoveItem(System.Int32)` |  |
+| `ChildCollection<TParent, TChild>` | method | `SetItem(System.Int32, TChild)` | EXACT_EQUIVALENT | `SetItem(System.Int32, TChild)` |  |
+| `ChildCollection<TParent, TChild>` | method | `SetParent(TChild, TParent)` | SEMANTIC_EQUIVALENT | `SetParent(const std::shared_ptr<TChild>&, TParent*)` | same carrier rule as GetParent. |
+| `ContentBuildLogger` | constructor | `.ctor()` | EXACT_EQUIVALENT | `ContentBuildLogger()` |  |
+| `ContentBuildLogger` | property | `LoggerRootDirectory` | EXACT_EQUIVALENT | `getLoggerRootDirectoryProperty() / setLoggerRootDirectoryProperty()` |  |
+| `ContentBuildLogger` | method | `GetCurrentFilename(Microsoft.Xna.Framework.Content.Pipeline.ContentIdentity)` | EXACT_EQUIVALENT | `GetCurrentFilename(Microsoft.Xna.Framework.Content.Pipeline.ContentIdentity)` |  |
+| `ContentBuildLogger` | method | `LogImportantMessage(System.String, System.Object[])` | SEMANTIC_EQUIVALENT | `LogImportantMessage(std::string_view, Args&&...)` | params object[] becomes a variadic std::format template forwarding to the non-template virtual LogImportantMessage(const std::string&). |
+| `ContentBuildLogger` | method | `LogMessage(System.String, System.Object[])` | SEMANTIC_EQUIVALENT | `LogMessage(std::string_view, Args&&...)` | params object[] becomes a variadic std::format template forwarding to the non-template virtual LogMessage(const std::string&). |
+| `ContentBuildLogger` | method | `LogWarning(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentIdentity, System.String, System.Object[])` | SEMANTIC_EQUIVALENT | `LogWarning(const std::string&, const ContentIdentity&, std::string_view, Args&&...)` | params object[] becomes a variadic std::format template forwarding to the non-template virtual LogWarning(helpLink, identity, const std::string&). |
+| `ContentBuildLogger` | method | `PopFile()` | EXACT_EQUIVALENT | `PopFile()` |  |
+| `ContentBuildLogger` | method | `PushFile(System.String)` | EXACT_EQUIVALENT | `PushFile(System.String)` |  |
+| `ContentIdentity` | constructor | `.ctor()` | EXACT_EQUIVALENT | `ContentIdentity()` |  |
+| `ContentIdentity` | constructor | `.ctor(System.String)` | EXACT_EQUIVALENT | `ContentIdentity(System.String)` |  |
+| `ContentIdentity` | constructor | `.ctor(System.String, System.String)` | EXACT_EQUIVALENT | `ContentIdentity(System.String, System.String)` |  |
+| `ContentIdentity` | constructor | `.ctor(System.String, System.String, System.String)` | EXACT_EQUIVALENT | `ContentIdentity(System.String, System.String, System.String)` |  |
+| `ContentIdentity` | property | `FragmentIdentifier` | EXACT_EQUIVALENT | `getFragmentIdentifierProperty() / setFragmentIdentifierProperty()` |  |
+| `ContentIdentity` | property | `SourceFilename` | EXACT_EQUIVALENT | `getSourceFilenameProperty() / setSourceFilenameProperty()` |  |
+| `ContentIdentity` | property | `SourceTool` | EXACT_EQUIVALENT | `getSourceToolProperty() / setSourceToolProperty()` |  |
+| `ContentImporterAttribute` | constructor | `.ctor(System.String)` | EXACT_EQUIVALENT | `ContentImporterAttribute(System.String)` |  |
+| `ContentImporterAttribute` | constructor | `.ctor(System.String[])` | EXACT_EQUIVALENT | `ContentImporterAttribute(System.String[])` |  |
+| `ContentImporterAttribute` | property | `CacheImportedData` | EXACT_EQUIVALENT | `getCacheImportedDataProperty() / setCacheImportedDataProperty()` |  |
+| `ContentImporterAttribute` | property | `DefaultProcessor` | EXACT_EQUIVALENT | `getDefaultProcessorProperty() / setDefaultProcessorProperty()` |  |
+| `ContentImporterAttribute` | property | `DisplayName` | EXACT_EQUIVALENT | `getDisplayNameProperty() / setDisplayNameProperty()` |  |
+| `ContentImporterAttribute` | property | `FileExtensions` | SEMANTIC_EQUIVALENT | `getFileExtensionsProperty()` | IEnumerable<string> is returned as const std::vector<std::string>&. |
+| `ContentImporterContext` | constructor | `.ctor()` | EXACT_EQUIVALENT | `ContentImporterContext()` |  |
+| `ContentImporterContext` | property | `IntermediateDirectory` | EXACT_EQUIVALENT | `getIntermediateDirectoryProperty()` |  |
+| `ContentImporterContext` | property | `Logger` | EXACT_EQUIVALENT | `getLoggerProperty()` |  |
+| `ContentImporterContext` | property | `OutputDirectory` | EXACT_EQUIVALENT | `getOutputDirectoryProperty()` |  |
+| `ContentImporterContext` | method | `AddDependency(System.String)` | EXACT_EQUIVALENT | `AddDependency(System.String)` |  |
+| `ContentImporter<T>` | constructor | `.ctor()` | EXACT_EQUIVALENT | `ContentImporter()` |  |
+| `ContentImporter<T>` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | EXACT_EQUIVALENT | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` |  |
+| `ContentItem` | constructor | `.ctor()` | EXACT_EQUIVALENT | `ContentItem()` |  |
+| `ContentItem` | property | `Identity` | EXACT_EQUIVALENT | `getIdentityProperty() / setIdentityProperty()` |  |
+| `ContentItem` | property | `Name` | EXACT_EQUIVALENT | `getNameProperty() / setNameProperty()` |  |
+| `ContentItem` | property | `OpaqueData` | EXACT_EQUIVALENT | `getOpaqueDataProperty()` |  |
+| `ContentProcessorAttribute` | constructor | `.ctor()` | EXACT_EQUIVALENT | `ContentProcessorAttribute()` |  |
+| `ContentProcessorAttribute` | property | `DisplayName` | EXACT_EQUIVALENT | `getDisplayNameProperty() / setDisplayNameProperty()` |  |
+| `ContentProcessorContext` | constructor | `.ctor()` | EXACT_EQUIVALENT | `ContentProcessorContext()` |  |
+| `ContentProcessorContext` | property | `BuildConfiguration` | EXACT_EQUIVALENT | `getBuildConfigurationProperty()` |  |
+| `ContentProcessorContext` | property | `IntermediateDirectory` | EXACT_EQUIVALENT | `getIntermediateDirectoryProperty()` |  |
+| `ContentProcessorContext` | property | `Logger` | EXACT_EQUIVALENT | `getLoggerProperty()` |  |
+| `ContentProcessorContext` | property | `OutputDirectory` | EXACT_EQUIVALENT | `getOutputDirectoryProperty()` |  |
+| `ContentProcessorContext` | property | `OutputFilename` | EXACT_EQUIVALENT | `getOutputFilenameProperty()` |  |
+| `ContentProcessorContext` | property | `Parameters` | EXACT_EQUIVALENT | `getParametersProperty()` |  |
+| `ContentProcessorContext` | property | `TargetPlatform` | EXACT_EQUIVALENT | `getTargetPlatformProperty()` |  |
+| `ContentProcessorContext` | property | `TargetProfile` | EXACT_EQUIVALENT | `getTargetProfileProperty()` |  |
+| `ContentProcessorContext` | method | `AddDependency(System.String)` | EXACT_EQUIVALENT | `AddDependency(System.String)` |  |
+| `ContentProcessorContext` | method | `AddOutputFile(System.String)` | EXACT_EQUIVALENT | `AddOutputFile(System.String)` |  |
+| `ContentProcessorContext` | method | `BuildAndLoadAsset<TInput, TOutput>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<TInput>, System.String)` | SEMANTIC_EQUIVALENT | `BuildAndLoadAsset<TInput, TOutput>(const ExternalReference<TInput>&, const std::string&)` | the two-argument overload is the four-argument template with defaulted empty parameters and importer name. |
+| `ContentProcessorContext` | method | `BuildAndLoadAsset<TInput, TOutput>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<TInput>, System.String, Microsoft.Xna.Framework.Content.Pipeline.OpaqueDataDictionary, System.String)` | SEMANTIC_EQUIVALENT | `BuildAndLoadAsset<TInput, TOutput>(const ExternalReference<TInput>&, const std::string&, const OpaqueDataDictionary&, const std::string&)` | a generic method cannot be virtual in C++: the member template forwards to the non-template virtual BuildAndLoadAssetCore carrying the type names; the nested import/process runs on the canonical pipeline and its dependencies merge into the outer node. |
+| `ContentProcessorContext` | method | `BuildAsset<TInput, TOutput>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<TInput>, System.String)` | SEMANTIC_EQUIVALENT | `BuildAsset<TInput, TOutput>(const ExternalReference<TInput>&, const std::string&)` | the two-argument overload is the five-argument template with defaulted empty parameters, importer name and asset name. |
+| `ContentProcessorContext` | method | `BuildAsset<TInput, TOutput>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<TInput>, System.String, Microsoft.Xna.Framework.Content.Pipeline.OpaqueDataDictionary, System.String, System.String)` | SEMANTIC_EQUIVALENT | `BuildAsset<TInput, TOutput>(const ExternalReference<TInput>&, const std::string&, const OpaqueDataDictionary&, const std::string&, const std::string&)` | a generic method cannot be virtual in C++: the member template forwards to the non-template virtual BuildAssetCore; the nested build runs through the canonical pipeline and its compiled output becomes an additional output of the current node, owned and fingerprinted like any other artifact. |
+| `ContentProcessorContext` | method | `Convert<TInput, TOutput>(TInput, System.String)` | SEMANTIC_EQUIVALENT | `Convert<TInput, TOutput>(const Carrier<TInput>&, const std::string&)` | the two-argument overload is the three-argument template with a defaulted empty OpaqueDataDictionary. |
+| `ContentProcessorContext` | method | `Convert<TInput, TOutput>(TInput, System.String, Microsoft.Xna.Framework.Content.Pipeline.OpaqueDataDictionary)` | SEMANTIC_EQUIVALENT | `Convert<TInput, TOutput>(const Carrier<TInput>&, const std::string&, const OpaqueDataDictionary&)` | a generic method cannot be virtual in C++: the member template forwards to the non-template virtual ConvertCore carrying the type names. |
+| `ContentProcessor<TInput, TOutput>` | constructor | `.ctor()` | EXACT_EQUIVALENT | `ContentProcessor()` |  |
+| `ContentProcessor<TInput, TOutput>` | method | `Process(TInput, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | EXACT_EQUIVALENT | `Process(TInput, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` |  |
 | `EffectImporter` | constructor | `.ctor()` | MISSING |  |  |
 | `EffectImporter` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | MISSING |  |  |
-| `ExternalReference<T>` | constructor | `.ctor()` | MISSING |  |  |
-| `ExternalReference<T>` | constructor | `.ctor(System.String)` | MISSING |  |  |
-| `ExternalReference<T>` | constructor | `.ctor(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentIdentity)` | MISSING |  |  |
-| `ExternalReference<T>` | property | `Filename` | MISSING |  |  |
+| `ExternalReference<T>` | constructor | `.ctor()` | EXACT_EQUIVALENT | `ExternalReference()` |  |
+| `ExternalReference<T>` | constructor | `.ctor(System.String)` | EXACT_EQUIVALENT | `ExternalReference(System.String)` |  |
+| `ExternalReference<T>` | constructor | `.ctor(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentIdentity)` | EXACT_EQUIVALENT | `ExternalReference(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentIdentity)` |  |
+| `ExternalReference<T>` | property | `Filename` | EXACT_EQUIVALENT | `getFilenameProperty() / setFilenameProperty()` |  |
 | `FbxImporter` | constructor | `.ctor()` | MISSING |  |  |
 | `FbxImporter` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | MISSING |  |  |
 | `FontDescriptionImporter` | constructor | `.ctor()` | MISSING |  |  |
@@ -653,68 +653,68 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `VertexContent` | method | `InsertRange(System.Int32, System.Collections.Generic.IEnumerable<System.Int32>)` | MISSING |  |  |
 | `VertexContent` | method | `RemoveAt(System.Int32)` | MISSING |  |  |
 | `VertexContent` | method | `RemoveRange(System.Int32, System.Int32)` | MISSING |  |  |
-| `IContentImporter` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | MISSING |  |  |
-| `IContentProcessor` | property | `InputType` | MISSING |  |  |
-| `IContentProcessor` | property | `OutputType` | MISSING |  |  |
-| `IContentProcessor` | method | `Process(System.Object, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | MISSING |  |  |
-| `InvalidContentException` | constructor | `.ctor()` | MISSING |  |  |
+| `IContentImporter` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | SEMANTIC_EQUIVALENT | `Import(const std::string&, ContentImporterContext&) -> ContentObject` | object is ContentObject (the canonical type-erased box); non-virtual, dispatching to the protected virtual ImportObject. |
+| `IContentProcessor` | property | `InputType` | EXACT_EQUIVALENT | `getInputTypeProperty()` |  |
+| `IContentProcessor` | property | `OutputType` | EXACT_EQUIVALENT | `getOutputTypeProperty()` |  |
+| `IContentProcessor` | method | `Process(System.Object, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | SEMANTIC_EQUIVALENT | `Process(const ContentObject&, ContentProcessorContext&) -> ContentObject` | object is ContentObject; non-virtual, dispatching to the protected virtual ProcessObject. |
+| `InvalidContentException` | constructor | `.ctor()` | EXACT_EQUIVALENT | `InvalidContentException()` |  |
 | `InvalidContentException` | constructor | `.ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)` | HOST_SUBSTITUTION |  | .NET binary serialization of exceptions has no C++ counterpart; the exception's developer-visible contract (message, ContentIdentity, inner exception) is provided in full. |
-| `InvalidContentException` | constructor | `.ctor(System.String)` | MISSING |  |  |
-| `InvalidContentException` | constructor | `.ctor(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentIdentity)` | MISSING |  |  |
-| `InvalidContentException` | constructor | `.ctor(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentIdentity, System.Exception)` | MISSING |  |  |
-| `InvalidContentException` | constructor | `.ctor(System.String, System.Exception)` | MISSING |  |  |
-| `InvalidContentException` | property | `ContentIdentity` | MISSING |  |  |
+| `InvalidContentException` | constructor | `.ctor(System.String)` | EXACT_EQUIVALENT | `InvalidContentException(System.String)` |  |
+| `InvalidContentException` | constructor | `.ctor(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentIdentity)` | EXACT_EQUIVALENT | `InvalidContentException(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentIdentity)` |  |
+| `InvalidContentException` | constructor | `.ctor(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentIdentity, System.Exception)` | EXACT_EQUIVALENT | `InvalidContentException(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentIdentity, System.Exception)` |  |
+| `InvalidContentException` | constructor | `.ctor(System.String, System.Exception)` | EXACT_EQUIVALENT | `InvalidContentException(System.String, System.Exception)` |  |
+| `InvalidContentException` | property | `ContentIdentity` | EXACT_EQUIVALENT | `getContentIdentityProperty() / setContentIdentityProperty()` |  |
 | `InvalidContentException` | method | `GetObjectData(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)` | HOST_SUBSTITUTION |  | .NET binary serialization of exceptions has no C++ counterpart; the exception's developer-visible contract (message, ContentIdentity, inner exception) is provided in full. |
 | `Mp3Importer` | constructor | `.ctor()` | MISSING |  |  |
 | `Mp3Importer` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | MISSING |  |  |
-| `NamedValueDictionary<T>` | constructor | `.ctor()` | MISSING |  |  |
-| `NamedValueDictionary<T>` | property | `Count` | MISSING |  |  |
-| `NamedValueDictionary<T>` | property | `DefaultSerializerType` | MISSING |  |  |
-| `NamedValueDictionary<T>` | property | `Keys` | MISSING |  |  |
-| `NamedValueDictionary<T>` | property | `Values` | MISSING |  |  |
-| `NamedValueDictionary<T>` | indexer | `Item[System.String]` | MISSING |  |  |
-| `NamedValueDictionary<T>` | method | `Add(System.String, T)` | MISSING |  |  |
-| `NamedValueDictionary<T>` | method | `AddItem(System.String, T)` | MISSING |  |  |
-| `NamedValueDictionary<T>` | method | `Clear()` | MISSING |  |  |
-| `NamedValueDictionary<T>` | method | `ClearItems()` | MISSING |  |  |
-| `NamedValueDictionary<T>` | method | `ContainsKey(System.String)` | MISSING |  |  |
-| `NamedValueDictionary<T>` | method | `GetEnumerator()` | MISSING |  |  |
-| `NamedValueDictionary<T>` | method | `Remove(System.String)` | MISSING |  |  |
-| `NamedValueDictionary<T>` | method | `RemoveItem(System.String)` | MISSING |  |  |
-| `NamedValueDictionary<T>` | method | `SetItem(System.String, T)` | MISSING |  |  |
-| `NamedValueDictionary<T>` | method | `TryGetValue(System.String, out T)` | MISSING |  |  |
-| `OpaqueDataDictionary` | constructor | `.ctor()` | MISSING |  |  |
-| `OpaqueDataDictionary` | property | `DefaultSerializerType` | MISSING |  |  |
-| `OpaqueDataDictionary` | method | `AddItem(System.String, System.Object)` | MISSING |  |  |
-| `OpaqueDataDictionary` | method | `ClearItems()` | MISSING |  |  |
-| `OpaqueDataDictionary` | method | `GetContentAsXml()` | MISSING |  |  |
-| `OpaqueDataDictionary` | method | `GetValue<T>(System.String, T)` | MISSING |  |  |
-| `OpaqueDataDictionary` | method | `RemoveItem(System.String)` | MISSING |  |  |
-| `OpaqueDataDictionary` | method | `SetItem(System.String, System.Object)` | MISSING |  |  |
-| `PipelineComponentScanner` | constructor | `.ctor()` | MISSING |  |  |
-| `PipelineComponentScanner` | property | `Errors` | MISSING |  |  |
-| `PipelineComponentScanner` | property | `ImporterAttributes` | MISSING |  |  |
-| `PipelineComponentScanner` | property | `ImporterNames` | MISSING |  |  |
-| `PipelineComponentScanner` | property | `ImporterOutputTypes` | MISSING |  |  |
-| `PipelineComponentScanner` | property | `ProcessorAttributes` | MISSING |  |  |
-| `PipelineComponentScanner` | property | `ProcessorInputTypes` | MISSING |  |  |
-| `PipelineComponentScanner` | property | `ProcessorNames` | MISSING |  |  |
-| `PipelineComponentScanner` | property | `ProcessorOutputTypes` | MISSING |  |  |
-| `PipelineComponentScanner` | property | `ProcessorParameters` | MISSING |  |  |
-| `PipelineComponentScanner` | method | `Update(System.Collections.Generic.IEnumerable<System.String>)` | MISSING |  |  |
-| `PipelineComponentScanner` | method | `Update(System.Collections.Generic.IEnumerable<System.String>, System.Collections.Generic.IEnumerable<System.String>)` | MISSING |  |  |
-| `PipelineException` | constructor | `.ctor()` | MISSING |  |  |
+| `NamedValueDictionary<T>` | constructor | `.ctor()` | EXACT_EQUIVALENT | `NamedValueDictionary()` |  |
+| `NamedValueDictionary<T>` | property | `Count` | EXACT_EQUIVALENT | `getCountProperty()` |  |
+| `NamedValueDictionary<T>` | property | `DefaultSerializerType` | SEMANTIC_EQUIVALENT | `getDefaultSerializerTypeProperty()` | protected internal getter becomes a protected virtual returning System::Type. |
+| `NamedValueDictionary<T>` | property | `Keys` | SEMANTIC_EQUIVALENT | `getKeysProperty()` | ICollection<string> is returned as std::vector<std::string> (sharp-runtime Dictionary precedent). |
+| `NamedValueDictionary<T>` | property | `Values` | SEMANTIC_EQUIVALENT | `getValuesProperty()` | ICollection<T> is returned as std::vector<T>. |
+| `NamedValueDictionary<T>` | indexer | `Item[System.String]` | SEMANTIC_EQUIVALENT | `operator[] / Set()` | the C# indexer getter is operator[]; its add-or-replace setter is Set(key, value) because operator[] cannot add a key without a value. |
+| `NamedValueDictionary<T>` | method | `Add(System.String, T)` | EXACT_EQUIVALENT | `Add(System.String, T)` |  |
+| `NamedValueDictionary<T>` | method | `AddItem(System.String, T)` | EXACT_EQUIVALENT | `AddItem(System.String, T)` |  |
+| `NamedValueDictionary<T>` | method | `Clear()` | EXACT_EQUIVALENT | `Clear()` |  |
+| `NamedValueDictionary<T>` | method | `ClearItems()` | EXACT_EQUIVALENT | `ClearItems()` |  |
+| `NamedValueDictionary<T>` | method | `ContainsKey(System.String)` | EXACT_EQUIVALENT | `ContainsKey(System.String)` |  |
+| `NamedValueDictionary<T>` | method | `GetEnumerator()` | SEMANTIC_EQUIVALENT | `GetEnumerator() / begin(), end()` | IEnumerator<KeyValuePair<string,T>> is a heap-allocated sharp-runtime enumerator the caller owns; range-for over std::pair is the idiomatic form. |
+| `NamedValueDictionary<T>` | method | `Remove(System.String)` | EXACT_EQUIVALENT | `Remove(System.String)` |  |
+| `NamedValueDictionary<T>` | method | `RemoveItem(System.String)` | EXACT_EQUIVALENT | `RemoveItem(System.String)` |  |
+| `NamedValueDictionary<T>` | method | `SetItem(System.String, T)` | EXACT_EQUIVALENT | `SetItem(System.String, T)` |  |
+| `NamedValueDictionary<T>` | method | `TryGetValue(System.String, out T)` | EXACT_EQUIVALENT | `TryGetValue(System.String, out T)` |  |
+| `OpaqueDataDictionary` | constructor | `.ctor()` | EXACT_EQUIVALENT | `OpaqueDataDictionary()` |  |
+| `OpaqueDataDictionary` | property | `DefaultSerializerType` | SEMANTIC_EQUIVALENT | `getDefaultSerializerTypeProperty()` | protected internal getter becomes a protected virtual returning System::Type::From<System::Object>(). |
+| `OpaqueDataDictionary` | method | `AddItem(System.String, System.Object)` | EXACT_EQUIVALENT | `AddItem(System.String, System.Object)` |  |
+| `OpaqueDataDictionary` | method | `ClearItems()` | EXACT_EQUIVALENT | `ClearItems()` |  |
+| `OpaqueDataDictionary` | method | `GetContentAsXml()` | MISSING |  | needs the intermediate serializer (XNAPP-072); throws NotSupportedException until then |
+| `OpaqueDataDictionary` | method | `GetValue<T>(System.String, T)` | EXACT_EQUIVALENT | `GetValue<T>(System.String, T)` |  |
+| `OpaqueDataDictionary` | method | `RemoveItem(System.String)` | EXACT_EQUIVALENT | `RemoveItem(System.String)` |  |
+| `OpaqueDataDictionary` | method | `SetItem(System.String, System.Object)` | EXACT_EQUIVALENT | `SetItem(System.String, System.Object)` |  |
+| `PipelineComponentScanner` | constructor | `.ctor()` | EXACT_EQUIVALENT | `PipelineComponentScanner()` |  |
+| `PipelineComponentScanner` | property | `Errors` | SEMANTIC_EQUIVALENT | `getErrorsProperty()` | IList<string> is returned as const std::vector<std::string>&. |
+| `PipelineComponentScanner` | property | `ImporterAttributes` | SEMANTIC_EQUIVALENT | `getImporterAttributesProperty()` | IDictionary<string, X> is returned as const std::map<std::string, X>&. |
+| `PipelineComponentScanner` | property | `ImporterNames` | SEMANTIC_EQUIVALENT | `getImporterNamesProperty()` | IEnumerable<string> is returned as std::vector<std::string>. |
+| `PipelineComponentScanner` | property | `ImporterOutputTypes` | SEMANTIC_EQUIVALENT | `getImporterOutputTypesProperty()` | IDictionary<string, X> is returned as const std::map<std::string, X>&. |
+| `PipelineComponentScanner` | property | `ProcessorAttributes` | SEMANTIC_EQUIVALENT | `getProcessorAttributesProperty()` | IDictionary<string, X> is returned as const std::map<std::string, X>&. |
+| `PipelineComponentScanner` | property | `ProcessorInputTypes` | SEMANTIC_EQUIVALENT | `getProcessorInputTypesProperty()` | IDictionary<string, X> is returned as const std::map<std::string, X>&. |
+| `PipelineComponentScanner` | property | `ProcessorNames` | SEMANTIC_EQUIVALENT | `getProcessorNamesProperty()` | IEnumerable<string> is returned as std::vector<std::string>. |
+| `PipelineComponentScanner` | property | `ProcessorOutputTypes` | SEMANTIC_EQUIVALENT | `getProcessorOutputTypesProperty()` | IDictionary<string, X> is returned as const std::map<std::string, X>&. |
+| `PipelineComponentScanner` | property | `ProcessorParameters` | SEMANTIC_EQUIVALENT | `getProcessorParametersProperty()` | IDictionary<string, X> is returned as const std::map<std::string, X>&. |
+| `PipelineComponentScanner` | method | `Update(System.Collections.Generic.IEnumerable<System.String>)` | HOST_SUBSTITUTION | `Update(const std::vector<std::string>&)` | XNA loads pipeline assemblies from the given paths; CNA loads no code dynamically, so the names select registered component catalogs and an unknown name is reported in Errors exactly as an unloadable assembly is. |
+| `PipelineComponentScanner` | method | `Update(System.Collections.Generic.IEnumerable<System.String>, System.Collections.Generic.IEnumerable<System.String>)` | HOST_SUBSTITUTION | `Update(const std::vector<std::string>&, const std::vector<std::string>&)` | XNA loads pipeline assemblies from the given paths; CNA loads no code dynamically, so the names select registered component catalogs and an unknown name is reported in Errors exactly as an unloadable assembly is. |
+| `PipelineException` | constructor | `.ctor()` | EXACT_EQUIVALENT | `PipelineException()` |  |
 | `PipelineException` | constructor | `.ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)` | HOST_SUBSTITUTION |  | .NET binary serialization of exceptions has no C++ counterpart; the exception's developer-visible contract (message, ContentIdentity, inner exception) is provided in full. |
-| `PipelineException` | constructor | `.ctor(System.String)` | MISSING |  |  |
-| `PipelineException` | constructor | `.ctor(System.String, System.Exception)` | MISSING |  |  |
-| `PipelineException` | constructor | `.ctor(System.String, System.Object[])` | MISSING |  |  |
-| `ProcessorParameter` | property | `DefaultValue` | MISSING |  |  |
-| `ProcessorParameter` | property | `Description` | MISSING |  |  |
-| `ProcessorParameter` | property | `DisplayName` | MISSING |  |  |
-| `ProcessorParameter` | property | `IsEnum` | MISSING |  |  |
-| `ProcessorParameter` | property | `PossibleEnumValues` | MISSING |  |  |
-| `ProcessorParameter` | property | `PropertyName` | MISSING |  |  |
-| `ProcessorParameter` | property | `PropertyType` | MISSING |  |  |
+| `PipelineException` | constructor | `.ctor(System.String)` | EXACT_EQUIVALENT | `PipelineException(System.String)` |  |
+| `PipelineException` | constructor | `.ctor(System.String, System.Exception)` | EXACT_EQUIVALENT | `PipelineException(System.String, System.Exception)` |  |
+| `PipelineException` | constructor | `.ctor(System.String, System.Object[])` | SEMANTIC_EQUIVALENT | `PipelineException(std::string_view, Args&&...)` | params object[] becomes a variadic std::format constructor. |
+| `ProcessorParameter` | property | `DefaultValue` | EXACT_EQUIVALENT | `getDefaultValueProperty()` |  |
+| `ProcessorParameter` | property | `Description` | EXACT_EQUIVALENT | `getDescriptionProperty()` |  |
+| `ProcessorParameter` | property | `DisplayName` | EXACT_EQUIVALENT | `getDisplayNameProperty()` |  |
+| `ProcessorParameter` | property | `IsEnum` | EXACT_EQUIVALENT | `getIsEnumProperty()` |  |
+| `ProcessorParameter` | property | `PossibleEnumValues` | EXACT_EQUIVALENT | `getPossibleEnumValuesProperty()` |  |
+| `ProcessorParameter` | property | `PropertyName` | EXACT_EQUIVALENT | `getPropertyNameProperty()` |  |
+| `ProcessorParameter` | property | `PropertyType` | EXACT_EQUIVALENT | `getPropertyTypeProperty()` |  |
 | `CompiledEffectContent` | constructor | `.ctor(System.Byte[])` | MISSING |  |  |
 | `CompiledEffectContent` | method | `GetEffectCode()` | MISSING |  |  |
 | `EffectProcessor` | constructor | `.ctor()` | MISSING |  |  |
@@ -913,9 +913,9 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `IntermediateWriter` | method | `WriteRawObject<T>(T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer)` | MISSING |  |  |
 | `IntermediateWriter` | method | `WriteSharedResource<T>(T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute)` | MISSING |  |  |
 | `IntermediateWriter` | method | `WriteTypeName(System.Type)` | MISSING |  |  |
-| `TargetPlatform` | enum value | `Windows = 0` | MISSING |  |  |
-| `TargetPlatform` | enum value | `Xbox360 = 1` | MISSING |  |  |
-| `TargetPlatform` | enum value | `WindowsPhone = 2` | MISSING |  |  |
+| `TargetPlatform` | enum value | `Windows = 0` | EXACT_EQUIVALENT | `TargetPlatform::Windows` |  |
+| `TargetPlatform` | enum value | `Xbox360 = 1` | EXACT_EQUIVALENT | `TargetPlatform::Xbox360` |  |
+| `TargetPlatform` | enum value | `WindowsPhone = 2` | EXACT_EQUIVALENT | `TargetPlatform::WindowsPhone` |  |
 | `BuildContent` | constant | `CancelEventNameFormat` | MISSING |  |  |
 | `BuildContent` | constructor | `.ctor()` | MISSING |  |  |
 | `BuildContent` | property | `BuildConfiguration` | MISSING |  |  |
