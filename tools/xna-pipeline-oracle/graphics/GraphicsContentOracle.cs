@@ -2647,6 +2647,92 @@ namespace Cna.Xna40.GraphicsOracle
                 return builder.ToString();
             });
 
+            // ---- FontDescriptionImporter: the .spritefont schema ---------------------------------
+            Record("fontimporter/full", () =>
+            {
+                string directory = Path.Combine(outputDirectory, "work");
+                Directory.CreateDirectory(directory);
+                string path = Path.Combine(directory, "full.spritefont");
+                File.WriteAllText(path,
+                    "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n<XnaContent xmlns:Graphics=\"Microsoft.Xna.Framework.Content.Pipeline.Graphics\">\r\n" +
+                    "  <Asset Type=\"Graphics:FontDescription\">\r\n" +
+                    "    <FontName>Segoe UI Mono</FontName>\r\n    <Size>14</Size>\r\n    <Spacing>2</Spacing>\r\n" +
+                    "    <UseKerning>true</UseKerning>\r\n    <Style>Bold</Style>\r\n    <DefaultCharacter>*</DefaultCharacter>\r\n" +
+                    "    <CharacterRegions>\r\n      <CharacterRegion>\r\n        <Start>&#32;</Start>\r\n        <End>&#126;</End>\r\n      </CharacterRegion>\r\n" +
+                    "      <CharacterRegion>\r\n        <Start>&#160;</Start>\r\n        <End>&#163;</End>\r\n      </CharacterRegion>\r\n" +
+                    "    </CharacterRegions>\r\n  </Asset>\r\n</XnaContent>\r\n");
+                var importer = new FontDescriptionImporter();
+                var context = new ProbeImporterContext();
+                FontDescription font = importer.Import(path, context);
+                var characters = new List<char>(font.Characters);
+                characters.Sort();
+                return "type=" + font.GetType().Name + " dependencies=" + context.Dependencies.Count +
+                       " identity=" + (font.Identity == null ? "null" : Path.GetFileName(font.Identity.SourceFilename ?? "") + "/" + (font.Identity.SourceTool ?? "null")) +
+                       " " + DescribeFont(font) + " count=" + characters.Count +
+                       " first=U+" + ((int)characters[0]).ToString("X4") +
+                       " last=U+" + ((int)characters[characters.Count - 1]).ToString("X4");
+            });
+            Record("fontimporter/minimal", () =>
+            {
+                string directory = Path.Combine(outputDirectory, "work");
+                Directory.CreateDirectory(directory);
+                var builder = new StringBuilder();
+                Action<string, string> probe = delegate(string label, string body)
+                {
+                    if (builder.Length > 0) builder.Append(' ');
+                    string path = Path.Combine(directory, label + ".spritefont");
+                    File.WriteAllText(path,
+                        "<XnaContent xmlns:Graphics=\"Microsoft.Xna.Framework.Content.Pipeline.Graphics\">" +
+                        "<Asset Type=\"Graphics:FontDescription\">" + body + "</Asset></XnaContent>");
+                    try
+                    {
+                        FontDescription font = new FontDescriptionImporter().Import(path, new ProbeImporterContext());
+                        builder.Append(label + "=[" + DescribeFont(font) + " count=" + new List<char>(font.Characters).Count + "]");
+                    }
+                    catch (Exception error) { builder.Append(label + "=" + error.GetType().Name + ": " + error.Message); }
+                };
+                probe("name_size_only", "<FontName>Arial</FontName><Size>10</Size>");
+                probe("no_size", "<FontName>Arial</FontName>");
+                probe("no_name", "<Size>10</Size>");
+                probe("empty_regions", "<FontName>Arial</FontName><Size>10</Size><CharacterRegions></CharacterRegions>");
+                probe("no_default_character", "<FontName>Arial</FontName><Size>10</Size><CharacterRegions><CharacterRegion><Start>&#65;</Start><End>&#67;</End></CharacterRegion></CharacterRegions>");
+                probe("bad_style", "<FontName>Arial</FontName><Size>10</Size><Style>Sideways</Style>");
+                probe("style_bold_italic", "<FontName>Arial</FontName><Size>10</Size><Style>Bold, Italic</Style>");
+                probe("reversed_region", "<FontName>Arial</FontName><Size>10</Size><CharacterRegions><CharacterRegion><Start>&#67;</Start><End>&#65;</End></CharacterRegion></CharacterRegions>");
+                probe("overlapping_regions", "<FontName>Arial</FontName><Size>10</Size><CharacterRegions><CharacterRegion><Start>&#65;</Start><End>&#70;</End></CharacterRegion><CharacterRegion><Start>&#68;</Start><End>&#74;</End></CharacterRegion></CharacterRegions>");
+                probe("fractional_size", "<FontName>Arial</FontName><Size>12.5</Size>");
+                probe("negative_spacing", "<FontName>Arial</FontName><Size>10</Size><Spacing>-3</Spacing>");
+                probe("required_only", "<FontName>Arial</FontName><Size>10</Size><Style>Regular</Style><CharacterRegions><CharacterRegion><Start>&#65;</Start><End>&#67;</End></CharacterRegion></CharacterRegions>");
+                probe("out_of_order", "<Size>10</Size><FontName>Arial</FontName><Style>Regular</Style><CharacterRegions><CharacterRegion><Start>&#65;</Start><End>&#67;</End></CharacterRegion></CharacterRegions>");
+                probe("all_optional", "<FontName>Arial</FontName><Size>10</Size><Spacing>1.5</Spacing><UseKerning>false</UseKerning><Style>Italic</Style><DefaultCharacter>?</DefaultCharacter><CharacterRegions><CharacterRegion><Start>&#65;</Start><End>&#67;</End></CharacterRegion></CharacterRegions>");
+                probe("region_missing_end", "<FontName>Arial</FontName><Size>10</Size><Style>Regular</Style><CharacterRegions><CharacterRegion><Start>&#65;</Start></CharacterRegion></CharacterRegions>");
+                return builder.ToString();
+            });
+            Record("fontimporter/refusals", () =>
+            {
+                string directory = Path.Combine(outputDirectory, "work");
+                Directory.CreateDirectory(directory);
+                var builder = new StringBuilder();
+                Action<string, string> probe = delegate(string label, string path)
+                {
+                    if (builder.Length > 0) builder.Append(' ');
+                    try
+                    {
+                        FontDescription font = new FontDescriptionImporter().Import(path, new ProbeImporterContext());
+                        builder.Append(label + "=accepted");
+                    }
+                    catch (Exception error) { builder.Append(label + "=" + error.GetType().Name + ": " + error.Message); }
+                };
+                probe("missing", Path.Combine(directory, "no_such.spritefont"));
+                string garbage = Path.Combine(directory, "garbage.spritefont");
+                File.WriteAllText(garbage, "not xml at all");
+                probe("garbage", garbage);
+                string wrongType = Path.Combine(directory, "wrong.spritefont");
+                File.WriteAllText(wrongType, "<XnaContent><Asset Type=\"int\">3</Asset></XnaContent>");
+                probe("wrong_type", wrongType);
+                return builder.ToString();
+            });
+
             // ---- EffectImporter ------------------------------------------------------------------
             Record("effectimporter/source", () =>
             {

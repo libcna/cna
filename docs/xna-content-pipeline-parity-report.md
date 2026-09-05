@@ -10,17 +10,17 @@
 
 | Quantity | Implemented (EXACT + SEMANTIC + HOST_SUBSTITUTION) | EXTERNAL_BLOCKED | MISSING |
 |---|---|---:|---:|
-| public/protected types | 115/128 (89.8%) | 0 | 13 |
-| public/protected members | 626/705 (88.8%) | 1 | 78 |
+| public/protected types | 116/128 (90.6%) | 0 | 12 |
+| public/protected members | 628/705 (89.1%) | 1 | 76 |
 | enum values | 27/27 (100.0%) | 0 | 0 |
-| built-in importers | 3/10 (30.0%) | 0 | 7 |
+| built-in importers | 4/10 (40.0%) | 0 | 6 |
 | built-in processors | 11/12 (91.7%) | 0 | 1 |
 | processor properties | 46/47 (97.9%) | 0 | 1 |
 
 Status vocabulary: EXACT_EQUIVALENT, SEMANTIC_EQUIVALENT (spelling differs, capability identical; note says how),
 HOST_SUBSTITUTION (Microsoft-host mechanism replaced; note says how), EXTERNAL_BLOCKED (note names the
-unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 45, SEMANTIC_EQUIVALENT 69, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 13.
-Member status by value: EXACT_EQUIVALENT 403, SEMANTIC_EQUIVALENT 217, HOST_SUBSTITUTION 6, EXTERNAL_BLOCKED 1, MISSING 78.
+unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 45, SEMANTIC_EQUIVALENT 70, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 12.
+Member status by value: EXACT_EQUIVALENT 404, SEMANTIC_EQUIVALENT 218, HOST_SUBSTITUTION 6, EXTERNAL_BLOCKED 1, MISSING 76.
 
 Rules applied mechanically: 3 delegate plumbing members are listed in section 7 and not counted; 3 exception
 serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serialization has no C++ counterpart).
@@ -30,7 +30,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | Namespace | Types | Implemented | Blocked | Missing |
 |---|---:|---:|---:|---:|
 | `Microsoft.Xna.Framework.Content.Pipeline.Audio` | 5 | 5 | 0 | 0 |
-| `Microsoft.Xna.Framework.Content.Pipeline` | 32 | 24 | 0 | 8 |
+| `Microsoft.Xna.Framework.Content.Pipeline` | 32 | 25 | 0 | 7 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Graphics` | 47 | 47 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Processors` | 28 | 27 | 0 | 1 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler` | 5 | 5 | 0 | 0 |
@@ -59,7 +59,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `…` | `EffectImporter` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::EffectImporter` | the effect is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). |
 | `…` | `ExternalReference<T>` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::ExternalReference<T>` |  |
 | `…` | `FbxImporter` | class | MISSING |  |  |
-| `…` | `FontDescriptionImporter` | class | MISSING |  |  |
+| `…` | `FontDescriptionImporter` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::FontDescriptionImporter` | the description is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). |
 | `….Graphics` | `AlphaTestMaterialContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::AlphaTestMaterialContent` | Adds no state: every property is a view over the base's OpaqueData or Textures, verified entry by entry against tests/reference/xna40/graphics (case material/alphatest_properties or material/basic_properties). |
 | `….Graphics` | `AnimationChannel` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::AnimationChannel` | Ordered by time, with Add answering the insertion index and a keyframe placed after one that already holds its time; membership is by reference. All measured (animation/channel_*). |
 | `….Graphics` | `AnimationChannelDictionary` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::AnimationChannelDictionary` |  |
@@ -176,7 +176,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 |---|---|---|---|---|---|
 | `EffectImporter` | .fx | `EffectProcessor` | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::EffectImporter` | the effect is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). |
 | `FbxImporter` | .fbx | `ModelProcessor` | MISSING |  |  |
-| `FontDescriptionImporter` | .spritefont | `FontDescriptionProcessor` | MISSING |  |  |
+| `FontDescriptionImporter` | .spritefont | `FontDescriptionProcessor` | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::FontDescriptionImporter` | the description is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). |
 | `Mp3Importer` | .mp3 | `SongProcessor` | MISSING |  |  |
 | `TextureImporter` | .bmp, .dds, .dib, .hdr, .jpg, .pfm, .png, .ppm, .tga | `SpriteTextureProcessor` | MISSING |  |  |
 | `WavImporter` | .wav | `SoundEffectProcessor` | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::WavImporter` | the audio is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). |
@@ -352,8 +352,8 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `ExternalReference<T>` | property | `Filename` | EXACT_EQUIVALENT | `getFilenameProperty() / setFilenameProperty()` |  |
 | `FbxImporter` | constructor | `.ctor()` | MISSING |  |  |
 | `FbxImporter` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | MISSING |  |  |
-| `FontDescriptionImporter` | constructor | `.ctor()` | MISSING |  |  |
-| `FontDescriptionImporter` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | MISSING |  |  |
+| `FontDescriptionImporter` | constructor | `.ctor()` | EXACT_EQUIVALENT | `FontDescriptionImporter()` |  |
+| `FontDescriptionImporter` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | SEMANTIC_EQUIVALENT | `Import(const std::string&, ContentImporterContext&) -> std::shared_ptr<FontDescription>` | the description is answered by shared pointer; the document is read by the intermediate serializer under its own rules, and the identity carries the file and the tool name FontDescriptionImporter. |
 | `AlphaTestMaterialContent` | constant | `AlphaFunctionKey` | SEMANTIC_EQUIVALENT | `AlphaTestMaterialContent::AlphaFunctionKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
 | `AlphaTestMaterialContent` | constant | `AlphaKey` | SEMANTIC_EQUIVALENT | `AlphaTestMaterialContent::AlphaKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
 | `AlphaTestMaterialContent` | constant | `DiffuseColorKey` | SEMANTIC_EQUIVALENT | `AlphaTestMaterialContent::DiffuseColorKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
