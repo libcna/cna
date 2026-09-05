@@ -1,0 +1,4648 @@
+{
+ "schema": "cna.xna40.content-pipeline-parity-map/1",
+ "types": {
+  "Microsoft.Xna.Framework.Content.Pipeline.Audio.AudioContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor(System.String, Microsoft.Xna.Framework.Content.Pipeline.Audio.AudioFileType)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Data": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Duration": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:FileName": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:FileType": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Format": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:LoopLength": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:LoopStart": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ConvertFormat(Microsoft.Xna.Framework.Content.Pipeline.Audio.ConversionFormat, Microsoft.Xna.Framework.Content.Pipeline.Audio.ConversionQuality, System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Dispose()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Finalize()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Audio.AudioFileType": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {},
+   "enumValues": {
+    "Wav": {
+     "status": "MISSING",
+     "cna": ""
+    },
+    "Mp3": {
+     "status": "MISSING",
+     "cna": ""
+    },
+    "Wma": {
+     "status": "MISSING",
+     "cna": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Audio.AudioFormat": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "property:AverageBytesPerSecond": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:BitsPerSample": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:BlockAlign": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:ChannelCount": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Format": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:NativeWaveFormat": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:SampleRate": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Audio.ConversionFormat": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {},
+   "enumValues": {
+    "Pcm": {
+     "status": "MISSING",
+     "cna": ""
+    },
+    "Adpcm": {
+     "status": "MISSING",
+     "cna": ""
+    },
+    "WindowsMedia": {
+     "status": "MISSING",
+     "cna": ""
+    },
+    "Xma": {
+     "status": "MISSING",
+     "cna": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Audio.ConversionQuality": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {},
+   "enumValues": {
+    "Low": {
+     "status": "MISSING",
+     "cna": ""
+    },
+    "Medium": {
+     "status": "MISSING",
+     "cna": ""
+    },
+    "Best": {
+     "status": "MISSING",
+     "cna": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.ChildCollection`2": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor(TParent)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ClearItems()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:GetParent(TChild)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:InsertItem(System.Int32, TChild)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:RemoveItem(System.Int32)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:SetItem(System.Int32, TChild)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:SetParent(TChild, TParent)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.ContentBuildLogger": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:LoggerRootDirectory": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:GetCurrentFilename(Microsoft.Xna.Framework.Content.Pipeline.ContentIdentity)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:LogImportantMessage(System.String, System.Object[])": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:LogMessage(System.String, System.Object[])": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:LogWarning(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentIdentity, System.String, System.Object[])": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:PopFile()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:PushFile(System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.ContentIdentity": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constructor:.ctor(System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constructor:.ctor(System.String, System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constructor:.ctor(System.String, System.String, System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:FragmentIdentifier": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:SourceFilename": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:SourceTool": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.ContentImporterAttribute": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor(System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constructor:.ctor(System.String[])": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:CacheImportedData": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:DefaultProcessor": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:DisplayName": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:FileExtensions": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:IntermediateDirectory": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Logger": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:OutputDirectory": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:AddDependency(System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.ContentImporter`1": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.ContentItem": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Identity": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Name": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:OpaqueData": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorAttribute": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:DisplayName": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:BuildConfiguration": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:IntermediateDirectory": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Logger": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:OutputDirectory": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:OutputFilename": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Parameters": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:TargetPlatform": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:TargetProfile": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:AddDependency(System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:AddOutputFile(System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:BuildAndLoadAsset<TInput, TOutput>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<TInput>, System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:BuildAndLoadAsset<TInput, TOutput>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<TInput>, System.String, Microsoft.Xna.Framework.Content.Pipeline.OpaqueDataDictionary, System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:BuildAsset<TInput, TOutput>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<TInput>, System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:BuildAsset<TInput, TOutput>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<TInput>, System.String, Microsoft.Xna.Framework.Content.Pipeline.OpaqueDataDictionary, System.String, System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Convert<TInput, TOutput>(TInput, System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Convert<TInput, TOutput>(TInput, System.String, Microsoft.Xna.Framework.Content.Pipeline.OpaqueDataDictionary)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.ContentProcessor`2": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Process(TInput, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.EffectImporter": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.ExternalReference`1": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constructor:.ctor(System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constructor:.ctor(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentIdentity)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Filename": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.FbxImporter": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.FontDescriptionImporter": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.AlphaTestMaterialContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constant:AlphaFunctionKey": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constant:AlphaKey": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constant:DiffuseColorKey": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constant:ReferenceAlphaKey": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constant:TextureKey": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constant:VertexColorEnabledKey": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Alpha": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:AlphaFunction": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:DiffuseColor": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:ReferenceAlpha": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Texture": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:VertexColorEnabled": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.AnimationChannel": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Count": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "indexer:Item[System.Int32]": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Add(Microsoft.Xna.Framework.Content.Pipeline.Graphics.AnimationKeyframe)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Clear()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Contains(Microsoft.Xna.Framework.Content.Pipeline.Graphics.AnimationKeyframe)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:GetEnumerator()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:IndexOf(Microsoft.Xna.Framework.Content.Pipeline.Graphics.AnimationKeyframe)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Remove(Microsoft.Xna.Framework.Content.Pipeline.Graphics.AnimationKeyframe)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:RemoveAt(System.Int32)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.AnimationChannelDictionary": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.AnimationContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Channels": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Duration": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.AnimationContentDictionary": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.AnimationKeyframe": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor(System.TimeSpan, Microsoft.Xna.Framework.Matrix)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Time": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Transform": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:CompareTo(Microsoft.Xna.Framework.Content.Pipeline.Graphics.AnimationKeyframe)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.BasicMaterialContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constant:AlphaKey": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constant:DiffuseColorKey": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constant:EmissiveColorKey": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constant:SpecularColorKey": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constant:SpecularPowerKey": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constant:TextureKey": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constant:VertexColorEnabledKey": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Alpha": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:DiffuseColor": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:EmissiveColor": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:SpecularColor": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:SpecularPower": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Texture": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:VertexColorEnabled": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constructor:.ctor(System.Int32, System.Int32)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Height": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Width": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Copy(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Copy(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:GetPixelData()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:SetPixelData(System.Byte[])": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ToString()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:TryCopyFrom(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Rectangle)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:TryCopyTo(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Rectangle)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:TryGetFormat(out Microsoft.Xna.Framework.Graphics.SurfaceFormat)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ValidateCopyArguments(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.BoneContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.BoneWeight": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor(System.String, System.Single)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:BoneName": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Weight": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.BoneWeightCollection": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:NormalizeWeights()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:NormalizeWeights(System.Int32)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.DualTextureMaterialContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constant:AlphaKey": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constant:DiffuseColorKey": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constant:Texture2Key": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constant:TextureKey": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constant:VertexColorEnabledKey": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Alpha": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:DiffuseColor": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Texture": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Texture2": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:VertexColorEnabled": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.Dxt1BitmapContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor(System.Int32, System.Int32)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:TryGetFormat(out Microsoft.Xna.Framework.Graphics.SurfaceFormat)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.Dxt3BitmapContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor(System.Int32, System.Int32)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:TryGetFormat(out Microsoft.Xna.Framework.Graphics.SurfaceFormat)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.Dxt5BitmapContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor(System.Int32, System.Int32)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:TryGetFormat(out Microsoft.Xna.Framework.Graphics.SurfaceFormat)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.DxtBitmapContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor(System.Int32)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constructor:.ctor(System.Int32, System.Int32, System.Int32)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:GetPixelData()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:SetPixelData(System.Byte[])": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:TryCopyFrom(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Rectangle)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:TryCopyTo(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Rectangle)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.EffectContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:EffectCode": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.EffectMaterialContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constant:CompiledEffectKey": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constant:EffectKey": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:CompiledEffect": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Effect": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.EnvironmentMapMaterialContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constant:AlphaKey": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constant:DiffuseColorKey": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constant:EmissiveColorKey": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constant:EnvironmentMapAmountKey": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constant:EnvironmentMapKey": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constant:EnvironmentMapSpecularKey": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constant:FresnelFactorKey": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constant:TextureKey": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Alpha": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:DiffuseColor": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:EmissiveColor": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:EnvironmentMap": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:EnvironmentMapAmount": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:EnvironmentMapSpecular": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:FresnelFactor": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Texture": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.FontDescription": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor(System.String, System.Single, System.Single)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constructor:.ctor(System.String, System.Single, System.Single, Microsoft.Xna.Framework.Content.Pipeline.Graphics.FontDescriptionStyle)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constructor:.ctor(System.String, System.Single, System.Single, Microsoft.Xna.Framework.Content.Pipeline.Graphics.FontDescriptionStyle, System.Boolean)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Characters": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:DefaultCharacter": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:FontName": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Size": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Spacing": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Style": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:UseKerning": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.FontDescriptionStyle": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {},
+   "enumValues": {
+    "Regular": {
+     "status": "MISSING",
+     "cna": ""
+    },
+    "Bold": {
+     "status": "MISSING",
+     "cna": ""
+    },
+    "Italic": {
+     "status": "MISSING",
+     "cna": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.GeometryContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Indices": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Material": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Parent": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Vertices": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.GeometryContentCollection": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "method:GetParent(Microsoft.Xna.Framework.Content.Pipeline.Graphics.GeometryContent)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:SetParent(Microsoft.Xna.Framework.Content.Pipeline.Graphics.GeometryContent, Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshContent)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.IndexCollection": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:AddRange(System.Collections.Generic.IEnumerable<System.Int32>)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.IndirectPositionCollection": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "property:Count": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "indexer:Item[System.Int32]": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Contains(Microsoft.Xna.Framework.Vector3)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:CopyTo(Microsoft.Xna.Framework.Vector3[], System.Int32)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:GetEnumerator()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:IndexOf(Microsoft.Xna.Framework.Vector3)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.MaterialContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Textures": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:GetReferenceTypeProperty<T>(System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:GetTexture(System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:GetValueTypeProperty<T>(System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:SetProperty<T>(System.String, T)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:SetTexture(System.String, Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureContent>)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshBuilder": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "property:MergeDuplicatePositions": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:MergePositionTolerance": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Name": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:SwapWindingOrder": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:AddTriangleVertex(System.Int32)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:CreatePosition(Microsoft.Xna.Framework.Vector3)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:CreatePosition(System.Single, System.Single, System.Single)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:CreateVertexChannel<T>(System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:FinishMesh()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:SetMaterial(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MaterialContent)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:SetOpaqueData(Microsoft.Xna.Framework.Content.Pipeline.OpaqueDataDictionary)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:SetVertexChannelData(System.Int32, System.Object)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:StartMesh(System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Geometry": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Positions": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshHelper": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "method:CalculateNormals(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshContent, System.Boolean)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:CalculateTangentFrames(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshContent, System.String, System.String, System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:FindSkeleton(Microsoft.Xna.Framework.Content.Pipeline.Graphics.NodeContent)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:FlattenSkeleton(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BoneContent)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:MergeDuplicatePositions(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshContent, System.Single)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:MergeDuplicateVertices(Microsoft.Xna.Framework.Content.Pipeline.Graphics.GeometryContent)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:MergeDuplicateVertices(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshContent)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:OptimizeForCache(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshContent)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:SwapWindingOrder(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshContent)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:TransformScene(Microsoft.Xna.Framework.Content.Pipeline.Graphics.NodeContent, Microsoft.Xna.Framework.Matrix)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.MipmapChain": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constructor:.ctor(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:InsertItem(System.Int32, Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:SetItem(System.Int32, Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "operator:op_Implicit(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.MipmapChainCollection": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "method:ClearItems()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:InsertItem(System.Int32, Microsoft.Xna.Framework.Content.Pipeline.Graphics.MipmapChain)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:RemoveItem(System.Int32)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:SetItem(System.Int32, Microsoft.Xna.Framework.Content.Pipeline.Graphics.MipmapChain)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.NodeContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:AbsoluteTransform": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Animations": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Children": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Parent": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Transform": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.NodeContentCollection": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "method:GetParent(Microsoft.Xna.Framework.Content.Pipeline.Graphics.NodeContent)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:SetParent(Microsoft.Xna.Framework.Content.Pipeline.Graphics.NodeContent, Microsoft.Xna.Framework.Content.Pipeline.Graphics.NodeContent)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.PixelBitmapContent`1": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constructor:.ctor(System.Int32, System.Int32)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:GetPixel(System.Int32, System.Int32)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:GetPixelData()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:GetRow(System.Int32)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ReplaceColor(T, T)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:SetPixel(System.Int32, System.Int32, T)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:SetPixelData(System.Byte[])": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ToString()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:TryCopyFrom(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Rectangle)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:TryCopyTo(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Rectangle)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:TryGetFormat(out Microsoft.Xna.Framework.Graphics.SurfaceFormat)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.PositionCollection": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.SkinnedMaterialContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constant:AlphaKey": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constant:DiffuseColorKey": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constant:EmissiveColorKey": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constant:SpecularColorKey": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constant:SpecularPowerKey": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constant:TextureKey": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constant:WeightsPerVertexKey": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Alpha": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:DiffuseColor": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:EmissiveColor": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:SpecularColor": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:SpecularPower": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Texture": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:WeightsPerVertex": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.Texture2DContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Mipmaps": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Validate(System.Nullable<Microsoft.Xna.Framework.Graphics.GraphicsProfile>)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.Texture3DContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:GenerateMipmaps(System.Boolean)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Validate(System.Nullable<Microsoft.Xna.Framework.Graphics.GraphicsProfile>)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MipmapChainCollection)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Faces": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ConvertBitmapType(System.Type)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:GenerateMipmaps(System.Boolean)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Validate(System.Nullable<Microsoft.Xna.Framework.Graphics.GraphicsProfile>)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureCubeContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Validate(System.Nullable<Microsoft.Xna.Framework.Graphics.GraphicsProfile>)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureReferenceDictionary": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.VectorConverter": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "method:GetConverter<TInput, TOutput>()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:TryGetSurfaceFormat(System.Type, out Microsoft.Xna.Framework.Graphics.SurfaceFormat)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:TryGetVectorType(Microsoft.Xna.Framework.Graphics.SurfaceFormat, out System.Type)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:TryGetVectorType(Microsoft.Xna.Framework.Graphics.VertexElementFormat, out System.Type)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:TryGetVertexElementFormat(System.Type, out Microsoft.Xna.Framework.Graphics.VertexElementFormat)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.VertexChannel": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "property:Count": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:ElementType": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Name": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "indexer:Item[System.Int32]": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Contains(System.Object)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:CopyTo(System.Array, System.Int32)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:GetEnumerator()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:IndexOf(System.Object)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ReadConvertedContent<TargetType>()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.VertexChannelCollection": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "property:Count": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "indexer:Item[System.Int32]": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "indexer:Item[System.String]": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Add(System.String, System.Type, System.Collections.IEnumerable)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Add<ElementType>(System.String, System.Collections.Generic.IEnumerable<ElementType>)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Clear()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Contains(Microsoft.Xna.Framework.Content.Pipeline.Graphics.VertexChannel)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Contains(System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ConvertChannelContent<TargetType>(System.Int32)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ConvertChannelContent<TargetType>(System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Get<T>(System.Int32)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Get<T>(System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:GetEnumerator()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:IndexOf(Microsoft.Xna.Framework.Content.Pipeline.Graphics.VertexChannel)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:IndexOf(System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Insert(System.Int32, System.String, System.Type, System.Collections.IEnumerable)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Insert<ElementType>(System.Int32, System.String, System.Collections.Generic.IEnumerable<ElementType>)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Remove(Microsoft.Xna.Framework.Content.Pipeline.Graphics.VertexChannel)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Remove(System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:RemoveAt(System.Int32)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.VertexChannelNames": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "method:Binormal(System.Int32)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Color(System.Int32)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:DecodeBaseName(System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:DecodeUsageIndex(System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:EncodeName(Microsoft.Xna.Framework.Graphics.VertexElementUsage, System.Int32)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:EncodeName(System.String, System.Int32)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Normal()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Normal(System.Int32)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Tangent(System.Int32)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:TextureCoordinate(System.Int32)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:TryDecodeUsage(System.String, out Microsoft.Xna.Framework.Graphics.VertexElementUsage)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Weights()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Weights(System.Int32)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.VertexChannel`1": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "property:ElementType": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "indexer:Item[System.Int32]": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Contains(T)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:CopyTo(T[], System.Int32)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:GetEnumerator()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:IndexOf(T)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ReadConvertedContent<TargetType>()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Graphics.VertexContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "property:Channels": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:PositionIndices": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Positions": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:VertexCount": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Add(System.Int32)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:AddRange(System.Collections.Generic.IEnumerable<System.Int32>)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:CreateVertexBuffer()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Insert(System.Int32, System.Int32)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:InsertRange(System.Int32, System.Collections.Generic.IEnumerable<System.Int32>)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:RemoveAt(System.Int32)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:RemoveRange(System.Int32, System.Int32)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.IContentImporter": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "method:Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.IContentProcessor": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "property:InputType": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:OutputType": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Process(System.Object, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.InvalidContentException": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constructor:.ctor(System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constructor:.ctor(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentIdentity)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constructor:.ctor(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentIdentity, System.Exception)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constructor:.ctor(System.String, System.Exception)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:ContentIdentity": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Mp3Importer": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.NamedValueDictionary`1": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Count": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:DefaultSerializerType": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Keys": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Values": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "indexer:Item[System.String]": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Add(System.String, T)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:AddItem(System.String, T)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Clear()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ClearItems()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ContainsKey(System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:GetEnumerator()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Remove(System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:RemoveItem(System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:SetItem(System.String, T)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:TryGetValue(System.String, out T)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.OpaqueDataDictionary": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:DefaultSerializerType": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:AddItem(System.String, System.Object)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ClearItems()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:GetContentAsXml()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:GetValue<T>(System.String, T)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:RemoveItem(System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:SetItem(System.String, System.Object)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.PipelineComponentScanner": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Errors": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:ImporterAttributes": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:ImporterNames": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:ImporterOutputTypes": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:ProcessorAttributes": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:ProcessorInputTypes": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:ProcessorNames": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:ProcessorOutputTypes": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:ProcessorParameters": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Update(System.Collections.Generic.IEnumerable<System.String>)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Update(System.Collections.Generic.IEnumerable<System.String>, System.Collections.Generic.IEnumerable<System.String>)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.PipelineException": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constructor:.ctor(System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constructor:.ctor(System.String, System.Exception)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constructor:.ctor(System.String, System.Object[])": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.ProcessorParameter": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "property:DefaultValue": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Description": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:DisplayName": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:IsEnum": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:PossibleEnumValues": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:PropertyName": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:PropertyType": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.ProcessorParameterCollection": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {}
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Processors.CompiledEffectContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor(System.Byte[])": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:GetEffectCode()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Processors.EffectProcessor": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:DebugMode": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Defines": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.EffectContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Processors.EffectProcessorDebugMode": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {},
+   "enumValues": {
+    "Auto": {
+     "status": "MISSING",
+     "cna": ""
+    },
+    "Debug": {
+     "status": "MISSING",
+     "cna": ""
+    },
+    "Optimize": {
+     "status": "MISSING",
+     "cna": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Processors.FontDescriptionProcessor": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.FontDescription, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Processors.FontTextureProcessor": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:FirstCharacter": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:PremultiplyAlpha": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:TextureFormat": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:GetCharacterForIndex(System.Int32)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.Texture2DContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Processors.MaterialProcessor": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:ColorKeyColor": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:ColorKeyEnabled": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:DefaultEffect": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:GenerateMipmaps": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:PremultiplyTextureAlpha": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:ResizeTexturesToPowerOfTwo": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:TextureFormat": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:BuildEffect(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<Microsoft.Xna.Framework.Content.Pipeline.Graphics.EffectContent>, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:BuildTexture(System.String, Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureContent>, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MaterialContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Processors.MaterialProcessorDefaultEffect": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {},
+   "enumValues": {
+    "BasicEffect": {
+     "status": "MISSING",
+     "cna": ""
+    },
+    "SkinnedEffect": {
+     "status": "MISSING",
+     "cna": ""
+    },
+    "EnvironmentMapEffect": {
+     "status": "MISSING",
+     "cna": ""
+    },
+    "DualTextureEffect": {
+     "status": "MISSING",
+     "cna": ""
+    },
+    "AlphaTestEffect": {
+     "status": "MISSING",
+     "cna": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Processors.ModelBoneContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "property:Children": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Index": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Name": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Parent": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Transform": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Processors.ModelBoneContentCollection": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {}
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Processors.ModelContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "property:Bones": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Meshes": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Root": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Tag": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Processors.ModelMeshContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "property:BoundingSphere": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:MeshParts": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Name": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:ParentBone": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:SourceMesh": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Tag": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Processors.ModelMeshContentCollection": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {}
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Processors.ModelMeshPartContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "property:IndexBuffer": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Material": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:NumVertices": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:PrimitiveCount": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:StartIndex": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Tag": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:VertexBuffer": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:VertexOffset": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Processors.ModelMeshPartContentCollection": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {}
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Processors.ModelProcessor": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:ColorKeyColor": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:ColorKeyEnabled": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:DefaultEffect": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:GenerateMipmaps": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:GenerateTangentFrames": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:PremultiplyTextureAlpha": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:PremultiplyVertexColors": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:ResizeTexturesToPowerOfTwo": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:RotationX": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:RotationY": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:RotationZ": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Scale": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:SwapWindingOrder": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:TextureFormat": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ConvertMaterial(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MaterialContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.NodeContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ProcessGeometryUsingMaterial(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MaterialContent, System.Collections.Generic.IEnumerable<Microsoft.Xna.Framework.Content.Pipeline.Graphics.GeometryContent>, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ProcessVertexChannel(Microsoft.Xna.Framework.Content.Pipeline.Graphics.GeometryContent, System.Int32, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Processors.ModelTextureProcessor": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:ColorKeyColor": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:ColorKeyEnabled": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:GenerateMipmaps": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:ResizeToPowerOfTwo": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:TextureFormat": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Processors.PassThroughProcessor": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Process(System.Object, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Processors.SongContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {}
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Processors.SongProcessor": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Quality": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Process(Microsoft.Xna.Framework.Content.Pipeline.Audio.AudioContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Processors.SoundEffectContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {}
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Processors.SoundEffectProcessor": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Quality": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Process(Microsoft.Xna.Framework.Content.Pipeline.Audio.AudioContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Processors.SpriteFontContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {}
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Processors.SpriteTextureProcessor": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:ColorKeyColor": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:ColorKeyEnabled": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:GenerateMipmaps": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:ResizeToPowerOfTwo": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:TextureFormat": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Processors.TextureProcessor": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:ColorKeyColor": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:ColorKeyEnabled": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:GenerateMipmaps": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:PremultiplyAlpha": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:ResizeToPowerOfTwo": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:TextureFormat": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Processors.TextureProcessorOutputFormat": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {},
+   "enumValues": {
+    "NoChange": {
+     "status": "MISSING",
+     "cna": ""
+    },
+    "Color": {
+     "status": "MISSING",
+     "cna": ""
+    },
+    "DxtCompressed": {
+     "status": "MISSING",
+     "cna": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Processors.VertexBufferContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constructor:.ctor(System.Int32)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:VertexData": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:VertexDeclaration": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:SizeOf(System.Type)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Write(System.Int32, System.Int32, System.Type, System.Collections.IEnumerable)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Write<T>(System.Int32, System.Int32, System.Collections.Generic.IEnumerable<T>)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Processors.VertexDeclarationContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:VertexElements": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:VertexStride": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Processors.VideoProcessor": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:VideoSoundtrackType": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Process(Microsoft.Xna.Framework.Content.Pipeline.VideoContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentCompiler": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "method:GetTypeWriter(System.Type)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentTypeWriter": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor(System.Type)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:CanDeserializeIntoExistingObject": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:TargetType": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:TypeVersion": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:GetRuntimeReader(Microsoft.Xna.Framework.Content.Pipeline.TargetPlatform)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:GetRuntimeType(Microsoft.Xna.Framework.Content.Pipeline.TargetPlatform)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Initialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentCompiler)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ShouldCompressContent(Microsoft.Xna.Framework.Content.Pipeline.TargetPlatform, System.Object)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Write(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentWriter, System.Object)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentTypeWriterAttribute": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentTypeWriter`1": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Write(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentWriter, System.Object)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Write(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentWriter, T)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentWriter": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "property:TargetPlatform": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:TargetProfile": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Dispose(System.Boolean)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Write(Microsoft.Xna.Framework.Color)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Write(Microsoft.Xna.Framework.Matrix)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Write(Microsoft.Xna.Framework.Quaternion)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Write(Microsoft.Xna.Framework.Vector2)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Write(Microsoft.Xna.Framework.Vector3)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Write(Microsoft.Xna.Framework.Vector4)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:WriteExternalReference<T>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<T>)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:WriteObject<T>(T)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:WriteObject<T>(T, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentTypeWriter)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:WriteRawObject<T>(T)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:WriteRawObject<T>(T, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentTypeWriter)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:WriteSharedResource<T>(T)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor(System.Type)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constructor:.ctor(System.Type, System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:CanDeserializeIntoExistingObject": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:TargetType": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:XmlTypeName": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Deserialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateReader, Microsoft.Xna.Framework.Content.ContentSerializerAttribute, System.Object)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Initialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateSerializer)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ObjectIsEmpty(System.Object)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ScanChildren(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateSerializer, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer+ChildCallback, System.Object)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Serialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateWriter, System.Object, Microsoft.Xna.Framework.Content.ContentSerializerAttribute)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer+ChildCallback": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "method:Invoke(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer, System.Object)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializerAttribute": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer`1": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constructor:.ctor(System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Deserialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateReader, Microsoft.Xna.Framework.Content.ContentSerializerAttribute, System.Object)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Deserialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateReader, Microsoft.Xna.Framework.Content.ContentSerializerAttribute, T)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ObjectIsEmpty(System.Object)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ObjectIsEmpty(T)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ScanChildren(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateSerializer, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer+ChildCallback, System.Object)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ScanChildren(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateSerializer, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer+ChildCallback, T)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Serialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateWriter, System.Object, Microsoft.Xna.Framework.Content.ContentSerializerAttribute)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Serialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateWriter, T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateReader": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "property:Serializer": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Xml": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:MoveToElement(System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ReadExternalReference<T>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<T>)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ReadObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ReadObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ReadObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer, T)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ReadObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, T)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ReadRawObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ReadRawObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ReadRawObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer, T)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ReadRawObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, T)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ReadSharedResource<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, System.Action<T>)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:ReadTypeName()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateSerializer": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "method:Deserialize<T>(System.Xml.XmlReader, System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:GetTypeSerializer(System.Type)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Serialize<T>(System.Xml.XmlWriter, T, System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateWriter": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "property:Serializer": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Xml": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:WriteExternalReference<T>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<T>)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:WriteObject<T>(T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:WriteObject<T>(T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:WriteRawObject<T>(T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:WriteRawObject<T>(T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:WriteSharedResource<T>(T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:WriteTypeName(System.Type)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.TargetPlatform": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {},
+   "enumValues": {
+    "Windows": {
+     "status": "MISSING",
+     "cna": ""
+    },
+    "Xbox360": {
+     "status": "MISSING",
+     "cna": ""
+    },
+    "WindowsPhone": {
+     "status": "MISSING",
+     "cna": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Tasks.BuildContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constant:CancelEventNameFormat": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:BuildConfiguration": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:CompressContent": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:ContentProjectGUID": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:IntermediateDirectory": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:IntermediateFiles": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:LoggerRootDirectory": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:OutputContentFiles": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:OutputDirectory": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:PipelineAssemblies": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:PipelineAssemblyDependencies": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:RebuildAll": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:RebuiltContentFiles": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:RootDirectory": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:SourceAssets": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:TargetPlatform": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:TargetProfile": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Execute()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Tasks.BuildXact": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:BuildConfiguration": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:ContentProjectGUID": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:IntermediateDirectory": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:IntermediateFiles": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:LoggerRootDirectory": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:OutputDirectory": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:OutputXactFiles": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:RebuildAll": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:RebuiltXactFiles": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:RootDirectory": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:TargetPlatform": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:TargetProfile": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:XactProjects": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:XnaFrameworkVersion": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Execute()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Tasks.CleanContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:BuildConfiguration": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:ContentProjectGUID": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:IntermediateDirectory": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:OutputDirectory": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:RootDirectory": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:TargetPlatform": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:TargetProfile": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Execute()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.Tasks.GetLastOutputs": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:ContentProjectGUID": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:IntermediateDirectory": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:OutputContentFiles": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Execute()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.TextureImporter": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.VideoContent": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor(System.String)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:BitsPerSecond": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Duration": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Filename": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:FramesPerSecond": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Height": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:VideoSoundtrackType": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "property:Width": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Dispose()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.WavImporter": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.WmaImporter": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.WmvImporter": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.XImporter": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Dispose()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Dispose(System.Boolean)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  },
+  "Microsoft.Xna.Framework.Content.Pipeline.XmlImporter": {
+   "status": "MISSING",
+   "cna": "",
+   "header": "",
+   "note": "",
+   "members": {
+    "constructor:.ctor()": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    },
+    "method:Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)": {
+     "status": "MISSING",
+     "cna": "",
+     "note": ""
+    }
+   }
+  }
+ }
+}
