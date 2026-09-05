@@ -1497,6 +1497,22 @@ namespace CNA::Internal::Renderers::Vulkan
         {
             return pipelinesInstanced3D_.size();
         }
+        /// plan_vulkan.md `VULKAN-395` diagnostic: live entries in the `VkSampler` cache.
+        ///
+        /// The key is not bounded by the XNA enumerations alone -- `MaxMipLevel` is an `int` and
+        /// `MipMapLevelOfDetailBias` a `float`, both caller-supplied -- so "how many samplers has
+        /// this renderer created" is a question a test has to be able to ask.
+        CNAEXT [[nodiscard]] std::size_t GetSamplerCacheSizeEXT() const noexcept
+        {
+            return samplerCache_.size();
+        }
+        /// plan_vulkan.md `VULKAN-395`: the device's own ceiling on live samplers
+        /// (`VkPhysicalDeviceLimits::maxSamplerAllocationCount`). Creating more fails, and until
+        /// this row that failure was a silently substituted white texture.
+        CNAEXT [[nodiscard]] std::uint32_t GetMaxSamplerAllocationCountEXT() const noexcept
+        {
+            return deviceLimits_.maxSamplerAllocationCount;
+        }
         // REMED-GFX-095: live MRT construction/pipeline diagnostics used by the dedicated
         // regression to distinguish a requested multisample target from a silent 1x pass.
         [[nodiscard]] const VulkanMRTProxy* GetCurrentMRTProxyEXT() const noexcept

@@ -1069,6 +1069,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_declared_effect_layout
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plans/plan_vulkan.md VULKAN-395: how large the VkSampler cache can get. Two of its seven key
+        # fields are caller-supplied numbers rather than enumerations, so the key space is not the
+        # few hundred the row assumed.
+        cna_vulkan_test(cna_test_vulkan_sampler_cache_bound
+                        vulkan_sampler_cache_bound_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SamplerCacheBound
+            COMMAND cna_test_vulkan_sampler_cache_bound
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plans/plan_vulkan.md VULKAN-008: capability reporting captured as a checked-in snapshot,
         # read through the GraphicsDevice seam because six of the nineteen members are answered
         # above the renderer. The oracle VULKAN-470 re-verifies against.
