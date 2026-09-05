@@ -300,16 +300,12 @@ namespace
     /**
      * @brief Whether a mipMap=true RenderTarget2D is implemented at all.
      *
-     * WEBGPU declares this unimplemented (plans/plan_webgpu.md WEBGPU-53/54) and throws when the target's
-     * mip chain would have to be regenerated. That predates and is unrelated to texture resolution,
-     * so leg J1 records the boundary there instead of a value.
+     * True everywhere. It was false on WEBGPU while that renderer's `RenderTarget2D`
+     * constructor raised a catchable `std::runtime_error` for `mipMap=true`;
+     * `plans/plan_webgpu.md` `WEBGPU-164` allocates the chain and regenerates it from level 0
+     * on unbind, so the legs below measure a value there rather than a refusal.
      */
-    constexpr bool kMipmappedRenderTargetSupported =
-#if defined(CNA_RENDERER_WEBGPU)
-        false;
-#else
-        true;
-#endif
+    constexpr bool kMipmappedRenderTargetSupported = true;
 
     /**
      * @brief The producer pattern texel at (@p x, @p y), (0, 0) being the TOP-LEFT corner.

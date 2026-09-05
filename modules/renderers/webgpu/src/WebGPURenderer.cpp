@@ -2309,11 +2309,27 @@ namespace CNA::Internal::Renderers::WebGPU
     }
 
     WebGPURenderTargetRenderer::WebGPURenderTargetRenderer(WebGPURenderer& owner, int width, int height,
-                                                          int depthFormat, bool preserveContents)
+                                                          int depthFormat, bool preserveContents,
+                                                          bool mipMap)
         : owner_(&owner), width_(width), height_(height), preserveContents_(preserveContents)
     {
         if (width_ <= 0 || height_ <= 0)
             throw std::invalid_argument("CNA WebGPU: RenderTarget2D dimensions must be positive");
+
+        // WEBGPU-164: the same count the XNA layer already computed with CalculateMipLevels before
+        // it reached this renderer -- halving until both extents are 1 -- so what is allocated here
+        // matches what RenderTarget2D::LevelCount reports rather than contradicting it, which is the
+        // mismatch the old hard refusal existed to avoid.
+        if (mipMap)
+        {
+            levelCount_ = 1;
+            for (int w = width_, h = height_; w > 1 || h > 1; )
+            {
+                w = w > 1 ? w / 2 : 1;
+                h = h > 1 ? h / 2 : 1;
+                ++levelCount_;
+            }
+        }
 
         // Always created in the renderer's colour format (surfaceFormat_), NOT
         // WGPUTextureFormat_RGBA8Unorm (the format every plain WebGPUTextureRenderer always uses)
@@ -2341,7 +2357,7 @@ namespace CNA::Internal::Renderers::WebGPU
         colorDescriptor.dimension = WGPUTextureDimension_2D;
         colorDescriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(width_), static_cast<std::uint32_t>(height_), 1};
         colorDescriptor.format = colorFormat_;
-        colorDescriptor.mipLevelCount = 1;
+        colorDescriptor.mipLevelCount = static_cast<std::uint32_t>(levelCount_);  // WEBGPU-164
         colorDescriptor.sampleCount = 1;
         colorTexture_ = wgpuDeviceCreateTexture(owner_->Device(), &colorDescriptor);
         if (colorTexture_ == nullptr)
@@ -2352,6 +2368,28 @@ namespace CNA::Internal::Renderers::WebGPU
             wgpuTextureRelease(colorTexture_);
             colorTexture_ = nullptr;
             throw std::runtime_error("CNA WebGPU: failed to create RenderTarget2D colour view");
+        }
+        // WEBGPU-164: level 0 alone, for the render pass and the MSAA resolve. On a single-level
+        // target this describes exactly the same texels as colorView_ above; it is a separate view
+        // because a colour attachment may name only one level, while a sampled view must name all
+        // of them.
+        WGPUTextureViewDescriptor level0Descriptor{};
+        level0Descriptor.label = StringView("CNA WebGPU RenderTarget2D Level0 View");
+        level0Descriptor.format = colorFormat_;
+        level0Descriptor.dimension = WGPUTextureViewDimension_2D;
+        level0Descriptor.baseMipLevel = 0;
+        level0Descriptor.mipLevelCount = 1;
+        level0Descriptor.baseArrayLayer = 0;
+        level0Descriptor.arrayLayerCount = 1;
+        level0Descriptor.aspect = WGPUTextureAspect_All;
+        colorLevel0View_ = wgpuTextureCreateView(colorTexture_, &level0Descriptor);
+        if (colorLevel0View_ == nullptr)
+        {
+            wgpuTextureViewRelease(colorView_);
+            wgpuTextureRelease(colorTexture_);
+            colorView_ = nullptr;
+            colorTexture_ = nullptr;
+            throw std::runtime_error("CNA WebGPU: failed to create RenderTarget2D level-0 view");
         }
 
         // WEBGPU-39: map the requested XNA DepthFormat to the exact WGPU depth attachment format,
@@ -2378,6 +2416,7 @@ namespace CNA::Internal::Renderers::WebGPU
             depthTexture_ = wgpuDeviceCreateTexture(owner_->Device(), &depthDescriptor);
             if (depthTexture_ == nullptr)
             {
+                wgpuTextureViewRelease(colorLevel0View_);  // WEBGPU-164
                 wgpuTextureViewRelease(colorView_);
                 wgpuTextureRelease(colorTexture_);
                 colorView_ = nullptr;
@@ -2388,6 +2427,7 @@ namespace CNA::Internal::Renderers::WebGPU
             if (depthView_ == nullptr)
             {
                 wgpuTextureRelease(depthTexture_);
+                wgpuTextureViewRelease(colorLevel0View_);  // WEBGPU-164
                 wgpuTextureViewRelease(colorView_);
                 wgpuTextureRelease(colorTexture_);
                 depthTexture_ = nullptr;
@@ -2418,6 +2458,7 @@ namespace CNA::Internal::Renderers::WebGPU
             {
                 wgpuTextureViewRelease(depthView_);
                 wgpuTextureRelease(depthTexture_);
+                wgpuTextureViewRelease(colorLevel0View_);  // WEBGPU-164
                 wgpuTextureViewRelease(colorView_);
                 wgpuTextureRelease(colorTexture_);
                 depthView_ = nullptr;
@@ -2432,6 +2473,7 @@ namespace CNA::Internal::Renderers::WebGPU
                 wgpuTextureRelease(msaaColorTexture_);
                 wgpuTextureViewRelease(depthView_);
                 wgpuTextureRelease(depthTexture_);
+                wgpuTextureViewRelease(colorLevel0View_);  // WEBGPU-164
                 wgpuTextureViewRelease(colorView_);
                 wgpuTextureRelease(colorTexture_);
                 msaaColorTexture_ = nullptr;
@@ -2450,15 +2492,31 @@ namespace CNA::Internal::Renderers::WebGPU
     {
         // RenderTarget2D::Dispose() (Task 717's own precedent) already refuses to dispose a
         // render target still bound on its GraphicsDevice, so this should never actually trigger
-        // in practice -- kept as defense-in-depth, mirroring VulkanRenderTargetRenderer's own
-        // identical destructor guard.
-        if (owner_ != nullptr && owner_->currentRenderTarget_ == this)
+        // through the public API -- but a stack-allocated target's C++ destructor runs directly and
+        // bypasses that guard, which is exactly what `bound_target_lifetime_test` leg L1 does.
+        //
+        // WEBGPU-164: an MRT set is the case this guard used to get wrong. Clearing
+        // `currentRenderTarget_` alone left `mrtExtraTargets_` holding the SURVIVING slots of a set
+        // whose slot 0 no longer exists, so the queued draws were then dropped -- the survivor came
+        // back empty -- and the next flush would have built an N-attachment pass around a null slot
+        // 0. Flush the set FIRST, while every attachment this pass names is still alive, then drop
+        // the whole binding rather than half of it. Latent until now only because leg L1 needs a
+        // mipped survivor, which this renderer refused to create at all.
+        if (owner_ != nullptr &&
+            (owner_->currentRenderTarget_ == this ||
+             std::find(owner_->mrtExtraTargets_.begin(), owner_->mrtExtraTargets_.end(), this) !=
+                 owner_->mrtExtraTargets_.end()))
+        {
+            owner_->FlushCurrentRenderTarget();
             owner_->currentRenderTarget_ = nullptr;
+            owner_->mrtExtraTargets_.clear();
+        }
         if (msaaColorView_ != nullptr) wgpuTextureViewRelease(msaaColorView_);
         if (msaaColorTexture_ != nullptr) wgpuTextureRelease(msaaColorTexture_);
         if (depthView_ != nullptr) wgpuTextureViewRelease(depthView_);
         if (depthTexture_ != nullptr) wgpuTextureRelease(depthTexture_);
         if (colorView_ != nullptr) wgpuTextureViewRelease(colorView_);
+        if (colorLevel0View_ != nullptr) wgpuTextureViewRelease(colorLevel0View_);  // WEBGPU-164
         if (colorTexture_ != nullptr) wgpuTextureRelease(colorTexture_);
     }
 
@@ -2483,10 +2541,15 @@ namespace CNA::Internal::Renderers::WebGPU
         // silently successful return.
         if (owner_ == nullptr || w <= 0 || h <= 0 || data == nullptr)
             return false;
-        if (level != 0)
-            throw std::invalid_argument("CNA WebGPU: RenderTarget2D.GetData: mip level > 0 is not "
-                                        "supported on this renderer (no mip chain, see "
-                                        "plans/plan_webgpu.md WEBGPU-53/54)");
+        // WEBGPU-164: any level of the chain this target was created with. A level outside it is
+        // still a caller error and still says so.
+        if (level < 0 || level >= levelCount_)
+            throw std::invalid_argument(
+                "CNA WebGPU: RenderTarget2D.GetData: mip level " + std::to_string(level) +
+                " is outside this target's chain of " + std::to_string(levelCount_) +
+                " level(s). A target created with mipMap=false has level 0 only.");
+        const int levelWidth = std::max(1, width_ >> level);
+        const int levelHeight = std::max(1, height_ >> level);
 
         // Mirrors WebGPURenderer::ReadBackbuffer()'s own on-demand-flush pattern -- if
         // this render target is STILL the currently bound target, render whatever has been
@@ -2496,8 +2559,8 @@ namespace CNA::Internal::Renderers::WebGPU
         if (owner_->currentRenderTarget_ == this)
             owner_->RenderPendingDrawsToRenderTarget(const_cast<WebGPURenderTargetRenderer*>(this));
 
-        const auto bytesPerRow = AlignBytesPerRow(static_cast<std::uint32_t>(width_) * 4u);
-        const std::uint64_t bufferSize = static_cast<std::uint64_t>(bytesPerRow) * static_cast<std::uint64_t>(height_);
+        const auto bytesPerRow = AlignBytesPerRow(static_cast<std::uint32_t>(levelWidth) * 4u);
+        const std::uint64_t bufferSize = static_cast<std::uint64_t>(bytesPerRow) * static_cast<std::uint64_t>(levelHeight);
 
         WGPUBufferDescriptor bufferDescriptor{};
         bufferDescriptor.label = StringView("CNA WebGPU RenderTarget2D Readback Buffer");
@@ -2513,7 +2576,7 @@ namespace CNA::Internal::Renderers::WebGPU
 
         WGPUTexelCopyTextureInfo source{};
         source.texture = colorTexture_;
-        source.mipLevel = 0;
+        source.mipLevel = static_cast<std::uint32_t>(level);   // WEBGPU-164
         source.origin = WGPUOrigin3D{0, 0, 0};
         source.aspect = WGPUTextureAspect_All;
 
@@ -2521,9 +2584,10 @@ namespace CNA::Internal::Renderers::WebGPU
         destination.buffer = readbackBuffer;
         destination.layout.offset = 0;
         destination.layout.bytesPerRow = bytesPerRow;
-        destination.layout.rowsPerImage = static_cast<std::uint32_t>(height_);
+        destination.layout.rowsPerImage = static_cast<std::uint32_t>(levelHeight);
 
-        const WGPUExtent3D copySize{static_cast<std::uint32_t>(width_), static_cast<std::uint32_t>(height_), 1};
+        const WGPUExtent3D copySize{static_cast<std::uint32_t>(levelWidth),
+                                    static_cast<std::uint32_t>(levelHeight), 1};
         wgpuCommandEncoderCopyTextureToBuffer(encoder, &source, &destination, &copySize);
 
         WGPUCommandBufferDescriptor commandBufferDescriptor{};
@@ -2568,7 +2632,7 @@ namespace CNA::Internal::Renderers::WebGPU
             {
                 const int sx = x + col;
                 std::uint8_t* d = out + (static_cast<std::size_t>(row) * w + col) * 4;
-                if (sx < 0 || sx >= width_ || sy < 0 || sy >= height_)
+                if (sx < 0 || sx >= levelWidth || sy < 0 || sy >= levelHeight)
                 {
                     d[0] = d[1] = d[2] = d[3] = 0;
                     continue;
@@ -5608,9 +5672,15 @@ namespace CNA::Internal::Renderers::WebGPU
         if (const auto it = mipBlitPipelines_.find(format); it != mipBlitPipelines_.end())
             return it->second;
 
-        std::array<WGPUColorTargetState, 4> mrtColorTargets{};
-        const int mrtColorCount = InitStockColorTargetsEXT(mrtColorTargets);
-        WGPUColorTargetState& target = mrtColorTargets[0];
+        // WEBGPU-164: EXACTLY ONE colour target, always. This used to call
+        // InitStockColorTargetsEXT, which reports the count of the MRT set currently bound for
+        // replay -- but a mip-blit pass has one attachment by construction (one destination mip
+        // level), and this pipeline is cached by FORMAT alone, so a first creation while a
+        // two-target MRT set happened to be bound baked a two-target pipeline and then reused it
+        // for every later single-attachment blit: "the RenderPass uses textures with formats
+        // [Bgra8Unorm] but the RenderPipeline uses [Bgra8Unorm, Bgra8Unorm]". Latent until a mipped
+        // target could be part of an MRT set, which is what this task made possible.
+        WGPUColorTargetState target{};
         target.format = format;
         // REMED-GFX-077: internal mipmap-blit utility pipeline — not a game draw, so it is
         // intentionally unaffected by the game's BlendState.ColorWriteChannels/MultiSampleMask.
@@ -5618,8 +5688,8 @@ namespace CNA::Internal::Renderers::WebGPU
         WGPUFragmentState fragment{};
         fragment.module = mipBlitShader_;
         fragment.entryPoint = StringView("fs_main");
-        fragment.targetCount = static_cast<std::size_t>(mrtColorCount);
-        fragment.targets = mrtColorTargets.data();
+        fragment.targetCount = 1;
+        fragment.targets = &target;
 
         WGPURenderPipelineDescriptor pipeline{};
         pipeline.label = StringView("CNA WebGPU MipBlit Pipeline");
@@ -8178,6 +8248,21 @@ namespace CNA::Internal::Renderers::WebGPU
         pendingBindGroupReleases_.clear();
         pendingBufferReleases_.clear();
 
+        // WEBGPU-164: regenerate each attached target's mip chain from its just-rendered (and,
+        // under MSAA, just-resolved) level 0 -- FNA3D's ResolveTarget does exactly this on unbind,
+        // and the cube sibling below already does it per face. Ordered after the submit above, so
+        // the downsample cascade samples a finished level 0. In each target's own colorFormat_, not
+        // RGBA8Unorm. EVERY slot of an MRT set, not only slot 0: a mipped target in slot 1 is as
+        // much a written attachment as slot 0 is, and leaving its chain stale would make what a
+        // later sample reads depend on which slot the game happened to bind it in.
+        const auto regenerate = [this](WebGPURenderTargetRenderer* rt) {
+            if (rt != nullptr && rt->LevelCount() > 1)
+                GenerateMipsForLayer(rt->ColorTexture(), 0, rt->GetWidth(), rt->GetHeight(),
+                                     rt->LevelCount(), rt->ColorFormat());
+        };
+        regenerate(target);
+        for (WebGPURenderTargetRenderer* extra : mrtExtraTargets_) regenerate(extra);
+
         // REMED-GFX-159: ReplayDrawsInOrder() clears the ordered stream and all eleven family
         // vectors together at its own tail -- the vectors have to outlive the whole walk now, so
         // no family may drop its own commands part-way through it.
@@ -8680,18 +8765,12 @@ namespace CNA::Internal::Renderers::WebGPU
     std::unique_ptr<IRenderTargetRenderer> WebGPURenderer::CreateRenderTarget2D(
         int w, int h, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
-        // WEBGPU-53/54: mip-chain regeneration (mipMap=true) is not implemented on this renderer
-        // yet -- throwing here (a clear "genuinely unsupported, not a silent degrade" error, matching
-        // CHECKLIST.md's Draco-import convention of a clear error over quietly under-delivering) is
-        // deliberately preferred
-        // over silently creating a single-level target while RenderTarget2D::RenderTarget2D()'s
-        // own CalculateMipLevels() has already told the XNA layer to expect a full mip chain --
-        // that mismatch would let Texture2D::SetData/GetData(level>0, ...) silently write into or
-        // read from nothing.
-        if (mipMap)
-            throw std::runtime_error("CNA WebGPU: RenderTarget2D mip-chain regeneration "
-                                     "(mipMap=true) is not implemented on this renderer yet -- see "
-                                     "plans/plan_webgpu.md WEBGPU-53/54");
+        // WEBGPU-164: mipMap=true used to throw here. The throw was honest rather than wrong -- a
+        // single-level target while RenderTarget2D's own CalculateMipLevels() had already told the
+        // XNA layer to expect a chain would let GetData(level>0) read from nothing -- but it
+        // refused a normal XNA constructor. The target now allocates the chain it was asked for and
+        // regenerates levels 1.. from level 0 on unbind, which is FNA3D's ResolveTarget timing and
+        // what the cube target (WEBGPU-114) already does per face.
         // WEBGPU-58: the per-instance requested multiSampleCount argument is intentionally NOT
         // read here -- WebGPURenderTargetRenderer's own constructor unconditionally mirrors this
         // renderer's CURRENT global sampleCount_ instead (see that class's own top-of-class doc
@@ -8701,7 +8780,8 @@ namespace CNA::Internal::Renderers::WebGPU
         // FNA3D_GetMaxMultiSampleCount's real-clamped-value contract -- 0 whenever the renderer has
         // no MSAA active, exactly as before this task.
         (void) multiSampleCount;
-        return std::make_unique<WebGPURenderTargetRenderer>(*this, w, h, depthFormat, preserveContents);
+        return std::make_unique<WebGPURenderTargetRenderer>(*this, w, h, depthFormat,
+                                                           preserveContents, mipMap);
     }
 
     void WebGPURenderer::SetRenderTarget2D(IRenderTargetRenderer* rt)

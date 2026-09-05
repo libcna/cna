@@ -220,7 +220,7 @@ namespace CNA::Internal::Renderers::WebGPU
     {
     public:
         WebGPURenderTargetRenderer(WebGPURenderer& owner, int width, int height,
-                                  int depthFormat, bool preserveContents);
+                                  int depthFormat, bool preserveContents, bool mipMap = false);
         ~WebGPURenderTargetRenderer() override;
 
         WebGPURenderTargetRenderer(const WebGPURenderTargetRenderer&) = delete;
@@ -246,16 +246,30 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] WGPUTextureView View() const override { return colorView_; }
         [[nodiscard]] WebGPUSampledTextureEXT Sampled() const override { return {colorView_, sampled_}; }
         [[nodiscard]] WGPUTextureView DepthView() const { return depthView_; }
+        /**
+         * @brief WEBGPU-164: this target's mip-chain length; 1 unless it was created with mipMap.
+         *
+         * `RenderPendingDrawsToRenderTarget` regenerates levels 1.. from the just-rendered level 0
+         * when this is greater than one, which is FNA3D's `ResolveTarget` timing and the same rule
+         * `WebGPURenderTargetCubeRenderer` already follows per face.
+         */
+        [[nodiscard]] int LevelCount() const { return levelCount_; }
+        /** @brief WEBGPU-164: the colour texture itself, for the mip-regeneration cascade. */
+        [[nodiscard]] WGPUTexture ColorTexture() const { return colorTexture_; }
         [[nodiscard]] bool PreserveContents() const { return preserveContents_; }
         [[nodiscard]] int GetMultiSampleCount() const override { return appliedMultiSampleCount_; }
         /// WEBGPU-58: the actual render-pass colour attachment to draw into -- the multisampled
         /// texture's view when this instance is multisampled, otherwise the same single-sample
         /// colorView_ that View() returns (identical to before MSAA existed).
-        [[nodiscard]] WGPUTextureView ColorAttachmentView() const { return msaaColorView_ != nullptr ? msaaColorView_ : colorView_; }
+        /// WEBGPU-164: `colorLevel0View_`, not `colorView_`. A render-pass colour attachment must
+        /// name exactly one mip level, and `colorView_` spans the whole chain so it can be SAMPLED.
+        /// They are the same view's worth of texels on a single-level target, which is why this
+        /// distinction did not exist before mipped targets did.
+        [[nodiscard]] WGPUTextureView ColorAttachmentView() const { return msaaColorView_ != nullptr ? msaaColorView_ : colorLevel0View_; }
         /// WEBGPU-58: the render pass's resolveTarget -- colorView_ when multisampled (wgpu-native
         /// resolves into it automatically as the pass ends), or nullptr otherwise (no resolve
         /// needed/possible for a single-sample attachment).
-        [[nodiscard]] WGPUTextureView ResolveTargetView() const { return msaaColorView_ != nullptr ? colorView_ : nullptr; }
+        [[nodiscard]] WGPUTextureView ResolveTargetView() const { return msaaColorView_ != nullptr ? colorLevel0View_ : nullptr; }
         /// REMED-GFX-102: exact colour-attachment format captured by this target object. Sprite
         /// pipeline identity uses format compatibility, never this target object's identity.
         [[nodiscard]] WGPUTextureFormat ColorFormat() const { return colorFormat_; }
@@ -271,7 +285,12 @@ namespace CNA::Internal::Renderers::WebGPU
         bool preserveContents_ = false;
         WGPUTextureFormat colorFormat_ = WGPUTextureFormat_Undefined;
         WGPUTexture colorTexture_ = nullptr;
+        /// The SAMPLING view: every mip level, so a shader reading this target sees the whole chain.
         WGPUTextureView colorView_ = nullptr;
+        /// WEBGPU-164: the RENDER-ATTACHMENT (and MSAA resolve) view, level 0 only.
+        WGPUTextureView colorLevel0View_ = nullptr;
+        /// WEBGPU-164: `CalculateMipLevels(width, height)` when created with mipMap, else 1.
+        int levelCount_ = 1;
         /// WEBGPU-39: mapped depth attachment format (Undefined = None, no depth texture created).
         WGPUTextureFormat depthFormat_ = WGPUTextureFormat_Depth24PlusStencil8;
         bool depthHasStencil_ = true;

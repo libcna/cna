@@ -28,6 +28,8 @@ set(CNA_PARITY_FIXTURES
     # WEBGPU-172: one vertex split across two VertexBufferBindings is the same picture as one
     # buffer, and each binding's VertexOffset is converted with its own stride.
     multi_stream_split
+    # WEBGPU-164: a mipMap=true RenderTarget2D has a real, regenerated, readable chain.
+    render_target_mip
     # WEBGPU-153: FillMode::WireFrame draws edges and leaves the interior empty.
     fill_mode_wireframe
     # WEBGPU-161: SamplerState.MaxMipLevel selects which mip level a sample comes from.

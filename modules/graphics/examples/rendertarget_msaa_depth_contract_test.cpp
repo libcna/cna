@@ -172,18 +172,12 @@ namespace
     /**
      * @brief Whether a render target may be built with a mip chain here.
      *
-     * False on WEBGPU, whose `RenderTarget2D` constructor raises
-     * `std::runtime_error("... mip-chain regeneration (mipMap=true) is not implemented on this
-     * renderer yet -- see plans/plan_webgpu.md WEBGPU-53/54")`. That is a deliberate, separately tracked
-     * boundary and -- importantly for this file -- it is a CATCHABLE public refusal rather than a
-     * process abort, which is exactly the contract leg M14 asserts there.
+     * True everywhere. It was false on WEBGPU while that renderer's `RenderTarget2D` constructor
+     * raised `std::runtime_error("... mip-chain regeneration (mipMap=true) is not implemented ...")`;
+     * `plans/plan_webgpu.md` `WEBGPU-164` implemented the chain, so leg M14 measures a mipped
+     * multisampled target there instead of measuring the shape of its refusal.
      */
-    constexpr bool kMipMappedTargetSupported =
-#if defined(CNA_RENDERER_WEBGPU)
-        false;
-#else
-        true;
-#endif
+    constexpr bool kMipMappedTargetSupported = true;
 
     /** @brief 0, or a power of two. */
     constexpr bool IsLegalSampleCount(int n)

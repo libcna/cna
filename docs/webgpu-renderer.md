@@ -400,8 +400,9 @@ actually pointed at one — fixed by introducing `IWebGPUSamplable` (mirroring
 helper everywhere a texture pointer is stored, so an incompatible type now safely resolves to
 "unbound" instead of undefined behaviour.
 
-Mip-chain regeneration is deliberately deferred, not silently under-delivered:
-`CreateRenderTarget2D()` throws a clear error for `mipMap=true`. MSAA (`WEBGPU-58`) is implemented
+Mip-chain regeneration was deferred here until `WEBGPU-164` (2026-09-05) — `CreateRenderTarget2D()`
+threw a clear error for `mipMap=true` rather than under-delivering a chain the XNA layer had already
+promised. It is implemented now: see *Mip-mapped RenderTarget2D* below. MSAA (`WEBGPU-58`) is implemented
 and verified end-to-end as of 2026-07-18: the renderer-global `sampleCount_`,
 `ApplyMultiSampleCount()`'s empirically-probed clamped-return-value contract, and
 `WebGPURenderTargetRenderer`'s unconditional mirroring of that global sample count all work, and a
@@ -734,6 +735,40 @@ Verified by the two shared multi-stream oracles (`OrdinaryDrawMultiStreamTests`,
 `InstancedDrawMultiStreamTests`, 48 cases) and by the `multi_stream_split` parity fixture, whose
 EasyGL and WebGPU frames are byte-identical.
 
+## Mip-mapped RenderTarget2D (2026-09-05, `WEBGPU-164`)
+
+`RenderTarget2D(..., mipMap: true)` used to throw. It now allocates the chain `CalculateMipLevels`
+declares and regenerates levels 1.. from level 0 **when the target is unbound** — FNA3D's
+`ResolveTarget` timing, and the same rule `WebGPURenderTargetCubeRenderer` (`WEBGPU-114`) already
+followed per face. The cascade is the existing `GenerateMipsForLayer` render-pass downsample, so no
+new machinery was added; MSAA composes the way it does for the cube target, because the resolve
+writes level 0 and the cascade then reads it.
+
+Two details are worth naming. The colour texture now needs **two views**: `colorView_` spans the
+whole chain and is what a shader samples, while a new `colorLevel0View_` names exactly one level and
+is what the render pass attaches (and what an MSAA pass resolves into) — a colour attachment may name
+only one mip level. And `GetData(level)` reads that level's own dimensions rather than the target's,
+so a 2×2 level returns four texels instead of a level-0-sized copy.
+
+Implementing this exposed two latent bugs, both unreachable before a mipped target could be part of
+an MRT set. The shared mip-blit pipeline is cached **by format alone** but was built with
+`InitStockColorTargetsEXT`'s attachment count — the count of whatever MRT set happened to be bound —
+so a first creation while a two-target set was bound baked a two-target pipeline and reused it for
+every later single-attachment blit. It is now always exactly one target, which is what a blit pass
+has by construction. And `~WebGPURenderTargetRenderer` cleared `currentRenderTarget_` while leaving
+`mrtExtraTargets_` holding the surviving slots of a set whose slot 0 no longer existed, dropping the
+queued draws and leaving the next flush to build an N-attachment pass around a null slot 0; the
+destructor now flushes the set first, while every attachment is still alive, and then drops the
+binding whole. Mip regeneration also runs for **every** slot of an MRT set rather than slot 0 alone.
+
+Verified by `WebGPU_RenderTarget2D` Check G (a 32×32 target painted in two halves; level 4 keeps
+both), by the `render_target_mip` parity fixture — a 64×64 target painted in four quadrants, with
+`GetData` asserted at both ends of the chain and the target sampled back both unrestricted and pinned
+to its coarsest level, **byte-identical to EasyGL, max diff 0** — and by the three shared
+render-target suites (`rendertarget_msaa_mip_readback`, `rendertarget_msaa_depth_contract`,
+`rendertarget_first_use`) whose WebGPU "declares mipped targets unimplemented" declarations were
+deleted rather than left describing a boundary that no longer exists.
+
 ## Important limitations
 
 The desktop feature set now covers 3D (every stock effect, with FNA fog parity), real instancing,
@@ -748,7 +783,6 @@ open** in `plans/plan_webgpu.md`:
   it mirrors the renderer's global sample count instead. Backbuffer and `RenderTarget2D` MSAA otherwise
   work end to end (`WEBGPU-58`, `WebGPU_Msaa` 6/6).
 - **`RenderTargetCube` per-face MSAA** -- ignored; `GetMultiSampleCount()` reports 0 (`WEBGPU-114`).
-- `TextureCube`/`RenderTargetCube` mip regeneration (`mipMap=true` throws on a `RenderTargetCube`).
 
 **Multiple render targets are supported** (`WEBGPU-85`/`86`/`87`): `SupportsCapability(MultipleRenderTargets)`
 reports true, and `SetRenderTargets` binds 2..4 `RenderTarget2D` targets that share width/height/sample
