@@ -155,6 +155,31 @@ namespace Microsoft::Xna::Framework::Input::Touch
         CNAEXT static void setMouseTouchEmulationEnabledEXT(bool value);
 
         /**
+         * @brief Gets whether touch input is currently withheld from the game.
+         *
+         * @note CNAEXT — not part of the XNA `TouchPanel` API. On every real XNA platform a
+         *       visible Guide overlay is drawn and driven by the system shell, which owns the
+         *       screen while it is up, so the game's own touch panel reports nothing behind it.
+         *       CNA renders its Guide overlay inside the game's own Draw(), so that ownership has
+         *       to be expressed explicitly; `Guide` raises and lowers this flag around a pending
+         *       message box or keyboard-input prompt.
+         * @return True while touch input is withheld.
+         */
+        CNAEXT [[nodiscard]] static bool getInputSuppressedEXT();
+
+        /**
+         * @brief Withholds touch input from the game, or resumes delivering it.
+         *
+         * While suppressed, `GetState()` reports no touches and no gesture is queued or
+         * available; any gesture already queued when suppression begins is discarded, so a tap
+         * made while an overlay was up cannot fire the moment it closes.
+         *
+         * @note CNAEXT — see getInputSuppressedEXT().
+         * @param value True to withhold touch input, false to resume delivering it.
+         */
+        CNAEXT static void setInputSuppressedEXT(bool value);
+
+        /**
          * @brief Returns touch panel capabilities.
          * @return The touch panel capabilities.
          */
@@ -252,6 +277,7 @@ namespace Microsoft::Xna::Framework::Input::Touch
         static std::uintptr_t windowHandle_;
         static bool touchDeviceExists_;
         static bool mouseTouchEmulationEnabled_;
+        static bool inputSuppressed_;
 
         static std::queue<GestureSample> gestures_;
         static std::array<TouchLocation, MAX_TOUCHES> touches_;

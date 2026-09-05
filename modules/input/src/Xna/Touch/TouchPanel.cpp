@@ -65,6 +65,7 @@ namespace Microsoft::Xna::Framework::Input::Touch
     std::uintptr_t TouchPanel::windowHandle_ = 0;
     bool TouchPanel::touchDeviceExists_ = false;
     bool TouchPanel::mouseTouchEmulationEnabled_ = false;
+    bool TouchPanel::inputSuppressed_ = false;
 
     std::queue<GestureSample> TouchPanel::gestures_;
     std::array<TouchLocation, TouchPanel::MAX_TOUCHES> TouchPanel::touches_{};
@@ -114,6 +115,23 @@ namespace Microsoft::Xna::Framework::Input::Touch
     bool TouchPanel::getIsGestureAvailableProperty()
     {
         return !gestures_.empty();
+    }
+
+    bool TouchPanel::getInputSuppressedEXT()
+    {
+        return inputSuppressed_;
+    }
+
+    void TouchPanel::setInputSuppressedEXT(bool value)
+    {
+        inputSuppressed_ = value;
+        if (value)
+        {
+            // Drop what is already queued as well: a tap made while the overlay was up must not
+            // reach the game one frame after it closes.
+            std::queue<GestureSample> empty;
+            gestures_.swap(empty);
+        }
     }
 
     std::uintptr_t TouchPanel::getWindowHandleProperty()
@@ -172,6 +190,11 @@ namespace Microsoft::Xna::Framework::Input::Touch
     {
         validTouches_.clear();
 
+        if (inputSuppressed_)
+        {
+            return TouchCollection(validTouches_);
+        }
+
         for (const TouchLocation& touch : touches_)
         {
             if (touch.getStateProperty() != TouchLocationState::Invalid)
@@ -228,6 +251,10 @@ namespace Microsoft::Xna::Framework::Input::Touch
 
     void TouchPanel::EnqueueGesture(const GestureSample& gesture)
     {
+        if (inputSuppressed_)
+        {
+            return;
+        }
         gestures_.push(gesture);
     }
 

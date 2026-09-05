@@ -3,7 +3,9 @@
 #include <any>
 
 #include "CNA/Platform/CurrentPlatform.hpp"
+#include "CNA/Platform/CannedMouse.hpp"
 #include "CNA/Platform/PlatformException.hpp"
+#include "CNA/Platform/PlatformTestDecorator.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
@@ -16,6 +18,9 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
+#include "Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp"
+#include "Microsoft/Xna/Framework/Input/Touch/GestureType.hpp"
+#include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
@@ -414,6 +419,22 @@ TEST(GuideTest, HasPendingKeyboardInputEXTReflectsRealState) {
     delete result;
 }
 
+// The keyboard prompt is the sample's other overlay (the high-score name entry) and owns the
+// screen the same way.
+TEST(GuideTest, AVisibleKeyboardPromptWithholdsTouchInputFromTheGame) {
+    using Microsoft::Xna::Framework::Input::Touch::TouchPanel;
+
+    KeyboardInputGuard guard;
+    TouchPanel::setInputSuppressedEXT(false);
+    System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
+        PlayerIndex::One, "title", "description", "", System::AsyncCallback{}, std::any{}
+    );
+    EXPECT_TRUE(TouchPanel::getInputSuppressedEXT());
+    PressEnter();
+    EXPECT_FALSE(TouchPanel::getInputSuppressedEXT());
+    delete result;
+}
+
 TEST(GuideTest, IsVisibleReflectsPendingKeyboardInput) {
     KeyboardInputGuard guard;
     EXPECT_FALSE(Guide::getIsVisibleProperty());
@@ -564,6 +585,71 @@ namespace {
     };
 }
 
+// SAMPLE-065: on every real XNA platform the shell owns the screen while a Guide overlay is up,
+// so the game's touch panel reports nothing behind it. CNA draws the overlay inside the game's
+// own Draw(), so without this the tap that misses a message-box button falls straight through to
+// whatever the game is drawing underneath -- in NinjAcademy, back onto the menu entry that raised
+// the box, which then raised a second one and terminated on "A message box is already pending."
+TEST(GuideTest, AVisibleMessageBoxWithholdsTouchInputFromTheGame) {
+    using Microsoft::Xna::Framework::Input::Touch::GestureSample;
+    using Microsoft::Xna::Framework::Input::Touch::GestureType;
+    using Microsoft::Xna::Framework::Input::Touch::TouchPanel;
+
+    MessageBoxGuard guard;
+    TouchPanel::setInputSuppressedEXT(false);
+    ASSERT_FALSE(TouchPanel::getInputSuppressedEXT());
+
+    System::IAsyncResult* result = Guide::BeginShowMessageBox(
+        "Load game", "Saved game data detected. Load it?", std::vector<std::string>{"Yes", "No"},
+        0, MessageBoxIcon::None, System::AsyncCallback{}, std::any{}
+    );
+    EXPECT_TRUE(TouchPanel::getInputSuppressedEXT());
+
+    // A tap behind the overlay reaches neither the gesture queue nor the touch state.
+    TouchPanel::EnqueueGesture(GestureSample(
+        GestureType::Tap, System::TimeSpan::Zero,
+        Microsoft::Xna::Framework::Vector2(470.0f, 300.0f), Microsoft::Xna::Framework::Vector2::Zero,
+        Microsoft::Xna::Framework::Vector2::Zero, Microsoft::Xna::Framework::Vector2::Zero));
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+    EXPECT_EQ(0u, TouchPanel::GetState().getCountProperty());
+
+    // Answering it hands input straight back.
+    Guide::SimulateMessageBoxClickEXT(1);
+    EXPECT_FALSE(TouchPanel::getInputSuppressedEXT());
+    TouchPanel::EnqueueGesture(GestureSample(
+        GestureType::Tap, System::TimeSpan::Zero,
+        Microsoft::Xna::Framework::Vector2(470.0f, 300.0f), Microsoft::Xna::Framework::Vector2::Zero,
+        Microsoft::Xna::Framework::Vector2::Zero, Microsoft::Xna::Framework::Vector2::Zero));
+    EXPECT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    (void)TouchPanel::ReadGesture();
+    delete result;
+}
+
+// A gesture queued before the overlay went up must not fire the frame it comes down either.
+TEST(GuideTest, ARaisedOverlayDiscardsGesturesAlreadyQueued) {
+    using Microsoft::Xna::Framework::Input::Touch::GestureSample;
+    using Microsoft::Xna::Framework::Input::Touch::GestureType;
+    using Microsoft::Xna::Framework::Input::Touch::TouchPanel;
+
+    MessageBoxGuard guard;
+    TouchPanel::setInputSuppressedEXT(false);
+    TouchPanel::EnqueueGesture(GestureSample(
+        GestureType::Tap, System::TimeSpan::Zero,
+        Microsoft::Xna::Framework::Vector2(10.0f, 10.0f), Microsoft::Xna::Framework::Vector2::Zero,
+        Microsoft::Xna::Framework::Vector2::Zero, Microsoft::Xna::Framework::Vector2::Zero));
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+
+    System::IAsyncResult* result = Guide::BeginShowMessageBox(
+        "title", "text", std::vector<std::string>{"OK"}, 0, MessageBoxIcon::None,
+        System::AsyncCallback{}, std::any{}
+    );
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+
+    Guide::SimulateMessageBoxClickEXT(0);
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+    delete result;
+}
+
 TEST(GuideTest, HasPendingMessageBoxDefaultsFalse) {
     MessageBoxGuard guard;
     EXPECT_FALSE(Guide::getHasPendingMessageBoxEXTProperty());
@@ -669,6 +755,101 @@ TEST(GuideTest, RenderSimulateClickEndCycleReturnsCorrectButtonIndex) {
     std::optional<int> selected = Guide::EndShowMessageBox(result);
     ASSERT_TRUE(selected.has_value());
     EXPECT_EQ(*selected, 2);
+    delete result;
+}
+
+namespace
+{
+    /** @brief A platform whose mouse a test scripts, so a real click can drive the overlay. */
+    class CannedMousePlatform final : public CNA::Platform::Testing::PlatformTestDecorator
+    {
+    public:
+        [[nodiscard]] CNA::Platform::IPlatformMouse* GetMouse() override { return &mouse_; }
+
+        /** @brief Publishes a mouse state. @param x Client x. @param y Client y. @param down Left held. */
+        void Press(const int x, const int y, const bool down)
+        {
+            CNA::Platform::MouseSnapshot snapshot;
+            snapshot.x = x;
+            snapshot.y = y;
+            snapshot.buttons = down ? std::uint8_t{1} : std::uint8_t{0};
+            mouse_.SetPending(snapshot);
+            mouse_.Update();
+        }
+
+    private:
+        CNA::Platform::Testing::CannedMouse mouse_;
+    };
+}
+
+// SAMPLE-065: the click that answers the box is a press AND a release. Lifting the touch withhold
+// on the press let the release arrive as a tap on whatever the box had been covering: in
+// NinjAcademy that was the loading screen behind it, which then started a second content load and
+// displayed a game that had already consumed the saved state, so "resume" showed a score of 0.
+TEST(GuideTest, TheClickThatAnswersAMessageBoxDoesNotAlsoReachTheGame) {
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+    using Microsoft::Xna::Framework::Input::Touch::GestureSample;
+    using Microsoft::Xna::Framework::Input::Touch::GestureType;
+    using Microsoft::Xna::Framework::Input::Touch::TouchPanel;
+
+    MessageBoxGuard guard;
+    GraphicsDevice device;
+    SpriteBatch spriteBatch(device);
+    auto font = MakeSimpleTestFont(device);
+    Texture2D whitePixel = MakeWhitePixelTexture(device);
+
+    CannedMousePlatform platform;
+    CNA::Platform::Testing::ScopedCurrentPlatform installed(platform);
+
+    TouchPanel::setInputSuppressedEXT(false);
+    System::IAsyncResult* result = Guide::BeginShowMessageBox(
+        "Load game", "Saved game data detected. Load it?", std::vector<std::string>{"Yes", "No"},
+        0, MessageBoxIcon::None, System::AsyncCallback{}, std::any{}
+    );
+
+    const auto render = [&]
+    {
+        spriteBatch.Begin();
+        Guide::RenderPendingMessageBoxEXT(device, spriteBatch, *font, whitePixel);
+        spriteBatch.End();
+    };
+
+    // The box sizes itself to its own text, so find a button by clicking rather than by
+    // reproducing that arithmetic here. Each attempt releases first, because the overlay answers
+    // on the press edge.
+    const int width = device.getViewportProperty().getWidthProperty();
+    const int height = device.getViewportProperty().getHeightProperty();
+    for (int y = 0; y < height && Guide::getHasPendingMessageBoxEXTProperty(); y += 4)
+    {
+        for (int x = 0; x < width && Guide::getHasPendingMessageBoxEXTProperty(); x += 4)
+        {
+            platform.Press(x, y, false);
+            render();
+            platform.Press(x, y, true);
+            render();
+        }
+    }
+    ASSERT_FALSE(Guide::getHasPendingMessageBoxEXTProperty())
+        << "no position in the viewport answered the message box";
+
+    // The button is still held: the rest of that click belongs to the overlay, not the game.
+    EXPECT_TRUE(TouchPanel::getInputSuppressedEXT());
+    TouchPanel::EnqueueGesture(GestureSample(
+        GestureType::Tap, System::TimeSpan::Zero, Vector2(10.0f, 10.0f), Vector2::Zero,
+        Vector2::Zero, Vector2::Zero));
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+
+    // Releasing it hands input back on the next frame the game pumps the overlay.
+    platform.Press(0, 0, false);
+    render();
+    EXPECT_FALSE(TouchPanel::getInputSuppressedEXT());
+    TouchPanel::EnqueueGesture(GestureSample(
+        GestureType::Tap, System::TimeSpan::Zero, Vector2(10.0f, 10.0f), Vector2::Zero,
+        Vector2::Zero, Vector2::Zero));
+    EXPECT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    (void)TouchPanel::ReadGesture();
+
     delete result;
 }
 
