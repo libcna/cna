@@ -175,21 +175,54 @@ protected:
             dev.setBlendStateProperty(BlendState::Opaque);
         }
 
-        // ---- C: the MultiSampleMask sweep --------------------------------------------------------
-        const std::size_t beforeMask = Renderer().GetGraphicsPipelineCacheEntryCountEXT();
-        for (int i = 0; i < kSweep; ++i) {
-            BlendState bs;
-            bs.setMultiSampleMaskProperty(static_cast<int>(0xFFFFFFFFu >> (i % 31)));
-            dev.setBlendStateProperty(bs);
-            DrawQuad(dev, vb);
+        // ---- C: the MultiSampleMask axis ---------------------------------------------------------
+        // VULKAN-162 narrowed the key's mask term to the bits that can matter, so this is an
+        // ASSERTION now rather than the measurement VULKAN-394 left it as. A non-MSAA pipeline has
+        // exactly one sample, so every mask with bit 0 set rasterizes identically and must share
+        // one pipeline; a mask with bit 0 CLEAR draws nothing and is genuinely a second one.
+        {
+            const std::size_t before = Renderer().GetGraphicsPipelineCacheEntryCountEXT();
+            for (int i = 0; i < kSweep; ++i) {
+                BlendState bs;
+                // Distinct 32-bit values, all with bit 0 set: at one sample they are the same mask.
+                bs.setMultiSampleMaskProperty(static_cast<int>(0xFFFFFFFFu >> (i % 31)));
+                dev.setBlendStateProperty(bs);
+                DrawQuad(dev, vb);
+            }
+            const std::size_t after = Renderer().GetGraphicsPipelineCacheEntryCountEXT();
+            dev.setBlendStateProperty(BlendState::Opaque);
+            check(after - before <= 1,
+                  "C 32 distinct MultiSampleMask values collapse onto one non-MSAA pipeline",
+                  std::to_string(before) + " -> " + std::to_string(after) + " for "
+                      + std::to_string(kSweep)
+                      + " distinct masks (before VULKAN-162 this was +30)");
         }
-        const std::size_t afterMask = Renderer().GetGraphicsPipelineCacheEntryCountEXT();
-        dev.setBlendStateProperty(BlendState::Opaque);
-        std::printf("[INFO] C %d distinct MultiSampleMask values: %zu -> %zu pipelines (+%zu)\n",
-                    kSweep, beforeMask, afterMask, afterMask - beforeMask);
-        std::fflush(stdout);
-        check(true, "C MultiSampleMask sweep measured", std::to_string(afterMask - beforeMask)
-                  + " new pipelines for " + std::to_string(kSweep) + " distinct masks");
+
+        // A mask that clears bit 0 is not the same mask, even at one sample: it selects no sample
+        // and draws nothing. It must get its own pipeline, or the narrowing has merged two
+        // pipelines that really do differ -- which is the failure mode a size-only assertion above
+        // would happily accept.
+        {
+            const std::size_t before = Renderer().GetGraphicsPipelineCacheEntryCountEXT();
+            BlendState bs;
+            bs.setMultiSampleMaskProperty(static_cast<int>(0xFFFFFFFEu));   // bit 0 clear
+            dev.setBlendStateProperty(bs);
+            dev.Clear(Color(0, 0, 0, 255));
+            DrawQuad(dev, vb);
+            const std::size_t after = Renderer().GetGraphicsPipelineCacheEntryCountEXT();
+            Color got(0, 0, 0, 0);
+            const Rectangle at(kSize / 2, kSize / 2, 1, 1);
+            dev.GetBackBufferData(&at, &got, 0, 1);
+            dev.setBlendStateProperty(BlendState::Opaque);
+            check(after > before,
+                  "C a mask that clears sample 0 still gets its own pipeline",
+                  std::to_string(before) + " -> " + std::to_string(after));
+            check(got.getRProperty() < 32 && got.getGProperty() < 32 && got.getBProperty() < 32,
+                  "C and it masks the only sample away, so nothing is drawn",
+                  "(" + std::to_string(got.getRProperty()) + ","
+                      + std::to_string(got.getGProperty()) + ","
+                      + std::to_string(got.getBProperty()) + "), expected the cleared colour");
+        }
 
         // ---- D: the declaration axis -------------------------------------------------------------
         // Distinct declarations must get distinct pipelines -- that is VULKAN-146's whole point, and
