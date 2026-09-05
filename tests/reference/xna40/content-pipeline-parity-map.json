@@ -48,9 +48,9 @@
      "note": ""
     },
     "method:ConvertFormat(Microsoft.Xna.Framework.Content.Pipeline.Audio.ConversionFormat, Microsoft.Xna.Framework.Content.Pipeline.Audio.ConversionQuality, System.String)": {
-     "status": "MISSING",
+     "status": "HOST_SUBSTITUTION",
      "cna": "ConvertFormat(ConversionFormat, ConversionQuality, const std::string&)",
-     "note": "declared and refusing; the conversions themselves are XNAPP-161."
+     "note": "Pcm at Best is XNA's own answer byte for byte, and the resampled qualities match its rate, depth, byte rate, data length, loop and duration; the sample values are this host's resampler, because XNA's lives inside its native helper. Adpcm is an in-house MS-ADPCM encoder writing XNA's own block geometry -- format 2, four bits, 70 bytes per channel per block of 128 frames, and the 32-byte extension with the seven standard coefficient pairs -- at the source rate, where XNA's encoder also resamples to a rate of its own choosing. WindowsMedia and Xma are refused by name: neither encoder exists outside the platform that owns it, and neither could be measured."
     },
     "method:Dispose()": {
      "status": "EXACT_EQUIVALENT",

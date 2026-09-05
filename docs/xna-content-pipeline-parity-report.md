@@ -11,7 +11,7 @@
 | Quantity | Implemented (EXACT + SEMANTIC + HOST_SUBSTITUTION) | EXTERNAL_BLOCKED | MISSING |
 |---|---|---:|---:|
 | public/protected types | 108/128 (84.4%) | 0 | 20 |
-| public/protected members | 614/705 (87.1%) | 0 | 91 |
+| public/protected members | 615/705 (87.2%) | 0 | 90 |
 | enum values | 27/27 (100.0%) | 0 | 0 |
 | built-in importers | 0/10 (0.0%) | 0 | 10 |
 | built-in processors | 9/12 (75.0%) | 0 | 3 |
@@ -20,7 +20,7 @@
 Status vocabulary: EXACT_EQUIVALENT, SEMANTIC_EQUIVALENT (spelling differs, capability identical; note says how),
 HOST_SUBSTITUTION (Microsoft-host mechanism replaced; note says how), EXTERNAL_BLOCKED (note names the
 unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 43, SEMANTIC_EQUIVALENT 64, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 20.
-Member status by value: EXACT_EQUIVALENT 396, SEMANTIC_EQUIVALENT 213, HOST_SUBSTITUTION 5, EXTERNAL_BLOCKED 0, MISSING 91.
+Member status by value: EXACT_EQUIVALENT 396, SEMANTIC_EQUIVALENT 213, HOST_SUBSTITUTION 6, EXTERNAL_BLOCKED 0, MISSING 90.
 
 Rules applied mechanically: 3 delegate plumbing members are listed in section 7 and not counted; 3 exception
 serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serialization has no C++ counterpart).
@@ -264,7 +264,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `AudioContent` | property | `Format` | SEMANTIC_EQUIVALENT | `getFormatProperty()` | the format is a shared pointer, which is the lifetime a .NET reference gives it. |
 | `AudioContent` | property | `LoopLength` | EXACT_EQUIVALENT | `getLoopLengthProperty()` |  |
 | `AudioContent` | property | `LoopStart` | EXACT_EQUIVALENT | `getLoopStartProperty()` |  |
-| `AudioContent` | method | `ConvertFormat(Microsoft.Xna.Framework.Content.Pipeline.Audio.ConversionFormat, Microsoft.Xna.Framework.Content.Pipeline.Audio.ConversionQuality, System.String)` | MISSING | `ConvertFormat(ConversionFormat, ConversionQuality, const std::string&)` | declared and refusing; the conversions themselves are XNAPP-161. |
+| `AudioContent` | method | `ConvertFormat(Microsoft.Xna.Framework.Content.Pipeline.Audio.ConversionFormat, Microsoft.Xna.Framework.Content.Pipeline.Audio.ConversionQuality, System.String)` | HOST_SUBSTITUTION | `ConvertFormat(ConversionFormat, ConversionQuality, const std::string&)` | Pcm at Best is XNA's own answer byte for byte, and the resampled qualities match its rate, depth, byte rate, data length, loop and duration; the sample values are this host's resampler, because XNA's lives inside its native helper. Adpcm is an in-house MS-ADPCM encoder writing XNA's own block geometry -- format 2, four bits, 70 bytes per channel per block of 128 frames, and the 32-byte extension with the seven standard coefficient pairs -- at the source rate, where XNA's encoder also resamples to a rate of its own choosing. WindowsMedia and Xma are refused by name: neither encoder exists outside the platform that owns it, and neither could be measured. |
 | `AudioContent` | method | `Dispose()` | EXACT_EQUIVALENT | `Dispose()` |  |
 | `AudioContent` | method | `Finalize()` | SEMANTIC_EQUIVALENT | `~AudioContent()` | a destructor stands for the finalizer: the samples are released when the object goes, without a garbage collector to wait for. |
 | `AudioFileType` | enum value | `Wav = 0` | EXACT_EQUIVALENT | `AudioFileType::Wav` |  |

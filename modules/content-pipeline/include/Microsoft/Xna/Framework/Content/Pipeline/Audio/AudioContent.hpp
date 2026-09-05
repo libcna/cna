@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -117,6 +118,36 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Audio
          * @throws InvalidContentException when the content has been disposed.
          */
         void RequireNotDisposed(const std::string& member) const;
+
+        /**
+         * @brief The rate a quality asks for, as a fraction of the source's own.
+         *
+         * @param sourceRate The source sample rate.
+         * @param quality The requested quality.
+         * @return The target sample rate.
+         */
+        [[nodiscard]] static SharpRuntime::intcs TargetRate(SharpRuntime::intcs sourceRate,
+                                                            ConversionQuality quality);
+
+        /**
+         * @brief Rewrites the samples at another rate, keeping the depth and the channel count.
+         *
+         * @param targetRate The rate to resample to.
+         */
+        void Resample(SharpRuntime::intcs targetRate);
+
+        /** @brief Rewrites the samples as MS-ADPCM at the rate they already have. */
+        void EncodeAdpcm();
+
+        /**
+         * @brief The samples as signed PCM16, whatever depth they are stored in.
+         *
+         * @return The interleaved frames.
+         */
+        [[nodiscard]] std::vector<std::int16_t> SamplesAsPcm16() const;
+
+        /** @brief Sets the duration from the data length and the byte rate. */
+        void RecomputeDuration();
 
         std::string fileName_;
         AudioFileType fileType_ = AudioFileType::Wav;
