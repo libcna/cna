@@ -913,6 +913,37 @@ reports 0 **and renders a binary diagonal**, while a sibling requesting 4 report
 diagonal**. Two live targets, two sample counts, both the property and the edge pixels — which also
 exercises the re-measured module-reuse path for real.
 
+## Device loss: what the pin actually does (2026-09-06, `WEBGPU-180`)
+
+Measured against **wgpu-native v29.0.1.1**, not read from the header, by
+`spikes/webgpu-devicelost-spike/` — which carries the full transcript and the reasoning. The four
+facts a caller needs:
+
+**A device replace is renderer-internal.** `WGPUInstance`, `WGPUAdapter` and `WGPUSurface` all
+survive it: a second device requested from the same adapter can re-configure the *same* surface and
+acquire from it. Recovery never has to reach back into `CNA::Platform` or rebuild the window.
+
+**A lost device must be gated BEFORE the acquire, never after.** `wgpuSurfaceGetCurrentTexture` on a
+surface whose device is lost does not return a failure status — it panics inside wgpu-native
+(`Parent device is lost`) and, because the panic cannot unwind across the C ABI, **aborts the
+process**. There is nothing to read and nothing to catch. `CanBeginDrawEXT()` returning false is what
+stands between a lost device and that abort; it is a safety mechanism, not a convenience for `Game`.
+
+**On native, the device-lost callback never fires.** For an application-initiated `wgpuDeviceDestroy`
+this pin delivers no `WGPUDeviceLostCallback` at all — not under `AllowProcessEvents` with the
+instance pumped, not with `wgpuDevicePoll` on the device, not on releasing the last reference, and
+not under `AllowSpontaneous`. The renderer therefore raises `RendererDeviceEvent` itself at the point
+it destroys the device. This is a statement about v29.0.1.1, not about WebGPU; a later pin may change
+it, and the spike is the check.
+
+**On the web target it does fire, and that asymmetry is deliberate.** `emdawnwebgpu` bridges the real
+`GPUDevice.lost` promise to the C callback, and `wgpuDeviceDestroy` is literally `device.destroy()`,
+which the WebGPU specification resolves with reason `"destroyed"`. The browser's reason vocabulary is
+narrower than the header's — only `Unknown` and `Destroyed` are reachable from a browser reason
+string. This half is derived from the port's own JavaScript, not confirmed in a browser; that
+confirmation belongs with `WEBGPU-196`.
+
+
 ## Important limitations
 
 The desktop feature set now covers 3D (every stock effect, with FNA fog parity), real instancing,
