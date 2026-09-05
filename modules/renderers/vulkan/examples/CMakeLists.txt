@@ -98,6 +98,12 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_DrawInstanced_3Instances COMMAND cna_test_vulkan_instanced
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-396: what the per-one-time-command vkQueueWaitIdle costs, measured
+        cna_vulkan_test(cna_test_vulkan_one_time_command_cost
+                        vulkan_one_time_command_cost_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_OneTimeCommandCost COMMAND cna_test_vulkan_one_time_command_cost
+            TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-400: is the EasyGL-documented "full-backbuffer SpriteBatch draw before
         # a 3D draw breaks the frame" finding (migration-guide known issues, Task 933) present here?
         # Renderer-neutral source so the same file can answer it for any family.

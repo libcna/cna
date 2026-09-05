@@ -1785,6 +1785,33 @@ namespace CNA::Internal::Renderers::Vulkan
             return retiredBufferCountEXT_;
         }
         /**
+         * @brief Test-only: how many one-time command submissions this renderer has performed.
+         *
+         * plans/plan_vulkan.md `VULKAN-396`. Every texture upload, layout transition and readback
+         * goes through `EndOneTimeCommands`, which submits and then waits the queue, so this is
+         * also the number of `vkQueueWaitIdle` calls those paths cost.
+         *
+         * @return Number of completed one-time command submissions since construction.
+         */
+        CNAEXT [[nodiscard]] uint64_t GetOneTimeCommandCountEXT() const noexcept
+        {
+            return oneTimeCommandCountEXT_;
+        }
+        /**
+         * @brief Test-only: total nanoseconds spent inside those `vkQueueWaitIdle` calls.
+         *
+         * plans/plan_vulkan.md `VULKAN-396`, whose whole point is that this must be measured
+         * rather than argued about. Device-dependent by nature: a test may print and bound it,
+         * but failing on an absolute duration would make the suite report the GPU rather than the
+         * renderer.
+         *
+         * @return Accumulated wait time in nanoseconds.
+         */
+        CNAEXT [[nodiscard]] uint64_t GetOneTimeCommandWaitNanosEXT() const noexcept
+        {
+            return oneTimeCommandWaitNanosEXT_;
+        }
+        /**
          * @brief Test-only: how many deferred 3D draws are still queued for the next submit.
          *
          * plans/plan_vulkan.md `VULKAN-026`. The queue is cleared inside `RecordCommandBuffer`,
@@ -1966,6 +1993,10 @@ namespace CNA::Internal::Renderers::Vulkan
         uint64_t deviceWaitIdleCountEXT_ = 0;
         /// plan_vulkan.md VULKAN-392: VkBuffer handles handed to the retirement queue.
         uint64_t retiredBufferCountEXT_ = 0;
+        /// plan_vulkan.md VULKAN-396: one-time command submissions, and the time their queue
+        /// waits cost. Both device-dependent in magnitude, both structural in ratio.
+        uint64_t oneTimeCommandCountEXT_ = 0;
+        uint64_t oneTimeCommandWaitNanosEXT_ = 0;
         /// The single funnel for vkDeviceWaitIdle, so the counter above cannot miss one.
         void DeviceWaitIdleEXT();
         uint64_t frameSubmitCountEXT_      = 0;

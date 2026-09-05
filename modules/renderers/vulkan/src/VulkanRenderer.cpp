@@ -19,6 +19,7 @@ namespace {
 #include <bit>
 #include <algorithm>
 #include <cassert>
+#include <chrono>
 #include <cstdarg>
 #include <cstdint>
 #include <type_traits>
@@ -9595,7 +9596,16 @@ namespace CNA::Internal::Renderers::Vulkan
         si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         si.commandBufferCount = 1; si.pCommandBuffers = &cb;
         vkQueueSubmit(graphicsQueue_, 1, &si, VK_NULL_HANDLE);
+        // plan_vulkan.md VULKAN-396: the wait is timed rather than argued about. It is here
+        // because the command buffer is freed on the next line and freeing one still executing is
+        // illegal -- so the question this instrumentation answers is not "why is it here" but
+        // "what does it cost", which no amount of reading can settle.
+        const auto waitBegin = std::chrono::steady_clock::now();
         vkQueueWaitIdle(graphicsQueue_);
+        oneTimeCommandWaitNanosEXT_ += static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now() - waitBegin).count());
+        ++oneTimeCommandCountEXT_;
         vkFreeCommandBuffers(device_, commandPool_, 1, &cb);
     }
 
