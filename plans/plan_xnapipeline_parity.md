@@ -557,7 +557,7 @@ named in the row). ID ranges: Phase 0 `001–009`, 1 `010–019`, 2 `020–029`,
 | `XNAPP-003` | Audit the canonical engine and confirm one pipeline, one XNB writer, and the build-time/runtime module split (§1 boundaries; `RegisterBuiltInContentPipeline` in `tools/content/content.cpp` is the single registration point). | [x] |
 | `XNAPP-004` | Environment audit for oracles (§3.2): SDK, runtime, Wine .NET 4.0, mcs, BuildContent precedent. Recorded in memory so a later session cannot regress to "unavailable". | [x] |
 | `XNAPP-005` | Configure the stable build directory `cmake-build-debug/` (Ninja, Debug, HEADLESS, SDL3, ccache, `CNA_TEST_DISPLAY=:99`, `CNA_ENABLE_DRACO=OFF`, `CNA_SHARP_RUNTIME_ROOT` = the `next`-era `sharp-runtimenext` checkout because `develop`'s sharp-runtime lacks `StoragePaths::SetIsolatedStorageRootOverride`). | [x] |
-| `XNAPP-006` | Record the test baseline of `CnaContentTests` and `CnaContentPipelineTests` in this environment before any change (§33). | [ ] |
+| `XNAPP-006` | Record the test baseline of `CnaContentTests` and `CnaContentPipelineTests` in this environment before any change (§33). | [x] Recorded in §33.1; needed a one-line fix to a test that did not compile at HEAD (`CnbDocument::Parse` arity). |
 | `XNAPP-007` | Create this plan; index it in `plans/README.md`. | [x] |
 | `XNAPP-008` | Provenance gate: a test that fails if any Microsoft binary (`Microsoft.Xna.*.dll`, `XnaNative.dll`, `*.exe` from the SDK) or a Microsoft font appears under `tests/`, `tools/`, `modules/`, `docs/`. | [ ] |
 
@@ -795,7 +795,26 @@ module) with `src/Xna/`; `ContentSerializer*` descriptors in `modules/content/in
 
 ### 33.1 Test baseline (this environment)
 
-*To be recorded by `XNAPP-006` once `cmake-build-debug` finishes building.*
+Build dir `cmake-build-debug/` (`Debug`, Ninja, `CNA_PLATFORM=SDL3`, `CNA_GRAPHICS_RENDERER=HEADLESS`,
+`CNA_AUDIO_PLATFORM=SDL3`, FreeType 2.13.3, FFmpeg, Zstandard, Draco off), both binaries run from
+the repository root with `env -u WAYLAND_DISPLAY DISPLAY=:99 SDL_VIDEODRIVER=x11`, 2026-09-05, at
+`92fb589f9` (after the one-line `XNAPP-006` test-compile fix, before any façade code):
+
+```text
+CnaContentTests:          1794 run   1779 passed   19 skipped   6 failed
+CnaContentPipelineTests:   112 run    112 passed    0 skipped   0 failed
+```
+
+All 6 failures are environmental and reproduce on the unmodified tree:
+
+| Failure group | Count | Cause |
+|---|---:|---|
+| `CnbTextureContentManagerTest.ATexture3DCnb…`, `…ATextureCubeCnb…`, `CnbTextureCubeProducerTest.…ThroughContentManager`, `CnjCapabilityMatrixTest.TextureCubeDelegatesViaSourceFile`, `CnjTexture3DTest.LoadsRealCnjFixture` | 5 | `HEADLESS` has no `TextureCube`/`Texture3D` storage, so `ContentManager::Load` of those roots refuses |
+| `ContentManagerVideoXnbTest.TheObjectReferencedFormLoadsToTheSameValuesAsTheInlineOne` | 1 | Video-fixture load through this configuration's FFmpeg backend; unrelated to content building |
+
+The 19 skips are the suite's own prerequisites (a >2 GiB file, an optional real-world glTF asset,
+renderer-gated readers). **Any new failure outside these 6 is a regression.** The audio-device
+failures `plan_xnapipeline.md` §0.4 recorded do not occur here: this machine has a sound device.
 
 ### 33.2 Handoff
 
