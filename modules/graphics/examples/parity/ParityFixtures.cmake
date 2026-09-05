@@ -66,6 +66,8 @@ set(CNA_PARITY_FIXTURES
     # WEBGPU-178: SpriteBatch's state family -- sort modes and layerDepth, the Begin transform,
     # blend-state leakage between batches, and render-target-local sprite coordinates.
     sprite_state
+    # WEBGPU-179: a SpriteFont string, a newline and a default-character substitution reach pixels.
+    sprite_font
     # WEBGPU-153: FillMode::WireFrame draws edges and leaves the interior empty.
     fill_mode_wireframe
     # WEBGPU-161: SamplerState.MaxMipLevel selects which mip level a sample comes from.
