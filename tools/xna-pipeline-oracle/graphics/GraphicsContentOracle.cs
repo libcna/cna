@@ -1840,6 +1840,106 @@ namespace Cna.Xna40.GraphicsOracle
                 return "accepted";
             });
 
+            // ---- Font processors -------------------------------------------------------------------
+            Record("fontprocessor/description_arial", () =>
+            {
+                var processor = new FontDescriptionProcessor();
+                var description = new FontDescription("Arial", 12.0f, 0.0f);
+                description.Characters.Add('A');
+                description.Characters.Add('B');
+                description.Identity = new ContentIdentity("font.spritefont");
+                SpriteFontContent font = processor.Process(description, new RecordingProcessorContext());
+                return "type=" + font.GetType().Name + " properties=" + Properties(font);
+            });
+            Record("fontprocessor/description_missing_font", () =>
+            {
+                var processor = new FontDescriptionProcessor();
+                var description = new FontDescription("No Such Font At All", 12.0f, 0.0f);
+                description.Characters.Add('A');
+                description.Identity = new ContentIdentity("font.spritefont");
+                processor.Process(description, new RecordingProcessorContext());
+                return "accepted";
+            });
+            Record("fontprocessor/description_no_characters", () =>
+            {
+                var processor = new FontDescriptionProcessor();
+                var description = new FontDescription("Arial", 12.0f, 0.0f);
+                description.Identity = new ContentIdentity("font.spritefont");
+                processor.Process(description, new RecordingProcessorContext());
+                return "accepted";
+            });
+            Record("fontprocessor/description_null", () =>
+            {
+                var processor = new FontDescriptionProcessor();
+                processor.Process(null, new RecordingProcessorContext());
+                return "accepted";
+            });
+            Record("fontprocessor/texture_null", () =>
+            {
+                var processor = new FontTextureProcessor();
+                processor.Process(null, new RecordingProcessorContext());
+                return "accepted";
+            });
+            Record("fontprocessor/texture_character_for_index", () =>
+            {
+                var processor = new FontTextureProcessor();
+                var method = typeof(FontTextureProcessor).GetMethod("GetCharacterForIndex", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
+                var results = new StringBuilder();
+                foreach (int index in new int[] { 0, 1, 5 })
+                {
+                    if (results.Length > 0) results.Append(' ');
+                    object value = method.Invoke(processor, new object[] { index });
+                    results.Append(index + "=U+" + ((int)(char)value).ToString("X4"));
+                }
+                return results.ToString();
+            });
+            Record("fontprocessor/texture_first_character_set", () =>
+            {
+                var processor = new FontTextureProcessor();
+                processor.FirstCharacter = 'a';
+                var method = typeof(FontTextureProcessor).GetMethod("GetCharacterForIndex", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
+                return "0=U+" + ((int)(char)method.Invoke(processor, new object[] { 0 })).ToString("X4") +
+                       " 3=U+" + ((int)(char)method.Invoke(processor, new object[] { 3 })).ToString("X4");
+            });
+            Record("fontprocessor/texture_strip", () =>
+            {
+                // Two glyphs separated by the delimiter colour XNA looks for, whatever that is:
+                // the message tells us when it is wrong.
+                var processor = new FontTextureProcessor();
+                var texture = new Texture2DContent();
+                var bitmap = new PixelBitmapContent<Color>(8, 4);
+                for (int y = 0; y < 4; y++)
+                    for (int x = 0; x < 8; x++)
+                        bitmap.SetPixel(x, y, new Color(255, 0, 255, 255));
+                for (int y = 1; y < 3; y++)
+                {
+                    bitmap.SetPixel(1, y, Color.White);
+                    bitmap.SetPixel(2, y, Color.White);
+                    bitmap.SetPixel(5, y, Color.White);
+                }
+                texture.Mipmaps.Add(bitmap);
+                SpriteFontContent font = processor.Process(texture, new RecordingProcessorContext());
+                return "type=" + font.GetType().Name;
+            });
+            Record("fontprocessor/texture_empty", () =>
+            {
+                var processor = new FontTextureProcessor();
+                var texture = new Texture2DContent();
+                texture.Mipmaps.Add(new PixelBitmapContent<Color>(4, 4));
+                processor.Process(texture, new RecordingProcessorContext());
+                return "accepted";
+            });
+            Record("fontprocessor/spritefont_content_members", () =>
+            {
+                var builder = new StringBuilder();
+                foreach (System.Reflection.MemberInfo member in typeof(SpriteFontContent).GetMembers(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.DeclaredOnly))
+                {
+                    if (builder.Length > 0) builder.Append(' ');
+                    builder.Append(member.MemberType + ":" + member.Name);
+                }
+                return builder.Length == 0 ? "none" : builder.ToString();
+            });
+
             // ---- TextureReferenceDictionary ------------------------------------------------------
             Record("texturereferencedictionary/default", () => { var d = new TextureReferenceDictionary(); return "count=" + d.Count + " ToString=\"" + d + "\""; });
 

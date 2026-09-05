@@ -483,6 +483,16 @@
   {"case": "effectprocessor/defines_used", "result": "bytes=476"},
   {"case": "effectprocessor/defines_missing", "result": "throws InvalidContentException: Errors compiling undefined.fx:\r\nundefined.fx(1,31): error X3004: undeclared identifier 'TINT'\r\nundefined.fx(1,24): error X3080: 'PS': function must return a value"},
   {"case": "effectprocessor/null_input", "result": "throws ArgumentNullException: Value cannot be null.\r\nParameter name: input"},
+  {"case": "fontprocessor/description_arial", "result": "type=SpriteFontContent properties="},
+  {"case": "fontprocessor/description_missing_font", "result": "throws InvalidContentException: The font family \"No Such Font At All\" could not be found. Please ensure the requested font is installed, and is a TrueType or OpenType font."},
+  {"case": "fontprocessor/description_no_characters", "result": "throws InvalidContentException: Cannot build this font: there were no glyphs found to build."},
+  {"case": "fontprocessor/description_null", "result": "throws ArgumentNullException: Value cannot be null.\r\nParameter name: input"},
+  {"case": "fontprocessor/texture_null", "result": "throws ArgumentNullException: Value cannot be null.\r\nParameter name: input"},
+  {"case": "fontprocessor/texture_character_for_index", "result": "0=U+0020 1=U+0021 5=U+0025"},
+  {"case": "fontprocessor/texture_first_character_set", "result": "0=U+0061 3=U+0064"},
+  {"case": "fontprocessor/texture_strip", "result": "type=SpriteFontContent"},
+  {"case": "fontprocessor/texture_empty", "result": "throws InvalidContentException: Cannot build this font: there were no glyphs found to build."},
+  {"case": "fontprocessor/spritefont_content_members", "result": "none"},
   {"case": "texturereferencedictionary/default", "result": "count=0 ToString=\"Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureReferenceDictionary\""}
  ]
 }

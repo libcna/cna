@@ -13,6 +13,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <iomanip>
 #include <vector>
 #include <filesystem>
 #include <fstream>
@@ -31,6 +32,7 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/StockMaterials.hpp"
 #include "CNA/Content/Pipeline/EffectCompilerService.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/EffectProcessor.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Processors/FontProcessors.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/MaterialProcessor.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/PassThroughProcessor.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/ProcessorEnums.hpp"
@@ -950,4 +952,137 @@ TEST(XnaEffectProcessor, RefusalsMatchXna)
                          return std::string(refusing.Process(nullptr, none) == nullptr ? "null" : "compiled");
                      }),
               Expected("effectprocessor/null_input"));
+}
+
+TEST(XnaFontProcessors, DefaultsMatchXna)
+{
+    const Processors::FontTextureProcessor processor;
+    static const std::map<TextureProcessorOutputFormat, std::string> formats = {
+        {TextureProcessorOutputFormat::NoChange, "NoChange"},
+        {TextureProcessorOutputFormat::Color, "Color"},
+        {TextureProcessorOutputFormat::DxtCompressed, "DxtCompressed"}};
+    // The oracle prints the character itself, which for the default is a space.
+    EXPECT_EQ(std::string("FirstCharacter=") +
+                  static_cast<char>(processor.getFirstCharacterProperty()) + " PremultiplyAlpha=" +
+                  (processor.getPremultiplyAlphaProperty() ? "True" : "False") + " TextureFormat=" +
+                  formats.at(processor.getTextureFormatProperty()),
+              Expected("processor/FontTextureProcessor"));
+
+    EXPECT_EQ("first=U+" + [&]
+              {
+                  std::ostringstream text;
+                  text << std::uppercase << std::hex << std::setfill('0') << std::setw(4)
+                       << static_cast<int>(processor.getFirstCharacterProperty());
+                  return text.str();
+              }(),
+              Expected("processor/font_texture_first_character"));
+
+    EXPECT_EQ("", Expected("processor/FontDescriptionProcessor"));
+}
+
+TEST(XnaFontProcessors, GlyphIndicesFollowFirstCharacter)
+{
+    /** @brief A processor that exposes the protected mapping, as a derived processor would. */
+    class Probe : public Processors::FontTextureProcessor
+    {
+    public:
+        using FontTextureProcessor::GetCharacterForIndex;
+    };
+    const auto codePoint = [](SharpRuntime::charcs value)
+    {
+        std::ostringstream text;
+        text << std::uppercase << std::hex << std::setfill('0') << std::setw(4) << static_cast<int>(value);
+        return "U+" + text.str();
+    };
+    Probe probe;
+    EXPECT_EQ("0=" + codePoint(probe.GetCharacterForIndex(0)) + " 1=" + codePoint(probe.GetCharacterForIndex(1)) +
+                  " 5=" + codePoint(probe.GetCharacterForIndex(5)),
+              Expected("fontprocessor/texture_character_for_index"));
+
+    Probe moved;
+    moved.setFirstCharacterProperty(u'a');
+    EXPECT_EQ("0=" + codePoint(moved.GetCharacterForIndex(0)) + " 3=" + codePoint(moved.GetCharacterForIndex(3)),
+              Expected("fontprocessor/texture_first_character_set"));
+}
+
+TEST(XnaFontProcessors, RefusalsMatchXna)
+{
+    EXPECT_EQ(Result([]
+                     {
+                         Processors::FontDescriptionProcessor processor;
+                         RecordingContext context;
+                         return std::string(processor.Process(nullptr, context) == nullptr ? "null" : "built");
+                     }),
+              Expected("fontprocessor/description_null"));
+
+    EXPECT_EQ(Result([]
+                     {
+                         Processors::FontTextureProcessor processor;
+                         RecordingContext context;
+                         return std::string(processor.Process(nullptr, context) == nullptr ? "null" : "built");
+                     }),
+              Expected("fontprocessor/texture_null"));
+
+    EXPECT_EQ(Result([]
+                     {
+                         Processors::FontDescriptionProcessor processor;
+                         RecordingContext context;
+                         auto description = std::make_shared<Graphics::FontDescription>("Arial", 12.0f, 0.0f);
+                         (void)processor.Process(description, context);
+                         return std::string("accepted");
+                     }),
+              Expected("fontprocessor/description_no_characters"));
+
+    EXPECT_EQ(Result([]
+                     {
+                         Processors::FontDescriptionProcessor processor;
+                         RecordingContext context;
+                         auto description =
+                             std::make_shared<Graphics::FontDescription>("No Such Font At All", 12.0f, 0.0f);
+                         description->getCharactersProperty().insert(u'A');
+                         (void)processor.Process(description, context);
+                         return std::string("accepted");
+                     }),
+              Expected("fontprocessor/description_missing_font"));
+
+    EXPECT_EQ(Result([]
+                     {
+                         Processors::FontTextureProcessor processor;
+                         RecordingContext context;
+                         auto texture = std::make_shared<Texture2DContent>();
+                         texture->getMipmapsProperty().Add(std::make_shared<PixelBitmapContent<Color>>(4, 4));
+                         (void)processor.Process(texture, context);
+                         return std::string("accepted");
+                     }),
+              Expected("fontprocessor/texture_empty"));
+}
+
+TEST(XnaFontProcessors, ATextureStripBecomesOneGlyphPerRun)
+{
+    Processors::FontTextureProcessor processor;
+    auto texture = std::make_shared<Texture2DContent>();
+    auto bitmap = std::make_shared<PixelBitmapContent<Color>>(8, 4);
+    for (int y = 0; y < 4; ++y)
+    {
+        for (int x = 0; x < 8; ++x)
+        {
+            bitmap->SetPixel(x, y, Color(255, 0, 255, 255));
+        }
+    }
+    for (int y = 1; y < 3; ++y)
+    {
+        bitmap->SetPixel(1, y, Color(255, 255, 255, 255));
+        bitmap->SetPixel(2, y, Color(255, 255, 255, 255));
+        bitmap->SetPixel(5, y, Color(255, 255, 255, 255));
+    }
+    texture->getMipmapsProperty().Add(bitmap);
+    RecordingContext context;
+    const std::shared_ptr<Processors::SpriteFontContent> font = processor.Process(texture, context);
+    ASSERT_NE(font, nullptr);
+    EXPECT_EQ("type=SpriteFontContent", Expected("fontprocessor/texture_strip"));
+    // What XNA answered is a SpriteFontContent with nothing public to compare, so the two runs of
+    // non-border columns are asserted here rather than against the corpus.
+    EXPECT_EQ(font->Data().characters.size(), 2u);
+    EXPECT_EQ(font->Data().characters[0], processor.getFirstCharacterProperty());
+    EXPECT_EQ(font->Data().glyphBounds.size(), 2u);
 }

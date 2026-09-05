@@ -2962,58 +2962,58 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Processors.FontDescriptionProcessor": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::FontDescriptionProcessor",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/FontProcessors.hpp",
+   "note": "Rasterizes through the canonical CNA::Content::Pipeline::RasterizeFontDescription and resolves the font the way the canonical importer does, which is a filename match rather than a family-table lookup -- so a font installed under another filename is not found where XNA would find it. The refusals are XNA's own, measured (fontprocessor/description_missing_font, /description_no_characters, /description_null).",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "FontDescriptionProcessor()",
      "note": ""
     },
     "method:Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.FontDescription, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Process(const std::shared_ptr<FontDescription>&, ContentProcessorContext&)",
+     "note": "content travels as an owned shared_ptr; the rasterization is the canonical one rather than XNA's own, so the atlas layout differs while the refusals do not."
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Processors.FontTextureProcessor": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::FontTextureProcessor",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/FontProcessors.hpp",
+   "note": "Defaults and the character mapping are measured (processor/FontTextureProcessor, fontprocessor/texture_character_for_index, /texture_first_character_set). What Process produces cannot be compared beyond its boundary, because SpriteFontContent publishes nothing: the two measured outcomes -- a delimited strip is accepted, a texture with no glyphs is refused with XNA's message -- are reproduced, and the glyph packing is CNA's own.",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "FontTextureProcessor()",
      "note": ""
     },
     "property:FirstCharacter": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getFirstCharacterProperty() / setFirstCharacterProperty()",
      "note": ""
     },
     "property:PremultiplyAlpha": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getPremultiplyAlphaProperty() / setPremultiplyAlphaProperty()",
      "note": ""
     },
     "property:TextureFormat": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getTextureFormatProperty() / setTextureFormatProperty()",
      "note": ""
     },
     "method:GetCharacterForIndex(System.Int32)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "GetCharacterForIndex(intcs)",
+     "note": "protected in both; FirstCharacter plus the index, measured."
     },
     "method:Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.Texture2DContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Process(const std::shared_ptr<Texture2DContent>&, ContentProcessorContext&)",
+     "note": "content travels as an owned shared_ptr; the glyph runs are found against the texture's own border colour and packed CNA's way, which XNA's output does not expose for comparison."
     }
    }
   },
@@ -3502,10 +3502,10 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Processors.SpriteFontContent": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::SpriteFontContent",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/SpriteFontContent.hpp",
+   "note": "XNA publishes no member of its own on this type (measured, fontprocessor/spritefont_content_members lists none), so what it holds is reachable here only through a CNAEXT accessor -- and what it holds is the canonical sprite-font data this repository already writes.",
    "members": {}
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Processors.SpriteTextureProcessor": {

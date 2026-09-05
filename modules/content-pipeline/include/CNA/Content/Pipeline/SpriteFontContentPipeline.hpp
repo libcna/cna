@@ -127,6 +127,18 @@ namespace CNA::Content::Pipeline
      * @throws std::runtime_error when the font cannot be opened, a glyph is missing, the atlas
      *         would exceed the maximum texture size, or this build has no rasterizer.
      */
+    /**
+     * @brief Searches the system font directories for a file whose stem matches a name.
+     *
+     * Deliberately a filename match rather than a family-name lookup, for the reason the
+     * importer's own use of it states: reading a font's internal family table would need the
+     * rasterizer, which an unconfigured build does not have.
+     *
+     * @param fontName The font name as authored.
+     * @return The first matching path in a deterministic walk, or an empty path.
+     */
+    [[nodiscard]] std::filesystem::path FindSystemFontFile(const std::string& fontName);
+
     [[nodiscard]] Cnb::CnbSpriteFontData RasterizeFontDescription(
         const FontDescription& description, std::vector<std::string>& warnings);
 

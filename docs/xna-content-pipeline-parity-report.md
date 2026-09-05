@@ -10,17 +10,17 @@
 
 | Quantity | Implemented (EXACT + SEMANTIC + HOST_SUBSTITUTION) | EXTERNAL_BLOCKED | MISSING |
 |---|---|---:|---:|
-| public/protected types | 88/128 (68.8%) | 0 | 40 |
-| public/protected members | 513/705 (72.8%) | 0 | 192 |
+| public/protected types | 91/128 (71.1%) | 0 | 37 |
+| public/protected members | 521/705 (73.9%) | 0 | 184 |
 | enum values | 17/27 (63.0%) | 0 | 10 |
 | built-in importers | 0/10 (0.0%) | 0 | 10 |
-| built-in processors | 6/12 (50.0%) | 0 | 6 |
-| processor properties | 27/47 (57.4%) | 0 | 20 |
+| built-in processors | 8/12 (66.7%) | 0 | 4 |
+| processor properties | 30/47 (63.8%) | 0 | 17 |
 
 Status vocabulary: EXACT_EQUIVALENT, SEMANTIC_EQUIVALENT (spelling differs, capability identical; note says how),
 HOST_SUBSTITUTION (Microsoft-host mechanism replaced; note says how), EXTERNAL_BLOCKED (note names the
-unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 40, SEMANTIC_EQUIVALENT 47, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 40.
-Member status by value: EXACT_EQUIVALENT 338, SEMANTIC_EQUIVALENT 170, HOST_SUBSTITUTION 5, EXTERNAL_BLOCKED 0, MISSING 192.
+unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 40, SEMANTIC_EQUIVALENT 50, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 37.
+Member status by value: EXACT_EQUIVALENT 344, SEMANTIC_EQUIVALENT 172, HOST_SUBSTITUTION 5, EXTERNAL_BLOCKED 0, MISSING 184.
 
 Rules applied mechanically: 3 delegate plumbing members are listed in section 7 and not counted; 3 exception
 serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serialization has no C++ counterpart).
@@ -32,7 +32,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `Microsoft.Xna.Framework.Content.Pipeline.Audio` | 5 | 0 | 0 | 5 |
 | `Microsoft.Xna.Framework.Content.Pipeline` | 32 | 21 | 0 | 11 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Graphics` | 47 | 45 | 0 | 2 |
-| `Microsoft.Xna.Framework.Content.Pipeline.Processors` | 28 | 10 | 0 | 18 |
+| `Microsoft.Xna.Framework.Content.Pipeline.Processors` | 28 | 13 | 0 | 15 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler` | 5 | 5 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate` | 7 | 7 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Tasks` | 4 | 0 | 0 | 4 |
@@ -120,8 +120,8 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `….Processors` | `CompiledEffectContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::CompiledEffectContent` | Landed with XNAPP-094 rather than XNAPP-135, because EffectMaterialContent references it. It carries one CNAEXT member the inventory does not list: a public parameterless constructor, which the intermediate serializer needs where XNA's reflection reaches a private one. |
 | `….Processors` | `EffectProcessor` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::EffectProcessor` | XNA compiles in-process with D3DX; CNA drives the one effect compiler this repository has, the canonical CNA::Content::Pipeline::EffectCompilerService, and carries a CNAEXT constructor taking it. The observable contract is measured (effectprocessor/*): the byte code comes back as CompiledEffectContent, a refused source raises InvalidContentException beginning `Errors compiling <file>:` with the compiler's own diagnostics, and a null input is refused. Two host differences: the runtime composed that message with Environment.NewLine, where CNA writes a newline; and a compiler that is not installed is reported through the same message rather than being impossible, as it is in XNA. |
 | `….Processors` | `EffectProcessorDebugMode` | enum | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::EffectProcessorDebugMode` |  |
-| `….Processors` | `FontDescriptionProcessor` | class | MISSING |  |  |
-| `….Processors` | `FontTextureProcessor` | class | MISSING |  |  |
+| `….Processors` | `FontDescriptionProcessor` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::FontDescriptionProcessor` | Rasterizes through the canonical CNA::Content::Pipeline::RasterizeFontDescription and resolves the font the way the canonical importer does, which is a filename match rather than a family-table lookup -- so a font installed under another filename is not found where XNA would find it. The refusals are XNA's own, measured (fontprocessor/description_missing_font, /description_no_characters, /description_null). |
+| `….Processors` | `FontTextureProcessor` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::FontTextureProcessor` | Defaults and the character mapping are measured (processor/FontTextureProcessor, fontprocessor/texture_character_for_index, /texture_first_character_set). What Process produces cannot be compared beyond its boundary, because SpriteFontContent publishes nothing: the two measured outcomes -- a delimited strip is accepted, a texture with no glyphs is refused with XNA's message -- are reproduced, and the glyph packing is CNA's own. |
 | `….Processors` | `MaterialProcessor` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::MaterialProcessor` | Measured against a build context that records what it is asked to build (materialprocessor/*): the material comes back as the same object with each texture reference replaced, every texture is built through `TextureProcessor` with the six parameters this processor's properties map onto, and an effect material's effect is built through `EffectProcessor` with no parameters at all. Its own defaults differ from the texture processor's: mipmaps on and DxtCompressed. |
 | `….Processors` | `MaterialProcessorDefaultEffect` | enum | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::MaterialProcessorDefaultEffect` |  |
 | `….Processors` | `ModelBoneContent` | class | MISSING |  |  |
@@ -138,7 +138,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `….Processors` | `SongProcessor` | class | MISSING |  |  |
 | `….Processors` | `SoundEffectContent` | class | MISSING |  |  |
 | `….Processors` | `SoundEffectProcessor` | class | MISSING |  |  |
-| `….Processors` | `SpriteFontContent` | class | MISSING |  |  |
+| `….Processors` | `SpriteFontContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::SpriteFontContent` | XNA publishes no member of its own on this type (measured, fontprocessor/spritefont_content_members lists none), so what it holds is reachable here only through a CNAEXT accessor -- and what it holds is the canonical sprite-font data this repository already writes. |
 | `….Processors` | `SpriteTextureProcessor` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::SpriteTextureProcessor` | The texture processor's defaults exactly (measured, processor/SpriteTextureProcessor). |
 | `….Processors` | `TextureProcessor` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::TextureProcessor` | Every default and every step is measured (processor/TextureProcessor and textureprocessor/*): the colour key runs first, then the resize, then the premultiply, then the mipmaps, and the format last; NoChange keeps the bitmap type the texture arrived with, and DxtCompressed picks Dxt1 unless a pixel is partly transparent. |
 | `….Processors` | `TextureProcessorOutputFormat` | enum | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::TextureProcessorOutputFormat` |  |
@@ -190,8 +190,8 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | XNA processor | Input | Output | Properties | Status | CNA type |
 |---|---|---|---:|---|---|
 | `EffectProcessor` | `EffectContent` | `CompiledEffectContent` | 2 | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::EffectProcessor` |
-| `FontDescriptionProcessor` | `FontDescription` | `SpriteFontContent` | 0 | MISSING |  |
-| `FontTextureProcessor` | `Texture2DContent` | `SpriteFontContent` | 3 | MISSING |  |
+| `FontDescriptionProcessor` | `FontDescription` | `SpriteFontContent` | 0 | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::FontDescriptionProcessor` |
+| `FontTextureProcessor` | `Texture2DContent` | `SpriteFontContent` | 3 | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::FontTextureProcessor` |
 | `MaterialProcessor` | `MaterialContent` | `MaterialContent` | 7 | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::MaterialProcessor` |
 | `ModelProcessor` | `NodeContent` | `ModelContent` | 14 | MISSING |  |
 | `ModelTextureProcessor` | `TextureContent` | `TextureContent` | 6 | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::ModelTextureProcessor` |
@@ -206,9 +206,9 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 |---|---|---|---|---|---|
 | `EffectProcessor` | `DebugMode` | `EffectProcessorDebugMode` | `EffectProcessorDebugMode.Auto` | EXACT_EQUIVALENT | `getDebugModeProperty() / setDebugModeProperty()` |
 | `EffectProcessor` | `Defines` | `String` | `None` | SEMANTIC_EQUIVALENT | `getDefinesProperty() / setDefinesProperty()` |
-| `FontTextureProcessor` | `FirstCharacter` | `Char` | `'\u0020' (32)` | MISSING |  |
-| `FontTextureProcessor` | `PremultiplyAlpha` | `Boolean` | `True` | MISSING |  |
-| `FontTextureProcessor` | `TextureFormat` | `TextureProcessorOutputFormat` | `TextureProcessorOutputFormat.Color` | MISSING |  |
+| `FontTextureProcessor` | `FirstCharacter` | `Char` | `'\u0020' (32)` | EXACT_EQUIVALENT | `getFirstCharacterProperty() / setFirstCharacterProperty()` |
+| `FontTextureProcessor` | `PremultiplyAlpha` | `Boolean` | `True` | EXACT_EQUIVALENT | `getPremultiplyAlphaProperty() / setPremultiplyAlphaProperty()` |
+| `FontTextureProcessor` | `TextureFormat` | `TextureProcessorOutputFormat` | `TextureProcessorOutputFormat.Color` | EXACT_EQUIVALENT | `getTextureFormatProperty() / setTextureFormatProperty()` |
 | `MaterialProcessor` | `ColorKeyColor` | `Color` | `Color:{R:255 G:0 B:255 A:255}` | EXACT_EQUIVALENT | `getColorKeyColorProperty() / setColorKeyColorProperty()` |
 | `MaterialProcessor` | `ColorKeyEnabled` | `Boolean` | `True` | EXACT_EQUIVALENT | `getColorKeyEnabledProperty() / setColorKeyEnabledProperty()` |
 | `MaterialProcessor` | `DefaultEffect` | `MaterialProcessorDefaultEffect` | `MaterialProcessorDefaultEffect.BasicEffect` | EXACT_EQUIVALENT | `getDefaultEffectProperty() / setDefaultEffectProperty()` |
@@ -724,14 +724,14 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `EffectProcessorDebugMode` | enum value | `Auto = 0` | EXACT_EQUIVALENT | `EffectProcessorDebugMode::Auto` |  |
 | `EffectProcessorDebugMode` | enum value | `Debug = 1` | EXACT_EQUIVALENT | `EffectProcessorDebugMode::Debug` |  |
 | `EffectProcessorDebugMode` | enum value | `Optimize = 2` | EXACT_EQUIVALENT | `EffectProcessorDebugMode::Optimize` |  |
-| `FontDescriptionProcessor` | constructor | `.ctor()` | MISSING |  |  |
-| `FontDescriptionProcessor` | method | `Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.FontDescription, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | MISSING |  |  |
-| `FontTextureProcessor` | constructor | `.ctor()` | MISSING |  |  |
-| `FontTextureProcessor` | property | `FirstCharacter` | MISSING |  |  |
-| `FontTextureProcessor` | property | `PremultiplyAlpha` | MISSING |  |  |
-| `FontTextureProcessor` | property | `TextureFormat` | MISSING |  |  |
-| `FontTextureProcessor` | method | `GetCharacterForIndex(System.Int32)` | MISSING |  |  |
-| `FontTextureProcessor` | method | `Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.Texture2DContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | MISSING |  |  |
+| `FontDescriptionProcessor` | constructor | `.ctor()` | EXACT_EQUIVALENT | `FontDescriptionProcessor()` |  |
+| `FontDescriptionProcessor` | method | `Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.FontDescription, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | SEMANTIC_EQUIVALENT | `Process(const std::shared_ptr<FontDescription>&, ContentProcessorContext&)` | content travels as an owned shared_ptr; the rasterization is the canonical one rather than XNA's own, so the atlas layout differs while the refusals do not. |
+| `FontTextureProcessor` | constructor | `.ctor()` | EXACT_EQUIVALENT | `FontTextureProcessor()` |  |
+| `FontTextureProcessor` | property | `FirstCharacter` | EXACT_EQUIVALENT | `getFirstCharacterProperty() / setFirstCharacterProperty()` |  |
+| `FontTextureProcessor` | property | `PremultiplyAlpha` | EXACT_EQUIVALENT | `getPremultiplyAlphaProperty() / setPremultiplyAlphaProperty()` |  |
+| `FontTextureProcessor` | property | `TextureFormat` | EXACT_EQUIVALENT | `getTextureFormatProperty() / setTextureFormatProperty()` |  |
+| `FontTextureProcessor` | method | `GetCharacterForIndex(System.Int32)` | EXACT_EQUIVALENT | `GetCharacterForIndex(intcs)` | protected in both; FirstCharacter plus the index, measured. |
+| `FontTextureProcessor` | method | `Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.Texture2DContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | SEMANTIC_EQUIVALENT | `Process(const std::shared_ptr<Texture2DContent>&, ContentProcessorContext&)` | content travels as an owned shared_ptr; the glyph runs are found against the texture's own border colour and packed CNA's way, which XNA's output does not expose for comparison. |
 | `MaterialProcessor` | constructor | `.ctor()` | EXACT_EQUIVALENT | `MaterialProcessor()` |  |
 | `MaterialProcessor` | property | `ColorKeyColor` | EXACT_EQUIVALENT | `getColorKeyColorProperty() / setColorKeyColorProperty()` |  |
 | `MaterialProcessor` | property | `ColorKeyEnabled` | EXACT_EQUIVALENT | `getColorKeyEnabledProperty() / setColorKeyEnabledProperty()` |  |

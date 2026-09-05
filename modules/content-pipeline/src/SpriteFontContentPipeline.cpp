@@ -680,6 +680,8 @@ namespace CNA::Content::Pipeline
          */
         [[nodiscard]] std::filesystem::path FindSystemFont(const std::string& fontName)
         {
+            // The exported spelling below forwards here, so the XNA façade resolves a font the
+            // same way the canonical importer does rather than inventing a second rule.
             std::string wanted;
             for (const char character : fontName)
             {
@@ -735,6 +737,11 @@ namespace CNA::Content::Pipeline
     std::vector<std::string> FontDescriptionImporter::SourceExtensions() const
     {
         return {".spritefont"};
+    }
+
+    std::filesystem::path FindSystemFontFile(const std::string& fontName)
+    {
+        return FindSystemFont(fontName);
     }
 
     std::vector<std::string> FontDescriptionImporter::OutputTypes() const
