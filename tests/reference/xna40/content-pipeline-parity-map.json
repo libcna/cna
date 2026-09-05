@@ -1001,14 +1001,14 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Graphics.BoneContent": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::BoneContent",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/NodeContent.hpp",
    "note": "",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "BoneContent()",
      "note": ""
     }
    }
@@ -1438,53 +1438,53 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Graphics.GeometryContent": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::GeometryContent",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/NodeContent.hpp",
+   "note": "The material is a shared resource and optional: a batch without one writes nothing and reads back without one (measured, mesh/serialize and mesh/deserialize).",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "GeometryContent()",
      "note": ""
     },
     "property:Indices": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getIndicesProperty()",
      "note": ""
     },
     "property:Material": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getMaterialProperty() / setMaterialProperty()",
+     "note": "the material is an owned shared_ptr, and dispatch on its dynamic type is what puts a BasicMaterialContent in the document."
     },
     "property:Parent": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getParentProperty() -> MeshContent*",
+     "note": "the parent back-reference is a raw pointer, valid while the batch is in that mesh's collection."
     },
     "property:Vertices": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getVerticesProperty()",
      "note": ""
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Graphics.GeometryContentCollection": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::GeometryContentCollection",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/NodeContent.hpp",
+   "note": "Carries one CNAEXT constructor the inventory does not list: a parentless one, for the same reason NodeContentCollection does.",
    "members": {
     "method:GetParent(Microsoft.Xna.Framework.Content.Pipeline.Graphics.GeometryContent)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "GetParent(const std::shared_ptr<GeometryContent>&) -> MeshContent*",
+     "note": "children are owned and shared, so they travel as std::shared_ptr; the parent back-reference is a raw pointer valid while the child is in the collection, the carrier rule ChildCollection already sets."
     },
     "method:SetParent(Microsoft.Xna.Framework.Content.Pipeline.Graphics.GeometryContent, Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshContent)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "SetParent(const std::shared_ptr<GeometryContent>&, MeshContent*)",
+     "note": "children are owned and shared, so they travel as std::shared_ptr; the parent back-reference is a raw pointer valid while the child is in the collection, the carrier rule ChildCollection already sets."
     }
    }
   },
@@ -1507,39 +1507,39 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Graphics.IndirectPositionCollection": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::IndirectPositionCollection",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/VertexContent.hpp",
+   "note": "A read-only view: the parent mesh's positions in the order the position indices name them (measured, vertexcontent/indirect_positions).",
    "members": {
     "property:Count": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getCountProperty()",
      "note": ""
     },
     "indexer:Item[System.Int32]": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "operator[](intcs)",
      "note": ""
     },
     "method:Contains(Microsoft.Xna.Framework.Vector3)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Contains(const Vector3&)",
      "note": ""
     },
     "method:CopyTo(Microsoft.Xna.Framework.Vector3[], System.Int32)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "CopyTo(std::vector<Vector3>&, intcs)",
+     "note": "Vector3[] is a std::vector<Vector3>."
     },
     "method:GetEnumerator()": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "operator[](intcs) over getCountProperty()",
+     "note": "the view is traversed by index, as it computes each position on demand."
     },
     "method:IndexOf(Microsoft.Xna.Framework.Vector3)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "IndexOf(const Vector3&)",
      "note": ""
     }
    }
@@ -1661,24 +1661,24 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshContent": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::MeshContent",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/NodeContent.hpp",
    "note": "",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "MeshContent()",
      "note": ""
     },
     "property:Geometry": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getGeometryProperty()",
      "note": ""
     },
     "property:Positions": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getPositionsProperty()",
      "note": ""
     }
    }
@@ -1803,58 +1803,58 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Graphics.NodeContent": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::NodeContent",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/NodeContent.hpp",
+   "note": "The transform starts as the identity, not the zero matrix a default .NET Matrix is -- visible in what the serializer writes for an untouched node (measured, node/serialize). AbsoluteTransform composes up the chain, and a node refuses a second parent with the runtime's own InvalidOperationException, which CNA's ChildCollection now gives everywhere.",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "NodeContent()",
      "note": ""
     },
     "property:AbsoluteTransform": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getAbsoluteTransformProperty()",
      "note": ""
     },
     "property:Animations": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getAnimationsProperty()",
      "note": ""
     },
     "property:Children": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getChildrenProperty()",
      "note": ""
     },
     "property:Parent": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getParentProperty() -> NodeContent*",
+     "note": "the parent back-reference is a raw pointer, valid while the node is in that parent's collection."
     },
     "property:Transform": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getTransformProperty() / setTransformProperty()",
      "note": ""
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Graphics.NodeContentCollection": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::NodeContentCollection",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/NodeContent.hpp",
+   "note": "Carries one CNAEXT constructor the inventory does not list: a parentless one, which the intermediate serializer's CreateInstance is compiled against even where reading fills the node's own collection in place.",
    "members": {
     "method:GetParent(Microsoft.Xna.Framework.Content.Pipeline.Graphics.NodeContent)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "GetParent(const std::shared_ptr<NodeContent>&) -> NodeContent*",
+     "note": "children are owned and shared, so they travel as std::shared_ptr; the parent back-reference is a raw pointer valid while the child is in the collection, the carrier rule ChildCollection already sets."
     },
     "method:SetParent(Microsoft.Xna.Framework.Content.Pipeline.Graphics.NodeContent, Microsoft.Xna.Framework.Content.Pipeline.Graphics.NodeContent)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "SetParent(const std::shared_ptr<NodeContent>&, NodeContent*)",
+     "note": "children are owned and shared, so they travel as std::shared_ptr; the parent back-reference is a raw pointer valid while the child is in the collection, the carrier rule ChildCollection already sets."
     }
    }
   },
@@ -2166,162 +2166,162 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Graphics.VertexChannel": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::VertexChannelBase",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/VertexChannel.hpp",
+   "note": "XNA's non-generic VertexChannel and its VertexChannel<T> cannot share a name in C++, so the base is VertexChannelBase -- the ContentTypeSerializerBase precedent. The object-typed members take a ContentObject, the pipeline's box.",
    "members": {
     "property:Count": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getCountProperty()",
      "note": ""
     },
     "property:ElementType": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getElementTypeProperty()",
      "note": ""
     },
     "property:Name": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getNameProperty()",
      "note": ""
     },
     "indexer:Item[System.Int32]": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "operator[](intcs) -> ContentObject",
+     "note": "the object indexer answers the pipeline's box."
     },
     "method:Contains(System.Object)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Contains(const ContentObject&)",
+     "note": "object is ContentObject."
     },
     "method:CopyTo(System.Array, System.Int32)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "CopyTo(std::vector<ContentObject>&, intcs)",
+     "note": "System.Array is a std::vector of boxes."
     },
     "method:GetEnumerator()": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "operator[](intcs) over getCountProperty()",
+     "note": "the non-generic channel is traversed by index; VertexChannel<T> exposes its entries directly."
     },
     "method:IndexOf(System.Object)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "IndexOf(const ContentObject&)",
+     "note": "object is ContentObject."
     },
     "method:ReadConvertedContent<TargetType>()": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "ReadConvertedContent<TargetType>() -> std::vector<TargetType>",
+     "note": "the conversion runs through Vector4, which is what the pipeline's VectorConverter does; IEnumerable<T> is a std::vector."
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Graphics.VertexChannelCollection": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::VertexChannelCollection",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/VertexChannel.hpp",
+   "note": "Every refusal is the measured one: a duplicate name, an entry count that is not the vertex count, an unknown name (KeyNotFoundException) and a channel asked for as the wrong type (InvalidOperationException naming both types). The type-erased routes build the channel through a factory each element type registers with, where XNA reflects a VertexChannel<T> into being.",
    "members": {
     "property:Count": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getCountProperty()",
      "note": ""
     },
     "indexer:Item[System.Int32]": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "operator[](intcs)",
+     "note": "channels are owned and shared, so they travel as std::shared_ptr."
     },
     "indexer:Item[System.String]": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "operator[](const std::string&)",
+     "note": "channels are owned and shared, so they travel as std::shared_ptr."
     },
     "method:Add(System.String, System.Type, System.Collections.IEnumerable)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Add(const std::string&, System::Type, const std::vector<ContentObject>&)",
+     "note": "the untyped sequence is a std::vector of boxes, and the channel comes from the element-type factory."
     },
     "method:Add<ElementType>(System.String, System.Collections.Generic.IEnumerable<ElementType>)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Add<ElementType>(const std::string&, std::vector<ElementType>)",
+     "note": "IEnumerable<T> is a std::vector<T>, which cannot be null; an empty one is XNA's null (measured, vertexcontent/channel_add_null_data)."
     },
     "method:Clear()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Clear()",
      "note": ""
     },
     "method:Contains(Microsoft.Xna.Framework.Content.Pipeline.Graphics.VertexChannel)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Contains(const std::shared_ptr<VertexChannelBase>&)",
+     "note": "channels travel as std::shared_ptr."
     },
     "method:Contains(System.String)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Contains(const std::string&)",
      "note": ""
     },
     "method:ConvertChannelContent<TargetType>(System.Int32)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ConvertChannelContent<TargetType>(intcs)",
      "note": ""
     },
     "method:ConvertChannelContent<TargetType>(System.String)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ConvertChannelContent<TargetType>(const std::string&)",
      "note": ""
     },
     "method:Get<T>(System.Int32)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Get<T>(intcs)",
+     "note": "answers a std::shared_ptr<VertexChannel<T>>."
     },
     "method:Get<T>(System.String)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Get<T>(const std::string&)",
+     "note": "answers a std::shared_ptr<VertexChannel<T>>."
     },
     "method:GetEnumerator()": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "begin() / end()",
+     "note": "C++ traverses a collection with iterators."
     },
     "method:IndexOf(Microsoft.Xna.Framework.Content.Pipeline.Graphics.VertexChannel)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "IndexOf(const std::shared_ptr<VertexChannelBase>&)",
+     "note": "channels travel as std::shared_ptr."
     },
     "method:IndexOf(System.String)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "IndexOf(const std::string&)",
      "note": ""
     },
     "method:Insert(System.Int32, System.String, System.Type, System.Collections.IEnumerable)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Insert(intcs, const std::string&, System::Type, const std::vector<ContentObject>&)",
+     "note": "the untyped sequence is a std::vector of boxes, and the channel comes from the element-type factory."
     },
     "method:Insert<ElementType>(System.Int32, System.String, System.Collections.Generic.IEnumerable<ElementType>)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Insert<ElementType>(intcs, const std::string&, std::vector<ElementType>)",
+     "note": "IEnumerable<T> is a std::vector<T>."
     },
     "method:Remove(Microsoft.Xna.Framework.Content.Pipeline.Graphics.VertexChannel)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Remove(const std::shared_ptr<VertexChannelBase>&)",
+     "note": "channels travel as std::shared_ptr."
     },
     "method:Remove(System.String)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Remove(const std::string&)",
      "note": ""
     },
     "method:RemoveAt(System.Int32)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "RemoveAt(intcs)",
      "note": ""
     }
    }
@@ -2400,107 +2400,107 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Graphics.VertexChannel`1": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::VertexChannel<T>",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/VertexChannel.hpp",
+   "note": "XNA's non-generic VertexChannel and its VertexChannel<T> cannot share a name in C++, so the base is VertexChannelBase -- the ContentTypeSerializerBase precedent.",
    "members": {
     "property:ElementType": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getElementTypeProperty()",
      "note": ""
     },
     "indexer:Item[System.Int32]": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "At(intcs) / SetAt(intcs, const T&)",
+     "note": "C++ cannot overload an indexer by return type against the base's boxed one, so the typed access is named."
     },
     "method:Contains(T)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Contains(const T&)",
      "note": ""
     },
     "method:CopyTo(T[], System.Int32)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "CopyTo(std::vector<T>&, intcs)",
+     "note": "T[] is a std::vector<T>."
     },
     "method:GetEnumerator()": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Items()",
+     "note": "the entries themselves, which a range-based for loop traverses."
     },
     "method:IndexOf(T)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "IndexOf(const T&)",
      "note": ""
     },
     "method:ReadConvertedContent<TargetType>()": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "ReadConvertedContent<TargetType>()",
+     "note": "inherited from the base; IEnumerable<T> is a std::vector."
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Graphics.VertexContent": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::VertexContent",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/VertexContent.hpp",
+   "note": "Every channel follows the vertices: adding one gives each channel a default entry at that position and removing one takes it away (measured, vertexcontent/add_with_channel, insert_with_channel, remove_with_channel). CreateVertexBuffer is the one member with no equivalent yet -- it answers a VertexBufferContent, which XNAPP-134 owns.",
    "members": {
     "property:Channels": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getChannelsProperty()",
      "note": ""
     },
     "property:PositionIndices": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getPositionIndicesProperty()",
      "note": ""
     },
     "property:Positions": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getPositionsProperty()",
      "note": ""
     },
     "property:VertexCount": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getVertexCountProperty()",
      "note": ""
     },
     "method:Add(System.Int32)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Add(intcs)",
      "note": ""
     },
     "method:AddRange(System.Collections.Generic.IEnumerable<System.Int32>)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "AddRange(const std::vector<intcs>&)",
+     "note": "IEnumerable<int> is a std::vector<intcs>, which cannot be null."
     },
     "method:CreateVertexBuffer()": {
      "status": "MISSING",
      "cna": "",
-     "note": ""
+     "note": "Answers a Processors.VertexBufferContent, which XNAPP-134 implements; the measurement is already in the corpus (vertexcontent/create_vertex_buffer: 12 bytes, stride 12, one element for a positions-only batch)."
     },
     "method:Insert(System.Int32, System.Int32)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Insert(intcs, intcs)",
      "note": ""
     },
     "method:InsertRange(System.Int32, System.Collections.Generic.IEnumerable<System.Int32>)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "InsertRange(intcs, const std::vector<intcs>&)",
+     "note": "IEnumerable<int> is a std::vector<intcs>, which cannot be null."
     },
     "method:RemoveAt(System.Int32)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "RemoveAt(intcs)",
      "note": ""
     },
     "method:RemoveRange(System.Int32, System.Int32)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "RemoveRange(intcs, intcs)",
      "note": ""
     }
    }

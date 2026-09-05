@@ -7,6 +7,7 @@
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/Collections/ObjectModel/Collection.hpp"
 
 namespace Microsoft::Xna::Framework::Content::Pipeline
@@ -40,6 +41,21 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         {
             if (parent_ == nullptr) { throw System::ArgumentNullException("parent"); }
         }
+
+        /** @brief Tag selecting the parentless constructor below. */
+        struct NoParentTag
+        {
+        };
+
+        /**
+         * @brief Initializes a collection with no parent yet.
+         *
+         * XNA's collections always have one, because its serializer fills a collection the parent
+         * already owns. C++ needs a default-constructible type all the same: the intermediate
+         * serializer's `CreateInstance` is compiled for every type it can read, even where reading
+         * fills the parent's own collection in place and never calls it.
+         */
+        explicit ChildCollection(NoParentTag) noexcept : parent_(nullptr) {}
 
         /**
          * @brief Gets the parent of a child object.
@@ -114,9 +130,11 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             if (item == nullptr) { throw System::ArgumentNullException("item"); }
             if (GetParent(item) != nullptr)
             {
-                throw System::ArgumentException(
-                    "The item already belongs to a parent; remove it from its current collection first.",
-                    "item");
+                // The runtime's own words, measured on a NodeContentCollection
+                // (tests/reference/xna40/graphics case node/reparent).
+                throw System::InvalidOperationException("Cannot add child object " + item->GetTypeName() +
+                                                        " because it already has a parent. Remove it from the "
+                                                        "existing parent collection first.");
             }
         }
 

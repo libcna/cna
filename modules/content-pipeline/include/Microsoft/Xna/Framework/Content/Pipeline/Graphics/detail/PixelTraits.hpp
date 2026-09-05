@@ -44,13 +44,14 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics::detail
      * compile, where XNA throws `NotSupportedException` at run time
      * (`tests/reference/xna40/graphics/graphics-content-oracle.json`, `pixel_type/Byte/describe`).
      */
+    // Declared and left undefined: the specializations below are the whole list, and `ValidPixelType`
+    // asks whether one exists. A definition carrying a static_assert would fire while the concept
+    // merely asks the question, which is what a vertex channel of indices does
+    // (VertexChannel<int> is a legitimate type with no vector conversion). The friendly message a
+    // wrong T deserves lives on the two entry points that take one: PixelBitmapContent<T> and
+    // VectorConverter::GetConverter<TIn, TOut>().
     template<typename T>
-    struct PixelTraits
-    {
-        static_assert(sizeof(T) == 0,
-                      "PixelBitmapContent<T>: T is not a valid PixelBitmapContent type. Supported types are Single, "
-                      "Vector2, Vector3, Vector4, and value types that implement IPackedVector.");
-    };
+    struct PixelTraits;
 
     inline void WriteLittleEndian(std::uint64_t value, std::size_t bytes, std::uint8_t* out)
     {

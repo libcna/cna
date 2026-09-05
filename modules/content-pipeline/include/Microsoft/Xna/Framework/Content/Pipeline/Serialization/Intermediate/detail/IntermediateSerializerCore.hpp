@@ -346,8 +346,18 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
             {
                 return value.Get<T>();
             }
-            // A value-typed resource referenced through a reference wrapper.
-            return std::make_shared<Pointee>(value.Get<Pointee>());
+            // A value-typed resource referenced through a reference wrapper. A type that cannot be
+            // copied is never stored that way -- a NodeContent owns its children and is only ever
+            // boxed as a pointer -- so that branch would be dead code that fails to compile.
+            if constexpr (std::is_copy_constructible_v<Pointee>)
+            {
+                return std::make_shared<Pointee>(value.Get<Pointee>());
+            }
+            else
+            {
+                throw System::InvalidCastException("Cannot convert content of type '" + value.StableType() +
+                                                   "' to '" + ContentTypeName<T>::Name() + "'.");
+            }
         }
         else if constexpr (detail::IsOptional<T>::value)
         {

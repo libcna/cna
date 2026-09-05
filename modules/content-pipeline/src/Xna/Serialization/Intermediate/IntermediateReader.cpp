@@ -299,6 +299,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
             const std::string& name = format.getElementNameProperty();
             if (!MoveToElement(name))
             {
+                // An optional shared resource may be absent, exactly as any other optional member
+                // may: a geometry batch with no material writes none and reads back without one
+                // (measured, tests/reference/xna40/graphics case mesh/deserialize).
+                if (format.getOptionalProperty())
+                {
+                    return;
+                }
                 throw InvalidContentException("XML element \"" + name + "\" not found.");
             }
             if (xml_.GetAttribute("Null") == "true")

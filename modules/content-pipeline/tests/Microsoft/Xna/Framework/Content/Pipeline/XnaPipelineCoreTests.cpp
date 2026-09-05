@@ -285,7 +285,9 @@ namespace
         auto b = std::make_shared<TreeNode>();
         root->children.Add(a);
         EXPECT_EQ(a->parent, root.get());
-        EXPECT_THROW(other->children.Add(a), System::ArgumentException);
+        // The runtime's own refusal for a child that already has a parent, measured on a
+        // NodeContentCollection (tests/reference/xna40/graphics case node/reparent).
+        EXPECT_THROW(other->children.Add(a), System::InvalidOperationException);
         EXPECT_THROW(root->children.Add(nullptr), System::ArgumentNullException);
         root->children.Add(b);
         EXPECT_EQ(root->children.getCountProperty(), 2);

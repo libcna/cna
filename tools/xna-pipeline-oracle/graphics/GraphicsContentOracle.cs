@@ -1345,7 +1345,217 @@ namespace Cna.Xna40.GraphicsOracle
                 return "bytes=" + buffer.VertexData.Length + " stride=" + buffer.VertexDeclaration.VertexStride +
                        " elements=" + buffer.VertexDeclaration.VertexElements.Count;
             });
+            Record("vertexcontent/add_with_channel", () =>
+            {
+                var mesh = new MeshContent();
+                for (int i = 0; i < 3; i++) mesh.Positions.Add(new Vector3(i, 0, 0));
+                var geometry = new GeometryContent();
+                mesh.Geometry.Add(geometry);
+                geometry.Vertices.AddRange(new int[] { 0, 1 });
+                var channel = geometry.Vertices.Channels.Add<Vector2>("Custom0", new Vector2[] { new Vector2(1, 1), new Vector2(2, 2) });
+                geometry.Vertices.Add(2);
+                var values = new StringBuilder();
+                foreach (Vector2 value in channel) { if (values.Length > 0) values.Append(' '); values.Append(value); }
+                return "count=" + geometry.Vertices.VertexCount + " channel=" + channel.Count + " values=" + values;
+            });
+            Record("vertexcontent/remove_with_channel", () =>
+            {
+                var mesh = new MeshContent();
+                for (int i = 0; i < 3; i++) mesh.Positions.Add(new Vector3(i, 0, 0));
+                var geometry = new GeometryContent();
+                mesh.Geometry.Add(geometry);
+                geometry.Vertices.AddRange(new int[] { 0, 1, 2 });
+                var channel = geometry.Vertices.Channels.Add<Vector2>("Custom0", new Vector2[] { new Vector2(1, 1), new Vector2(2, 2), new Vector2(3, 3) });
+                geometry.Vertices.RemoveAt(1);
+                var values = new StringBuilder();
+                foreach (Vector2 value in channel) { if (values.Length > 0) values.Append(' '); values.Append(value); }
+                return "count=" + geometry.Vertices.VertexCount + " channel=" + channel.Count + " values=" + values;
+            });
+            Record("vertexcontent/insert_with_channel", () =>
+            {
+                var mesh = new MeshContent();
+                for (int i = 0; i < 3; i++) mesh.Positions.Add(new Vector3(i, 0, 0));
+                var geometry = new GeometryContent();
+                mesh.Geometry.Add(geometry);
+                geometry.Vertices.AddRange(new int[] { 0, 2 });
+                var channel = geometry.Vertices.Channels.Add<Vector2>("Custom0", new Vector2[] { new Vector2(1, 1), new Vector2(3, 3) });
+                geometry.Vertices.Insert(1, 1);
+                var values = new StringBuilder();
+                foreach (Vector2 value in channel) { if (values.Length > 0) values.Append(' '); values.Append(value); }
+                return "count=" + geometry.Vertices.VertexCount + " channel=" + channel.Count + " values=" + values;
+            });
             Record("vertexcontent/tostring", () => new GeometryContent().Vertices + "|" + new GeometryContent().Vertices.Channels + "|" + new GeometryContent().Vertices.PositionIndices);
+
+            // ---- NodeContent, MeshContent, GeometryContent -----------------------------------------
+            Record("node/defaults", () =>
+            {
+                var node = new NodeContent();
+                return "transform=" + Describe(node.Transform) + " absolute=" + Describe(node.AbsoluteTransform) +
+                       " children=" + node.Children.Count + " animations=" + node.Animations.Count +
+                       " parent=" + (node.Parent == null ? "null" : "set") + " name=\"" + node.Name + "\"";
+            });
+            Record("node/absolute_transform", () =>
+            {
+                var root = new NodeContent();
+                root.Transform = Matrix.CreateTranslation(1, 0, 0);
+                var child = new NodeContent();
+                child.Transform = Matrix.CreateTranslation(0, 2, 0);
+                root.Children.Add(child);
+                var grandchild = new NodeContent();
+                grandchild.Transform = Matrix.CreateTranslation(0, 0, 3);
+                child.Children.Add(grandchild);
+                return "child_parent=" + (child.Parent == root) + " child_absolute=" + Describe(child.AbsoluteTransform) +
+                       " grandchild_absolute=" + Describe(grandchild.AbsoluteTransform);
+            });
+            Record("node/reparent", () =>
+            {
+                var first = new NodeContent();
+                var second = new NodeContent();
+                var child = new NodeContent();
+                first.Children.Add(child);
+                second.Children.Add(child);
+                return "first=" + first.Children.Count + " second=" + second.Children.Count + " parent_is_second=" + (child.Parent == second);
+            });
+            Record("node/add_null_child", () => { var node = new NodeContent(); node.Children.Add(null); return "count=" + node.Children.Count; });
+            Record("node/remove_child", () =>
+            {
+                var root = new NodeContent();
+                var child = new NodeContent();
+                root.Children.Add(child);
+                root.Children.Remove(child);
+                return "count=" + root.Children.Count + " parent=" + (child.Parent == null ? "null" : "set");
+            });
+            Record("node/clear_children", () =>
+            {
+                var root = new NodeContent();
+                var child = new NodeContent();
+                root.Children.Add(child);
+                root.Children.Clear();
+                return "count=" + root.Children.Count + " parent=" + (child.Parent == null ? "null" : "set");
+            });
+            Record("node/bone_is_a_node", () => { var bone = new BoneContent(); return "children=" + bone.Children.Count + " tostring=" + bone; });
+            Record("mesh/defaults", () => { var mesh = new MeshContent(); return "positions=" + mesh.Positions.Count + " geometry=" + mesh.Geometry.Count + " children=" + mesh.Children.Count; });
+            Record("mesh/geometry_parent", () =>
+            {
+                var mesh = new MeshContent();
+                var geometry = new GeometryContent();
+                mesh.Geometry.Add(geometry);
+                bool parented = geometry.Parent == mesh;
+                mesh.Geometry.Remove(geometry);
+                return "parented=" + parented + " after_remove=" + (geometry.Parent == null ? "null" : "set") + " count=" + mesh.Geometry.Count;
+            });
+            Record("mesh/geometry_add_null", () => { var mesh = new MeshContent(); mesh.Geometry.Add(null); return "count=" + mesh.Geometry.Count; });
+            Record("geometry/material", () =>
+            {
+                var geometry = new GeometryContent();
+                geometry.Material = new BasicMaterialContent();
+                return "material=" + geometry.Material.GetType().Name + " indices=" + geometry.Indices.Count;
+            });
+            Record("node/serialize", () =>
+            {
+                var root = new NodeContent();
+                root.Name = "Root";
+                root.Transform = Matrix.CreateTranslation(1, 2, 3);
+                var child = new BoneContent();
+                child.Name = "Bone";
+                root.Children.Add(child);
+                return SerializeIntermediate(root);
+            });
+            Record("mesh/serialize", () =>
+            {
+                var mesh = new MeshContent();
+                mesh.Name = "Mesh";
+                mesh.Positions.Add(new Vector3(0, 0, 0));
+                mesh.Positions.Add(new Vector3(1, 0, 0));
+                mesh.Positions.Add(new Vector3(0, 1, 0));
+                var geometry = new GeometryContent();
+                mesh.Geometry.Add(geometry);
+                geometry.Vertices.AddRange(new int[] { 0, 1, 2 });
+                geometry.Indices.AddRange(new int[] { 0, 1, 2 });
+                geometry.Material = new BasicMaterialContent();
+                geometry.Vertices.Channels.Add<Vector2>(VertexChannelNames.TextureCoordinate(0), new Vector2[] { new Vector2(0, 0), new Vector2(1, 0), new Vector2(0, 1) });
+                return SerializeIntermediate(mesh);
+            });
+            Record("node/serialize_with_animation", () =>
+            {
+                var root = new NodeContent();
+                root.Name = "Root";
+                var animation = new AnimationContent();
+                animation.Duration = TimeSpan.FromSeconds(1);
+                root.Animations.Add("Walk", animation);
+                var child = new NodeContent();
+                root.Children.Add(child);
+                return SerializeIntermediate(root);
+            });
+            Record("node/deserialize_minimal", () =>
+            {
+                var root = DeserializeIntermediate<NodeContent>(
+                    "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n" +
+                    "<XnaContent xmlns:Graphics=\"Microsoft.Xna.Framework.Content.Pipeline.Graphics\">\r\n" +
+                    "  <Asset Type=\"Graphics:NodeContent\">\r\n" +
+                    "    <Name>Root</Name>\r\n" +
+                    "    <Transform>1 0 0 0 0 1 0 0 0 0 1 0 1 2 3 1</Transform>\r\n" +
+                    "    <Children>\r\n" +
+                    "      <Child Type=\"Graphics:BoneContent\">\r\n" +
+                    "        <Name>Bone</Name>\r\n" +
+                    "        <Transform>1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1</Transform>\r\n" +
+                    "      </Child>\r\n" +
+                    "    </Children>\r\n" +
+                    "  </Asset>\r\n" +
+                    "</XnaContent>\r\n");
+                return "name=\"" + root.Name + "\" children=" + root.Children.Count + " child=" + root.Children[0].GetType().Name +
+                       " child_parent=" + (root.Children[0].Parent == root) + " transform=" + Describe(root.Transform);
+            });
+            Record("mesh/deserialize", () =>
+            {
+                var mesh = DeserializeIntermediate<MeshContent>(
+                    "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n" +
+                    "<XnaContent xmlns:Graphics=\"Microsoft.Xna.Framework.Content.Pipeline.Graphics\" xmlns:Framework=\"Microsoft.Xna.Framework\">\r\n" +
+                    "  <Asset Type=\"Graphics:MeshContent\">\r\n" +
+                    "    <Name>Mesh</Name>\r\n" +
+                    "    <Transform>1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1</Transform>\r\n" +
+                    "    <Positions>0 0 0 1 0 0 0 1 0</Positions>\r\n" +
+                    "    <Geometry>\r\n" +
+                    "      <Batch>\r\n" +
+                    "        <Indices>0 1 2</Indices>\r\n" +
+                    "        <Vertices>\r\n" +
+                    "          <PositionIndices>0 1 2</PositionIndices>\r\n" +
+                    "          <Channels>\r\n" +
+                    "            <VertexChannel Name=\"TextureCoordinate0\" ElementType=\"Framework:Vector2\">0 0 1 0 0 1</VertexChannel>\r\n" +
+                    "          </Channels>\r\n" +
+                    "        </Vertices>\r\n" +
+                    "      </Batch>\r\n" +
+                    "    </Geometry>\r\n" +
+                    "  </Asset>\r\n" +
+                    "</XnaContent>\r\n");
+                var geometry = mesh.Geometry[0];
+                return "positions=" + mesh.Positions.Count + " geometry=" + mesh.Geometry.Count + " indices=" + geometry.Indices.Count +
+                       " vertices=" + geometry.Vertices.VertexCount + " channels=" + geometry.Vertices.Channels.Count +
+                       " channel=" + geometry.Vertices.Channels[0].Name + " element=" + geometry.Vertices.Channels[0].ElementType.Name +
+                       " parent=" + (geometry.Parent == mesh);
+            });
+            Record("node/deserialize", () =>
+            {
+                var root = DeserializeIntermediate<NodeContent>(
+                    "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n" +
+                    "<XnaContent xmlns:Graphics=\"Microsoft.Xna.Framework.Content.Pipeline.Graphics\">\r\n" +
+                    "  <Asset Type=\"Graphics:NodeContent\">\r\n" +
+                    "    <Name>Root</Name>\r\n" +
+                    "    <Transform>1 0 0 0 0 1 0 0 0 0 1 0 1 2 3 1</Transform>\r\n" +
+                    "    <Animations />\r\n" +
+                    "    <Children>\r\n" +
+                    "      <Child Type=\"Graphics:BoneContent\">\r\n" +
+                    "        <Name>Bone</Name>\r\n" +
+                    "        <Transform>1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1</Transform>\r\n" +
+                    "        <Animations />\r\n" +
+                    "        <Children />\r\n" +
+                    "      </Child>\r\n" +
+                    "    </Children>\r\n" +
+                    "  </Asset>\r\n" +
+                    "</XnaContent>\r\n");
+                return "name=\"" + root.Name + "\" children=" + root.Children.Count + " child=" + root.Children[0].GetType().Name +
+                       " child_parent=" + (root.Children[0].Parent == root) + " transform=" + Describe(root.Transform);
+            });
 
             // ---- TextureReferenceDictionary ------------------------------------------------------
             Record("texturereferencedictionary/default", () => { var d = new TextureReferenceDictionary(); return "count=" + d.Count + " ToString=\"" + d + "\""; });
@@ -1367,6 +1577,13 @@ namespace Cna.Xna40.GraphicsOracle
             public T ReadReference<T>(string key) where T : class { return GetReferenceTypeProperty<T>(key); }
             public T? ReadValue<T>(string key) where T : struct { return GetValueTypeProperty<T>(key); }
             public void Write<T>(string key, T value) { SetProperty(key, value); }
+        }
+
+        private static string Describe(Matrix matrix)
+        {
+            return "(" + matrix.M41.ToString("R", CultureInfo.InvariantCulture) + "," +
+                   matrix.M42.ToString("R", CultureInfo.InvariantCulture) + "," +
+                   matrix.M43.ToString("R", CultureInfo.InvariantCulture) + ")";
         }
 
         private static string Positions(System.Collections.Generic.IEnumerable<Vector3> positions)

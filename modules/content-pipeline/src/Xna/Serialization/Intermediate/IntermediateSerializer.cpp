@@ -16,7 +16,10 @@
 
 #include "Microsoft/Xna/Framework/BoundingBox.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/TextureReferenceDictionary.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/NodeContent.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/StockMaterials.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/VertexCollections.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/detail/VertexChannelSerializers.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/detail/AnimationChannelSerializer.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/CollectionSerializer.hpp"
 #include "Microsoft/Xna/Framework/BoundingSphere.hpp"
@@ -1510,6 +1513,31 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
         RegisterTypeSerializer(std::make_unique<CollectionSerializer<Graphics::PositionCollection, Vector3>>());
         RegisterTypeSerializer(
             std::make_unique<CollectionSerializer<Graphics::BoneWeightCollection, Graphics::BoneWeight>>());
+        // The vertex channels: a typed channel writes its packed entries, and the collection writes
+        // one <VertexChannel Name="…" ElementType="…"> element apiece (measured, mesh/serialize).
+        RegisterTypeSerializer(std::make_unique<Graphics::detail::VertexChannelSerializer<std::int32_t>>());
+        RegisterTypeSerializer(std::make_unique<Graphics::detail::VertexChannelCollectionSerializer>());
+        Graphics::detail::VertexChannelFactory::RegisterBuiltIns();
+        IntermediateSerializer::TypeSerializerFor<Graphics::VertexContent>();
+        // A geometry batch names its material through a MaterialContent reference, and the writer
+        // dispatches on the dynamic type, so every stock material has to be known already.
+        IntermediateSerializer::TypeSerializerFor<Graphics::MaterialContent>();
+        IntermediateSerializer::TypeSerializerFor<Graphics::BasicMaterialContent>();
+        IntermediateSerializer::TypeSerializerFor<Graphics::AlphaTestMaterialContent>();
+        IntermediateSerializer::TypeSerializerFor<Graphics::DualTextureMaterialContent>();
+        IntermediateSerializer::TypeSerializerFor<Graphics::EnvironmentMapMaterialContent>();
+        IntermediateSerializer::TypeSerializerFor<Graphics::SkinnedMaterialContent>();
+        IntermediateSerializer::TypeSerializerFor<Graphics::EffectMaterialContent>();
+        IntermediateSerializer::TypeSerializerFor<Graphics::EffectContent>();
+        IntermediateSerializer::TypeSerializerFor<Graphics::NodeContent>();
+        IntermediateSerializer::TypeSerializerFor<Graphics::BoneContent>();
+        IntermediateSerializer::TypeSerializerFor<Graphics::MeshContent>();
+        IntermediateSerializer::TypeSerializerFor<Graphics::GeometryContent>();
+        RegisterTypeSerializer(std::make_unique<
+                               CollectionSerializer<Graphics::NodeContentCollection, std::shared_ptr<Graphics::NodeContent>>>());
+        RegisterTypeSerializer(
+            std::make_unique<CollectionSerializer<Graphics::GeometryContentCollection,
+                                                  std::shared_ptr<Graphics::GeometryContent>>>());
         IntermediateSerializer::TypeSerializerFor<Graphics::AnimationContent>();
         RegisterTypeSerializer(
             std::make_unique<NamedValueDictionarySerializer<Graphics::AnimationChannelDictionary,
