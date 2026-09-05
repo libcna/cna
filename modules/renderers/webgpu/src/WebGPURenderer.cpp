@@ -904,7 +904,9 @@ namespace CNA::Internal::Renderers::WebGPU
             int colorWriteMask,
             std::uint32_t sampleMask,
             int colorAttachmentCount = 1,
-            WGPUTextureFormat depthFormat = WGPUTextureFormat_Depth24PlusStencil8)
+            WGPUTextureFormat depthFormat = WGPUTextureFormat_Depth24PlusStencil8,
+            WGPUTextureFormat colorFormat = WGPUTextureFormat_Undefined,
+            std::uint32_t sampleCount = 0)
         {
             std::uint64_t key = static_cast<std::uint64_t>(topology);
             // REMED-GFX-105: RequiredStripIndexFormat() canonicalizes this to Undefined for
@@ -947,6 +949,14 @@ namespace CNA::Internal::Renderers::WebGPU
             // Depth24PlusStencil8, so every existing (backbuffer/Depth24Stencil8) key is byte-identical.
             if (depthFormat != WGPUTextureFormat_Depth24PlusStencil8)
                 key = key * 31u + static_cast<std::uint64_t>(depthFormat);
+            // WEBGPU-197: a WebGPU pipeline bakes its colour target's FORMAT and SAMPLE COUNT, so
+            // two draws into targets that differ in either must not share one pipeline -- WebGPU
+            // rejects the mismatch outright. Both are folded unconditionally: a cache is per
+            // process, so what matters is that keys stay DISTINCT where the pipelines must be, not
+            // that a key keeps the numeric value it had before this dimension existed. Every draw
+            // in one pass sees the same pair, so no cardinality test gains a variant.
+            key = key * 31u + static_cast<std::uint64_t>(colorFormat);
+            key = key * 31u + static_cast<std::uint64_t>(sampleCount);
             return key;
         }
 
@@ -4325,7 +4335,10 @@ namespace CNA::Internal::Renderers::WebGPU
         std::array<WGPUColorTargetState, 4> mrtColorTargets{};
         const int mrtColorCount = InitStockColorTargetsEXT(mrtColorTargets);
         WGPUColorTargetState& target = mrtColorTargets[0];
-        target.format = surfaceFormat_;
+        // WEBGPU-197: the BOUND target's format, not the swap chain's. Undefined outside a replay
+        // (no pass to match), where the backbuffer's own format is the right answer.
+        target.format = replayColorFormat_ != WGPUTextureFormat_Undefined ? replayColorFormat_
+                                                                          : surfaceFormat_;
         target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
         WGPUFragmentState fragment{};
         fragment.module = d.fragmentModule;
@@ -4349,8 +4362,13 @@ namespace CNA::Internal::Renderers::WebGPU
         WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
         FillWGPUBlendState(blendState, d.blendParams);
         target.blend = d.blend ? &blendState : nullptr;
-        // WEBGPU-58: this renderer's single renderer-GLOBAL MSAA sample count (1 outside MSAA).
-        pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
+        // WEBGPU-58/197: the BOUND target's sample count. This was the renderer-global sampleCount_,
+        // which is why a RenderTarget2D had to mirror that global unconditionally rather than
+        // honouring its own request (WEBGPU-165). 0 means "not inside a replay", where the global is
+        // the right answer.
+        pipeline.multisample.count = replaySampleCount_ != 0
+                                         ? replaySampleCount_
+                                         : static_cast<std::uint32_t>(std::max(1, sampleCount_));
         pipeline.multisample.mask = CurrentSampleMask(); // REMED-GFX-077: BlendState.MultiSampleMask
         pipeline.multisample.alphaToCoverageEnabled = false;
         pipeline.fragment = &fragment;
@@ -4396,7 +4414,8 @@ namespace CNA::Internal::Renderers::WebGPU
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
+                                                     depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
+                                                     replayColorFormat_, replaySampleCount_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         if (auto it = coloredPipelines_.find(key); it != coloredPipelines_.end())
             return it->second;
@@ -4524,7 +4543,8 @@ namespace CNA::Internal::Renderers::WebGPU
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
+                                                     depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
+                                                     replayColorFormat_, replaySampleCount_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         if (auto it = texturedPipelines_.find(key); it != texturedPipelines_.end())
             return it->second;
@@ -4569,7 +4589,8 @@ namespace CNA::Internal::Renderers::WebGPU
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
+                                                     depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
+                                                     replayColorFormat_, replaySampleCount_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         if (auto it = coloredTexturedPipelines_.find(key); it != coloredTexturedPipelines_.end())
             return it->second;
@@ -4709,7 +4730,8 @@ namespace CNA::Internal::Renderers::WebGPU
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
+                                                     depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
+                                                     replayColorFormat_, replaySampleCount_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         if (auto it = litTexturedPipelines_.find(key); it != litTexturedPipelines_.end())
             return it->second;
@@ -4753,7 +4775,8 @@ namespace CNA::Internal::Renderers::WebGPU
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
+                                                     depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
+                                                     replayColorFormat_, replaySampleCount_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         if (auto it = litTexturedVertexLitPipelines_.find(key); it != litTexturedVertexLitPipelines_.end())
             return it->second;
@@ -4861,7 +4884,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias,
-                                                     CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
+                                                     CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
+                                                     replayColorFormat_, replaySampleCount_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         auto& cache = colored ? alphaTestColoredPipelines_ : alphaTestPipelines_;
         if (auto it = cache.find(key); it != cache.end())
@@ -5011,7 +5035,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias,
-                                                     CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
+                                                     CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
+                                                     replayColorFormat_, replaySampleCount_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         auto& cache = colored ? dualTextureColoredPipelines_ : dualTexturePipelines_;
         if (auto it = cache.find(key); it != cache.end())
@@ -5189,7 +5214,8 @@ namespace CNA::Internal::Renderers::WebGPU
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
+                                                     depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
+                                                     replayColorFormat_, replaySampleCount_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         if (auto it = envMapPipelines_.find(key); it != envMapPipelines_.end())
             return it->second;
@@ -5535,7 +5561,8 @@ namespace CNA::Internal::Renderers::WebGPU
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, salt, colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
+                                                     depthBias, slopeScaleDepthBias, salt, colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
+                                                     replayColorFormat_, replaySampleCount_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         if (auto it = instancedPipelines_.find(key); it != instancedPipelines_.end())
             return it->second;
@@ -7389,7 +7416,15 @@ namespace CNA::Internal::Renderers::WebGPU
         for (int c = 1; c < count; ++c)
         {
             out[static_cast<std::size_t>(c)] = WGPUColorTargetState{};
-            out[static_cast<std::size_t>(c)].format = surfaceFormat_;  // every RT here shares surfaceFormat_
+            // WEBGPU-197: this slot's OWN format, from the pass being replayed. It used to be
+            // surfaceFormat_ for every slot, which held only because a non-Color target could not be
+            // drawn into at all. Falls back to the replayed slot-0 format when the destination did
+            // not name one, which is the pre-197 answer for a set that shares one format.
+            out[static_cast<std::size_t>(c)].format =
+                replayMrtColorFormats_[static_cast<std::size_t>(c)] != WGPUTextureFormat_Undefined
+                    ? replayMrtColorFormats_[static_cast<std::size_t>(c)]
+                    : (replayColorFormat_ != WGPUTextureFormat_Undefined ? replayColorFormat_
+                                                                         : surfaceFormat_);
             out[static_cast<std::size_t>(c)].writeMask = WGPUColorWriteMask_None;  // stock draw writes slot 0 only
             out[static_cast<std::size_t>(c)].blend = nullptr;
         }
@@ -7408,6 +7443,15 @@ namespace CNA::Internal::Renderers::WebGPU
         replayDepthFormat_ = destination.depthView != nullptr ? destination.depthFormat
                                                               : WGPUTextureFormat_Undefined;
         replayDepthHasStencil_ = destination.depthView != nullptr && destination.depthHasStencil;
+        // WEBGPU-197: and the pass's own COLOUR format and sample count, the other two properties a
+        // WebGPU pipeline bakes. Every 3D family used to read the swap-chain pair regardless of what
+        // was bound, which is what made a non-Color target undrawable and a per-target sample count
+        // impossible. Both fall back to the renderer-global values when the destination does not say
+        // (an internal pass), so nothing about the backbuffer case moves.
+        replayColorFormat_ = destination.colorFormat != WGPUTextureFormat_Undefined
+                                 ? destination.colorFormat : surfaceFormat_;
+        replaySampleCount_ = std::max<std::uint32_t>(1u, destination.sampleCount);
+        replayMrtColorFormats_ = destination.mrtColorFormats;
         const bool trace = TraceDrawOrder();
 
         ReplayState state{};
@@ -10531,7 +10575,8 @@ namespace
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
+                                                     replayColorFormat_, replaySampleCount_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         auto& cache = colored ? pbrColorPipelines_ : pbrPipelines_;
         if (auto it = cache.find(key); it != cache.end())
@@ -11022,7 +11067,8 @@ namespace
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
+                                                     replayColorFormat_, replaySampleCount_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         auto& cache = preferVertexLit
             ? (hasVertexColor ? skinnedVertexLitColorPipelines_ : skinnedVertexLitPipelines_)
@@ -11426,7 +11472,8 @@ namespace
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
+                                                     replayColorFormat_, replaySampleCount_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         auto& cache = colored ? skinnedPbrColorPipelines_ : skinnedPbrPipelines_;
         if (auto it = cache.find(key); it != cache.end())

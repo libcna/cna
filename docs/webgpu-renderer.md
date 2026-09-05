@@ -769,6 +769,29 @@ render-target suites (`rendertarget_msaa_mip_readback`, `rendertarget_msaa_depth
 `rendertarget_first_use`) whose WebGPU "declares mipped targets unimplemented" declarations were
 deleted rather than left describing a boundary that no longer exists.
 
+## The pipeline key and the bound target (2026-09-05, `WEBGPU-197`, partial)
+
+A WebGPU render pipeline bakes its colour target's **format** and **sample count**. All twelve of
+this renderer's 3D families read the swap-chain `surfaceFormat_` and one renderer-global
+`sampleCount_` instead of the pass they were about to be used in, which is why a `RenderTarget2D`
+could not honour its own `multiSampleCount` and why no non-`Color` target could ever be drawn into.
+
+`ReplayDrawsInOrder` now records the pass's own colour format and sample count — alongside the depth
+format it already recorded — and `Build3DPipelineEXT` reads those, with both folded into every 3D
+pipeline cache key. `PassDestination` already carried the values per target, and the SpriteBatch path
+had keyed on them since it was written; this is the 3D side catching up.
+
+It is **not finished**, for two reasons worth stating rather than discovering later. Every target this
+renderer can currently create shares the backbuffer's format and mirrors its sample count, so the new
+key dimensions are today always equal to the values they replaced — real, but unprovable until
+`WEBGPU-198`/`199` or `WEBGPU-165` land. And it makes the `WEBGPU-58` finding reachable: that task
+measured, on this pin, that a shader module / bind-group layout / pipeline layout reused unchanged for
+a pipeline with a different `WGPUMultisampleState.count` **silently renders wrong** — no validation
+error, correct-looking draw, wrong pixels — which is why `ClearAllPipelineCaches()` tears down every
+module and layout when the global sample count changes. Building per-pass sample-count variants from
+shared modules is exactly that reuse; it is harmless only while every pass in a frame shares one
+count. Re-measure it before `WEBGPU-165` gives two targets different counts.
+
 ## Important limitations
 
 The desktop feature set now covers 3D (every stock effect, with FNA fog parity), real instancing,

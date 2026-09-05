@@ -2718,6 +2718,32 @@ namespace CNA::Internal::Renderers::WebGPU
         /// Depth16 target is distinct from one for Depth24PlusStencil8 (WebGPU rejects a format mismatch
         /// between pipeline and attachment). Set from the active target's own depth format at replay.
         WGPUTextureFormat replayDepthFormat_ = WGPUTextureFormat_Depth24PlusStencil8;
+
+        /**
+         * @brief WEBGPU-197: the COLOUR format of the render pass currently being replayed.
+         *
+         * A WebGPU render pipeline bakes `WGPUColorTargetState.format`, and every 3D family used to
+         * read the swap-chain `surfaceFormat_` -- which is why no non-`Color` target could ever be
+         * drawn into. It is set from the pass's own destination at replay, exactly as
+         * @ref replayDepthFormat_ is, and folded into every 3D pipeline key so a pipeline built for
+         * one target format is never handed to a pass using another. `Undefined` means "not inside a
+         * replay", and the builders fall back to `surfaceFormat_` then.
+         *
+         * The SpriteBatch path has always done this (`WebGPUSpriteBlendSnapshot::targetFormat`);
+         * this is the 3D side catching up.
+         */
+        WGPUTextureFormat replayColorFormat_ = WGPUTextureFormat_Undefined;
+        /**
+         * @brief WEBGPU-197: the SAMPLE COUNT of the render pass currently being replayed.
+         *
+         * The pipeline's other baked target property, and the reason a `RenderTarget2D` could not
+         * honour its own `multiSampleCount` (`WEBGPU-165`). 0 means "not inside a replay", and the
+         * builders fall back to the renderer-global `sampleCount_` then.
+         */
+        std::uint32_t replaySampleCount_ = 0;
+        /// WEBGPU-197: the extra MRT slots' own colour formats for the pass being replayed. Index 0
+        /// is unused; slot 0's format is @ref replayColorFormat_.
+        std::array<WGPUTextureFormat, 4> replayMrtColorFormats_{};
         /// WEBGPU-39: whether the active pass's depth format carries a stencil aspect (only the combined
         /// Depth24PlusStencil8 does). Stencil ops (WEBGPU-83) are baked only when true; the depth pass's
         /// own stencil load/store ops are likewise omitted for a depth-only format.
