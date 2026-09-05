@@ -241,11 +241,20 @@ namespace
      * DrawColoredPrimitives, and D3D9 reports that stride 20 has no matching CNA vertex layout.
      * Their texture SLOT is the same ITextureRenderer binding the other families use, so the
      * contract is still covered there by the remaining families.
+     *
+     * VULKAN joined the declining side in plans/plan_vulkan.md `VULKAN-152`, and it is worth saying why
+     * it was not there already. Its PbrEffect pair always refused this stride by name. Its
+     * SkinnedEffect did not -- it reduced any unlistable stride to 52, read past the record it was
+     * given, and rasterized NOTHING, which this very check then passed 32 samples out of 32
+     * because both of its sides draw the same family and an empty picture agrees with itself
+     * perfectly (`VULKAN-156`, finding F-25). With that silent no-op turned into a refusal, all
+     * three families decline the fixture and the renderer belongs in this list.
      */
     constexpr bool kSkinnedFamiliesAcceptPositionTexture =
 #if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_WEBGPU) || \
     defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_DIRECTX11) || \
-    defined(CNA_RENDERER_DIRECTX12) || defined(CNA_RENDERER_LLGL)
+    defined(CNA_RENDERER_DIRECTX12) || defined(CNA_RENDERER_LLGL) || \
+    defined(CNA_RENDERER_VULKAN)
         false;
 #else
         true;
