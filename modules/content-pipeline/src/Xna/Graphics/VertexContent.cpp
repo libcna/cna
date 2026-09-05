@@ -256,6 +256,15 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
 
     GeometryContent* VertexContent::Owner() const noexcept { return owner_; }
 
+    void VertexContent::ReorderVertices(const std::vector<SharpRuntime::intcs>& order)
+    {
+        positionIndices_->ReorderEntries(order);
+        for (const std::shared_ptr<VertexChannelBase>& channel : *channels_)
+        {
+            channel->ReorderEntries(order);
+        }
+    }
+
     void VertexContent::SetOwner(GeometryContent* owner) noexcept { owner_ = owner; }
 
     void VertexContent::DescribeContent(Serialization::Intermediate::ContentTypeDescriptor<VertexContent>& d)

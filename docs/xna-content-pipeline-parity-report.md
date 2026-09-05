@@ -10,8 +10,8 @@
 
 | Quantity | Implemented (EXACT + SEMANTIC + HOST_SUBSTITUTION) | EXTERNAL_BLOCKED | MISSING |
 |---|---|---:|---:|
-| public/protected types | 101/128 (78.9%) | 0 | 27 |
-| public/protected members | 574/705 (81.4%) | 0 | 131 |
+| public/protected types | 102/128 (79.7%) | 0 | 26 |
+| public/protected members | 584/705 (82.8%) | 0 | 121 |
 | enum values | 17/27 (63.0%) | 0 | 10 |
 | built-in importers | 0/10 (0.0%) | 0 | 10 |
 | built-in processors | 9/12 (75.0%) | 0 | 3 |
@@ -19,8 +19,8 @@
 
 Status vocabulary: EXACT_EQUIVALENT, SEMANTIC_EQUIVALENT (spelling differs, capability identical; note says how),
 HOST_SUBSTITUTION (Microsoft-host mechanism replaced; note says how), EXTERNAL_BLOCKED (note names the
-unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 40, SEMANTIC_EQUIVALENT 60, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 27.
-Member status by value: EXACT_EQUIVALENT 376, SEMANTIC_EQUIVALENT 193, HOST_SUBSTITUTION 5, EXTERNAL_BLOCKED 0, MISSING 131.
+unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 40, SEMANTIC_EQUIVALENT 61, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 26.
+Member status by value: EXACT_EQUIVALENT 376, SEMANTIC_EQUIVALENT 203, HOST_SUBSTITUTION 5, EXTERNAL_BLOCKED 0, MISSING 121.
 
 Rules applied mechanically: 3 delegate plumbing members are listed in section 7 and not counted; 3 exception
 serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serialization has no C++ counterpart).
@@ -31,7 +31,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 |---|---:|---:|---:|---:|
 | `Microsoft.Xna.Framework.Content.Pipeline.Audio` | 5 | 0 | 0 | 5 |
 | `Microsoft.Xna.Framework.Content.Pipeline` | 32 | 21 | 0 | 11 |
-| `Microsoft.Xna.Framework.Content.Pipeline.Graphics` | 47 | 45 | 0 | 2 |
+| `Microsoft.Xna.Framework.Content.Pipeline.Graphics` | 47 | 46 | 0 | 1 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Processors` | 28 | 23 | 0 | 5 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler` | 5 | 5 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate` | 7 | 7 | 0 | 0 |
@@ -88,7 +88,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `….Graphics` | `MaterialContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::MaterialContent` | The five accessors XNA declares protected stay protected, and a C++ null is an empty std::optional or a null shared_ptr. Every behaviour is pinned to tests/reference/xna40/graphics (cases material/*): a property set to null removes its entry, a property whose stored value has another type reads as null rather than refusing, and an empty key is refused the way the runtime refuses a null one. |
 | `….Graphics` | `MeshBuilder` | class | MISSING |  |  |
 | `….Graphics` | `MeshContent` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::MeshContent` |  |
-| `….Graphics` | `MeshHelper` | class | MISSING |  |  |
+| `….Graphics` | `MeshHelper` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::MeshHelper` | the mesh, batch and node are shared pointers, which is the lifetime a .NET reference gives them. A channel name left empty stands for XNA's null name. |
 | `….Graphics` | `MipmapChain` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::MipmapChain` | A Collection<BitmapContent> of shared_ptr elements; the null check XNA's InsertItem/SetItem perform is kept (ArgumentNullException, parameter name item). |
 | `….Graphics` | `MipmapChainCollection` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::MipmapChainCollection` | Carries XNA's fixed-size flag: a Texture2DContent has one face and a TextureCubeContent six, and resizing either refuses with XNA's NotSupportedException text. |
 | `….Graphics` | `NodeContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::NodeContent` | The transform starts as the identity, not the zero matrix a default .NET Matrix is -- visible in what the serializer writes for an untouched node (measured, node/serialize). AbsoluteTransform composes up the chain, and a node refuses a second parent with the runtime's own InvalidOperationException, which CNA's ChildCollection now gives everywhere. |
@@ -519,16 +519,16 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `MeshContent` | constructor | `.ctor()` | EXACT_EQUIVALENT | `MeshContent()` |  |
 | `MeshContent` | property | `Geometry` | EXACT_EQUIVALENT | `getGeometryProperty()` |  |
 | `MeshContent` | property | `Positions` | EXACT_EQUIVALENT | `getPositionsProperty()` |  |
-| `MeshHelper` | method | `CalculateNormals(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshContent, System.Boolean)` | MISSING |  |  |
-| `MeshHelper` | method | `CalculateTangentFrames(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshContent, System.String, System.String, System.String)` | MISSING |  |  |
-| `MeshHelper` | method | `FindSkeleton(Microsoft.Xna.Framework.Content.Pipeline.Graphics.NodeContent)` | MISSING |  |  |
-| `MeshHelper` | method | `FlattenSkeleton(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BoneContent)` | MISSING |  |  |
-| `MeshHelper` | method | `MergeDuplicatePositions(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshContent, System.Single)` | MISSING |  |  |
-| `MeshHelper` | method | `MergeDuplicateVertices(Microsoft.Xna.Framework.Content.Pipeline.Graphics.GeometryContent)` | MISSING |  |  |
-| `MeshHelper` | method | `MergeDuplicateVertices(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshContent)` | MISSING |  |  |
-| `MeshHelper` | method | `OptimizeForCache(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshContent)` | MISSING |  |  |
-| `MeshHelper` | method | `SwapWindingOrder(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshContent)` | MISSING |  |  |
-| `MeshHelper` | method | `TransformScene(Microsoft.Xna.Framework.Content.Pipeline.Graphics.NodeContent, Microsoft.Xna.Framework.Matrix)` | MISSING |  |  |
+| `MeshHelper` | method | `CalculateNormals(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshContent, System.Boolean)` | SEMANTIC_EQUIVALENT | `CalculateNormals(const std::shared_ptr<MeshContent>&, bool)` | the mesh, batch and node are shared pointers, which is the lifetime a .NET reference gives them. |
+| `MeshHelper` | method | `CalculateTangentFrames(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshContent, System.String, System.String, System.String)` | SEMANTIC_EQUIVALENT | `CalculateTangentFrames(const std::shared_ptr<MeshContent>&, const std::string&, const std::string&, const std::string&)` | the mesh, batch and node are shared pointers, which is the lifetime a .NET reference gives them. An empty channel name asks for that half of the frame not to be written, as XNA's null does. |
+| `MeshHelper` | method | `FindSkeleton(Microsoft.Xna.Framework.Content.Pipeline.Graphics.NodeContent)` | SEMANTIC_EQUIVALENT | `FindSkeleton(const std::shared_ptr<NodeContent>&) -> std::shared_ptr<BoneContent>` | the mesh, batch and node are shared pointers, which is the lifetime a .NET reference gives them. |
+| `MeshHelper` | method | `FlattenSkeleton(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BoneContent)` | SEMANTIC_EQUIVALENT | `FlattenSkeleton(const std::shared_ptr<BoneContent>&) -> std::vector<std::shared_ptr<BoneContent>>` | the list is a std::vector of shared pointers, which is what an IList<BoneContent> is here. |
+| `MeshHelper` | method | `MergeDuplicatePositions(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshContent, System.Single)` | SEMANTIC_EQUIVALENT | `MergeDuplicatePositions(const std::shared_ptr<MeshContent>&, Single)` | the mesh, batch and node are shared pointers, which is the lifetime a .NET reference gives them. |
+| `MeshHelper` | method | `MergeDuplicateVertices(Microsoft.Xna.Framework.Content.Pipeline.Graphics.GeometryContent)` | SEMANTIC_EQUIVALENT | `MergeDuplicateVertices(const std::shared_ptr<GeometryContent>&)` | the mesh, batch and node are shared pointers, which is the lifetime a .NET reference gives them. |
+| `MeshHelper` | method | `MergeDuplicateVertices(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshContent)` | SEMANTIC_EQUIVALENT | `MergeDuplicateVertices(const std::shared_ptr<MeshContent>&)` | the mesh, batch and node are shared pointers, which is the lifetime a .NET reference gives them. |
+| `MeshHelper` | method | `OptimizeForCache(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshContent)` | SEMANTIC_EQUIVALENT | `OptimizeForCache(const std::shared_ptr<MeshContent>&)` | the mesh, batch and node are shared pointers, which is the lifetime a .NET reference gives them. |
+| `MeshHelper` | method | `SwapWindingOrder(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshContent)` | SEMANTIC_EQUIVALENT | `SwapWindingOrder(const std::shared_ptr<MeshContent>&)` | the mesh, batch and node are shared pointers, which is the lifetime a .NET reference gives them. |
+| `MeshHelper` | method | `TransformScene(Microsoft.Xna.Framework.Content.Pipeline.Graphics.NodeContent, Microsoft.Xna.Framework.Matrix)` | SEMANTIC_EQUIVALENT | `TransformScene(const std::shared_ptr<NodeContent>&, const Matrix&)` | the mesh, batch and node are shared pointers, which is the lifetime a .NET reference gives them. |
 | `MipmapChain` | constructor | `.ctor()` | EXACT_EQUIVALENT | `MipmapChain()` |  |
 | `MipmapChain` | constructor | `.ctor(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent)` | SEMANTIC_EQUIVALENT | `MipmapChain(std::shared_ptr<BitmapContent>)` | reference parameters are shared_ptr carriers: a BitmapContent is polymorphic and owned, so CNA passes std::shared_ptr<BitmapContent> where XNA passes the reference itself. |
 | `MipmapChain` | method | `InsertItem(System.Int32, Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent)` | SEMANTIC_EQUIVALENT | `InsertItem(intcs, const std::shared_ptr<BitmapContent>&)` | reference parameters are shared_ptr carriers: a BitmapContent is polymorphic and owned, so CNA passes std::shared_ptr<BitmapContent> where XNA passes the reference itself. |

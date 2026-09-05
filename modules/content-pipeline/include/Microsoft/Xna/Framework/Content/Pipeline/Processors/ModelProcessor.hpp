@@ -246,14 +246,6 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
                                           SharpRuntime::intcs vertexChannelIndex, ContentProcessorContext& context);
 
     private:
-        /**
-         * @brief Adds the tangent and binormal channels a geometry batch is asked for.
-         *
-         * @param geometry The geometry batch.
-         * @throws InvalidContentException when the batch has no `TextureCoordinate0` channel.
-         */
-        static void GenerateTangentFrames(Graphics::GeometryContent& geometry);
-
         Color colorKeyColor_{255, 0, 255, 255};
         bool colorKeyEnabled_ = true;
         MaterialProcessorDefaultEffect defaultEffect_ = MaterialProcessorDefaultEffect::BasicEffect;

@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentProcessorContext.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/MeshHelper.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/StockMaterials.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/VertexChannelNames.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
@@ -43,62 +44,6 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
                 result.push_back(batches[i]);
             }
             return result;
-        }
-
-        /** @brief Every position of a mesh, as a list the caller can write back. */
-        void TransformPositions(Graphics::MeshContent& mesh, const Matrix& transform)
-        {
-            Graphics::PositionCollection& positions = mesh.getPositionsProperty();
-            const auto& reader =
-                static_cast<const System::Collections::ObjectModel::Collection<Vector3>&>(positions);
-            for (SharpRuntime::intcs i = 0; i < positions.getCountProperty(); ++i)
-            {
-                positions.setItem(i, Vector3::Transform(reader[i], transform));
-            }
-        }
-
-        /**
-         * @brief Applies a transform to a scene the way the model processor's scale and rotation
-         *        reach it: the geometry is moved, and every node's transform is re-expressed in the
-         *        new frame so the scene comes out transformed exactly once.
-         */
-        void TransformScene(Graphics::NodeContent& node, const Matrix& transform, const Matrix& inverse)
-        {
-            node.setTransformProperty(inverse * node.getTransformProperty() * transform);
-            if (auto* mesh = dynamic_cast<Graphics::MeshContent*>(&node))
-            {
-                TransformPositions(*mesh, transform);
-                for (const std::shared_ptr<Graphics::GeometryContent>& geometry : GeometryOf(*mesh))
-                {
-                    auto& channels = geometry->getVerticesProperty().getChannelsProperty();
-                    for (const std::shared_ptr<Graphics::VertexChannelBase>& channel : channels)
-                    {
-                        // A direction is rotated and made unit again; a texture coordinate or a
-                        // colour is left alone.
-                        const std::string base =
-                            Graphics::VertexChannelNames::DecodeBaseName(channel->getNameProperty());
-                        if (base != "Normal" && base != "Tangent" && base != "Binormal")
-                        {
-                            continue;
-                        }
-                        auto typed = std::dynamic_pointer_cast<Graphics::VertexChannel<Vector3>>(channel);
-                        if (typed == nullptr)
-                        {
-                            continue;
-                        }
-                        for (SharpRuntime::intcs i = 0; i < typed->getCountProperty(); ++i)
-                        {
-                            Vector3 value = Vector3::TransformNormal(typed->At(i), transform);
-                            value.Normalize();
-                            typed->SetAt(i, value);
-                        }
-                    }
-                }
-            }
-            for (const std::shared_ptr<Graphics::NodeContent>& child : ChildrenOf(node))
-            {
-                TransformScene(*child, transform, inverse);
-            }
         }
 
         /** @brief The sphere that bounds a mesh's own positions. */
@@ -184,7 +129,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
                                   Matrix::CreateRotationX(MathHelper::ToRadians(rotationX_)) *
                                   Matrix::CreateRotationY(MathHelper::ToRadians(rotationY_)) *
                                   Matrix::CreateScale(scale_);
-        TransformScene(*input, adjustment, Matrix::Invert(adjustment));
+        Graphics::MeshHelper::TransformScene(input, adjustment);
         ModelBoneContentCollection bones;
         ModelMeshContentCollection meshes;
         // Every node becomes a bone, in the order a depth-first walk reaches them (measured,
@@ -206,6 +151,12 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
             if (const auto mesh = std::dynamic_pointer_cast<Graphics::MeshContent>(node))
             {
                 ModelMeshPartContentCollection parts;
+                if (generateTangentFrames_)
+                {
+                    Graphics::MeshHelper::CalculateTangentFrames(
+                        mesh, Graphics::VertexChannelNames::TextureCoordinate(0),
+                        Graphics::VertexChannelNames::Tangent(0), Graphics::VertexChannelNames::Binormal(0));
+                }
                 const std::vector<std::shared_ptr<Graphics::GeometryContent>> batches = GeometryOf(*mesh);
                 // A geometry with no material of its own is given one (measured,
                 // modelprocessor/triangle answers a BasicMaterialContent), and the batches that
@@ -235,6 +186,14 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
                 {
                     ProcessGeometryUsingMaterial(materials[group], grouped[group], context);
                 }
+                if (swapWindingOrder_)
+                {
+                    Graphics::MeshHelper::SwapWindingOrder(mesh);
+                }
+                // Every batch is put through the cache optimization, which reverses its triangles
+                // and renumbers its vertices in the order the reversed list reaches them
+                // (measured, modelprocessor/quad_ordering and swap_winding_detail).
+                Graphics::MeshHelper::OptimizeForCache(mesh);
                 for (const std::shared_ptr<Graphics::GeometryContent>& geometry : batches)
                 {
                     const auto& indices = static_cast<const System::Collections::ObjectModel::Collection<
@@ -243,24 +202,6 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
                     for (SharpRuntime::intcs i = 0; i < indices.getCountProperty(); ++i)
                     {
                         indexBuffer->Add(indices[i]);
-                    }
-                    if (swapWindingOrder_)
-                    {
-                        // Reversing each triangle's last two indices is what turns a model
-                        // inside out without touching its vertices.
-                        for (SharpRuntime::intcs i = 0; i + 2 < indexBuffer->getCountProperty(); i += 3)
-                        {
-                            const SharpRuntime::intcs second =
-                                static_cast<const System::Collections::ObjectModel::Collection<
-                                    SharpRuntime::intcs>&>(*indexBuffer)[i + 1];
-                            const SharpRuntime::intcs third =
-                                static_cast<const System::Collections::ObjectModel::Collection<
-                                    SharpRuntime::intcs>&>(*indexBuffer)[i + 2];
-                            indexBuffer->Insert(i + 1, third);
-                            indexBuffer->RemoveAt(i + 2);
-                            indexBuffer->Insert(i + 2, second);
-                            indexBuffer->RemoveAt(i + 3);
-                        }
                     }
                     auto part = std::make_shared<ModelMeshPartContent>(
                         geometry->getVerticesProperty().CreateVertexBuffer(), indexBuffer, 0,
@@ -323,10 +264,6 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
                                               (mesh == nullptr ? std::string() : mesh->getNameProperty()) +
                                               "\" contains geometry without any vertex weights.");
             }
-            if (generateTangentFrames_)
-            {
-                GenerateTangentFrames(*geometry);
-            }
             for (SharpRuntime::intcs i = 0;
                  i < geometry->getVerticesProperty().getChannelsProperty().getCountProperty(); ++i)
             {
@@ -373,100 +310,6 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
             };
             typed->SetAt(i, Color(scale(colour.getRProperty()), scale(colour.getGProperty()),
                                   scale(colour.getBProperty()), colour.getAProperty()));
-        }
-    }
-
-    void ModelProcessor::GenerateTangentFrames(Graphics::GeometryContent& geometry)
-    {
-        auto& channels = geometry.getVerticesProperty().getChannelsProperty();
-        const std::string tangentName = Graphics::VertexChannelNames::Tangent(0);
-        const std::string binormalName = Graphics::VertexChannelNames::Binormal(0);
-        if (channels.Contains(tangentName) && channels.Contains(binormalName))
-        {
-            return;
-        }
-        const std::string texCoordName = Graphics::VertexChannelNames::TextureCoordinate(0);
-        if (!channels.Contains(texCoordName))
-        {
-            // The frame is derived from the texture coordinates, so their absence is refused by
-            // name (measured, modelprocessor/tangent_frames_no_texcoords).
-            throw InvalidContentException("Required vertex channel \"" + texCoordName + "\" not found.");
-        }
-        const std::shared_ptr<Graphics::VertexChannel<Vector2>> texCoords =
-            channels.Get<Vector2>(texCoordName);
-        const std::shared_ptr<Graphics::VertexChannel<Vector3>> normals =
-            channels.Contains(Graphics::VertexChannelNames::Normal())
-                ? channels.Get<Vector3>(Graphics::VertexChannelNames::Normal())
-                : nullptr;
-        const SharpRuntime::intcs count = geometry.getVerticesProperty().getVertexCountProperty();
-        const auto& positions = geometry.getVerticesProperty().getPositionsProperty();
-        const auto& indices =
-            static_cast<const System::Collections::ObjectModel::Collection<SharpRuntime::intcs>&>(
-                geometry.getIndicesProperty());
-        std::vector<Vector3> tangents(static_cast<std::size_t>(count), Vector3(0, 0, 0));
-        std::vector<Vector3> faceNormals(static_cast<std::size_t>(count), Vector3(0, 0, 0));
-        for (SharpRuntime::intcs i = 0; i + 2 < indices.getCountProperty(); i += 3)
-        {
-            const SharpRuntime::intcs a = indices[i];
-            const SharpRuntime::intcs b = indices[i + 1];
-            const SharpRuntime::intcs c = indices[i + 2];
-            const Vector3 edge1 = Vector3::Subtract(positions[b], positions[a]);
-            const Vector3 edge2 = Vector3::Subtract(positions[c], positions[a]);
-            const Vector2 delta1 = Vector2::Subtract(texCoords->At(b), texCoords->At(a));
-            const Vector2 delta2 = Vector2::Subtract(texCoords->At(c), texCoords->At(a));
-            const SharpRuntime::Single determinant = delta1.X * delta2.Y - delta2.X * delta1.Y;
-            const Vector3 face = Vector3::Cross(edge1, edge2);
-            for (const SharpRuntime::intcs vertex : {a, b, c})
-            {
-                faceNormals[static_cast<std::size_t>(vertex)] =
-                    Vector3::Add(faceNormals[static_cast<std::size_t>(vertex)], face);
-            }
-            if (determinant == 0.0f)
-            {
-                continue;
-            }
-            const SharpRuntime::Single reciprocal = 1.0f / determinant;
-            const Vector3 tangent = Vector3::Multiply(
-                Vector3::Subtract(Vector3::Multiply(edge1, delta2.Y), Vector3::Multiply(edge2, delta1.Y)),
-                reciprocal);
-            for (const SharpRuntime::intcs vertex : {a, b, c})
-            {
-                tangents[static_cast<std::size_t>(vertex)] =
-                    Vector3::Add(tangents[static_cast<std::size_t>(vertex)], tangent);
-            }
-        }
-        std::vector<Vector3> tangentChannel(static_cast<std::size_t>(count));
-        std::vector<Vector3> binormalChannel(static_cast<std::size_t>(count));
-        for (SharpRuntime::intcs i = 0; i < count; ++i)
-        {
-            Vector3 normal = normals != nullptr ? normals->At(i) : faceNormals[static_cast<std::size_t>(i)];
-            if (normal.LengthSquared() > 0.0f)
-            {
-                normal.Normalize();
-            }
-            Vector3 tangent = tangents[static_cast<std::size_t>(i)];
-            // The tangent is made perpendicular to the normal before it is stored, which is what
-            // keeps the frame orthogonal where two triangles disagree.
-            tangent = Vector3::Subtract(tangent, Vector3::Multiply(normal, Vector3::Dot(normal, tangent)));
-            if (tangent.LengthSquared() > 0.0f)
-            {
-                tangent.Normalize();
-            }
-            Vector3 binormal = Vector3::Cross(normal, tangent);
-            if (binormal.LengthSquared() > 0.0f)
-            {
-                binormal.Normalize();
-            }
-            tangentChannel[static_cast<std::size_t>(i)] = tangent;
-            binormalChannel[static_cast<std::size_t>(i)] = binormal;
-        }
-        if (!channels.Contains(tangentName))
-        {
-            (void)channels.Add<Vector3>(tangentName, std::move(tangentChannel));
-        }
-        if (!channels.Contains(binormalName))
-        {
-            (void)channels.Add<Vector3>(binormalName, std::move(binormalChannel));
         }
     }
 

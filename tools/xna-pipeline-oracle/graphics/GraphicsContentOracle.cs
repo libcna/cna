@@ -2178,6 +2178,403 @@ namespace Cna.Xna40.GraphicsOracle
                 return DescribeModelFull(model);
             });
 
+            // ---- MeshBuilder and MeshHelper ------------------------------------------------------
+            Record("meshbuilder/defaults", () =>
+            {
+                MeshBuilder builder = MeshBuilder.StartMesh("Mesh");
+                return "MergeDuplicatePositions=" + builder.MergeDuplicatePositions +
+                       " MergePositionTolerance=" + builder.MergePositionTolerance.ToString("R", CultureInfo.InvariantCulture) +
+                       " Name=" + (builder.Name == null ? "null" : "\"" + builder.Name + "\"") +
+                       " SwapWindingOrder=" + builder.SwapWindingOrder;
+            });
+            Record("meshbuilder/quad", () => DescribeMeshFull(BuiltQuad(false, false)));
+            Record("meshbuilder/quad_merged", () => DescribeMeshFull(BuiltQuad(true, false)));
+            Record("meshbuilder/quad_swapped", () => DescribeMeshFull(BuiltQuad(false, true)));
+            Record("meshbuilder/duplicate_positions", () =>
+            {
+                // The same position twice, once exactly and once within the tolerance.
+                MeshBuilder builder = MeshBuilder.StartMesh("Mesh");
+                builder.MergeDuplicatePositions = true;
+                builder.MergePositionTolerance = 0.01f;
+                int a = builder.CreatePosition(new Vector3(0, 0, 0));
+                int b = builder.CreatePosition(new Vector3(0, 0, 0));
+                int c = builder.CreatePosition(new Vector3(0.005f, 0, 0));
+                int d = builder.CreatePosition(new Vector3(1, 0, 0));
+                builder.AddTriangleVertex(a);
+                builder.AddTriangleVertex(d);
+                builder.AddTriangleVertex(c);
+                return "a=" + a + " b=" + b + " c=" + c + " d=" + d + " " + DescribeMeshFull(builder.FinishMesh());
+            });
+            Record("meshbuilder/material_and_opaque_data", () =>
+            {
+                MeshBuilder builder = MeshBuilder.StartMesh("Mesh");
+                var material = new BasicMaterialContent();
+                material.Alpha = 0.5f;
+                builder.SetMaterial(material);
+                var data = new OpaqueDataDictionary();
+                data.Add("Key", 7);
+                builder.SetOpaqueData(data);
+                builder.CreatePosition(0, 0, 0);
+                builder.CreatePosition(1, 0, 0);
+                builder.CreatePosition(0, 1, 0);
+                builder.AddTriangleVertex(0);
+                builder.AddTriangleVertex(1);
+                builder.AddTriangleVertex(2);
+                return DescribeMeshFull(builder.FinishMesh());
+            });
+            Record("meshbuilder/refusals", () =>
+            {
+                var builder = new StringBuilder();
+                Action<string, Action> probe = delegate(string name, Action body)
+                {
+                    if (builder.Length > 0) builder.Append(' ');
+                    try { body(); builder.Append(name + "=accepted"); }
+                    catch (Exception error) { builder.Append(name + "=" + error.GetType().Name + ":" + error.Message); }
+                };
+                probe("nullName", delegate { MeshBuilder.StartMesh(null); });
+                probe("channelAfterVertex", delegate
+                {
+                    MeshBuilder one = MeshBuilder.StartMesh("Mesh");
+                    one.CreatePosition(0, 0, 0);
+                    one.AddTriangleVertex(0);
+                    one.CreateVertexChannel<Vector3>(VertexChannelNames.Normal());
+                });
+                probe("badVertexIndex", delegate
+                {
+                    MeshBuilder one = MeshBuilder.StartMesh("Mesh");
+                    one.CreatePosition(0, 0, 0);
+                    one.AddTriangleVertex(4);
+                });
+                probe("wrongChannelType", delegate
+                {
+                    MeshBuilder one = MeshBuilder.StartMesh("Mesh");
+                    int channel = one.CreateVertexChannel<Vector3>(VertexChannelNames.Normal());
+                    one.CreatePosition(0, 0, 0);
+                    one.SetVertexChannelData(channel, new Vector2(1, 2));
+                    one.AddTriangleVertex(0);
+                    one.FinishMesh();
+                });
+                probe("badChannelIndex", delegate
+                {
+                    MeshBuilder one = MeshBuilder.StartMesh("Mesh");
+                    one.SetVertexChannelData(3, Vector3.UnitZ);
+                });
+                probe("unfinishedTriangle", delegate
+                {
+                    MeshBuilder one = MeshBuilder.StartMesh("Mesh");
+                    one.CreatePosition(0, 0, 0);
+                    one.AddTriangleVertex(0);
+                    one.FinishMesh();
+                });
+                probe("nullMaterial", delegate { MeshBuilder.StartMesh("Mesh").SetMaterial(null); });
+                probe("nullOpaqueData", delegate { MeshBuilder.StartMesh("Mesh").SetOpaqueData(null); });
+                return builder.ToString();
+            });
+            Record("meshhelper/calculate_normals", () =>
+            {
+                MeshContent mesh = BuiltQuad(true, false);
+                mesh.Geometry[0].Vertices.Channels.Remove(VertexChannelNames.Normal());
+                MeshHelper.CalculateNormals(mesh, false);
+                return DescribeMeshFull(mesh);
+            });
+            Record("meshhelper/calculate_normals_overwrite", () =>
+            {
+                MeshContent mesh = BuiltQuad(true, false);
+                for (int i = 0; i < mesh.Geometry[0].Vertices.VertexCount; i++)
+                    mesh.Geometry[0].Vertices.Channels.Get<Vector3>(VertexChannelNames.Normal())[i] = new Vector3(1, 0, 0);
+                MeshHelper.CalculateNormals(mesh, false);
+                string kept = DescribeMeshFull(mesh);
+                MeshHelper.CalculateNormals(mesh, true);
+                return "kept=" + kept + " overwritten=" + DescribeMeshFull(mesh);
+            });
+            Record("meshhelper/calculate_tangent_frames", () =>
+            {
+                MeshContent mesh = BuiltQuad(true, false);
+                MeshHelper.CalculateTangentFrames(mesh, VertexChannelNames.TextureCoordinate(0),
+                                                  VertexChannelNames.Tangent(0), VertexChannelNames.Binormal(0));
+                return DescribeMeshFull(mesh);
+            });
+            Record("meshhelper/calculate_tangent_frames_refusals", () =>
+            {
+                var builder = new StringBuilder();
+                Action<string, Action> probe = delegate(string name, Action body)
+                {
+                    if (builder.Length > 0) builder.Append(' ');
+                    try { body(); builder.Append(name + "=accepted"); }
+                    catch (Exception error) { builder.Append(name + "=" + error.GetType().Name + ":" + error.Message); }
+                };
+                probe("noTexCoords", delegate
+                {
+                    MeshContent mesh = BuiltQuad(true, false);
+                    mesh.Geometry[0].Vertices.Channels.Remove(VertexChannelNames.TextureCoordinate(0));
+                    MeshHelper.CalculateTangentFrames(mesh, VertexChannelNames.TextureCoordinate(0),
+                                                      VertexChannelNames.Tangent(0), VertexChannelNames.Binormal(0));
+                });
+                probe("nullTangentAndBinormal", delegate
+                {
+                    MeshContent mesh = BuiltQuad(true, false);
+                    MeshHelper.CalculateTangentFrames(mesh, VertexChannelNames.TextureCoordinate(0), null, null);
+                });
+                probe("nullMesh", delegate
+                {
+                    MeshHelper.CalculateTangentFrames(null, VertexChannelNames.TextureCoordinate(0),
+                                                      VertexChannelNames.Tangent(0), VertexChannelNames.Binormal(0));
+                });
+                return builder.ToString();
+            });
+            Record("meshhelper/skeleton", () =>
+            {
+                var root = new NodeContent();
+                root.Name = "Root";
+                var skeleton = new BoneContent();
+                skeleton.Name = "Skeleton";
+                var childA = new BoneContent();
+                childA.Name = "A";
+                var childB = new BoneContent();
+                childB.Name = "B";
+                var grandChild = new BoneContent();
+                grandChild.Name = "A1";
+                root.Children.Add(skeleton);
+                skeleton.Children.Add(childA);
+                skeleton.Children.Add(childB);
+                childA.Children.Add(grandChild);
+                BoneContent found = MeshHelper.FindSkeleton(root);
+                var order = new StringBuilder();
+                foreach (BoneContent bone in MeshHelper.FlattenSkeleton(skeleton))
+                    order.Append((order.Length == 0 ? "" : ",") + bone.Name);
+                string fromBone = MeshHelper.FindSkeleton(grandChild) == null ? "null" : MeshHelper.FindSkeleton(grandChild).Name;
+                return "found=" + (found == null ? "null" : found.Name) + " flattened=[" + order + "]" +
+                       " fromGrandChild=" + fromBone +
+                       " fromEmpty=" + (MeshHelper.FindSkeleton(new NodeContent()) == null ? "null" : "found");
+            });
+            Record("meshhelper/merge_duplicate_positions", () =>
+            {
+                MeshContent mesh = BuiltQuad(false, false);
+                MeshHelper.MergeDuplicatePositions(mesh, 0.0f);
+                string exact = DescribeMeshFull(mesh);
+                MeshContent loose = BuiltQuad(false, false);
+                loose.Positions[1] = new Vector3(1.001f, 0, 0);
+                MeshHelper.MergeDuplicatePositions(loose, 0.01f);
+                return "exact=" + exact + " loose=" + DescribeMeshFull(loose);
+            });
+            Record("meshhelper/merge_duplicate_vertices", () =>
+            {
+                MeshContent mesh = BuiltQuad(true, false);
+                MeshHelper.MergeDuplicateVertices(mesh.Geometry[0]);
+                string one = DescribeMeshFull(mesh);
+                MeshContent whole = BuiltQuad(true, false);
+                MeshHelper.MergeDuplicateVertices(whole);
+                return "geometry=" + one + " mesh=" + DescribeMeshFull(whole);
+            });
+            Record("meshhelper/optimize_for_cache", () =>
+            {
+                MeshContent mesh = BuiltQuad(true, false);
+                MeshHelper.OptimizeForCache(mesh);
+                return DescribeMeshFull(mesh);
+            });
+            Record("meshhelper/swap_winding_order", () =>
+            {
+                MeshContent mesh = BuiltQuad(true, false);
+                MeshHelper.SwapWindingOrder(mesh);
+                return DescribeMeshFull(mesh);
+            });
+            Record("meshhelper/transform_scene", () =>
+            {
+                var root = new NodeContent();
+                root.Name = "Root";
+                root.Transform = Matrix.CreateTranslation(1, 0, 0);
+                var bone = new BoneContent();
+                bone.Name = "Bone";
+                bone.Transform = Matrix.CreateTranslation(0, 3, 0);
+                root.Children.Add(bone);
+                MeshContent mesh = BuiltQuad(true, false);
+                bone.Children.Add(mesh);
+                MeshHelper.TransformScene(root, Matrix.CreateRotationY(MathHelper.ToRadians(90)) * Matrix.CreateScale(2));
+                return "root=" + DescribeMatrixFull(root.Transform) + " bone=" + DescribeMatrixFull(bone.Transform) +
+                       " " + DescribeMeshFull(mesh);
+            });
+
+            Record("modelprocessor/swap_winding_detail", () =>
+            {
+                // The plain swap_winding case counts the indices; this one prints their order.
+                var processor = new ModelProcessor();
+                processor.SwapWindingOrder = true;
+                var root = new NodeContent();
+                root.Name = "Root";
+                root.Children.Add(TriangleMesh());
+                return DescribeModelFull(processor.Process(root, new RecordingProcessorContext()));
+            });
+            Record("meshhelper/calculate_normals_tent", () =>
+            {
+                MeshContent mesh = Tent();
+                MeshHelper.CalculateNormals(mesh, true);
+                return DescribeMeshFull(mesh);
+            });
+            Record("meshhelper/merge_duplicate_positions_real", () =>
+            {
+                var mesh = new MeshContent();
+                mesh.Name = "Mesh";
+                mesh.Positions.Add(new Vector3(0, 0, 0));
+                mesh.Positions.Add(new Vector3(1, 0, 0));
+                mesh.Positions.Add(new Vector3(0.0005f, 0, 0));
+                mesh.Positions.Add(new Vector3(0, 1, 0));
+                var geometry = new GeometryContent();
+                mesh.Geometry.Add(geometry);
+                geometry.Vertices.AddRange(new int[] { 0, 1, 2, 3 });
+                geometry.Indices.AddRange(new int[] { 0, 1, 2, 1, 2, 3 });
+                geometry.Vertices.Channels.Add<Vector2>(VertexChannelNames.TextureCoordinate(0),
+                    new Vector2[] { new Vector2(0, 0), new Vector2(1, 0), new Vector2(0, 0), new Vector2(0, 1) });
+                MeshContent tight = Tent();
+                MeshHelper.MergeDuplicatePositions(mesh, 0.001f);
+                string merged = DescribeMeshFull(mesh);
+                MeshHelper.MergeDuplicatePositions(tight, 0.0f);
+                return "merged=" + merged + " tent=" + DescribeMeshFull(tight);
+            });
+            Record("meshhelper/merge_duplicate_vertices_real", () =>
+            {
+                // Two vertices at the same position with the same channel data, and two with
+                // different data: what tells which of the two a merge is keyed on.
+                var mesh = new MeshContent();
+                mesh.Name = "Mesh";
+                mesh.Positions.Add(new Vector3(0, 0, 0));
+                mesh.Positions.Add(new Vector3(1, 0, 0));
+                mesh.Positions.Add(new Vector3(0, 1, 0));
+                var geometry = new GeometryContent();
+                mesh.Geometry.Add(geometry);
+                geometry.Vertices.AddRange(new int[] { 0, 1, 2, 0, 1, 2 });
+                geometry.Indices.AddRange(new int[] { 0, 1, 2, 3, 4, 5 });
+                geometry.Vertices.Channels.Add<Vector2>(VertexChannelNames.TextureCoordinate(0),
+                    new Vector2[] { new Vector2(0, 0), new Vector2(1, 0), new Vector2(0, 1),
+                                    new Vector2(0, 0), new Vector2(1, 0), new Vector2(9, 9) });
+                MeshHelper.MergeDuplicateVertices(geometry);
+                return DescribeMeshFull(mesh);
+            });
+            Record("meshhelper/optimize_for_cache_grid", () =>
+            {
+                MeshContent mesh = Grid(3);
+                MeshHelper.OptimizeForCache(mesh);
+                return DescribeMeshFull(mesh);
+            });
+
+            Record("modelprocessor/quad_ordering", () =>
+            {
+                // Two triangles through the processor: whether their order and their vertices come
+                // out as they went in is what says whether the cache optimization runs here.
+                var processor = new ModelProcessor();
+                var root = new NodeContent();
+                root.Name = "Root";
+                root.Children.Add(BuiltQuad(true, false));
+                return DescribeModelFull(processor.Process(root, new RecordingProcessorContext()));
+            });
+            Record("meshhelper/calculate_normals_shared_positions", () =>
+            {
+                // Two vertices at one position with different texture coordinates -- a seam. Do
+                // they get one averaged normal, or one each?
+                var mesh = new MeshContent();
+                mesh.Name = "Seam";
+                mesh.Positions.Add(new Vector3(0, 0, 0));
+                mesh.Positions.Add(new Vector3(1, 0, 0));
+                mesh.Positions.Add(new Vector3(0, 1, 0));
+                mesh.Positions.Add(new Vector3(0, 0, 1));
+                var geometry = new GeometryContent();
+                mesh.Geometry.Add(geometry);
+                geometry.Vertices.AddRange(new int[] { 0, 1, 2, 0, 3, 1 });
+                geometry.Indices.AddRange(new int[] { 0, 1, 2, 3, 4, 5 });
+                geometry.Vertices.Channels.Add<Vector2>(VertexChannelNames.TextureCoordinate(0),
+                    new Vector2[] { new Vector2(0, 0), new Vector2(1, 0), new Vector2(0, 1),
+                                    new Vector2(7, 7), new Vector2(8, 8), new Vector2(9, 9) });
+                MeshHelper.CalculateNormals(mesh, true);
+                return DescribeMeshFull(mesh);
+            });
+            Record("meshhelper/optimize_for_cache_shuffled", () =>
+            {
+                // The same grid with its triangles in a scrambled order: a plain reversal and a
+                // real cache optimizer answer differently here.
+                MeshContent mesh = Grid(3);
+                GeometryContent geometry = mesh.Geometry[0];
+                var order = new int[] { 5, 0, 11, 3, 8, 14, 1, 17, 6, 12, 2, 9, 16, 4, 10, 7, 15, 13 };
+                var indices = new List<int>();
+                foreach (int triangle in order)
+                    for (int i = 0; i < 3; i++)
+                        indices.Add(geometry.Indices[triangle * 3 + i]);
+                geometry.Indices.Clear();
+                geometry.Indices.AddRange(indices.ToArray());
+                MeshHelper.OptimizeForCache(mesh);
+                return DescribeMeshFull(mesh);
+            });
+
+            Record("meshhelper/null_and_range_refusals", () =>
+            {
+                var builder = new StringBuilder();
+                Action<string, Action> probe = delegate(string name, Action body)
+                {
+                    if (builder.Length > 0) builder.Append(' ');
+                    try { body(); builder.Append(name + "=accepted"); }
+                    catch (Exception error) { builder.Append(name + "=" + error.GetType().Name + ":" + error.Message); }
+                };
+                probe("normalsNull", delegate { MeshHelper.CalculateNormals(null, true); });
+                probe("mergePositionsNull", delegate { MeshHelper.MergeDuplicatePositions(null, 0.0f); });
+                probe("mergePositionsNegative", delegate { MeshHelper.MergeDuplicatePositions(Tent(), -1.0f); });
+                probe("mergeVerticesNullGeometry", delegate { MeshHelper.MergeDuplicateVertices((GeometryContent)null); });
+                probe("mergeVerticesNullMesh", delegate { MeshHelper.MergeDuplicateVertices((MeshContent)null); });
+                probe("optimizeNull", delegate { MeshHelper.OptimizeForCache(null); });
+                probe("swapNull", delegate { MeshHelper.SwapWindingOrder(null); });
+                probe("transformNull", delegate { MeshHelper.TransformScene(null, Matrix.Identity); });
+                probe("findSkeletonNull", delegate { MeshHelper.FindSkeleton(null); });
+                probe("flattenNull", delegate { MeshHelper.FlattenSkeleton(null); });
+                return builder.ToString();
+            });
+            Record("meshbuilder/channel_refusals", () =>
+            {
+                var builder = new StringBuilder();
+                Action<string, Action> probe = delegate(string name, Action body)
+                {
+                    if (builder.Length > 0) builder.Append(' ');
+                    try { body(); builder.Append(name + "=accepted"); }
+                    catch (Exception error) { builder.Append(name + "=" + error.GetType().Name + ":" + error.Message); }
+                };
+                probe("nullChannelName", delegate { MeshBuilder.StartMesh("Mesh").CreateVertexChannel<Vector3>(null); });
+                probe("duplicateChannel", delegate
+                {
+                    MeshBuilder one = MeshBuilder.StartMesh("Mesh");
+                    one.CreateVertexChannel<Vector3>(VertexChannelNames.Normal());
+                    one.CreateVertexChannel<Vector3>(VertexChannelNames.Normal());
+                });
+                probe("intChannel", delegate { MeshBuilder.StartMesh("Mesh").CreateVertexChannel<int>("Custom0"); });
+                probe("stringChannel", delegate { MeshBuilder.StartMesh("Mesh").CreateVertexChannel<string>("Custom0"); });
+                probe("dataBeforePosition", delegate
+                {
+                    MeshBuilder one = MeshBuilder.StartMesh("Mesh");
+                    int channel = one.CreateVertexChannel<Vector3>(VertexChannelNames.Normal());
+                    one.SetVertexChannelData(channel, Vector3.UnitZ);
+                });
+                probe("finishTwice", delegate
+                {
+                    MeshBuilder one = MeshBuilder.StartMesh("Mesh");
+                    one.CreatePosition(0, 0, 0);
+                    one.CreatePosition(1, 0, 0);
+                    one.CreatePosition(0, 1, 0);
+                    one.AddTriangleVertex(0);
+                    one.AddTriangleVertex(1);
+                    one.AddTriangleVertex(2);
+                    one.FinishMesh();
+                    one.FinishMesh();
+                });
+                probe("nameAfterStart", delegate
+                {
+                    MeshBuilder one = MeshBuilder.StartMesh("Given");
+                    one.Name = "Renamed";
+                    one.CreatePosition(0, 0, 0);
+                    one.CreatePosition(1, 0, 0);
+                    one.CreatePosition(0, 1, 0);
+                    one.AddTriangleVertex(0);
+                    one.AddTriangleVertex(1);
+                    one.AddTriangleVertex(2);
+                    if (one.FinishMesh().Name != "Renamed") throw new Exception("name=" + one.FinishMesh().Name);
+                });
+                return builder.ToString();
+            });
+
             // ---- TextureReferenceDictionary ------------------------------------------------------
             Record("texturereferencedictionary/default", () => { var d = new TextureReferenceDictionary(); return "count=" + d.Count + " ToString=\"" + d + "\""; });
 
@@ -2459,6 +2856,126 @@ namespace Cna.Xna40.GraphicsOracle
                 builder.Append(position.X.ToString("R", CultureInfo.InvariantCulture));
             }
             return "[" + builder + "]";
+        }
+
+        /// A mesh in full: its positions, and per geometry its vertex indices, triangle indices and
+        /// every channel's values. What tells a merge from a copy, and a reorder from a rewrite.
+        private static string DescribeMeshFull(MeshContent mesh)
+        {
+            if (mesh == null) return "null";
+            var builder = new StringBuilder("name=" + (mesh.Name ?? "null") + " positions=" + mesh.Positions.Count + "[");
+            for (int i = 0; i < mesh.Positions.Count; i++)
+                builder.Append((i == 0 ? "" : " ") + VectorText(mesh.Positions[i]));
+            builder.Append("] geometry=" + mesh.Geometry.Count);
+            foreach (GeometryContent geometry in mesh.Geometry)
+            {
+                builder.Append(" {vertices=" + geometry.Vertices.VertexCount + " positionIndices=[");
+                for (int i = 0; i < geometry.Vertices.PositionIndices.Count; i++)
+                    builder.Append((i == 0 ? "" : ",") + geometry.Vertices.PositionIndices[i]);
+                builder.Append("] indices=[");
+                for (int i = 0; i < geometry.Indices.Count; i++)
+                    builder.Append((i == 0 ? "" : ",") + geometry.Indices[i]);
+                builder.Append("] material=" + (geometry.Material == null ? "null" : geometry.Material.GetType().Name));
+                builder.Append(" opaque=" + geometry.OpaqueData.Count);
+                foreach (VertexChannel channel in geometry.Vertices.Channels)
+                {
+                    builder.Append(" channel=" + channel.Name + ":" + channel.ElementType.Name + "[");
+                    for (int i = 0; i < channel.Count; i++)
+                        builder.Append((i == 0 ? "" : " ") + ValueText(channel[i]));
+                    builder.Append("]");
+                }
+                builder.Append("}");
+            }
+            return builder.ToString();
+        }
+
+        private static string VectorText(Vector3 value)
+        {
+            return "(" + value.X.ToString("R", CultureInfo.InvariantCulture) + "," +
+                   value.Y.ToString("R", CultureInfo.InvariantCulture) + "," +
+                   value.Z.ToString("R", CultureInfo.InvariantCulture) + ")";
+        }
+
+        private static string ValueText(object value)
+        {
+            if (value == null) return "null";
+            if (value is Vector3) return VectorText((Vector3)value);
+            if (value is Vector2)
+            {
+                Vector2 v = (Vector2)value;
+                return "(" + v.X.ToString("R", CultureInfo.InvariantCulture) + "," + v.Y.ToString("R", CultureInfo.InvariantCulture) + ")";
+            }
+            if (value is float) return ((float)value).ToString("R", CultureInfo.InvariantCulture);
+            return Convert.ToString(value, CultureInfo.InvariantCulture);
+        }
+
+        /// The one mesh the MeshBuilder and MeshHelper cases start from: a unit quad of two
+        /// triangles, built through the builder itself so the builder's own output is measured.
+        private static MeshContent BuiltQuad(bool merge, bool swap)
+        {
+            MeshBuilder builder = MeshBuilder.StartMesh("Quad");
+            builder.MergeDuplicatePositions = merge;
+            builder.SwapWindingOrder = swap;
+            int normals = builder.CreateVertexChannel<Vector3>(VertexChannelNames.Normal());
+            int coords = builder.CreateVertexChannel<Vector2>(VertexChannelNames.TextureCoordinate(0));
+            int a = builder.CreatePosition(0, 0, 0);
+            int b = builder.CreatePosition(1, 0, 0);
+            int c = builder.CreatePosition(1, 1, 0);
+            int d = builder.CreatePosition(0, 1, 0);
+            int[] corners = new int[] { a, b, c, a, c, d };
+            Vector2[] uv = new Vector2[] { new Vector2(0, 0), new Vector2(1, 0), new Vector2(1, 1),
+                                           new Vector2(0, 0), new Vector2(1, 1), new Vector2(0, 1) };
+            for (int i = 0; i < corners.Length; i++)
+            {
+                builder.SetVertexChannelData(normals, Vector3.UnitZ);
+                builder.SetVertexChannelData(coords, uv[i]);
+                builder.AddTriangleVertex(corners[i]);
+            }
+            return builder.FinishMesh();
+        }
+
+        /// A tent: two triangles meeting along a shared edge at a right angle, which is what tells
+        /// an averaged vertex normal from a face normal.
+        private static MeshContent Tent()
+        {
+            var mesh = new MeshContent();
+            mesh.Name = "Tent";
+            mesh.Positions.Add(new Vector3(0, 0, 0));
+            mesh.Positions.Add(new Vector3(1, 0, 0));
+            mesh.Positions.Add(new Vector3(0, 1, 0));
+            mesh.Positions.Add(new Vector3(0, 0, 1));
+            var geometry = new GeometryContent();
+            mesh.Geometry.Add(geometry);
+            geometry.Vertices.AddRange(new int[] { 0, 1, 2, 3 });
+            geometry.Indices.AddRange(new int[] { 0, 1, 2, 0, 3, 1 });
+            return mesh;
+        }
+
+        /// A grid of quads, which is a mesh big enough for a cache optimizer to have a choice.
+        private static MeshContent Grid(int side)
+        {
+            var mesh = new MeshContent();
+            mesh.Name = "Grid";
+            for (int y = 0; y <= side; y++)
+                for (int x = 0; x <= side; x++)
+                    mesh.Positions.Add(new Vector3(x, y, 0));
+            var geometry = new GeometryContent();
+            mesh.Geometry.Add(geometry);
+            var vertices = new List<int>();
+            var indices = new List<int>();
+            for (int y = 0; y < side; y++)
+                for (int x = 0; x < side; x++)
+                {
+                    int a = y * (side + 1) + x, b = a + 1, c = a + side + 1, d = c + 1;
+                    foreach (int corner in new int[] { a, b, d, a, d, c })
+                    {
+                        indices.Add(vertices.Count);
+                        vertices.Add(corner);
+                    }
+                }
+            geometry.Vertices.AddRange(vertices.ToArray());
+            geometry.Indices.AddRange(indices.ToArray());
+            return mesh;
         }
 
         private static string DescribeVertices(VertexContent vertices)

@@ -1436,6 +1436,14 @@ TEST(XnaModelProcessor, ProcessesASceneAsXnaDoes)
     EXPECT_EQ(DescribeModel(swapped.Process(TriangleScene(), swappedContext)),
               Expected("modelprocessor/swap_winding"));
 
+    // Swapping reverses the whole triangle and the cache optimization then renumbers its vertices,
+    // which is why the index buffer still reads 0,1,2 and the vertices came out reversed.
+    Processors::ModelProcessor swappedDetail;
+    swappedDetail.setSwapWindingOrderProperty(true);
+    RecordingContext swappedDetailContext;
+    EXPECT_EQ(DescribeModelFull(swappedDetail.Process(TriangleScene(), swappedDetailContext)),
+              Expected("modelprocessor/swap_winding_detail"));
+
     Processors::ModelProcessor empty;
     RecordingContext emptyContext;
     EXPECT_EQ(DescribeModel(empty.Process(std::make_shared<Graphics::NodeContent>(), emptyContext)),

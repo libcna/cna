@@ -1684,60 +1684,60 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshHelper": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::MeshHelper",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/MeshHelper.hpp",
+   "note": "the mesh, batch and node are shared pointers, which is the lifetime a .NET reference gives them. A channel name left empty stands for XNA's null name.",
    "members": {
     "method:CalculateNormals(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshContent, System.Boolean)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "CalculateNormals(const std::shared_ptr<MeshContent>&, bool)",
+     "note": "the mesh, batch and node are shared pointers, which is the lifetime a .NET reference gives them."
     },
     "method:CalculateTangentFrames(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshContent, System.String, System.String, System.String)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "CalculateTangentFrames(const std::shared_ptr<MeshContent>&, const std::string&, const std::string&, const std::string&)",
+     "note": "the mesh, batch and node are shared pointers, which is the lifetime a .NET reference gives them. An empty channel name asks for that half of the frame not to be written, as XNA's null does."
     },
     "method:FindSkeleton(Microsoft.Xna.Framework.Content.Pipeline.Graphics.NodeContent)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "FindSkeleton(const std::shared_ptr<NodeContent>&) -> std::shared_ptr<BoneContent>",
+     "note": "the mesh, batch and node are shared pointers, which is the lifetime a .NET reference gives them."
     },
     "method:FlattenSkeleton(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BoneContent)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "FlattenSkeleton(const std::shared_ptr<BoneContent>&) -> std::vector<std::shared_ptr<BoneContent>>",
+     "note": "the list is a std::vector of shared pointers, which is what an IList<BoneContent> is here."
     },
     "method:MergeDuplicatePositions(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshContent, System.Single)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "MergeDuplicatePositions(const std::shared_ptr<MeshContent>&, Single)",
+     "note": "the mesh, batch and node are shared pointers, which is the lifetime a .NET reference gives them."
     },
     "method:MergeDuplicateVertices(Microsoft.Xna.Framework.Content.Pipeline.Graphics.GeometryContent)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "MergeDuplicateVertices(const std::shared_ptr<GeometryContent>&)",
+     "note": "the mesh, batch and node are shared pointers, which is the lifetime a .NET reference gives them."
     },
     "method:MergeDuplicateVertices(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshContent)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "MergeDuplicateVertices(const std::shared_ptr<MeshContent>&)",
+     "note": "the mesh, batch and node are shared pointers, which is the lifetime a .NET reference gives them."
     },
     "method:OptimizeForCache(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshContent)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "OptimizeForCache(const std::shared_ptr<MeshContent>&)",
+     "note": "the mesh, batch and node are shared pointers, which is the lifetime a .NET reference gives them."
     },
     "method:SwapWindingOrder(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshContent)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "SwapWindingOrder(const std::shared_ptr<MeshContent>&)",
+     "note": "the mesh, batch and node are shared pointers, which is the lifetime a .NET reference gives them."
     },
     "method:TransformScene(Microsoft.Xna.Framework.Content.Pipeline.Graphics.NodeContent, Microsoft.Xna.Framework.Matrix)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "TransformScene(const std::shared_ptr<NodeContent>&, const Matrix&)",
+     "note": "the mesh, batch and node are shared pointers, which is the lifetime a .NET reference gives them."
     }
    }
   },

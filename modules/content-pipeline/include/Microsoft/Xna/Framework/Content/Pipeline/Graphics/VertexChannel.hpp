@@ -190,6 +190,26 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
          */
         CNAEXT virtual void AddEntry(const ContentObject& value) = 0;
 
+        /**
+         * @brief Rebuilds the entries in the given order, which is how a mesh is reordered without
+         *        knowing what its channels hold.
+         *
+         * @param order The old index of each new entry; it must name every entry once.
+         * @throws System::ArgumentException when the order is not a permutation of the entries.
+         */
+        CNAEXT virtual void ReorderEntries(const std::vector<SharpRuntime::intcs>& order) = 0;
+
+        /**
+         * @brief Determines whether two entries of this channel are equal.
+         *
+         * @param first The first entry index.
+         * @param second The second entry index.
+         * @return true when the entries compare equal.
+         * @throws System::ArgumentOutOfRangeException when an index is outside the channel.
+         */
+        CNAEXT [[nodiscard]] virtual bool EntriesEqual(SharpRuntime::intcs first,
+                                                       SharpRuntime::intcs second) const = 0;
+
         /** @brief Returns the type's stable name. */
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
@@ -397,6 +417,47 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
                               SharpRuntime::intcs stride) const override;
 
         /** @brief Appends one boxed entry. */
+        CNAEXT void ReorderEntries(const std::vector<SharpRuntime::intcs>& order) override
+        {
+            if (order.size() != items_.size())
+            {
+                throw System::ArgumentException("The order must name every entry of the channel once.",
+                                                "order");
+            }
+            std::vector<T> reordered;
+            reordered.reserve(items_.size());
+            for (const SharpRuntime::intcs index : order)
+            {
+                if (index < 0 || static_cast<std::size_t>(index) >= items_.size())
+                {
+                    throw System::ArgumentException("The order must name every entry of the channel once.",
+                                                    "order");
+                }
+                reordered.push_back(items_[static_cast<std::size_t>(index)]);
+            }
+            items_ = std::move(reordered);
+        }
+
+        CNAEXT [[nodiscard]] bool EntriesEqual(SharpRuntime::intcs first,
+                                               SharpRuntime::intcs second) const override
+        {
+            if (first < 0 || second < 0 || static_cast<std::size_t>(first) >= items_.size() ||
+                static_cast<std::size_t>(second) >= items_.size())
+            {
+                throw System::ArgumentOutOfRangeException("index");
+            }
+            const T& a = items_[static_cast<std::size_t>(first)];
+            const T& b = items_[static_cast<std::size_t>(second)];
+            if constexpr (detail::ValidPixelType<T>)
+            {
+                return detail::PixelTraits<T>::Equal(a, b);
+            }
+            else
+            {
+                return a == b;
+            }
+        }
+
         CNAEXT void AddEntry(const ContentObject& value) override
         {
             if (!Holds<T>(value))

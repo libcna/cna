@@ -238,6 +238,14 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
         CNAEXT [[nodiscard]] GeometryContent* Owner() const noexcept;
 
         /**
+         * @brief Rebuilds the vertices in the given order, position indices and channels together.
+         *
+         * @param order The old index of each new vertex; it must name every vertex once.
+         * @throws System::ArgumentException when the order is not a permutation of the vertices.
+         */
+        CNAEXT void ReorderVertices(const std::vector<SharpRuntime::intcs>& order);
+
+        /**
          * @brief Attaches these vertices to a geometry batch.
          *
          * @param owner The owning batch.
