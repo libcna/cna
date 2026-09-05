@@ -30,7 +30,20 @@ namespace CNA::Internal::Xnb
          * @param reference The authored reference, which may be empty for "no reference".
          * @return Empty when the reference is acceptable, otherwise the reason it is not.
          */
-        [[nodiscard]] std::string ExternalReferenceProblem(const std::string& reference)
+        /// Counts the directory components of a logical asset name: the depth an external
+        /// reference written from that asset may climb with `..` and still stay in the root.
+        [[nodiscard]] int AssetDirectoryDepth(const std::string& assetName)
+        {
+            int depth = 0;
+            for (const char character : assetName)
+            {
+                if (character == '/' || character == '\\') { ++depth; }
+            }
+            return depth;
+        }
+
+        [[nodiscard]] std::string ExternalReferenceProblem(const std::string& reference,
+                                                           const int assetDirectoryDepth)
         {
             if (reference.empty()) { return {}; }
             // A NUL or a control character in a path is never authored on purpose. It survives
@@ -53,7 +66,10 @@ namespace CNA::Internal::Xnb
                 return "it names a drive-qualified absolute path";
             }
 
-            int depth = 0;
+            // The reader resolves the reference relative to the asset's own directory
+            // (ContentReader::ReadExternalReference), so an asset in a subdirectory may climb
+            // that many levels before it leaves the content root.
+            int depth = assetDirectoryDepth;
             std::size_t start = 0u;
             while (start <= reference.size())
             {
@@ -228,7 +244,7 @@ namespace CNA::Internal::Xnb
 
     void XnbWriter::WriteExternalReference(const std::string& relativePath)
     {
-        const std::string problem = ExternalReferenceProblem(relativePath);
+        const std::string problem = ExternalReferenceProblem(relativePath, AssetDirectoryDepth(assetName_));
         if (!problem.empty())
         {
             throw XnbWriteException(
@@ -304,6 +320,25 @@ namespace CNA::Internal::Xnb
     }
 
     void XnbWriter::WriteNullObject() { body_.Write7BitEncodedInt(0); }
+
+    void XnbWriter::WriteObject(const XnbTypeWriterBase& writer, const void* value)
+    {
+        Write7BitEncodedInt(InternTypeWriter(writer));
+        WriteNested(writer, value);
+    }
+
+    void XnbWriter::WriteRawObject(const XnbTypeWriterBase& writer, const void* value)
+    {
+        InternTypeWriter(writer);
+        WriteNested(writer, value);
+    }
+
+    std::int32_t XnbWriter::AddSharedResource(const XnbTypeWriterBase& writer,
+                                              std::shared_ptr<const void> owner)
+    {
+        const void* pointer = owner.get();
+        return EnqueueSharedResource(writer, pointer, std::move(owner));
+    }
 
     std::string XnbWriter::MissingWriterContext() const
     {

@@ -649,6 +649,16 @@ namespace CNA::Content::Pipeline
         return value_ == nullptr;
     }
 
+    std::type_index ContentValue::CppType() const noexcept
+    {
+        return cppType_;
+    }
+
+    const void* ContentValue::RawData() const noexcept
+    {
+        return value_.get();
+    }
+
     ContentImporterContext::ContentImporterContext(
         std::filesystem::path sourceRoot, std::filesystem::path source, std::string logicalName,
         std::string component, const ContentSourceRootCapabilities& externalSourceRoots,
@@ -1384,7 +1394,7 @@ namespace CNA::Content::Pipeline
         {
             writerSchemas = writer->OutputSchemaIdentities();
             ValidateWriterSchemas(writerSchemas);
-            output = writer->Write(processed, logicalName);
+            output = writer->Write(processed, logicalName, request.environment);
             if (output.bytes.empty())
             {
                 throw std::logic_error("writer returned an empty file image.");

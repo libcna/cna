@@ -519,6 +519,27 @@ namespace CNA::Content::Pipeline
         [[nodiscard]] bool Empty() const noexcept;
 
         /**
+         * @brief Returns the process-local C++ type of the stored value, for a component that
+         *        dispatches on it without knowing @p T statically (the XNA-shaped
+         *        `ContentCompiler`, plans/plan_xnapipeline_parity.md `XNAPP-062`).
+         *
+         * Never serialized: it identifies a type only within this process.
+         *
+         * @return The stored value's `std::type_index`, or `typeid(void)` when empty.
+         */
+        [[nodiscard]] std::type_index CppType() const noexcept;
+
+        /**
+         * @brief Returns the erased address of the stored value, valid while this object lives.
+         *
+         * The pointer is meaningful only together with CppType(); a caller casts it to that type
+         * and to nothing else.
+         *
+         * @return The stored value, or null when empty.
+         */
+        [[nodiscard]] const void* RawData() const noexcept;
+
+        /**
          * @brief Accesses the concrete value after checking its process-local C++ type.
          *
          * @tparam T Concrete type expected by the component.
@@ -1036,6 +1057,28 @@ namespace CNA::Content::Pipeline
          */
         [[nodiscard]] virtual ContentWriteResult Write(const ContentValue& input,
                                                        const std::string& logicalName) const = 0;
+
+        /**
+         * @brief Writes with the build's host-level facts available
+         *        (plans/plan_xnapipeline_parity.md `XNAPP-063`).
+         *
+         * The coordinator calls this form; the default forwards to Write() so every existing
+         * writer is unchanged. A writer whose bytes depend on the environment -- an XNB object
+         * writer spelling external references relative to the asset's output location -- overrides
+         * it.
+         *
+         * @param input Processed value whose stable type equals InputType().
+         * @param logicalName Logical name recorded in the output.
+         * @param environment The build's platform, profile, configuration and directories.
+         * @return The same result Write() returns.
+         */
+        [[nodiscard]] virtual ContentWriteResult Write(const ContentValue& input,
+                                                       const std::string& logicalName,
+                                                       const ContentBuildEnvironment& environment) const
+        {
+            (void)environment;
+            return Write(input, logicalName);
+        }
     };
 
     /**
