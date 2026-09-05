@@ -1069,6 +1069,16 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_declared_effect_layout
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plans/plan_vulkan.md VULKAN-149 (F-15): the INSTANCED route's per-vertex layout, and the
+        # choice between its two vertex shaders, come from the declaration rather than from
+        # REMED-GFX-212's stride table. Every record carries a decoy colour at the offset that
+        # table would have used, so a stride-driven implementation cannot agree by accident.
+        cna_vulkan_test(cna_test_vulkan_declared_instanced_layout
+                        vulkan_declared_instanced_layout_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DeclaredInstancedLayout
+            COMMAND cna_test_vulkan_declared_instanced_layout
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plans/plan_vulkan.md VULKAN-146 (F-15): the BasicEffect pipelines take their attribute
         # offsets from the caller's VertexDeclaration. Two 24-byte declarations the stride table
         # cannot tell apart -- colour at 12 and colour at 20 -- must draw their own colours and get

@@ -4931,6 +4931,14 @@ namespace CNA::Internal::Renderers::Vulkan
         /// plans/plan_gltf.md GLTF-463's stride-80 variant: the above plus a vertex colour.
         constexpr StockProgramInput kPbrSkinnedColored[] = { kPos, kNormal, kTangent, kUv, kWeights,
                                                              kIndices, kUv1, kColor };
+
+        // VULKAN-149. The instanced route's PER-VERTEX inputs only: locations 0 and 1 of
+        // instanced3d.vert.glsl / instanced_colored3d.vert.glsl. Its per-instance matrix columns
+        // sit at 4..7 on binding 1, are not declaration-derived and are appended after these.
+        /// instanced3d, position-only.
+        constexpr StockProgramInput kInstanced[]        = { kPos };
+        /// instanced_colored3d, REMED-GFX-212's position+colour sibling.
+        constexpr StockProgramInput kInstancedColored[] = { kPos, kColor };
     }
 
     // VULKAN-146: swap a factory's baked attribute array for the declaration-derived one when the
@@ -5130,6 +5138,43 @@ namespace CNA::Internal::Renderers::Vulkan
         default:
             return false;
         }
+    }
+
+    // VULKAN-149: the instanced route's PER-VERTEX layout, and with it the choice between its two
+    // vertex shaders.
+    //
+    // REMED-GFX-212 made that choice from the stride alone, and the table above is the whole of
+    // it. That is the same guess REMED-GFX-234 took out of the BasicEffect bundle, in both
+    // directions: a position-only vertex padded to 16 bytes gets a colour attribute aimed at four
+    // bytes of padding, and a Position+Colour vertex at any stride the table does not list loses
+    // its colour with no diagnostic. A declaration answers both questions -- whether there is a
+    // colour at all, and where it is.
+    //
+    // An ABSENT declaration keeps the stride's answer; it is the only thing there is to go on, and
+    // it is what every `VertexBuffer(device, count)` relies on. The declaration's answer is taken
+    // only when the layout it produces is COMPLETE: a shader picked from the declaration and fed
+    // from the stride table would be the worst of both, so an incomplete layout falls back to the
+    // stride for the shape and the attributes together, and goes through the fidelity guard.
+    //
+    // Only the two per-vertex inputs are built here. The per-instance matrix columns are a
+    // separate stream at locations 4..7 on binding 1, appended by the factory afterwards, and
+    // `MultiStreamVertexInput` stays false.
+    static VulkanVertexInputLayoutEXT BuildInstancedVertexLayoutEXT(
+        const CNA::Internal::Graphics::DeclaredVertexLayout& declared)
+    {
+        if (declared.IsEmpty()) return {};
+        const bool wantColored = DeclarationNamesUsageEXT(
+            declared, Microsoft::Xna::Framework::Graphics::VertexElementUsage::Color);
+        std::size_t inputCount = 0;
+        const CNA::Internal::Graphics::StockProgramInput* inputs = nullptr;
+        if (wantColored) {
+            inputs     = StockInputs::kInstancedColored;
+            inputCount = std::size(StockInputs::kInstancedColored);
+        } else {
+            inputs     = StockInputs::kInstanced;
+            inputCount = std::size(StockInputs::kInstanced);
+        }
+        return BuildVulkanVertexInputLayoutEXT(declared, inputs, inputCount);
     }
 
     VkPipeline VulkanRenderer::GetOrCreatePipeline3D(VkPrimitiveTopology topo,
@@ -8791,7 +8836,8 @@ namespace CNA::Internal::Renderers::Vulkan
         std::size_t pvStride, VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
-        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
+        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt,
+        const VulkanVertexInputLayoutEXT& vertexLayout)
     {
         // Ensure pipelineLayoutExt3D_ exists (128-byte PC + 1 descriptor set for future texture use).
         if (pipelineLayoutExt3D_ == VK_NULL_HANDLE) {
@@ -8808,7 +8854,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // FoldPerVertexStrideIntoKey. VertexColorEnabled itself is deliberately NOT in the key:
         // it travels in the push constant (FillInstancedPushConst's pc[31]), exactly as it does
         // for the ordinary colored3d pipeline, so toggling it never creates a pipeline variant.
-        PipelineKey key = { FoldPerVertexStrideIntoKey(FoldDepthFormatIntoKey(MakeExt3DKey(pvStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), pvStride), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask };
+        PipelineKey key = { FoldPerVertexStrideIntoKey(FoldDepthFormatIntoKey(MakeExt3DKey(pvStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), pvStride), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask, vertexLayout.Hash() };
         auto it = pipelinesInstanced3D_.find(key);
         if (it != pipelinesInstanced3D_.end()) return it->second;
 
@@ -8816,7 +8862,13 @@ namespace CNA::Internal::Renderers::Vulkan
         // REMED-GFX-212: the geometry stride's own packed layout selects the vertex shader, the
         // same way the ordinary route picks colored3d/textured3d/colored_textured3d by stride.
         uint32_t packedColorOffset = 0;
-        const bool hasPackedColor = PackedColorOffsetForStride(pvStride, packedColorOffset);
+        // VULKAN-149: the declaration decides this when it supplied every input of one of the two
+        // programs, and the shape is read back off the layout it produced -- one attribute is
+        // instanced3d, two is instanced_colored3d. There is no third shape, so nothing else can
+        // be meant. Without a usable declaration the stride table answers, exactly as before.
+        const bool hasPackedColor = vertexLayout.IsComplete()
+            ? vertexLayout.attributeCount == std::size(StockInputs::kInstancedColored)
+            : PackedColorOffsetForStride(pvStride, packedColorOffset);
         VkShaderModule vert = hasPackedColor
             ? CreateShaderModule(kInstancedColored3dVertSpv, kInstancedColored3dVertSpv_size)
             : CreateShaderModule(kInstanced3dVertSpv, kInstanced3dVertSpv_size);
@@ -8839,6 +8891,11 @@ namespace CNA::Internal::Renderers::Vulkan
         // per-instance columns keep locations 4..7, so this can never collide with them.
         if (hasPackedColor)
             attrs[attrCount++] = { 1, 0, VK_FORMAT_R8G8B8A8_UNORM, packedColorOffset }; // aColor
+        // VULKAN-149: and the declaration's own offsets and formats replace the two above when it
+        // supplied them. Applied here, before the per-instance columns are appended, because the
+        // applicator overwrites from index 0 and resets the count -- binding 1's attributes are
+        // not declaration-derived and must survive it.
+        ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, std::size(attrs), attrCount);
         attrs[attrCount++] = { 4, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0  }; // aInstCol0 (per-instance)
         attrs[attrCount++] = { 5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 16 }; // aInstCol1
         attrs[attrCount++] = { 6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 32 }; // aInstCol2
@@ -9649,7 +9706,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 } else if (draw.useInstanced) {
                     pipe = GetOrCreatePipelineInstanced3D(draw.stride, draw.topology,
                                                           draw.depthTest, draw.depthWrite,
-                                                          draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
+                                                          draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt, draw.vertexLayout);
                 } else if (draw.useLitTextured) {
                     // Task 1103: same rationale as useSkinned above.
                     pipe = draw.preferVertexLit
@@ -12185,8 +12242,16 @@ namespace CNA::Internal::Renderers::Vulkan
         // FX-112: not applied to a compiled draw, which builds its vertex input from the
         // declarations rather than from the stride, so any declaration it can satisfy is faithful
         // by construction.
-        RequireFaithfulDeclarationEXT(vb_in, "instanced", /*positionOnlyFallback=*/true,
-                                      compiledEffectDraw);
+        const auto& vbForLayout = static_cast<const VulkanVertexBufferRenderer&>(vb_in);
+        const VulkanVertexInputLayoutEXT instancedLayout =
+            BuildInstancedVertexLayoutEXT(vbForLayout.GetDeclarationEXT());
+        // VULKAN-149: as on the ordinary routes -- the guard is for a route that infers its input
+        // from the stride, and a declaration that supplied every per-vertex input of the program
+        // it selected means this one no longer does. Everything else still goes through it
+        // unchanged, including a declaration that left one of those two inputs unsupplied.
+        if (!instancedLayout.IsComplete())
+            RequireFaithfulDeclarationEXT(vb_in, "instanced", /*positionOnlyFallback=*/true,
+                                          compiledEffectDraw);
 
         // REMED-GFX-151: as in the two Ex draws above. The `instanceVb == nullptr` branch already
         // returned through DrawIndexedPrimitivesEx, which notes them itself.
@@ -12310,6 +12375,9 @@ namespace CNA::Internal::Renderers::Vulkan
         // SetVertexBuffers cannot reach this queued draw.
         d.baseVertex   = static_cast<int32_t>(params.baseVertex + perVertexOffset);
         d.useInstanced = true;
+        // VULKAN-149: taken at DRAW time, like every other route's, because the record is replayed
+        // at Present() by which time the buffer's declaration may have been replaced.
+        d.vertexLayout = instancedLayout;
         d.descSet      = defaultWhiteDescSet_;  // no per-draw texture for now
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
         // plans/plan_fx.md FX-112: two streams, per-vertex first, so binding 0 is the geometry and

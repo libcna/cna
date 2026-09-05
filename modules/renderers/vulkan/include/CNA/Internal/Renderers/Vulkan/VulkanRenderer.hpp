@@ -2930,7 +2930,8 @@ namespace CNA::Internal::Renderers::Vulkan
                                                    uint32_t colorAttachmentCount, bool wireframe,
                                                    bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
-                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {});
         void FillInstancedPushConst(float (&pc)[32], const Matrix& view, const Matrix& proj,
                                     const GpuDrawParams& p);
         void CreateFrame3DInstBuffers();
