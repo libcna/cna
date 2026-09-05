@@ -6267,6 +6267,14 @@ namespace CNA::Internal::Renderers::WebGPU
 
     WebGPURenderer::LogicalViewport WebGPURenderer::ComputeLogicalViewport() const
     {
+        return ComputeLogicalViewportForEXT(physicalWidth_, physicalHeight_);
+    }
+
+    WebGPURenderer::LogicalViewport WebGPURenderer::ComputeLogicalViewportForEXT(
+        int physicalWidth, int physicalHeight) const
+    {
+        const int physicalWidth_ = physicalWidth;
+        const int physicalHeight_ = physicalHeight;
         LogicalViewport viewport{};
         viewport.width = static_cast<float>(std::max(0, physicalWidth_));
         viewport.height = static_cast<float>(std::max(0, physicalHeight_));
@@ -9109,7 +9117,21 @@ namespace CNA::Internal::Renderers::WebGPU
 
     void WebGPURenderer::GetViewportSize(int& width, int& height)
     {
-        const LogicalViewport viewport = ComputeLogicalViewport();
+        // WEBGPU-178: answer from the size the PLATFORM has reported, not from the size this
+        // renderer last CONFIGURED its surface to. GraphicsDevice::RefreshViewport() calls
+        // OnSurfaceChanged() and then GetViewportSize() in the same breath, so at this moment the
+        // surface state already holds the new drawable while `physicalWidth_` still holds the
+        // previous configuration -- ConfigureSurface() has not run yet. Reporting the stale one
+        // left `GraphicsDevice.Viewport` at the pre-resize size, and since SpriteBatch derives its
+        // projection from that Viewport, every sprite in a one-frame program came out scaled by
+        // the ratio between the two: a 128x96 fixture drew its sprites at 128/800 of their size,
+        // while EasyGL -- whose getLogicalSize() reads its own surface state -- was correct.
+        // The two agree everywhere else, because ConfigureSurface() runs before the frame is drawn.
+        const auto drawable = surfaceState_.GetDrawableSize();
+        const bool reported = drawable.width > 0 && drawable.height > 0;
+        const LogicalViewport viewport = reported
+            ? ComputeLogicalViewportForEXT(drawable.width, drawable.height)
+            : ComputeLogicalViewport();
         width = static_cast<int>(std::lround(viewport.logicalWidth));
         height = static_cast<int>(std::lround(viewport.logicalHeight));
     }

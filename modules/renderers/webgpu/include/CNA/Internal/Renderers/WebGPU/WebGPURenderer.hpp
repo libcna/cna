@@ -2493,6 +2493,20 @@ namespace CNA::Internal::Renderers::WebGPU
         // that, mirroring the pre-existing SetRenderTarget2D() call-then-assign structure.
         void FlushCurrentRenderTarget();
         [[nodiscard]] LogicalViewport ComputeLogicalViewport() const;
+
+        /**
+         * @brief The logical viewport a given PHYSICAL surface size would produce.
+         *
+         * Split out of @ref ComputeLogicalViewport for `WEBGPU-178`: the size the renderer has
+         * last CONFIGURED and the size the platform has last REPORTED are not the same thing for
+         * one call, and `GetViewportSize()` has to answer with the reported one.
+         *
+         * @param physicalWidth The surface width to reason about, in physical pixels.
+         * @param physicalHeight The surface height to reason about, in physical pixels.
+         * @return The presentation rectangle and logical extent for that surface.
+         */
+        [[nodiscard]] LogicalViewport ComputeLogicalViewportForEXT(int physicalWidth,
+                                                                   int physicalHeight) const;
         // WEBGPU-82: full SamplerState cache (filter + address mode + anisotropy), keyed on the
         // COMPLETE description and filled by FillWGPUSamplerDescriptor's explicit ordinal table.
         // REMED-GFX-170: this is now the renderer's ONE sampler translation. SpriteBatch used to
