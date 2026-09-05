@@ -540,12 +540,12 @@ Filled by `parity_report.py` into `docs/xna-content-pipeline-parity-report.md` a
 each phase close. The member denominator the report counts is 705: the inventory's 708 minus the
 3 delegate-plumbing members the report lists separately (§5).
 
-**Current (2026-09-05, after Phases 5–9 and `XNAPP-230`): types 109/128,
-members 622/705, enum values 27/27 (closed), importers 1/10, extensions 0/18, processors 11/12,
-properties 46/47, intermediate-serializer features §13 complete against the 265-case corpus,
-targets verified 0/3, black-box-verified families 4 (intermediate XML byte for byte, now including
-the genuine `XmlImporter`; the graphics content object model against 542 measurements; the
-framework's float packing against 68; the audio content model against 31).** The previous plan's routes
+**Current (2026-09-06, after Phases 5–9, `XNAPP-230`, and the five importers a façade can reach):
+types 117/128, members 630/705, enum values 27/27 (closed), importers 5/10, extensions 0/18,
+processors 11/12, properties 46/47, intermediate-serializer features §13 complete against the
+265-case corpus, targets verified 0/3, black-box-verified families 4 (intermediate XML byte for
+byte, including the genuine `XmlImporter`; the graphics content object model against 553
+measurements; the framework's float packing against 68; the audio content model against 35).** The previous plan's routes
 exist and work, but by this plan's definition only XNA-namespaced types with tested behaviour
 count; the input/processor counts stay at zero until a row passes the `IMPLEMENTED+TESTED` bar,
 which requires a fixture, an importer test, a processor test, both output tests and a
@@ -842,18 +842,22 @@ Phase 7 is done except the `VideoProcessor` half of `XNAPP-136`, which waits on 
 `VideoContent`; `138` stays partial for the same reason. **Phase 8 is done** (`XNAPP-150`–`152`):
 `MeshBuilder`, all ten `MeshHelper` operations, and a game's own processor building a scene that
 reaches an `.xnb` CNA reads back. **Phase 9 is done** (`XNAPP-160`, `161`), with a fourth oracle at
-`tools/xna-pipeline-oracle/audio/`. `XNAPP-230` (`XmlImporter`) is done, which is the first of the
-ten importers. The next phases need their measurements before their code -- extend
+`tools/xna-pipeline-oracle/audio/`. **Five of the ten importers are done**: `XmlImporter` (`XNAPP-230`), `WavImporter` (`XNAPP-200`),
+`EffectImporter` (`XNAPP-190`), `FontDescriptionImporter` (`XNAPP-180`, with `181`) and
+`TextureImporter` (`XNAPP-166`, whose DDS half is `XNAPP-165`). The five left need something this
+build does not have: an MP3 decoder (`XNAPP-201`), a WMA one (`XNAPP-202`), a WMV one (Phase 14),
+and the two modelling formats (Phases 15 and 16). The next phases need their measurements before their code -- extend
 `tools/xna-pipeline-oracle/graphics/GraphicsContentOracle.cs` the way the texture side was
 measured. The intermediate serializer is
 verified byte for byte against `tests/reference/xna40/intermediate/`; extend the oracle
 (`tools/xna-pipeline-oracle/intermediate/run-intermediate-oracle.sh`) before asserting anything
 about the format that the corpus does not show. sharp-runtime (`next`, sibling checkout
 `sharp-runtimenext`) carries the XML fixes this phase needed; another session works in that
-checkout concurrently, so stage only your own hunks there. Next: Phase 13 in ID order
-(`XNAPP-200`, the `WavImporter` façade, is thin over `XNAPP-160`'s reader), then the other
-importers a façade can reach -- `FontDescriptionImporter` (Phase 11) and `EffectImporter`
-(Phase 12) -- before the ones that need a decoder or a modelling format. The owner asked for
+checkout concurrently, so stage only your own hunks there. Next: `XNAPP-167` (per-extension fixtures and the differential comparison Phase 10 asks for),
+then `XNAPP-182` (the font atlas differential, which needs a font registered in the Wine prefix),
+`XNAPP-191`/`192` (the effect compiler comparison), and `XNAPP-201`/`202` and Phase 14, each of
+which waits on a decoder this build does not have -- measure XNA's answer first and record
+`EXTERNAL_BLOCKED` with the exact reason where none can be reached. The owner asked for
 continuous commits and pushes (2026-09-05), and on the same day asked that unnecessary disk writes
 be avoided: build the one target a change needs (`ninja -C cmake-build-debug -j3
 CnaContentPipelineTests`) rather than the whole configuration, and never reconfigure or clean.
