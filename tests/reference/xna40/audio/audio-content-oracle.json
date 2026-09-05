@@ -1,0 +1,28 @@
+{
+ "producer": "Microsoft XNA Game Studio 4.0 Content Pipeline (Microsoft.Xna.Framework.Content.Pipeline.Audio), driven by tools/xna-pipeline-oracle/audio/AudioContentOracle.cs",
+ "runtime": "4.0.30319.1",
+ "pipelineAssembly": "Microsoft.Xna.Framework.Content.Pipeline, Version=4.0.0.0, Culture=neutral, PublicKeyToken=842cf8be1de50553",
+ "cases": [
+  {"case": "enums/AudioFileType", "result": "Wav=0 Mp3=1 Wma=2"},
+  {"case": "enums/ConversionFormat", "result": "Pcm=0 Adpcm=1 WindowsMedia=2 Xma=3"},
+  {"case": "enums/ConversionQuality", "result": "Low=0 Medium=1 Best=2"},
+  {"case": "audiocontent/mono_pcm16", "result": "fileName=mono8k.wav fileType=Wav duration=1000000 loopStart=0 loopLength=800 dataLength=1600 format=1 channels=1 sampleRate=8000 bits=16 blockAlign=2 bytesPerSecond=16000 native=01000100401F0000803E0000020010000000 first16=0D141B222930373E454C535A61686F76"},
+  {"case": "audiocontent/stereo_pcm16", "result": "fileType=Wav duration=1000000 loopStart=0 loopLength=4410 dataLength=17640 format=1 channels=2 sampleRate=44100 bits=16 blockAlign=4 bytesPerSecond=176400 native=0100020044AC000010B10200040010000000"},
+  {"case": "audiocontent/mono_pcm8", "result": "fileType=Wav duration=1000000 loopStart=0 loopLength=2205 dataLength=2205 format=1 channels=1 sampleRate=22050 bits=8 blockAlign=1 bytesPerSecond=22050 native=010001002256000022560000010008000000"},
+  {"case": "audiocontent/identity_and_name", "result": "name=null identity=null opaque=0 fileNameIsFullPath=True"},
+  {"case": "convert/pcm_from_8bit", "result": "fileType=Wav duration=1000000 loopStart=0 loopLength=2205 dataLength=2205 format=1 channels=1 sampleRate=22050 bits=8 blockAlign=1 bytesPerSecond=22050 native=010001002256000022560000010008000000"},
+  {"case": "convert/pcm_best_first_bytes", "result": "unchanged=0D141B222930373E454C535A61686F76"},
+  {"case": "refusals/missing_file", "result": "throws InvalidContentException: Failed to open file absent.wav. Ensure the file is a valid audio file and is not DRM protected."},
+  {"case": "refusals/wrong_file_type", "result": "throws InvalidContentException: Failed to open file mono8k.wav. Ensure the file is a valid audio file and is not DRM protected."},
+  {"case": "refusals/null_file_name", "result": "throws InvalidContentException: Failed to open file . Ensure the file is a valid audio file and is not DRM protected."},
+  {"case": "refusals/not_a_wav", "result": "throws InvalidContentException: Failed to open file garbage.wav. Ensure the file is a valid audio file and is not DRM protected."},
+  {"case": "refusals/after_dispose", "result": "data=InvalidContentException duration=1000000 format=set fileName=set convert=InvalidContentException disposeTwice=accepted"},
+  {"case": "refusals/data_is_read_only", "result": "type=ReadOnlyCollection`1 count=1600"},
+  {"case": "convert/pcm_low", "result": "fileType=Wav duration=1000000 loopStart=0 loopLength=2204 dataLength=8820 format=1 channels=2 sampleRate=22050 bits=16 blockAlign=4 bytesPerSecond=88200 native=010002002256000088580100040010000000"},
+  {"case": "convert/adpcm_low", "result": "fileType=Wav duration=1050000 loopStart=0 loopLength=2176 dataLength=2520 format=2 channels=2 sampleRate=21769 bits=4 blockAlign=140 bytesPerSecond=23809 native=0200020009550000015D00008C00040020008000070000010000000200FF00000000C0004000F0000000CC0130FF880118FF"},
+  {"case": "convert/pcm_medium", "result": "fileType=Wav duration=990000 loopStart=0 loopLength=3306 dataLength=13228 format=1 channels=2 sampleRate=33075 bits=16 blockAlign=4 bytesPerSecond=132300 native=0100020033810000CC040200040010000000"},
+  {"case": "convert/adpcm_medium", "result": "fileType=Wav duration=1000000 loopStart=0 loopLength=4352 dataLength=4760 format=2 channels=2 sampleRate=43519 bits=4 blockAlign=140 bytesPerSecond=47598 native=02000200FFA90000EEB900008C00040020008000070000010000000200FF00000000C0004000F0000000CC0130FF880118FF"},
+  {"case": "convert/pcm_best", "result": "fileType=Wav duration=1000000 loopStart=0 loopLength=4410 dataLength=17640 format=1 channels=2 sampleRate=44100 bits=16 blockAlign=4 bytesPerSecond=176400 native=0100020044AC000010B10200040010000000"},
+  {"case": "convert/adpcm_best", "result": "fileType=Wav duration=1000000 loopStart=0 loopLength=4352 dataLength=4760 format=2 channels=2 sampleRate=43519 bits=4 blockAlign=140 bytesPerSecond=47598 native=02000200FFA90000EEB900008C00040020008000070000010000000200FF00000000C0004000F0000000CC0130FF880118FF"}
+ ]
+}

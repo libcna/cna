@@ -2,175 +2,175 @@
  "schema": "cna.xna40.content-pipeline-parity-map/1",
  "types": {
   "Microsoft.Xna.Framework.Content.Pipeline.Audio.AudioContent": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Audio::AudioContent",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Audio/AudioContent.hpp",
+   "note": "the samples and the format are answered by const reference and shared pointer rather than as a ReadOnlyCollection and a reference; only WAVE sources are read, an MP3 or WMA being refused with the same message XNA gives an unreadable file. ConvertFormat is XNAPP-161.",
    "members": {
     "constructor:.ctor(System.String, Microsoft.Xna.Framework.Content.Pipeline.Audio.AudioFileType)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "AudioContent(const std::string&, AudioFileType)",
+     "note": "only a WAVE source is read here; a named MP3 or WMA is refused with XNA's own unreadable-file message rather than decoded."
     },
     "property:Data": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getDataProperty()",
+     "note": "a const std::vector<bytecs>& stands for the ReadOnlyCollection<Byte>; it throws after Dispose, as XNA's does."
     },
     "property:Duration": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getDurationProperty()",
      "note": ""
     },
     "property:FileName": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getFileNameProperty()",
      "note": ""
     },
     "property:FileType": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getFileTypeProperty()",
      "note": ""
     },
     "property:Format": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getFormatProperty()",
+     "note": "the format is a shared pointer, which is the lifetime a .NET reference gives it."
     },
     "property:LoopLength": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getLoopLengthProperty()",
      "note": ""
     },
     "property:LoopStart": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getLoopStartProperty()",
      "note": ""
     },
     "method:ConvertFormat(Microsoft.Xna.Framework.Content.Pipeline.Audio.ConversionFormat, Microsoft.Xna.Framework.Content.Pipeline.Audio.ConversionQuality, System.String)": {
      "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "cna": "ConvertFormat(ConversionFormat, ConversionQuality, const std::string&)",
+     "note": "declared and refusing; the conversions themselves are XNAPP-161."
     },
     "method:Dispose()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Dispose()",
      "note": ""
     },
     "method:Finalize()": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "~AudioContent()",
+     "note": "a destructor stands for the finalizer: the samples are released when the object goes, without a garbage collector to wait for."
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Audio.AudioFileType": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Audio::AudioFileType",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Audio/AudioEnums.hpp",
    "note": "",
    "members": {},
    "enumValues": {
     "Wav": {
-     "status": "MISSING",
-     "cna": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "AudioFileType::Wav"
     },
     "Mp3": {
-     "status": "MISSING",
-     "cna": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "AudioFileType::Mp3"
     },
     "Wma": {
-     "status": "MISSING",
-     "cna": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "AudioFileType::Wma"
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Audio.AudioFormat": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Audio::AudioFormat",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Audio/AudioFormat.hpp",
+   "note": "the native wave format is a std::vector<bytecs> rather than a ReadOnlyCollection<Byte>, which is what a read-only view of bytes is here.",
    "members": {
     "property:AverageBytesPerSecond": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getAverageBytesPerSecondProperty()",
      "note": ""
     },
     "property:BitsPerSample": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getBitsPerSampleProperty()",
      "note": ""
     },
     "property:BlockAlign": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getBlockAlignProperty()",
      "note": ""
     },
     "property:ChannelCount": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getChannelCountProperty()",
      "note": ""
     },
     "property:Format": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getFormatProperty()",
      "note": ""
     },
     "property:NativeWaveFormat": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getNativeWaveFormatProperty()",
+     "note": "a const std::vector<bytecs>& stands for the ReadOnlyCollection<Byte>; the bytes are the same eighteen XNA answers."
     },
     "property:SampleRate": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getSampleRateProperty()",
      "note": ""
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Audio.ConversionFormat": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Audio::ConversionFormat",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Audio/AudioEnums.hpp",
    "note": "",
    "members": {},
    "enumValues": {
     "Pcm": {
-     "status": "MISSING",
-     "cna": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ConversionFormat::Pcm"
     },
     "Adpcm": {
-     "status": "MISSING",
-     "cna": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ConversionFormat::Adpcm"
     },
     "WindowsMedia": {
-     "status": "MISSING",
-     "cna": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ConversionFormat::WindowsMedia"
     },
     "Xma": {
-     "status": "MISSING",
-     "cna": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ConversionFormat::Xma"
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Audio.ConversionQuality": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Audio::ConversionQuality",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Audio/AudioEnums.hpp",
    "note": "",
    "members": {},
    "enumValues": {
     "Low": {
-     "status": "MISSING",
-     "cna": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ConversionQuality::Low"
     },
     "Medium": {
-     "status": "MISSING",
-     "cna": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ConversionQuality::Medium"
     },
     "Best": {
-     "status": "MISSING",
-     "cna": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ConversionQuality::Best"
     }
    }
   },

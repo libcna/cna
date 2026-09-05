@@ -10,17 +10,17 @@
 
 | Quantity | Implemented (EXACT + SEMANTIC + HOST_SUBSTITUTION) | EXTERNAL_BLOCKED | MISSING |
 |---|---|---:|---:|
-| public/protected types | 103/128 (80.5%) | 0 | 25 |
-| public/protected members | 597/705 (84.7%) | 0 | 108 |
-| enum values | 17/27 (63.0%) | 0 | 10 |
+| public/protected types | 108/128 (84.4%) | 0 | 20 |
+| public/protected members | 614/705 (87.1%) | 0 | 91 |
+| enum values | 27/27 (100.0%) | 0 | 0 |
 | built-in importers | 0/10 (0.0%) | 0 | 10 |
 | built-in processors | 9/12 (75.0%) | 0 | 3 |
 | processor properties | 44/47 (93.6%) | 0 | 3 |
 
 Status vocabulary: EXACT_EQUIVALENT, SEMANTIC_EQUIVALENT (spelling differs, capability identical; note says how),
 HOST_SUBSTITUTION (Microsoft-host mechanism replaced; note says how), EXTERNAL_BLOCKED (note names the
-unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 40, SEMANTIC_EQUIVALENT 62, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 25.
-Member status by value: EXACT_EQUIVALENT 384, SEMANTIC_EQUIVALENT 208, HOST_SUBSTITUTION 5, EXTERNAL_BLOCKED 0, MISSING 108.
+unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 43, SEMANTIC_EQUIVALENT 64, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 20.
+Member status by value: EXACT_EQUIVALENT 396, SEMANTIC_EQUIVALENT 213, HOST_SUBSTITUTION 5, EXTERNAL_BLOCKED 0, MISSING 91.
 
 Rules applied mechanically: 3 delegate plumbing members are listed in section 7 and not counted; 3 exception
 serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serialization has no C++ counterpart).
@@ -29,7 +29,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 
 | Namespace | Types | Implemented | Blocked | Missing |
 |---|---:|---:|---:|---:|
-| `Microsoft.Xna.Framework.Content.Pipeline.Audio` | 5 | 0 | 0 | 5 |
+| `Microsoft.Xna.Framework.Content.Pipeline.Audio` | 5 | 5 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline` | 32 | 21 | 0 | 11 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Graphics` | 47 | 47 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Processors` | 28 | 23 | 0 | 5 |
@@ -41,11 +41,11 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 
 | Namespace | XNA type | Kind | Status | CNA type | Note |
 |---|---|---|---|---|---|
-| `….Audio` | `AudioContent` | class | MISSING |  |  |
-| `….Audio` | `AudioFileType` | enum | MISSING |  |  |
-| `….Audio` | `AudioFormat` | class | MISSING |  |  |
-| `….Audio` | `ConversionFormat` | enum | MISSING |  |  |
-| `….Audio` | `ConversionQuality` | enum | MISSING |  |  |
+| `….Audio` | `AudioContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Audio::AudioContent` | the samples and the format are answered by const reference and shared pointer rather than as a ReadOnlyCollection and a reference; only WAVE sources are read, an MP3 or WMA being refused with the same message XNA gives an unreadable file. ConvertFormat is XNAPP-161. |
+| `….Audio` | `AudioFileType` | enum | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Audio::AudioFileType` |  |
+| `….Audio` | `AudioFormat` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Audio::AudioFormat` | the native wave format is a std::vector<bytecs> rather than a ReadOnlyCollection<Byte>, which is what a read-only view of bytes is here. |
+| `….Audio` | `ConversionFormat` | enum | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Audio::ConversionFormat` |  |
+| `….Audio` | `ConversionQuality` | enum | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Audio::ConversionQuality` |  |
 | `…` | `ChildCollection<TParent, TChild>` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::ChildCollection<TParent, TChild>` |  |
 | `…` | `ContentBuildLogger` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::ContentBuildLogger` |  |
 | `…` | `ContentIdentity` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::ContentIdentity` |  |
@@ -256,34 +256,34 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 
 | XNA type | Kind | Signature | Status | CNA | Note |
 |---|---|---|---|---|---|
-| `AudioContent` | constructor | `.ctor(System.String, Microsoft.Xna.Framework.Content.Pipeline.Audio.AudioFileType)` | MISSING |  |  |
-| `AudioContent` | property | `Data` | MISSING |  |  |
-| `AudioContent` | property | `Duration` | MISSING |  |  |
-| `AudioContent` | property | `FileName` | MISSING |  |  |
-| `AudioContent` | property | `FileType` | MISSING |  |  |
-| `AudioContent` | property | `Format` | MISSING |  |  |
-| `AudioContent` | property | `LoopLength` | MISSING |  |  |
-| `AudioContent` | property | `LoopStart` | MISSING |  |  |
-| `AudioContent` | method | `ConvertFormat(Microsoft.Xna.Framework.Content.Pipeline.Audio.ConversionFormat, Microsoft.Xna.Framework.Content.Pipeline.Audio.ConversionQuality, System.String)` | MISSING |  |  |
-| `AudioContent` | method | `Dispose()` | MISSING |  |  |
-| `AudioContent` | method | `Finalize()` | MISSING |  |  |
-| `AudioFileType` | enum value | `Wav = 0` | MISSING |  |  |
-| `AudioFileType` | enum value | `Mp3 = 1` | MISSING |  |  |
-| `AudioFileType` | enum value | `Wma = 2` | MISSING |  |  |
-| `AudioFormat` | property | `AverageBytesPerSecond` | MISSING |  |  |
-| `AudioFormat` | property | `BitsPerSample` | MISSING |  |  |
-| `AudioFormat` | property | `BlockAlign` | MISSING |  |  |
-| `AudioFormat` | property | `ChannelCount` | MISSING |  |  |
-| `AudioFormat` | property | `Format` | MISSING |  |  |
-| `AudioFormat` | property | `NativeWaveFormat` | MISSING |  |  |
-| `AudioFormat` | property | `SampleRate` | MISSING |  |  |
-| `ConversionFormat` | enum value | `Pcm = 0` | MISSING |  |  |
-| `ConversionFormat` | enum value | `Adpcm = 1` | MISSING |  |  |
-| `ConversionFormat` | enum value | `WindowsMedia = 2` | MISSING |  |  |
-| `ConversionFormat` | enum value | `Xma = 3` | MISSING |  |  |
-| `ConversionQuality` | enum value | `Low = 0` | MISSING |  |  |
-| `ConversionQuality` | enum value | `Medium = 1` | MISSING |  |  |
-| `ConversionQuality` | enum value | `Best = 2` | MISSING |  |  |
+| `AudioContent` | constructor | `.ctor(System.String, Microsoft.Xna.Framework.Content.Pipeline.Audio.AudioFileType)` | SEMANTIC_EQUIVALENT | `AudioContent(const std::string&, AudioFileType)` | only a WAVE source is read here; a named MP3 or WMA is refused with XNA's own unreadable-file message rather than decoded. |
+| `AudioContent` | property | `Data` | SEMANTIC_EQUIVALENT | `getDataProperty()` | a const std::vector<bytecs>& stands for the ReadOnlyCollection<Byte>; it throws after Dispose, as XNA's does. |
+| `AudioContent` | property | `Duration` | EXACT_EQUIVALENT | `getDurationProperty()` |  |
+| `AudioContent` | property | `FileName` | EXACT_EQUIVALENT | `getFileNameProperty()` |  |
+| `AudioContent` | property | `FileType` | EXACT_EQUIVALENT | `getFileTypeProperty()` |  |
+| `AudioContent` | property | `Format` | SEMANTIC_EQUIVALENT | `getFormatProperty()` | the format is a shared pointer, which is the lifetime a .NET reference gives it. |
+| `AudioContent` | property | `LoopLength` | EXACT_EQUIVALENT | `getLoopLengthProperty()` |  |
+| `AudioContent` | property | `LoopStart` | EXACT_EQUIVALENT | `getLoopStartProperty()` |  |
+| `AudioContent` | method | `ConvertFormat(Microsoft.Xna.Framework.Content.Pipeline.Audio.ConversionFormat, Microsoft.Xna.Framework.Content.Pipeline.Audio.ConversionQuality, System.String)` | MISSING | `ConvertFormat(ConversionFormat, ConversionQuality, const std::string&)` | declared and refusing; the conversions themselves are XNAPP-161. |
+| `AudioContent` | method | `Dispose()` | EXACT_EQUIVALENT | `Dispose()` |  |
+| `AudioContent` | method | `Finalize()` | SEMANTIC_EQUIVALENT | `~AudioContent()` | a destructor stands for the finalizer: the samples are released when the object goes, without a garbage collector to wait for. |
+| `AudioFileType` | enum value | `Wav = 0` | EXACT_EQUIVALENT | `AudioFileType::Wav` |  |
+| `AudioFileType` | enum value | `Mp3 = 1` | EXACT_EQUIVALENT | `AudioFileType::Mp3` |  |
+| `AudioFileType` | enum value | `Wma = 2` | EXACT_EQUIVALENT | `AudioFileType::Wma` |  |
+| `AudioFormat` | property | `AverageBytesPerSecond` | EXACT_EQUIVALENT | `getAverageBytesPerSecondProperty()` |  |
+| `AudioFormat` | property | `BitsPerSample` | EXACT_EQUIVALENT | `getBitsPerSampleProperty()` |  |
+| `AudioFormat` | property | `BlockAlign` | EXACT_EQUIVALENT | `getBlockAlignProperty()` |  |
+| `AudioFormat` | property | `ChannelCount` | EXACT_EQUIVALENT | `getChannelCountProperty()` |  |
+| `AudioFormat` | property | `Format` | EXACT_EQUIVALENT | `getFormatProperty()` |  |
+| `AudioFormat` | property | `NativeWaveFormat` | SEMANTIC_EQUIVALENT | `getNativeWaveFormatProperty()` | a const std::vector<bytecs>& stands for the ReadOnlyCollection<Byte>; the bytes are the same eighteen XNA answers. |
+| `AudioFormat` | property | `SampleRate` | EXACT_EQUIVALENT | `getSampleRateProperty()` |  |
+| `ConversionFormat` | enum value | `Pcm = 0` | EXACT_EQUIVALENT | `ConversionFormat::Pcm` |  |
+| `ConversionFormat` | enum value | `Adpcm = 1` | EXACT_EQUIVALENT | `ConversionFormat::Adpcm` |  |
+| `ConversionFormat` | enum value | `WindowsMedia = 2` | EXACT_EQUIVALENT | `ConversionFormat::WindowsMedia` |  |
+| `ConversionFormat` | enum value | `Xma = 3` | EXACT_EQUIVALENT | `ConversionFormat::Xma` |  |
+| `ConversionQuality` | enum value | `Low = 0` | EXACT_EQUIVALENT | `ConversionQuality::Low` |  |
+| `ConversionQuality` | enum value | `Medium = 1` | EXACT_EQUIVALENT | `ConversionQuality::Medium` |  |
+| `ConversionQuality` | enum value | `Best = 2` | EXACT_EQUIVALENT | `ConversionQuality::Best` |  |
 | `ChildCollection<TParent, TChild>` | constructor | `.ctor(TParent)` | EXACT_EQUIVALENT | `ChildCollection(TParent)` |  |
 | `ChildCollection<TParent, TChild>` | method | `ClearItems()` | EXACT_EQUIVALENT | `ClearItems()` |  |
 | `ChildCollection<TParent, TChild>` | method | `GetParent(TChild)` | SEMANTIC_EQUIVALENT | `GetParent(const std::shared_ptr<TChild>&) -> TParent*` | children are shared pointers and the parent back reference a raw pointer valid while the child is in the collection -- the lifetime a .NET reference gives it. |
