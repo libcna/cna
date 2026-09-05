@@ -1961,6 +1961,21 @@ namespace CNA::Internal::Renderers::Vulkan
                 ". Use DrawPrimitivesEx, whose layout comes from the VertexDeclaration.");
     }
 
+    void VulkanRenderer::RequireBoneIndexFormatEXT() const
+    {
+        // VULKAN-151. The skinned shaders take BLENDINDICES as `vec4` so that one shader serves
+        // both spellings XNA allows; a `Byte4` element reaches it through
+        // VK_FORMAT_R8G8B8A8_USCALED, which Vulkan does not require a device to support for vertex
+        // buffers. Measured supported on both drivers available here
+        // (spikes/vulkan-vertex-format-spike/). Where it is not, the honest answer is a refusal
+        // that names the format and the way round it, not a pipeline that fails to build.
+        if (!uscaledVertexFormatSupported_)
+            throw std::runtime_error(
+                "Vulkan: this device cannot bind VK_FORMAT_R8G8B8A8_USCALED as a vertex attribute, "
+                "so a Byte4-spelled BlendIndices cannot reach the skinned shaders. Supply a "
+                "VertexDeclaration spelling BlendIndices as Vector4, which binds natively.");
+    }
+
     void VulkanRenderer::RequireSkinnedStrideEXT(std::size_t stride) const
     {
         // VULKAN-156. GetOrCreatePipelineSkinned3D and its VertexLit sibling both reduce their
@@ -2552,6 +2567,16 @@ namespace CNA::Internal::Renderers::Vulkan
         // own limits, and it must answer for the device this loop actually selected -- which is not
         // necessarily GPU 0. Cached here, next to the selection, rather than re-queried per call.
         deviceLimits_ = p.limits;
+        // VULKAN-151: can this device bind Byte4 bone indices to the shaders' `vec4` input?
+        // VK_FORMAT_R8G8B8A8_USCALED is not a mandatory vertex-buffer format, so ask rather than
+        // assume. Measured YES on both drivers here (spikes/vulkan-vertex-format-spike/).
+        {
+            VkFormatProperties uscaled{};
+            vkGetPhysicalDeviceFormatProperties(physicalDevice_, VK_FORMAT_R8G8B8A8_USCALED,
+                                                &uscaled);
+            uscaledVertexFormatSupported_ =
+                (uscaled.bufferFeatures & VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT) != 0;
+        }
         // VULKAN-097: the pixel-centre correction must stay strictly BELOW half a pixel. A device
         // whose rasterizer cannot represent 63/128 rounds it back up to exactly half, which puts
         // XNA's 1x1 triangles on an excluded fill edge again -- the trap EasyGL hit on WebGL's four
@@ -4925,11 +4950,13 @@ namespace CNA::Internal::Renderers::Vulkan
         // VULKAN-147.
         constexpr StockProgramInput kWeights{
             VertexElementUsage::BlendWeight, 0, VertexElementFormat::Vector4, "aBoneWeights"};
-        /// The shader declares `uvec4`, so only the integer spelling binds here -- see
-        /// BuildVulkanVertexInputLayoutEXT's note on `alternateFormat`.
+        /// VULKAN-151: the shader declares `vec4`, so BOTH spellings XNA allows bind here --
+        /// `Vector4` natively, `Byte4` through VK_FORMAT_R8G8B8A8_USCALED. The primary format is
+        /// the float one because that is what the shader input actually is; `Byte4` is the
+        /// alternate, and BuildVulkanVertexInputLayoutEXT converts it.
         constexpr StockProgramInput kIndices{
-            VertexElementUsage::BlendIndices, 0, VertexElementFormat::Byte4, "aBoneIndices",
-            VertexElementFormat::Vector4};
+            VertexElementUsage::BlendIndices, 0, VertexElementFormat::Vector4, "aBoneIndices",
+            VertexElementFormat::Byte4};
 
         /// alpha_test3d: one VS for strides 20 and 32, with the UV remapped to location 1 --
         /// which is exactly the offset guess (24 for stride 32, 12 for 20) the declaration removes.
@@ -8169,7 +8196,7 @@ namespace CNA::Internal::Renderers::Vulkan
         attrs[1] = { 1, 0, VK_FORMAT_R32G32B32_SFLOAT,    12 }; // aNormal
         attrs[2] = { 2, 0, VK_FORMAT_R32G32_SFLOAT,       24 }; // aUV
         attrs[3] = { 3, 0, VK_FORMAT_R32G32B32A32_SFLOAT, 32 }; // aBoneWeights
-        attrs[4] = { 4, 0, VK_FORMAT_R8G8B8A8_UINT,       48 }; // aBoneIndices
+        attrs[4] = { 4, 0, VK_FORMAT_R8G8B8A8_USCALED,    48 }; // aBoneIndices (VULKAN-151)
         uint32_t attrCount = 5;
         if (colored) {
             attrs[5] = { 5, 0, VK_FORMAT_R8G8B8A8_UNORM, 52 }; // aColor
@@ -8326,7 +8353,7 @@ namespace CNA::Internal::Renderers::Vulkan
         attrs[1] = { 1, 0, VK_FORMAT_R32G32B32_SFLOAT,    12 }; // aNormal
         attrs[2] = { 2, 0, VK_FORMAT_R32G32_SFLOAT,       24 }; // aUV
         attrs[3] = { 3, 0, VK_FORMAT_R32G32B32A32_SFLOAT, 32 }; // aBoneWeights
-        attrs[4] = { 4, 0, VK_FORMAT_R8G8B8A8_UINT,       48 }; // aBoneIndices
+        attrs[4] = { 4, 0, VK_FORMAT_R8G8B8A8_USCALED,    48 }; // aBoneIndices (VULKAN-151)
         uint32_t attrCount = 5;
         if (colored) {
             attrs[5] = { 5, 0, VK_FORMAT_R8G8B8A8_UNORM, 52 }; // aColor
@@ -8942,7 +8969,7 @@ namespace CNA::Internal::Renderers::Vulkan
         attrs[2] = { 2, 0, VK_FORMAT_R32G32B32A32_SFLOAT, 24 }; // aTangent
         attrs[3] = { 3, 0, VK_FORMAT_R32G32_SFLOAT,       40 }; // aUV
         attrs[4] = { 4, 0, VK_FORMAT_R32G32B32A32_SFLOAT, 48 }; // aBoneWeights
-        attrs[5] = { 5, 0, VK_FORMAT_R8G8B8A8_UINT,       64 }; // aBoneIndices
+        attrs[5] = { 5, 0, VK_FORMAT_R8G8B8A8_USCALED,    64 }; // aBoneIndices (VULKAN-151)
         if (dualUv)
             attrs[6] = { 6, 0, VK_FORMAT_R32G32_SFLOAT,   68 }; // aUV1
         if (colored)
@@ -11813,7 +11840,10 @@ namespace CNA::Internal::Renderers::Vulkan
                 inputs = PbrFamilyStockInputsEXT(needsSkinned, stride, inputCount);
             if (inputs != nullptr)
                 declaredLayout = BuildVulkanVertexInputLayoutEXT(
-                    vb.GetDeclarationEXT(), inputs, inputCount);
+                    vb.GetDeclarationEXT(), inputs, inputCount,
+                    // VULKAN-151: lets a `Byte4`-spelled BLENDINDICES bind to the skinned shaders'
+                    // `vec4` input, on a device that can carry it.
+                    uscaledVertexFormatSupported_);
             // VULKAN-150: DualTextureEffect has its own builder rather than a table, because its
             // second coordinate set is aliased onto the first when the record declares only one.
             if (needsDualTex)
@@ -11891,6 +11921,13 @@ namespace CNA::Internal::Renderers::Vulkan
         // VULKAN-156: same rule as the PBR pair's -- the stride list judges a buffer whose
         // declaration did not supply the shader's inputs. One that did says where they are.
         if (d.useSkinned && !declaredLayout.IsComplete()) RequireSkinnedStrideEXT(stride);
+        // VULKAN-151: the stride-derived bone-index attribute is VK_FORMAT_R8G8B8A8_USCALED, which
+        // is not a mandatory vertex-buffer format. A device without it cannot take the baked path
+        // at all, so say so here rather than let vkCreateGraphicsPipelines fail at Present. A
+        // COMPLETE layout needs no check: the builder only emits _USCALED where the device
+        // supports it, and a `Vector4`-spelled index never needs it.
+        if ((d.useSkinned || d.usePbrSkinned) && !declaredLayout.IsComplete())
+            RequireBoneIndexFormatEXT();
         d.useLitTextured = needsLitTextured;
         // VULKAN-146: taken at DRAW time, above, because the record is replayed at Present(), by
         // which point the buffer may carry a different declaration entirely.
@@ -12149,7 +12186,10 @@ namespace CNA::Internal::Renderers::Vulkan
                 inputs = PbrFamilyStockInputsEXT(needsSkinned, stride, inputCount);
             if (inputs != nullptr)
                 declaredLayout = BuildVulkanVertexInputLayoutEXT(
-                    vb.GetDeclarationEXT(), inputs, inputCount);
+                    vb.GetDeclarationEXT(), inputs, inputCount,
+                    // VULKAN-151: lets a `Byte4`-spelled BLENDINDICES bind to the skinned shaders'
+                    // `vec4` input, on a device that can carry it.
+                    uscaledVertexFormatSupported_);
             // VULKAN-150: DualTextureEffect has its own builder rather than a table, because its
             // second coordinate set is aliased onto the first when the record declares only one.
             if (needsDualTex)
@@ -12228,6 +12268,13 @@ namespace CNA::Internal::Renderers::Vulkan
         // VULKAN-156: same rule as the PBR pair's -- the stride list judges a buffer whose
         // declaration did not supply the shader's inputs. One that did says where they are.
         if (d.useSkinned && !declaredLayout.IsComplete()) RequireSkinnedStrideEXT(stride);
+        // VULKAN-151: the stride-derived bone-index attribute is VK_FORMAT_R8G8B8A8_USCALED, which
+        // is not a mandatory vertex-buffer format. A device without it cannot take the baked path
+        // at all, so say so here rather than let vkCreateGraphicsPipelines fail at Present. A
+        // COMPLETE layout needs no check: the builder only emits _USCALED where the device
+        // supports it, and a `Vector4`-spelled index never needs it.
+        if ((d.useSkinned || d.usePbrSkinned) && !declaredLayout.IsComplete())
+            RequireBoneIndexFormatEXT();
         d.useLitTextured = needsLitTextured;
         // VULKAN-146: taken at DRAW time, above, because the record is replayed at Present(), by
         // which point the buffer may carry a different declaration entirely.

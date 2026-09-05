@@ -1364,6 +1364,17 @@ namespace CNA::Internal::Renderers::Vulkan
         void RequireSkinnedStrideEXT(std::size_t stride) const;
 
         /**
+         * @brief Refuses a skinned draw whose bone indices this device cannot carry.
+         *
+         * plans/plan_vulkan.md `VULKAN-151`. The stride-derived bone-index attribute is
+         * `VK_FORMAT_R8G8B8A8_USCALED`, which is not a mandatory vertex-buffer format; a device
+         * without it is told so by name, with the `Vector4` spelling named as the way round.
+         *
+         * @throws std::runtime_error when `uscaledVertexFormatSupported_` is false.
+         */
+        void RequireBoneIndexFormatEXT() const;
+
+        /**
          * @brief Refuses a vertex stride the legacy colored-primitive pair cannot express.
          *
          * plans/plan_vulkan.md `VULKAN-155` (finding F-24). `GetOrCreatePipeline3D` hard-codes a
@@ -1950,6 +1961,20 @@ namespace CNA::Internal::Renderers::Vulkan
         /// Decides both the `VK_QUERY_CONTROL_PRECISE_BIT` this renderer passes to
         /// `vkCmdBeginQuery` and the answer `PixelCountIsPreciseEXT()` gives.
         bool occlusionQueryPreciseSupported_ = false;
+        /// plan_vulkan.md `VULKAN-151`: whether this device can bind `VK_FORMAT_R8G8B8A8_USCALED`
+        /// as a vertex attribute.
+        ///
+        /// The skinned shaders take their bone indices as `vec4`, so ONE shader serves both of the
+        /// spellings XNA allows for `BLENDINDICES`: `Vector4` binds natively, and `Byte4` binds
+        /// through this format -- integer values converted to float without normalisation, the
+        /// same conversion `glVertexAttribPointer(..., GL_UNSIGNED_BYTE, GL_FALSE, ...)` performs
+        /// and that EasyGL therefore already depends on.
+        ///
+        /// `_USCALED` is not in Vulkan's mandatory vertex-buffer format list, so this is measured
+        /// on the selected device rather than assumed. Both drivers available here support it
+        /// (`spikes/vulkan-vertex-format-spike/`); a device that does not gets a by-name refusal
+        /// for a `Byte4`-spelled bone index rather than a wrong picture.
+        bool uscaledVertexFormatSupported_ = false;
         /// plan_vulkan.md VULKAN-020: the SELECTED physical device's limits, cached where the
         /// selection is made. `SupportsCapability` answers `MultipleRenderTargets` and (VULKAN-021)
         /// `MultiSampleAntiAliasing` from these rather than from a constant.

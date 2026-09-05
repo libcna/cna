@@ -1461,11 +1461,15 @@ namespace
          "command.lightUniforms[39] = static_cast<float>(params.weightsPerVertex)",
          "if (weightsPerVertex >= 2.0) skinMat += bb.bones[inBoneIndices.y] * inBoneWeights.y",
          "if (weightsPerVertex >= 4.0) skinMat += bb.bones[inBoneIndices.z] * inBoneWeights.z"},
+        // plans/plan_vulkan.md VULKAN-151: `aBoneIndices` is a `vec4` here now, not a `uvec4`, so the
+        // palette subscript carries an `int()` -- the same shape the EasyGL row two entries above
+        // has had all along. What this evidence asserts is unchanged: the shader really does read
+        // the palette and gate the second and fourth influences on the weight count.
         {"vulkan",
          "d.boneMatrices.assign(params.boneTransforms, params.boneTransforms + count * 16)",
          "FillPbrUboData(d.pbrUboData, params, static_cast<float>(params.weightsPerVertex))",
-         "if (weightsPerVertex >= 2.0) skinMat += bb.bones[aBoneIndices.y] * aBoneWeights.y",
-         "if (weightsPerVertex >= 4.0) skinMat += bb.bones[aBoneIndices.z] * aBoneWeights.z"},
+         "if (weightsPerVertex >= 2.0) skinMat += bb.bones[int(aBoneIndices.y)] * aBoneWeights.y",
+         "if (weightsPerVertex >= 4.0) skinMat += bb.bones[int(aBoneIndices.z)] * aBoneWeights.z"},
         {"webgpu",
          "out[4 + i] = p.boneTransforms[i]",
          "out[0] = static_cast<float>(p.weightsPerVertex)",

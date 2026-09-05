@@ -11,7 +11,15 @@ layout(location = 1) in vec3  aNormal;
 layout(location = 2) in vec4  aTangent;
 layout(location = 3) in vec2  aUV;
 layout(location = 4) in vec4  aBoneWeights;
-layout(location = 5) in uvec4 aBoneIndices;
+// plans/plan_vulkan.md VULKAN-151: `vec4`, not `uvec4`. XNA lets a content processor spell
+// BLENDINDICES as Byte4 or as Vector4 (plans/plan_fx.md FX-127, and CustomModelAnimation's own
+// SkinnedModelProcessor writes Vector4), and a Vulkan shader input cannot take both an integer and
+// a float attribute. Taking the indices as floats lets ONE shader serve both spellings: Vector4
+// binds natively, and Byte4 binds through VK_FORMAT_R8G8B8A8_USCALED -- integer values converted
+// to float without normalisation, which is exactly what EasyGL's own
+// glVertexAttribPointer(..., GL_UNSIGNED_BYTE, GL_FALSE, ...) does. A bone palette is a handful of
+// entries, far inside float's exact-integer range, so nothing is lost in the conversion.
+layout(location = 5) in vec4 aBoneIndices;
 #ifdef CNA_PBR_DUAL_UV
 layout(location = 6) in vec2  aUV1;
 #endif
@@ -84,10 +92,10 @@ float cnaDirectionHandedness(mat3 m) {
 
 void main() {
     float weightsPerVertex = pbr.fogColorEnabled.w; // REMED-GFX-010: alongside the fog vector
-    mat4 skinMat = bb.bones[aBoneIndices.x] * aBoneWeights.x;
-    if (weightsPerVertex >= 2.0) skinMat += bb.bones[aBoneIndices.y] * aBoneWeights.y;
-    if (weightsPerVertex >= 4.0) skinMat += bb.bones[aBoneIndices.z] * aBoneWeights.z
-                                          + bb.bones[aBoneIndices.w] * aBoneWeights.w;
+    mat4 skinMat = bb.bones[int(aBoneIndices.x)] * aBoneWeights.x;
+    if (weightsPerVertex >= 2.0) skinMat += bb.bones[int(aBoneIndices.y)] * aBoneWeights.y;
+    if (weightsPerVertex >= 4.0) skinMat += bb.bones[int(aBoneIndices.z)] * aBoneWeights.z
+                                          + bb.bones[int(aBoneIndices.w)] * aBoneWeights.w;
     vec4 skinnedPos = skinMat * vec4(aPos, 1.0);
     gl_Position = pc.mvp * skinnedPos;
     // REMED-GFX-011: matches skinned3d.vert.glsl, which does flip (the comment previously here

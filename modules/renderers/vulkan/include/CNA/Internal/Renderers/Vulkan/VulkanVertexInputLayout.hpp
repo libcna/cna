@@ -140,10 +140,34 @@ namespace CNA::Internal::Renderers::Vulkan
      * @param inputCount How many inputs @p inputs holds.
      * @return The layout.
      */
+    /**
+     * @brief The unnormalised float VkFormat that carries an integer element's values, if any.
+     *
+     * plans/plan_vulkan.md `VULKAN-151`. `_USCALED` converts integer components to float **without**
+     * normalising -- `glVertexAttribPointer(..., GL_UNSIGNED_BYTE, GL_FALSE, ...)`'s conversion,
+     * exactly. It is what lets one shader input serve both spellings XNA allows for a semantic
+     * whose values are small integers, `BLENDINDICES` being the one that matters here.
+     *
+     * @param format The declared element format.
+     * @return The `_USCALED` format, or `VK_FORMAT_UNDEFINED` when there is no such conversion.
+     */
+    [[nodiscard]] inline VkFormat UnnormalisedFloatFormatForEXT(
+        Microsoft::Xna::Framework::Graphics::VertexElementFormat format) noexcept
+    {
+        using F = Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+        switch (format) {
+            case F::Byte4:  return VK_FORMAT_R8G8B8A8_USCALED;
+            case F::Short2: return VK_FORMAT_R16G16_USCALED;
+            case F::Short4: return VK_FORMAT_R16G16B16A16_USCALED;
+            default:        return VK_FORMAT_UNDEFINED;
+        }
+    }
+
     [[nodiscard]] inline VulkanVertexInputLayoutEXT BuildVulkanVertexInputLayoutEXT(
         const CNA::Internal::Graphics::DeclaredVertexLayout& declared,
         const CNA::Internal::Graphics::StockProgramInput* inputs,
-        std::size_t inputCount)
+        std::size_t inputCount,
+        bool uscaledVertexFormatSupported = false)
     {
         using Microsoft::Xna::Framework::Graphics::VertexElement;
 
@@ -181,24 +205,43 @@ namespace CNA::Internal::Renderers::Vulkan
                 layout.unrepresentableInputMask |= (1u << location);
                 continue;
             }
-            // plan_vulkan.md VULKAN-147. Compared against the input's PRIMARY format, which is what
-            // the shader actually declares -- deliberately not against `alternateFormat`. That
-            // field records a second legal way to SPELL a semantic in a declaration
-            // (`BlendIndices` may arrive as `Byte4` or `Vector4`, plans/plan_fx.md FX-127); it does
-            // not make both bindable. The shader says `uvec4`, and handing a float attribute to an
-            // integer input is a Vulkan usage error rather than a conversion. Reported as
-            // unrepresentable, so the caller refuses by name instead of binding it.
-            if (IsIntegerVertexElementFormat(match->getVertexElementFormatProperty()) !=
-                IsIntegerVertexElementFormat(in.format))
+            // plan_vulkan.md VULKAN-147, refined by VULKAN-151. The comparison is against the
+            // input's PRIMARY format, which is what the shader actually declares -- never against
+            // `alternateFormat`, which records a second legal way to SPELL a semantic and not a
+            // second thing the shader can read.
+            //
+            // Handing a float attribute to an INTEGER input stays a Vulkan usage error rather than
+            // a conversion, and is still reported as unrepresentable.
+            //
+            // The other direction is a conversion, and Vulkan has a format for it: an integer
+            // element feeding a FLOAT input binds through `_USCALED`, which converts the components
+            // without normalising them (VULKAN-151). That is what makes one skinned shader serve
+            // both `Byte4`- and `Vector4`-spelled `BLENDINDICES`. It is applied only where the
+            // declaration named the input's `alternateFormat` -- so it is a spelling the program's
+            // own table already sanctions, not a silent reinterpretation of any integer element
+            // that happens to line up -- and only where the device can bind the format at all.
+            VkFormat boundFormat = format;
+            const bool elementIsInteger =
+                IsIntegerVertexElementFormat(match->getVertexElementFormatProperty());
+            if (elementIsInteger != IsIntegerVertexElementFormat(in.format))
             {
-                layout.unrepresentableInputMask |= (1u << location);
-                continue;
+                const bool sanctionedSpelling =
+                    in.alternateFormat == match->getVertexElementFormatProperty();
+                const VkFormat converted =
+                    UnnormalisedFloatFormatForEXT(match->getVertexElementFormatProperty());
+                if (!elementIsInteger || !sanctionedSpelling ||
+                    converted == VK_FORMAT_UNDEFINED || !uscaledVertexFormatSupported)
+                {
+                    layout.unrepresentableInputMask |= (1u << location);
+                    continue;
+                }
+                boundFormat = converted;
             }
 
             VkVertexInputAttributeDescription& attr = layout.attributes[layout.attributeCount++];
             attr.location = static_cast<std::uint32_t>(location);
             attr.binding  = 0;
-            attr.format   = format;
+            attr.format   = boundFormat;
             attr.offset   = static_cast<std::uint32_t>(match->getOffsetProperty());
         }
         return layout;

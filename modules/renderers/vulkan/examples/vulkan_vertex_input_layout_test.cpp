@@ -168,15 +168,18 @@ int main()
 
     // ---- E2: a float spelling of an integer input is unrepresentable HERE -----------------------
     // BlendIndices may legally arrive as Byte4 or Vector4 -- a content processor writes either
-    // (plans/plan_fx.md FX-127) -- and the skinned shader declares uvec4. Only the integer spelling
-    // is bindable in Vulkan; handing it a float attribute is a usage error, not a conversion. So
-    // the float spelling must be REPORTED, which is what makes the caller refuse by name.
+    // (plans/plan_fx.md FX-127) -- and VULKAN-151 made the skinned shaders take it as `vec4` so
+    // that ONE shader serves both. Vector4 binds natively; Byte4 binds through
+    // VK_FORMAT_R8G8B8A8_USCALED, an unnormalised integer-to-float conversion. The conversion is
+    // offered only where the declaration named the input's own `alternateFormat` and only where
+    // the device can carry the format, so both halves are asserted here -- including that a device
+    // without it still REPORTS rather than binds.
     {
         constexpr StockProgramInput kWeights{
             VertexElementUsage::BlendWeight, 0, VertexElementFormat::Vector4, "aBoneWeights"};
         constexpr StockProgramInput kIndices{
-            VertexElementUsage::BlendIndices, 0, VertexElementFormat::Byte4, "aBoneIndices",
-            VertexElementFormat::Vector4};
+            VertexElementUsage::BlendIndices, 0, VertexElementFormat::Vector4, "aBoneIndices",
+            VertexElementFormat::Byte4};
         constexpr StockProgramInput kSkinned[] = { kPos, kWeights, kIndices };
 
         const DeclaredVertexLayout byteIndices = Declare(32, {
@@ -189,16 +192,50 @@ int main()
             VertexElement(12, VertexElementFormat::Vector4, VertexElementUsage::BlendWeight, 0),
             VertexElement(28, VertexElementFormat::Vector4, VertexElementUsage::BlendIndices, 0),
         });
-        const auto lb = BuildVulkanVertexInputLayoutEXT(byteIndices, kSkinned, std::size(kSkinned));
-        const auto lfi = BuildVulkanVertexInputLayoutEXT(floatIndices, kSkinned, std::size(kSkinned));
-        check(lb.IsComplete() && lb.attributes[2].format == VK_FORMAT_R8G8B8A8_UINT,
-              "E2 the integer spelling of BlendIndices binds as an integer attribute",
+        const auto lb = BuildVulkanVertexInputLayoutEXT(byteIndices, kSkinned, std::size(kSkinned),
+                                                       /*uscaledVertexFormatSupported=*/true);
+        const auto lbNoUscaled = BuildVulkanVertexInputLayoutEXT(byteIndices, kSkinned,
+                                                                std::size(kSkinned),
+                                                                /*uscaled=*/false);
+        const auto lfi = BuildVulkanVertexInputLayoutEXT(floatIndices, kSkinned, std::size(kSkinned),
+                                                        /*uscaledVertexFormatSupported=*/true);
+        check(lb.IsComplete() && lb.attributes[2].format == VK_FORMAT_R8G8B8A8_USCALED,
+              "E2 the Byte4 spelling of BlendIndices binds through the unnormalised conversion",
               Describe(lb));
-        check(!lfi.IsComplete() && lfi.unrepresentableInputMask == (1u << 2)
-                  && lfi.missingInputMask == 0,
-              "E2 the float spelling is reported unrepresentable, not bound to a uvec4 input",
-              "missing=" + std::to_string(lfi.missingInputMask)
-                  + " unrepresentable=" + std::to_string(lfi.unrepresentableInputMask));
+        check(lfi.IsComplete() && lfi.attributes[2].format == VK_FORMAT_R32G32B32A32_SFLOAT,
+              "E2 the Vector4 spelling binds natively, so one shader serves both",
+              Describe(lfi));
+        check(lb.attributes[2].offset == 28 && lfi.attributes[2].offset == 28,
+              "E2 both spellings keep the declaration's own byte offset",
+              Describe(lb) + " / " + Describe(lfi));
+        check(!lbNoUscaled.IsComplete() && lbNoUscaled.unrepresentableInputMask == (1u << 2)
+                  && lbNoUscaled.missingInputMask == 0,
+              "E2 a device without the _USCALED format REPORTS the Byte4 spelling rather than "
+              "binding it to a float input",
+              "missing=" + std::to_string(lbNoUscaled.missingInputMask)
+                  + " unrepresentable=" + std::to_string(lbNoUscaled.unrepresentableInputMask));
+    }
+
+    // ---- E3: the conversion is not a licence to reinterpret any integer element -----------------
+    // It is offered ONLY where the declaration named the input's own alternateFormat. An integer
+    // element arriving at a float input the program never sanctioned that spelling for is still
+    // unrepresentable, and a float element at an INTEGER input always is -- that direction is a
+    // Vulkan usage error and no format converts it.
+    {
+        constexpr StockProgramInput kUvOnly{
+            VertexElementUsage::TextureCoordinate, 0, VertexElementFormat::Vector2, "aUV"};
+        constexpr StockProgramInput kProgram[] = { kPos, kUvOnly };
+        const DeclaredVertexLayout shortUv = Declare(20, {
+            VertexElement(0,  VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Short2,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        const auto ls = BuildVulkanVertexInputLayoutEXT(shortUv, kProgram, std::size(kProgram),
+                                                       /*uscaledVertexFormatSupported=*/true);
+        check(!ls.IsComplete() && ls.unrepresentableInputMask == (1u << 1),
+              "E3 an integer element the program's table does not sanction stays unrepresentable, "
+              "even where the device could convert it",
+              Describe(ls));
     }
 
     // ---- F: an empty declaration has no opinion ------------------------------------------------

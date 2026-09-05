@@ -301,6 +301,99 @@ protected:
                       return DrawWith(dev, fx, vb);
                   });
 
+        // ---- C2: VULKAN-151, both spellings of BLENDINDICES draw the same picture ---------------
+        // XNA lets a content processor write BLENDINDICES as Byte4 or as Vector4, and this
+        // renderer's skinned shader used to declare `uvec4`, so only the integer spelling bound.
+        // It takes `vec4` now: Vector4 binds natively and Byte4 binds through
+        // VK_FORMAT_R8G8B8A8_USCALED. The claim is that the SPELLING makes no difference to the
+        // picture, so it is asserted as equality of the two readbacks -- not as each matching a
+        // constant, which two blank frames would also satisfy.
+        //
+        // The bone index used is 1, not 0, and bone 0 is a transform that puts the quad far off
+        // screen. An index read as anything but 1 therefore renders nothing, so this cannot pass
+        // by ignoring the attribute -- which is exactly what a wrong format conversion would do.
+        {
+            const auto drawSkinned = [&](VertexBuffer& vb) {
+                SkinnedEffect fx(dev);
+                fx.setTextureProperty(strip_.get());
+                fx.setWeightsPerVertexProperty(1);
+                std::vector<Matrix> bones = { Matrix::CreateTranslation(1000.f, 1000.f, 0.f),
+                                              Matrix::getIdentityProperty() };
+                fx.SetBoneTransforms(bones);
+                fx.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+                fx.setAmbientLightColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+                fx.DirectionalLight0.setEnabledProperty(false);
+                fx.DirectionalLight1.setEnabledProperty(false);
+                fx.DirectionalLight2.setEnabledProperty(false);
+                fx.setWorldProperty(Matrix::getIdentityProperty());
+                fx.setViewProperty(Matrix::getIdentityProperty());
+                fx.setProjectionProperty(Matrix::getIdentityProperty());
+                return DrawWith(dev, fx, vb);
+            };
+
+            // Byte4 spelling: the canonical stride-52 record, bone index 1.
+            VertexDeclaration declByte(52, {
+                VertexElement(0,  VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+                VertexElement(12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0),
+                VertexElement(24, VertexElementFormat::Vector2,
+                              VertexElementUsage::TextureCoordinate, 0),
+                VertexElement(32, VertexElementFormat::Vector4,
+                              VertexElementUsage::BlendWeight, 0),
+                VertexElement(48, VertexElementFormat::Byte4,
+                              VertexElementUsage::BlendIndices, 0),
+            });
+            std::vector<std::uint8_t> byteBytes(static_cast<std::size_t>(6 * 52), 0);
+            for (int i = 0; i < 6; ++i) {
+                std::uint8_t* v = byteBytes.data() + i * 52;
+                PutFloat3(v + 0,  kQuad[i].x, kQuad[i].y, 0.0f);
+                PutFloat3(v + 12, 0.0f, 0.0f, 1.0f);
+                PutFloat2(v + 24, 0.25f, 0.5f);          // the LEFT texel
+                PutFloat4(v + 32, 1.0f, 0.0f, 0.0f, 0.0f);
+                v[48] = 1; v[49] = 0; v[50] = 0; v[51] = 0;
+            }
+            VertexBuffer vbByte(dev, declByte, 6, BufferUsage::None);
+            vbByte.SetDataRaw(byteBytes.data(), 6, 52);
+
+            // Vector4 spelling: the same record with the indices as four floats, so stride 64.
+            VertexDeclaration declFloat(64, {
+                VertexElement(0,  VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+                VertexElement(12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0),
+                VertexElement(24, VertexElementFormat::Vector2,
+                              VertexElementUsage::TextureCoordinate, 0),
+                VertexElement(32, VertexElementFormat::Vector4,
+                              VertexElementUsage::BlendWeight, 0),
+                VertexElement(48, VertexElementFormat::Vector4,
+                              VertexElementUsage::BlendIndices, 0),
+            });
+            std::vector<std::uint8_t> floatBytes(static_cast<std::size_t>(6 * 64), 0);
+            for (int i = 0; i < 6; ++i) {
+                std::uint8_t* v = floatBytes.data() + i * 64;
+                PutFloat3(v + 0,  kQuad[i].x, kQuad[i].y, 0.0f);
+                PutFloat3(v + 12, 0.0f, 0.0f, 1.0f);
+                PutFloat2(v + 24, 0.25f, 0.5f);
+                PutFloat4(v + 32, 1.0f, 0.0f, 0.0f, 0.0f);
+                PutFloat4(v + 48, 1.0f, 0.0f, 0.0f, 0.0f);
+            }
+            VertexBuffer vbFloat(dev, declFloat, 6, BufferUsage::None);
+            vbFloat.SetDataRaw(floatBytes.data(), 6, 64);
+
+            Color gotByte(0, 0, 0, 0), gotFloat(0, 0, 0, 0);
+            std::string how;
+            try {
+                gotByte  = drawSkinned(vbByte);
+                gotFloat = drawSkinned(vbFloat);
+            } catch (const std::exception& e) {
+                how = std::string("refused: ") + e.what();
+            }
+            check(how.empty() && Matches(gotByte, gotFloat),
+                  "C2 a Vector4-spelled BlendIndices renders the SAME picture as the Byte4 one",
+                  how.empty() ? "Byte4=" + Show(gotByte) + " Vector4=" + Show(gotFloat) : how);
+            check(how.empty() && Matches(gotByte, kLeft),
+                  "C2 and that picture is the sampled texel, so bone 1 really was selected "
+                  "(bone 0 puts the quad off screen)",
+                  how.empty() ? Show(gotByte) + " (expected " + Show(kLeft) + ")" : how);
+        }
+
         // ---- D2: PbrEffect at stride 64, which is on no list -----------------------------------
         // pbr3d.vert.glsl takes {position, normal, tangent, uv}. Canonically that is 48 bytes;
         // here it is 64, with four bytes of padding after each of the last three elements -- the
