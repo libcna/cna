@@ -458,6 +458,14 @@ Python XNB parser (`tools/xnb/xnb_conformance.py`, extended per type) into a nor
 form and compared. Byte equality is asserted only where serialization is deterministic and
 expected identical (it already is for `List<string>`, `Texture2D`, `SoundEffect`).
 
+The intermediate XML format has its own oracle, already run (`XNAPP-074`, 2026-09-05):
+`tools/xna-pipeline-oracle/intermediate/IntermediateOracle.cs` drives the genuine
+`IntermediateSerializer` over CNA-authored graphs and hand-written XML variants; the corpus is
+`tests/reference/xna40/intermediate/` (254 cases: 71 graphs written, 86 variants accepted, 93
+refused with their messages, 3 graphs the serializer itself refuses) and the measured
+specification is `docs/xna-intermediate-xml-format.md`. CNA's serializer tests read the corpus
+files directly, so a divergence from the genuine format is a failing test, not an opinion.
+
 ## 24. XNB semantic comparison strategy
 
 Compare: root reader; type-reader table (names, versions, order); object graph; texture format,
@@ -627,7 +635,7 @@ module) with `src/Xna/`; `ContentSerializer*` descriptors in `modules/content/in
 | `XNAPP-071` | `IntermediateSerializer::Serialize/Deserialize/GetTypeSerializer`; `IntermediateWriter` (9); `IntermediateReader` (14); `ContentTypeSerializer`/`<T>` bases; `ContentTypeSerializerAttribute`. | [ ] |
 | `XNAPP-072` | Primitives, strings, enums, arrays, lists, dictionaries, nullable, nested types, inheritance/polymorphism (`Type=`), shared resources (`<Resources>`), external references, optional/ignored/flattened/allow-null members, collection item names, `XnaContent`/`Asset` envelope, namespace aliases (`xmlns`), error location/identity. | [ ] |
 | `XNAPP-073` | Built-in serializers for every math/framework type XNA serializes inline (`Vector*`, `Matrix`, `Quaternion`, `Color`, `Rectangle`, `Point`, `BoundingBox`, `Curve`, `TimeSpan`, …). | [ ] |
-| `XNAPP-074` | Verify against XML the genuine `IntermediateSerializer` writes for the same graphs (§23), and XML the genuine `XmlImporter` accepts; record every difference. | [ ] |
+| `XNAPP-074` | Verify against XML the genuine `IntermediateSerializer` writes for the same graphs (§23), and XML the genuine `XmlImporter` accepts; record every difference. | [~] Oracle and corpus done first, so the implementation follows a measured specification: `tools/xna-pipeline-oracle/intermediate/` (driver + `run-intermediate-oracle.sh`), `tests/reference/xna40/intermediate/` (254 cases, `manifest.json`), `docs/xna-intermediate-xml-format.md`. Measured facts that shape `XNAPP-070`–`073`: properties serialize before fields; reading is positional and strict; packed collections are exactly the single-token types (`bool`, integers, `float`, `double`, `Vector*`, `Quaternion`, `Matrix`, `Rectangle`, `Point`, `Plane`, `Color`) while `char`, `decimal`, `TimeSpan`, `DateTime`, enums and nullables are element-per-item; `Color` is one `AARRGGBB` hex token; `TimeSpan` is an ISO 8601 duration; a null shared reference leaves the member unassigned; the root is written twice when a shared-resource cycle reaches it; self-closing `<Resources />` is refused while `<Resources></Resources>` is accepted; three XNA crashes (`NullReferenceException` on `Null="true"` for a value type, `RankException`, U+0000) become `InvalidContentException` in CNA (recorded divergence). Remaining: the CNA-vs-corpus test run once `XNAPP-071`–`073` exist, and the `XmlImporter` acceptance leg. |
 | `XNAPP-075` | Hardening: no DOCTYPE/external entities, depth/size ceilings, cyclic shared resources, malformed numbers; fuzz target. | [ ] |
 
 ### Phase 6 — graphics intermediate content API (47 types)
@@ -824,9 +832,13 @@ failures `plan_xnapipeline.md` §0.4 recorded do not occur here: this machine ha
 Session 1 (2026-09-05): Phases 0–1 done except `XNAPP-008`/`015`/`016`; Phase 3 done except
 `XNAPP-043` (`VideoContent`, with Phase 14), with `032`/`045` partial as their rows say. The parity map
 is edited through `tools/xna-pipeline-oracle/parity_map_edit.py` with a decision document, never
-by hand, and the report regenerates with `parity_report.py`. Phase 4 done. Next: Phase 5 (the intermediate serializer and the type-description
-system, which also supplies the automatic XNB writer for undecorated types), then Phase 6/7 in ID
-order.
+by hand, and the report regenerates with `parity_report.py`. Phase 4 done. Phase 5 started with the
+measurement leg of `XNAPP-074`: the intermediate-XML oracle has run and
+`docs/xna-intermediate-xml-format.md` is the specification the C++ serializer follows. Next:
+`XNAPP-070`–`073` (type descriptions, `IntermediateSerializer`/`Reader`/`Writer`, built-in
+serializers, tests reading `tests/reference/xna40/intermediate/`), then `075`, then Phase 6/7 in ID
+order. The intermediate oracle reruns with
+`tools/xna-pipeline-oracle/intermediate/run-intermediate-oracle.sh`.
 The build directory is `cmake-build-debug/`; **this session builds with `-j3` at the owner's
 request** (a per-session cap, not a repository rule); the oracle regenerates with
 `tools/xna-pipeline-oracle/run-oracle.sh`.

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<XnaContent xmlns:IntermediateOracle="Cna.Xna40.IntermediateOracle">
+  <Asset Type="IntermediateOracle:Primitives">
+    <Bool>true</Bool>
+    <Byte>200</Byte>
+    <SByte>-5</SByte>
+    <Short>-30000</Short>
+    <UShort>60000</UShort>
+    <Int>-123456789</Int>
+    <UInt>4000000000</UInt>
+    <Long>-9000000000000000000</Long>
+    <ULong>18000000000000000000</ULong>
+    <Float>1.5</Float>
+    <Double>2.25</Double>
+    <Char>x</Char>
+    <String>hello world</String>
+    <Decimal>12.34</Decimal>
+    <TimeSpan>PT1.5S</TimeSpan>
+    <DateTime>2010-09-16T12:30:45Z</DateTime>
+  </Asset>
+</XnaContent>

@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<XnaContent xmlns:IntermediateOracle="Cna.Xna40.IntermediateOracle">
+  <Asset Type="IntermediateOracle:PackedCollections">
+    <Bools>true false</Bools>
+    <Enums>
+      <Item>Happy</Item>
+      <Item>Sad</Item>
+    </Enums>
+    <Flags>
+      <Item>Cheese, Olives</Item>
+      <Item>None</Item>
+    </Flags>
+    <Colors>FFFF0000 FF6495ED</Colors>
+    <Spans>
+      <Item>PT1.5S</Item>
+      <Item>PT2M</Item>
+    </Spans>
+    <Dates>
+      <Item>2010-09-16T12:30:45Z</Item>
+    </Dates>
+    <Decimals>
+      <Item>1.5</Item>
+      <Item>2</Item>
+    </Decimals>
+    <Doubles>0.1 1E+300</Doubles>
+    <Longs>-1 9223372036854775807</Longs>
+    <Ulongs>18446744073709551615</Ulongs>
+    <Shorts>-3 3</Shorts>
+    <Ushorts>65535</Ushorts>
+    <Sbytes>-128 127</Sbytes>
+    <Uints>4000000000</Uints>
+    <Vector2s>1 2 3 4</Vector2s>
+    <Vector4s>1 2 3 4</Vector4s>
+    <Quaternions>0 0 0 1</Quaternions>
+    <Rectangles>1 2 3 4 5 6 7 8</Rectangles>
+    <Points>1 2</Points>
+    <Matrices>1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1</Matrices>
+    <Planes>0 1 0 3</Planes>
+    <Boxes>
+      <Item>
+        <Min>0 0 0</Min>
+        <Max>1 1 1</Max>
+      </Item>
+    </Boxes>
+    <Spheres>
+      <Item>
+        <Center>0 0 0</Center>
+        <Radius>2</Radius>
+      </Item>
+    </Spheres>
+    <Rays>
+      <Item>
+        <Position>0 0 0</Position>
+        <Direction>0 0 1</Direction>
+      </Item>
+    </Rays>
+    <Curves>
+      <Item>
+        <PreLoop>Constant</PreLoop>
+        <PostLoop>Constant</PostLoop>
+        <Keys />
+      </Item>
+    </Curves>
+    <NullableVectors>
+      <Item>1 1 1</Item>
+      <Item Null="true" />
+    </NullableVectors>
+    <BoxedPrimitives>
+      <Item Type="long">1</Item>
+      <Item Type="short">2</Item>
+      <Item Type="byte">3</Item>
+      <Item Type="System.Char">c</Item>
+      <Item Type="System.Decimal">1.5</Item>
+      <Item Type="double">2.5</Item>
+      <Item Type="bool">true</Item>
+      <Item Type="IntermediateOracle:Mood">Sad</Item>
+      <Item Type="System.TimeSpan">PT1S</Item>
+      <Item Type="ulong">4</Item>
+      <Item Type="ushort">5</Item>
+      <Item Type="sbyte">6</Item>
+      <Item Type="uint">7</Item>
+      <Item Type="float">8</Item>
+    </BoxedPrimitives>
+    <IntIntMap>
+      <Item>
+        <Key>1</Key>
+        <Value>2</Value>
+      </Item>
+    </IntIntMap>
+    <EnumVectorMap>
+      <Item>
+        <Key>Happy</Key>
+        <Value>1 1 1</Value>
+      </Item>
+    </EnumVectorMap>
+    <BoolArray>false true</BoolArray>
+    <CharArray>
+      <Item>a</Item>
+      <Item>b</Item>
+    </CharArray>
+    <StringWithSpaces>
+      <Item>a b</Item>
+      <Item> c </Item>
+    </StringWithSpaces>
+  </Asset>
+</XnaContent>

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<XnaContent xmlns:IntermediateOracle="Cna.Xna40.IntermediateOracle">
+  <Asset Type="IntermediateOracle:MathTypes">
+    <Vector2>1.5 -2.5</Vector2>
+    <Vector3>1 2 3</Vector3>
+    <Vector4>0.1 0.2 0.3 0.4</Vector4>
+    <Matrix>1 0 0 0 0 1 0 0 0 0 1 0 1 2 3 1</Matrix>
+    <Quaternion>0 0.7071068 0 0.7071068</Quaternion>
+    <Color>280A141E</Color>
+    <Rectangle>1 2 30 40</Rectangle>
+    <Point>-7 8</Point>
+    <BoundingBox>
+      <Min>-1 -2 -3</Min>
+      <Max>1 2 3</Max>
+    </BoundingBox>
+    <BoundingSphere>
+      <Center>1 1 1</Center>
+      <Radius>5</Radius>
+    </BoundingSphere>
+    <Plane>0 1 0 3</Plane>
+    <Ray>
+      <Position>0 0 0</Position>
+      <Direction>0 0 1</Direction>
+    </Ray>
+    <Curve>
+      <PreLoop>Constant</PreLoop>
+      <PostLoop>Linear</PostLoop>
+      <Keys>0 0 0 1 Smooth 1 2 1 0 Step</Keys>
+    </Curve>
+  </Asset>
+</XnaContent>

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<XnaContent xmlns:IntermediateOracle="Cna.Xna40.IntermediateOracle" xmlns:Generic="System.Collections.Generic">
+  <Asset Type="IntermediateOracle:SharedResources">
+    <First>#Resource1</First>
+    <Second>#Resource1</Second>
+    <Other>#Resource2</Other>
+    <NullShared />
+    <SharedList>#Resource3</SharedList>
+    <Inline>
+      <Label>i</Label>
+      <Count>1</Count>
+    </Inline>
+  </Asset>
+  <Resources>
+    <Resource ID="#Resource1" Type="IntermediateOracle:Referenced">
+      <Label>x</Label>
+      <Count>1</Count>
+    </Resource>
+    <Resource ID="#Resource2" Type="IntermediateOracle:Referenced">
+      <Label>other</Label>
+      <Count>3</Count>
+    </Resource>
+    <Resource ID="#Resource3" Type="Generic:List[IntermediateOracle:Referenced]">
+      <Item>
+        <Label>shared</Label>
+        <Count>2</Count>
+      </Item>
+      <Item>
+        <Label>other</Label>
+        <Count>3</Count>
+      </Item>
+    </Resource>
+  </Resources>
+</XnaContent>

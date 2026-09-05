@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<XnaContent xmlns:Framework="Microsoft.Xna.Framework">
+  <Asset Type="Framework:Ray">
+    <Position>0 0 0</Position>
+    <Direction>0 0 -1</Direction>
+  </Asset>
+</XnaContent>

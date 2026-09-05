@@ -68,8 +68,25 @@ The `counts` object in `content-pipeline-api.json` is authoritative; the plan qu
 `tools/xna-pipeline-oracle/parity_report.py` recomputes every percentage from it. Do not restate
 the numbers here.
 
+## Intermediate XML oracle (`intermediate/`)
+
+`intermediate/IntermediateOracle.cs` is a second driver, compiled the same way, that runs the
+genuine `IntermediateSerializer` over CNA-authored types: it serializes a corpus of object graphs
+(primitives, strings, math types, enums, collections, nullables, polymorphism, shared resources,
+external references, serializer attributes, deep nesting, root values of every kind), round-trips
+each through the genuine deserializer, and hands the deserializer hand-written XML variants to
+record what it accepts and with which message it refuses the rest.
+
+```sh
+tools/xna-pipeline-oracle/intermediate/run-intermediate-oracle.sh   # writes tests/reference/xna40/intermediate/
+```
+
+The result is the format specification `docs/xna-intermediate-xml-format.md`; the corpus's
+`manifest.json` lists every case with its verdict. Extend the driver when a question about the
+format comes up — the document only states what a case in the corpus shows.
+
 ## Not committed
 
-The Microsoft assemblies, the compiled oracle and the Wine-side temporaries live only under the
+The Microsoft assemblies, the compiled oracles and the Wine-side temporaries live only under the
 ignored `build/xna-pipeline-oracle/`. Committing them is prohibited by the plan's provenance
 rules and by Microsoft's licence.

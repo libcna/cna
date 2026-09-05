@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<XnaContent xmlns:IntermediateOracle="Cna.Xna40.IntermediateOracle">
+  <Asset Type="IntermediateOracle:Both">
+    <Shared>#Resource1</Shared>
+    <Texture>
+      <Reference>#External1</Reference>
+    </Texture>
+  </Asset>
+  <Resources>
+    <Resource ID="#Resource1" Type="IntermediateOracle:Referenced">
+      <Label>shared</Label>
+      <Count>2</Count>
+    </Resource>
+  </Resources>
+  <ExternalReferences>
+    <ExternalReference ID="#External1" TargetType="Microsoft.Xna.Framework.Content.Pipeline.Graphics.Texture2DContent">Z:\rv\data\development\github.com\openeggbert\cnatmp\Textures\wall.png</ExternalReference>
+  </ExternalReferences>
+</XnaContent>

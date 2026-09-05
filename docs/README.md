@@ -84,6 +84,14 @@ on it) rather than assuming either way.
   Importer -> Processor -> Content Type Writer system above frozen CNB: `cna-content`, built-in
   source routes, dependency/XREF semantics, incremental manifests, determinism, atomic publication,
   Unicode paths, custom extensions, and the exact stable/experimental boundary.
+- **[`xna-content-pipeline-compat-api.md`](xna-content-pipeline-compat-api.md)** — the design
+  contract of the `Microsoft::Xna::Framework::Content::Pipeline` façade over that engine
+  (`plans/plan_xnapipeline_parity.md`); `xna-content-pipeline-parity-report.md` is the generated
+  member-by-member parity report.
+- **[`xna-intermediate-xml-format.md`](xna-intermediate-xml-format.md)** — the XNA 4.0
+  intermediate XML format as measured by running the genuine `IntermediateSerializer`; the
+  specification CNA's serializer and `XmlImporter` implement, backed by the corpus in
+  `tests/reference/xna40/intermediate/`.
 
 ## Graphics — per-effect / per-feature support matrices
 

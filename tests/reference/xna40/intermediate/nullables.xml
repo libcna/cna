@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<XnaContent xmlns:IntermediateOracle="Cna.Xna40.IntermediateOracle">
+  <Asset Type="IntermediateOracle:Nullables">
+    <HasValue>5</HasValue>
+    <NoValue Null="true" />
+    <Vector>1 2 3</Vector>
+    <Enum>Angry</Enum>
+    <ListOfNullable>
+      <Item>1</Item>
+      <Item Null="true" />
+      <Item>3</Item>
+    </ListOfNullable>
+  </Asset>
+</XnaContent>
