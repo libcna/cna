@@ -472,7 +472,7 @@ TEST(CnbTextureCodecTest, GeneratedMipChainSurvivesAnEncodeDecodeRoundTrip)
     CnbTextureData data = SolidRgba8(16u, 8u, 77u);
     CNA::Content::Cnb::GenerateRgba8MipChain(data);
     const std::vector<std::uint8_t> encoded = EncodeTexture2DToCnb(data, "mipped");
-    const CnbTextureData decoded = DecodeTexture2DFromCnb(CnbDocument::Parse(encoded));
+    const CnbTextureData decoded = DecodeTexture2DFromCnb(CnbDocument::Parse(encoded, "mipped"));
 
     EXPECT_EQ(decoded.mipCount, data.mipCount);
     ASSERT_EQ(decoded.representations.size(), 1u);
