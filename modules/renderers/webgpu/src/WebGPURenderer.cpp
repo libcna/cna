@@ -110,6 +110,18 @@ namespace CNA::Internal::Renderers::WebGPU
             case SurfaceFormat::Dxt5SrgbEXT: return {WGPUTextureFormat_BC3RGBAUnormSrgb, true, 16};
             case SurfaceFormat::Bc7EXT:      return {WGPUTextureFormat_BC7RGBAUnorm, true, 16};
             case SurfaceFormat::Bc7SrgbEXT:  return {WGPUTextureFormat_BC7RGBAUnormSrgb, true, 16};
+            // WEBGPU-184: XNA's two signed-normalized byte formats map cleanly onto core WebGPU --
+            // `rg8snorm` and `rgba8snorm` are both filterable float formats there, and a shader
+            // samples them in [-1,1], which is the semantic NormalizedByte carries. No expansion,
+            // no CPU conversion: the bytes the game supplies are the bytes the GPU stores.
+            //
+            // Deliberately NOT here: Bgr565, Bgra5551 and Bgra4444. WebGPU has no 16-bit packed
+            // colour format at all, so the only way to accept them would be to expand each texel to
+            // RGBA8 at upload -- a texture that says it is 565 while the GPU holds 8888, which is
+            // the shape of defect WEBGPU-163 was and which WEBGPU-183's surface test exists to
+            // stop. They stay refused, by name, and GetAdditionalLimitationsTextEXT() says so.
+            case SurfaceFormat::NormalizedByte2: return {WGPUTextureFormat_RG8Snorm, false, 2};
+            case SurfaceFormat::NormalizedByte4: return {WGPUTextureFormat_RGBA8Snorm, false, 4};
             default:                         return {WGPUTextureFormat_RGBA8Unorm, false, 4};
             }
         }
@@ -1409,9 +1421,14 @@ namespace CNA::Internal::Renderers::WebGPU
 
         if (!compressed_ && !data.pixels.empty())
         {
-            const std::size_t required = static_cast<std::size_t>(width_) * static_cast<std::size_t>(height_) * 4u;
+            // WEBGPU-184: sized from the FORMAT. NormalizedByte2 is two bytes per texel, so a
+            // width*height*4 check would reject a correctly sized buffer for it.
+            const std::size_t required = static_cast<std::size_t>(width_) *
+                                         static_cast<std::size_t>(height_) *
+                                         static_cast<std::size_t>(blockBytes_);
             if (data.pixels.size() < required)
-                throw std::invalid_argument("CNA WebGPU: Texture2D RGBA buffer is smaller than width*height*4");
+                throw std::invalid_argument(
+                    "CNA WebGPU: Texture2D pixel buffer is smaller than width*height*bytesPerTexel");
         }
 
         WGPUTextureDescriptor descriptor{};
@@ -1425,9 +1442,30 @@ namespace CNA::Internal::Renderers::WebGPU
         // WEBGPU-144: a block-compressed texture is never a render attachment and never mip-generated
         // (its mips are supplied pre-compressed), so RenderAttachment is dropped for it; CopySrc/Dst
         // stay for block upload/readback.
+        // WEBGPU-184: and neither is a SIGNED-NORMALIZED one. `rgba8snorm`/`rg8snorm` are sampleable
+        // and filterable in core WebGPU but NOT renderable, so asking for RenderAttachment is a
+        // validation error that invalidates the texture -- measured: "Texture usages
+        // TextureUsages(RENDER_ATTACHMENT) are not allowed on a texture of type Rgba8Snorm", after
+        // which every view and every write on it fails too. Dropping the flag is what makes the
+        // format usable at all; the cost is that GenerateMips2D's render-pass blit cannot run on
+        // one, which is why a mip chain is refused for these formats below.
+        const bool renderable = !compressed_ && wgpuFormat_ != WGPUTextureFormat_RG8Snorm &&
+                                wgpuFormat_ != WGPUTextureFormat_RGBA8Snorm;
         descriptor.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst |
                            WGPUTextureUsage_CopySrc |
-                           (compressed_ ? WGPUTextureUsage_None : WGPUTextureUsage_RenderAttachment);
+                           (renderable ? WGPUTextureUsage_RenderAttachment : WGPUTextureUsage_None);
+        if (!renderable && !compressed_ && mipLevels_ > 1)
+        {
+            // Refused by name rather than silently handing back a one-level texture or a chain of
+            // undefined levels. XNA allows mipMap on a NormalizedByte texture; this renderer cannot
+            // GENERATE that chain, because generation goes through a render pass the format may not
+            // be the target of. A game that supplies every level itself is not what this rejects --
+            // it is the automatic generation that has nowhere to run.
+            throw System::NotSupportedException(
+                "CNA WebGPU: a mip-mapped NormalizedByte2/NormalizedByte4 Texture2D is not "
+                "supported -- WebGPU's signed-normalized formats are not renderable, so this "
+                "renderer's mip generation, which draws into each level, has no path for them");
+        }
         descriptor.dimension = WGPUTextureDimension_2D;
         descriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(width_), static_cast<std::uint32_t>(height_), 1};
         descriptor.format = wgpuFormat_;
@@ -1469,19 +1507,24 @@ namespace CNA::Internal::Renderers::WebGPU
     {
         if (rgba == nullptr)
             throw std::invalid_argument("CNA WebGPU: texture update source cannot be null");
-        if (stride < width_ * 4)
+        // WEBGPU-184: a row is width * bytesPerTexel, and bytesPerTexel is not always four -- the
+        // shared layer hands this method `levelW * getBytesPerTexel()`, which is 2 for
+        // NormalizedByte2, so a hardcoded `* 4` rejected a correctly strided upload outright.
+        const int rowBytes = width_ * blockBytes_;
+        if (stride < rowBytes)
             throw std::invalid_argument("CNA WebGPU: texture update stride is too small");
 
         std::vector<std::uint8_t> tightlyPacked;
         const std::uint8_t* upload = rgba;
-        if (stride != width_ * 4)
+        if (stride != rowBytes)
         {
-            tightlyPacked.resize(static_cast<std::size_t>(width_) * static_cast<std::size_t>(height_) * 4u);
+            tightlyPacked.resize(static_cast<std::size_t>(width_) * static_cast<std::size_t>(height_) *
+                                 static_cast<std::size_t>(blockBytes_));
             for (int y = 0; y < height_; ++y)
             {
-                std::memcpy(tightlyPacked.data() + static_cast<std::size_t>(y) * width_ * 4u,
+                std::memcpy(tightlyPacked.data() + static_cast<std::size_t>(y) * rowBytes,
                             rgba + static_cast<std::size_t>(y) * stride,
-                            static_cast<std::size_t>(width_) * 4u);
+                            static_cast<std::size_t>(rowBytes));
             }
             upload = tightlyPacked.data();
         }
@@ -1539,10 +1582,14 @@ namespace CNA::Internal::Renderers::WebGPU
         }
 
         WGPUTexelCopyBufferLayout layout{};
-        layout.bytesPerRow = static_cast<std::uint32_t>(levelW * 4);
+        // WEBGPU-184: blockBytes_ is bytes per TEXEL for an uncompressed format, so this row stride
+        // follows the format rather than assuming RGBA8.
+        layout.bytesPerRow = static_cast<std::uint32_t>(levelW * blockBytes_);
         layout.rowsPerImage = static_cast<std::uint32_t>(levelH);
         const WGPUExtent3D extent{static_cast<std::uint32_t>(levelW), static_cast<std::uint32_t>(levelH), 1};
-        const std::size_t byteCount = static_cast<std::size_t>(levelW) * static_cast<std::size_t>(levelH) * 4u;
+        const std::size_t byteCount = static_cast<std::size_t>(levelW) *
+                                      static_cast<std::size_t>(levelH) *
+                                      static_cast<std::size_t>(blockBytes_);
         wgpuQueueWriteTexture(owner_->Queue(), &destination, rgba, byteCount, &layout, &extent);
     }
 
@@ -1599,7 +1646,9 @@ namespace CNA::Internal::Renderers::WebGPU
 
         const int levelW = MipDim(width_, level);
         const int levelH = MipDim(height_, level);
-        const auto bytesPerRow = AlignBytesPerRow(static_cast<std::uint32_t>(levelW) * 4u);
+        // WEBGPU-184: per TEXEL, not always four bytes -- NormalizedByte2 is two.
+        const auto bytesPerRow = AlignBytesPerRow(
+            static_cast<std::uint32_t>(levelW) * static_cast<std::uint32_t>(blockBytes_));
         const std::uint64_t bufferSize = static_cast<std::uint64_t>(bytesPerRow) * static_cast<std::uint64_t>(levelH);
 
         WGPUBufferDescriptor bufferDescriptor{};
@@ -8096,6 +8145,18 @@ namespace CNA::Internal::Renderers::WebGPU
         // otherwise defer to the framework's own rule (which CPU-decompresses to Color elsewhere).
         if (bcSupported_ && ClassifyWebGPUTextureFormat(surfaceFormat).compressed)
             return RendererFormatVerdict::Supported;
+        // WEBGPU-184: the two signed-normalized byte formats are core WebGPU texture formats
+        // (`rg8snorm`/`rgba8snorm`), stored natively with no expansion, so they are Supported
+        // rather than deferred to the framework's Color-only rule. Texture path only: neither is
+        // renderable in core WebGPU, and MapRenderTargetColorFormatEXT deliberately does not list
+        // them, so a RenderTarget2D asking for one is still refused by name.
+        {
+            using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+            const auto requested = static_cast<SurfaceFormat>(surfaceFormat);
+            if (requested == SurfaceFormat::NormalizedByte2 ||
+                requested == SurfaceFormat::NormalizedByte4)
+                return RendererFormatVerdict::Supported;
+        }
         return RendererFormatVerdict::Defer;
     }
 
@@ -8235,6 +8296,18 @@ namespace CNA::Internal::Renderers::WebGPU
         // every stock 3D family does so. What this text exists for is the three routes that do NOT,
         // because the row's rule is that a route which cannot apply the state says so by name rather
         // than ignoring it quietly.
+        // WEBGPU-184: the decision this row asked to be made and recorded, in the place a caller
+        // reads. NormalizedByte2/4 were implemented natively rather than refused; the three packed
+        // 16-bit colour formats were not, and the reason is stated so the choice is auditable.
+        add("SurfaceFormat.Bgr565, Bgra5551 and Bgra4444 are refused for a Texture2D or TextureCube, "
+            "by name, on this renderer. WebGPU has no 16-bit packed colour texture format at all, so "
+            "the only way to accept them would be to expand every texel to RGBA8 at upload -- a "
+            "texture reporting one format while the GPU holds another, which is the shape of the "
+            "defect WEBGPU-163 was and which this renderer's format surface deliberately does not "
+            "have. SurfaceFormat.NormalizedByte2 and NormalizedByte4 ARE supported, stored natively "
+            "as rg8snorm and rgba8snorm with no conversion; XNA's Reach profile excludes both from a "
+            "CUBE texture, so a TextureCube still refuses them, on profile grounds rather than "
+            "renderer ones.");
         add("SamplerState.MipMapLevelOfDetailBias is applied on every stock 3D effect route "
             "(BasicEffect, AlphaTestEffect, DualTextureEffect -- both samplers -- EnvironmentMapEffect "
             "and SkinnedEffect) via WGSL textureSampleBias, and WGSL clamps a sample bias to roughly "

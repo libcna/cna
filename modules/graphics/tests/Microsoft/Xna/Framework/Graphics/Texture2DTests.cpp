@@ -406,7 +406,9 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
     // them through one branch -- NormalizedByte2 as RG8_SNORM beside NormalizedByte4's
     // RGBA8_SNORM. Both need the ES 3 class of context that has SNORM at all, so this list
     // is deliberately the same one NormalizedByte4Throws uses.
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2))
+    // plans/plan_webgpu.md WEBGPU-184 added WEBGPU to this list: core WebGPU has `rg8snorm` and
+    // `rgba8snorm`, so the format is stored natively there too, with no expansion.
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte2));
     }
@@ -418,7 +420,7 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
 
 TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
 {
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2))
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte4));
     }
@@ -664,8 +666,11 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         // to end on both its backends, and only if its texel is a multiple of four bytes -- the
         // framework's own transfer rule, which ByteEXT, UShortEXT and HalfSingle would break.
         const bool igl = CNA_RENDERER_IS(Igl);
+        // WEBGPU-184: WEBGPU joins the signed-normalized set -- `rg8snorm`/`rgba8snorm` are core
+        // WebGPU formats, stored natively. The name keeps its EasyGL prefix only because the list
+        // began there; what it selects is "renderers that store SNORM", which now includes this one.
         const bool easyGlSignedNormalized =
-            CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2);
+            CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU);
         // REMED-GFX-244: the packed 16-bit formats Reach permits, promoted on the same ES 3
         // generation the signed-normalized pair needs and verified by a real sampled draw
         // (EasyGL_Packed16Format) rather than by a readback, which this renderer serves from a CPU
