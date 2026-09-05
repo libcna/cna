@@ -540,8 +540,8 @@ Filled by `parity_report.py` into `docs/xna-content-pipeline-parity-report.md` a
 each phase close. The member denominator the report counts is 705: the inventory's 708 minus the
 3 delegate-plumbing members the report lists separately (§5).
 
-**Current (2026-09-05, after Phase 5, Phase 6 and the first Phase 7 rows): types 87/128,
-members 509/705, enum values 17/27, importers 0/10, extensions 0/18, processors 0/12,
+**Current (2026-09-05, after Phase 5, Phase 6 and five Phase 7 rows): types 88/128,
+members 513/705, enum values 17/27, importers 0/10, extensions 0/18, processors 0/12,
 properties 0/47, intermediate-serializer features §13 complete against the 254-case corpus,
 targets verified 0/3, black-box-verified families 3 (intermediate XML byte for byte; the graphics
 content object model against 266 measurements; the framework's float packing against 68).** The previous plan's routes
@@ -664,10 +664,10 @@ module) with `src/Xna/`; `ContentSerializer*` descriptors in `modules/content/in
 | `XNAPP-132` | `FontDescriptionProcessor`, `FontTextureProcessor` (3 properties), `SpriteFontContent`. | [ ] |
 | `XNAPP-133` | `MaterialProcessor` (7 properties, `BuildTexture`/`BuildEffect`/`Process` protected virtuals). | [x] `Processors/MaterialProcessor.hpp`/`.cpp`, measured against a build context that records what it is asked to build (`materialprocessor/*`). The material comes back as the **same object** with each texture reference replaced by the built one; every texture goes through `TextureProcessor` with the six parameters this processor's properties map onto (`PremultiplyTextureAlpha` becomes `PremultiplyAlpha`, `ResizeTexturesToPowerOfTwo` becomes `ResizeToPowerOfTwo`); an effect material's effect goes through `EffectProcessor` with **no parameters at all**, and the result lands in `CompiledEffect`. Its own defaults differ from the texture processor's: mipmaps on, `DxtCompressed`. |
 | `XNAPP-134` | `ModelProcessor` (14 properties; `ConvertMaterial`, `ProcessGeometryUsingMaterial`, `ProcessVertexChannel` protected virtuals; `Process`), `ModelContent` graph types (`ModelBoneContent(Collection)`, `ModelMeshContent(Collection)`, `ModelMeshPartContent(Collection)`, `VertexBufferContent`, `VertexDeclarationContent`) as the typed view of the canonical model IR. | [ ] |
-| `XNAPP-135` | `EffectProcessor` (2 properties), `CompiledEffectContent` (`GetEffectCode`). | [~] `CompiledEffectContent` landed with `XNAPP-094` (both its members, measured), because `EffectMaterialContent` references it. `EffectProcessor` remains. |
+| `XNAPP-135` | `EffectProcessor` (2 properties), `CompiledEffectContent` (`GetEffectCode`). | [x] `CompiledEffectContent` landed with `XNAPP-094` (both members, measured); `EffectProcessor` is `Processors/EffectProcessor.hpp`/`.cpp` over the canonical `EffectCompilerService`, which is the one effect compiler this repository has -- XNA compiles in-process with D3DX. Measured (`effectprocessor/*`, which compile real HLSL under Wine): a successful compile answers the byte code, a refused one raises `InvalidContentException` beginning `Errors compiling <file>:` followed by the compiler's diagnostics, a missing define fails with the compiler's own `X3004`, and a null input is refused. Two host differences recorded in the map: the runtime composed that message with `Environment.NewLine`; and a compiler that is not installed is reported through the same message, which cannot happen in XNA. |
 | `XNAPP-136` | `SoundEffectProcessor`/`SongProcessor` (`Quality`), `SoundEffectContent`, `SongContent`; `VideoProcessor` (`VideoSoundtrackType`). | [ ] |
 | `XNAPP-137` | `PassThroughProcessor`. | [x] `Processors/PassThroughProcessor.hpp`/`.cpp`: an object-to-object processor that answers its input, with the pipeline's `ContentObject` as the `object` carrier. |
-| `XNAPP-138` | For every processor: tests with explicit values, omitted values (XNA defaults), and property interactions; defaults asserted against §10. | [~] `XnaProcessorTests.cpp`: 12 tests over `XNAPP-130`, `131`, `133` and `137`, each against the measured corpus rather than against §10's table -- the defaults are now read from the runtime, and §10 agrees with them. The remaining processors follow their own rows. |
+| `XNAPP-138` | For every processor: tests with explicit values, omitted values (XNA defaults), and property interactions; defaults asserted against §10. | [~] `XnaProcessorTests.cpp`: 15 tests over `XNAPP-130`, `131`, `133`, `135` and `137`, each against the measured corpus rather than against §10's table -- the defaults are now read from the runtime, and §10 agrees with them. The remaining processors follow their own rows. |
 
 ### Phase 8 — MeshBuilder / MeshHelper / model intermediate API
 
@@ -839,8 +839,8 @@ by hand, and the report regenerates with `parity_report.py`. Phases 4 and 5 done
 `XmlImporter` leg of `074` remains, as `XNAPP-230`). Phase 6 is done (`XNAPP-090`–`097`, `099`; `098` partial), except
 `VertexContent::CreateVertexBuffer`, which waits on `XNAPP-134`'s `VertexBufferContent`.
 `MeshBuilder` and `MeshHelper` are Phase 8 (`XNAPP-150`, `151`), not Phase 6. Phase 7 has started:
-`XNAPP-130`, `131`, `133` and `137` are done and `138` is partial; the remaining processors are
-`XNAPP-132`, `134`, `135` and `136`. The next phases need their measurements before their code -- extend
+`XNAPP-130`, `131`, `133`, `135` and `137` are done and `138` is partial; the remaining
+processors are `XNAPP-132`, `134` and `136`. The next phases need their measurements before their code -- extend
 `tools/xna-pipeline-oracle/graphics/GraphicsContentOracle.cs` the way the texture side was
 measured. The intermediate serializer is
 verified byte for byte against `tests/reference/xna40/intermediate/`; extend the oracle

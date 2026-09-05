@@ -25,9 +25,12 @@
 
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentBuildLogger.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentProcessorContext.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/PixelBitmapContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/TextureContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/StockMaterials.hpp"
+#include "CNA/Content/Pipeline/EffectCompilerService.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Processors/EffectProcessor.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/MaterialProcessor.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/PassThroughProcessor.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/ProcessorEnums.hpp"
@@ -119,6 +122,18 @@ namespace
             const std::size_t end = text.find(')', core);
             text = text.substr(0, core) + (end == std::string::npos ? "" : text.substr(end + 1));
         }
+        // A message the runtime composed with Environment.NewLine carries the host's line ending,
+        // not XNA's; CNA writes "\n" on this one.
+        std::string unwrapped;
+        for (std::size_t i = 0; i < text.size(); ++i)
+        {
+            if (text[i] == '\r' && i + 1 < text.size() && text[i + 1] == '\n')
+            {
+                continue;
+            }
+            unwrapped += text[i];
+        }
+        text = unwrapped;
         // The runtime resolved every relative reference against its own working directory; that
         // drive letter is a property of the host, not of XNA.
         static const std::regex windowsPath("[A-Za-z]:\\\\[^ <\"\\n]*");
@@ -173,6 +188,10 @@ namespace
         catch (const System::ArgumentNullException& error)
         {
             return Normalize("throws ArgumentNullException: " + error.getMessageProperty());
+        }
+        catch (const Microsoft::Xna::Framework::Content::Pipeline::InvalidContentException& error)
+        {
+            return Normalize("throws InvalidContentException: " + error.getMessageProperty());
         }
         catch (const System::Exception& error)
         {
@@ -832,4 +851,103 @@ TEST(XnaMaterialProcessor, RefusesANullMaterial)
                          return DescribeMaterial(processor.Process(nullptr, context), "MaterialContent");
                      }),
               Expected("materialprocessor/null_input"));
+}
+
+namespace
+{
+    /** @brief A compiler that answers what a test tells it to, so the processor can be measured. */
+    class ScriptedCompiler final : public CNA::Content::Pipeline::EffectCompilerService
+    {
+    public:
+        /** @brief What the next compile answers. */
+        CNA::Content::Pipeline::EffectCompileResult result;
+
+        /** @brief What the last compile was asked for. */
+        mutable CNA::Content::Pipeline::EffectCompileRequest request;
+
+        /** @brief Whether the compiler reports itself available. */
+        bool available = true;
+
+        [[nodiscard]] CNA::Content::Pipeline::EffectCompilerIdentity Identity() const override { return {}; }
+        [[nodiscard]] bool Available() const override { return available; }
+        [[nodiscard]] std::string UnavailableReason() const override
+        {
+            return available ? std::string() : "no effect compiler was found";
+        }
+        [[nodiscard]] CNA::Content::Pipeline::EffectCompileResult Compile(
+            const CNA::Content::Pipeline::EffectCompileRequest& compileRequest) const override
+        {
+            request = compileRequest;
+            return result;
+        }
+    };
+}
+
+TEST(XnaEffectProcessor, DefaultsMatchXna)
+{
+    const auto compiler = std::make_shared<ScriptedCompiler>();
+    const Processors::EffectProcessor processor(compiler);
+    static const std::map<Processors::EffectProcessorDebugMode, std::string> modes = {
+        {Processors::EffectProcessorDebugMode::Auto, "Auto"},
+        {Processors::EffectProcessorDebugMode::Debug, "Debug"},
+        {Processors::EffectProcessorDebugMode::Optimize, "Optimize"}};
+    EXPECT_EQ("DebugMode=" + modes.at(processor.getDebugModeProperty()) + " Defines=" +
+                  (processor.getDefinesProperty().empty() ? "null" : processor.getDefinesProperty()),
+              Expected("processor/EffectProcessor"));
+
+    Processors::EffectProcessor defined(compiler);
+    defined.setDefinesProperty("A=1;B");
+    EXPECT_EQ("defines=" + defined.getDefinesProperty() + " debug=" + modes.at(defined.getDebugModeProperty()),
+              Expected("processor/effect_defines"));
+}
+
+TEST(XnaEffectProcessor, CompilesThroughTheCanonicalCompiler)
+{
+    const auto compiler = std::make_shared<ScriptedCompiler>();
+    compiler->result.succeeded = true;
+    compiler->result.bytecode = {0xCF, 0x0B, 0xF0, 0xBC, 0x01};
+    Processors::EffectProcessor processor(compiler);
+    processor.setDefinesProperty("TINT=float4(0,1,0,1);FLAG");
+    auto effect = std::make_shared<Graphics::EffectContent>();
+    effect->setEffectCodeProperty("technique T { }");
+    effect->setIdentityProperty(
+        Microsoft::Xna::Framework::Content::Pipeline::ContentIdentity("shader.fx"));
+    RecordingContext context;
+    const std::shared_ptr<Processors::CompiledEffectContent> compiled = processor.Process(effect, context);
+    ASSERT_NE(compiled, nullptr);
+    EXPECT_EQ(compiled->GetEffectCode(), compiler->result.bytecode);
+    EXPECT_EQ(compiler->request.defines.at("TINT"), "float4(0,1,0,1)");
+    EXPECT_EQ(compiler->request.defines.at("FLAG"), "");
+    EXPECT_EQ(compiler->request.source.filename().string(), "shader.fx");
+    // The context says HiDef and Debug, so the compile follows both.
+    EXPECT_EQ(compiler->request.profile, CNA::Content::Pipeline::EffectSourceProfile::HiDef);
+    EXPECT_TRUE(compiler->request.debugInformation);
+}
+
+TEST(XnaEffectProcessor, RefusalsMatchXna)
+{
+    const auto compiler = std::make_shared<ScriptedCompiler>();
+    compiler->result.succeeded = false;
+    CNA::Content::Pipeline::EffectCompilerDiagnostic diagnostic;
+    diagnostic.file = "bad.fx";
+    diagnostic.line = 1;
+    diagnostic.column = 6;
+    diagnostic.code = "X3000";
+    diagnostic.message = "invalid target or usage string";
+    compiler->result.diagnostics.push_back(diagnostic);
+    Processors::EffectProcessor processor(compiler);
+    auto effect = std::make_shared<Graphics::EffectContent>();
+    effect->setEffectCodeProperty("this is not an effect");
+    effect->setIdentityProperty(Microsoft::Xna::Framework::Content::Pipeline::ContentIdentity("bad.fx"));
+    RecordingContext context;
+    EXPECT_EQ(Result([&] { return std::string(processor.Process(effect, context) == nullptr ? "null" : "compiled"); }),
+              Expected("effectprocessor/compile_error"));
+
+    Processors::EffectProcessor refusing(compiler);
+    EXPECT_EQ(Result([&]
+                     {
+                         RecordingContext none;
+                         return std::string(refusing.Process(nullptr, none) == nullptr ? "null" : "compiled");
+                     }),
+              Expected("effectprocessor/null_input"));
 }

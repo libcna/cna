@@ -2913,30 +2913,30 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Processors.EffectProcessor": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::EffectProcessor",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/EffectProcessor.hpp",
+   "note": "XNA compiles in-process with D3DX; CNA drives the one effect compiler this repository has, the canonical CNA::Content::Pipeline::EffectCompilerService, and carries a CNAEXT constructor taking it. The observable contract is measured (effectprocessor/*): the byte code comes back as CompiledEffectContent, a refused source raises InvalidContentException beginning `Errors compiling <file>:` with the compiler's own diagnostics, and a null input is refused. Two host differences: the runtime composed that message with Environment.NewLine, where CNA writes a newline; and a compiler that is not installed is reported through the same message rather than being impossible, as it is in XNA.",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "EffectProcessor()",
      "note": ""
     },
     "property:DebugMode": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getDebugModeProperty() / setDebugModeProperty()",
      "note": ""
     },
     "property:Defines": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getDefinesProperty() / setDefinesProperty()",
+     "note": "the nullable C# string is a std::string here; empty is the null XNA starts with, and neither compiles a definition."
     },
     "method:Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.EffectContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Process(const std::shared_ptr<EffectContent>&, ContentProcessorContext&)",
+     "note": "content travels as an owned shared_ptr; the compile itself runs through the canonical compiler service rather than in-process D3DX."
     }
    }
   },

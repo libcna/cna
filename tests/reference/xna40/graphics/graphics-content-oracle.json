@@ -477,6 +477,12 @@
   {"case": "materialprocessor/properties_forwarded", "result": "[cat.tga->TextureProcessor(ColorKeyColor={R:1 G:2 B:3 A:4},ColorKeyEnabled=False,GenerateMipmaps=False,PremultiplyAlpha=False,ResizeToPowerOfTwo=True,TextureFormat=NoChange) importer=null asset=null out=TextureContent]"},
   {"case": "materialprocessor/null_input", "result": "throws ArgumentNullException: Value cannot be null.\r\nParameter name: input"},
   {"case": "materialprocessor/base_material", "result": "MaterialContent opaque={} textures={} built=[]"},
+  {"case": "effectprocessor/compile_simple", "result": "bytes=476 head=CF0BF0BC"},
+  {"case": "effectprocessor/compile_error", "result": "throws InvalidContentException: Errors compiling bad.fx:\r\nbad.fx(1,6): error X3000: invalid target or usage string"},
+  {"case": "effectprocessor/empty_code", "result": "throws InvalidContentException: Errors compiling empty.fx:\r\nID3DXEffectCompiler: There were no techniques\r\nID3DXEffectCompiler: Compilation failed"},
+  {"case": "effectprocessor/defines_used", "result": "bytes=476"},
+  {"case": "effectprocessor/defines_missing", "result": "throws InvalidContentException: Errors compiling undefined.fx:\r\nundefined.fx(1,31): error X3004: undeclared identifier 'TINT'\r\nundefined.fx(1,24): error X3080: 'PS': function must return a value"},
+  {"case": "effectprocessor/null_input", "result": "throws ArgumentNullException: Value cannot be null.\r\nParameter name: input"},
   {"case": "texturereferencedictionary/default", "result": "count=0 ToString=\"Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureReferenceDictionary\""}
  ]
 }

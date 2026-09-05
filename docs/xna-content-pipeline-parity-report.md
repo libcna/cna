@@ -10,17 +10,17 @@
 
 | Quantity | Implemented (EXACT + SEMANTIC + HOST_SUBSTITUTION) | EXTERNAL_BLOCKED | MISSING |
 |---|---|---:|---:|
-| public/protected types | 87/128 (68.0%) | 0 | 41 |
-| public/protected members | 509/705 (72.2%) | 0 | 196 |
+| public/protected types | 88/128 (68.8%) | 0 | 40 |
+| public/protected members | 513/705 (72.8%) | 0 | 192 |
 | enum values | 17/27 (63.0%) | 0 | 10 |
 | built-in importers | 0/10 (0.0%) | 0 | 10 |
-| built-in processors | 5/12 (41.7%) | 0 | 7 |
-| processor properties | 25/47 (53.2%) | 0 | 22 |
+| built-in processors | 6/12 (50.0%) | 0 | 6 |
+| processor properties | 27/47 (57.4%) | 0 | 20 |
 
 Status vocabulary: EXACT_EQUIVALENT, SEMANTIC_EQUIVALENT (spelling differs, capability identical; note says how),
 HOST_SUBSTITUTION (Microsoft-host mechanism replaced; note says how), EXTERNAL_BLOCKED (note names the
-unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 40, SEMANTIC_EQUIVALENT 46, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 41.
-Member status by value: EXACT_EQUIVALENT 336, SEMANTIC_EQUIVALENT 168, HOST_SUBSTITUTION 5, EXTERNAL_BLOCKED 0, MISSING 196.
+unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 40, SEMANTIC_EQUIVALENT 47, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 40.
+Member status by value: EXACT_EQUIVALENT 338, SEMANTIC_EQUIVALENT 170, HOST_SUBSTITUTION 5, EXTERNAL_BLOCKED 0, MISSING 192.
 
 Rules applied mechanically: 3 delegate plumbing members are listed in section 7 and not counted; 3 exception
 serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serialization has no C++ counterpart).
@@ -32,7 +32,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `Microsoft.Xna.Framework.Content.Pipeline.Audio` | 5 | 0 | 0 | 5 |
 | `Microsoft.Xna.Framework.Content.Pipeline` | 32 | 21 | 0 | 11 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Graphics` | 47 | 45 | 0 | 2 |
-| `Microsoft.Xna.Framework.Content.Pipeline.Processors` | 28 | 9 | 0 | 19 |
+| `Microsoft.Xna.Framework.Content.Pipeline.Processors` | 28 | 10 | 0 | 18 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler` | 5 | 5 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate` | 7 | 7 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Tasks` | 4 | 0 | 0 | 4 |
@@ -118,7 +118,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `…` | `ProcessorParameter` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::ProcessorParameter` |  |
 | `…` | `ProcessorParameterCollection` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::ProcessorParameterCollection` |  |
 | `….Processors` | `CompiledEffectContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::CompiledEffectContent` | Landed with XNAPP-094 rather than XNAPP-135, because EffectMaterialContent references it. It carries one CNAEXT member the inventory does not list: a public parameterless constructor, which the intermediate serializer needs where XNA's reflection reaches a private one. |
-| `….Processors` | `EffectProcessor` | class | MISSING |  |  |
+| `….Processors` | `EffectProcessor` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::EffectProcessor` | XNA compiles in-process with D3DX; CNA drives the one effect compiler this repository has, the canonical CNA::Content::Pipeline::EffectCompilerService, and carries a CNAEXT constructor taking it. The observable contract is measured (effectprocessor/*): the byte code comes back as CompiledEffectContent, a refused source raises InvalidContentException beginning `Errors compiling <file>:` with the compiler's own diagnostics, and a null input is refused. Two host differences: the runtime composed that message with Environment.NewLine, where CNA writes a newline; and a compiler that is not installed is reported through the same message rather than being impossible, as it is in XNA. |
 | `….Processors` | `EffectProcessorDebugMode` | enum | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::EffectProcessorDebugMode` |  |
 | `….Processors` | `FontDescriptionProcessor` | class | MISSING |  |  |
 | `….Processors` | `FontTextureProcessor` | class | MISSING |  |  |
@@ -189,7 +189,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 
 | XNA processor | Input | Output | Properties | Status | CNA type |
 |---|---|---|---:|---|---|
-| `EffectProcessor` | `EffectContent` | `CompiledEffectContent` | 2 | MISSING |  |
+| `EffectProcessor` | `EffectContent` | `CompiledEffectContent` | 2 | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::EffectProcessor` |
 | `FontDescriptionProcessor` | `FontDescription` | `SpriteFontContent` | 0 | MISSING |  |
 | `FontTextureProcessor` | `Texture2DContent` | `SpriteFontContent` | 3 | MISSING |  |
 | `MaterialProcessor` | `MaterialContent` | `MaterialContent` | 7 | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::MaterialProcessor` |
@@ -204,8 +204,8 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 
 | Processor | Property | Type | XNA default (black-box) | Status | CNA |
 |---|---|---|---|---|---|
-| `EffectProcessor` | `DebugMode` | `EffectProcessorDebugMode` | `EffectProcessorDebugMode.Auto` | MISSING |  |
-| `EffectProcessor` | `Defines` | `String` | `None` | MISSING |  |
+| `EffectProcessor` | `DebugMode` | `EffectProcessorDebugMode` | `EffectProcessorDebugMode.Auto` | EXACT_EQUIVALENT | `getDebugModeProperty() / setDebugModeProperty()` |
+| `EffectProcessor` | `Defines` | `String` | `None` | SEMANTIC_EQUIVALENT | `getDefinesProperty() / setDefinesProperty()` |
 | `FontTextureProcessor` | `FirstCharacter` | `Char` | `'\u0020' (32)` | MISSING |  |
 | `FontTextureProcessor` | `PremultiplyAlpha` | `Boolean` | `True` | MISSING |  |
 | `FontTextureProcessor` | `TextureFormat` | `TextureProcessorOutputFormat` | `TextureProcessorOutputFormat.Color` | MISSING |  |
@@ -717,10 +717,10 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `ProcessorParameter` | property | `PropertyType` | EXACT_EQUIVALENT | `getPropertyTypeProperty()` |  |
 | `CompiledEffectContent` | constructor | `.ctor(System.Byte[])` | SEMANTIC_EQUIVALENT | `CompiledEffectContent(std::vector<bytecs>)` | byte[] is std::vector<bytecs>, which cannot be null, so the ArgumentNullException XNA gives for a null array has no counterpart (measured: compiledeffect/null). |
 | `CompiledEffectContent` | method | `GetEffectCode()` | EXACT_EQUIVALENT | `GetEffectCode()` |  |
-| `EffectProcessor` | constructor | `.ctor()` | MISSING |  |  |
-| `EffectProcessor` | property | `DebugMode` | MISSING |  |  |
-| `EffectProcessor` | property | `Defines` | MISSING |  |  |
-| `EffectProcessor` | method | `Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.EffectContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | MISSING |  |  |
+| `EffectProcessor` | constructor | `.ctor()` | EXACT_EQUIVALENT | `EffectProcessor()` |  |
+| `EffectProcessor` | property | `DebugMode` | EXACT_EQUIVALENT | `getDebugModeProperty() / setDebugModeProperty()` |  |
+| `EffectProcessor` | property | `Defines` | SEMANTIC_EQUIVALENT | `getDefinesProperty() / setDefinesProperty()` | the nullable C# string is a std::string here; empty is the null XNA starts with, and neither compiles a definition. |
+| `EffectProcessor` | method | `Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.EffectContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | SEMANTIC_EQUIVALENT | `Process(const std::shared_ptr<EffectContent>&, ContentProcessorContext&)` | content travels as an owned shared_ptr; the compile itself runs through the canonical compiler service rather than in-process D3DX. |
 | `EffectProcessorDebugMode` | enum value | `Auto = 0` | EXACT_EQUIVALENT | `EffectProcessorDebugMode::Auto` |  |
 | `EffectProcessorDebugMode` | enum value | `Debug = 1` | EXACT_EQUIVALENT | `EffectProcessorDebugMode::Debug` |  |
 | `EffectProcessorDebugMode` | enum value | `Optimize = 2` | EXACT_EQUIVALENT | `EffectProcessorDebugMode::Optimize` |  |

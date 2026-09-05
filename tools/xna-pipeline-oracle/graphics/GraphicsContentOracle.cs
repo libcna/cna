@@ -1783,6 +1783,63 @@ namespace Cna.Xna40.GraphicsOracle
                 return DescribeMaterial(result) + " built=" + context.Built;
             });
 
+            // ---- EffectProcessor -------------------------------------------------------------------
+            Record("effectprocessor/compile_simple", () =>
+            {
+                var processor = new EffectProcessor();
+                var effect = new EffectContent();
+                effect.EffectCode = "float4 PS() : COLOR0 { return float4(1,0,0,1); }\n" +
+                                    "technique T { pass P { PixelShader = compile ps_2_0 PS(); } }\n";
+                effect.Identity = new ContentIdentity("shader.fx");
+                CompiledEffectContent compiled = processor.Process(effect, new RecordingProcessorContext());
+                byte[] code = compiled.GetEffectCode();
+                return "bytes=" + code.Length + " head=" + Hex(new byte[] { code[0], code[1], code[2], code[3] });
+            });
+            Record("effectprocessor/compile_error", () =>
+            {
+                var processor = new EffectProcessor();
+                var effect = new EffectContent();
+                effect.EffectCode = "this is not an effect";
+                effect.Identity = new ContentIdentity("bad.fx");
+                processor.Process(effect, new RecordingProcessorContext());
+                return "accepted";
+            });
+            Record("effectprocessor/empty_code", () =>
+            {
+                var processor = new EffectProcessor();
+                var effect = new EffectContent();
+                effect.Identity = new ContentIdentity("empty.fx");
+                processor.Process(effect, new RecordingProcessorContext());
+                return "accepted";
+            });
+            Record("effectprocessor/defines_used", () =>
+            {
+                var processor = new EffectProcessor();
+                processor.Defines = "TINT=float4(0,1,0,1)";
+                var effect = new EffectContent();
+                effect.EffectCode = "float4 PS() : COLOR0 { return TINT; }\n" +
+                                    "technique T { pass P { PixelShader = compile ps_2_0 PS(); } }\n";
+                effect.Identity = new ContentIdentity("defined.fx");
+                CompiledEffectContent compiled = processor.Process(effect, new RecordingProcessorContext());
+                return "bytes=" + compiled.GetEffectCode().Length;
+            });
+            Record("effectprocessor/defines_missing", () =>
+            {
+                var processor = new EffectProcessor();
+                var effect = new EffectContent();
+                effect.EffectCode = "float4 PS() : COLOR0 { return TINT; }\n" +
+                                    "technique T { pass P { PixelShader = compile ps_2_0 PS(); } }\n";
+                effect.Identity = new ContentIdentity("undefined.fx");
+                processor.Process(effect, new RecordingProcessorContext());
+                return "accepted";
+            });
+            Record("effectprocessor/null_input", () =>
+            {
+                var processor = new EffectProcessor();
+                processor.Process(null, new RecordingProcessorContext());
+                return "accepted";
+            });
+
             // ---- TextureReferenceDictionary ------------------------------------------------------
             Record("texturereferencedictionary/default", () => { var d = new TextureReferenceDictionary(); return "count=" + d.Count + " ToString=\"" + d + "\""; });
 
