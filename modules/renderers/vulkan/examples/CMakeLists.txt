@@ -98,6 +98,12 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_DrawInstanced_3Instances COMMAND cna_test_vulkan_instanced
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-025: what AcquireThreadContextLeaseEXT() means here, and what it does not
+        cna_vulkan_test(cna_test_vulkan_thread_context_lease
+                        vulkan_thread_context_lease_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_ThreadContextLease COMMAND cna_test_vulkan_thread_context_lease
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-026: what CanBeginDrawEXT() answers when the swapchain is out of date
         cna_vulkan_test(cna_test_vulkan_swapchain_outofdate
                         vulkan_swapchain_outofdate_test.cpp)
