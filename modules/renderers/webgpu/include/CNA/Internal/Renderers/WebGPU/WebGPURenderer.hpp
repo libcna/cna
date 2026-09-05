@@ -961,6 +961,7 @@ namespace CNA::Internal::Renderers::WebGPU
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
+            int addressW = 1;  ///< WEBGPU-160: the third addressing axis.
             // REMED-GFX-102: complete per-Begin BlendState + BlendFactor capture by value. No
             // BlendState pointer, live renderer state, texture identity, sprite identity, or target
             // object identity participates in replay or pipeline selection.
@@ -1125,6 +1126,22 @@ namespace CNA::Internal::Renderers::WebGPU
             return transientBuffersCreatedEXT_;
         }
         /// WEBGPU-12/59: lifetime count of transient per-draw buffers served from the pool (reuses).
+        /**
+         * @brief plans/plan_webgpu.md WEBGPU-160: how many distinct native samplers the slot cache holds.
+         *
+         * `SamplerState.AddressW` is observable in PIXELS only where a renderer samples a volume
+         * texture, and this one has no public route that does (`IEffectRenderer::BindTexture3D` is
+         * unimplemented here). This counter is what makes the state's arrival measurable anyway:
+         * three draws that differ only in `AddressW` must create three distinct samplers, and a
+         * fourth repeating one of them must create none. Before the fix they collided onto a single
+         * cache entry, because `addressW` was in neither the key nor the descriptor.
+         *
+         * @return The number of cached slot samplers.
+         */
+        [[nodiscard]] std::size_t GetSlotSamplerCacheSizeEXT() const noexcept
+        {
+            return slotSamplerCache_.size();
+        }
         [[nodiscard]] std::size_t GetTransientBufferReuseCountEXT() const noexcept
         {
             return transientBuffersReusedEXT_;
@@ -1249,6 +1266,18 @@ namespace CNA::Internal::Renderers::WebGPU
         // reaches the same table. Storage-only here; actually read by every texture-consuming Queue*Draw() at
         // queue time for slot 0 (see each command's textureFilter/addressU/addressV capture).
         void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
+        /**
+         * @brief plans/plan_webgpu.md WEBGPU-160: the third addressing axis of a `SamplerState`.
+         *
+         * Separate from `ApplySamplerState` in the interface because it is observable only where a
+         * renderer samples a volume texture, so each renderer adopts it explicitly. It was not
+         * overridden here, so `SamplerState.AddressW` was discarded in silence -- including for
+         * `Texture3D`, where it is the only axis that matters.
+         *
+         * @param slot The texture slot, 0-15.
+         * @param addressW The raw `TextureAddressMode` ordinal for W.
+         */
+        void ApplySamplerAddressW(int slot, int addressW) override;
         // WEBGPU-80/81/29/30: scissor rect, viewport, blend constant and stencil reference are all
         // genuinely dynamic wgpu-native render-pass state (wgpuRenderPassEncoderSetScissorRect/
         // SetViewport/SetBlendConstant/SetStencilReference), exactly like Vulkan's own
@@ -2063,7 +2092,8 @@ namespace CNA::Internal::Renderers::WebGPU
         // descriptor and the cache key were wrong in the same way. `family` names the public draw
         // family for CNA_WEBGPU_SAMPLER_TRACE and has no effect on the cache key.
         [[nodiscard]] WGPUSampler GetOrCreateSlotSampler(int filter, int addressU, int addressV,
-                                                        int maxAnisotropy, const char* family);
+                                                        int addressW, int maxAnisotropy,
+                                                        const char* family);
         /** @brief Releases every native sampler in slotSamplerCache_ and empties it. */
         void ReleaseSamplerCache();
         [[nodiscard]] WGPUPrimitiveTopology ToTopology(PrimitiveType primitive) const;
@@ -2368,10 +2398,17 @@ namespace CNA::Internal::Renderers::WebGPU
             int filter = 0;    ///< XNA TextureFilter::Linear
             int addressU = 1;  ///< matches every *DrawCommand struct's own textureFilter/addressU/
             int addressV = 1;  ///< addressV default (Clamp) -- this file's established convention.
+            /// WEBGPU-160: the third addressing axis. Observable wherever a volume texture is
+            /// sampled, and Clamp by default like the other two.
+            int addressW = 1;
             int maxAnisotropy = 4;
         };
         std::array<SlotSamplerState, 16> slotSamplers_{};
-        std::unordered_map<std::uint32_t, WGPUSampler> slotSamplerCache_;
+        /// WEBGPU-160: keyed 64-bit, because the 32-bit key was exactly full -- filter, addressU,
+        /// addressV and anisotropy took one byte each -- and the W axis lives above bit 32. A
+        /// uint32_t map here silently TRUNCATED it, so three states with different W hashed to one
+        /// entry and the first sampler was handed to all three.
+        std::unordered_map<std::uint64_t, WGPUSampler> slotSamplerCache_;
 
         WGPUBuffer readbackBuffer_ = nullptr;
         std::uint64_t readbackBufferCapacity_ = 0;
@@ -2546,6 +2583,7 @@ namespace CNA::Internal::Renderers::WebGPU
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
+            int addressW = 1;  ///< WEBGPU-160: the third addressing axis.
             int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
             // WEBGPU-21: stride 24 (VertexPositionColorTexture) instead of stride 20
             // (VertexPositionTexture) -- selects coloredTexturedShader_/
@@ -2671,6 +2709,7 @@ namespace CNA::Internal::Renderers::WebGPU
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
+            int addressW = 1;  ///< WEBGPU-160: the third addressing axis.
             int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
             /// Task 1105 (plans/plan_graphics.md Phase 80): true selects the per-vertex-lit sibling
             /// pipeline/shader (XNA's real BasicEffect.PreferPerPixelLighting==false default);
@@ -2776,6 +2815,7 @@ namespace CNA::Internal::Renderers::WebGPU
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
+            int addressW = 1;  ///< WEBGPU-160: the third addressing axis.
             int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
             std::size_t stride = 20;   ///< 20, 24, or 32 -- selects vertex layout + shader module
             bool hasVertexColor = false;
@@ -2861,6 +2901,7 @@ namespace CNA::Internal::Renderers::WebGPU
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
+            int addressW = 1;  ///< WEBGPU-160: the third addressing axis.
             int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
             ///@}
             ///@{ REMED-GFX-172: `DualTextureEffect.Texture2`'s own GraphicsDevice.SamplerStates[1],
@@ -2871,6 +2912,7 @@ namespace CNA::Internal::Renderers::WebGPU
             int texture1Filter = 0;
             int texture1AddressU = 1;
             int texture1AddressV = 1;
+            int texture1AddressW = 1;  ///< WEBGPU-160.
             int texture1MaxAnisotropy = 4;
             ///@}
             bool hasVertexColor = false;   ///< stride 24 vs stride 20
@@ -2975,6 +3017,7 @@ namespace CNA::Internal::Renderers::WebGPU
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
+            int addressW = 1;  ///< WEBGPU-160: the third addressing axis.
             int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
             ///@}
             ///@{ REMED-GFX-172: the reflection cube's own GraphicsDevice.SamplerStates[1], captured
@@ -2985,6 +3028,7 @@ namespace CNA::Internal::Renderers::WebGPU
             int envMapFilter = 0;
             int envMapAddressU = 1;
             int envMapAddressV = 1;
+            int envMapAddressW = 1;  ///< WEBGPU-160.
             int envMapMaxAnisotropy = 4;
             ///@}
         };
@@ -3167,6 +3211,7 @@ namespace CNA::Internal::Renderers::WebGPU
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
+            int addressW = 1;  ///< WEBGPU-160: the third addressing axis.
             int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
         };
         void CreatePbrResources();
@@ -3269,6 +3314,7 @@ namespace CNA::Internal::Renderers::WebGPU
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
+            int addressW = 1;  ///< WEBGPU-160: the third addressing axis.
             int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
             std::size_t stride = 52;   ///< 52 (no vertex colour) or 56 (vertex colour appended)
             bool preferVertexLit = false;
@@ -3362,6 +3408,7 @@ namespace CNA::Internal::Renderers::WebGPU
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
+            int addressW = 1;  ///< WEBGPU-160: the third addressing axis.
             int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
         };
         void CreateSkinnedPbrResources();

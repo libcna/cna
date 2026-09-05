@@ -934,7 +934,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // GetOrCreateSlotSampler(), mirrors VulkanRenderer::ApplySamplerState()'s own
         // filter switch verbatim (magFilter/minFilter split per XNA TextureFilter value).
         void FillWGPUSamplerDescriptor(WGPUSamplerDescriptor& descriptor, int filter, int addressU,
-                                       int addressV, int maxAnisotropy)
+                                       int addressV, int addressW, int maxAnisotropy)
         {
             // XNA TextureFilter: 0=Linear,1=Point,2=Anisotropic,3=LinearMipPoint,4=PointMipLinear,
             // 5=MinLinearMagPointMipLinear,6=MinLinearMagPointMipPoint,
@@ -957,7 +957,10 @@ namespace CNA::Internal::Renderers::WebGPU
             }
             descriptor.addressModeU = ToAddressMode(addressU);
             descriptor.addressModeV = ToAddressMode(addressV);
-            descriptor.addressModeW = WGPUAddressMode_ClampToEdge;
+            // WEBGPU-160: the third axis is the caller's, through the same ordinal table as U and
+            // V. It was hardcoded to ClampToEdge, which discarded SamplerState.AddressW in silence
+            // -- and for a Texture3D that is the only axis that matters.
+            descriptor.addressModeW = ToAddressMode(addressW);
             descriptor.magFilter = magF;
             descriptor.minFilter = minF;
             descriptor.mipmapFilter = mipMode;
@@ -4770,11 +4773,13 @@ namespace CNA::Internal::Renderers::WebGPU
         command.textureFilter = slotSamplers_[0].filter;
         command.addressU = slotSamplers_[0].addressU;
         command.addressV = slotSamplers_[0].addressV;
+        command.addressW = slotSamplers_[0].addressW;  // WEBGPU-160
         command.maxAnisotropy = slotSamplers_[0].maxAnisotropy;
         // REMED-GFX-172: and the reflection cube's own slot, captured here for the same reason.
         command.envMapFilter = slotSamplers_[1].filter;
         command.envMapAddressU = slotSamplers_[1].addressU;
         command.envMapAddressV = slotSamplers_[1].addressV;
+        command.envMapAddressW = slotSamplers_[1].addressW;  // WEBGPU-160
         command.envMapMaxAnisotropy = slotSamplers_[1].maxAnisotropy;
 
         const Matrix mvp = world * view * projection;
@@ -4855,7 +4860,7 @@ namespace CNA::Internal::Renderers::WebGPU
         WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
 
         WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
-                                                     command.addressV, command.maxAnisotropy,
+                                                     command.addressV, command.addressW, command.maxAnisotropy,
                                                      "EnvironmentMap3D");
         WGPUTextureView texView = command.texture
             ? command.texture.View()
@@ -4867,7 +4872,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // at this draw's public call. The fallback 1x1 white cube is filtered by the same slot --
         // a missing resource does not change WHICH sampler slot owns that binding.
         WGPUSampler cubeSampler = GetOrCreateSlotSampler(command.envMapFilter, command.envMapAddressU,
-                                                         command.envMapAddressV,
+                                                         command.envMapAddressV, command.envMapAddressW,
                                                          command.envMapMaxAnisotropy,
                                                          "EnvironmentMap3D/slot1");
         std::array<WGPUBindGroupEntry, 4> texEntries{};
@@ -5790,7 +5795,7 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             bindEntries[1].binding = 1;
             bindEntries[1].sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
-                                                            command.addressV, kSpriteBatchMaxAnisotropy,
+                                                            command.addressV, command.addressW, kSpriteBatchMaxAnisotropy,
                                                             "SpriteBatch ShaderEffect");
             bindEntries[2].binding = 2;
             bindEntries[2].textureView = command.texture.View();
@@ -5879,7 +5884,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // that declaration's own note; it is a constant here, so it is trivially immutable per
         // queued sprite.
         entries[0].sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
-                                                    command.addressV, kSpriteBatchMaxAnisotropy,
+                                                    command.addressV, command.addressW, kSpriteBatchMaxAnisotropy,
                                                     "SpriteBatch");
         entries[1].binding = 1;
         entries[1].textureView = command.texture.View();
@@ -7143,7 +7148,22 @@ namespace CNA::Internal::Renderers::WebGPU
     {
         if (slot < 0 || slot >= static_cast<int>(slotSamplers_.size()))
             return;
-        slotSamplers_[static_cast<std::size_t>(slot)] = SlotSamplerState{filter, addressU, addressV, maxAnisotropy};
+        // WEBGPU-160: addressW is deliberately NOT reset here. The interface splits the two calls
+        // precisely so a renderer can adopt the W axis independently, and GraphicsDevice drives
+        // them separately; clearing it from this setter would make the surviving value depend on
+        // the order the two arrive in.
+        SlotSamplerState& state = slotSamplers_[static_cast<std::size_t>(slot)];
+        state.filter = filter;
+        state.addressU = addressU;
+        state.addressV = addressV;
+        state.maxAnisotropy = maxAnisotropy;
+    }
+
+    void WebGPURenderer::ApplySamplerAddressW(int slot, int addressW)
+    {
+        if (slot < 0 || slot >= static_cast<int>(slotSamplers_.size()))
+            return;
+        slotSamplers_[static_cast<std::size_t>(slot)].addressW = addressW;
     }
 
     void WebGPURenderer::SetBlendFactor(float r, float g, float b, float a)
@@ -7360,19 +7380,24 @@ namespace CNA::Internal::Renderers::WebGPU
     }
 
     WGPUSampler WebGPURenderer::GetOrCreateSlotSampler(int filter, int addressU, int addressV,
-                                                               int maxAnisotropy, const char* family)
+                                                               int addressW, int maxAnisotropy,
+                                                               const char* family)
     {
         const int clampedAniso = std::clamp(maxAnisotropy, 1, 16);
-        const std::uint32_t key = (static_cast<std::uint32_t>(filter) & 0xFFu)
-                                 | ((static_cast<std::uint32_t>(addressU) & 0xFFu) << 8)
-                                 | ((static_cast<std::uint32_t>(addressV) & 0xFFu) << 16)
-                                 | ((static_cast<std::uint32_t>(clampedAniso) & 0xFFu) << 24);
+        // WEBGPU-160: the key is 64-bit because the 32-bit one was exactly full -- filter, U, V and
+        // anisotropy took a byte each. A W axis folded into it would have aliased two genuinely
+        // different samplers onto one cache entry, which is worse than not honouring W at all.
+        const std::uint64_t key = (static_cast<std::uint64_t>(filter) & 0xFFull)
+                                 | ((static_cast<std::uint64_t>(addressU) & 0xFFull) << 8)
+                                 | ((static_cast<std::uint64_t>(addressV) & 0xFFull) << 16)
+                                 | ((static_cast<std::uint64_t>(clampedAniso) & 0xFFull) << 24)
+                                 | ((static_cast<std::uint64_t>(addressW) & 0xFFull) << 32);
         const auto it = slotSamplerCache_.find(key);
         const bool hit = it != slotSamplerCache_.end();
 
         WGPUSamplerDescriptor descriptor{};
         descriptor.label = StringView("CNA WebGPU SamplerState Sampler");
-        FillWGPUSamplerDescriptor(descriptor, filter, addressU, addressV, clampedAniso);
+        FillWGPUSamplerDescriptor(descriptor, filter, addressU, addressV, addressW, clampedAniso);
         WGPUSampler sampler = nullptr;
         if (hit)
         {
@@ -7391,7 +7416,7 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             std::fprintf(stderr,
                          "[cna-wgpu-sampler] family=%s filter=%d(%s) mag=%s min=%s mip=%s "
-                         "aniso=%u addrU=%s addrV=%s key=0x%08x sampler=%p %s\n",
+                         "aniso=%u addrU=%s addrV=%s addrW=%s key=0x%016llx sampler=%p %s\n",
                          family, filter, TextureFilterName(filter),
                          FilterModeName(descriptor.magFilter),
                          FilterModeName(descriptor.minFilter),
@@ -7399,7 +7424,8 @@ namespace CNA::Internal::Renderers::WebGPU
                          static_cast<unsigned>(descriptor.maxAnisotropy),
                          AddressModeName(descriptor.addressModeU),
                          AddressModeName(descriptor.addressModeV),
-                         static_cast<unsigned>(key), static_cast<void*>(sampler),
+                         AddressModeName(descriptor.addressModeW),
+                         static_cast<unsigned long long>(key), static_cast<void*>(sampler),
                          hit ? "HIT" : "CREATE");
         }
         return sampler;
@@ -8932,7 +8958,7 @@ namespace CNA::Internal::Renderers::WebGPU
         WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
 
         WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
-                                                     command.addressV, command.maxAnisotropy,
+                                                     command.addressV, command.addressW, command.maxAnisotropy,
                                                      "Textured3D");
         std::array<WGPUBindGroupEntry, 2> texEntries{};
         texEntries[0].binding = 0;
@@ -9046,7 +9072,7 @@ namespace CNA::Internal::Renderers::WebGPU
         WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
 
         WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
-                                                     command.addressV, command.maxAnisotropy,
+                                                     command.addressV, command.addressW, command.maxAnisotropy,
                                                      "LitTextured3D");
         std::array<WGPUBindGroupEntry, 2> texEntries{};
         texEntries[0].binding = 0;
@@ -9173,6 +9199,7 @@ namespace CNA::Internal::Renderers::WebGPU
         command.textureFilter = slotSamplers_[0].filter;
         command.addressU = slotSamplers_[0].addressU;
         command.addressV = slotSamplers_[0].addressV;
+        command.addressW = slotSamplers_[0].addressW;  // WEBGPU-160
         command.maxAnisotropy = slotSamplers_[0].maxAnisotropy;
         // Task 1105: XNA's real BasicEffect.PreferPerPixelLighting default is false (per-vertex),
         // matching every other renderer's own dispatch condition for this flag.
@@ -9244,7 +9271,7 @@ namespace CNA::Internal::Renderers::WebGPU
         WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
 
         WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
-                                                     command.addressV, command.maxAnisotropy,
+                                                     command.addressV, command.addressW, command.maxAnisotropy,
                                                      "AlphaTest3D");
         std::array<WGPUBindGroupEntry, 2> texEntries{};
         texEntries[0].binding = 0;
@@ -9364,6 +9391,7 @@ namespace CNA::Internal::Renderers::WebGPU
         command.textureFilter = slotSamplers_[0].filter;
         command.addressU = slotSamplers_[0].addressU;
         command.addressV = slotSamplers_[0].addressV;
+        command.addressW = slotSamplers_[0].addressW;  // WEBGPU-160
         command.maxAnisotropy = slotSamplers_[0].maxAnisotropy;
         const Matrix wvp = world * view * projection;
         FillAlphaTestUniforms(command.uniforms, wvp, params);
@@ -9432,13 +9460,13 @@ namespace CNA::Internal::Renderers::WebGPU
         WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
 
         WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
-                                                     command.addressV, command.maxAnisotropy,
+                                                     command.addressV, command.addressW, command.maxAnisotropy,
                                                      "DualTexture3D");
         // REMED-GFX-172: Texture2's own SamplerStates[1], from the description captured at this
         // draw's public call. Resolved through the same REMED-GFX-170 sampler cache -- an identical
         // pair of slots is one cache hit, not a second native sampler.
         WGPUSampler sampler1 = GetOrCreateSlotSampler(command.texture1Filter, command.texture1AddressU,
-                                                      command.texture1AddressV,
+                                                      command.texture1AddressV, command.texture1AddressW,
                                                       command.texture1MaxAnisotropy,
                                                       "DualTexture3D/slot1");
         std::array<WGPUBindGroupEntry, 4> texEntries{};
@@ -9567,6 +9595,7 @@ namespace CNA::Internal::Renderers::WebGPU
         command.textureFilter = slotSamplers_[0].filter;
         command.addressU = slotSamplers_[0].addressU;
         command.addressV = slotSamplers_[0].addressV;
+        command.addressW = slotSamplers_[0].addressW;  // WEBGPU-160
         command.maxAnisotropy = slotSamplers_[0].maxAnisotropy;
         command.texture1 = ResolveSamplable(params.texture1);
         // REMED-GFX-172: and the SECOND layer's own slot, captured here for the same reason. Both
@@ -9574,6 +9603,7 @@ namespace CNA::Internal::Renderers::WebGPU
         command.texture1Filter = slotSamplers_[1].filter;
         command.texture1AddressU = slotSamplers_[1].addressU;
         command.texture1AddressV = slotSamplers_[1].addressV;
+        command.texture1AddressW = slotSamplers_[1].addressW;  // WEBGPU-160
         command.texture1MaxAnisotropy = slotSamplers_[1].maxAnisotropy;
         const Matrix wvp = world * view * projection;
         FillExtUniforms(command.uniforms, wvp, params);
@@ -9663,6 +9693,7 @@ namespace CNA::Internal::Renderers::WebGPU
         command.textureFilter = slotSamplers_[0].filter;
         command.addressU = slotSamplers_[0].addressU;
         command.addressV = slotSamplers_[0].addressV;
+        command.addressW = slotSamplers_[0].addressW;  // WEBGPU-160
         command.maxAnisotropy = slotSamplers_[0].maxAnisotropy;
         const Matrix wvp = world * view * projection;
         FillExtUniforms(command.uniforms, wvp, params);
@@ -10066,6 +10097,7 @@ namespace
         command.textureFilter = slotSamplers_[0].filter;
         command.addressU = slotSamplers_[0].addressU;
         command.addressV = slotSamplers_[0].addressV;
+        command.addressW = slotSamplers_[0].addressW;  // WEBGPU-160
         command.maxAnisotropy = slotSamplers_[0].maxAnisotropy;
         command.normalMap = params.pbrNormalMap != nullptr
             ? ResolveSamplable(params.pbrNormalMap)
@@ -10179,7 +10211,7 @@ namespace
         WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
 
         WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
-                                                     command.addressV, command.maxAnisotropy,
+                                                     command.addressV, command.addressW, command.maxAnisotropy,
                                                      "Pbr3D");
         // plans/plan_gltf.md GLTF-344: entries 6 and 7 are KHR_materials_specular's own maps, which
         // resolve to the white identity when the material declares neither.
@@ -10533,6 +10565,7 @@ namespace
         command.textureFilter = slotSamplers_[0].filter;
         command.addressU = slotSamplers_[0].addressU;
         command.addressV = slotSamplers_[0].addressV;
+        command.addressW = slotSamplers_[0].addressW;  // WEBGPU-160
         command.maxAnisotropy = slotSamplers_[0].maxAnisotropy;
         // Real XNA's SkinnedEffect.PreferPerPixelLighting default is false (per-vertex), matching
         // every other renderer's own dispatch condition for this flag (Task 1102b).
@@ -10625,7 +10658,7 @@ namespace
         WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
 
         WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
-                                                     command.addressV, command.maxAnisotropy,
+                                                     command.addressV, command.addressW, command.maxAnisotropy,
                                                      "Skinned3D");
         std::array<WGPUBindGroupEntry, 2> texEntries{};
         texEntries[0].binding = 0;
@@ -10925,6 +10958,7 @@ namespace
         command.textureFilter = slotSamplers_[0].filter;
         command.addressU = slotSamplers_[0].addressU;
         command.addressV = slotSamplers_[0].addressV;
+        command.addressW = slotSamplers_[0].addressW;  // WEBGPU-160
         command.maxAnisotropy = slotSamplers_[0].maxAnisotropy;
         command.normalMap = params.pbrNormalMap != nullptr
             ? ResolveSamplable(params.pbrNormalMap)
@@ -11049,7 +11083,7 @@ namespace
         WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
 
         WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
-                                                     command.addressV, command.maxAnisotropy,
+                                                     command.addressV, command.addressW, command.maxAnisotropy,
                                                      "SkinnedPbr3D");
         // plans/plan_gltf.md GLTF-344: entries 6 and 7 are KHR_materials_specular's own maps, which
         // resolve to the white identity when the material declares neither.
