@@ -57,6 +57,9 @@ set(CNA_PARITY_FIXTURES
     # WEBGPU-176: EnvironmentMapEffect's EnvironmentMapSpecular, light count, EyePosition, world
     # transform and the Fresnel gradient, all on a uniform cube so the face convention drops out.
     env_map_terms
+    # WEBGPU-177: SkinnedEffect's bone palette (identity, translation, a 50/50 blend, the last
+    # slot), light count, specular and VertexColorEnabled.
+    skinned_terms
     # WEBGPU-153: FillMode::WireFrame draws edges and leaves the interior empty.
     fill_mode_wireframe
     # WEBGPU-161: SamplerState.MaxMipLevel selects which mip level a sample comes from.

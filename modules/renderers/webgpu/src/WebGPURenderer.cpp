@@ -9800,7 +9800,13 @@ namespace CNA::Internal::Renderers::WebGPU
             QueuePbrDraw(vb, ib, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        if (params.skinned && !params.pbr && (stride == 52 || stride == 56))
+        // WEBGPU-177: no stride clause. A skinned effect is a skinned DRAW whatever byte layout the
+        // declaration chose -- `BLENDINDICES0` may be `Vector4` as well as `Byte4`, which is stride
+        // 64 rather than 52 -- and QueueSkinnedDraw is the one place that knows whether a given
+        // declaration can supply the five semantics it needs. Gating on the stride here sent a
+        // perfectly good stride-64 skinned vertex down to DrawColoredPrimitives, which refused it
+        // as "not a stride-16 VertexPositionColor buffer": a true statement about the wrong route.
+        if (params.skinned && !params.pbr)
         {
             QueueSkinnedDraw(vb, ib, world, view, projection, primitive, primitiveCount, params);
             return;
@@ -11730,6 +11736,112 @@ namespace
         return created;
     }
 
+
+    /// plans/plan_webgpu.md WEBGPU-177: rewrite a skinned vertex stream into CNA's canonical
+    /// stride-52 (or stride-56 with colour) skinned record.
+    ///
+    /// XNA's `VertexElementFormat` describes the BYTES in the buffer, not the register the semantic
+    /// arrives in: a `BLENDINDICES` element may legitimately be declared `Vector4` as well as
+    /// `Byte4` -- the stock `SkinnedModelProcessor` writes `ConvertChannelContent<Vector4>` and real
+    /// XNA draws it (`plans/plan_fx.md` FX-127, and EasyGL's own
+    /// `easygl_skinnedeffect_vector4_bone_indices_test`). This renderer's skinned pipeline declares
+    /// one fixed attribute array and its WGSL takes `vec4<u32>` bone indices, and WebGPU has no
+    /// vertex format that reads unsigned bytes as un-normalized floats -- the trick EasyGL uses to
+    /// serve both declarations from one shader. So rather than double every skinned shader, the
+    /// stream is NORMALIZED here, at capture: bone indices are small integers (XNA caps the palette
+    /// at 72) and a float index is therefore exactly representable as the byte the canonical record
+    /// wants. Everything downstream keeps seeing the one layout it already knows.
+    ///
+    /// @param declaredElements The buffer's own declaration.
+    /// @param source The buffer's shadow bytes.
+    /// @param sourceStride The declared stride of @p source.
+    /// @param out Receives the canonical record; untouched when the declaration cannot supply one.
+    /// @param outStride Receives 52, or 56 when the declaration carries a COLOR0.
+    /// @return True when the whole stream was rewritten.
+    [[nodiscard]] static bool NormalizeSkinnedStreamEXT(
+        const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaredElements,
+        const std::vector<std::uint8_t>& source, std::size_t sourceStride,
+        std::vector<std::uint8_t>& out, std::size_t& outStride)
+    {
+        using CNA::Internal::Graphics::FindDeclaredSemanticEXT;
+        using Microsoft::Xna::Framework::Graphics::VertexElement;
+        using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+        if (sourceStride == 0 || declaredElements.empty()) return false;
+
+        const VertexElement* position =
+            FindDeclaredSemanticEXT(declaredElements, VertexElementUsage::Position, 0);
+        const VertexElement* normal =
+            FindDeclaredSemanticEXT(declaredElements, VertexElementUsage::Normal, 0);
+        const VertexElement* uv =
+            FindDeclaredSemanticEXT(declaredElements, VertexElementUsage::TextureCoordinate, 0);
+        const VertexElement* weights =
+            FindDeclaredSemanticEXT(declaredElements, VertexElementUsage::BlendWeight, 0);
+        const VertexElement* indices =
+            FindDeclaredSemanticEXT(declaredElements, VertexElementUsage::BlendIndices, 0);
+        const VertexElement* color =
+            FindDeclaredSemanticEXT(declaredElements, VertexElementUsage::Color, 0);
+        if (position == nullptr || normal == nullptr || uv == nullptr || weights == nullptr ||
+            indices == nullptr)
+            return false;
+        if (position->getVertexElementFormatProperty() != VertexElementFormat::Vector3 ||
+            normal->getVertexElementFormatProperty() != VertexElementFormat::Vector3 ||
+            uv->getVertexElementFormatProperty() != VertexElementFormat::Vector2 ||
+            weights->getVertexElementFormatProperty() != VertexElementFormat::Vector4)
+            return false;
+        const VertexElementFormat indexFormat = indices->getVertexElementFormatProperty();
+        if (indexFormat != VertexElementFormat::Byte4 &&
+            indexFormat != VertexElementFormat::Vector4)
+            return false;
+        const bool withColor =
+            color != nullptr &&
+            color->getVertexElementFormatProperty() == VertexElementFormat::Color;
+
+        outStride = withColor ? 56u : 52u;
+        const std::size_t vertexCount = source.size() / sourceStride;
+        out.assign(vertexCount * outStride, std::uint8_t{0});
+
+        const auto readFloats = [&source](std::size_t at, float* into, std::size_t count) {
+            std::memcpy(into, source.data() + at, count * sizeof(float));
+        };
+        for (std::size_t vertex = 0; vertex < vertexCount; ++vertex)
+        {
+            const std::size_t src = vertex * sourceStride;
+            std::uint8_t* dst = out.data() + vertex * outStride;
+            std::memcpy(dst + 0,
+                        source.data() + src +
+                            static_cast<std::size_t>(position->getOffsetProperty()), 12);
+            std::memcpy(dst + 12,
+                        source.data() + src +
+                            static_cast<std::size_t>(normal->getOffsetProperty()), 12);
+            std::memcpy(dst + 24,
+                        source.data() + src + static_cast<std::size_t>(uv->getOffsetProperty()), 8);
+            std::memcpy(dst + 32,
+                        source.data() + src +
+                            static_cast<std::size_t>(weights->getOffsetProperty()), 16);
+            if (indexFormat == VertexElementFormat::Byte4)
+            {
+                std::memcpy(dst + 48,
+                            source.data() + src +
+                                static_cast<std::size_t>(indices->getOffsetProperty()), 4);
+            }
+            else
+            {
+                float declared[4]{};
+                readFloats(src + static_cast<std::size_t>(indices->getOffsetProperty()), declared, 4);
+                for (int lane = 0; lane < 4; ++lane)
+                {
+                    const float clamped = std::clamp(declared[lane], 0.0f, 255.0f);
+                    dst[48 + lane] = static_cast<std::uint8_t>(clamped + 0.5f);
+                }
+            }
+            if (withColor)
+                std::memcpy(dst + 52,
+                            source.data() + src +
+                                static_cast<std::size_t>(color->getOffsetProperty()), 4);
+        }
+        return true;
+    }
+
     void WebGPURenderer::QueueSkinnedDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                                   PrimitiveType primitive, int primitiveCount,
@@ -11737,17 +11849,35 @@ namespace
     {
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
         const std::size_t stride = webgpuVb.Stride();
-        if (stride != 52 && stride != 56)
-            throw std::invalid_argument("CNA WebGPU: QueueSkinnedDraw requires a stride-52 "
-                                        "(VertexPositionNormalTextureSkinned) or stride-56 "
-                                        "(with vertex colour) vertex buffer");
         // plans/plan_gltf.md GLTF-474: an absent base-colour map is no longer refused -- the command
         // takes the neutral-white default below, which is the identity for `tex * colour`.
 
         SkinnedDrawCommand command;
-        command.stride = stride;
-        const auto& shadow = webgpuVb.ShadowData();
-        const std::size_t byteOffset = static_cast<std::size_t>(params.vertexStart) * stride;
+        // WEBGPU-177: the canonical stride-52/56 record still takes the memcpy it always did, so
+        // nothing about the layout this renderer has always accepted changes. Any OTHER declaration
+        // that can supply the same five semantics is rewritten into that record instead of being
+        // refused -- see NormalizeSkinnedStreamEXT for why the rewrite happens here rather than in
+        // a second pair of shaders.
+        std::vector<std::uint8_t> normalized;
+        std::size_t normalizedStride = 0;
+        const std::vector<std::uint8_t>* stream = &webgpuVb.ShadowData();
+        std::size_t sourceStride = stride;
+        if (stride != 52 && stride != 56)
+        {
+            if (!NormalizeSkinnedStreamEXT(webgpuVb.Declaration().GetElements(),
+                                           webgpuVb.ShadowData(), stride, normalized,
+                                           normalizedStride))
+                throw std::invalid_argument(
+                    "CNA WebGPU: QueueSkinnedDraw needs a vertex that declares POSITION0 "
+                    "(Vector3), NORMAL0 (Vector3), TEXCOORD0 (Vector2), BLENDWEIGHT0 (Vector4) "
+                    "and BLENDINDICES0 (Byte4 or Vector4), with an optional COLOR0 -- this "
+                    "declaration supplies none such, and its stride is neither 52 nor 56");
+            stream = &normalized;
+            sourceStride = normalizedStride;
+        }
+        command.stride = sourceStride;
+        const std::vector<std::uint8_t>& shadow = *stream;
+        const std::size_t byteOffset = static_cast<std::size_t>(params.vertexStart) * sourceStride;
         if (byteOffset <= shadow.size())
             command.vertexData.assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset), shadow.end());
         command.topology = ToTopology(primitive);
