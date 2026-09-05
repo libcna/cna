@@ -29,6 +29,8 @@ set(CNA_PARITY_FIXTURES
     fill_mode_wireframe
     # WEBGPU-161: SamplerState.MaxMipLevel selects which mip level a sample comes from.
     sampler_max_mip_level
+    # WEBGPU-205: SamplerState.MipMapLevelOfDetailBias shifts which mip level a sample comes from.
+    sampler_lod_bias
 )
 
 # Builds and registers every fixture for one renderer.

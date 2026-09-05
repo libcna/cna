@@ -44,6 +44,11 @@ struct Uniforms {
     light0DiffuseVertexColor: vec4f,
     fogColor: vec4f,
     fogVector: vec4f,
+    // WEBGPU-205: [40]=slot 0's MipMapLevelOfDetailBias, [41]=slot 1's. WGPUSamplerDescriptor has
+    // no lodBias field at all -- addressModeU/V/W, magFilter, minFilter, mipmapFilter, lodMinClamp,
+    // lodMaxClamp, compare and maxAnisotropy, and nothing else -- so the state travels here and is
+    // applied by textureSampleBias below. An absent sampler field is not an absent capability.
+    samplerBias: vec4f,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 
@@ -83,6 +88,11 @@ struct Uniforms {
     light0DiffuseVertexColor: vec4f,
     fogColor: vec4f,
     fogVector: vec4f,
+    // WEBGPU-205: [40]=slot 0's MipMapLevelOfDetailBias, [41]=slot 1's. WGPUSamplerDescriptor has
+    // no lodBias field at all -- addressModeU/V/W, magFilter, minFilter, mipmapFilter, lodMinClamp,
+    // lodMaxClamp, compare and maxAnisotropy, and nothing else -- so the state travels here and is
+    // applied by textureSampleBias below. An absent sampler field is not an absent capability.
+    samplerBias: vec4f,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 @group(1) @binding(0) var texSampler: sampler;
@@ -107,7 +117,7 @@ struct VertexOutput {
 }
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     let textureEnabled = u.light0DirTexture.w;
-    let sampled = select(vec4f(1.0), textureSample(tex, texSampler, input.uv), textureEnabled > 0.5);
+    let sampled = select(vec4f(1.0), textureSampleBias(tex, texSampler, input.uv, u.samplerBias.x), textureEnabled > 0.5);
     let base = sampled * u.diffuseColor;
     // WEBGPU-149: FNA ApplyFog -- mix(FogColor*base.a, rgb, keep); output alpha preserved.
     return vec4f(mix(u.fogColor.xyz * base.a, base.rgb, input.fogFactor), base.a);
@@ -123,6 +133,11 @@ struct Uniforms {
     light0DiffuseVertexColor: vec4f,
     fogColor: vec4f,
     fogVector: vec4f,
+    // WEBGPU-205: [40]=slot 0's MipMapLevelOfDetailBias, [41]=slot 1's. WGPUSamplerDescriptor has
+    // no lodBias field at all -- addressModeU/V/W, magFilter, minFilter, mipmapFilter, lodMinClamp,
+    // lodMaxClamp, compare and maxAnisotropy, and nothing else -- so the state travels here and is
+    // applied by textureSampleBias below. An absent sampler field is not an absent capability.
+    samplerBias: vec4f,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 @group(1) @binding(0) var texSampler: sampler;
@@ -151,7 +166,7 @@ struct VertexOutput {
 }
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     let textureEnabled = u.light0DirTexture.w;
-    let sampled = select(vec4f(1.0), textureSample(tex, texSampler, input.uv), textureEnabled > 0.5);
+    let sampled = select(vec4f(1.0), textureSampleBias(tex, texSampler, input.uv, u.samplerBias.x), textureEnabled > 0.5);
     let base = sampled * input.tint;
     // WEBGPU-149: FNA ApplyFog -- mix(FogColor*base.a, rgb, keep); output alpha preserved.
     return vec4f(mix(u.fogColor.xyz * base.a, base.rgb, input.fogFactor), base.a);
@@ -178,6 +193,11 @@ struct Uniforms {
     light0DiffuseVertexColor: vec4f,
     fogColor: vec4f,
     fogVector: vec4f,
+    // WEBGPU-205: [40]=slot 0's MipMapLevelOfDetailBias, [41]=slot 1's. WGPUSamplerDescriptor has
+    // no lodBias field at all -- addressModeU/V/W, magFilter, minFilter, mipmapFilter, lodMinClamp,
+    // lodMaxClamp, compare and maxAnisotropy, and nothing else -- so the state travels here and is
+    // applied by textureSampleBias below. An absent sampler field is not an absent capability.
+    samplerBias: vec4f,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 
@@ -229,7 +249,7 @@ struct VertexOutput {
 }
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     let textureEnabled = u.light0DirTexture.w;
-    let sampled = select(vec4f(1.0), textureSample(tex, texSampler, input.uv), textureEnabled > 0.5);
+    let sampled = select(vec4f(1.0), textureSampleBias(tex, texSampler, input.uv, u.samplerBias.x), textureEnabled > 0.5);
     let lightingEnabled = u.ambientLighting.w;
     // WEBGPU-157: XNA's Vc variants multiply the vertex colour into the DIFFUSE result BEFORE the
     // specular term is added, so the highlight is scaled only through the resulting alpha.
@@ -279,6 +299,11 @@ struct Uniforms {
     light0DiffuseVertexColor: vec4f,
     fogColor: vec4f,
     fogVector: vec4f,
+    // WEBGPU-205: [40]=slot 0's MipMapLevelOfDetailBias, [41]=slot 1's. WGPUSamplerDescriptor has
+    // no lodBias field at all -- addressModeU/V/W, magFilter, minFilter, mipmapFilter, lodMinClamp,
+    // lodMaxClamp, compare and maxAnisotropy, and nothing else -- so the state travels here and is
+    // applied by textureSampleBias below. An absent sampler field is not an absent capability.
+    samplerBias: vec4f,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 
@@ -352,7 +377,7 @@ struct VertexOutput {
 }
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     let textureEnabled = u.light0DirTexture.w;
-    let sampled = select(vec4f(1.0), textureSample(tex, texSampler, input.uv), textureEnabled > 0.5);
+    let sampled = select(vec4f(1.0), textureSampleBias(tex, texSampler, input.uv, u.samplerBias.x), textureEnabled > 0.5);
     let lightingEnabled = u.ambientLighting.w;
     // WEBGPU-157: see the per-pixel sibling -- the vertex colour multiplies the diffuse result.
     let vc = select(vec4f(1.0), input.tint, u.light0DiffuseVertexColor.w > 0.5);
@@ -377,6 +402,11 @@ struct Uniforms {
     fogPad: vec4f,
     fogColor: vec4f,
     fogVector: vec4f,
+    // WEBGPU-205: [40]=slot 0's MipMapLevelOfDetailBias, [41]=slot 1's. WGPUSamplerDescriptor has
+    // no lodBias field at all -- addressModeU/V/W, magFilter, minFilter, mipmapFilter, lodMinClamp,
+    // lodMaxClamp, compare and maxAnisotropy, and nothing else -- so the state travels here and is
+    // applied by textureSampleBias below. An absent sampler field is not an absent capability.
+    samplerBias: vec4f,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 @group(1) @binding(0) var texSampler: sampler;
@@ -401,7 +431,7 @@ struct VertexOutput {
     return output;
 }
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
-    let color = textureSample(tex, texSampler, input.uv) * u.diffuseColor;
+    let color = textureSampleBias(tex, texSampler, input.uv, u.samplerBias.x) * u.diffuseColor;
     let alpha = color.a;
     let useTolerance = u.alphaTest.y > 0.0;
     let lessTest = (alpha < u.alphaTest.x);
@@ -426,6 +456,11 @@ struct Uniforms {
     fogPad: vec4f,
     fogColor: vec4f,
     fogVector: vec4f,
+    // WEBGPU-205: [40]=slot 0's MipMapLevelOfDetailBias, [41]=slot 1's. WGPUSamplerDescriptor has
+    // no lodBias field at all -- addressModeU/V/W, magFilter, minFilter, mipmapFilter, lodMinClamp,
+    // lodMaxClamp, compare and maxAnisotropy, and nothing else -- so the state travels here and is
+    // applied by textureSampleBias below. An absent sampler field is not an absent capability.
+    samplerBias: vec4f,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 @group(1) @binding(0) var texSampler: sampler;
@@ -453,7 +488,7 @@ struct VertexOutput {
     return output;
 }
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
-    let color = textureSample(tex, texSampler, input.uv) * input.tint;
+    let color = textureSampleBias(tex, texSampler, input.uv, u.samplerBias.x) * input.tint;
     let alpha = color.a;
     let useTolerance = u.alphaTest.y > 0.0;
     let lessTest = (alpha < u.alphaTest.x);
@@ -486,6 +521,11 @@ struct Uniforms {
     light0DiffuseVertexColor: vec4f,
     fogColor: vec4f,
     fogVector: vec4f,
+    // WEBGPU-205: [40]=slot 0's MipMapLevelOfDetailBias, [41]=slot 1's. WGPUSamplerDescriptor has
+    // no lodBias field at all -- addressModeU/V/W, magFilter, minFilter, mipmapFilter, lodMinClamp,
+    // lodMaxClamp, compare and maxAnisotropy, and nothing else -- so the state travels here and is
+    // applied by textureSampleBias below. An absent sampler field is not an absent capability.
+    samplerBias: vec4f,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 @group(1) @binding(0) var tex0Sampler: sampler;
@@ -514,8 +554,8 @@ struct VertexOutput {
     return output;
 }
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
-    var sample0 = textureSample(tex0, tex0Sampler, input.uv);
-    let sample1 = textureSample(tex1, tex1Sampler, input.uv1);
+    var sample0 = textureSampleBias(tex0, tex0Sampler, input.uv, u.samplerBias.x);
+    let sample1 = textureSampleBias(tex1, tex1Sampler, input.uv1, u.samplerBias.y);
     sample0 = vec4f(sample0.rgb * 2.0, sample0.a);
     let base = sample0 * sample1 * u.diffuseColor;
     // WEBGPU-149: FNA ApplyFog -- mix(FogColor*base.a, rgb, keep); output alpha preserved.
@@ -532,6 +572,11 @@ struct Uniforms {
     light0DiffuseVertexColor: vec4f,
     fogColor: vec4f,
     fogVector: vec4f,
+    // WEBGPU-205: [40]=slot 0's MipMapLevelOfDetailBias, [41]=slot 1's. WGPUSamplerDescriptor has
+    // no lodBias field at all -- addressModeU/V/W, magFilter, minFilter, mipmapFilter, lodMinClamp,
+    // lodMaxClamp, compare and maxAnisotropy, and nothing else -- so the state travels here and is
+    // applied by textureSampleBias below. An absent sampler field is not an absent capability.
+    samplerBias: vec4f,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 @group(1) @binding(0) var tex0Sampler: sampler;
@@ -564,8 +609,8 @@ struct VertexOutput {
     return output;
 }
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
-    var sample0 = textureSample(tex0, tex0Sampler, input.uv);
-    let sample1 = textureSample(tex1, tex1Sampler, input.uv1);
+    var sample0 = textureSampleBias(tex0, tex0Sampler, input.uv, u.samplerBias.x);
+    let sample1 = textureSampleBias(tex1, tex1Sampler, input.uv1, u.samplerBias.y);
     sample0 = vec4f(sample0.rgb * 2.0, sample0.a);
     let base = sample0 * sample1 * input.tint;
     // WEBGPU-149: FNA ApplyFog -- mix(FogColor*base.a, rgb, keep); output alpha preserved.
@@ -596,6 +641,8 @@ struct EnvMapParams {
     normalMatrixCol0: vec4f,
     normalMatrixCol1: vec4f,
     normalMatrixCol2: vec4f,
+    // WEBGPU-205: [60]=the base texture's MipMapLevelOfDetailBias, [61]=the environment cube's.
+    samplerBias: vec4f,
 };
 @group(0) @binding(1) var<uniform> ep: EnvMapParams;
 
@@ -634,7 +681,7 @@ struct VertexOutput {
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     let n = normalize(input.worldNormal);
     let e = normalize(input.eyeDir);
-    let texColor = textureSample(tex, texSampler, input.uv);
+    let texColor = textureSampleBias(tex, texSampler, input.uv, ep.samplerBias.x);
     let ndotl0 = max(dot(n, -ep.light0Dir.xyz), 0.0);
     let ndotl1 = max(dot(n, -ep.light1Dir.xyz), 0.0);
     let ndotl2 = max(dot(n, -ep.light2Dir.xyz), 0.0);
@@ -650,7 +697,7 @@ struct VertexOutput {
     let baseColor = litRGB * texColor.rgb;
     let combinedAlpha = ep.diffuseColor.a * texColor.a;
     let reflDir = reflect(-e, n);
-    let envSample = textureSample(envMap, envMapSampler, reflDir);
+    let envSample = textureSampleBias(envMap, envMapSampler, reflDir, ep.samplerBias.y);
     let viewAngle = dot(e, n);
     let fresnelEnabled = ep.light0DiffuseFresnelEn.w;
     let blendFactor = select(ep.emissiveAmount.w,
@@ -972,6 +1019,11 @@ struct Uniforms {
     light0DiffuseVertexColor: vec4f,
     fogColor: vec4f,
     fogVector: vec4f,
+    // WEBGPU-205: [40]=slot 0's MipMapLevelOfDetailBias, [41]=slot 1's. WGPUSamplerDescriptor has
+    // no lodBias field at all -- addressModeU/V/W, magFilter, minFilter, mipmapFilter, lodMinClamp,
+    // lodMaxClamp, compare and maxAnisotropy, and nothing else -- so the state travels here and is
+    // applied by textureSampleBias below. An absent sampler field is not an absent capability.
+    samplerBias: vec4f,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 
@@ -1089,7 +1141,7 @@ fn skinNormal(m: mat3x3f, n: vec3f) -> vec3f {
     let h2 = normalize(e - nl2); let spec2 = pow(max(dot(h2, n), 0.0) * zerol2, lp.specularColorPower.w);
     let specularRGB = (spec0 * lp.light0Specular.xyz + spec1 * lp.light1Specular.xyz
                        + spec2 * lp.light2Specular.xyz) * lp.specularColorPower.xyz;
-    let texColor = textureSample(tex, texSampler, input.uv);
+    let texColor = textureSampleBias(tex, texSampler, input.uv, u.samplerBias.x);
     var color = vec4f(litRGB * texColor.rgb, u.diffuseColor.a * texColor.a);
     color = vec4f(color.rgb + specularRGB * color.a, color.a);
     // WEBGPU-148: ApplyFog last (matches FNA's ApplyFog ordering).
@@ -1106,6 +1158,11 @@ struct Uniforms {
     light0DiffuseVertexColor: vec4f,
     fogColor: vec4f,
     fogVector: vec4f,
+    // WEBGPU-205: [40]=slot 0's MipMapLevelOfDetailBias, [41]=slot 1's. WGPUSamplerDescriptor has
+    // no lodBias field at all -- addressModeU/V/W, magFilter, minFilter, mipmapFilter, lodMinClamp,
+    // lodMaxClamp, compare and maxAnisotropy, and nothing else -- so the state travels here and is
+    // applied by textureSampleBias below. An absent sampler field is not an absent capability.
+    samplerBias: vec4f,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 
@@ -1208,7 +1265,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     let h2 = normalize(e - nl2); let spec2 = pow(max(dot(h2, n), 0.0) * zerol2, lp.specularColorPower.w);
     let specularRGB = (spec0 * lp.light0Specular.xyz + spec1 * lp.light1Specular.xyz
                        + spec2 * lp.light2Specular.xyz) * lp.specularColorPower.xyz;
-    let texColor = textureSample(tex, texSampler, input.uv);
+    let texColor = textureSampleBias(tex, texSampler, input.uv, u.samplerBias.x);
     let vertexColorEnabled = u.light0DiffuseVertexColor.w;
     let vc = select(vec4f(1.0, 1.0, 1.0, 1.0), input.color, vertexColorEnabled > 0.5);
     var color = vec4f(litRGB * texColor.rgb, u.diffuseColor.a * texColor.a * vc.a);
@@ -1228,6 +1285,11 @@ struct Uniforms {
     light0DiffuseVertexColor: vec4f,
     fogColor: vec4f,
     fogVector: vec4f,
+    // WEBGPU-205: [40]=slot 0's MipMapLevelOfDetailBias, [41]=slot 1's. WGPUSamplerDescriptor has
+    // no lodBias field at all -- addressModeU/V/W, magFilter, minFilter, mipmapFilter, lodMinClamp,
+    // lodMaxClamp, compare and maxAnisotropy, and nothing else -- so the state travels here and is
+    // applied by textureSampleBias below. An absent sampler field is not an absent capability.
+    samplerBias: vec4f,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 
@@ -1326,7 +1388,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
 }
 
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
-    let texColor = textureSample(tex, texSampler, input.uv);
+    let texColor = textureSampleBias(tex, texSampler, input.uv, u.samplerBias.x);
     var color = vec4f(input.litRGB * texColor.rgb, u.diffuseColor.a * texColor.a);
     color = vec4f(color.rgb + input.specularRGB * color.a, color.a);
     // WEBGPU-148: ApplyFog last (matches FNA's ApplyFog ordering).
@@ -1343,6 +1405,11 @@ struct Uniforms {
     light0DiffuseVertexColor: vec4f,
     fogColor: vec4f,
     fogVector: vec4f,
+    // WEBGPU-205: [40]=slot 0's MipMapLevelOfDetailBias, [41]=slot 1's. WGPUSamplerDescriptor has
+    // no lodBias field at all -- addressModeU/V/W, magFilter, minFilter, mipmapFilter, lodMinClamp,
+    // lodMaxClamp, compare and maxAnisotropy, and nothing else -- so the state travels here and is
+    // applied by textureSampleBias below. An absent sampler field is not an absent capability.
+    samplerBias: vec4f,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 
@@ -1444,7 +1511,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
 }
 
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
-    let texColor = textureSample(tex, texSampler, input.uv);
+    let texColor = textureSampleBias(tex, texSampler, input.uv, u.samplerBias.x);
     let vertexColorEnabled = u.light0DiffuseVertexColor.w;
     let vc = select(vec4f(1.0, 1.0, 1.0, 1.0), input.color, vertexColorEnabled > 0.5);
     var color = vec4f(input.litRGB * texColor.rgb, u.diffuseColor.a * texColor.a * vc.a);

@@ -1274,6 +1274,17 @@ namespace CNA::Internal::Renderers::WebGPU
          * @param lodBias `WEBGPU-205`'s, not consumed yet.
          */
         void ApplySamplerMipState(int slot, int maxMipLevel, float lodBias) override;
+
+        /**
+         * @brief plans/plan_webgpu.md WEBGPU-205: the routes that do not apply a sampler LOD bias.
+         *
+         * The state is implemented on every stock 3D route by WGSL `textureSampleBias`. Three
+         * routes do not carry it, and the row's rule is that no route may ignore it in silence --
+         * so they are named here rather than left for a caller to discover from pixels.
+         *
+         * @return The renderer-specific limitations text.
+         */
+        [[nodiscard]] std::string_view GetAdditionalLimitationsTextEXT() const override;
         // WEBGPU-80/81/29/30: scissor rect, viewport, blend constant and stencil reference are all
         // genuinely dynamic wgpu-native render-pass state (wgpuRenderPassEncoderSetScissorRect/
         // SetViewport/SetBlendConstant/SetStencilReference), exactly like Vulkan's own
@@ -2400,6 +2411,10 @@ namespace CNA::Internal::Renderers::WebGPU
             /// WEBGPU-161: `SamplerState.MaxMipLevel` -- the highest-resolution mip level sampling
             /// may use. XNA's default is 0, i.e. no restriction.
             int maxMipLevel = 0;
+            /// WEBGPU-205: `SamplerState.MipMapLevelOfDetailBias`. NOT a sampler-descriptor field --
+            /// `WGPUSamplerDescriptor` has no `lodBias` -- so it travels in the per-draw uniform
+            /// block and is applied by WGSL's `textureSampleBias` in the fragment stage.
+            float lodBias = 0.0f;
             int maxAnisotropy = 4;
         };
         std::array<SlotSamplerState, 16> slotSamplers_{};
@@ -2495,7 +2510,9 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t firstIndex = 0;
             std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 40> uniforms{};
+            /// WEBGPU-205: 44 floats. The 40-float block was exactly full (128 base
+            /// + 32 fog tail), and the per-slot LOD bias needs a channel of its own.
+            std::array<float, 44> uniforms{};
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;  ///< XNA CompareFunction ordinal; 3 = LessEqual
@@ -2550,7 +2567,9 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t firstIndex = 0;
             std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 40> uniforms{};
+            /// WEBGPU-205: 44 floats. The 40-float block was exactly full (128 base
+            /// + 32 fog tail), and the per-slot LOD bias needs a channel of its own.
+            std::array<float, 44> uniforms{};
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
@@ -2684,7 +2703,9 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t firstIndex = 0;
             std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 40> uniforms{};
+            /// WEBGPU-205: 44 floats. The 40-float block was exactly full (128 base
+            /// + 32 fog tail), and the per-slot LOD bias needs a channel of its own.
+            std::array<float, 44> uniforms{};
             std::array<float, 68> lightUniforms{};
             bool depthTest = false;
             bool depthWrite = false;
@@ -2792,7 +2813,9 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t firstIndex = 0;
             std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 40> uniforms{};
+            /// WEBGPU-205: 44 floats. The 40-float block was exactly full (128 base
+            /// + 32 fog tail), and the per-slot LOD bias needs a channel of its own.
+            std::array<float, 44> uniforms{};
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
@@ -2877,7 +2900,9 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t firstIndex = 0;
             std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 40> uniforms{};
+            /// WEBGPU-205: 44 floats. The 40-float block was exactly full (128 base
+            /// + 32 fog tail), and the per-slot LOD bias needs a channel of its own.
+            std::array<float, 44> uniforms{};
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
@@ -2986,7 +3011,9 @@ namespace CNA::Internal::Renderers::WebGPU
             std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
             std::array<float, 32> transformUniforms{};  ///< group 0 binding 0: mvp (16) + world (16)
-            std::array<float, 60> envMapUniforms{};     ///< group 0 binding 1: 15 vec4f (240 bytes)
+            /// WEBGPU-205: 16 vec4f (256 bytes). The sixteenth carries the per-slot LOD bias --
+            /// [60]=slot 0 (the base texture), [61]=slot 1 (the environment cube).
+            std::array<float, 64> envMapUniforms{};     ///< group 0 binding 1: 16 vec4f (256 bytes)
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
@@ -3108,7 +3135,9 @@ namespace CNA::Internal::Renderers::WebGPU
             std::size_t pvStride = 16;
             std::size_t instVbStride = 64;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 40> uniforms{};
+            /// WEBGPU-205: 44 floats. The 40-float block was exactly full (128 base
+            /// + 32 fog tail), and the per-slot LOD bias needs a channel of its own.
+            std::array<float, 44> uniforms{};
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
@@ -3182,7 +3211,9 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t firstIndex = 0;
             std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 40> uniforms{};
+            /// WEBGPU-205: 44 floats. The 40-float block was exactly full (128 base
+            /// + 32 fog tail), and the per-slot LOD bias needs a channel of its own.
+            std::array<float, 44> uniforms{};
             std::array<float, 68> lightUniforms{};
             /// plans/plan_gltf.md GLTF-344: 76 floats (304 bytes) -- the base 56 plus specular F0/factor
             /// and the two specular map transforms.
@@ -3292,7 +3323,9 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t firstIndex = 0;
             std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 40> uniforms{};
+            /// WEBGPU-205: 44 floats. The 40-float block was exactly full (128 base
+            /// + 32 fog tail), and the per-slot LOD bias needs a channel of its own.
+            std::array<float, 44> uniforms{};
             std::array<float, 68> lightUniforms{};
             /// SkinningParams UBO: [0] = WeightsPerVertex (Task 895's 1/2/4 convention, stored as a
             /// float in the x component of a padding vec4), [4 .. 4+72*16) = 72 column-major bone
@@ -3380,7 +3413,9 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t firstIndex = 0;
             std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 40> uniforms{};
+            /// WEBGPU-205: 44 floats. The 40-float block was exactly full (128 base
+            /// + 32 fog tail), and the per-slot LOD bias needs a channel of its own.
+            std::array<float, 44> uniforms{};
             std::array<float, 68> lightUniforms{};
             /// plans/plan_gltf.md GLTF-344: 76 floats (304 bytes) -- the base 56 plus specular F0/factor
             /// and the two specular map transforms.

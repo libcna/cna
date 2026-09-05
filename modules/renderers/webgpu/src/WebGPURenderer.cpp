@@ -985,15 +985,19 @@ namespace CNA::Internal::Renderers::WebGPU
         // binding-0 now binds exactly this many bytes (all *DrawCommand::uniforms are std::array<float,40>),
         // so the bind-group layouts declare this as their binding-0 minBindingSize -- the strongest
         // validation, not the weaker minBindingSize=0.
-        constexpr std::uint64_t kPrimaryUniformByteSize = 40u * sizeof(float);
-        static_assert(kPrimaryUniformByteSize == 160u, "primary WebGPU UBO must be 160 bytes (128 base + 32 fog tail)");
+        // WEBGPU-205: 176 bytes. The 160-byte block was exactly full -- 128 base plus WEBGPU-149's
+        // 32-byte fog tail -- so the per-slot LOD bias got its own 16-byte tail rather than being
+        // squeezed into a field that already means something else.
+        constexpr std::uint64_t kPrimaryUniformByteSize = 44u * sizeof(float);
+        static_assert(kPrimaryUniformByteSize == 176u,
+                      "primary WebGPU UBO must be 176 bytes (128 base + 32 fog tail + 16 bias tail)");
 
         // Mirrors VulkanRenderer::DrawColoredPrimitives()'s own use of
         // FillExtPushConst()'s byte layout: this path carries no BasicEffect diffuse/
         // VertexColorEnabled (no GpuDrawParams at all), so it preserves the historical XNA
         // behaviour of outputting the raw vertex colours unmodified (diffuseColor=white,
         // vertexColorEnabled=true), everything else left zeroed.
-        void FillColoredUniforms(std::array<float, 40>& out, const Matrix& world, const Matrix& view,
+        void FillColoredUniforms(std::array<float, 44>& out, const Matrix& world, const Matrix& view,
                                  const Matrix& projection)
         {
             const Matrix wvp = world * view * projection;
@@ -1012,7 +1016,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // this time, not DrawColoredPrimitives()'s hardcoded white/vertex-color-always-true
         // values) -- used by DrawPrimitivesEx()'s stride-16 dispatch so a BasicEffect draw's real
         // DiffuseColor/VertexColorEnabled actually reach the shader.
-        void FillExtUniforms(std::array<float, 40>& out, const Matrix& wvp, const GpuDrawParams& p)
+        void FillExtUniforms(std::array<float, 44>& out, const Matrix& wvp, const GpuDrawParams& p)
         {
             wvp.ToColumnMajor(out.data());
             out[16] = p.diffuseColor[0]; out[17] = p.diffuseColor[1];
@@ -1090,7 +1094,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // (cross-checked against EasyGLRenderer::EnsureEnvMapped3DProgram()'s identical
         // GLSL formula before porting), plus a CPU-precomputed normal matrix at the tail (WGSL has
         // no inverse() -- same reason FillLitLightUniforms() precomputes its own).
-        void FillEnvMapParams(std::array<float, 60>& out, const GpuDrawParams& p)
+        void FillEnvMapParams(std::array<float, 64>& out, const GpuDrawParams& p)
         {
             out[0] = p.eyePositionWorld[0]; out[1] = p.eyePositionWorld[1];
             out[2] = p.eyePositionWorld[2]; out[3] = 0.0f;
@@ -1124,7 +1128,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // vertexColorEnabled in FillExtUniforms) for {alphaRef, alphaTolerance, passWeight,
         // failWeight, vertexColorEnabled} instead, plus the 32-byte fog tail (160 total), so it still fits
         // the existing coloredBindGroupLayout_ unchanged.
-        void FillAlphaTestUniforms(std::array<float, 40>& out, const Matrix& wvp, const GpuDrawParams& p)
+        void FillAlphaTestUniforms(std::array<float, 44>& out, const Matrix& wvp, const GpuDrawParams& p)
         {
             wvp.ToColumnMajor(out.data());
             out[16] = p.diffuseColor[0]; out[17] = p.diffuseColor[1];
@@ -4608,7 +4612,10 @@ namespace CNA::Internal::Renderers::WebGPU
         uboLayoutEntries[1].binding = 1;
         uboLayoutEntries[1].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
         uboLayoutEntries[1].buffer.type = WGPUBufferBindingType_Uniform;
-        uboLayoutEntries[1].buffer.minBindingSize = 240;
+        // WEBGPU-205: 256, not 240 -- EnvMapParams gained a sixteenth vec4f for the per-slot LOD
+        // bias. A minBindingSize smaller than the WGSL struct is a pipeline-creation error, which
+        // is exactly how this was caught rather than by a wrong picture.
+        uboLayoutEntries[1].buffer.minBindingSize = 256;
         WGPUBindGroupLayoutDescriptor uboLayoutDescriptor{};
         uboLayoutDescriptor.label = StringView("CNA WebGPU EnvMap3D UBO BindGroupLayout");
         uboLayoutDescriptor.entryCount = uboLayoutEntries.size();
@@ -4793,6 +4800,10 @@ namespace CNA::Internal::Renderers::WebGPU
         const Matrix mvp = world * view * projection;
         FillEnvMapTransform(command.transformUniforms, mvp, world);
         FillEnvMapParams(command.envMapUniforms, params);
+        // WEBGPU-205: the environment-map family carries its own uniform block, so its bias tail is
+        // its own too -- [60] is the base texture's slot, [61] the cube's.
+        command.envMapUniforms[60] = slotSamplers_[0].lodBias;
+        command.envMapUniforms[61] = slotSamplers_[1].lodBias;
 
         if (ib != nullptr)
         {
@@ -7174,16 +7185,35 @@ namespace CNA::Internal::Renderers::WebGPU
         slotSamplers_[static_cast<std::size_t>(slot)].addressW = addressW;
     }
 
+    std::string_view WebGPURenderer::GetAdditionalLimitationsTextEXT() const
+    {
+        // WEBGPU-205. SamplerState.MipMapLevelOfDetailBias IS implemented here -- WGPUSamplerDescriptor
+        // carries no lodBias field, but WGSL's textureSampleBias applies XNA's semantic exactly, and
+        // every stock 3D family does so. What this text exists for is the three routes that do NOT,
+        // because the row's rule is that a route which cannot apply the state says so by name rather
+        // than ignoring it quietly.
+        return
+            "SamplerState.MipMapLevelOfDetailBias is applied on every stock 3D effect route "
+            "(BasicEffect, AlphaTestEffect, DualTextureEffect -- both samplers -- EnvironmentMapEffect "
+            "and SkinnedEffect) via WGSL textureSampleBias, and WGSL clamps a sample bias to roughly "
+            "[-16, +16), so a larger magnitude saturates rather than extrapolating. Three routes do "
+            "not apply it: SpriteBatch, whose stock pipeline binds no uniform buffer at all and so "
+            "has no channel to carry the value (WEBGPU-205 records the two options); a custom CNAEXT "
+            "ShaderEffect, which supplies its own WGSL and therefore its own sampling calls; and the "
+            "metallic-roughness PbrEffect/SkinnedPbrEffect families, which are the glTF route rather "
+            "than an XNA stock effect. On those three the bias is accepted and has no effect.";
+    }
+
     void WebGPURenderer::ApplySamplerMipState(int slot, int maxMipLevel, float lodBias)
     {
-        // WEBGPU-205 owns lodBias and is an IMPLEMENTATION task, not a limitation: WGSL's
-        // textureSampleBias applies exactly XNA's semantic in the fragment stage, which is where
-        // every one of this renderer's sampling calls already sits. Ignoring it here is this row's
-        // scope boundary, not a statement that it cannot be done.
-        (void) lodBias;
         if (slot < 0 || slot >= static_cast<int>(slotSamplers_.size()))
             return;
-        slotSamplers_[static_cast<std::size_t>(slot)].maxMipLevel = maxMipLevel;
+        SlotSamplerState& state = slotSamplers_[static_cast<std::size_t>(slot)];
+        state.maxMipLevel = maxMipLevel;
+        // WEBGPU-205: WGSL clamps a sample bias to roughly [-16, +16), so the value is clamped here
+        // rather than left to produce an implementation-defined result at the edges. The clamp is
+        // stated in docs/sampler-state-support.md rather than left for a caller to discover.
+        state.lodBias = std::clamp(lodBias, -15.99f, 15.99f);
     }
 
     void WebGPURenderer::SetBlendFactor(float r, float g, float b, float a)
@@ -8498,10 +8528,16 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             const Matrix wvp = world * view * projection;
             FillExtUniforms(command.uniforms, wvp, *params);
+            // WEBGPU-205: the per-slot MipMapLevelOfDetailBias, in the block's own tail.
+            command.uniforms[40] = slotSamplers_[0].lodBias;
+            command.uniforms[41] = slotSamplers_[1].lodBias;
         }
         else
         {
             FillColoredUniforms(command.uniforms, world, view, projection);
+            // WEBGPU-205: the per-slot MipMapLevelOfDetailBias, in the block's own tail.
+            command.uniforms[40] = slotSamplers_[0].lodBias;
+            command.uniforms[41] = slotSamplers_[1].lodBias;
         }
 
         if (ib != nullptr)
@@ -8842,6 +8878,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // column-major into [0..15], not specifically a WVP.
         const Matrix vp = view * projection;
         FillExtUniforms(command.uniforms, vp, params);
+        // WEBGPU-205: the per-slot MipMapLevelOfDetailBias, in the block's own tail.
+        command.uniforms[40] = slotSamplers_[0].lodBias;
+        command.uniforms[41] = slotSamplers_[1].lodBias;
 
         // WEBGPU-153: FillMode::WireFrame becomes a line-list draw over this command's own
         // vertices, rewritten here at queue time so the replay needs no wireframe branch.
@@ -9215,6 +9254,9 @@ namespace CNA::Internal::Renderers::WebGPU
         command.preferVertexLit = params.lightingEnabled && !params.preferPerPixelLighting;
         const Matrix wvp = world * view * projection;
         FillExtUniforms(command.uniforms, wvp, params);
+        // WEBGPU-205: the per-slot MipMapLevelOfDetailBias, in the block's own tail.
+        command.uniforms[40] = slotSamplers_[0].lodBias;
+        command.uniforms[41] = slotSamplers_[1].lodBias;
         FillLitLightUniforms(command.lightUniforms, params);
 
         if (ib != nullptr)
@@ -9405,6 +9447,9 @@ namespace CNA::Internal::Renderers::WebGPU
         command.maxAnisotropy = slotSamplers_[0].maxAnisotropy;
         const Matrix wvp = world * view * projection;
         FillAlphaTestUniforms(command.uniforms, wvp, params);
+        // WEBGPU-205: the per-slot MipMapLevelOfDetailBias, in the block's own tail.
+        command.uniforms[40] = slotSamplers_[0].lodBias;
+        command.uniforms[41] = slotSamplers_[1].lodBias;
 
         if (ib != nullptr)
         {
@@ -9619,6 +9664,9 @@ namespace CNA::Internal::Renderers::WebGPU
         command.texture1MaxAnisotropy = slotSamplers_[1].maxAnisotropy;
         const Matrix wvp = world * view * projection;
         FillExtUniforms(command.uniforms, wvp, params);
+        // WEBGPU-205: the per-slot MipMapLevelOfDetailBias, in the block's own tail.
+        command.uniforms[40] = slotSamplers_[0].lodBias;
+        command.uniforms[41] = slotSamplers_[1].lodBias;
 
         if (ib != nullptr)
         {
@@ -9710,6 +9758,9 @@ namespace CNA::Internal::Renderers::WebGPU
         command.maxAnisotropy = slotSamplers_[0].maxAnisotropy;
         const Matrix wvp = world * view * projection;
         FillExtUniforms(command.uniforms, wvp, params);
+        // WEBGPU-205: the per-slot MipMapLevelOfDetailBias, in the block's own tail.
+        command.uniforms[40] = slotSamplers_[0].lodBias;
+        command.uniforms[41] = slotSamplers_[1].lodBias;
 
         if (ib != nullptr)
         {
@@ -10137,6 +10188,9 @@ namespace
 
         const Matrix wvp = world * view * projection;
         FillExtUniforms(command.uniforms, wvp, params);
+        // WEBGPU-205: the per-slot MipMapLevelOfDetailBias, in the block's own tail.
+        command.uniforms[40] = slotSamplers_[0].lodBias;
+        command.uniforms[41] = slotSamplers_[1].lodBias;
         FillLitLightUniforms(command.lightUniforms, params);
         FillPbrFactors(command.pbrFactors, params);
 
@@ -10587,6 +10641,9 @@ namespace
         command.preferVertexLit = params.lightingEnabled && !params.preferPerPixelLighting;
         const Matrix wvp = world * view * projection;
         FillExtUniforms(command.uniforms, wvp, params);
+        // WEBGPU-205: the per-slot MipMapLevelOfDetailBias, in the block's own tail.
+        command.uniforms[40] = slotSamplers_[0].lodBias;
+        command.uniforms[41] = slotSamplers_[1].lodBias;
         FillLitLightUniforms(command.lightUniforms, params);
         FillSkinningParams(command.skinningParams, params);
 
@@ -11000,6 +11057,9 @@ namespace
 
         const Matrix wvp = world * view * projection;
         FillExtUniforms(command.uniforms, wvp, params);
+        // WEBGPU-205: the per-slot MipMapLevelOfDetailBias, in the block's own tail.
+        command.uniforms[40] = slotSamplers_[0].lodBias;
+        command.uniforms[41] = slotSamplers_[1].lodBias;
         FillLitLightUniforms(command.lightUniforms, params);
         FillPbrFactors(command.pbrFactors, params);
         FillSkinningParams(command.skinningParams, params);
