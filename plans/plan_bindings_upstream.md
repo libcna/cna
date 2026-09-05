@@ -395,6 +395,26 @@ working one side by side.
 
 ---
 
+## BINDFIX-036 — fractional global Doppler scale changes stationary pitch
+
+Found through the native and browser ports of XNA Audio3D sample SAMPLE-059. Its normal dog
+and cat recordings sounded like a motorcycle because the sample sets
+`SoundEffect.DopplerScale = 0.1f`: CNA computed the physical Doppler factor with only the
+emitter scale and then multiplied the completed playback ratio by `0.1`, so even zero
+listener/emitter velocities produced a `0.1` frequency ratio.
+
+Microsoft XNA 4.0's `KernelSoundEffectInstance.Apply3D` IL establishes the required ordering.
+Before calling `X3DAudioCalculate`, it replaces the emitter's `_DopplerScale` with
+`_DopplerScale * KernelSoundEffect::dopplerScale`; afterward it applies only
+`dspSettings.DopplerFactor` to the pitch ratio. FNA's current `SoundEffectInstance.UpdatePitch`
+diverges by multiplying the completed factor by the global scale.
+
+Fixed under `plans/plan_audio.md` **AUD-09-009** by passing the combined scale into
+`ComputeDopplerFactor` exactly once. Two regressions cover both the stationary `0.1` case and
+a moving-source `0.5 * 0.5` case whose XNA ratio is exactly `8/9`.
+
+---
+
 ## Fixed in this pass
 
 Three defects, each independently reported by two or more bindings, each one a place where

@@ -845,6 +845,53 @@ TEST_F(SoundEffectInstanceTest, Apply3DZeroVelocitiesYieldNeutralDopplerRegardle
     EXPECT_NEAR(MIX_GetTrackFrequencyRatio(track), 1.0f, 1e-5f);
 }
 
+// SAMPLE-059/AUD-09-009: XNA scales the listener/emitter velocities used by the Doppler
+// calculation. It does not multiply the completed frequency ratio by the global scale. A
+// stationary source therefore remains pitch-neutral even when the global scale is fractional.
+TEST_F(SoundEffectInstanceTest, Apply3DZeroVelocitiesRemainNeutralWithFractionalGlobalDopplerScale)
+{
+    REQUIRE_DEVICE();
+    DopplerScaleGuard guard;
+    SoundEffect::setDopplerScaleProperty(0.1f);
+
+    SoundEffectInstance inst = instance();
+
+    AudioListener listener;
+    AudioEmitter emitter;
+    emitter.setPositionProperty({10.0f, 5.0f, -3.0f});
+    inst.Apply3D(listener, emitter);
+    inst.Play();
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+    EXPECT_NEAR(MIX_GetTrackFrequencyRatio(track), 1.0f, 1e-5f);
+}
+
+// SAMPLE-059/AUD-09-009: XNA first combines SoundEffect.DopplerScale and
+// AudioEmitter.DopplerScale, then uses that single effective scaler inside X3DAudioCalculate.
+// With a receding emitter at half the speed of sound and both scales at 0.5, the effective
+// velocity is one eighth the speed of sound and the expected ratio is 343.5 / 386.4375 = 8/9.
+TEST_F(SoundEffectInstanceTest, Apply3DCombinesGlobalAndEmitterDopplerScalesInsideCalculation)
+{
+    REQUIRE_DEVICE();
+    DopplerScaleGuard guard;
+    SoundEffect::setDopplerScaleProperty(0.5f);
+
+    SoundEffectInstance inst = instance();
+
+    AudioListener listener;
+    AudioEmitter emitter;
+    emitter.setDopplerScaleProperty(0.5f);
+    emitter.setPositionProperty({10.0f, 0.0f, 0.0f});
+    emitter.setVelocityProperty({171.75f, 0.0f, 0.0f});
+    inst.Apply3D(listener, emitter);
+    inst.Play();
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+    EXPECT_NEAR(MIX_GetTrackFrequencyRatio(track), 8.0f / 9.0f, 1e-4f);
+}
+
 // AUD-09-005: equal listener/emitter velocity (parallel motion, e.g. both riding the same moving
 // platform) must produce no *relative* Doppler shift -- both velocity components project onto the
 // same emitter-to-listener axis identically, so the ratio's numerator and denominator must cancel

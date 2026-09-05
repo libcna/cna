@@ -90,8 +90,8 @@ namespace Microsoft::Xna::Framework::Audio
         // panning (CP-19) or true elevation/HRTF, real Doppler only needs the engine's existing
         // playback frequency-ratio control.
         // `toListener*` is the emitter-to-listener direction vector (FAudio's own naming);
-        // `dopplerScaler` is the per-emitter AudioEmitter.DopplerScale (distinct from the global
-        // SoundEffect.DopplerScale multiplier applied by the caller afterward).
+        // `dopplerScaler` is the effective emitter scaler after combining the per-emitter and
+        // global XNA DopplerScale values.
         float ComputeDopplerFactor(
             float speedOfSound, float dopplerScaler,
             float toListenerX, float toListenerY, float toListenerZ, float distance,
@@ -1067,18 +1067,24 @@ namespace Microsoft::Xna::Framework::Audio
 
         const float pan = INTERNAL_calculatePan(rightDisplacement, distance);
 
-        // P9-3D-005: matches FNA's UpdatePitch() exactly ("doppler = dspSettings.DopplerFactor *
-        // dopplerScale" when the global SoundEffect.DopplerScale is nonzero, else 1.0f/no-op).
-        // dx/dy/dz above are emitter-minus-listener; ComputeDopplerFactor wants the
+        // SAMPLE-059/AUD-09-009: intentionally follows Microsoft XNA Framework.dll IL for
+        // KernelSoundEffectInstance.Apply3D rather than FNA's divergent UpdatePitch(). XNA
+        // multiplies the emitter's _DopplerScale by KernelSoundEffect::dopplerScale before
+        // X3DAudioCalculate, then applies only dspSettings.DopplerFactor to the pitch ratio.
+        // Multiplying the completed factor by the global scale, as FNA does, incorrectly changes
+        // even a stationary sound's pitch (the sample's 0.1 scale turned barking into a motor-like
+        // sound). dx/dy/dz above are emitter-minus-listener; ComputeDopplerFactor wants the
         // emitter-to-listener direction (FAudio's own naming), i.e. the negation.
         const float globalDopplerScale = SoundEffect::getDopplerScaleProperty();
-        const float doppler = (globalDopplerScale != 0.0f)
+        const float effectiveDopplerScale =
+            emitter.getDopplerScaleProperty() * globalDopplerScale;
+        const float doppler = (effectiveDopplerScale != 0.0f)
             ? ComputeDopplerFactor(
                   SoundEffect::getSpeedOfSoundProperty(),
-                  emitter.getDopplerScaleProperty(),
+                  effectiveDopplerScale,
                   -dx, -dy, -dz, distance,
                   listener.getVelocityProperty(),
-                  emitter.getVelocityProperty()) * globalDopplerScale
+                  emitter.getVelocityProperty())
             : 1.0f;
 
         // AUDIO-001: persist the derived spatial state (was applied directly and only here,
