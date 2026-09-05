@@ -4489,20 +4489,20 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.TextureImporter": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "HOST_SUBSTITUTION",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::TextureImporter",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/TextureImporter.hpp",
+   "note": "the texture is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(); DDS sources wait on XNAPP-165.",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "TextureImporter()",
      "note": ""
     },
     "method:Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "HOST_SUBSTITUTION",
+     "cna": "Import(const std::string&, ContentImporterContext&) -> std::shared_ptr<TextureContent>",
+     "note": "the texture is answered by shared pointer; every source XNA reads is read the same way and answers the same pixels, except a DDS, which this route does not read yet -- that is XNAPP-165, and the importer refuses one meanwhile."
     }
    }
   },

@@ -2647,6 +2647,81 @@ namespace Cna.Xna40.GraphicsOracle
                 return builder.ToString();
             });
 
+            // ---- TextureImporter: what each source format becomes --------------------------------
+            Record("textureimporter/formats", () =>
+            {
+                string directory = Path.Combine(outputDirectory, "work");
+                Directory.CreateDirectory(directory);
+                var builder = new StringBuilder();
+                Action<string, string> probe = delegate(string label, string path)
+                {
+                    if (builder.Length > 0) builder.Append(' ');
+                    try
+                    {
+                        var importer = new TextureImporter();
+                        var context = new ProbeImporterContext();
+                        TextureContent texture = importer.Import(path, context);
+                        builder.Append(label + "=[" + DescribeTexture(texture) + " dependencies=" +
+                                       context.Dependencies.Count + " identity=" +
+                                       (texture.Identity == null ? "null" : (texture.Identity.SourceTool ?? "null")) + "]");
+                    }
+                    catch (Exception error) { builder.Append(label + "=" + error.GetType().Name + ": " + error.Message); }
+                };
+                // A 2x2 image whose four pixels are red, green, blue and half-transparent white,
+                // written in each format the importer names.
+                probe("png", WriteImage(directory, "probe.png", System.Drawing.Imaging.ImageFormat.Png));
+                probe("bmp", WriteImage(directory, "probe.bmp", System.Drawing.Imaging.ImageFormat.Bmp));
+                probe("jpg", WriteImage(directory, "probe.jpg", System.Drawing.Imaging.ImageFormat.Jpeg));
+                probe("tga", WriteTga(directory, "probe.tga"));
+                probe("ppm", WritePpm(directory, "probe.ppm"));
+                probe("pfm", WritePfm(directory, "probe.pfm"));
+                probe("dib", WriteDib(directory, "probe.dib"));
+                probe("dds", WriteDds(directory, "probe.dds"));
+                probe("wrong_extension", WriteImage(directory, "probe.xyz", System.Drawing.Imaging.ImageFormat.Png));
+                return builder.ToString();
+            });
+            Record("textureimporter/pfm_pixels", () =>
+            {
+                string directory = Path.Combine(outputDirectory, "work");
+                Directory.CreateDirectory(directory);
+                TextureContent texture = new TextureImporter().Import(WritePfm(directory, "pixels.pfm"),
+                                                                      new ProbeImporterContext());
+                var bitmap = (PixelBitmapContent<Vector4>)texture.Faces[0][0];
+                var builder = new StringBuilder();
+                for (int y = 0; y < bitmap.Height; y++)
+                    for (int x = 0; x < bitmap.Width; x++)
+                    {
+                        Vector4 pixel = bitmap.GetPixel(x, y);
+                        if (builder.Length > 0) builder.Append(' ');
+                        builder.Append("(" + pixel.X.ToString("R", CultureInfo.InvariantCulture) + "," +
+                                       pixel.Y.ToString("R", CultureInfo.InvariantCulture) + "," +
+                                       pixel.Z.ToString("R", CultureInfo.InvariantCulture) + "," +
+                                       pixel.W.ToString("R", CultureInfo.InvariantCulture) + ")");
+                    }
+                return builder.ToString();
+            });
+            Record("textureimporter/refusals", () =>
+            {
+                string directory = Path.Combine(outputDirectory, "work");
+                Directory.CreateDirectory(directory);
+                var builder = new StringBuilder();
+                Action<string, string> probe = delegate(string label, string path)
+                {
+                    if (builder.Length > 0) builder.Append(' ');
+                    try
+                    {
+                        TextureContent texture = new TextureImporter().Import(path, new ProbeImporterContext());
+                        builder.Append(label + "=accepted");
+                    }
+                    catch (Exception error) { builder.Append(label + "=" + error.GetType().Name + ": " + error.Message); }
+                };
+                probe("missing", Path.Combine(directory, "no_such.png"));
+                string garbage = Path.Combine(directory, "garbage.png");
+                File.WriteAllBytes(garbage, new byte[] { 1, 2, 3, 4, 5 });
+                probe("garbage", garbage);
+                return builder.ToString();
+            });
+
             // ---- FontDescriptionImporter: the .spritefont schema ---------------------------------
             Record("fontimporter/full", () =>
             {
@@ -3016,6 +3091,125 @@ namespace Cna.Xna40.GraphicsOracle
             var texture = new Texture2DContent();
             texture.Mipmaps.Add(Gradient(width, height));
             return texture;
+        }
+
+        /// The four pixels every source-format probe carries: red, green, blue, half-transparent white.
+        private static readonly byte[][] ProbePixels = new byte[][]
+        {
+            new byte[] { 255, 0, 0, 255 },
+            new byte[] { 0, 255, 0, 255 },
+            new byte[] { 0, 0, 255, 255 },
+            new byte[] { 255, 255, 255, 128 },
+        };
+
+        private static string WriteImage(string directory, string name, System.Drawing.Imaging.ImageFormat format)
+        {
+            string path = Path.Combine(directory, name);
+            using (var bitmap = new System.Drawing.Bitmap(2, 2, System.Drawing.Imaging.PixelFormat.Format32bppArgb))
+            {
+                for (int i = 0; i < 4; i++)
+                {
+                    byte[] pixel = ProbePixels[i];
+                    bitmap.SetPixel(i % 2, i / 2,
+                                    System.Drawing.Color.FromArgb(pixel[3], pixel[0], pixel[1], pixel[2]));
+                }
+                bitmap.Save(path, format);
+            }
+            return path;
+        }
+
+        private static string WriteTga(string directory, string name)
+        {
+            string path = Path.Combine(directory, name);
+            using (var stream = new FileStream(path, FileMode.Create, FileAccess.Write))
+            using (var writer = new BinaryWriter(stream))
+            {
+                writer.Write(new byte[] { 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0 });
+                writer.Write((short)2);
+                writer.Write((short)2);
+                writer.Write((byte)32);
+                writer.Write((byte)0x28);   // top-left origin, eight alpha bits
+                for (int i = 0; i < 4; i++)
+                {
+                    byte[] pixel = ProbePixels[i];
+                    writer.Write(new byte[] { pixel[2], pixel[1], pixel[0], pixel[3] });
+                }
+            }
+            return path;
+        }
+
+        private static string WritePpm(string directory, string name)
+        {
+            string path = Path.Combine(directory, name);
+            var bytes = new List<byte>(Encoding.ASCII.GetBytes("P6\n2 2\n255\n"));
+            foreach (byte[] pixel in ProbePixels) { bytes.Add(pixel[0]); bytes.Add(pixel[1]); bytes.Add(pixel[2]); }
+            File.WriteAllBytes(path, bytes.ToArray());
+            return path;
+        }
+
+        private static string WritePfm(string directory, string name)
+        {
+            string path = Path.Combine(directory, name);
+            var bytes = new List<byte>(Encoding.ASCII.GetBytes("PF\n2 2\n-1.0\n"));
+            // A PFM's rows run bottom to top, and each pixel is three little-endian floats.
+            for (int row = 1; row >= 0; row--)
+                for (int column = 0; column < 2; column++)
+                {
+                    byte[] pixel = ProbePixels[row * 2 + column];
+                    for (int channel = 0; channel < 3; channel++)
+                        bytes.AddRange(BitConverter.GetBytes(pixel[channel] / 255.0f));
+                }
+            File.WriteAllBytes(path, bytes.ToArray());
+            return path;
+        }
+
+        private static string WriteDib(string directory, string name)
+        {
+            // A DIB is a BMP without its fourteen-byte file header.
+            string bmp = WriteImage(directory, "probe_for_dib.bmp", System.Drawing.Imaging.ImageFormat.Bmp);
+            byte[] all = File.ReadAllBytes(bmp);
+            var body = new byte[all.Length - 14];
+            Array.Copy(all, 14, body, 0, body.Length);
+            string path = Path.Combine(directory, name);
+            File.WriteAllBytes(path, body);
+            return path;
+        }
+
+        private static string WriteDds(string directory, string name)
+        {
+            string path = Path.Combine(directory, name);
+            var bytes = new List<byte>(Encoding.ASCII.GetBytes("DDS "));
+            Action<int> Word = delegate(int value) { bytes.AddRange(BitConverter.GetBytes(value)); };
+            Word(124);                     // header size
+            Word(0x1 | 0x2 | 0x4 | 0x1000 | 0x8);  // caps, height, width, pixel format, pitch
+            Word(2);                       // height
+            Word(2);                       // width
+            Word(2 * 4);                   // pitch
+            Word(0);                       // depth
+            Word(0);                       // mip count
+            for (int i = 0; i < 11; i++) { Word(0); }  // reserved
+            Word(32);                      // pixel format size
+            Word(0x1 | 0x40);              // alpha pixels, RGB
+            Word(0);                       // four cc
+            Word(32);                      // bit count
+            Word(0x00FF0000);              // red mask
+            Word(0x0000FF00);              // green mask
+            Word(0x000000FF);              // blue mask
+            Word(unchecked((int)0xFF000000));      // alpha mask
+            Word(0x1000);                  // caps: texture
+            Word(0);
+            Word(0);
+            Word(0);
+            Word(0);
+            foreach (byte[] pixel in ProbePixels)
+            {
+                bytes.Add(pixel[2]);
+                bytes.Add(pixel[1]);
+                bytes.Add(pixel[0]);
+                bytes.Add(pixel[3]);
+            }
+            File.WriteAllBytes(path, bytes.ToArray());
+            return path;
         }
 
         private static string DescribeTexture(TextureContent texture)
