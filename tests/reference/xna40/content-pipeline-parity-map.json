@@ -2941,23 +2941,23 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Processors.EffectProcessorDebugMode": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::EffectProcessorDebugMode",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/ProcessorEnums.hpp",
    "note": "",
    "members": {},
    "enumValues": {
     "Auto": {
-     "status": "MISSING",
-     "cna": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "EffectProcessorDebugMode::Auto"
     },
     "Debug": {
-     "status": "MISSING",
-     "cna": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "EffectProcessorDebugMode::Debug"
     },
     "Optimize": {
-     "status": "MISSING",
-     "cna": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "EffectProcessorDebugMode::Optimize"
     }
    }
   },
@@ -3081,31 +3081,31 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Processors.MaterialProcessorDefaultEffect": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::MaterialProcessorDefaultEffect",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/ProcessorEnums.hpp",
    "note": "",
    "members": {},
    "enumValues": {
     "BasicEffect": {
-     "status": "MISSING",
-     "cna": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "MaterialProcessorDefaultEffect::BasicEffect"
     },
     "SkinnedEffect": {
-     "status": "MISSING",
-     "cna": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "MaterialProcessorDefaultEffect::SkinnedEffect"
     },
     "EnvironmentMapEffect": {
-     "status": "MISSING",
-     "cna": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "MaterialProcessorDefaultEffect::EnvironmentMapEffect"
     },
     "DualTextureEffect": {
-     "status": "MISSING",
-     "cna": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "MaterialProcessorDefaultEffect::DualTextureEffect"
     },
     "AlphaTestEffect": {
-     "status": "MISSING",
-     "cna": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "MaterialProcessorDefaultEffect::AlphaTestEffect"
     }
    }
   },
@@ -3381,63 +3381,63 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Processors.ModelTextureProcessor": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::ModelTextureProcessor",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/TextureProcessor.hpp",
+   "note": "Mipmapped and DXT-compressed by default, which is the only difference from the texture processor (measured, processor/ModelTextureProcessor).",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ModelTextureProcessor()",
      "note": ""
     },
     "property:ColorKeyColor": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getColorKeyColorProperty() / setColorKeyColorProperty()",
+     "note": "inherited; XNA redeclares it only to hide it from the designer."
     },
     "property:ColorKeyEnabled": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getColorKeyEnabledProperty() / setColorKeyEnabledProperty()",
+     "note": "inherited; XNA redeclares it only to hide it from the designer."
     },
     "property:GenerateMipmaps": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getGenerateMipmapsProperty() / setGenerateMipmapsProperty()",
+     "note": "inherited; XNA redeclares it only to hide it from the designer."
     },
     "property:ResizeToPowerOfTwo": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getResizeToPowerOfTwoProperty() / setResizeToPowerOfTwoProperty()",
+     "note": "inherited; XNA redeclares it only to hide it from the designer."
     },
     "property:TextureFormat": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getTextureFormatProperty() / setTextureFormatProperty()",
+     "note": "inherited; XNA redeclares it only to hide it from the designer."
     },
     "method:Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Process(const std::shared_ptr<TextureContent>&, ContentProcessorContext&)",
+     "note": "inherited from TextureProcessor, which is what XNA's override calls."
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Processors.PassThroughProcessor": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::PassThroughProcessor",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/PassThroughProcessor.hpp",
+   "note": "An object-to-object processor, so its carrier is the pipeline's ContentObject box.",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "PassThroughProcessor()",
      "note": ""
     },
     "method:Process(System.Object, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Process(const ContentObject&, ContentProcessorContext&)",
+     "note": "object is ContentObject."
     }
    }
   },
@@ -3509,114 +3509,114 @@
    "members": {}
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Processors.SpriteTextureProcessor": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::SpriteTextureProcessor",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/TextureProcessor.hpp",
+   "note": "The texture processor's defaults exactly (measured, processor/SpriteTextureProcessor).",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "SpriteTextureProcessor()",
      "note": ""
     },
     "property:ColorKeyColor": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getColorKeyColorProperty() / setColorKeyColorProperty()",
+     "note": "inherited; XNA redeclares it only to hide it from the designer."
     },
     "property:ColorKeyEnabled": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getColorKeyEnabledProperty() / setColorKeyEnabledProperty()",
+     "note": "inherited; XNA redeclares it only to hide it from the designer."
     },
     "property:GenerateMipmaps": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getGenerateMipmapsProperty() / setGenerateMipmapsProperty()",
+     "note": "inherited; XNA redeclares it only to hide it from the designer."
     },
     "property:ResizeToPowerOfTwo": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getResizeToPowerOfTwoProperty() / setResizeToPowerOfTwoProperty()",
+     "note": "inherited; XNA redeclares it only to hide it from the designer."
     },
     "property:TextureFormat": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getTextureFormatProperty() / setTextureFormatProperty()",
+     "note": "inherited; XNA redeclares it only to hide it from the designer."
     },
     "method:Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Process(const std::shared_ptr<TextureContent>&, ContentProcessorContext&)",
+     "note": "inherited from TextureProcessor, which is what XNA's override calls."
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Processors.TextureProcessor": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::TextureProcessor",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/TextureProcessor.hpp",
+   "note": "Every default and every step is measured (processor/TextureProcessor and textureprocessor/*): the colour key runs first, then the resize, then the premultiply, then the mipmaps, and the format last; NoChange keeps the bitmap type the texture arrived with, and DxtCompressed picks Dxt1 unless a pixel is partly transparent.",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "TextureProcessor()",
      "note": ""
     },
     "property:ColorKeyColor": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getColorKeyColorProperty() / setColorKeyColorProperty()",
      "note": ""
     },
     "property:ColorKeyEnabled": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getColorKeyEnabledProperty() / setColorKeyEnabledProperty()",
      "note": ""
     },
     "property:GenerateMipmaps": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getGenerateMipmapsProperty() / setGenerateMipmapsProperty()",
      "note": ""
     },
     "property:PremultiplyAlpha": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getPremultiplyAlphaProperty() / setPremultiplyAlphaProperty()",
      "note": ""
     },
     "property:ResizeToPowerOfTwo": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getResizeToPowerOfTwoProperty() / setResizeToPowerOfTwoProperty()",
      "note": ""
     },
     "property:TextureFormat": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getTextureFormatProperty() / setTextureFormatProperty()",
      "note": ""
     },
     "method:Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Process(const std::shared_ptr<TextureContent>&, ContentProcessorContext&)",
+     "note": "the texture is an owned shared_ptr, and the processed texture is the same object, as XNA's is."
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Processors.TextureProcessorOutputFormat": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::TextureProcessorOutputFormat",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/ProcessorEnums.hpp",
    "note": "",
    "members": {},
    "enumValues": {
     "NoChange": {
-     "status": "MISSING",
-     "cna": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "TextureProcessorOutputFormat::NoChange"
     },
     "Color": {
-     "status": "MISSING",
-     "cna": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "TextureProcessorOutputFormat::Color"
     },
     "DxtCompressed": {
-     "status": "MISSING",
-     "cna": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "TextureProcessorOutputFormat::DxtCompressed"
     }
    }
   },

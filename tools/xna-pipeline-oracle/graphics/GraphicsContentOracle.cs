@@ -1557,6 +1557,166 @@ namespace Cna.Xna40.GraphicsOracle
                        " child_parent=" + (root.Children[0].Parent == root) + " transform=" + Describe(root.Transform);
             });
 
+            // ---- Processor defaults ----------------------------------------------------------------
+            // Every processor's properties as constructed, read back through reflection so the
+            // list cannot drift from the type. This is the measured form of the defaults table.
+            Record("processor/TextureProcessor", () => Properties(new TextureProcessor()));
+            Record("processor/SpriteTextureProcessor", () => Properties(new SpriteTextureProcessor()));
+            Record("processor/ModelTextureProcessor", () => Properties(new ModelTextureProcessor()));
+            Record("processor/FontDescriptionProcessor", () => Properties(new FontDescriptionProcessor()));
+            Record("processor/FontTextureProcessor", () => Properties(new FontTextureProcessor()));
+            Record("processor/MaterialProcessor", () => Properties(new MaterialProcessor()));
+            Record("processor/ModelProcessor", () => Properties(new ModelProcessor()));
+            Record("processor/EffectProcessor", () => Properties(new EffectProcessor()));
+            Record("processor/PassThroughProcessor", () => Properties(new PassThroughProcessor()));
+            Record("processor/SongProcessor", () => Properties(new SongProcessor()));
+            Record("processor/SoundEffectProcessor", () => Properties(new SoundEffectProcessor()));
+            Record("processor/VideoProcessor", () => Properties(new VideoProcessor()));
+            Record("processor/types", () =>
+            {
+                var builder = new StringBuilder();
+                object[] processors = new object[] { new TextureProcessor(), new SpriteTextureProcessor(), new ModelTextureProcessor(),
+                                                     new FontDescriptionProcessor(), new FontTextureProcessor(), new MaterialProcessor(),
+                                                     new ModelProcessor(), new EffectProcessor(), new PassThroughProcessor(),
+                                                     new SongProcessor(), new SoundEffectProcessor(), new VideoProcessor() };
+                foreach (object processor in processors)
+                {
+                    var typed = (IContentProcessor)processor;
+                    if (builder.Length > 0) builder.Append(' ');
+                    builder.Append(processor.GetType().Name + "=" + typed.InputType.Name + "->" + typed.OutputType.Name);
+                }
+                return builder.ToString();
+            });
+            Record("processor/effect_defines", () => { var p = new EffectProcessor(); p.Defines = "A=1;B"; return "defines=" + p.Defines + " debug=" + p.DebugMode; });
+            Record("processor/font_texture_first_character", () => { var p = new FontTextureProcessor(); return "first=U+" + ((int)p.FirstCharacter).ToString("X4"); });
+
+            // ---- TextureProcessor.Process ----------------------------------------------------------
+            // The processor runs against a context of our own, because XNA's build context is
+            // internal; everything the processor actually needs from it is answered here.
+            Record("textureprocessor/defaults_4x4", () =>
+            {
+                var processor = new TextureProcessor();
+                return DescribeTexture(Process(processor, ColorTexture(4, 4)));
+            });
+            Record("textureprocessor/color_key", () =>
+            {
+                var processor = new TextureProcessor();
+                var texture = new Texture2DContent();
+                var bitmap = new PixelBitmapContent<Color>(2, 1);
+                bitmap.SetPixel(0, 0, new Color(255, 0, 255, 255));
+                bitmap.SetPixel(1, 0, new Color(10, 20, 30, 255));
+                texture.Mipmaps.Add(bitmap);
+                return DescribeTexture(Process(processor, texture));
+            });
+            Record("textureprocessor/color_key_disabled", () =>
+            {
+                var processor = new TextureProcessor();
+                processor.ColorKeyEnabled = false;
+                var texture = new Texture2DContent();
+                var bitmap = new PixelBitmapContent<Color>(2, 1);
+                bitmap.SetPixel(0, 0, new Color(255, 0, 255, 255));
+                bitmap.SetPixel(1, 0, new Color(10, 20, 30, 255));
+                texture.Mipmaps.Add(bitmap);
+                return DescribeTexture(Process(processor, texture));
+            });
+            Record("textureprocessor/premultiply", () =>
+            {
+                var processor = new TextureProcessor();
+                processor.ColorKeyEnabled = false;
+                var texture = new Texture2DContent();
+                var bitmap = new PixelBitmapContent<Color>(1, 1);
+                bitmap.SetPixel(0, 0, new Color(255, 128, 0, 128));
+                texture.Mipmaps.Add(bitmap);
+                return DescribeTexture(Process(processor, texture));
+            });
+            Record("textureprocessor/no_premultiply", () =>
+            {
+                var processor = new TextureProcessor();
+                processor.ColorKeyEnabled = false;
+                processor.PremultiplyAlpha = false;
+                var texture = new Texture2DContent();
+                var bitmap = new PixelBitmapContent<Color>(1, 1);
+                bitmap.SetPixel(0, 0, new Color(255, 128, 0, 128));
+                texture.Mipmaps.Add(bitmap);
+                return DescribeTexture(Process(processor, texture));
+            });
+            Record("textureprocessor/mipmaps", () =>
+            {
+                var processor = new TextureProcessor();
+                processor.GenerateMipmaps = true;
+                return DescribeTexture(Process(processor, ColorTexture(4, 4)));
+            });
+            Record("textureprocessor/resize_to_power_of_two", () =>
+            {
+                var processor = new TextureProcessor();
+                processor.ResizeToPowerOfTwo = true;
+                return DescribeTexture(Process(processor, ColorTexture(3, 5)));
+            });
+            Record("textureprocessor/dxt", () =>
+            {
+                var processor = new TextureProcessor();
+                processor.TextureFormat = TextureProcessorOutputFormat.DxtCompressed;
+                return DescribeTexture(Process(processor, ColorTexture(4, 4)));
+            });
+            Record("textureprocessor/dxt_opaque", () =>
+            {
+                var processor = new TextureProcessor();
+                processor.TextureFormat = TextureProcessorOutputFormat.DxtCompressed;
+                processor.ColorKeyEnabled = false;
+                var texture = new Texture2DContent();
+                var bitmap = new PixelBitmapContent<Color>(4, 4);
+                for (int y = 0; y < 4; y++) for (int x = 0; x < 4; x++) bitmap.SetPixel(x, y, new Color(x * 60, y * 60, 30, 255));
+                texture.Mipmaps.Add(bitmap);
+                return DescribeTexture(Process(processor, texture));
+            });
+            Record("textureprocessor/dxt_colorkeyed_opaque", () =>
+            {
+                // The colour key turns pixels transparent, so an otherwise opaque texture still
+                // needs an alpha-carrying format: this asks whether the choice is made after it.
+                var processor = new TextureProcessor();
+                processor.TextureFormat = TextureProcessorOutputFormat.DxtCompressed;
+                var texture = new Texture2DContent();
+                var bitmap = new PixelBitmapContent<Color>(4, 4);
+                for (int y = 0; y < 4; y++) for (int x = 0; x < 4; x++) bitmap.SetPixel(x, y, new Color(x * 60, y * 60, 30, 255));
+                bitmap.SetPixel(0, 0, new Color(255, 0, 255, 255));
+                texture.Mipmaps.Add(bitmap);
+                return DescribeTexture(Process(processor, texture));
+            });
+            Record("textureprocessor/dxt_non_multiple_of_four", () =>
+            {
+                var processor = new TextureProcessor();
+                processor.TextureFormat = TextureProcessorOutputFormat.DxtCompressed;
+                return DescribeTexture(Process(processor, ColorTexture(5, 3)));
+            });
+            Record("textureprocessor/resize_already_power_of_two", () =>
+            {
+                var processor = new TextureProcessor();
+                processor.ResizeToPowerOfTwo = true;
+                return DescribeTexture(Process(processor, ColorTexture(4, 4)));
+            });
+            Record("textureprocessor/cube_defaults", () =>
+            {
+                var processor = new TextureProcessor();
+                var texture = new TextureCubeContent();
+                for (int face = 0; face < 6; face++) texture.Faces[face].Add(Gradient(4, 4));
+                return DescribeTexture(Process(processor, texture));
+            });
+            Record("textureprocessor/null_input", () =>
+            {
+                var processor = new TextureProcessor();
+                return DescribeTexture(Process(processor, null));
+            });
+            Record("textureprocessor/no_change", () =>
+            {
+                var processor = new TextureProcessor();
+                processor.TextureFormat = TextureProcessorOutputFormat.NoChange;
+                var texture = new Texture2DContent();
+                texture.Mipmaps.Add(new PixelBitmapContent<Bgr565>(4, 4));
+                return DescribeTexture(Process(processor, texture));
+            });
+            Record("textureprocessor/sprite_defaults", () => DescribeTexture(Process(new SpriteTextureProcessor(), ColorTexture(4, 4))));
+            Record("textureprocessor/model_defaults", () => DescribeTexture(Process(new ModelTextureProcessor(), ColorTexture(4, 4))));
+
             // ---- TextureReferenceDictionary ------------------------------------------------------
             Record("texturereferencedictionary/default", () => { var d = new TextureReferenceDictionary(); return "count=" + d.Count + " ToString=\"" + d + "\""; });
 
@@ -1577,6 +1737,104 @@ namespace Cna.Xna40.GraphicsOracle
             public T ReadReference<T>(string key) where T : class { return GetReferenceTypeProperty<T>(key); }
             public T? ReadValue<T>(string key) where T : struct { return GetValueTypeProperty<T>(key); }
             public void Write<T>(string key, T value) { SetProperty(key, value); }
+        }
+
+        /// A build context that answers what a processor asks of it and refuses the rest, so a
+        /// processor's own work can be measured without XNA's internal build engine.
+        private sealed class ProbeProcessorContext : ContentProcessorContext
+        {
+            private readonly OpaqueDataDictionary parameters = new OpaqueDataDictionary();
+            private readonly ContentBuildLogger logger = new ProbeLogger();
+            public override string BuildConfiguration { get { return "Debug"; } }
+            public override string IntermediateDirectory { get { return "obj"; } }
+            public override ContentBuildLogger Logger { get { return logger; } }
+            public override string OutputDirectory { get { return "bin"; } }
+            public override string OutputFilename { get { return "asset.xnb"; } }
+            public override OpaqueDataDictionary Parameters { get { return parameters; } }
+            public override TargetPlatform TargetPlatform { get { return TargetPlatform.Windows; } }
+            public override GraphicsProfile TargetProfile { get { return GraphicsProfile.HiDef; } }
+            public override void AddDependency(string filename) { }
+            public override void AddOutputFile(string filename) { }
+            public override TOutput BuildAndLoadAsset<TInput, TOutput>(ExternalReference<TInput> sourceAsset, string processorName, OpaqueDataDictionary processorParameters, string importerName)
+            { throw new NotSupportedException("BuildAndLoadAsset"); }
+            public override ExternalReference<TOutput> BuildAsset<TInput, TOutput>(ExternalReference<TInput> sourceAsset, string processorName, OpaqueDataDictionary processorParameters, string importerName, string assetName)
+            { throw new NotSupportedException("BuildAsset"); }
+            public override TOutput Convert<TInput, TOutput>(TInput input, string processorName, OpaqueDataDictionary processorParameters)
+            { throw new NotSupportedException("Convert"); }
+        }
+
+        private sealed class ProbeLogger : ContentBuildLogger
+        {
+            public override void LogImportantMessage(string message, params object[] messageArgs) { }
+            public override void LogMessage(string message, params object[] messageArgs) { }
+            public override void LogWarning(string helpLink, ContentIdentity contentIdentity, string message, params object[] messageArgs) { }
+        }
+
+        private static TextureContent Process(TextureProcessor processor, TextureContent texture)
+        {
+            return processor.Process(texture, new ProbeProcessorContext());
+        }
+
+        private static Texture2DContent ColorTexture(int width, int height)
+        {
+            var texture = new Texture2DContent();
+            texture.Mipmaps.Add(Gradient(width, height));
+            return texture;
+        }
+
+        private static string DescribeTexture(TextureContent texture)
+        {
+            var builder = new StringBuilder(texture.GetType().Name + " faces=" + texture.Faces.Count);
+            for (int face = 0; face < texture.Faces.Count; face++)
+            {
+                builder.Append(" [");
+                for (int level = 0; level < texture.Faces[face].Count; level++)
+                {
+                    BitmapContent bitmap = texture.Faces[face][level];
+                    if (level > 0) builder.Append(' ');
+                    SurfaceFormat format;
+                    bool hasFormat = bitmap.TryGetFormat(out format);
+                    builder.Append(bitmap.Width + "x" + bitmap.Height + ":" + (hasFormat ? format.ToString() : "none"));
+                }
+                builder.Append(']');
+            }
+            if (texture.Faces.Count == 1 && texture.Faces[0].Count > 0)
+            {
+                BitmapContent first = texture.Faces[0][0];
+                SurfaceFormat format;
+                if (first.TryGetFormat(out format) && format == SurfaceFormat.Color && first.Width * first.Height <= 16)
+                {
+                    builder.Append(" pixels=" + Hex(first.GetPixelData()));
+                }
+            }
+            return builder.ToString();
+        }
+
+        /// Every public property of a processor, in name order, with its value: the defaults table,
+        /// read from the object rather than from a document.
+        private static string Properties(object instance)
+        {
+            var names = new List<string>();
+            foreach (System.Reflection.PropertyInfo property in instance.GetType().GetProperties())
+            {
+                if (property.GetIndexParameters().Length == 0 && property.CanRead) names.Add(property.Name);
+            }
+            names.Sort(StringComparer.Ordinal);
+            var builder = new StringBuilder();
+            foreach (string name in names)
+            {
+                System.Reflection.PropertyInfo property = instance.GetType().GetProperty(name);
+                object value;
+                try { value = property.GetValue(instance, null); }
+                catch (Exception error) { value = error.GetType().Name; }
+                if (builder.Length > 0) builder.Append(' ');
+                string text;
+                if (value == null) text = "null";
+                else if (value is float) text = ((float)value).ToString("R", CultureInfo.InvariantCulture);
+                else text = Convert.ToString(value, CultureInfo.InvariantCulture);
+                builder.Append(name + "=" + text);
+            }
+            return builder.ToString();
         }
 
         private static string Describe(Matrix matrix)

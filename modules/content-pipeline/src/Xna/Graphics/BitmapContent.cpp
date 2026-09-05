@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/BitmapContent.hpp"
 
+#include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/DxtBitmapContent.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/PixelBitmapContent.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <map>
@@ -160,6 +163,51 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
         }
     }
 
+    namespace
+    {
+        /**
+         * @brief Registers every bitmap type the pipeline ships, once.
+         *
+         * A type registers itself when one is first constructed, which is enough for the copy
+         * protocol but not for `ConvertBitmapType`: converting to a type no instance of which
+         * exists yet -- the compressed formats a texture processor asks for -- would find an empty
+         * registry. XNA reflects the type instead and needs no such list.
+         */
+        void RegisterBuiltInBitmapTypes()
+        {
+            static const bool once = []
+            {
+                namespace Packed = Microsoft::Xna::Framework::Graphics::PackedVector;
+                BitmapContent::RegisterBitmapType<PixelBitmapContent<Color>>(PixelBitmapContent<Color>::XnaTypeName);
+                BitmapContent::RegisterBitmapType<PixelBitmapContent<Vector4>>(PixelBitmapContent<Vector4>::XnaTypeName);
+                BitmapContent::RegisterBitmapType<PixelBitmapContent<Vector2>>(PixelBitmapContent<Vector2>::XnaTypeName);
+                BitmapContent::RegisterBitmapType<PixelBitmapContent<float>>(PixelBitmapContent<float>::XnaTypeName);
+                BitmapContent::RegisterBitmapType<PixelBitmapContent<Packed::Alpha8>>(PixelBitmapContent<Packed::Alpha8>::XnaTypeName);
+                BitmapContent::RegisterBitmapType<PixelBitmapContent<Packed::Bgr565>>(PixelBitmapContent<Packed::Bgr565>::XnaTypeName);
+                BitmapContent::RegisterBitmapType<PixelBitmapContent<Packed::Bgra4444>>(PixelBitmapContent<Packed::Bgra4444>::XnaTypeName);
+                BitmapContent::RegisterBitmapType<PixelBitmapContent<Packed::Bgra5551>>(PixelBitmapContent<Packed::Bgra5551>::XnaTypeName);
+                BitmapContent::RegisterBitmapType<PixelBitmapContent<Packed::Byte4>>(PixelBitmapContent<Packed::Byte4>::XnaTypeName);
+                BitmapContent::RegisterBitmapType<PixelBitmapContent<Packed::HalfSingle>>(PixelBitmapContent<Packed::HalfSingle>::XnaTypeName);
+                BitmapContent::RegisterBitmapType<PixelBitmapContent<Packed::HalfVector2>>(PixelBitmapContent<Packed::HalfVector2>::XnaTypeName);
+                BitmapContent::RegisterBitmapType<PixelBitmapContent<Packed::HalfVector4>>(PixelBitmapContent<Packed::HalfVector4>::XnaTypeName);
+                BitmapContent::RegisterBitmapType<PixelBitmapContent<Packed::NormalizedByte2>>(PixelBitmapContent<Packed::NormalizedByte2>::XnaTypeName);
+                BitmapContent::RegisterBitmapType<PixelBitmapContent<Packed::NormalizedByte4>>(PixelBitmapContent<Packed::NormalizedByte4>::XnaTypeName);
+                BitmapContent::RegisterBitmapType<PixelBitmapContent<Packed::NormalizedShort2>>(PixelBitmapContent<Packed::NormalizedShort2>::XnaTypeName);
+                BitmapContent::RegisterBitmapType<PixelBitmapContent<Packed::NormalizedShort4>>(PixelBitmapContent<Packed::NormalizedShort4>::XnaTypeName);
+                BitmapContent::RegisterBitmapType<PixelBitmapContent<Packed::Rg32>>(PixelBitmapContent<Packed::Rg32>::XnaTypeName);
+                BitmapContent::RegisterBitmapType<PixelBitmapContent<Packed::Rgba1010102>>(PixelBitmapContent<Packed::Rgba1010102>::XnaTypeName);
+                BitmapContent::RegisterBitmapType<PixelBitmapContent<Packed::Rgba64>>(PixelBitmapContent<Packed::Rgba64>::XnaTypeName);
+                BitmapContent::RegisterBitmapType<PixelBitmapContent<Packed::Short2>>(PixelBitmapContent<Packed::Short2>::XnaTypeName);
+                BitmapContent::RegisterBitmapType<PixelBitmapContent<Packed::Short4>>(PixelBitmapContent<Packed::Short4>::XnaTypeName);
+                BitmapContent::RegisterBitmapType<Dxt1BitmapContent>(std::string(Dxt1BitmapContent::XnaTypeName));
+                BitmapContent::RegisterBitmapType<Dxt3BitmapContent>(std::string(Dxt3BitmapContent::XnaTypeName));
+                BitmapContent::RegisterBitmapType<Dxt5BitmapContent>(std::string(Dxt5BitmapContent::XnaTypeName));
+                return true;
+            }();
+            (void)once;
+        }
+    }
+
     void BitmapContent::RegisterBitmapType(System::Type bitmapType, std::string dotNetName, BitmapFactory factory)
     {
         BitmapTypeRegistry& registry = Registry();
@@ -170,6 +218,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
     std::shared_ptr<BitmapContent> BitmapContent::CreateBitmap(System::Type bitmapType, SharpRuntime::intcs width,
                                                                SharpRuntime::intcs height)
     {
+        RegisterBuiltInBitmapTypes();
         BitmapTypeRegistry& registry = Registry();
         BitmapFactory factory;
         {
@@ -187,6 +236,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
 
     std::string BitmapContent::BitmapTypeName(System::Type bitmapType)
     {
+        RegisterBuiltInBitmapTypes();
         BitmapTypeRegistry& registry = Registry();
         std::lock_guard<std::mutex> lock(registry.mutex);
         const auto found = registry.entries.find(bitmapType);

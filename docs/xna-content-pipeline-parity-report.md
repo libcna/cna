@@ -10,17 +10,17 @@
 
 | Quantity | Implemented (EXACT + SEMANTIC + HOST_SUBSTITUTION) | EXTERNAL_BLOCKED | MISSING |
 |---|---|---:|---:|
-| public/protected types | 79/128 (61.7%) | 0 | 49 |
-| public/protected members | 474/705 (67.2%) | 0 | 231 |
-| enum values | 6/27 (22.2%) | 0 | 21 |
+| public/protected types | 86/128 (67.2%) | 0 | 42 |
+| public/protected members | 498/705 (70.6%) | 0 | 207 |
+| enum values | 17/27 (63.0%) | 0 | 10 |
 | built-in importers | 0/10 (0.0%) | 0 | 10 |
-| built-in processors | 0/12 (0.0%) | 0 | 12 |
-| processor properties | 0/47 (0.0%) | 0 | 47 |
+| built-in processors | 4/12 (33.3%) | 0 | 8 |
+| processor properties | 18/47 (38.3%) | 0 | 29 |
 
 Status vocabulary: EXACT_EQUIVALENT, SEMANTIC_EQUIVALENT (spelling differs, capability identical; note says how),
 HOST_SUBSTITUTION (Microsoft-host mechanism replaced; note says how), EXTERNAL_BLOCKED (note names the
-unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 37, SEMANTIC_EQUIVALENT 41, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 49.
-Member status by value: EXACT_EQUIVALENT 308, SEMANTIC_EQUIVALENT 161, HOST_SUBSTITUTION 5, EXTERNAL_BLOCKED 0, MISSING 231.
+unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 40, SEMANTIC_EQUIVALENT 45, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 42.
+Member status by value: EXACT_EQUIVALENT 328, SEMANTIC_EQUIVALENT 165, HOST_SUBSTITUTION 5, EXTERNAL_BLOCKED 0, MISSING 207.
 
 Rules applied mechanically: 3 delegate plumbing members are listed in section 7 and not counted; 3 exception
 serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serialization has no C++ counterpart).
@@ -32,7 +32,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `Microsoft.Xna.Framework.Content.Pipeline.Audio` | 5 | 0 | 0 | 5 |
 | `Microsoft.Xna.Framework.Content.Pipeline` | 32 | 21 | 0 | 11 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Graphics` | 47 | 45 | 0 | 2 |
-| `Microsoft.Xna.Framework.Content.Pipeline.Processors` | 28 | 1 | 0 | 27 |
+| `Microsoft.Xna.Framework.Content.Pipeline.Processors` | 28 | 8 | 0 | 20 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler` | 5 | 5 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate` | 7 | 7 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Tasks` | 4 | 0 | 0 | 4 |
@@ -119,11 +119,11 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `…` | `ProcessorParameterCollection` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::ProcessorParameterCollection` |  |
 | `….Processors` | `CompiledEffectContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::CompiledEffectContent` | Landed with XNAPP-094 rather than XNAPP-135, because EffectMaterialContent references it. It carries one CNAEXT member the inventory does not list: a public parameterless constructor, which the intermediate serializer needs where XNA's reflection reaches a private one. |
 | `….Processors` | `EffectProcessor` | class | MISSING |  |  |
-| `….Processors` | `EffectProcessorDebugMode` | enum | MISSING |  |  |
+| `….Processors` | `EffectProcessorDebugMode` | enum | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::EffectProcessorDebugMode` |  |
 | `….Processors` | `FontDescriptionProcessor` | class | MISSING |  |  |
 | `….Processors` | `FontTextureProcessor` | class | MISSING |  |  |
 | `….Processors` | `MaterialProcessor` | class | MISSING |  |  |
-| `….Processors` | `MaterialProcessorDefaultEffect` | enum | MISSING |  |  |
+| `….Processors` | `MaterialProcessorDefaultEffect` | enum | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::MaterialProcessorDefaultEffect` |  |
 | `….Processors` | `ModelBoneContent` | class | MISSING |  |  |
 | `….Processors` | `ModelBoneContentCollection` | class | MISSING |  |  |
 | `….Processors` | `ModelContent` | class | MISSING |  |  |
@@ -132,16 +132,16 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `….Processors` | `ModelMeshPartContent` | class | MISSING |  |  |
 | `….Processors` | `ModelMeshPartContentCollection` | class | MISSING |  |  |
 | `….Processors` | `ModelProcessor` | class | MISSING |  |  |
-| `….Processors` | `ModelTextureProcessor` | class | MISSING |  |  |
-| `….Processors` | `PassThroughProcessor` | class | MISSING |  |  |
+| `….Processors` | `ModelTextureProcessor` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::ModelTextureProcessor` | Mipmapped and DXT-compressed by default, which is the only difference from the texture processor (measured, processor/ModelTextureProcessor). |
+| `….Processors` | `PassThroughProcessor` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::PassThroughProcessor` | An object-to-object processor, so its carrier is the pipeline's ContentObject box. |
 | `….Processors` | `SongContent` | class | MISSING |  |  |
 | `….Processors` | `SongProcessor` | class | MISSING |  |  |
 | `….Processors` | `SoundEffectContent` | class | MISSING |  |  |
 | `….Processors` | `SoundEffectProcessor` | class | MISSING |  |  |
 | `….Processors` | `SpriteFontContent` | class | MISSING |  |  |
-| `….Processors` | `SpriteTextureProcessor` | class | MISSING |  |  |
-| `….Processors` | `TextureProcessor` | class | MISSING |  |  |
-| `….Processors` | `TextureProcessorOutputFormat` | enum | MISSING |  |  |
+| `….Processors` | `SpriteTextureProcessor` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::SpriteTextureProcessor` | The texture processor's defaults exactly (measured, processor/SpriteTextureProcessor). |
+| `….Processors` | `TextureProcessor` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::TextureProcessor` | Every default and every step is measured (processor/TextureProcessor and textureprocessor/*): the colour key runs first, then the resize, then the premultiply, then the mipmaps, and the format last; NoChange keeps the bitmap type the texture arrived with, and DxtCompressed picks Dxt1 unless a pixel is partly transparent. |
+| `….Processors` | `TextureProcessorOutputFormat` | enum | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::TextureProcessorOutputFormat` |  |
 | `….Processors` | `VertexBufferContent` | class | MISSING |  |  |
 | `….Processors` | `VertexDeclarationContent` | class | MISSING |  |  |
 | `….Processors` | `VideoProcessor` | class | MISSING |  |  |
@@ -194,12 +194,12 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `FontTextureProcessor` | `Texture2DContent` | `SpriteFontContent` | 3 | MISSING |  |
 | `MaterialProcessor` | `MaterialContent` | `MaterialContent` | 7 | MISSING |  |
 | `ModelProcessor` | `NodeContent` | `ModelContent` | 14 | MISSING |  |
-| `ModelTextureProcessor` | `TextureContent` | `TextureContent` | 6 | MISSING |  |
-| `PassThroughProcessor` | `Object` | `Object` | 0 | MISSING |  |
+| `ModelTextureProcessor` | `TextureContent` | `TextureContent` | 6 | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::ModelTextureProcessor` |
+| `PassThroughProcessor` | `Object` | `Object` | 0 | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::PassThroughProcessor` |
 | `SongProcessor` | `AudioContent` | `SongContent` | 1 | MISSING |  |
 | `SoundEffectProcessor` | `AudioContent` | `SoundEffectContent` | 1 | MISSING |  |
-| `SpriteTextureProcessor` | `TextureContent` | `TextureContent` | 6 | MISSING |  |
-| `TextureProcessor` | `TextureContent` | `TextureContent` | 6 | MISSING |  |
+| `SpriteTextureProcessor` | `TextureContent` | `TextureContent` | 6 | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::SpriteTextureProcessor` |
+| `TextureProcessor` | `TextureContent` | `TextureContent` | 6 | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::TextureProcessor` |
 | `VideoProcessor` | `VideoContent` | `VideoContent` | 1 | MISSING |  |
 
 | Processor | Property | Type | XNA default (black-box) | Status | CNA |
@@ -230,26 +230,26 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `ModelProcessor` | `Scale` | `Single` | `1` | MISSING |  |
 | `ModelProcessor` | `SwapWindingOrder` | `Boolean` | `False` | MISSING |  |
 | `ModelProcessor` | `TextureFormat` | `TextureProcessorOutputFormat` | `TextureProcessorOutputFormat.DxtCompressed` | MISSING |  |
-| `ModelTextureProcessor` | `ColorKeyColor` | `Color` | `Color:{R:255 G:0 B:255 A:255}` | MISSING |  |
-| `ModelTextureProcessor` | `ColorKeyEnabled` | `Boolean` | `True` | MISSING |  |
-| `ModelTextureProcessor` | `GenerateMipmaps` | `Boolean` | `True` | MISSING |  |
-| `ModelTextureProcessor` | `PremultiplyAlpha` | `Boolean` | `True` | MISSING |  |
-| `ModelTextureProcessor` | `ResizeToPowerOfTwo` | `Boolean` | `False` | MISSING |  |
-| `ModelTextureProcessor` | `TextureFormat` | `TextureProcessorOutputFormat` | `TextureProcessorOutputFormat.DxtCompressed` | MISSING |  |
+| `ModelTextureProcessor` | `ColorKeyColor` | `Color` | `Color:{R:255 G:0 B:255 A:255}` | EXACT_EQUIVALENT | `getColorKeyColorProperty() / setColorKeyColorProperty()` |
+| `ModelTextureProcessor` | `ColorKeyEnabled` | `Boolean` | `True` | EXACT_EQUIVALENT | `getColorKeyEnabledProperty() / setColorKeyEnabledProperty()` |
+| `ModelTextureProcessor` | `GenerateMipmaps` | `Boolean` | `True` | EXACT_EQUIVALENT | `getGenerateMipmapsProperty() / setGenerateMipmapsProperty()` |
+| `ModelTextureProcessor` | `PremultiplyAlpha` | `Boolean` | `True` | EXACT_EQUIVALENT | `getPremultiplyAlphaProperty() / setPremultiplyAlphaProperty()` |
+| `ModelTextureProcessor` | `ResizeToPowerOfTwo` | `Boolean` | `False` | EXACT_EQUIVALENT | `getResizeToPowerOfTwoProperty() / setResizeToPowerOfTwoProperty()` |
+| `ModelTextureProcessor` | `TextureFormat` | `TextureProcessorOutputFormat` | `TextureProcessorOutputFormat.DxtCompressed` | EXACT_EQUIVALENT | `getTextureFormatProperty() / setTextureFormatProperty()` |
 | `SongProcessor` | `Quality` | `ConversionQuality` | `ConversionQuality.Best` | MISSING |  |
 | `SoundEffectProcessor` | `Quality` | `ConversionQuality` | `ConversionQuality.Best` | MISSING |  |
-| `SpriteTextureProcessor` | `ColorKeyColor` | `Color` | `Color:{R:255 G:0 B:255 A:255}` | MISSING |  |
-| `SpriteTextureProcessor` | `ColorKeyEnabled` | `Boolean` | `True` | MISSING |  |
-| `SpriteTextureProcessor` | `GenerateMipmaps` | `Boolean` | `False` | MISSING |  |
-| `SpriteTextureProcessor` | `PremultiplyAlpha` | `Boolean` | `True` | MISSING |  |
-| `SpriteTextureProcessor` | `ResizeToPowerOfTwo` | `Boolean` | `False` | MISSING |  |
-| `SpriteTextureProcessor` | `TextureFormat` | `TextureProcessorOutputFormat` | `TextureProcessorOutputFormat.Color` | MISSING |  |
-| `TextureProcessor` | `ColorKeyColor` | `Color` | `Color:{R:255 G:0 B:255 A:255}` | MISSING |  |
-| `TextureProcessor` | `ColorKeyEnabled` | `Boolean` | `True` | MISSING |  |
-| `TextureProcessor` | `GenerateMipmaps` | `Boolean` | `False` | MISSING |  |
-| `TextureProcessor` | `PremultiplyAlpha` | `Boolean` | `True` | MISSING |  |
-| `TextureProcessor` | `ResizeToPowerOfTwo` | `Boolean` | `False` | MISSING |  |
-| `TextureProcessor` | `TextureFormat` | `TextureProcessorOutputFormat` | `TextureProcessorOutputFormat.Color` | MISSING |  |
+| `SpriteTextureProcessor` | `ColorKeyColor` | `Color` | `Color:{R:255 G:0 B:255 A:255}` | EXACT_EQUIVALENT | `getColorKeyColorProperty() / setColorKeyColorProperty()` |
+| `SpriteTextureProcessor` | `ColorKeyEnabled` | `Boolean` | `True` | EXACT_EQUIVALENT | `getColorKeyEnabledProperty() / setColorKeyEnabledProperty()` |
+| `SpriteTextureProcessor` | `GenerateMipmaps` | `Boolean` | `False` | EXACT_EQUIVALENT | `getGenerateMipmapsProperty() / setGenerateMipmapsProperty()` |
+| `SpriteTextureProcessor` | `PremultiplyAlpha` | `Boolean` | `True` | EXACT_EQUIVALENT | `getPremultiplyAlphaProperty() / setPremultiplyAlphaProperty()` |
+| `SpriteTextureProcessor` | `ResizeToPowerOfTwo` | `Boolean` | `False` | EXACT_EQUIVALENT | `getResizeToPowerOfTwoProperty() / setResizeToPowerOfTwoProperty()` |
+| `SpriteTextureProcessor` | `TextureFormat` | `TextureProcessorOutputFormat` | `TextureProcessorOutputFormat.Color` | EXACT_EQUIVALENT | `getTextureFormatProperty() / setTextureFormatProperty()` |
+| `TextureProcessor` | `ColorKeyColor` | `Color` | `Color:{R:255 G:0 B:255 A:255}` | EXACT_EQUIVALENT | `getColorKeyColorProperty() / setColorKeyColorProperty()` |
+| `TextureProcessor` | `ColorKeyEnabled` | `Boolean` | `True` | EXACT_EQUIVALENT | `getColorKeyEnabledProperty() / setColorKeyEnabledProperty()` |
+| `TextureProcessor` | `GenerateMipmaps` | `Boolean` | `False` | EXACT_EQUIVALENT | `getGenerateMipmapsProperty() / setGenerateMipmapsProperty()` |
+| `TextureProcessor` | `PremultiplyAlpha` | `Boolean` | `True` | EXACT_EQUIVALENT | `getPremultiplyAlphaProperty() / setPremultiplyAlphaProperty()` |
+| `TextureProcessor` | `ResizeToPowerOfTwo` | `Boolean` | `False` | EXACT_EQUIVALENT | `getResizeToPowerOfTwoProperty() / setResizeToPowerOfTwoProperty()` |
+| `TextureProcessor` | `TextureFormat` | `TextureProcessorOutputFormat` | `TextureProcessorOutputFormat.Color` | EXACT_EQUIVALENT | `getTextureFormatProperty() / setTextureFormatProperty()` |
 | `VideoProcessor` | `VideoSoundtrackType` | `VideoSoundtrackType` | `VideoSoundtrackType.Music` | MISSING |  |
 
 ## 7. Members
@@ -721,9 +721,9 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `EffectProcessor` | property | `DebugMode` | MISSING |  |  |
 | `EffectProcessor` | property | `Defines` | MISSING |  |  |
 | `EffectProcessor` | method | `Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.EffectContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | MISSING |  |  |
-| `EffectProcessorDebugMode` | enum value | `Auto = 0` | MISSING |  |  |
-| `EffectProcessorDebugMode` | enum value | `Debug = 1` | MISSING |  |  |
-| `EffectProcessorDebugMode` | enum value | `Optimize = 2` | MISSING |  |  |
+| `EffectProcessorDebugMode` | enum value | `Auto = 0` | EXACT_EQUIVALENT | `EffectProcessorDebugMode::Auto` |  |
+| `EffectProcessorDebugMode` | enum value | `Debug = 1` | EXACT_EQUIVALENT | `EffectProcessorDebugMode::Debug` |  |
+| `EffectProcessorDebugMode` | enum value | `Optimize = 2` | EXACT_EQUIVALENT | `EffectProcessorDebugMode::Optimize` |  |
 | `FontDescriptionProcessor` | constructor | `.ctor()` | MISSING |  |  |
 | `FontDescriptionProcessor` | method | `Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.FontDescription, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | MISSING |  |  |
 | `FontTextureProcessor` | constructor | `.ctor()` | MISSING |  |  |
@@ -743,11 +743,11 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `MaterialProcessor` | method | `BuildEffect(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<Microsoft.Xna.Framework.Content.Pipeline.Graphics.EffectContent>, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | MISSING |  |  |
 | `MaterialProcessor` | method | `BuildTexture(System.String, Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureContent>, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | MISSING |  |  |
 | `MaterialProcessor` | method | `Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MaterialContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | MISSING |  |  |
-| `MaterialProcessorDefaultEffect` | enum value | `BasicEffect = 0` | MISSING |  |  |
-| `MaterialProcessorDefaultEffect` | enum value | `SkinnedEffect = 1` | MISSING |  |  |
-| `MaterialProcessorDefaultEffect` | enum value | `EnvironmentMapEffect = 2` | MISSING |  |  |
-| `MaterialProcessorDefaultEffect` | enum value | `DualTextureEffect = 3` | MISSING |  |  |
-| `MaterialProcessorDefaultEffect` | enum value | `AlphaTestEffect = 4` | MISSING |  |  |
+| `MaterialProcessorDefaultEffect` | enum value | `BasicEffect = 0` | EXACT_EQUIVALENT | `MaterialProcessorDefaultEffect::BasicEffect` |  |
+| `MaterialProcessorDefaultEffect` | enum value | `SkinnedEffect = 1` | EXACT_EQUIVALENT | `MaterialProcessorDefaultEffect::SkinnedEffect` |  |
+| `MaterialProcessorDefaultEffect` | enum value | `EnvironmentMapEffect = 2` | EXACT_EQUIVALENT | `MaterialProcessorDefaultEffect::EnvironmentMapEffect` |  |
+| `MaterialProcessorDefaultEffect` | enum value | `DualTextureEffect = 3` | EXACT_EQUIVALENT | `MaterialProcessorDefaultEffect::DualTextureEffect` |  |
+| `MaterialProcessorDefaultEffect` | enum value | `AlphaTestEffect = 4` | EXACT_EQUIVALENT | `MaterialProcessorDefaultEffect::AlphaTestEffect` |  |
 | `ModelBoneContent` | property | `Children` | MISSING |  |  |
 | `ModelBoneContent` | property | `Index` | MISSING |  |  |
 | `ModelBoneContent` | property | `Name` | MISSING |  |  |
@@ -790,39 +790,39 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `ModelProcessor` | method | `Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.NodeContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | MISSING |  |  |
 | `ModelProcessor` | method | `ProcessGeometryUsingMaterial(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MaterialContent, System.Collections.Generic.IEnumerable<Microsoft.Xna.Framework.Content.Pipeline.Graphics.GeometryContent>, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | MISSING |  |  |
 | `ModelProcessor` | method | `ProcessVertexChannel(Microsoft.Xna.Framework.Content.Pipeline.Graphics.GeometryContent, System.Int32, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | MISSING |  |  |
-| `ModelTextureProcessor` | constructor | `.ctor()` | MISSING |  |  |
-| `ModelTextureProcessor` | property | `ColorKeyColor` | MISSING |  |  |
-| `ModelTextureProcessor` | property | `ColorKeyEnabled` | MISSING |  |  |
-| `ModelTextureProcessor` | property | `GenerateMipmaps` | MISSING |  |  |
-| `ModelTextureProcessor` | property | `ResizeToPowerOfTwo` | MISSING |  |  |
-| `ModelTextureProcessor` | property | `TextureFormat` | MISSING |  |  |
-| `ModelTextureProcessor` | method | `Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | MISSING |  |  |
-| `PassThroughProcessor` | constructor | `.ctor()` | MISSING |  |  |
-| `PassThroughProcessor` | method | `Process(System.Object, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | MISSING |  |  |
+| `ModelTextureProcessor` | constructor | `.ctor()` | EXACT_EQUIVALENT | `ModelTextureProcessor()` |  |
+| `ModelTextureProcessor` | property | `ColorKeyColor` | EXACT_EQUIVALENT | `getColorKeyColorProperty() / setColorKeyColorProperty()` | inherited; XNA redeclares it only to hide it from the designer. |
+| `ModelTextureProcessor` | property | `ColorKeyEnabled` | EXACT_EQUIVALENT | `getColorKeyEnabledProperty() / setColorKeyEnabledProperty()` | inherited; XNA redeclares it only to hide it from the designer. |
+| `ModelTextureProcessor` | property | `GenerateMipmaps` | EXACT_EQUIVALENT | `getGenerateMipmapsProperty() / setGenerateMipmapsProperty()` | inherited; XNA redeclares it only to hide it from the designer. |
+| `ModelTextureProcessor` | property | `ResizeToPowerOfTwo` | EXACT_EQUIVALENT | `getResizeToPowerOfTwoProperty() / setResizeToPowerOfTwoProperty()` | inherited; XNA redeclares it only to hide it from the designer. |
+| `ModelTextureProcessor` | property | `TextureFormat` | EXACT_EQUIVALENT | `getTextureFormatProperty() / setTextureFormatProperty()` | inherited; XNA redeclares it only to hide it from the designer. |
+| `ModelTextureProcessor` | method | `Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | SEMANTIC_EQUIVALENT | `Process(const std::shared_ptr<TextureContent>&, ContentProcessorContext&)` | inherited from TextureProcessor, which is what XNA's override calls. |
+| `PassThroughProcessor` | constructor | `.ctor()` | EXACT_EQUIVALENT | `PassThroughProcessor()` |  |
+| `PassThroughProcessor` | method | `Process(System.Object, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | SEMANTIC_EQUIVALENT | `Process(const ContentObject&, ContentProcessorContext&)` | object is ContentObject. |
 | `SongProcessor` | constructor | `.ctor()` | MISSING |  |  |
 | `SongProcessor` | property | `Quality` | MISSING |  |  |
 | `SongProcessor` | method | `Process(Microsoft.Xna.Framework.Content.Pipeline.Audio.AudioContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | MISSING |  |  |
 | `SoundEffectProcessor` | constructor | `.ctor()` | MISSING |  |  |
 | `SoundEffectProcessor` | property | `Quality` | MISSING |  |  |
 | `SoundEffectProcessor` | method | `Process(Microsoft.Xna.Framework.Content.Pipeline.Audio.AudioContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | MISSING |  |  |
-| `SpriteTextureProcessor` | constructor | `.ctor()` | MISSING |  |  |
-| `SpriteTextureProcessor` | property | `ColorKeyColor` | MISSING |  |  |
-| `SpriteTextureProcessor` | property | `ColorKeyEnabled` | MISSING |  |  |
-| `SpriteTextureProcessor` | property | `GenerateMipmaps` | MISSING |  |  |
-| `SpriteTextureProcessor` | property | `ResizeToPowerOfTwo` | MISSING |  |  |
-| `SpriteTextureProcessor` | property | `TextureFormat` | MISSING |  |  |
-| `SpriteTextureProcessor` | method | `Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | MISSING |  |  |
-| `TextureProcessor` | constructor | `.ctor()` | MISSING |  |  |
-| `TextureProcessor` | property | `ColorKeyColor` | MISSING |  |  |
-| `TextureProcessor` | property | `ColorKeyEnabled` | MISSING |  |  |
-| `TextureProcessor` | property | `GenerateMipmaps` | MISSING |  |  |
-| `TextureProcessor` | property | `PremultiplyAlpha` | MISSING |  |  |
-| `TextureProcessor` | property | `ResizeToPowerOfTwo` | MISSING |  |  |
-| `TextureProcessor` | property | `TextureFormat` | MISSING |  |  |
-| `TextureProcessor` | method | `Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | MISSING |  |  |
-| `TextureProcessorOutputFormat` | enum value | `NoChange = 0` | MISSING |  |  |
-| `TextureProcessorOutputFormat` | enum value | `Color = 1` | MISSING |  |  |
-| `TextureProcessorOutputFormat` | enum value | `DxtCompressed = 2` | MISSING |  |  |
+| `SpriteTextureProcessor` | constructor | `.ctor()` | EXACT_EQUIVALENT | `SpriteTextureProcessor()` |  |
+| `SpriteTextureProcessor` | property | `ColorKeyColor` | EXACT_EQUIVALENT | `getColorKeyColorProperty() / setColorKeyColorProperty()` | inherited; XNA redeclares it only to hide it from the designer. |
+| `SpriteTextureProcessor` | property | `ColorKeyEnabled` | EXACT_EQUIVALENT | `getColorKeyEnabledProperty() / setColorKeyEnabledProperty()` | inherited; XNA redeclares it only to hide it from the designer. |
+| `SpriteTextureProcessor` | property | `GenerateMipmaps` | EXACT_EQUIVALENT | `getGenerateMipmapsProperty() / setGenerateMipmapsProperty()` | inherited; XNA redeclares it only to hide it from the designer. |
+| `SpriteTextureProcessor` | property | `ResizeToPowerOfTwo` | EXACT_EQUIVALENT | `getResizeToPowerOfTwoProperty() / setResizeToPowerOfTwoProperty()` | inherited; XNA redeclares it only to hide it from the designer. |
+| `SpriteTextureProcessor` | property | `TextureFormat` | EXACT_EQUIVALENT | `getTextureFormatProperty() / setTextureFormatProperty()` | inherited; XNA redeclares it only to hide it from the designer. |
+| `SpriteTextureProcessor` | method | `Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | SEMANTIC_EQUIVALENT | `Process(const std::shared_ptr<TextureContent>&, ContentProcessorContext&)` | inherited from TextureProcessor, which is what XNA's override calls. |
+| `TextureProcessor` | constructor | `.ctor()` | EXACT_EQUIVALENT | `TextureProcessor()` |  |
+| `TextureProcessor` | property | `ColorKeyColor` | EXACT_EQUIVALENT | `getColorKeyColorProperty() / setColorKeyColorProperty()` |  |
+| `TextureProcessor` | property | `ColorKeyEnabled` | EXACT_EQUIVALENT | `getColorKeyEnabledProperty() / setColorKeyEnabledProperty()` |  |
+| `TextureProcessor` | property | `GenerateMipmaps` | EXACT_EQUIVALENT | `getGenerateMipmapsProperty() / setGenerateMipmapsProperty()` |  |
+| `TextureProcessor` | property | `PremultiplyAlpha` | EXACT_EQUIVALENT | `getPremultiplyAlphaProperty() / setPremultiplyAlphaProperty()` |  |
+| `TextureProcessor` | property | `ResizeToPowerOfTwo` | EXACT_EQUIVALENT | `getResizeToPowerOfTwoProperty() / setResizeToPowerOfTwoProperty()` |  |
+| `TextureProcessor` | property | `TextureFormat` | EXACT_EQUIVALENT | `getTextureFormatProperty() / setTextureFormatProperty()` |  |
+| `TextureProcessor` | method | `Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | SEMANTIC_EQUIVALENT | `Process(const std::shared_ptr<TextureContent>&, ContentProcessorContext&)` | the texture is an owned shared_ptr, and the processed texture is the same object, as XNA's is. |
+| `TextureProcessorOutputFormat` | enum value | `NoChange = 0` | EXACT_EQUIVALENT | `TextureProcessorOutputFormat::NoChange` |  |
+| `TextureProcessorOutputFormat` | enum value | `Color = 1` | EXACT_EQUIVALENT | `TextureProcessorOutputFormat::Color` |  |
+| `TextureProcessorOutputFormat` | enum value | `DxtCompressed = 2` | EXACT_EQUIVALENT | `TextureProcessorOutputFormat::DxtCompressed` |  |
 | `VertexBufferContent` | constructor | `.ctor()` | MISSING |  |  |
 | `VertexBufferContent` | constructor | `.ctor(System.Int32)` | MISSING |  |  |
 | `VertexBufferContent` | property | `VertexData` | MISSING |  |  |

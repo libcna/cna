@@ -540,8 +540,8 @@ Filled by `parity_report.py` into `docs/xna-content-pipeline-parity-report.md` a
 each phase close. The member denominator the report counts is 705: the inventory's 708 minus the
 3 delegate-plumbing members the report lists separately (§5).
 
-**Current (2026-09-05, after Phase 5 and Phase 6 except `MeshBuilder`/`MeshHelper`): types
-79/128, members 474/705, enum values 6/27, importers 0/10, extensions 0/18, processors 0/12,
+**Current (2026-09-05, after Phase 5, Phase 6 and the first Phase 7 rows): types 86/128,
+members 498/705, enum values 17/27, importers 0/10, extensions 0/18, processors 0/12,
 properties 0/47, intermediate-serializer features §13 complete against the 254-case corpus,
 targets verified 0/3, black-box-verified families 3 (intermediate XML byte for byte; the graphics
 content object model against 266 measurements; the framework's float packing against 68).** The previous plan's routes
@@ -659,15 +659,15 @@ module) with `src/Xna/`; `ContentSerializer*` descriptors in `modules/content/in
 
 | ID | Task | State |
 |---|---|---|
-| `XNAPP-130` | `TextureProcessorOutputFormat`, `MaterialProcessorDefaultEffect`, `EffectProcessorDebugMode` enums (exact values). | [ ] |
-| `XNAPP-131` | `TextureProcessor` (6 properties with XNA defaults), `SpriteTextureProcessor`, `ModelTextureProcessor` as public classes over the canonical texture processor; the XNA defaults (`ColorKeyEnabled=true`, magenta) apply on the XNA façade and through `.contentproj`, the `.cna-content.json` route keeps its documented defaults — recorded as the one deliberate divergence of that route. | [ ] |
+| `XNAPP-130` | `TextureProcessorOutputFormat`, `MaterialProcessorDefaultEffect`, `EffectProcessorDebugMode` enums (exact values). | [x] `Processors/ProcessorEnums.hpp`, values from the inventory metadata and pinned by a test; each is registered with the intermediate serializer under its .NET name. |
+| `XNAPP-131` | `TextureProcessor` (6 properties with XNA defaults), `SpriteTextureProcessor`, `ModelTextureProcessor` as public classes over the canonical texture processor; the XNA defaults (`ColorKeyEnabled=true`, magenta) apply on the XNA façade and through `.contentproj`, the `.cna-content.json` route keeps its documented defaults — recorded as the one deliberate divergence of that route. | [x] `Processors/TextureProcessor.hpp`/`.cpp`, measured first. The defaults are read from the runtime's own objects (`processor/TextureProcessor`, `/SpriteTextureProcessor`, `/ModelTextureProcessor`), and `Process` is measured against a build context the driver supplies, because XNA's own build context is internal. The measured order is colour key, resize to the next power of two, premultiply, mipmaps, format -- and three things a reading would have missed: `NoChange` keeps the bitmap type the texture arrived with (a `Bgr565` texture stays `Bgr565`), `DxtCompressed` picks **Dxt1** unless a pixel is partly transparent (a colour-keyed cutout still fits Dxt1), and a null input is refused with `ArgumentNullException`. The canonical `CNA::Content::Pipeline::TextureProcessor` keeps its own parameter defaults for the `.cna-content.json` route; this façade is the XNA object-model processor and shares the canonical BC encoder through `DxtBitmapContent`. `BitmapContent` now registers every built-in bitmap type eagerly, because converting to a type no instance of which exists yet -- exactly what a compressing processor does -- found an empty registry. |
 | `XNAPP-132` | `FontDescriptionProcessor`, `FontTextureProcessor` (3 properties), `SpriteFontContent`. | [ ] |
 | `XNAPP-133` | `MaterialProcessor` (7 properties, `BuildTexture`/`BuildEffect`/`Process` protected virtuals). | [ ] |
 | `XNAPP-134` | `ModelProcessor` (14 properties; `ConvertMaterial`, `ProcessGeometryUsingMaterial`, `ProcessVertexChannel` protected virtuals; `Process`), `ModelContent` graph types (`ModelBoneContent(Collection)`, `ModelMeshContent(Collection)`, `ModelMeshPartContent(Collection)`, `VertexBufferContent`, `VertexDeclarationContent`) as the typed view of the canonical model IR. | [ ] |
 | `XNAPP-135` | `EffectProcessor` (2 properties), `CompiledEffectContent` (`GetEffectCode`). | [~] `CompiledEffectContent` landed with `XNAPP-094` (both its members, measured), because `EffectMaterialContent` references it. `EffectProcessor` remains. |
 | `XNAPP-136` | `SoundEffectProcessor`/`SongProcessor` (`Quality`), `SoundEffectContent`, `SongContent`; `VideoProcessor` (`VideoSoundtrackType`). | [ ] |
-| `XNAPP-137` | `PassThroughProcessor`. | [ ] |
-| `XNAPP-138` | For every processor: tests with explicit values, omitted values (XNA defaults), and property interactions; defaults asserted against §10. | [ ] |
+| `XNAPP-137` | `PassThroughProcessor`. | [x] `Processors/PassThroughProcessor.hpp`/`.cpp`: an object-to-object processor that answers its input, with the pipeline's `ContentObject` as the `object` carrier. |
+| `XNAPP-138` | For every processor: tests with explicit values, omitted values (XNA defaults), and property interactions; defaults asserted against §10. | [~] `XnaProcessorTests.cpp`: 8 tests over `XNAPP-130`, `131` and `137`, each against the measured corpus rather than against §10's table -- the defaults are now read from the runtime, and §10 agrees with them. The remaining processors follow their own rows. |
 
 ### Phase 8 — MeshBuilder / MeshHelper / model intermediate API
 
@@ -836,9 +836,11 @@ Session 1 (2026-09-05): Phases 0–1 done except `XNAPP-008`/`015`/`016`; Phase 
 `XNAPP-043` (`VideoContent`, with Phase 14), with `032`/`045` partial as their rows say. The parity map
 is edited through `tools/xna-pipeline-oracle/parity_map_edit.py` with a decision document, never
 by hand, and the report regenerates with `parity_report.py`. Phases 4 and 5 done (only the
-`XmlImporter` leg of `074` remains, as `XNAPP-230`). Phase 6 is done except `MeshBuilder` and `MeshHelper`, which no
-row owns yet, and `VertexContent::CreateVertexBuffer`, which waits on `XNAPP-134`
-(`XNAPP-090`–`097`, `099`; `098` partial). The remaining Phase 6 work needs their measurements before their code -- extend
+`XmlImporter` leg of `074` remains, as `XNAPP-230`). Phase 6 is done (`XNAPP-090`–`097`, `099`; `098` partial), except
+`VertexContent::CreateVertexBuffer`, which waits on `XNAPP-134`'s `VertexBufferContent`.
+`MeshBuilder` and `MeshHelper` are Phase 8 (`XNAPP-150`, `151`), not Phase 6. Phase 7 has started:
+`XNAPP-130`, `131` and `137` are done and `138` is partial; the remaining processors are
+`XNAPP-132`–`136`. The next phases need their measurements before their code -- extend
 `tools/xna-pipeline-oracle/graphics/GraphicsContentOracle.cs` the way the texture side was
 measured. The intermediate serializer is
 verified byte for byte against `tests/reference/xna40/intermediate/`; extend the oracle
