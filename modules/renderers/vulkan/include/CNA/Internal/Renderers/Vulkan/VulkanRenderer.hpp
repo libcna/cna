@@ -1363,6 +1363,20 @@ namespace CNA::Internal::Renderers::Vulkan
          */
         void RequireSkinnedStrideEXT(std::size_t stride) const;
 
+        /**
+         * @brief Refuses a vertex stride the legacy colored-primitive pair cannot express.
+         *
+         * plans/plan_vulkan.md `VULKAN-155` (finding F-24). `GetOrCreatePipeline3D` hard-codes a
+         * 16-byte binding and `Position@0` + `Color@12`, while `DrawColoredPrimitives` and
+         * `DrawIndexedColoredPrimitives` copy the buffer at its own stride -- so any other stride
+         * was copied faithfully and read back misaligned, drawing the wrong picture in silence.
+         *
+         * @param stride Byte stride of the vertex record.
+         * @param route  The entry point's name, for the diagnostic.
+         * @throws std::runtime_error naming the stride this route requires and what to use instead.
+         */
+        void RequireLegacyColoredStrideEXT(std::size_t stride, const char* route) const;
+
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void GetViewportSize(int& width, int& height) override;

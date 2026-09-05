@@ -1942,6 +1942,25 @@ namespace CNA::Internal::Renderers::Vulkan
         }
     }
 
+    void VulkanRenderer::RequireLegacyColoredStrideEXT(std::size_t stride, const char* route) const
+    {
+        // VULKAN-155 (F-24). GetOrCreatePipeline3D -- the only pipeline these two entry points
+        // reach -- hard-codes `bind{ 0, 16, VK_VERTEX_INPUT_RATE_VERTEX }` and Position@0 +
+        // Color@12, while the entry points copy `vertexCount * GetStride()` bytes. A 20-byte
+        // record was copied at 20 and read at 16, so vertex 1 came from the middle of vertex 0.
+        // Measured before the fix: both entry points drew the clear colour, silently.
+        //
+        // Refused rather than converted. This pair is a colored-vertex convenience with no
+        // production caller and no GpuDrawParams -- the declaration-driven layout every other
+        // route now takes is not reachable from here -- and D3D9 refuses the same stride by name.
+        // An honest refusal on a legacy surface is worth more than a binding path nothing calls.
+        if (stride != 16)
+            throw std::runtime_error(
+                std::string("Vulkan ") + route + " requires a 16-byte VertexPositionColor record; "
+                "this buffer's stride is " + std::to_string(stride) +
+                ". Use DrawPrimitivesEx, whose layout comes from the VertexDeclaration.");
+    }
+
     void VulkanRenderer::RequireSkinnedStrideEXT(std::size_t stride) const
     {
         // VULKAN-156. GetOrCreatePipelineSkinned3D and its VertexLit sibling both reduce their
@@ -11498,6 +11517,7 @@ namespace CNA::Internal::Renderers::Vulkan
         const auto& vulkanVB = static_cast<const VulkanVertexBufferRenderer&>(vb);
         uint32_t drawCount = static_cast<uint32_t>(VertexCountForPrimitives(primitive, primitiveCount));
         std::size_t stride = vulkanVB.GetStride() > 0 ? vulkanVB.GetStride() : 16;
+        RequireLegacyColoredStrideEXT(stride, "DrawColoredPrimitives");
 
         Pending3DDraw d{};
         // VULKAN-097: XNA's D3D9 pixel-centre convention, post-multiplied in row-vector order.
@@ -11540,6 +11560,7 @@ namespace CNA::Internal::Renderers::Vulkan
         const auto& vulkanIB = static_cast<const VulkanIndexBufferRenderer&>(ib);
         uint32_t indexCount = static_cast<uint32_t>(VertexCountForPrimitives(primitive, primitiveCount));
         std::size_t stride  = vulkanVB.GetStride() > 0 ? vulkanVB.GetStride() : 16;
+        RequireLegacyColoredStrideEXT(stride, "DrawIndexedColoredPrimitives");
         int vertexCount     = vulkanVB.GetVertexCount();
 
         Pending3DDraw d{};

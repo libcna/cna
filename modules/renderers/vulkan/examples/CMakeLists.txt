@@ -1069,6 +1069,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_declared_effect_layout
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plans/plan_vulkan.md VULKAN-155 (F-24): the legacy DrawColoredPrimitives pair reaches the one
+        # pipeline whose binding stride is hard-coded to 16, while both entry points copy the buffer
+        # at its real stride. Of bind it / refuse it / mis-read it, this pins which one happens.
+        cna_vulkan_test(cna_test_vulkan_legacy_colored_stride
+                        vulkan_legacy_colored_stride_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_LegacyColoredStride
+            COMMAND cna_test_vulkan_legacy_colored_stride
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plans/plan_vulkan.md VULKAN-156: what a stock family does when the stream does not supply
         # one of its shader's inputs. Rendering the texel and refusing by name are both acceptable;
         # rasterizing NOTHING and reporting success is not, and was invisible to the conformance
