@@ -530,6 +530,55 @@ namespace Cna.Xna40.IntermediateOracle
             Console.WriteLine(status.PadRight(20) + name + (note.Length > 0 ? "  -- " + note : ""));
         }
 
+        /// The least an importer needs: a context that logs nothing and keeps what it is told.
+        private sealed class ProbeImporterContext : ContentImporterContext
+        {
+            private readonly ContentBuildLogger logger = new ProbeLogger();
+            public readonly List<string> Dependencies = new List<string>();
+            public override string IntermediateDirectory { get { return "obj"; } }
+            public override ContentBuildLogger Logger { get { return logger; } }
+            public override string OutputDirectory { get { return "bin"; } }
+            public override void AddDependency(string filename) { Dependencies.Add(filename); }
+        }
+
+        private sealed class ProbeLogger : ContentBuildLogger
+        {
+            public override void LogImportantMessage(string message, params object[] messageArgs) { }
+            public override void LogMessage(string message, params object[] messageArgs) { }
+            public override void LogWarning(string helpLink, ContentIdentity contentIdentity, string message, params object[] messageArgs) { }
+        }
+
+        /// What XmlImporter answers for one document: the type it built, whether it recorded the
+        /// file as a dependency, and whether it stamped an identity on what it returned.
+        private static void Import(string directory, string name, string xml)
+        {
+            string path = Path.Combine(directory, name + ".importer.xml");
+            string status;
+            string note = "";
+            if (xml != null) { File.WriteAllText(path, xml); }
+            try
+            {
+                var importer = new XmlImporter();
+                var context = new ProbeImporterContext();
+                object value = importer.Import(xml == null ? Path.Combine(directory, "absent.xml") : path, context);
+                var item = value as ContentItem;
+                status = "imported";
+                note = "type=" + (value == null ? "null" : value.GetType().FullName) +
+                       " dependencies=" + context.Dependencies.Count +
+                       " identity=" + (item == null ? "not-a-content-item"
+                                                    : item.Identity == null ? "null"
+                                                    : Path.GetFileName(item.Identity.SourceFilename ?? "") +
+                                                      "/" + (item.Identity.SourceTool ?? "null"));
+            }
+            catch (Exception error)
+            {
+                status = "refused";
+                note = error.GetType().Name + ": " + error.Message;
+            }
+            Record(name, "Microsoft.Xna.Framework.Content.Pipeline.XmlImporter", status, note);
+            Console.WriteLine(status.PadRight(20) + name + (note.Length > 0 ? "  -- " + note : ""));
+        }
+
         private static int Main(string[] args)
         {
             if (args.Length != 1)
@@ -989,6 +1038,22 @@ namespace Cna.Xna40.IntermediateOracle
                 "<XnaContent><Asset Type=\"Cna.Xna40.IntermediateOracle.Node\"><Name>a</Name><Next>#B</Next></Asset><Resources><Resource ID=\"#B\" Type=\"Cna.Xna40.IntermediateOracle.Node\"><Name>b</Name><Next>#Z</Next></Resource></Resources></XnaContent>");
             Accept<Node>(directory, "accept_shared_reference_whitespace",
                 "<XnaContent><Asset Type=\"Cna.Xna40.IntermediateOracle.Node\"><Name>a</Name><Next> #B </Next></Asset><Resources><Resource ID=\"#B\" Type=\"Cna.Xna40.IntermediateOracle.Node\"><Name>b</Name><Next /></Resource></Resources></XnaContent>");
+
+            // ---- XmlImporter: the same serializer reached through the importer -------------------
+            Import(directory, "importer_node",
+                "<XnaContent><Asset Type=\"Cna.Xna40.IntermediateOracle.Node\"><Name>a</Name><Next Null=\"true\" /></Asset></XnaContent>");
+            Import(directory, "importer_content_item",
+                "<XnaContent><Asset Type=\"Microsoft.Xna.Framework.Content.Pipeline.Graphics.BoneContent\"><Name>Bone</Name><Transform>1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1</Transform></Asset></XnaContent>");
+            Import(directory, "importer_int",
+                "<XnaContent><Asset Type=\"int\">42</Asset></XnaContent>");
+            Import(directory, "importer_string_list",
+                "<XnaContent><Asset Type=\"System.Collections.Generic.List[string]\"><Item>a</Item><Item>b</Item></Asset></XnaContent>");
+            Import(directory, "importer_missing_file", null);
+            Import(directory, "importer_not_xml", "this is not a document");
+            Import(directory, "importer_no_asset", "<XnaContent></XnaContent>");
+            Import(directory, "importer_unknown_type",
+                "<XnaContent><Asset Type=\"Cna.Xna40.NoSuchType\"><Name>a</Name></Asset></XnaContent>");
+            Import(directory, "importer_empty_document", "");
 
             File.WriteAllText(Path.Combine(directory, "manifest.json"),
                 "{\n \"producer\": \"Microsoft XNA Game Studio 4.0 IntermediateSerializer, driven by tools/xna-pipeline-oracle/intermediate/IntermediateOracle.cs\",\n \"runtime\": \"" +

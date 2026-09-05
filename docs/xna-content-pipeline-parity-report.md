@@ -10,17 +10,17 @@
 
 | Quantity | Implemented (EXACT + SEMANTIC + HOST_SUBSTITUTION) | EXTERNAL_BLOCKED | MISSING |
 |---|---|---:|---:|
-| public/protected types | 112/128 (87.5%) | 0 | 16 |
-| public/protected members | 620/705 (87.9%) | 1 | 84 |
+| public/protected types | 113/128 (88.3%) | 0 | 15 |
+| public/protected members | 622/705 (88.2%) | 1 | 82 |
 | enum values | 27/27 (100.0%) | 0 | 0 |
-| built-in importers | 0/10 (0.0%) | 0 | 10 |
+| built-in importers | 1/10 (10.0%) | 0 | 9 |
 | built-in processors | 11/12 (91.7%) | 0 | 1 |
 | processor properties | 46/47 (97.9%) | 0 | 1 |
 
 Status vocabulary: EXACT_EQUIVALENT, SEMANTIC_EQUIVALENT (spelling differs, capability identical; note says how),
 HOST_SUBSTITUTION (Microsoft-host mechanism replaced; note says how), EXTERNAL_BLOCKED (note names the
-unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 45, SEMANTIC_EQUIVALENT 66, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 16.
-Member status by value: EXACT_EQUIVALENT 400, SEMANTIC_EQUIVALENT 214, HOST_SUBSTITUTION 6, EXTERNAL_BLOCKED 1, MISSING 84.
+unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 45, SEMANTIC_EQUIVALENT 67, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 15.
+Member status by value: EXACT_EQUIVALENT 401, SEMANTIC_EQUIVALENT 215, HOST_SUBSTITUTION 6, EXTERNAL_BLOCKED 1, MISSING 82.
 
 Rules applied mechanically: 3 delegate plumbing members are listed in section 7 and not counted; 3 exception
 serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serialization has no C++ counterpart).
@@ -30,7 +30,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | Namespace | Types | Implemented | Blocked | Missing |
 |---|---:|---:|---:|---:|
 | `Microsoft.Xna.Framework.Content.Pipeline.Audio` | 5 | 5 | 0 | 0 |
-| `Microsoft.Xna.Framework.Content.Pipeline` | 32 | 21 | 0 | 11 |
+| `Microsoft.Xna.Framework.Content.Pipeline` | 32 | 22 | 0 | 10 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Graphics` | 47 | 47 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Processors` | 28 | 27 | 0 | 1 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler` | 5 | 5 | 0 | 0 |
@@ -168,7 +168,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `…` | `WmaImporter` | class | MISSING |  |  |
 | `…` | `WmvImporter` | class | MISSING |  |  |
 | `…` | `XImporter` | class | MISSING |  |  |
-| `…` | `XmlImporter` | class | MISSING |  |  |
+| `…` | `XmlImporter` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::XmlImporter` | the imported object is a ContentObject rather than a System.Object reference, which is what a boxed value of any type is here; the descriptor XNA declares through an attribute is answered by a static Attribute(). |
 
 ## 4. Importers
 
@@ -183,7 +183,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `WmaImporter` | .wma | `SongProcessor` | MISSING |  |  |
 | `WmvImporter` | .wmv | `VideoProcessor` | MISSING |  |  |
 | `XImporter` | .x | `ModelProcessor` | MISSING |  |  |
-| `XmlImporter` | .xml | `-` | MISSING |  |  |
+| `XmlImporter` | .xml | `-` | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::XmlImporter` | the imported object is a ContentObject rather than a System.Object reference, which is what a boxed value of any type is here; the descriptor XNA declares through an attribute is answered by a static Attribute(). |
 
 ## 5. Processors and properties
 
@@ -986,8 +986,8 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `XImporter` | method | `Dispose()` | MISSING |  |  |
 | `XImporter` | method | `Dispose(System.Boolean)` | MISSING |  |  |
 | `XImporter` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | MISSING |  |  |
-| `XmlImporter` | constructor | `.ctor()` | MISSING |  |  |
-| `XmlImporter` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | MISSING |  |  |
+| `XmlImporter` | constructor | `.ctor()` | EXACT_EQUIVALENT | `XmlImporter()` |  |
+| `XmlImporter` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | SEMANTIC_EQUIVALENT | `Import(const std::string&, ContentImporterContext&) -> ContentObject` | the object is boxed as a ContentObject; a missing file is refused with FileNotFoundException and a malformed document with XNA's own deserialization sentence, whose parser-specific tail differs and is recorded in docs/xna-intermediate-xml-format.md. |
 
 ### 7.1 CLR plumbing not counted
 

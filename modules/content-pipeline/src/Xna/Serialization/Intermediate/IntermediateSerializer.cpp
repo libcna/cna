@@ -1518,6 +1518,35 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
         RegisterTypeSerializer(std::make_unique<Graphics::detail::VertexChannelSerializer<std::int32_t>>());
         RegisterTypeSerializer(std::make_unique<Graphics::detail::VertexChannelCollectionSerializer>());
         Graphics::detail::VertexChannelFactory::RegisterBuiltIns();
+        // XNA reaches a `List<T>` by reflection, so a document naming one resolves whether or not
+        // any C++ caller has asked for that instantiation. Registering the lists of the types the
+        // serializer already knows is what gives an untyped read -- an `XmlImporter` document
+        // whose `Asset Type` is `List[string]` -- the same reach (XNAPP-230).
+        const auto list = []<typename T>() { (void)IntermediateSerializer::TypeSerializerFor<std::vector<T>>(); };
+        list.template operator()<bool>();
+        list.template operator()<std::int8_t>();
+        list.template operator()<std::uint8_t>();
+        list.template operator()<std::int16_t>();
+        list.template operator()<std::uint16_t>();
+        list.template operator()<std::int32_t>();
+        list.template operator()<std::uint32_t>();
+        list.template operator()<std::int64_t>();
+        list.template operator()<std::uint64_t>();
+        list.template operator()<float>();
+        list.template operator()<double>();
+        list.template operator()<std::string>();
+        list.template operator()<char16_t>();
+        list.template operator()<Vector2>();
+        list.template operator()<Vector3>();
+        list.template operator()<Vector4>();
+        list.template operator()<Quaternion>();
+        list.template operator()<Matrix>();
+        list.template operator()<Plane>();
+        list.template operator()<Rectangle>();
+        list.template operator()<Point>();
+        list.template operator()<Color>();
+        list.template operator()<System::TimeSpan>();
+        list.template operator()<System::DateTime>();
         IntermediateSerializer::TypeSerializerFor<Graphics::VertexContent>();
         // A geometry batch names its material through a MaterialContent reference, and the writer
         // dispatches on the dynamic type, so every stock material has to be known already.

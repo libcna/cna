@@ -741,7 +741,7 @@ module) with `src/Xna/`; `ContentSerializer*` descriptors in `modules/content/in
 
 | ID | Task | State |
 |---|---|---|
-| `XNAPP-230` | `XmlImporter` (no default processor) over Phase 5; `.xml` → `Object` → `PassThroughProcessor` → automatic writer → XNB; XNA's own XML fixtures (the samples' `.xml` content) as the black-box corpus. | [ ] |
+| `XNAPP-230` | `XmlImporter` (no default processor) over Phase 5; `.xml` → `Object` → `PassThroughProcessor` → automatic writer → XNB; XNA's own XML fixtures (the samples' `.xml` content) as the black-box corpus. | [x] `XmlImporter` over the Phase 5 serializer, measured through nine new `importer_*` cases in the intermediate corpus (the oracle now drives the genuine importer, not only the serializer). What they settled: the importer builds **whatever the document's `Asset Type` names** -- a content item, a primitive, a list -- and **adds no dependency** to its context and leaves an imported content item's `Identity` **null**; a file that is not there is refused with the runtime's own `FileNotFoundException` rather than a content one; a malformed document, a missing `Asset`, an unknown type and an empty file each carry the serializer's own message. The two the XML parser itself rejects keep XNA's sentence and carry this parser's reason, a divergence recorded in `docs/xna-intermediate-xml-format.md` §12. Reaching an untyped `List[string]` needed one thing CNA did not have: XNA finds a `List<T>` by reflection, so the built-in registration now instantiates the lists of every type the serializer already knows, which is what gives an untyped read the same reach. No default processor, as XNA declares none. |
 
 ### Phase 18 — `.contentproj` compatibility
 

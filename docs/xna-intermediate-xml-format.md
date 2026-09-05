@@ -299,6 +299,11 @@ XML line and position; the message texts above are what CNA reproduces.
 Every difference between CNA's serializer and the corpus is one of these, each also named in
 the corpus test (`modules/content-pipeline/tests/…/XnaIntermediateSerializerTests.cpp`):
 
+* **A parser error reads differently.** A document the XML parser itself rejects -- not the
+  serializer -- is refused with XNA's own sentence, "There was an error while deserializing
+  intermediate XML.", followed by *this* parser's reason. .NET says "Data at the root level is
+  invalid. Line 1, position 1." and "Root element is missing." where CNA's names its own error.
+  The sentence is the part callers match on, and it is the same.
 * **`std::string` has no null.** A C# `string` member that is null writes `Null="true"`; a C++
   `std::string` cannot, so it never writes `Null="true"` and reads it as the empty string. A
   `std::optional<std::string>` member behaves exactly like the C# string.

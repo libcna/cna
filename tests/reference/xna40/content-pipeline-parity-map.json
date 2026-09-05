@@ -4642,20 +4642,20 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.XmlImporter": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::XmlImporter",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/XmlImporter.hpp",
+   "note": "the imported object is a ContentObject rather than a System.Object reference, which is what a boxed value of any type is here; the descriptor XNA declares through an attribute is answered by a static Attribute().",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "XmlImporter()",
      "note": ""
     },
     "method:Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Import(const std::string&, ContentImporterContext&) -> ContentObject",
+     "note": "the object is boxed as a ContentObject; a missing file is refused with FileNotFoundException and a malformed document with XNA's own deserialization sentence, whose parser-specific tail differs and is recorded in docs/xna-intermediate-xml-format.md."
     }
    }
   }
