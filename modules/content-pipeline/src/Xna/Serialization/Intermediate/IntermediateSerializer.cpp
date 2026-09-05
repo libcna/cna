@@ -16,7 +16,9 @@
 
 #include "Microsoft/Xna/Framework/BoundingBox.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/TextureReferenceDictionary.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/VertexCollections.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/detail/AnimationChannelSerializer.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/CollectionSerializer.hpp"
 #include "Microsoft/Xna/Framework/BoundingSphere.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Curve.hpp"
@@ -1501,6 +1503,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
         // animation/serialize_dictionary), and the channel itself, which is a collection of
         // keyframes rather than a described type.
         RegisterTypeSerializer(std::make_unique<Graphics::detail::AnimationChannelSerializer>());
+        // The vertex-side collections, which XNA reaches through the same reflective path as a
+        // List<T>: packed text for the single-token elements, one element apiece otherwise
+        // (measured, indexcollection/serialize, positioncollection/serialize, boneweight/serialize).
+        RegisterTypeSerializer(std::make_unique<CollectionSerializer<Graphics::IndexCollection, std::int32_t>>());
+        RegisterTypeSerializer(std::make_unique<CollectionSerializer<Graphics::PositionCollection, Vector3>>());
+        RegisterTypeSerializer(
+            std::make_unique<CollectionSerializer<Graphics::BoneWeightCollection, Graphics::BoneWeight>>());
         IntermediateSerializer::TypeSerializerFor<Graphics::AnimationContent>();
         RegisterTypeSerializer(
             std::make_unique<NamedValueDictionarySerializer<Graphics::AnimationChannelDictionary,

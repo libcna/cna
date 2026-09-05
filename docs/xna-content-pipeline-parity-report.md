@@ -10,8 +10,8 @@
 
 | Quantity | Implemented (EXACT + SEMANTIC + HOST_SUBSTITUTION) | EXTERNAL_BLOCKED | MISSING |
 |---|---|---:|---:|
-| public/protected types | 63/128 (49.2%) | 0 | 65 |
-| public/protected members | 381/705 (54.0%) | 0 | 324 |
+| public/protected types | 68/128 (53.1%) | 0 | 60 |
+| public/protected members | 403/705 (57.2%) | 0 | 302 |
 | enum values | 6/27 (22.2%) | 0 | 21 |
 | built-in importers | 0/10 (0.0%) | 0 | 10 |
 | built-in processors | 0/12 (0.0%) | 0 | 12 |
@@ -19,8 +19,8 @@
 
 Status vocabulary: EXACT_EQUIVALENT, SEMANTIC_EQUIVALENT (spelling differs, capability identical; note says how),
 HOST_SUBSTITUTION (Microsoft-host mechanism replaced; note says how), EXTERNAL_BLOCKED (note names the
-unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 33, SEMANTIC_EQUIVALENT 29, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 65.
-Member status by value: EXACT_EQUIVALENT 254, SEMANTIC_EQUIVALENT 122, HOST_SUBSTITUTION 5, EXTERNAL_BLOCKED 0, MISSING 324.
+unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 35, SEMANTIC_EQUIVALENT 32, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 60.
+Member status by value: EXACT_EQUIVALENT 270, SEMANTIC_EQUIVALENT 128, HOST_SUBSTITUTION 5, EXTERNAL_BLOCKED 0, MISSING 302.
 
 Rules applied mechanically: 3 delegate plumbing members are listed in section 7 and not counted; 3 exception
 serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serialization has no C++ counterpart).
@@ -31,7 +31,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 |---|---:|---:|---:|---:|
 | `Microsoft.Xna.Framework.Content.Pipeline.Audio` | 5 | 0 | 0 | 5 |
 | `Microsoft.Xna.Framework.Content.Pipeline` | 32 | 21 | 0 | 11 |
-| `Microsoft.Xna.Framework.Content.Pipeline.Graphics` | 47 | 29 | 0 | 18 |
+| `Microsoft.Xna.Framework.Content.Pipeline.Graphics` | 47 | 34 | 0 | 13 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Processors` | 28 | 1 | 0 | 27 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler` | 5 | 5 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate` | 7 | 7 | 0 | 0 |
@@ -69,8 +69,8 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `….Graphics` | `BasicMaterialContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::BasicMaterialContent` | Adds no state: every property is a view over the base's OpaqueData or Textures, verified entry by entry against tests/reference/xna40/graphics (case material/basic_properties or material/basic_properties). |
 | `….Graphics` | `BitmapContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::BitmapContent` | All 13 members present. The copy protocol runs in XNA's order -- argument validation, zero-size no-op, same-instance snapshot, destination TryCopyFrom, source TryCopyTo, then the Vector4 intermediate -- verified against tests/reference/xna40/graphics. |
 | `….Graphics` | `BoneContent` | class | MISSING |  |  |
-| `….Graphics` | `BoneWeight` | struct | MISSING |  |  |
-| `….Graphics` | `BoneWeightCollection` | class | MISSING |  |  |
+| `….Graphics` | `BoneWeight` | struct | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::BoneWeight` | A value type here as in XNA, with the measured guards: the name may not be empty and the weight must lie in [0, 1], NaN included because neither comparison is true of it (boneweight/weight_range). Both properties are read-only and neither is serialized, so a weight is an empty <Item /> element. |
+| `….Graphics` | `BoneWeightCollection` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::BoneWeightCollection` |  |
 | `….Graphics` | `DualTextureMaterialContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::DualTextureMaterialContent` | Adds no state: every property is a view over the base's OpaqueData or Textures, verified entry by entry against tests/reference/xna40/graphics (case material/dualtexture_properties or material/basic_properties). |
 | `….Graphics` | `Dxt1BitmapContent` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::Dxt1BitmapContent` |  |
 | `….Graphics` | `Dxt3BitmapContent` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::Dxt3BitmapContent` |  |
@@ -83,7 +83,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `….Graphics` | `FontDescriptionStyle` | enum | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::FontDescriptionStyle` |  |
 | `….Graphics` | `GeometryContent` | class | MISSING |  |  |
 | `….Graphics` | `GeometryContentCollection` | class | MISSING |  |  |
-| `….Graphics` | `IndexCollection` | class | MISSING |  |  |
+| `….Graphics` | `IndexCollection` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::IndexCollection` | AddRange takes a std::vector rather than an IEnumerable, so the ArgumentNullException XNA gives for a null sequence has no counterpart (measured, indexcollection/addrange_null). |
 | `….Graphics` | `IndirectPositionCollection` | class | MISSING |  |  |
 | `….Graphics` | `MaterialContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::MaterialContent` | The five accessors XNA declares protected stay protected, and a C++ null is an empty std::optional or a null shared_ptr. Every behaviour is pinned to tests/reference/xna40/graphics (cases material/*): a property set to null removes its entry, a property whose stored value has another type reads as null rather than refusing, and an empty key is refused the way the runtime refuses a null one. |
 | `….Graphics` | `MeshBuilder` | class | MISSING |  |  |
@@ -94,7 +94,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `….Graphics` | `NodeContent` | class | MISSING |  |  |
 | `….Graphics` | `NodeContentCollection` | class | MISSING |  |  |
 | `….Graphics` | `PixelBitmapContent<T>` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::PixelBitmapContent<T>` | T is constrained by a concept to the 22 pixel types XNA permits (detail/PixelTraits.hpp), where XNA discovers them through VectorConverter at run time. |
-| `….Graphics` | `PositionCollection` | class | MISSING |  |  |
+| `….Graphics` | `PositionCollection` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::PositionCollection` |  |
 | `….Graphics` | `SkinnedMaterialContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::SkinnedMaterialContent` | Adds no state: every property is a view over the base's OpaqueData or Textures, verified entry by entry against tests/reference/xna40/graphics (case material/skinned_properties or material/basic_properties). |
 | `….Graphics` | `Texture2DContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::Texture2DContent` | The Mipmaps property is the single fixed face, so the setter takes the owning shared_ptr that replaces it rather than assigning a value; everything else is the direct translation. |
 | `….Graphics` | `Texture3DContent` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::Texture3DContent` | The one texture whose face collection is resizable, and whose mipmap generation halves the depth as well. |
@@ -104,7 +104,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `….Graphics` | `VectorConverter` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::VectorConverter` | The 22-entry surface/vertex format table is pinned to tests/reference/xna40/graphics case by case. |
 | `….Graphics` | `VertexChannel` | class | MISSING |  |  |
 | `….Graphics` | `VertexChannelCollection` | class | MISSING |  |  |
-| `….Graphics` | `VertexChannelNames` | class | MISSING |  |  |
+| `….Graphics` | `VertexChannelNames` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::VertexChannelNames` | Every name and refusal is pinned to tests/reference/xna40/graphics (cases vertexnames/*), including the two the API does not show: the blend weights channel is spelled `Weights`, not by its VertexElementUsage name, and a name with no trailing digits decodes to usage index 0. |
 | `….Graphics` | `VertexChannel<T>` | class | MISSING |  |  |
 | `….Graphics` | `VertexContent` | class | MISSING |  |  |
 | `…` | `IContentImporter` | interface | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::IContentImporter` | The explicit interface implementation object IContentImporter.Import(...) is a non-virtual Import returning ContentObject, reachable only through the interface; the typed ContentImporter<T>::Import hides it exactly as C# does. |
@@ -415,12 +415,12 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `BitmapContent` | method | `TryGetFormat(out Microsoft.Xna.Framework.Graphics.SurfaceFormat)` | EXACT_EQUIVALENT | `TryGetFormat(SurfaceFormat&)` |  |
 | `BitmapContent` | method | `ValidateCopyArguments(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle)` | SEMANTIC_EQUIVALENT | `ValidateCopyArguments(const std::shared_ptr<BitmapContent>&, Rectangle, const std::shared_ptr<BitmapContent>&, Rectangle)` | reference parameters are shared_ptr carriers: a BitmapContent is polymorphic and owned, so CNA passes std::shared_ptr<BitmapContent> where XNA passes the reference itself. |
 | `BoneContent` | constructor | `.ctor()` | MISSING |  |  |
-| `BoneWeight` | constructor | `.ctor(System.String, System.Single)` | MISSING |  |  |
-| `BoneWeight` | property | `BoneName` | MISSING |  |  |
-| `BoneWeight` | property | `Weight` | MISSING |  |  |
-| `BoneWeightCollection` | constructor | `.ctor()` | MISSING |  |  |
-| `BoneWeightCollection` | method | `NormalizeWeights()` | MISSING |  |  |
-| `BoneWeightCollection` | method | `NormalizeWeights(System.Int32)` | MISSING |  |  |
+| `BoneWeight` | constructor | `.ctor(System.String, System.Single)` | SEMANTIC_EQUIVALENT | `BoneWeight(std::string, Single)` | C++ has no null std::string, so an empty name carries the refusal XNA gives for a null one. |
+| `BoneWeight` | property | `BoneName` | EXACT_EQUIVALENT | `getBoneNameProperty()` |  |
+| `BoneWeight` | property | `Weight` | EXACT_EQUIVALENT | `getWeightProperty()` |  |
+| `BoneWeightCollection` | constructor | `.ctor()` | EXACT_EQUIVALENT | `BoneWeightCollection()` |  |
+| `BoneWeightCollection` | method | `NormalizeWeights()` | EXACT_EQUIVALENT | `NormalizeWeights()` | Not the maxWeights overload with Count: an empty collection refuses with the normalization message rather than the range check (measured, boneweight/collection_normalize_empty). |
+| `BoneWeightCollection` | method | `NormalizeWeights(System.Int32)` | EXACT_EQUIVALENT | `NormalizeWeights(intcs)` |  |
 | `DualTextureMaterialContent` | constant | `AlphaKey` | SEMANTIC_EQUIVALENT | `DualTextureMaterialContent::AlphaKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
 | `DualTextureMaterialContent` | constant | `DiffuseColorKey` | SEMANTIC_EQUIVALENT | `DualTextureMaterialContent::DiffuseColorKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
 | `DualTextureMaterialContent` | constant | `Texture2Key` | SEMANTIC_EQUIVALENT | `DualTextureMaterialContent::Texture2Key` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
@@ -488,8 +488,8 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `GeometryContent` | property | `Vertices` | MISSING |  |  |
 | `GeometryContentCollection` | method | `GetParent(Microsoft.Xna.Framework.Content.Pipeline.Graphics.GeometryContent)` | MISSING |  |  |
 | `GeometryContentCollection` | method | `SetParent(Microsoft.Xna.Framework.Content.Pipeline.Graphics.GeometryContent, Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshContent)` | MISSING |  |  |
-| `IndexCollection` | constructor | `.ctor()` | MISSING |  |  |
-| `IndexCollection` | method | `AddRange(System.Collections.Generic.IEnumerable<System.Int32>)` | MISSING |  |  |
+| `IndexCollection` | constructor | `.ctor()` | EXACT_EQUIVALENT | `IndexCollection()` |  |
+| `IndexCollection` | method | `AddRange(System.Collections.Generic.IEnumerable<System.Int32>)` | SEMANTIC_EQUIVALENT | `AddRange(const std::vector<intcs>&)` | IEnumerable<int> is a std::vector<intcs>, which cannot be null. |
 | `IndirectPositionCollection` | property | `Count` | MISSING |  |  |
 | `IndirectPositionCollection` | indexer | `Item[System.Int32]` | MISSING |  |  |
 | `IndirectPositionCollection` | method | `Contains(Microsoft.Xna.Framework.Vector3)` | MISSING |  |  |
@@ -558,7 +558,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `PixelBitmapContent<T>` | method | `TryCopyFrom(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Rectangle)` | SEMANTIC_EQUIVALENT | `TryCopyFrom(const std::shared_ptr<BitmapContent>&, Rectangle, Rectangle)` | reference parameters are shared_ptr carriers: a BitmapContent is polymorphic and owned, so CNA passes std::shared_ptr<BitmapContent> where XNA passes the reference itself. |
 | `PixelBitmapContent<T>` | method | `TryCopyTo(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Rectangle)` | SEMANTIC_EQUIVALENT | `TryCopyTo(const std::shared_ptr<BitmapContent>&, Rectangle, Rectangle)` | reference parameters are shared_ptr carriers: a BitmapContent is polymorphic and owned, so CNA passes std::shared_ptr<BitmapContent> where XNA passes the reference itself. |
 | `PixelBitmapContent<T>` | method | `TryGetFormat(out Microsoft.Xna.Framework.Graphics.SurfaceFormat)` | EXACT_EQUIVALENT | `TryGetFormat(SurfaceFormat&)` |  |
-| `PositionCollection` | constructor | `.ctor()` | MISSING |  |  |
+| `PositionCollection` | constructor | `.ctor()` | EXACT_EQUIVALENT | `PositionCollection()` |  |
 | `SkinnedMaterialContent` | constant | `AlphaKey` | SEMANTIC_EQUIVALENT | `SkinnedMaterialContent::AlphaKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
 | `SkinnedMaterialContent` | constant | `DiffuseColorKey` | SEMANTIC_EQUIVALENT | `SkinnedMaterialContent::DiffuseColorKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
 | `SkinnedMaterialContent` | constant | `EmissiveColorKey` | SEMANTIC_EQUIVALENT | `SkinnedMaterialContent::EmissiveColorKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
@@ -622,19 +622,19 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `VertexChannelCollection` | method | `Remove(Microsoft.Xna.Framework.Content.Pipeline.Graphics.VertexChannel)` | MISSING |  |  |
 | `VertexChannelCollection` | method | `Remove(System.String)` | MISSING |  |  |
 | `VertexChannelCollection` | method | `RemoveAt(System.Int32)` | MISSING |  |  |
-| `VertexChannelNames` | method | `Binormal(System.Int32)` | MISSING |  |  |
-| `VertexChannelNames` | method | `Color(System.Int32)` | MISSING |  |  |
-| `VertexChannelNames` | method | `DecodeBaseName(System.String)` | MISSING |  |  |
-| `VertexChannelNames` | method | `DecodeUsageIndex(System.String)` | MISSING |  |  |
-| `VertexChannelNames` | method | `EncodeName(Microsoft.Xna.Framework.Graphics.VertexElementUsage, System.Int32)` | MISSING |  |  |
-| `VertexChannelNames` | method | `EncodeName(System.String, System.Int32)` | MISSING |  |  |
-| `VertexChannelNames` | method | `Normal()` | MISSING |  |  |
-| `VertexChannelNames` | method | `Normal(System.Int32)` | MISSING |  |  |
-| `VertexChannelNames` | method | `Tangent(System.Int32)` | MISSING |  |  |
-| `VertexChannelNames` | method | `TextureCoordinate(System.Int32)` | MISSING |  |  |
-| `VertexChannelNames` | method | `TryDecodeUsage(System.String, out Microsoft.Xna.Framework.Graphics.VertexElementUsage)` | MISSING |  |  |
-| `VertexChannelNames` | method | `Weights()` | MISSING |  |  |
-| `VertexChannelNames` | method | `Weights(System.Int32)` | MISSING |  |  |
+| `VertexChannelNames` | method | `Binormal(System.Int32)` | EXACT_EQUIVALENT | `Binormal(intcs)` |  |
+| `VertexChannelNames` | method | `Color(System.Int32)` | EXACT_EQUIVALENT | `Color(intcs)` |  |
+| `VertexChannelNames` | method | `DecodeBaseName(System.String)` | SEMANTIC_EQUIVALENT | `DecodeBaseName(const std::string&)` | C++ has no null std::string, so an empty name carries the refusal XNA gives for a null one. |
+| `VertexChannelNames` | method | `DecodeUsageIndex(System.String)` | SEMANTIC_EQUIVALENT | `DecodeUsageIndex(const std::string&)` | C++ has no null std::string, so an empty name carries the refusal XNA gives for a null one. |
+| `VertexChannelNames` | method | `EncodeName(Microsoft.Xna.Framework.Graphics.VertexElementUsage, System.Int32)` | EXACT_EQUIVALENT | `EncodeName(VertexElementUsage, intcs)` |  |
+| `VertexChannelNames` | method | `EncodeName(System.String, System.Int32)` | SEMANTIC_EQUIVALENT | `EncodeName(const std::string&, intcs)` | C++ has no null std::string, so an empty name carries the refusal XNA gives for a null one. |
+| `VertexChannelNames` | method | `Normal()` | EXACT_EQUIVALENT | `Normal()` |  |
+| `VertexChannelNames` | method | `Normal(System.Int32)` | EXACT_EQUIVALENT | `Normal(intcs)` |  |
+| `VertexChannelNames` | method | `Tangent(System.Int32)` | EXACT_EQUIVALENT | `Tangent(intcs)` |  |
+| `VertexChannelNames` | method | `TextureCoordinate(System.Int32)` | EXACT_EQUIVALENT | `TextureCoordinate(intcs)` |  |
+| `VertexChannelNames` | method | `TryDecodeUsage(System.String, out Microsoft.Xna.Framework.Graphics.VertexElementUsage)` | SEMANTIC_EQUIVALENT | `TryDecodeUsage(const std::string&, VertexElementUsage&)` | C++ has no null std::string, so an empty name carries the refusal XNA gives for a null one. The out parameter is a reference, left at Position when the name names no usage, as measured. |
+| `VertexChannelNames` | method | `Weights()` | EXACT_EQUIVALENT | `Weights()` |  |
+| `VertexChannelNames` | method | `Weights(System.Int32)` | EXACT_EQUIVALENT | `Weights(intcs)` |  |
 | `VertexChannel<T>` | property | `ElementType` | MISSING |  |  |
 | `VertexChannel<T>` | indexer | `Item[System.Int32]` | MISSING |  |  |
 | `VertexChannel<T>` | method | `Contains(T)` | MISSING |  |  |

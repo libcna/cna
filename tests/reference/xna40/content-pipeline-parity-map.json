@@ -1014,47 +1014,47 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Graphics.BoneWeight": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::BoneWeight",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/VertexCollections.hpp",
+   "note": "A value type here as in XNA, with the measured guards: the name may not be empty and the weight must lie in [0, 1], NaN included because neither comparison is true of it (boneweight/weight_range). Both properties are read-only and neither is serialized, so a weight is an empty <Item /> element.",
    "members": {
     "constructor:.ctor(System.String, System.Single)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "BoneWeight(std::string, Single)",
+     "note": "C++ has no null std::string, so an empty name carries the refusal XNA gives for a null one."
     },
     "property:BoneName": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getBoneNameProperty()",
      "note": ""
     },
     "property:Weight": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getWeightProperty()",
      "note": ""
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Graphics.BoneWeightCollection": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::BoneWeightCollection",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/VertexCollections.hpp",
    "note": "",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "BoneWeightCollection()",
      "note": ""
     },
     "method:NormalizeWeights()": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "NormalizeWeights()",
+     "note": "Not the maxWeights overload with Count: an empty collection refuses with the normalization message rather than the range check (measured, boneweight/collection_normalize_empty)."
     },
     "method:NormalizeWeights(System.Int32)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "NormalizeWeights(intcs)",
      "note": ""
     }
    }
@@ -1489,20 +1489,20 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Graphics.IndexCollection": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::IndexCollection",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/VertexCollections.hpp",
+   "note": "AddRange takes a std::vector rather than an IEnumerable, so the ArgumentNullException XNA gives for a null sequence has no counterpart (measured, indexcollection/addrange_null).",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "IndexCollection()",
      "note": ""
     },
     "method:AddRange(System.Collections.Generic.IEnumerable<System.Int32>)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "AddRange(const std::vector<intcs>&)",
+     "note": "IEnumerable<int> is a std::vector<intcs>, which cannot be null."
     }
    }
   },
@@ -1927,14 +1927,14 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Graphics.PositionCollection": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::PositionCollection",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/VertexCollections.hpp",
    "note": "",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "PositionCollection()",
      "note": ""
     }
    }
@@ -2327,74 +2327,74 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Graphics.VertexChannelNames": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::VertexChannelNames",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/VertexChannelNames.hpp",
+   "note": "Every name and refusal is pinned to tests/reference/xna40/graphics (cases vertexnames/*), including the two the API does not show: the blend weights channel is spelled `Weights`, not by its VertexElementUsage name, and a name with no trailing digits decodes to usage index 0.",
    "members": {
     "method:Binormal(System.Int32)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Binormal(intcs)",
      "note": ""
     },
     "method:Color(System.Int32)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Color(intcs)",
      "note": ""
     },
     "method:DecodeBaseName(System.String)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "DecodeBaseName(const std::string&)",
+     "note": "C++ has no null std::string, so an empty name carries the refusal XNA gives for a null one."
     },
     "method:DecodeUsageIndex(System.String)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "DecodeUsageIndex(const std::string&)",
+     "note": "C++ has no null std::string, so an empty name carries the refusal XNA gives for a null one."
     },
     "method:EncodeName(Microsoft.Xna.Framework.Graphics.VertexElementUsage, System.Int32)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "EncodeName(VertexElementUsage, intcs)",
      "note": ""
     },
     "method:EncodeName(System.String, System.Int32)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "EncodeName(const std::string&, intcs)",
+     "note": "C++ has no null std::string, so an empty name carries the refusal XNA gives for a null one."
     },
     "method:Normal()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Normal()",
      "note": ""
     },
     "method:Normal(System.Int32)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Normal(intcs)",
      "note": ""
     },
     "method:Tangent(System.Int32)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Tangent(intcs)",
      "note": ""
     },
     "method:TextureCoordinate(System.Int32)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "TextureCoordinate(intcs)",
      "note": ""
     },
     "method:TryDecodeUsage(System.String, out Microsoft.Xna.Framework.Graphics.VertexElementUsage)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "TryDecodeUsage(const std::string&, VertexElementUsage&)",
+     "note": "C++ has no null std::string, so an empty name carries the refusal XNA gives for a null one. The out parameter is a reference, left at Position when the name names no usage, as measured."
     },
     "method:Weights()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Weights()",
      "note": ""
     },
     "method:Weights(System.Int32)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Weights(intcs)",
      "note": ""
     }
    }

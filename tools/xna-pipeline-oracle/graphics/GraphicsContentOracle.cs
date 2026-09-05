@@ -1059,6 +1059,294 @@ namespace Cna.Xna40.GraphicsOracle
                 "</XnaContent>\r\n").Channels["Root"].Count.ToString());
             Record("animation/tostring", () => new AnimationContent() + "|" + new AnimationChannel() + "|" + new AnimationChannelDictionary() + "|" + new AnimationKeyframe(TimeSpan.Zero, Matrix.Identity));
 
+            // ---- VertexChannelNames ----------------------------------------------------------------
+            Record("vertexnames/standard", () => VertexChannelNames.Normal() + "|" + VertexChannelNames.Normal(1) + "|" +
+                   VertexChannelNames.Binormal(0) + "|" + VertexChannelNames.Color(2) + "|" + VertexChannelNames.Tangent(3) + "|" +
+                   VertexChannelNames.TextureCoordinate(0) + "|" + VertexChannelNames.Weights() + "|" + VertexChannelNames.Weights(4));
+            Record("vertexnames/encode_usage", () => VertexChannelNames.EncodeName(VertexElementUsage.Position, 0) + "|" +
+                   VertexChannelNames.EncodeName(VertexElementUsage.TextureCoordinate, 7) + "|" +
+                   VertexChannelNames.EncodeName(VertexElementUsage.BlendIndices, 1));
+            Record("vertexnames/encode_string", () => VertexChannelNames.EncodeName("Custom", 0) + "|" + VertexChannelNames.EncodeName("Custom", 12));
+            Record("vertexnames/encode_null", () => VertexChannelNames.EncodeName(null, 0));
+            Record("vertexnames/encode_negative", () => VertexChannelNames.EncodeName("Custom", -1));
+            Record("vertexnames/decode", () => VertexChannelNames.DecodeBaseName("TextureCoordinate0") + "|" +
+                   VertexChannelNames.DecodeUsageIndex("TextureCoordinate0") + "|" +
+                   VertexChannelNames.DecodeBaseName("Custom12") + "|" + VertexChannelNames.DecodeUsageIndex("Custom12") + "|" +
+                   VertexChannelNames.DecodeBaseName("NoDigits") + "|" + VertexChannelNames.DecodeUsageIndex("NoDigits"));
+            Record("vertexnames/decode_null", () => VertexChannelNames.DecodeBaseName(null) ?? "null");
+            Record("vertexnames/decode_usage_index_null", () => VertexChannelNames.DecodeUsageIndex(null).ToString());
+            Record("vertexnames/try_decode", () =>
+            {
+                VertexElementUsage usage;
+                bool ok = VertexChannelNames.TryDecodeUsage("Normal0", out usage);
+                VertexElementUsage other;
+                bool no = VertexChannelNames.TryDecodeUsage("Custom0", out other);
+                VertexElementUsage third;
+                bool bare = VertexChannelNames.TryDecodeUsage("Normal", out third);
+                return "normal=" + ok + "," + usage + " custom=" + no + "," + other + " bare=" + bare + "," + third;
+            });
+            Record("vertexnames/try_decode_null", () => { VertexElementUsage usage; bool ok = VertexChannelNames.TryDecodeUsage(null, out usage); return ok + "," + usage; });
+
+            // ---- BoneWeight and BoneWeightCollection ----------------------------------------------
+            Record("boneweight/members", () => { var w = new BoneWeight("Bone1", 0.25f); return "name=" + w.BoneName + " weight=" + w.Weight.ToString("R") + " tostring=" + w; });
+            Record("boneweight/null_name", () => new BoneWeight(null, 1.0f).BoneName ?? "null");
+            Record("boneweight/empty_name", () => "name=\"" + new BoneWeight("", 1.0f).BoneName + "\"");
+            Record("boneweight/negative_weight", () => new BoneWeight("Bone1", -1.0f).Weight.ToString("R"));
+            // The constructor refuses a weight outside its range, so these probe the range first and
+            // then normalize with weights it accepts.
+            Record("boneweight/weight_range", () =>
+            {
+                var results = new StringBuilder();
+                float[] probes = new float[] { 0.0f, 0.0001f, 0.5f, 1.0f, 1.0001f, 2.0f, float.NaN };
+                foreach (float probe in probes)
+                {
+                    if (results.Length > 0) results.Append(' ');
+                    try { results.Append(probe.ToString("R") + "=" + new BoneWeight("A", probe).Weight.ToString("R")); }
+                    catch (Exception error) { results.Append(probe.ToString("R") + "=" + error.GetType().Name); }
+                }
+                return results.ToString();
+            });
+            Record("boneweight/collection_normalize", () =>
+            {
+                var weights = new BoneWeightCollection();
+                weights.Add(new BoneWeight("A", 0.25f));
+                weights.Add(new BoneWeight("B", 0.75f));
+                weights.NormalizeWeights();
+                return Weights(weights);
+            });
+            Record("boneweight/collection_normalize_unnormalized", () =>
+            {
+                var weights = new BoneWeightCollection();
+                weights.Add(new BoneWeight("A", 0.5f));
+                weights.Add(new BoneWeight("B", 0.25f));
+                weights.NormalizeWeights();
+                return Weights(weights);
+            });
+            Record("boneweight/collection_normalize_max", () =>
+            {
+                var weights = new BoneWeightCollection();
+                weights.Add(new BoneWeight("A", 0.2f));
+                weights.Add(new BoneWeight("B", 0.5f));
+                weights.Add(new BoneWeight("C", 0.3f));
+                weights.NormalizeWeights(2);
+                return Weights(weights);
+            });
+            Record("boneweight/collection_normalize_zero_total", () =>
+            {
+                var weights = new BoneWeightCollection();
+                weights.NormalizeWeights();
+                return Weights(weights);
+            });
+            Record("boneweight/collection_normalize_empty", () => { var weights = new BoneWeightCollection(); weights.NormalizeWeights(); return Weights(weights); });
+            Record("boneweight/collection_normalize_negative_max", () => { var weights = new BoneWeightCollection(); weights.Add(new BoneWeight("A", 1.0f)); weights.NormalizeWeights(-1); return Weights(weights); });
+            Record("boneweight/collection_normalize_zero_max", () => { var weights = new BoneWeightCollection(); weights.Add(new BoneWeight("A", 1.0f)); weights.NormalizeWeights(0); return Weights(weights); });
+            Record("boneweight/collection_normalize_more_than_count", () => { var weights = new BoneWeightCollection(); weights.Add(new BoneWeight("A", 1.0f)); weights.NormalizeWeights(4); return Weights(weights); });
+            Record("boneweight/collection_normalize_ties", () =>
+            {
+                var weights = new BoneWeightCollection();
+                weights.Add(new BoneWeight("A", 0.25f));
+                weights.Add(new BoneWeight("B", 0.25f));
+                weights.Add(new BoneWeight("C", 0.5f));
+                weights.NormalizeWeights(2);
+                return Weights(weights);
+            });
+            Record("boneweight/default_value", () => { var w = default(BoneWeight); return "name=" + (w.BoneName ?? "null") + " weight=" + w.Weight.ToString("R"); });
+            Record("boneweight/serialize", () =>
+            {
+                var weights = new BoneWeightCollection();
+                weights.Add(new BoneWeight("A", 0.25f));
+                weights.Add(new BoneWeight("B", 0.75f));
+                return SerializeIntermediate(weights);
+            });
+            Record("boneweight/deserialize", () =>
+            {
+                var weights = DeserializeIntermediate<BoneWeightCollection>(
+                    "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n" +
+                    "<XnaContent xmlns:Graphics=\"Microsoft.Xna.Framework.Content.Pipeline.Graphics\">\r\n" +
+                    "  <Asset Type=\"Graphics:BoneWeightCollection\">\r\n    <Item />\r\n  </Asset>\r\n" +
+                    "</XnaContent>\r\n");
+                return Weights(weights);
+            });
+
+            Record("indexcollection/addrange", () =>
+            {
+                var indices = new IndexCollection();
+                indices.AddRange(new int[] { 3, 1, 2 });
+                indices.Add(4);
+                return "count=" + indices.Count + " items=" + string.Join(",", Array.ConvertAll(new List<int>(indices).ToArray(), i => i.ToString()));
+            });
+            Record("indexcollection/addrange_null", () => { var indices = new IndexCollection(); indices.AddRange(null); return "count=" + indices.Count; });
+            Record("indexcollection/serialize", () => { var indices = new IndexCollection(); indices.AddRange(new int[] { 0, 1, 2 }); return SerializeIntermediate(indices); });
+            Record("positioncollection/basics", () =>
+            {
+                var positions = new PositionCollection();
+                positions.Add(new Vector3(1, 2, 3));
+                positions.Add(new Vector3(4, 5, 6));
+                return "count=" + positions.Count + " first=" + positions[0] + " contains=" + positions.Contains(new Vector3(4, 5, 6)) +
+                       " indexof=" + positions.IndexOf(new Vector3(4, 5, 6));
+            });
+            Record("positioncollection/serialize", () => { var positions = new PositionCollection(); positions.Add(new Vector3(1, 2, 3)); return SerializeIntermediate(positions); });
+
+            // ---- VertexContent, VertexChannel, VertexChannelCollection -----------------------------
+            Record("vertexcontent/defaults", () =>
+            {
+                var geometry = new GeometryContent();
+                return DescribeVertices(geometry.Vertices) + " geometry_indices=" + geometry.Indices.Count +
+                       " material=" + (geometry.Material == null ? "null" : "set") +
+                       " parent=" + (geometry.Parent == null ? "null" : "set");
+            });
+            Record("vertexcontent/add_positions", () =>
+            {
+                var mesh = new MeshContent();
+                mesh.Positions.Add(new Vector3(0, 0, 0));
+                mesh.Positions.Add(new Vector3(1, 0, 0));
+                mesh.Positions.Add(new Vector3(0, 1, 0));
+                var geometry = new GeometryContent();
+                mesh.Geometry.Add(geometry);
+                geometry.Vertices.AddRange(new int[] { 0, 1, 2 });
+                return DescribeVertices(geometry.Vertices) + " positions=" + Positions(geometry.Vertices.Positions);
+            });
+            Record("vertexcontent/add_without_parent", () => { var geometry = new GeometryContent(); geometry.Vertices.Add(0); return DescribeVertices(geometry.Vertices); });
+            Record("vertexcontent/insert_and_remove", () =>
+            {
+                var mesh = new MeshContent();
+                for (int i = 0; i < 4; i++) mesh.Positions.Add(new Vector3(i, 0, 0));
+                var geometry = new GeometryContent();
+                mesh.Geometry.Add(geometry);
+                geometry.Vertices.AddRange(new int[] { 0, 1, 2 });
+                geometry.Vertices.Insert(1, 3);
+                geometry.Vertices.RemoveAt(0);
+                geometry.Vertices.InsertRange(0, new int[] { 2, 2 });
+                geometry.Vertices.RemoveRange(0, 1);
+                return DescribeVertices(geometry.Vertices) + " positions=" + Positions(geometry.Vertices.Positions);
+            });
+            Record("vertexcontent/channel_add", () =>
+            {
+                var mesh = new MeshContent();
+                mesh.Positions.Add(new Vector3(0, 0, 0));
+                mesh.Positions.Add(new Vector3(1, 0, 0));
+                var geometry = new GeometryContent();
+                mesh.Geometry.Add(geometry);
+                geometry.Vertices.AddRange(new int[] { 0, 1 });
+                VertexChannel<Vector2> channel = geometry.Vertices.Channels.Add<Vector2>(VertexChannelNames.TextureCoordinate(0), new Vector2[] { new Vector2(0, 0), new Vector2(1, 1) });
+                return "name=" + channel.Name + " count=" + channel.Count + " element=" + channel.ElementType.Name +
+                       " first=" + channel[0] + " channels=" + geometry.Vertices.Channels.Count;
+            });
+            Record("vertexcontent/channel_add_wrong_count", () =>
+            {
+                var mesh = new MeshContent();
+                mesh.Positions.Add(new Vector3(0, 0, 0));
+                var geometry = new GeometryContent();
+                mesh.Geometry.Add(geometry);
+                geometry.Vertices.AddRange(new int[] { 0 });
+                geometry.Vertices.Channels.Add<Vector2>("Custom0", new Vector2[] { new Vector2(0, 0), new Vector2(1, 1) });
+                return "accepted";
+            });
+            Record("vertexcontent/channel_add_null_data", () =>
+            {
+                var geometry = new GeometryContent();
+                geometry.Vertices.Channels.Add<Vector2>("Custom0", null);
+                return "count=" + geometry.Vertices.Channels.Count + " channel_count=" + geometry.Vertices.Channels[0].Count;
+            });
+            Record("vertexcontent/channel_add_duplicate", () =>
+            {
+                var geometry = new GeometryContent();
+                geometry.Vertices.Channels.Add<Vector2>("Custom0", null);
+                geometry.Vertices.Channels.Add<Vector2>("Custom0", null);
+                return "count=" + geometry.Vertices.Channels.Count;
+            });
+            Record("vertexcontent/channel_lookup", () =>
+            {
+                var geometry = new GeometryContent();
+                geometry.Vertices.Channels.Add<Vector2>("Custom0", null);
+                VertexChannel byName = geometry.Vertices.Channels["Custom0"];
+                VertexChannel byIndex = geometry.Vertices.Channels[0];
+                return "same=" + object.ReferenceEquals(byName, byIndex) + " contains=" + geometry.Vertices.Channels.Contains("Custom0") +
+                       " indexof=" + geometry.Vertices.Channels.IndexOf("Custom0") + " missing=" + geometry.Vertices.Channels.Contains("None") +
+                       " indexof_missing=" + geometry.Vertices.Channels.IndexOf("None");
+            });
+            Record("vertexcontent/channel_lookup_missing", () => { var geometry = new GeometryContent(); return geometry.Vertices.Channels["None"].Name; });
+            Record("vertexcontent/channel_get_typed", () =>
+            {
+                var geometry = new GeometryContent();
+                geometry.Vertices.Channels.Add<Vector2>("Custom0", null);
+                VertexChannel<Vector2> typed = geometry.Vertices.Channels.Get<Vector2>("Custom0");
+                return "name=" + typed.Name + " element=" + typed.ElementType.Name;
+            });
+            Record("vertexcontent/channel_get_wrong_type", () =>
+            {
+                var geometry = new GeometryContent();
+                geometry.Vertices.Channels.Add<Vector2>("Custom0", null);
+                return geometry.Vertices.Channels.Get<Vector3>("Custom0").ElementType.Name;
+            });
+            Record("vertexcontent/channel_convert", () =>
+            {
+                var mesh = new MeshContent();
+                mesh.Positions.Add(new Vector3(0, 0, 0));
+                var geometry = new GeometryContent();
+                mesh.Geometry.Add(geometry);
+                geometry.Vertices.AddRange(new int[] { 0 });
+                geometry.Vertices.Channels.Add<Vector2>("Custom0", new Vector2[] { new Vector2(0.25f, 0.5f) });
+                VertexChannel<Vector4> converted = geometry.Vertices.Channels.ConvertChannelContent<Vector4>("Custom0");
+                return "element=" + converted.ElementType.Name + " value=" + converted[0] + " channels=" + geometry.Vertices.Channels.Count +
+                       " same_name=" + converted.Name;
+            });
+            Record("vertexcontent/channel_read_converted", () =>
+            {
+                var mesh = new MeshContent();
+                mesh.Positions.Add(new Vector3(0, 0, 0));
+                var geometry = new GeometryContent();
+                mesh.Geometry.Add(geometry);
+                geometry.Vertices.AddRange(new int[] { 0 });
+                geometry.Vertices.Channels.Add<Vector2>("Custom0", new Vector2[] { new Vector2(0.25f, 0.5f) });
+                var read = new StringBuilder();
+                foreach (Vector4 value in geometry.Vertices.Channels[0].ReadConvertedContent<Vector4>()) read.Append(value);
+                return "values=" + read;
+            });
+            Record("vertexcontent/channel_remove", () =>
+            {
+                var geometry = new GeometryContent();
+                geometry.Vertices.Channels.Add<Vector2>("A0", null);
+                geometry.Vertices.Channels.Add<Vector2>("B0", null);
+                bool removed = geometry.Vertices.Channels.Remove("A0");
+                bool missing = geometry.Vertices.Channels.Remove("None");
+                geometry.Vertices.Channels.RemoveAt(0);
+                return "removed=" + removed + " missing=" + missing + " count=" + geometry.Vertices.Channels.Count;
+            });
+            Record("vertexcontent/channel_insert", () =>
+            {
+                var geometry = new GeometryContent();
+                geometry.Vertices.Channels.Add<Vector2>("A0", null);
+                geometry.Vertices.Channels.Insert<Vector3>(0, "B0", null);
+                var names = new StringBuilder();
+                foreach (VertexChannel channel in geometry.Vertices.Channels) { if (names.Length > 0) names.Append(' '); names.Append(channel.Name); }
+                return "names=" + names + " clear_then=" + ClearedChannelCount(geometry.Vertices.Channels);
+            });
+            Record("vertexcontent/indirect_positions", () =>
+            {
+                var mesh = new MeshContent();
+                mesh.Positions.Add(new Vector3(7, 0, 0));
+                mesh.Positions.Add(new Vector3(8, 0, 0));
+                var geometry = new GeometryContent();
+                mesh.Geometry.Add(geometry);
+                geometry.Vertices.AddRange(new int[] { 1, 0, 1 });
+                IndirectPositionCollection positions = geometry.Vertices.Positions;
+                return "count=" + positions.Count + " items=" + Positions(positions) + " contains=" + positions.Contains(new Vector3(7, 0, 0)) +
+                       " indexof=" + positions.IndexOf(new Vector3(7, 0, 0)) + " missing=" + positions.IndexOf(new Vector3(9, 0, 0));
+            });
+            Record("vertexcontent/create_vertex_buffer", () =>
+            {
+                var mesh = new MeshContent();
+                mesh.Positions.Add(new Vector3(0, 0, 0));
+                var geometry = new GeometryContent();
+                mesh.Geometry.Add(geometry);
+                geometry.Vertices.AddRange(new int[] { 0 });
+                VertexBufferContent buffer = geometry.Vertices.CreateVertexBuffer();
+                return "bytes=" + buffer.VertexData.Length + " stride=" + buffer.VertexDeclaration.VertexStride +
+                       " elements=" + buffer.VertexDeclaration.VertexElements.Count;
+            });
+            Record("vertexcontent/tostring", () => new GeometryContent().Vertices + "|" + new GeometryContent().Vertices.Channels + "|" + new GeometryContent().Vertices.PositionIndices);
+
             // ---- TextureReferenceDictionary ------------------------------------------------------
             Record("texturereferencedictionary/default", () => { var d = new TextureReferenceDictionary(); return "count=" + d.Count + " ToString=\"" + d + "\""; });
 
@@ -1079,6 +1367,48 @@ namespace Cna.Xna40.GraphicsOracle
             public T ReadReference<T>(string key) where T : class { return GetReferenceTypeProperty<T>(key); }
             public T? ReadValue<T>(string key) where T : struct { return GetValueTypeProperty<T>(key); }
             public void Write<T>(string key, T value) { SetProperty(key, value); }
+        }
+
+        private static string Positions(System.Collections.Generic.IEnumerable<Vector3> positions)
+        {
+            var builder = new StringBuilder();
+            foreach (Vector3 position in positions)
+            {
+                if (builder.Length > 0) builder.Append(' ');
+                builder.Append(position.X.ToString("R", CultureInfo.InvariantCulture));
+            }
+            return "[" + builder + "]";
+        }
+
+        private static string DescribeVertices(VertexContent vertices)
+        {
+            var indices = new StringBuilder();
+            foreach (int index in vertices.PositionIndices)
+            {
+                if (indices.Length > 0) indices.Append(' ');
+                indices.Append(index);
+            }
+            return "count=" + vertices.VertexCount + " indices=[" + indices + "] channels=" + vertices.Channels.Count;
+        }
+
+        private static string ClearedChannelCount(VertexChannelCollection channels)
+        {
+            channels.Clear();
+            return channels.Count.ToString();
+        }
+
+        private static string Weights(BoneWeightCollection weights)
+        {
+            var builder = new StringBuilder("count=" + weights.Count + " [");
+            bool first = true;
+            foreach (BoneWeight weight in weights)
+            {
+                if (!first) builder.Append(' ');
+                first = false;
+                builder.Append(weight.BoneName + "=" + weight.Weight.ToString("R", CultureInfo.InvariantCulture));
+            }
+            builder.Append(']');
+            return builder.ToString();
         }
 
         private static string DescribeMaterial(MaterialContent material)
