@@ -10,8 +10,8 @@
 
 | Quantity | Implemented (EXACT + SEMANTIC + HOST_SUBSTITUTION) | EXTERNAL_BLOCKED | MISSING |
 |---|---|---:|---:|
-| public/protected types | 26/128 (20.3%) | 0 | 102 |
-| public/protected members | 152/705 (21.6%) | 0 | 553 |
+| public/protected types | 33/128 (25.8%) | 0 | 95 |
+| public/protected members | 201/705 (28.5%) | 0 | 504 |
 | enum values | 3/27 (11.1%) | 0 | 24 |
 | built-in importers | 0/10 (0.0%) | 0 | 10 |
 | built-in processors | 0/12 (0.0%) | 0 | 12 |
@@ -19,8 +19,8 @@
 
 Status vocabulary: EXACT_EQUIVALENT, SEMANTIC_EQUIVALENT (spelling differs, capability identical; note says how),
 HOST_SUBSTITUTION (Microsoft-host mechanism replaced; note says how), EXTERNAL_BLOCKED (note names the
-unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 19, SEMANTIC_EQUIVALENT 6, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 102.
-Member status by value: EXACT_EQUIVALENT 114, SEMANTIC_EQUIVALENT 33, HOST_SUBSTITUTION 5, EXTERNAL_BLOCKED 0, MISSING 553.
+unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 23, SEMANTIC_EQUIVALENT 9, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 95.
+Member status by value: EXACT_EQUIVALENT 152, SEMANTIC_EQUIVALENT 44, HOST_SUBSTITUTION 5, EXTERNAL_BLOCKED 0, MISSING 504.
 
 Rules applied mechanically: 3 delegate plumbing members are listed in section 7 and not counted; 3 exception
 serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serialization has no C++ counterpart).
@@ -34,7 +34,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `Microsoft.Xna.Framework.Content.Pipeline.Graphics` | 47 | 0 | 0 | 47 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Processors` | 28 | 0 | 0 | 28 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler` | 5 | 5 | 0 | 0 |
-| `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate` | 7 | 0 | 0 | 7 |
+| `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate` | 7 | 7 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Tasks` | 4 | 0 | 0 | 4 |
 
 ## 3. Type matrix
@@ -150,13 +150,13 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `….Serialization.Compiler` | `ContentTypeWriterAttribute` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler::ContentTypeWriterAttribute` | C++ has no CLR attributes: the same-named descriptor is passed to ContentCompiler::AddTypeWriter<TWriter>(). |
 | `….Serialization.Compiler` | `ContentTypeWriter<T>` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler::ContentTypeWriter<T>` |  |
 | `….Serialization.Compiler` | `ContentWriter` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler::ContentWriter` |  |
-| `….Serialization.Intermediate` | `ContentTypeSerializer` | class | MISSING |  |  |
-| `….Serialization.Intermediate` | `ContentTypeSerializer+ChildCallback` | delegate | MISSING |  |  |
-| `….Serialization.Intermediate` | `ContentTypeSerializerAttribute` | class | MISSING |  |  |
-| `….Serialization.Intermediate` | `ContentTypeSerializer<T>` | class | MISSING |  |  |
-| `….Serialization.Intermediate` | `IntermediateReader` | class | MISSING |  |  |
-| `….Serialization.Intermediate` | `IntermediateSerializer` | class | MISSING |  |  |
-| `….Serialization.Intermediate` | `IntermediateWriter` | class | MISSING |  |  |
+| `….Serialization.Intermediate` | `ContentTypeSerializer` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermediate::ContentTypeSerializerBase` | C++ cannot give a class and a class template the same name, so the non-generic base is ContentTypeSerializerBase, as ContentTypeWriterBase stands beside ContentTypeWriter<T>. The protected internal members are protected and reached through Invoke* entry points. |
+| `….Serialization.Intermediate` | `ContentTypeSerializer+ChildCallback` | delegate | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermediate::ContentTypeSerializerBase::ChildCallback` | a delegate is a std::function<void(ContentTypeSerializerBase&, const ContentObject&)>; Invoke is the call operator |
+| `….Serialization.Intermediate` | `ContentTypeSerializerAttribute` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermediate::ContentTypeSerializerAttribute` | an attribute becomes a descriptor object handed to IntermediateSerializer::AddTypeSerializer<TSerializer>(), since C++ has no attributes or reflection |
+| `….Serialization.Intermediate` | `ContentTypeSerializer<T>` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermediate::ContentTypeSerializer<T>` |  |
+| `….Serialization.Intermediate` | `IntermediateReader` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermediate::IntermediateReader` |  |
+| `….Serialization.Intermediate` | `IntermediateSerializer` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermediate::IntermediateSerializer` | XNA discovers ContentTypeSerializer classes and member layouts by reflection; CNA registers serializers (AddTypeSerializer) and describes types (ContentTypeDescriptor), which are CNAEXT additions rather than changes to the XNA surface. |
+| `….Serialization.Intermediate` | `IntermediateWriter` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermediate::IntermediateWriter` |  |
 | `…` | `TargetPlatform` | enum | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::TargetPlatform` |  |
 | `….Tasks` | `BuildContent` | class | MISSING |  |  |
 | `….Tasks` | `BuildXact` | class | MISSING |  |  |
@@ -687,7 +687,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `OpaqueDataDictionary` | property | `DefaultSerializerType` | SEMANTIC_EQUIVALENT | `getDefaultSerializerTypeProperty()` | protected internal getter becomes a protected virtual returning System::Type::From<System::Object>(). |
 | `OpaqueDataDictionary` | method | `AddItem(System.String, System.Object)` | EXACT_EQUIVALENT | `AddItem(System.String, System.Object)` |  |
 | `OpaqueDataDictionary` | method | `ClearItems()` | EXACT_EQUIVALENT | `ClearItems()` |  |
-| `OpaqueDataDictionary` | method | `GetContentAsXml()` | MISSING |  | needs the intermediate serializer (XNAPP-072); throws NotSupportedException until then |
+| `OpaqueDataDictionary` | method | `GetContentAsXml()` | EXACT_EQUIVALENT | `GetContentAsXml()` | the measured document: compact, utf-16 declaration, <Data Key> entries typed only when not strings |
 | `OpaqueDataDictionary` | method | `GetValue<T>(System.String, T)` | EXACT_EQUIVALENT | `GetValue<T>(System.String, T)` |  |
 | `OpaqueDataDictionary` | method | `RemoveItem(System.String)` | EXACT_EQUIVALENT | `RemoveItem(System.String)` |  |
 | `OpaqueDataDictionary` | method | `SetItem(System.String, System.Object)` | EXACT_EQUIVALENT | `SetItem(System.String, System.Object)` |  |
@@ -865,54 +865,54 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `ContentWriter` | method | `WriteRawObject<T>(T)` | EXACT_EQUIVALENT | `WriteRawObject<T>(T)` |  |
 | `ContentWriter` | method | `WriteRawObject<T>(T, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler.ContentTypeWriter)` | EXACT_EQUIVALENT | `WriteRawObject<T>(const Carrier<T>&, ContentTypeWriterBase&)` |  |
 | `ContentWriter` | method | `WriteSharedResource<T>(T)` | EXACT_EQUIVALENT | `WriteSharedResource<T>(T)` |  |
-| `ContentTypeSerializer` | constructor | `.ctor(System.Type)` | MISSING |  |  |
-| `ContentTypeSerializer` | constructor | `.ctor(System.Type, System.String)` | MISSING |  |  |
-| `ContentTypeSerializer` | property | `CanDeserializeIntoExistingObject` | MISSING |  |  |
-| `ContentTypeSerializer` | property | `TargetType` | MISSING |  |  |
-| `ContentTypeSerializer` | property | `XmlTypeName` | MISSING |  |  |
-| `ContentTypeSerializer` | method | `Deserialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateReader, Microsoft.Xna.Framework.Content.ContentSerializerAttribute, System.Object)` | MISSING |  |  |
-| `ContentTypeSerializer` | method | `Initialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateSerializer)` | MISSING |  |  |
-| `ContentTypeSerializer` | method | `ObjectIsEmpty(System.Object)` | MISSING |  |  |
-| `ContentTypeSerializer` | method | `ScanChildren(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateSerializer, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer+ChildCallback, System.Object)` | MISSING |  |  |
-| `ContentTypeSerializer` | method | `Serialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateWriter, System.Object, Microsoft.Xna.Framework.Content.ContentSerializerAttribute)` | MISSING |  |  |
-| `ContentTypeSerializer+ChildCallback` | method | `Invoke(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer, System.Object)` | MISSING |  |  |
-| `ContentTypeSerializerAttribute` | constructor | `.ctor()` | MISSING |  |  |
-| `ContentTypeSerializer<T>` | constructor | `.ctor()` | MISSING |  |  |
-| `ContentTypeSerializer<T>` | constructor | `.ctor(System.String)` | MISSING |  |  |
-| `ContentTypeSerializer<T>` | method | `Deserialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateReader, Microsoft.Xna.Framework.Content.ContentSerializerAttribute, System.Object)` | MISSING |  |  |
-| `ContentTypeSerializer<T>` | method | `Deserialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateReader, Microsoft.Xna.Framework.Content.ContentSerializerAttribute, T)` | MISSING |  |  |
-| `ContentTypeSerializer<T>` | method | `ObjectIsEmpty(System.Object)` | MISSING |  |  |
-| `ContentTypeSerializer<T>` | method | `ObjectIsEmpty(T)` | MISSING |  |  |
-| `ContentTypeSerializer<T>` | method | `ScanChildren(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateSerializer, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer+ChildCallback, System.Object)` | MISSING |  |  |
-| `ContentTypeSerializer<T>` | method | `ScanChildren(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateSerializer, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer+ChildCallback, T)` | MISSING |  |  |
-| `ContentTypeSerializer<T>` | method | `Serialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateWriter, System.Object, Microsoft.Xna.Framework.Content.ContentSerializerAttribute)` | MISSING |  |  |
-| `ContentTypeSerializer<T>` | method | `Serialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateWriter, T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute)` | MISSING |  |  |
-| `IntermediateReader` | property | `Serializer` | MISSING |  |  |
-| `IntermediateReader` | property | `Xml` | MISSING |  |  |
-| `IntermediateReader` | method | `MoveToElement(System.String)` | MISSING |  |  |
-| `IntermediateReader` | method | `ReadExternalReference<T>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<T>)` | MISSING |  |  |
-| `IntermediateReader` | method | `ReadObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute)` | MISSING |  |  |
-| `IntermediateReader` | method | `ReadObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer)` | MISSING |  |  |
-| `IntermediateReader` | method | `ReadObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer, T)` | MISSING |  |  |
-| `IntermediateReader` | method | `ReadObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, T)` | MISSING |  |  |
-| `IntermediateReader` | method | `ReadRawObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute)` | MISSING |  |  |
-| `IntermediateReader` | method | `ReadRawObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer)` | MISSING |  |  |
-| `IntermediateReader` | method | `ReadRawObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer, T)` | MISSING |  |  |
-| `IntermediateReader` | method | `ReadRawObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, T)` | MISSING |  |  |
-| `IntermediateReader` | method | `ReadSharedResource<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, System.Action<T>)` | MISSING |  |  |
-| `IntermediateReader` | method | `ReadTypeName()` | MISSING |  |  |
-| `IntermediateSerializer` | method | `Deserialize<T>(System.Xml.XmlReader, System.String)` | MISSING |  |  |
-| `IntermediateSerializer` | method | `GetTypeSerializer(System.Type)` | MISSING |  |  |
-| `IntermediateSerializer` | method | `Serialize<T>(System.Xml.XmlWriter, T, System.String)` | MISSING |  |  |
-| `IntermediateWriter` | property | `Serializer` | MISSING |  |  |
-| `IntermediateWriter` | property | `Xml` | MISSING |  |  |
-| `IntermediateWriter` | method | `WriteExternalReference<T>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<T>)` | MISSING |  |  |
-| `IntermediateWriter` | method | `WriteObject<T>(T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute)` | MISSING |  |  |
-| `IntermediateWriter` | method | `WriteObject<T>(T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer)` | MISSING |  |  |
-| `IntermediateWriter` | method | `WriteRawObject<T>(T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute)` | MISSING |  |  |
-| `IntermediateWriter` | method | `WriteRawObject<T>(T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer)` | MISSING |  |  |
-| `IntermediateWriter` | method | `WriteSharedResource<T>(T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute)` | MISSING |  |  |
-| `IntermediateWriter` | method | `WriteTypeName(System.Type)` | MISSING |  |  |
+| `ContentTypeSerializer` | constructor | `.ctor(System.Type)` | EXACT_EQUIVALENT | `ContentTypeSerializerBase(System::Type)` |  |
+| `ContentTypeSerializer` | constructor | `.ctor(System.Type, System.String)` | EXACT_EQUIVALENT | `ContentTypeSerializerBase(System::Type, std::string)` |  |
+| `ContentTypeSerializer` | property | `CanDeserializeIntoExistingObject` | EXACT_EQUIVALENT | `getCanDeserializeIntoExistingObjectProperty()` |  |
+| `ContentTypeSerializer` | property | `TargetType` | EXACT_EQUIVALENT | `getTargetTypeProperty()` |  |
+| `ContentTypeSerializer` | property | `XmlTypeName` | EXACT_EQUIVALENT | `getXmlTypeNameProperty()` | empty string where XNA answers null |
+| `ContentTypeSerializer` | method | `Deserialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateReader, Microsoft.Xna.Framework.Content.ContentSerializerAttribute, System.Object)` | SEMANTIC_EQUIVALENT | `Deserialize(IntermediateReader&, const ContentSerializerAttribute&, const ContentObject&)` | object is ContentObject |
+| `ContentTypeSerializer` | method | `Initialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateSerializer)` | EXACT_EQUIVALENT | `Initialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateSerializer)` |  |
+| `ContentTypeSerializer` | method | `ObjectIsEmpty(System.Object)` | SEMANTIC_EQUIVALENT | `ObjectIsEmpty(const ContentObject&)` | object is ContentObject |
+| `ContentTypeSerializer` | method | `ScanChildren(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateSerializer, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer+ChildCallback, System.Object)` | SEMANTIC_EQUIVALENT | `ScanChildren(IntermediateSerializer&, const ChildCallback&, const ContentObject&)` | the delegate is a std::function; object is ContentObject |
+| `ContentTypeSerializer` | method | `Serialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateWriter, System.Object, Microsoft.Xna.Framework.Content.ContentSerializerAttribute)` | SEMANTIC_EQUIVALENT | `Serialize(IntermediateWriter&, const ContentObject&, const ContentSerializerAttribute&)` | object is ContentObject |
+| `ContentTypeSerializer+ChildCallback` | method | `Invoke(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer, System.Object)` | SEMANTIC_EQUIVALENT | `operator()(ContentTypeSerializerBase&, const ContentObject&)` | std::function call operator |
+| `ContentTypeSerializerAttribute` | constructor | `.ctor()` | EXACT_EQUIVALENT | `ContentTypeSerializerAttribute()` |  |
+| `ContentTypeSerializer<T>` | constructor | `.ctor()` | EXACT_EQUIVALENT | `ContentTypeSerializer()` |  |
+| `ContentTypeSerializer<T>` | constructor | `.ctor(System.String)` | EXACT_EQUIVALENT | `ContentTypeSerializer(System.String)` |  |
+| `ContentTypeSerializer<T>` | method | `Deserialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateReader, Microsoft.Xna.Framework.Content.ContentSerializerAttribute, System.Object)` | SEMANTIC_EQUIVALENT | `Deserialize(IntermediateReader&, const ContentSerializerAttribute&, const ContentObject&)` | object is ContentObject |
+| `ContentTypeSerializer<T>` | method | `Deserialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateReader, Microsoft.Xna.Framework.Content.ContentSerializerAttribute, T)` | EXACT_EQUIVALENT | `Deserialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateReader, Microsoft.Xna.Framework.Content.ContentSerializerAttribute, T)` |  |
+| `ContentTypeSerializer<T>` | method | `ObjectIsEmpty(System.Object)` | SEMANTIC_EQUIVALENT | `ObjectIsEmpty(const ContentObject&)` | object is ContentObject |
+| `ContentTypeSerializer<T>` | method | `ObjectIsEmpty(T)` | EXACT_EQUIVALENT | `ObjectIsEmpty(T)` |  |
+| `ContentTypeSerializer<T>` | method | `ScanChildren(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateSerializer, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer+ChildCallback, System.Object)` | SEMANTIC_EQUIVALENT | `ScanChildren(IntermediateSerializer&, const ChildCallback&, const ContentObject&)` | the delegate is a std::function; object is ContentObject |
+| `ContentTypeSerializer<T>` | method | `ScanChildren(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateSerializer, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer+ChildCallback, T)` | SEMANTIC_EQUIVALENT | `ScanChildren(IntermediateSerializer&, const ChildCallback&, const Carrier<T>&)` | the delegate is a std::function |
+| `ContentTypeSerializer<T>` | method | `Serialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateWriter, System.Object, Microsoft.Xna.Framework.Content.ContentSerializerAttribute)` | SEMANTIC_EQUIVALENT | `Serialize(IntermediateWriter&, const ContentObject&, const ContentSerializerAttribute&)` | object is ContentObject |
+| `ContentTypeSerializer<T>` | method | `Serialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateWriter, T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute)` | EXACT_EQUIVALENT | `Serialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateWriter, T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute)` |  |
+| `IntermediateReader` | property | `Serializer` | EXACT_EQUIVALENT | `getSerializerProperty()` |  |
+| `IntermediateReader` | property | `Xml` | EXACT_EQUIVALENT | `getXmlProperty()` |  |
+| `IntermediateReader` | method | `MoveToElement(System.String)` | EXACT_EQUIVALENT | `MoveToElement(System.String)` |  |
+| `IntermediateReader` | method | `ReadExternalReference<T>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<T>)` | EXACT_EQUIVALENT | `ReadExternalReference<T>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<T>)` |  |
+| `IntermediateReader` | method | `ReadObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute)` | EXACT_EQUIVALENT | `ReadObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute)` |  |
+| `IntermediateReader` | method | `ReadObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer)` | EXACT_EQUIVALENT | `ReadObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer)` |  |
+| `IntermediateReader` | method | `ReadObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer, T)` | EXACT_EQUIVALENT | `ReadObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer, T)` |  |
+| `IntermediateReader` | method | `ReadObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, T)` | EXACT_EQUIVALENT | `ReadObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, T)` |  |
+| `IntermediateReader` | method | `ReadRawObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute)` | EXACT_EQUIVALENT | `ReadRawObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute)` |  |
+| `IntermediateReader` | method | `ReadRawObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer)` | EXACT_EQUIVALENT | `ReadRawObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer)` |  |
+| `IntermediateReader` | method | `ReadRawObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer, T)` | EXACT_EQUIVALENT | `ReadRawObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer, T)` |  |
+| `IntermediateReader` | method | `ReadRawObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, T)` | EXACT_EQUIVALENT | `ReadRawObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, T)` |  |
+| `IntermediateReader` | method | `ReadSharedResource<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, System.Action<T>)` | SEMANTIC_EQUIVALENT | `ReadSharedResource<T>(const ContentSerializerAttribute&, std::function<void(Carrier<T>)>)` | Action<T> is a std::function |
+| `IntermediateReader` | method | `ReadTypeName()` | EXACT_EQUIVALENT | `ReadTypeName()` |  |
+| `IntermediateSerializer` | method | `Deserialize<T>(System.Xml.XmlReader, System.String)` | EXACT_EQUIVALENT | `Deserialize<T>(System.Xml.XmlReader, System.String)` |  |
+| `IntermediateSerializer` | method | `GetTypeSerializer(System.Type)` | EXACT_EQUIVALENT | `GetTypeSerializer(System.Type)` |  |
+| `IntermediateSerializer` | method | `Serialize<T>(System.Xml.XmlWriter, T, System.String)` | EXACT_EQUIVALENT | `Serialize<T>(System.Xml.XmlWriter, T, System.String)` |  |
+| `IntermediateWriter` | property | `Serializer` | EXACT_EQUIVALENT | `getSerializerProperty()` |  |
+| `IntermediateWriter` | property | `Xml` | EXACT_EQUIVALENT | `getXmlProperty()` |  |
+| `IntermediateWriter` | method | `WriteExternalReference<T>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<T>)` | EXACT_EQUIVALENT | `WriteExternalReference<T>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<T>)` |  |
+| `IntermediateWriter` | method | `WriteObject<T>(T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute)` | EXACT_EQUIVALENT | `WriteObject<T>(T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute)` |  |
+| `IntermediateWriter` | method | `WriteObject<T>(T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer)` | EXACT_EQUIVALENT | `WriteObject<T>(T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer)` |  |
+| `IntermediateWriter` | method | `WriteRawObject<T>(T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute)` | EXACT_EQUIVALENT | `WriteRawObject<T>(T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute)` |  |
+| `IntermediateWriter` | method | `WriteRawObject<T>(T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer)` | EXACT_EQUIVALENT | `WriteRawObject<T>(T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer)` |  |
+| `IntermediateWriter` | method | `WriteSharedResource<T>(T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute)` | EXACT_EQUIVALENT | `WriteSharedResource<T>(T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute)` |  |
+| `IntermediateWriter` | method | `WriteTypeName(System.Type)` | EXACT_EQUIVALENT | `WriteTypeName(System.Type)` |  |
 | `TargetPlatform` | enum value | `Windows = 0` | EXACT_EQUIVALENT | `TargetPlatform::Windows` |  |
 | `TargetPlatform` | enum value | `Xbox360 = 1` | EXACT_EQUIVALENT | `TargetPlatform::Xbox360` |  |
 | `TargetPlatform` | enum value | `WindowsPhone = 2` | EXACT_EQUIVALENT | `TargetPlatform::WindowsPhone` |  |

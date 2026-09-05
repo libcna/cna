@@ -10,3 +10,4 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/IntermediateWriter.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/ContentTypeDescription.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/BuiltInTypeSerializers.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/NamedValueDictionarySerializer.hpp"

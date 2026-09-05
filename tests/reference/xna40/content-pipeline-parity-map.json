@@ -2722,9 +2722,9 @@
      "note": ""
     },
     "method:GetContentAsXml()": {
-     "status": "MISSING",
-     "cna": "",
-     "note": "needs the intermediate serializer (XNAPP-072); throws NotSupportedException until then"
+     "status": "EXACT_EQUIVALENT",
+     "cna": "GetContentAsXml()",
+     "note": "the measured document: compact, utf-16 declaration, <Data Key> entries typed only when not strings"
     },
     "method:GetValue<T>(System.String, T)": {
      "status": "EXACT_EQUIVALENT",
@@ -3895,297 +3895,297 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermediate::ContentTypeSerializerBase",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/ContentTypeSerializer.hpp",
+   "note": "C++ cannot give a class and a class template the same name, so the non-generic base is ContentTypeSerializerBase, as ContentTypeWriterBase stands beside ContentTypeWriter<T>. The protected internal members are protected and reached through Invoke* entry points.",
    "members": {
     "constructor:.ctor(System.Type)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ContentTypeSerializerBase(System::Type)",
      "note": ""
     },
     "constructor:.ctor(System.Type, System.String)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ContentTypeSerializerBase(System::Type, std::string)",
      "note": ""
     },
     "property:CanDeserializeIntoExistingObject": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getCanDeserializeIntoExistingObjectProperty()",
      "note": ""
     },
     "property:TargetType": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getTargetTypeProperty()",
      "note": ""
     },
     "property:XmlTypeName": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getXmlTypeNameProperty()",
+     "note": "empty string where XNA answers null"
     },
     "method:Deserialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateReader, Microsoft.Xna.Framework.Content.ContentSerializerAttribute, System.Object)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Deserialize(IntermediateReader&, const ContentSerializerAttribute&, const ContentObject&)",
+     "note": "object is ContentObject"
     },
     "method:Initialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateSerializer)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Initialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateSerializer)",
      "note": ""
     },
     "method:ObjectIsEmpty(System.Object)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "ObjectIsEmpty(const ContentObject&)",
+     "note": "object is ContentObject"
     },
     "method:ScanChildren(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateSerializer, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer+ChildCallback, System.Object)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "ScanChildren(IntermediateSerializer&, const ChildCallback&, const ContentObject&)",
+     "note": "the delegate is a std::function; object is ContentObject"
     },
     "method:Serialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateWriter, System.Object, Microsoft.Xna.Framework.Content.ContentSerializerAttribute)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Serialize(IntermediateWriter&, const ContentObject&, const ContentSerializerAttribute&)",
+     "note": "object is ContentObject"
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer+ChildCallback": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermediate::ContentTypeSerializerBase::ChildCallback",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/ContentTypeSerializer.hpp",
+   "note": "a delegate is a std::function<void(ContentTypeSerializerBase&, const ContentObject&)>; Invoke is the call operator",
    "members": {
     "method:Invoke(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer, System.Object)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "operator()(ContentTypeSerializerBase&, const ContentObject&)",
+     "note": "std::function call operator"
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializerAttribute": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermediate::ContentTypeSerializerAttribute",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/ContentTypeSerializerAttribute.hpp",
+   "note": "an attribute becomes a descriptor object handed to IntermediateSerializer::AddTypeSerializer<TSerializer>(), since C++ has no attributes or reflection",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ContentTypeSerializerAttribute()",
      "note": ""
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer`1": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermediate::ContentTypeSerializer<T>",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/ContentTypeSerializer.hpp",
    "note": "",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ContentTypeSerializer()",
      "note": ""
     },
     "constructor:.ctor(System.String)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ContentTypeSerializer(System.String)",
      "note": ""
     },
     "method:Deserialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateReader, Microsoft.Xna.Framework.Content.ContentSerializerAttribute, System.Object)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Deserialize(IntermediateReader&, const ContentSerializerAttribute&, const ContentObject&)",
+     "note": "object is ContentObject"
     },
     "method:Deserialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateReader, Microsoft.Xna.Framework.Content.ContentSerializerAttribute, T)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Deserialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateReader, Microsoft.Xna.Framework.Content.ContentSerializerAttribute, T)",
      "note": ""
     },
     "method:ObjectIsEmpty(System.Object)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "ObjectIsEmpty(const ContentObject&)",
+     "note": "object is ContentObject"
     },
     "method:ObjectIsEmpty(T)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ObjectIsEmpty(T)",
      "note": ""
     },
     "method:ScanChildren(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateSerializer, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer+ChildCallback, System.Object)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "ScanChildren(IntermediateSerializer&, const ChildCallback&, const ContentObject&)",
+     "note": "the delegate is a std::function; object is ContentObject"
     },
     "method:ScanChildren(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateSerializer, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer+ChildCallback, T)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "ScanChildren(IntermediateSerializer&, const ChildCallback&, const Carrier<T>&)",
+     "note": "the delegate is a std::function"
     },
     "method:Serialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateWriter, System.Object, Microsoft.Xna.Framework.Content.ContentSerializerAttribute)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Serialize(IntermediateWriter&, const ContentObject&, const ContentSerializerAttribute&)",
+     "note": "object is ContentObject"
     },
     "method:Serialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateWriter, T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Serialize(Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateWriter, T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute)",
      "note": ""
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateReader": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermediate::IntermediateReader",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/IntermediateReader.hpp",
    "note": "",
    "members": {
     "property:Serializer": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getSerializerProperty()",
      "note": ""
     },
     "property:Xml": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getXmlProperty()",
      "note": ""
     },
     "method:MoveToElement(System.String)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "MoveToElement(System.String)",
      "note": ""
     },
     "method:ReadExternalReference<T>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<T>)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ReadExternalReference<T>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<T>)",
      "note": ""
     },
     "method:ReadObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ReadObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute)",
      "note": ""
     },
     "method:ReadObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ReadObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer)",
      "note": ""
     },
     "method:ReadObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer, T)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ReadObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer, T)",
      "note": ""
     },
     "method:ReadObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, T)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ReadObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, T)",
      "note": ""
     },
     "method:ReadRawObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ReadRawObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute)",
      "note": ""
     },
     "method:ReadRawObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ReadRawObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer)",
      "note": ""
     },
     "method:ReadRawObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer, T)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ReadRawObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer, T)",
      "note": ""
     },
     "method:ReadRawObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, T)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ReadRawObject<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, T)",
      "note": ""
     },
     "method:ReadSharedResource<T>(Microsoft.Xna.Framework.Content.ContentSerializerAttribute, System.Action<T>)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "ReadSharedResource<T>(const ContentSerializerAttribute&, std::function<void(Carrier<T>)>)",
+     "note": "Action<T> is a std::function"
     },
     "method:ReadTypeName()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ReadTypeName()",
      "note": ""
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateSerializer": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermediate::IntermediateSerializer",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/IntermediateSerializer.hpp",
+   "note": "XNA discovers ContentTypeSerializer classes and member layouts by reflection; CNA registers serializers (AddTypeSerializer) and describes types (ContentTypeDescriptor), which are CNAEXT additions rather than changes to the XNA surface.",
    "members": {
     "method:Deserialize<T>(System.Xml.XmlReader, System.String)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Deserialize<T>(System.Xml.XmlReader, System.String)",
      "note": ""
     },
     "method:GetTypeSerializer(System.Type)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "GetTypeSerializer(System.Type)",
      "note": ""
     },
     "method:Serialize<T>(System.Xml.XmlWriter, T, System.String)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Serialize<T>(System.Xml.XmlWriter, T, System.String)",
      "note": ""
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateWriter": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermediate::IntermediateWriter",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/IntermediateWriter.hpp",
    "note": "",
    "members": {
     "property:Serializer": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getSerializerProperty()",
      "note": ""
     },
     "property:Xml": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getXmlProperty()",
      "note": ""
     },
     "method:WriteExternalReference<T>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<T>)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "WriteExternalReference<T>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<T>)",
      "note": ""
     },
     "method:WriteObject<T>(T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "WriteObject<T>(T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute)",
      "note": ""
     },
     "method:WriteObject<T>(T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "WriteObject<T>(T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer)",
      "note": ""
     },
     "method:WriteRawObject<T>(T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "WriteRawObject<T>(T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute)",
      "note": ""
     },
     "method:WriteRawObject<T>(T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "WriteRawObject<T>(T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute, Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.ContentTypeSerializer)",
      "note": ""
     },
     "method:WriteSharedResource<T>(T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "WriteSharedResource<T>(T, Microsoft.Xna.Framework.Content.ContentSerializerAttribute)",
      "note": ""
     },
     "method:WriteTypeName(System.Type)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "WriteTypeName(System.Type)",
      "note": ""
     }
    }

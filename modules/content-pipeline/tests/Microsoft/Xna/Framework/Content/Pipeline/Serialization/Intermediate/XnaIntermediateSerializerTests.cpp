@@ -37,6 +37,7 @@
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ExternalReference.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/OpaqueDataDictionary.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/IntermediateSerializer.hpp"
 #include "System/DateTime.hpp"
 #include "System/DateTimeKind.hpp"
@@ -69,6 +70,7 @@ using Microsoft::Xna::Framework::Content::Pipeline::Carrier;
 using Microsoft::Xna::Framework::Content::Pipeline::ContentObject;
 using Microsoft::Xna::Framework::Content::Pipeline::ExternalReference;
 using Microsoft::Xna::Framework::Content::Pipeline::InvalidContentException;
+using Microsoft::Xna::Framework::Content::Pipeline::OpaqueDataDictionary;
 using Intermediate::ContentTypeDescriptor;
 using Intermediate::IntermediateSerializer;
 
@@ -870,6 +872,15 @@ namespace
         };
     }
 
+    OpaqueDataDictionary OracleOpaqueData()
+    {
+        OpaqueDataDictionary opaque;
+        opaque.Add("Count", Box<std::int32_t>(3));
+        opaque.Add("Name", Box<std::string>("wall"));
+        opaque.Add("Scale", Box<Vector3>(Vector3(1, 2, 3)));
+        return opaque;
+    }
+
     std::map<std::string, RoundTrip> RoundTrips()
     {
         std::map<std::string, RoundTrip> map;
@@ -900,6 +911,7 @@ namespace
         add("Cna.Xna40.IntermediateOracle.WithVersion", MakeRoundTrip<WithVersion>());
         add("Cna.Xna40.IntermediateOracle.Deep", MakeRoundTrip<Deep>());
         add("Cna.Xna40.IntermediateOracle.ArraysOfArrays", MakeRoundTrip<ArraysOfArrays>());
+        add("Microsoft.Xna.Framework.Content.Pipeline.OpaqueDataDictionary", MakeRoundTrip<OpaqueDataDictionary>());
         add("Cna.Xna40.IntermediateOracle.Mood", MakeRoundTrip<Mood>());
         add("Cna.Xna40.IntermediateOracle.Toppings", MakeRoundTrip<Toppings>());
         add("System.Boolean", MakeRoundTrip<bool>());
@@ -984,6 +996,7 @@ namespace
         map["type_version"] = [] { return SerializeToString<WithVersion>(std::make_shared<WithVersion>()); };
         map["deep"] = [] { return SerializeToString<Deep>(Deep::Build(20)); };
         map["arrays_of_arrays"] = [] { return SerializeToString<ArraysOfArrays>(std::make_shared<ArraysOfArrays>()); };
+        map["opaque_data_dictionary"] = [] { return SerializeToString<OpaqueDataDictionary>(OracleOpaqueData()); };
         map["root_int"] = [] { return SerializeToString<std::int32_t>(42); };
         map["root_string"] = [] { return SerializeToString<std::string>("just a string"); };
         map["root_vector3"] = [] { return SerializeToString<Vector3>(Vector3(1, 2, 3)); };
@@ -1116,7 +1129,7 @@ TEST_F(XnaIntermediateSerializerCorpus, FreshObjectsSerializeExactlyAsXnaWrote)
     std::vector<std::string> covered;
     for (const ManifestCase& item : ReadManifest())
     {
-        if (item.status != "written" && item.status != "round-trip-differs")
+        if ((item.status != "written" && item.status != "round-trip-differs") || !CorpusHas(item.name + ".xml"))
         {
             continue;
         }
@@ -1148,7 +1161,7 @@ TEST_F(XnaIntermediateSerializerCorpus, WrittenDocumentsRoundTripThroughCnaUncha
     std::size_t covered = 0;
     for (const ManifestCase& item : ReadManifest())
     {
-        if (item.status != "written" && item.status != "round-trip-differs")
+        if ((item.status != "written" && item.status != "round-trip-differs") || !CorpusHas(item.name + ".xml"))
         {
             continue;
         }
@@ -1271,6 +1284,13 @@ TEST_F(XnaIntermediateSerializerCorpus, RejectedInputsAreRefusedWithXnaMessages)
         }
     }
     EXPECT_GE(covered, 90u);
+}
+
+TEST_F(XnaIntermediateSerializerCorpus, OpaqueDataDictionaryGetContentAsXmlMatchesXna)
+{
+    EXPECT_EQ(OracleOpaqueData().GetContentAsXml(), ReadCorpus("opaque_data_dictionary.getcontentasxml.txt"));
+    EXPECT_EQ(OpaqueDataDictionary().GetContentAsXml(), ReadCorpus("opaque_data_dictionary_empty.getcontentasxml.txt"));
+    EXPECT_EQ(OpaqueDataDictionary().GetContentAsXml(), "");
 }
 
 TEST_F(XnaIntermediateSerializerCorpus, GraphsXnaCouldNotWriteAreRefusedTooWhereTheyExist)

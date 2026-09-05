@@ -64,10 +64,11 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          * @brief Returns the contents of the dictionary as an XML fragment in the intermediate
          *        serialization format.
          *
-         * @return XML text listing every entry as an `<Item>` with a `Key` and a typed `Value`.
-         * @throws System::NotSupportedException until the intermediate serializer exists
-         *         (plans/plan_xnapipeline_parity.md `XNAPP-072`); the parity map records this
-         *         member as MISSING until then.
+         * @return The intermediate XML document of this dictionary, compact, exactly as XNA returns
+         *         it (`tests/reference/xna40/intermediate/opaque_data_dictionary.getcontentasxml.txt`):
+         *         `<XnaContent><Asset Type="Pipeline:OpaqueDataDictionary"><Data Key="…" Type="…">…</Data>…`,
+         *         with a `Type` attribute only on values that are not strings; the empty string for
+         *         an empty dictionary.
          */
         [[nodiscard]] std::string GetContentAsXml() const;
 

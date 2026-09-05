@@ -175,3 +175,48 @@ Two idioms differ from C# and are worth knowing:
 * A type is not "implemented" because its header compiles. The parity map records
   `EXACT_EQUIVALENT`/`SEMANTIC_EQUIVALENT` only once the behaviour is tested; until then the row is
   `MISSING`, however much code exists.
+
+## 8. The intermediate serializer without reflection
+
+XNA's `IntermediateSerializer` reads a type's public properties and fields by reflection and
+finds `ContentTypeSerializer` classes by scanning assemblies. C++ has neither, so Phase 5 adds
+two CNAEXT mechanisms beside the XNA surface, both in
+`Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermediate`:
+
+* **A content description.** A type declares
+  `static void DescribeContent(ContentTypeDescriptor<T>& d)` (or specializes
+  `ContentTypeDescription<T>`) and lists its members in XNA's order -- public properties first,
+  then public fields, each in declaration order, base class first
+  (`docs/xna-intermediate-xml-format.md` §3): `d.Field("Name", &T::Name)`,
+  `d.Property("X", &T::getXProperty, &T::setXProperty)`, `d.ReadOnlyProperty("Items", &T::getItems)`
+  for a get-only collection XNA fills in place, `d.BaseType<Base>()`. The `[ContentSerializer]`
+  settings are fluent calls on the returned member descriptor (`.Optional()`, `.AllowNull(false)`,
+  `.ElementName("…")`, `.FlattenContent()`, `.SharedResource()`, `.CollectionItemName("…")`,
+  `.Ignore()` for `[ContentSerializerIgnore]`); the type-level attributes are
+  `d.RuntimeType("…")`, `d.TypeVersion(n)` and `d.CollectionItemName("…")`. The five
+  `ContentSerializer*Attribute` classes exist as XNA spells them (in `modules/content`) and are
+  what a `ContentTypeSerializer<T>` receives as its `format` argument.
+  `DescribedTypeSerializer<T>` is the serializer every described type gets -- CNA's counterpart of
+  XNA's reflective serializer -- and the same description will drive the automatic XNB writer.
+* **A registry.** `IntermediateSerializer::AddTypeSerializer<TSerializer>()` registers a
+  user-defined `ContentTypeSerializer<T>` (the `[ContentTypeSerializer]` attribute becomes its
+  descriptor argument); `TypeSerializerFor<T>()` returns a type's serializer, creating and
+  registering the described, enum, `std::vector`, `std::map`, `std::optional`, `std::shared_ptr`
+  and `ExternalReference<T>` serializers on first use. Polymorphic writing dispatches on the
+  dynamic type of a `System::Object`-derived reference, so a derived type must have been
+  registered (used once, or `TypeSerializerFor<Derived>()`) before an instance of it is written
+  through a base-typed member; reading a `Type="…"` attribute resolves names through the same
+  registry.
+
+Type mapping follows the carrier rule of §2 and adds: `std::vector<T>` is `List<T>` (and reads
+`T[]`), `std::map<K,V>` is `Dictionary<K,V>` written in key order, `std::optional<T>` is
+`Nullable<T>` (and a nullable `string`), `std::shared_ptr<U>` of a non-`Object` `U` gives a value
+type reference semantics (identity for shared resources), `ContentObject` is `object`, an enum
+needs `CNA_XNA_CONTENT_ENUM(E, "Namespace.E", flags, {E::A, "A"}, …)`. A `std::string` member has
+no null, so `Null="true"` reads as the empty string -- use `std::optional<std::string>` where XNA
+code relies on null.
+
+The C# spelling `ContentTypeSerializer` (base) and `ContentTypeSerializer<T>` follows the
+`ContentTypeWriterBase` precedent: the base is `ContentTypeSerializerBase`. Everything else in
+the namespace keeps XNA's names; the `protected internal` members are `protected` with
+`Invoke*` entry points for the reader and writer.

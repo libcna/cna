@@ -265,7 +265,14 @@ namespace
         EXPECT_THROW((void)data.GetValue<std::int32_t>("Scale", 0), System::InvalidCastException);
         EXPECT_THROW(data.Add("Empty", Xna::ContentObject{}), System::ArgumentException);
         EXPECT_EQ(data.getKeysProperty(), (std::vector<std::string>{"Scale", "Name", "Offset"}));
-        EXPECT_THROW((void)data.GetContentAsXml(), System::NotSupportedException);
+        // The measured XNA form (tests/reference/xna40/intermediate/opaque_data_dictionary.getcontentasxml.txt):
+        // compact, a utf-16 declaration, a Type attribute on every value that is not a string.
+        EXPECT_EQ(data.GetContentAsXml(),
+                  "<?xml version=\"1.0\" encoding=\"utf-16\"?><XnaContent xmlns:Pipeline=\"Microsoft.Xna.Framework.Content.Pipeline\" "
+                  "xmlns:Framework=\"Microsoft.Xna.Framework\"><Asset Type=\"Pipeline:OpaqueDataDictionary\">"
+                  "<Data Key=\"Scale\" Type=\"float\">2.5</Data><Data Key=\"Name\">hero</Data>"
+                  "<Data Key=\"Offset\" Type=\"Framework:Vector3\">1 2 3</Data></Asset></XnaContent>");
+        EXPECT_EQ(Xna::OpaqueDataDictionary().GetContentAsXml(), "");
     }
 
     // ---- ChildCollection ------------------------------------------------------------------

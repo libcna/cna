@@ -26,6 +26,12 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
      *
      * @tparam T The value type stored by the dictionary.
      */
+    namespace Serialization::Intermediate
+    {
+        template<typename TDictionary, typename TValue>
+        class NamedValueDictionarySerializer;
+    }
+
     template<typename T>
     class NamedValueDictionary : public System::Collections::Generic::IDictionary<std::string, T>
     {
@@ -197,6 +203,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
 
         /** @brief Range-for support: past-the-end. */
         [[nodiscard]] auto end() const noexcept { return entries_.cend(); }
+
+        /** @brief The intermediate serializer reads the protected default serializer type. */
+        template<typename, typename>
+        friend class Serialization::Intermediate::NamedValueDictionarySerializer;
 
     protected:
         /**

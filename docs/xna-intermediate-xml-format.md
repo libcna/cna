@@ -260,7 +260,18 @@ dictionaries, enums, structs and `object` (`root_object_int` writes `Type="int"`
 `root_list_object` writes `Type="Generic:List[System.Object]"` with typed items). `Deserialize<T>`
 with `T = object` needs the `Type` attribute (`accept_object_root_no_type`).
 
-## 10. Errors
+## 10. NamedValueDictionary and OpaqueDataDictionary
+
+`opaque_data_dictionary.xml`: a `NamedValueDictionary<T>` is written as one `<Data Key="…">`
+element per entry, in insertion order, with a `Type` attribute only when the value's type is not
+the dictionary's default serializer type -- for `OpaqueDataDictionary` that default is `string`,
+so `<Data Key="Name">wall</Data>` carries no `Type` while `<Data Key="Count" Type="int">3</Data>`
+and `<Data Key="Scale" Type="Framework:Vector3">1 2 3</Data>` do. `OpaqueDataDictionary.Add(key,
+null)` throws `ArgumentNullException`. `GetContentAsXml()` returns the same document compact
+(no indentation) with `encoding="utf-16"` in its declaration, and the empty string for an empty
+dictionary (`opaque_data_dictionary.getcontentasxml.txt`, `opaque_data_dictionary_empty.getcontentasxml.txt`).
+
+## 11. Errors
 
 Every rejection the corpus recorded is an `InvalidContentException` whose message begins *There was
 an error while deserializing intermediate XML.* when a lower layer (XML, number parsing, type lookup)
@@ -271,3 +282,32 @@ serializer itself refused, with these exceptions that surface as other exception
 root or an empty external filename, `RankException` for multidimensional arrays and
 `ArgumentException` for U+0000. CNA reports all of them as `InvalidContentException` carrying the
 XML line and position; the message texts above are what CNA reproduces.
+
+## 12. Where CNA differs, and why
+
+Every difference between CNA's serializer and the corpus is one of these, each also named in
+the corpus test (`modules/content-pipeline/tests/…/XnaIntermediateSerializerTests.cpp`):
+
+* **`std::string` has no null.** A C# `string` member that is null writes `Null="true"`; a C++
+  `std::string` cannot, so it never writes `Null="true"` and reads it as the empty string. A
+  `std::optional<std::string>` member behaves exactly like the C# string.
+* **`std::vector<T>` is `List<T>`.** C# arrays and lists are one C++ type, spelled `List` when
+  written; reading accepts both `T[]` and `List[T]` where XNA insists on the declared one
+  (`accept_int_array_from_list_type`, `accept_list_from_array_type`).
+* **`std::map<K,V>` writes in key order**, where a .NET `Dictionary` enumerates in insertion order.
+* **Self-closing empty sections are accepted.** `<Resources />` and `<ExternalReferences />` are
+  read as empty sections; XNA's reader loop fails on them (§1).
+* **Three XNA crashes are refusals.** `Null="true"` on a value type, a multidimensional array and
+  U+0000 in a string are `InvalidContentException`s in CNA (the first with a message naming the
+  member and type; XNA's is a `NullReferenceException`).
+* **Number formatting is .NET Framework 4.0's.** `R` writes 7 or 9 significant digits for `float`
+  and 15 or 17 for `double`, with `E+300`-style exponents (§4); sharp-runtime's own `Single::ToString`
+  follows .NET Core's shortest round-trip form, which XNA never wrote.
+* **tinyxml2 is the XML substrate.** It rejects a processing instruction inside an element
+  (`accept_processing_instruction`, which XNA accepts) and tolerates a byte-order mark inside the
+  text handed to the reader (`accept_bom_and_declaration`, which .NET rejects); it keeps
+  whitespace-only element content but drops indentation between elements, and reports no
+  column, so `Line L, position 0.` replaces .NET's column in messages.
+* **Paths.** Filenames under `ExternalReferences` are made relative to the relocation path's
+  directory and written with backslashes as XNA does; a relative filename is resolved against that
+  directory on reading and stored in the host's path form.

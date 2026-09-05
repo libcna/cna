@@ -31,6 +31,7 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/OpaqueDataDictionary.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/IntermediateReader.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/IntermediateWriter.hpp"
 #include "System/ArgumentException.hpp"
@@ -1431,6 +1432,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
         RegisterTypeSerializer(std::make_unique<BoundingSphereSerializer>());
         RegisterTypeSerializer(std::make_unique<RaySerializer>());
         RegisterTypeSerializer(std::make_unique<CurveSerializer>());
+        RegisterTypeSerializer(std::make_unique<NamedValueDictionarySerializer<OpaqueDataDictionary, ContentObject>>());
         ContentTypeSerializerBase& object = RegisterTypeSerializer(std::make_unique<ObjectSerializer>());
         {
             Registry& registry = TheRegistry();
