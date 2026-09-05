@@ -1069,6 +1069,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_declared_effect_layout
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plans/plan_vulkan.md VULKAN-141: baseVertex/startIndex/minVertexIndex/numVertices mean what
+        # XNA says. Four quads, one per quadrant, so the parameters are separable and every leg
+        # asserts all four quadrants rather than only the one it expects to light.
+        cna_vulkan_test(cna_test_vulkan_indexed_draw_range
+                        vulkan_indexed_draw_range_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_IndexedDrawRange
+            COMMAND cna_test_vulkan_indexed_draw_range
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plans/plan_vulkan.md VULKAN-394: the sibling question for the ~20 PipelineKey-keyed caches.
         cna_vulkan_test(cna_test_vulkan_pipeline_cache_bound
                         vulkan_pipeline_cache_bound_test.cpp)
