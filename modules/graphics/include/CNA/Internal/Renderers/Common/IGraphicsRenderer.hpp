@@ -2057,6 +2057,31 @@ namespace CNA::Internal::Renderers
         }
 
         /**
+         * @brief Whether a `TextureCube` may be created with the given surface format.
+         *
+         * plans/plan_webgpu.md `WEBGPU-163`. Separate from @ref ClassifySurfaceFormatEXT for the same
+         * reason @ref ClassifyRenderTargetFormatEXT is: a renderer may store a format in a 2D
+         * texture and have no cube allocation path for it at all. WebGPU is exactly that case --
+         * its BC support is real for `Texture2D` and its cube renderer is RGBA8-only -- so one
+         * classifier serving both kinds promised a format at construction that every `SetData`
+         * then refused.
+         *
+         * The default DELEGATES to @ref ClassifySurfaceFormatEXT rather than deferring, so adding
+         * this question changes no renderer's answer: a renderer whose cube path stores whatever
+         * its 2D path stores need not override it, and only one whose kinds genuinely differ says
+         * so. Note this is about STORAGE, not about the transfer payload
+         * (@ref IsCompressedCubeTransferFormatEXT) -- a renderer may store a compressed cube while
+         * transferring it as decoded pixels.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return This renderer's verdict for a cube, or Defer to accept the framework's rule.
+         */
+        [[nodiscard]] virtual RendererFormatVerdict ClassifyTextureCubeFormatEXT(int surfaceFormat) const
+        {
+            return ClassifySurfaceFormatEXT(surfaceFormat);
+        }
+
+        /**
          * @brief Whether a RenderTarget2D may be created with the given surface format.
          *
          * Deliberately separate from ClassifySurfaceFormatEXT: renderability is a strictly narrower

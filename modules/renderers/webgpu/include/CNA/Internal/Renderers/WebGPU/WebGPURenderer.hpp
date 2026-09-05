@@ -1448,6 +1448,23 @@ namespace CNA::Internal::Renderers::WebGPU
 
         /** @brief WEBGPU-144: the BC formats this renderer stores natively are Supported; else Defer. */
         [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief plans/plan_webgpu.md WEBGPU-163: the CUBE storage verdict, which is narrower here.
+         *
+         * `WEBGPU-144` made block-compressed `Texture2D` real, and `ClassifySurfaceFormatEXT`
+         * answers `Supported` for BC whenever the device enabled the feature. That one classifier
+         * served both kinds, but `CreateTextureCube` discards the format and
+         * `WebGPUTextureCubeRenderer` is RGBA8-only -- so `TextureCube(device, size, mipMap,
+         * SurfaceFormat::Dxt1)` CONSTRUCTED and then threw from every `SetData`. Refusing at
+         * construction is the interim honest state; `WEBGPU-206` is the parity state, because a
+         * cube is a six-layer 2D texture plus a cube view and nothing in
+         * `WGPUFeatureName_TextureCompressionBC` restricts it. This override must not outlive that
+         * row, and must never be cited as a platform limitation.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return `Unsupported` for a block-compressed format, otherwise the 2D verdict.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyTextureCubeFormatEXT(int surfaceFormat) const override;
 
     private:
         friend class WebGPURenderTargetRenderer;

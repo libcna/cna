@@ -7127,6 +7127,18 @@ namespace CNA::Internal::Renderers::WebGPU
         return RendererFormatVerdict::Defer;
     }
 
+    RendererFormatVerdict WebGPURenderer::ClassifyTextureCubeFormatEXT(int surfaceFormat) const
+    {
+        // WEBGPU-163, interim. The 2D BC support WEBGPU-144 delivered has no cube counterpart yet:
+        // CreateTextureCube discards the format and WebGPUTextureCubeRenderer stores RGBA8 only. So
+        // the same answer for both kinds promised a format at construction that every SetData
+        // refused -- the exact shape a capability query exists to prevent. Refuse it here instead,
+        // by name, and let WEBGPU-206 replace this with the real cube storage path.
+        if (ClassifyWebGPUTextureFormat(surfaceFormat).compressed)
+            return RendererFormatVerdict::Unsupported;
+        return ClassifySurfaceFormatEXT(surfaceFormat);
+    }
+
     void WebGPURenderer::RequireSupportedFillModeEXT(PrimitiveType primitive,
                                                              const char* route) const
     {

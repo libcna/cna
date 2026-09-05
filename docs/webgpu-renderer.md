@@ -707,6 +707,18 @@ mip chain, renders correctly). Baking this Phase-2 path exposed and fixed a comp
 a sub-4x4 tail mip (2x2/1x1) must be written with its **block-aligned** copy extent (`ceil(dim/4)*4`),
 which wgpu-native validates against, not its logical size -- Phase 1's single 4x4 level never hit it.
 
+**Block compression is `Texture2D`-only; a `TextureCube` refuses it at construction** (`WEBGPU-163`).
+`CreateTextureCube` discards the requested `surfaceFormat` and `WebGPUTextureCubeRenderer` stores RGBA8,
+so the support above does not extend to a cube. Until `WEBGPU-163`, one classifier answered for both
+resource kinds, and a `TextureCube(device, size, mipMap, SurfaceFormat::Dxt1)` therefore **constructed**
+on a BC-capable device and then threw from every `SetData`. `IGraphicsRenderer` now asks
+`ClassifyTextureCubeFormatEXT()` for a cube -- defaulting to the 2D verdict, so no other renderer moved --
+and this renderer overrides it to refuse every block-compressed format by name, saying in the message
+that the same format remains available as a `Texture2D` so a caller can fall back deliberately. This is
+an interim honest refusal, **not** a platform limitation: a BC cube is a six-layer 2D texture plus a
+`WGPUTextureViewDimension_Cube` view and nothing in `WGPUFeatureName_TextureCompressionBC` forbids it.
+`WEBGPU-206` is the parity implementation.
+
 **Occlusion queries are supported** (`WEBGPU-84`): `SupportsCapability(OcclusionQuery)` reports true,
 `CreateOcclusionQuery()` returns a real query backed by a `WGPUQuerySet`, and the sample count is
 exact -- a fully occluded draw reads back 0 and a visible one a full target of samples
