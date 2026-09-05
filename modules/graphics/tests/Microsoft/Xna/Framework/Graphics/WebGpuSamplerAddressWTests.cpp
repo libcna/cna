@@ -78,11 +78,14 @@ namespace
         RenderTarget2D target(device, kSize, kSize, false, SurfaceFormat::Color,
                               DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
         struct Vertex { float x, y, z; float u, v; };
+        // Triangle-STRIP order (TL, BL, TR, BR), not ring order: a strip fed a ring draws a
+        // different second triangle. The pixels are not asserted here, but a half-covered quad
+        // would still be a misleading thing to leave in a test.
         const std::array<Vertex, 4> verts{
             Vertex{-1.0f,  1.0f, 0.0f, 0.0f, 0.0f},
             Vertex{-1.0f, -1.0f, 0.0f, 0.0f, 1.0f},
-            Vertex{ 1.0f, -1.0f, 0.0f, 1.0f, 1.0f},
-            Vertex{ 1.0f,  1.0f, 0.0f, 1.0f, 0.0f}};
+            Vertex{ 1.0f,  1.0f, 0.0f, 1.0f, 0.0f},
+            Vertex{ 1.0f, -1.0f, 0.0f, 1.0f, 1.0f}};
         VertexBuffer vb(device,
                         VertexDeclaration(20,
                             {VertexElement(0, VertexElementFormat::Vector3,

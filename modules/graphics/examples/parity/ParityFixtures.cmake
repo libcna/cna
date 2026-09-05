@@ -27,6 +27,8 @@ set(CNA_PARITY_FIXTURES
     dual_texture_uv1
     # WEBGPU-153: FillMode::WireFrame draws edges and leaves the interior empty.
     fill_mode_wireframe
+    # WEBGPU-161: SamplerState.MaxMipLevel selects which mip level a sample comes from.
+    sampler_max_mip_level
 )
 
 # Builds and registers every fixture for one renderer.

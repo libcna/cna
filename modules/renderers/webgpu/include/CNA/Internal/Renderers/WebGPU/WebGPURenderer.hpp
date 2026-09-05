@@ -962,6 +962,7 @@ namespace CNA::Internal::Renderers::WebGPU
             int addressU = 1;
             int addressV = 1;
             int addressW = 1;  ///< WEBGPU-160: the third addressing axis.
+            int maxMipLevel = 0;  ///< WEBGPU-161: SamplerState.MaxMipLevel.
             // REMED-GFX-102: complete per-Begin BlendState + BlendFactor capture by value. No
             // BlendState pointer, live renderer state, texture identity, sprite identity, or target
             // object identity participates in replay or pipeline selection.
@@ -1278,6 +1279,23 @@ namespace CNA::Internal::Renderers::WebGPU
          * @param addressW The raw `TextureAddressMode` ordinal for W.
          */
         void ApplySamplerAddressW(int slot, int addressW) override;
+        /**
+         * @brief plans/plan_webgpu.md WEBGPU-161: `SamplerState.MaxMipLevel` reaches the sampler.
+         *
+         * `ApplySamplerMipState` was not overridden, so `MaxMipLevel` was discarded in silence.
+         * XNA's `MaxMipLevel` is the highest-resolution mip level sampling may use -- level 0 means
+         * "no restriction" -- which is `WGPUSamplerDescriptor::lodMinClamp`, the same mapping the
+         * reference renderer makes to `GL_TEXTURE_MIN_LOD` and FNA3D's SDL_GPU driver to `min_lod`.
+         *
+         * The `lodBias` argument is deliberately NOT consumed here: `WEBGPU-205` owns it, and it is
+         * an implementation task rather than a limitation, so nothing in this renderer may claim
+         * LOD bias is unsupported.
+         *
+         * @param slot The texture slot, 0-15.
+         * @param maxMipLevel The highest-resolution mip level sampling may use.
+         * @param lodBias `WEBGPU-205`'s, not consumed yet.
+         */
+        void ApplySamplerMipState(int slot, int maxMipLevel, float lodBias) override;
         // WEBGPU-80/81/29/30: scissor rect, viewport, blend constant and stencil reference are all
         // genuinely dynamic wgpu-native render-pass state (wgpuRenderPassEncoderSetScissorRect/
         // SetViewport/SetBlendConstant/SetStencilReference), exactly like Vulkan's own
@@ -2092,8 +2110,8 @@ namespace CNA::Internal::Renderers::WebGPU
         // descriptor and the cache key were wrong in the same way. `family` names the public draw
         // family for CNA_WEBGPU_SAMPLER_TRACE and has no effect on the cache key.
         [[nodiscard]] WGPUSampler GetOrCreateSlotSampler(int filter, int addressU, int addressV,
-                                                        int addressW, int maxAnisotropy,
-                                                        const char* family);
+                                                        int addressW, int maxMipLevel,
+                                                        int maxAnisotropy, const char* family);
         /** @brief Releases every native sampler in slotSamplerCache_ and empties it. */
         void ReleaseSamplerCache();
         [[nodiscard]] WGPUPrimitiveTopology ToTopology(PrimitiveType primitive) const;
@@ -2401,6 +2419,9 @@ namespace CNA::Internal::Renderers::WebGPU
             /// WEBGPU-160: the third addressing axis. Observable wherever a volume texture is
             /// sampled, and Clamp by default like the other two.
             int addressW = 1;
+            /// WEBGPU-161: `SamplerState.MaxMipLevel` -- the highest-resolution mip level sampling
+            /// may use. XNA's default is 0, i.e. no restriction.
+            int maxMipLevel = 0;
             int maxAnisotropy = 4;
         };
         std::array<SlotSamplerState, 16> slotSamplers_{};
@@ -2584,6 +2605,7 @@ namespace CNA::Internal::Renderers::WebGPU
             int addressU = 1;
             int addressV = 1;
             int addressW = 1;  ///< WEBGPU-160: the third addressing axis.
+            int maxMipLevel = 0;  ///< WEBGPU-161: SamplerState.MaxMipLevel.
             int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
             // WEBGPU-21: stride 24 (VertexPositionColorTexture) instead of stride 20
             // (VertexPositionTexture) -- selects coloredTexturedShader_/
@@ -2710,6 +2732,7 @@ namespace CNA::Internal::Renderers::WebGPU
             int addressU = 1;
             int addressV = 1;
             int addressW = 1;  ///< WEBGPU-160: the third addressing axis.
+            int maxMipLevel = 0;  ///< WEBGPU-161: SamplerState.MaxMipLevel.
             int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
             /// Task 1105 (plans/plan_graphics.md Phase 80): true selects the per-vertex-lit sibling
             /// pipeline/shader (XNA's real BasicEffect.PreferPerPixelLighting==false default);
@@ -2816,6 +2839,7 @@ namespace CNA::Internal::Renderers::WebGPU
             int addressU = 1;
             int addressV = 1;
             int addressW = 1;  ///< WEBGPU-160: the third addressing axis.
+            int maxMipLevel = 0;  ///< WEBGPU-161: SamplerState.MaxMipLevel.
             int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
             std::size_t stride = 20;   ///< 20, 24, or 32 -- selects vertex layout + shader module
             bool hasVertexColor = false;
@@ -2902,6 +2926,7 @@ namespace CNA::Internal::Renderers::WebGPU
             int addressU = 1;
             int addressV = 1;
             int addressW = 1;  ///< WEBGPU-160: the third addressing axis.
+            int maxMipLevel = 0;  ///< WEBGPU-161: SamplerState.MaxMipLevel.
             int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
             ///@}
             ///@{ REMED-GFX-172: `DualTextureEffect.Texture2`'s own GraphicsDevice.SamplerStates[1],
@@ -2913,6 +2938,7 @@ namespace CNA::Internal::Renderers::WebGPU
             int texture1AddressU = 1;
             int texture1AddressV = 1;
             int texture1AddressW = 1;  ///< WEBGPU-160.
+            int texture1MaxMipLevel = 0;  ///< WEBGPU-161.
             int texture1MaxAnisotropy = 4;
             ///@}
             bool hasVertexColor = false;   ///< stride 24 vs stride 20
@@ -3018,6 +3044,7 @@ namespace CNA::Internal::Renderers::WebGPU
             int addressU = 1;
             int addressV = 1;
             int addressW = 1;  ///< WEBGPU-160: the third addressing axis.
+            int maxMipLevel = 0;  ///< WEBGPU-161: SamplerState.MaxMipLevel.
             int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
             ///@}
             ///@{ REMED-GFX-172: the reflection cube's own GraphicsDevice.SamplerStates[1], captured
@@ -3029,6 +3056,7 @@ namespace CNA::Internal::Renderers::WebGPU
             int envMapAddressU = 1;
             int envMapAddressV = 1;
             int envMapAddressW = 1;  ///< WEBGPU-160.
+            int envMapMaxMipLevel = 0;  ///< WEBGPU-161.
             int envMapMaxAnisotropy = 4;
             ///@}
         };
@@ -3212,6 +3240,7 @@ namespace CNA::Internal::Renderers::WebGPU
             int addressU = 1;
             int addressV = 1;
             int addressW = 1;  ///< WEBGPU-160: the third addressing axis.
+            int maxMipLevel = 0;  ///< WEBGPU-161: SamplerState.MaxMipLevel.
             int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
         };
         void CreatePbrResources();
@@ -3315,6 +3344,7 @@ namespace CNA::Internal::Renderers::WebGPU
             int addressU = 1;
             int addressV = 1;
             int addressW = 1;  ///< WEBGPU-160: the third addressing axis.
+            int maxMipLevel = 0;  ///< WEBGPU-161: SamplerState.MaxMipLevel.
             int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
             std::size_t stride = 52;   ///< 52 (no vertex colour) or 56 (vertex colour appended)
             bool preferVertexLit = false;
@@ -3409,6 +3439,7 @@ namespace CNA::Internal::Renderers::WebGPU
             int addressU = 1;
             int addressV = 1;
             int addressW = 1;  ///< WEBGPU-160: the third addressing axis.
+            int maxMipLevel = 0;  ///< WEBGPU-161: SamplerState.MaxMipLevel.
             int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
         };
         void CreateSkinnedPbrResources();
