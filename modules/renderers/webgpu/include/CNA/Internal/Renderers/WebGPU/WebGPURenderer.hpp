@@ -146,6 +146,24 @@ namespace CNA::Internal::Renderers::WebGPU
 
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
+        /**
+         * @brief Keeps a reference to the framework's own CPU pixel buffer for this texture.
+         *
+         * `WEBGPU-181`: the bytes a device recreate would re-upload. `Texture2D` owns the buffer and
+         * hands it here; holding a `shared_ptr` to it costs nothing while the texture lives, because
+         * it is the SAME allocation `Texture2D::cpuPixels_` already holds -- no copy is made. The
+         * reference is dropped when `SetContextRecoveryEnabled(false)` says nothing will ever need
+         * re-uploading, which is what lets a game that never wants recovery pay nothing for it.
+         *
+         * @param pixels The shared level-0 RGBA buffer, or null.
+         */
+        void ShareCpuPixels(std::shared_ptr<std::vector<uint8_t>> pixels) override;
+
+        /** @brief The shared CPU pixels, or null. @return The retained buffer. */
+        [[nodiscard]] const std::shared_ptr<std::vector<uint8_t>>& SharedCpuPixelsEXT() const
+        {
+            return cpuPixels_;
+        }
         /// WEBGPU-51: real CPU readback of an arbitrary Texture2D renderer, via the same staged
         /// MAP_READ-buffer/aligned-row/async-map-and-poll technique WEBGPU-91's ReadBackbuffer()
         /// and WebGPURenderTargetRenderer::GetData() already established -- copies the WHOLE
@@ -172,6 +190,9 @@ namespace CNA::Internal::Renderers::WebGPU
         /// REMED-GFX-167: built once, at construction; handed to every deferred command that
         /// samples this texture so the native handles outlive this object when one does.
         std::shared_ptr<const WebGPUSampledResourceEXT> sampled_;
+        /// WEBGPU-181: the framework's own level-0 pixels, shared rather than copied. Empty unless
+        /// Texture2D handed them over AND context recovery is enabled.
+        std::shared_ptr<std::vector<uint8_t>> cpuPixels_;
         int width_ = 0;
         int height_ = 0;
         int mipLevels_ = 1;
@@ -378,10 +399,30 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] WGPUTextureView CubeView() const override { return cubeView_; }
         [[nodiscard]] WebGPUSampledTextureEXT SampledCube() const override { return {cubeView_, sampled_}; }
 
+        /**
+         * @brief Keeps a reference to the framework's own CPU pixels for one cube face.
+         *
+         * `WEBGPU-181`, the per-face spelling of `WebGPUTextureRenderer::ShareCpuPixels()` -- same
+         * purpose, same no-copy sharing, same drop when context recovery is off.
+         *
+         * @param face The cube face index, 0..5.
+         * @param pixels That face's shared level-0 RGBA buffer, or null.
+         */
+        void ShareCpuPixels(int face, std::shared_ptr<std::vector<uint8_t>> pixels) override;
+
+        /**
+         * @brief One face's shared CPU pixels, or null.
+         * @param face The cube face index, 0..5.
+         * @return The retained buffer for that face.
+         */
+        [[nodiscard]] const std::shared_ptr<std::vector<uint8_t>>& SharedCpuPixelsEXT(int face) const;
+
     private:
         WebGPURenderer* owner_ = nullptr;
         WGPUTexture texture_ = nullptr;
         WGPUTextureView cubeView_ = nullptr;
+        /// WEBGPU-181: the framework's own level-0 pixels, one entry per face, shared not copied.
+        std::array<std::shared_ptr<std::vector<uint8_t>>, 6> cpuPixels_{};
         /// REMED-GFX-167: see WebGPUTextureRenderer::sampled_.
         std::shared_ptr<const WebGPUSampledResourceEXT> sampled_;
         int size_ = 0;
@@ -2493,6 +2534,46 @@ namespace CNA::Internal::Renderers::WebGPU
         // that, mirroring the pre-existing SetRenderTarget2D() call-then-assign structure.
         void FlushCurrentRenderTarget();
         [[nodiscard]] LogicalViewport ComputeLogicalViewport() const;
+
+    public:
+        /**
+         * @brief Whether a game `Draw`/`Present` pair may begin.
+         *
+         * `WEBGPU-181`. False while the device is lost, and on this renderer that is a safety
+         * mechanism rather than a convenience: `WEBGPU-180` measured that
+         * `wgpuSurfaceGetCurrentTexture` on a surface whose device is lost does not return a failure
+         * status -- it panics inside wgpu-native and, because the panic cannot unwind across the C
+         * ABI, aborts the process. There is nothing to catch, so the loss has to be a gate BEFORE
+         * the acquire.
+         *
+         * @return True when the device is usable.
+         */
+        [[nodiscard]] bool CanBeginDrawEXT() const override { return !deviceLost_; }
+
+        /**
+         * @brief Turns CPU shadow retention for context recovery on or off.
+         *
+         * `WEBGPU-181`. With recovery enabled (the default) each texture renderer keeps a reference
+         * to the buffer `Texture2D`/`TextureCube` already owns, so a device recreate has bytes to
+         * re-upload without the game re-supplying them. Disabling it drops those references and
+         * stops future ones being taken, which is the whole cost of recovery on this renderer --
+         * no copy is ever made either way, only a `shared_ptr` held or not held.
+         *
+         * @param enabled True to retain CPU shadows.
+         */
+        void SetContextRecoveryEnabled(bool enabled) override;
+
+        /** @brief Whether CPU shadows are being retained. @return The current setting. */
+        [[nodiscard]] bool IsContextRecoveryEnabledEXT() const { return contextRecoveryEnabled_; }
+
+    private:
+        /// WEBGPU-181: set while the device is unusable; the only thing standing between a lost
+        /// device and the process abort WEBGPU-180 measured. WEBGPU-182 is what will set it from a
+        /// real destroy and clear it from a real recreate.
+        bool deviceLost_ = false;
+        /// WEBGPU-181: whether texture renderers keep a reference to the framework's CPU pixels.
+        bool contextRecoveryEnabled_ = true;
+
 
         /**
          * @brief The logical viewport a given PHYSICAL surface size would produce.

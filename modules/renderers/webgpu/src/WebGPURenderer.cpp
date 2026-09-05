@@ -9136,6 +9136,51 @@ namespace CNA::Internal::Renderers::WebGPU
         height = static_cast<int>(std::lround(viewport.logicalHeight));
     }
 
+    void WebGPURenderer::SetContextRecoveryEnabled(bool enabled)
+    {
+        // WEBGPU-181. This is FORWARD-LOOKING only, matching the interface's own wording -- "safe
+        // to call after renderer creation when no resources have been loaded yet ... future Create*
+        // calls will skip ... CPU shadow copies". A texture that already handed its buffer over
+        // keeps it: releasing those would need a registry of live texture renderers, which this
+        // renderer does not have and which WEBGPU-182 will need anyway (a recreate has to walk
+        // them to re-upload). Documented rather than quietly half-done, because the case the
+        // contract names -- called at startup, before any texture exists -- costs exactly nothing
+        // either way.
+        contextRecoveryEnabled_ = enabled;
+    }
+
+    void WebGPUTextureRenderer::ShareCpuPixels(std::shared_ptr<std::vector<uint8_t>> pixels)
+    {
+        // Shared, never copied: this is the same allocation Texture2D::cpuPixels_ holds, so the
+        // whole cost of context recovery on this renderer is one reference count.
+        if (owner_ != nullptr && !owner_->IsContextRecoveryEnabledEXT())
+        {
+            cpuPixels_.reset();
+            return;
+        }
+        cpuPixels_ = std::move(pixels);
+    }
+
+    void WebGPUTextureCubeRenderer::ShareCpuPixels(int face,
+                                                   std::shared_ptr<std::vector<uint8_t>> pixels)
+    {
+        if (face < 0 || face >= 6) return;
+        if (owner_ != nullptr && !owner_->IsContextRecoveryEnabledEXT())
+        {
+            cpuPixels_[static_cast<std::size_t>(face)].reset();
+            return;
+        }
+        cpuPixels_[static_cast<std::size_t>(face)] = std::move(pixels);
+    }
+
+    const std::shared_ptr<std::vector<uint8_t>>&
+    WebGPUTextureCubeRenderer::SharedCpuPixelsEXT(int face) const
+    {
+        static const std::shared_ptr<std::vector<uint8_t>> kNone;
+        if (face < 0 || face >= 6) return kNone;
+        return cpuPixels_[static_cast<std::size_t>(face)];
+    }
+
     void WebGPURenderer::SetVirtualResolution(int width, int height)
     {
         virtualWidth_ = width;
