@@ -325,6 +325,29 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     endif()
 endif()
 
+# --- plans/plan_xnapipeline_parity.md XNAPP-075: XNA intermediate-XML fuzz harness ---
+# Same two shapes as the compiled-effect harness: standalone replay/mutation by default, the
+# libFuzzer entry point on request. Not a ctest test; the deterministic mutation pass that does
+# run on every build is XnaIntermediateSerializerHardeningTests in the content-pipeline suite.
+if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
+    option(CNA_XNA_INTERMEDIATE_FUZZER_ENTRY_POINT
+           "Build the intermediate-XML fuzz harness for libFuzzer/AFL++ instead of standalone replay"
+           OFF)
+    add_executable(cna_xna_intermediate_fuzzer tools/content/xna_intermediate_fuzzer.cpp)
+    target_link_libraries(cna_xna_intermediate_fuzzer PRIVATE cna_content_pipeline)
+    cna_link_sharp_runtime(cna_xna_intermediate_fuzzer PRIVATE Core.Base Xml)
+    if(CNA_XNA_INTERMEDIATE_FUZZER_ENTRY_POINT)
+        target_compile_definitions(cna_xna_intermediate_fuzzer PRIVATE CNA_XNA_INTERMEDIATE_FUZZER_ENTRY_POINT)
+        if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+            target_link_options(cna_xna_intermediate_fuzzer PRIVATE -fsanitize=fuzzer)
+        else()
+            message(WARNING
+                "CNA: CNA_XNA_INTERMEDIATE_FUZZER_ENTRY_POINT=ON without clang -- the fuzz driver must be "
+                "supplied by the toolchain (for example AFL++) or the link will fail.")
+        endif()
+    endif()
+endif()
+
 # --- plans/plan_fx.md FX-053: compiled Effect Framework performance baseline ---
 # Measures construction, clone, dirty upload, clean apply and draw so the immutable-artifact-cache
 # question is decided on numbers. Manually invoked and never registered with ctest: wall-clock

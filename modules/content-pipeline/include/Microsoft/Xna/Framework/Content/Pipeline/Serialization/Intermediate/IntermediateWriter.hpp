@@ -136,6 +136,12 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
         void WriteTypeName(System::Type type);
 
         /**
+         * @brief The deepest object nesting the writer follows before refusing the graph: a cycle
+         *        through a member that is not a shared resource would otherwise recurse forever.
+         */
+        CNAEXT static constexpr int MaxNestingDepth = 1024;
+
+        /**
          * @brief Non-template form of `WriteObject`.
          *
          * @param value The boxed value.
@@ -217,5 +223,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
         std::map<const void*, std::string> resourceIds_;
         std::vector<QueuedExternal> externals_;
         std::map<std::pair<std::string, std::string>, std::string> externalIds_;
+        int depth_ = 0;
+
+        struct DepthGuard
+        {
+            explicit DepthGuard(IntermediateWriter& writer, const std::string& elementName);
+            ~DepthGuard();
+            IntermediateWriter& writer;
+        };
     };
 }

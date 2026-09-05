@@ -313,6 +313,15 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
         CNAEXT [[nodiscard]] static std::vector<std::string> SplitTokens(std::string_view text);
 
         /**
+         * @brief The deepest element nesting the reader follows before refusing the document.
+         *
+         * XNA has no ceiling and overflows its stack on a deep enough document; CNA refuses at
+         * this depth with an InvalidContentException instead. The corpus's deepest accepted graph
+         * has 200 levels.
+         */
+        CNAEXT static constexpr int MaxNestingDepth = 1024;
+
+        /**
          * @brief The reader's position as .NET spells it in messages.
          *
          * @return `Line L, position P.`
@@ -366,5 +375,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
         std::vector<std::pair<std::string, SharedResource>> sharedResources_;
         std::vector<std::pair<std::string, ExternalEntry>> externalReferences_;
         bool currentElementEmpty_ = false;
+        int depth_ = 0;
+
+        struct DepthGuard
+        {
+            explicit DepthGuard(IntermediateReader& reader);
+            ~DepthGuard();
+            IntermediateReader& reader;
+        };
     };
 }

@@ -306,8 +306,12 @@ the corpus test (`modules/content-pipeline/tests/…/XnaIntermediateSerializerTe
 * **tinyxml2 is the XML substrate.** It rejects a processing instruction inside an element
   (`accept_processing_instruction`, which XNA accepts) and tolerates a byte-order mark inside the
   text handed to the reader (`accept_bom_and_declaration`, which .NET rejects); it keeps
-  whitespace-only element content but drops indentation between elements, and reports no
-  column, so `Line L, position 0.` replaces .NET's column in messages.
+  whitespace-only element content but drops indentation between elements, reports no
+  column, so `Line L, position 0.` replaces .NET's column in messages, and refuses element
+  nesting beyond 500 levels while parsing (the corpus's deepest graph has 200; XNA has no ceiling
+  and overflows its stack instead). The serializer keeps its own 1024-level guard behind that for
+  flattened members and refuses to write a graph that cycles through a member that is not a
+  shared resource.
 * **Paths.** Filenames under `ExternalReferences` are made relative to the relocation path's
   directory and written with backslashes as XNA does; a relative filename is resolved against that
   directory on reading and stored in the host's path form.

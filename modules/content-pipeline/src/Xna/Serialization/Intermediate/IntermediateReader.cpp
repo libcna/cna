@@ -172,10 +172,23 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
         return resolved;
     }
 
+    IntermediateReader::DepthGuard::DepthGuard(IntermediateReader& owner) : reader(owner)
+    {
+        if (++reader.depth_ > MaxNestingDepth)
+        {
+            --reader.depth_;
+            throw InvalidContentException("XML nests deeper than the " + std::to_string(MaxNestingDepth) +
+                                          " levels CNA reads. " + reader.Location());
+        }
+    }
+
+    IntermediateReader::DepthGuard::~DepthGuard() { --reader.depth_; }
+
     ContentObject IntermediateReader::ReadObjectCore(const ContentSerializerAttribute& format,
                                                      ContentTypeSerializerBase& declaredSerializer,
                                                      const ContentObject& existingInstance)
     {
+        const DepthGuard depth(*this);
         const std::string& name = format.getElementNameProperty();
         const bool flatten = format.getFlattenContentProperty();
         ContentTypeSerializerBase* serializer = &declaredSerializer;
@@ -240,6 +253,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
                                                         ContentTypeSerializerBase& typeSerializer,
                                                         const ContentObject& existingInstance)
     {
+        const DepthGuard depth(*this);
         const bool flatten = format.getFlattenContentProperty();
         const bool savedEmpty = currentElementEmpty_;
         bool wasEmpty = false;

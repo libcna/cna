@@ -97,9 +97,24 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
         return *result;
     }
 
+    IntermediateWriter::DepthGuard::DepthGuard(IntermediateWriter& owner, const std::string& elementName) : writer(owner)
+    {
+        if (++writer.depth_ > MaxNestingDepth)
+        {
+            --writer.depth_;
+            throw InvalidContentException("The object graph nests deeper than " + std::to_string(MaxNestingDepth) +
+                                          " levels at element \"" + elementName +
+                                          "\"; a cycle through a member that is not a shared resource cannot be "
+                                          "written.");
+        }
+    }
+
+    IntermediateWriter::DepthGuard::~DepthGuard() { --writer.depth_; }
+
     void IntermediateWriter::WriteObjectCore(const ContentObject& value, const ContentSerializerAttribute& format,
                                              ContentTypeSerializerBase& declaredSerializer, bool forceTypeAttribute)
     {
+        const DepthGuard depth(*this, format.getElementNameProperty());
         const std::string& name = format.getElementNameProperty();
         const bool flatten = format.getFlattenContentProperty();
         if (declaredSerializer.IsNull(value))
@@ -149,6 +164,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
     void IntermediateWriter::WriteRawObjectCore(const ContentObject& value, const ContentSerializerAttribute& format,
                                                 ContentTypeSerializerBase& typeSerializer)
     {
+        const DepthGuard depth(*this, format.getElementNameProperty());
         const bool flatten = format.getFlattenContentProperty();
         if (!flatten)
         {
