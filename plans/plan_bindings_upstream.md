@@ -52,6 +52,60 @@ Each of these is a real observable divergence from XNA that a binding has measur
 pinned. Fixing them means deciding that XNA's IL outranks FNA where the two disagree,
 which is a change to the project's governing rule and not a change to a function.
 
+That rule has since been decided: `CLAUDE.md` now makes XNA the tie-break where a measured
+Microsoft XNA 4.0 behaviour and FNA's implementation disagree, and requires each divergence
+taken on those grounds to be recorded here. The rows above are still owner decisions, because
+none of them has been re-measured against the runtime itself; **XNAPACK-001** below is the first
+one that has.
+
+---
+
+## XNAPACK-001 — every float channel XNA packs is rounded, ties to even, and CNA truncated
+
+**Fixed 2026-09-05** in `modules/math/src/Color.cpp`, the fourteen headers under
+`modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/` that turn a float
+channel into an integer one (the three half-float types have no rounding rule of their own),
+and the new shared helper `modules/core/include/CNA/Internal/PackedRounding.hpp`.
+
+Measured on the XNA 4.0 runtime itself, not read from anyone's source: the driver is
+`tools/xna-pipeline-oracle/framework/FrameworkPackingOracle.cs`, run by
+`run-framework-oracle.sh` under Wine against the installed XNA Game Studio 4.0 assemblies, and
+its 68 measurements are committed as
+`tests/reference/xna40/framework/framework-packing-oracle.json`. CNA reproduces all of them in
+`modules/graphics/tests/Microsoft/Xna/Framework/Graphics/PackedVector/XnaFrameworkPackingTests.cpp`,
+which also fails if a measured case gains no reproduction.
+
+The rule XNA follows, everywhere a float channel becomes an integer one:
+
+| finding | source | repro |
+|---|---|---|
+| `Color(Vector4)` rounds; it does not truncate | `color/vector4_quarters` | `new Color(new Vector4(0.25f, 0.5f, 0.75f, 1))` is `{64, 128, 191, 255}`; CNA gave `{63, 127, 191, 255}` |
+| the tie goes to the even neighbour, not away from zero | `color/vector4_tie_even`, `packed/Byte4/ties` | `126.5, 127.5, 128.5, 129.5` byte units pack as `126, 128, 128, 130`; `new Byte4(0.5f, 1.5f, 2.5f, 3.5f)` is `0x04020200` |
+| the same rule holds for the normalized types, which CNA rounded away from zero (`std::lroundf`) | `packed/NormalizedByte4/ties`, `packed/NormalizedShort4/ties` | `0.5f/127, 1.5f/127, 2.5f/127, 3.5f/127` packs as `0, 2, 2, 4` |
+| and for the colour layouts, which CNA rounded with `+ 0.5f` then truncated | `packed/Alpha8/ties`, `packed/Bgr565/ties`, `packed/Rg32/ties`, `packed/Rgba1010102/ties` | `new Alpha8(0.5f/255)` is `0x00`, not `0x01` |
+| `Color.PackFromVector4` saturates and rounds exactly like the constructor | `color/packfromvector4_out_of_range` | `(2, -1, 0.5, 1)` packs as `{255, 0, 128, 255}`; CNA wrapped to `{254, 1, 127, 255}` |
+| a NaN channel packs as 0, and the infinities saturate | `color/vector4_nan`, `packed/Byte4/nan_and_infinities` | `new Byte4(NaN, +inf, -inf, 1e30f)` is `0xFF00FF00` |
+| `Color.Lerp` and `Color.Multiply` are the exception: they truncate, and `Lerp` clamps its amount | `color/lerp_half`, `color/multiply_odd_ties`, `color/lerp_amount_above_one` | `Lerp(black, white, 0.5f)` is `127`, not `128` |
+
+FNA truncates in the constructors (`R = (byte) MathHelper.Clamp(color.X * 255, Byte.MinValue,
+Byte.MaxValue);`, `Color.cs`) and neither clamps nor rounds in `PackFromVector4`, which is what
+CNA reproduced and what `REMED-CORE-004` pinned. XNA wins, so those pins were rewritten against
+the measurements rather than deleted.
+
+Two consequences worth naming. The old `+ 0.5f then cast` and `std::clamp` paths let a NaN
+channel reach an integer cast, which is undefined behaviour in C++ where C# merely leaves the
+value unspecified; the shared helper closes that for every type at once. And the change is
+visible in output, not only in edge cases: it is what made the content pipeline's
+`VectorConverter` tables agree with XNA
+(`plans/plan_xnapipeline_parity.md` XNAPP-090..092).
+
+**Still open, measured in the same pass:** XNA's packed-vector structs all override `ToString()`
+to print their packed value as hex (`packed/Byte4/tostring` is `04030201`,
+`packed/Short2/tostring` is `00020001`). CNA implements `ToString()` on none of the seventeen
+types. That is a missing member of the XNA surface rather than a packing difference, so it is
+recorded here and left to the graphics module's own parity work; the two cases are listed as
+unreproduced in the test above rather than silently skipped.
+
 ---
 
 ## BINDFIX-001 — `GraphicsAdapter` is enumerated before the video subsystem exists

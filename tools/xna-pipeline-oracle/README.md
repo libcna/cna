@@ -101,6 +101,23 @@ The texture paths create a Direct3D device, so the driver needs the pipeline's n
 X display** (`CNA_XNA40_DISPLAY`, `:99` by default); without either, every resampling, DXT and
 mipmap case reports "Specified method is not supported", which is the environment, not XNA.
 
+## Framework packing oracle (`framework/`)
+
+`framework/FrameworkPackingOracle.cs` measures one thing the graphics oracle could only observe
+indirectly: how the XNA framework itself turns a float channel into an integer one. It packs
+`Color` through every float constructor, `FromNonPremultiplied`, `Lerp`, `Multiply` and
+`IPackedVector.PackFromVector4`, and every `Graphics.PackedVector` type through its float
+constructor, with inputs chosen so that truncation, round-half-away-from-zero and
+round-half-to-even each give a different answer, plus NaN and the infinities.
+
+```sh
+tools/xna-pipeline-oracle/framework/run-framework-oracle.sh   # writes tests/reference/xna40/framework/framework-packing-oracle.json
+```
+
+No Direct3D device is created here, so unlike the graphics oracle this one needs no display. What
+it settled is recorded in `plans/plan_bindings_upstream.md` (`XNAPACK-001`) and reproduced by
+`modules/graphics/tests/Microsoft/Xna/Framework/Graphics/PackedVector/XnaFrameworkPackingTests.cpp`.
+
 ## Not committed
 
 The Microsoft assemblies, the compiled oracles and the Wine-side temporaries live only under the

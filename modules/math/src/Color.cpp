@@ -2,6 +2,7 @@
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
+#include "CNA/Internal/PackedRounding.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -34,60 +35,35 @@ namespace Microsoft::Xna::Framework
             return static_cast<bytecs>(ClampToByteInt(value));
         }
 
-        // Scale a unit float in [0,1] to a byte value in [0,255], clamping out-of-range input.
-        // Matches every float-taking Color constructor in real FNA (e.g. "R = (byte)
-        // MathHelper.Clamp(color.X * 255, Byte.MinValue, Byte.MaxValue);", Color.cs) -- used by
-        // this file's Color(Vector4)/Color(Vector3)/Color(float,float,float[,float]) ctors.
+        // Scale a unit float in [0,1] to a byte value in [0,255], saturating out-of-range input
+        // and rounding to the nearest byte with ties to even -- what every float-taking Color
+        // constructor in XNA 4.0 does, measured on the runtime itself
+        // (tests/reference/xna40/framework/framework-packing-oracle.json, cases color/vector4_*).
+        // FNA truncates instead ("R = (byte) MathHelper.Clamp(color.X * 255, Byte.MinValue,
+        // Byte.MaxValue);", Color.cs), which turns Color(new Vector4(0.25f, 0.5f, 0.75f, 1)) into
+        // {63, 127, 191, 255} where XNA gives {64, 128, 191, 255}. XNA wins (CLAUDE.md; the
+        // divergence is recorded in plans/plan_bindings_upstream.md).
+        //
+        // NaN yields 0, which is both what the XNA runtime produces (color/vector4_nan) and what
+        // keeps the conversion defined: casting NaN to an integer is undefined behaviour in C++,
+        // where C# leaves it merely unspecified.
         [[nodiscard]] bytecs ToByteFromUnitClamped(float value)
         {
-            const float clamped = MathHelper::Clamp(value * 255.0f, static_cast<float>(SharpRuntime::BYTE_MIN),
-                                                     static_cast<float>(SharpRuntime::BYTE_MAX));
-            if (std::isnan(clamped))
-            {
-                // MathHelper::Clamp faithfully reproduces FNA's own comparison-based clamp,
-                // under which a NaN input passes through unclamped (NaN < min and max < NaN are
-                // both false) -- correct to preserve, since MathHelper::Clamp is a public XNA
-                // API method used well beyond this file. But static_cast<intcs>(NaN) below would
-                // be undefined behavior in C++ (NaN is not representable in any integer type),
-                // unlike C#'s own (byte) cast, which merely yields an unspecified-but-defined
-                // value for NaN. 0 is this project's deterministic, documented stand-in for a
-                // result FNA itself leaves unspecified.
-                return bytecs{0};
-            }
-            return static_cast<bytecs>(static_cast<intcs>(clamped));
-        }
-
-        // Scale a unit float to a byte value via truncation (not clamping), matching FNA's
-        // IPackedVector.PackFromVector4 exactly: unlike every constructor above, FNA's real
-        // implementation does NOT clamp -- "R = (byte) (vector.X * 255.0f);" (Color.cs) casts
-        // directly, so an out-of-range component wraps rather than saturating at 0/255. A
-        // direct static_cast<bytecs>(value * 255.0f) is genuine undefined behavior in C++
-        // whenever the scaled value cannot be represented in bytecs's source integer type --
-        // which routinely happens for an HDR-authored or otherwise-unclamped Vector4. This
-        // truncates through a wide, always-safely-representable integer type first (a signed
-        // int -> bytecs narrowing conversion is well-defined modulo-256 wraparound in C++, not
-        // UB), reproducing FNA's truncating low-byte behavior for every realistic input while
-        // remaining well-defined for all of them; NaN/+-Infinity deterministically produce 0 (a
-        // result .NET itself leaves unspecified for this exact conversion).
-        [[nodiscard]] bytecs ToByteFromUnitTruncated(float value)
-        {
-            const float scaled = value * 255.0f;
-            if (!std::isfinite(scaled))
-            {
-                return bytecs{0};
-            }
-            constexpr float SafeBound = 8388608.0f; // 2^23: exact in float, well within intcs
-            const float bounded = std::clamp(scaled, -SafeBound, SafeBound);
-            return static_cast<bytecs>(static_cast<intcs>(bounded));
+            return static_cast<bytecs>(CNA::Internal::ClampAndRound(
+                value * 255.0f, static_cast<float>(SharpRuntime::BYTE_MIN),
+                static_cast<float>(SharpRuntime::BYTE_MAX)));
         }
 
         // Safely narrows a float already destined for the intcs-taking Color constructor (which
         // clamps again to [0,255] via ToByte() immediately) down to intcs, avoiding the
         // undefined behavior of casting a non-finite or out-of-intcs-range float directly to a
-        // 32-bit integer. Color::Lerp/Multiply share the exact same root cause as
-        // ToByteFromUnitTruncated above -- an interpolation/scale factor that is NaN (e.g. a
-        // caller's own 0/0) or otherwise produces a huge intermediate float reaches a bare
-        // static_cast<intcs>(...) with no guard. The exact pre-clamp bound is otherwise
+        // 32-bit integer. Color::Lerp/Multiply carry the same C++ hazard the conversion above
+        // does -- an interpolation/scale factor that is NaN (e.g. a caller's own 0/0) or
+        // otherwise produces a huge intermediate float reaches a bare static_cast<intcs>(...)
+        // with no guard. They do NOT round: XNA truncates in both (measured color/lerp_half and
+        // color/multiply_half in tests/reference/xna40/framework/framework-packing-oracle.json,
+        // where 127.5 becomes 127), unlike the float constructors, so truncating here is the
+        // faithful behaviour and not an oversight. The exact pre-clamp bound is otherwise
         // inconsequential -- ToByte()'s own clamp to [0,255] runs right after -- so any range
         // comfortably inside intcs's representable span is safe to pick.
         [[nodiscard]] intcs SafeFloatToIntcs(float value)
@@ -488,10 +464,16 @@ namespace Microsoft::Xna::Framework
 
     void Color::PackFromVector4(const Vector4& vector)
     {
-        setRProperty(ToByteFromUnitTruncated(vector.X));
-        setGProperty(ToByteFromUnitTruncated(vector.Y));
-        setBProperty(ToByteFromUnitTruncated(vector.Z));
-        setAProperty(ToByteFromUnitTruncated(vector.W));
+        // XNA's IPackedVector.PackFromVector4 saturates and rounds exactly like the
+        // Color(Vector4) constructor: measured color/packfromvector4_quarters and
+        // color/packfromvector4_out_of_range in
+        // tests/reference/xna40/framework/framework-packing-oracle.json. FNA's differs from its
+        // own constructor here -- "R = (byte) (vector.X * 255.0f);" (Color.cs) neither clamps nor
+        // rounds -- so an out-of-range component wrapped instead of saturating. XNA wins.
+        setRProperty(ToByteFromUnitClamped(vector.X));
+        setGProperty(ToByteFromUnitClamped(vector.Y));
+        setBProperty(ToByteFromUnitClamped(vector.Z));
+        setAProperty(ToByteFromUnitClamped(vector.W));
     }
 
     // ------------------------------------------------------------------

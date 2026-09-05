@@ -5,6 +5,7 @@
 #include <cmath>
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/IPackedVector.hpp"
+#include "CNA/Internal/PackedRounding.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics::PackedVector
 {
@@ -80,10 +81,16 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
     private:
         uint32_t packedValue_;
         static uint32_t Pack(float x, float y, float z, float w) {
-            auto xi = static_cast<uint8_t>(static_cast<int8_t>(std::lroundf(std::clamp(x,-1.f,1.f)*127.f)));
-            auto yi = static_cast<uint8_t>(static_cast<int8_t>(std::lroundf(std::clamp(y,-1.f,1.f)*127.f)));
-            auto zi = static_cast<uint8_t>(static_cast<int8_t>(std::lroundf(std::clamp(z,-1.f,1.f)*127.f)));
-            auto wi = static_cast<uint8_t>(static_cast<int8_t>(std::lroundf(std::clamp(w,-1.f,1.f)*127.f)));
+            // XNA saturates the channel and rounds it to the nearest integer with ties to even
+        // (.NET Math.Round), where FNA rounds a tie away from zero and a NaN channel reaches an
+        // integer cast undefined in C++. Measured on the XNA 4.0 runtime:
+        // tests/reference/xna40/framework/framework-packing-oracle.json, cases packed/*/ties,
+        // packed/*/negative_ties and packed/*/nan_and_infinities.
+
+            auto xi = static_cast<uint8_t>(static_cast<int8_t>(CNA::Internal::ClampAndRound(std::clamp(x, -1.0f, 1.0f) * 127.0f, -127.0f, 127.0f)));
+            auto yi = static_cast<uint8_t>(static_cast<int8_t>(CNA::Internal::ClampAndRound(std::clamp(y, -1.0f, 1.0f) * 127.0f, -127.0f, 127.0f)));
+            auto zi = static_cast<uint8_t>(static_cast<int8_t>(CNA::Internal::ClampAndRound(std::clamp(z, -1.0f, 1.0f) * 127.0f, -127.0f, 127.0f)));
+            auto wi = static_cast<uint8_t>(static_cast<int8_t>(CNA::Internal::ClampAndRound(std::clamp(w, -1.0f, 1.0f) * 127.0f, -127.0f, 127.0f)));
             return static_cast<uint32_t>(xi) | (static_cast<uint32_t>(yi)<<8) | (static_cast<uint32_t>(zi)<<16) | (static_cast<uint32_t>(wi)<<24);
         }
     };

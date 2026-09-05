@@ -294,12 +294,30 @@ TEST(ColorTest, FromNonPremultipliedScalesRgbByAlpha)
 
 TEST(ColorTest, FromNonPremultipliedVector4ScalesRgbByAlpha)
 {
-    // alpha=0.5 → each channel * 0.5
+    // alpha=0.5 → each channel * 0.5, and 0.5 * 255 = 127.5 rounds to 128, not 127
+    // (tests/reference/xna40/framework/framework-packing-oracle.json, color/vector4_quarters).
     Color c = Color::FromNonPremultiplied(Vector4(1.0f, 0.0f, 0.0f, 0.5f));
-    EXPECT_EQ(c.getAProperty(), 127);
+    EXPECT_EQ(c.getAProperty(), 128);
     EXPECT_GT(c.getRProperty(), 0);
     EXPECT_EQ(c.getGProperty(), 0);
     EXPECT_EQ(c.getBProperty(), 0);
+}
+
+// color/from_non_premultiplied_vector4 and color/from_non_premultiplied_ints: the float overload
+// premultiplies before packing, so both overloads answer the same colour for the same input.
+TEST(ColorTest, FromNonPremultipliedOverloadsAgreeWithXna)
+{
+    Color fromFloats = Color::FromNonPremultiplied(Vector4(1.0f, 0.0f, 0.25f, 0.5f));
+    EXPECT_EQ(fromFloats.getRProperty(), 128);
+    EXPECT_EQ(fromFloats.getGProperty(), 0);
+    EXPECT_EQ(fromFloats.getBProperty(), 32);
+    EXPECT_EQ(fromFloats.getAProperty(), 128);
+
+    Color fromInts = Color::FromNonPremultiplied(255, 0, 64, 128);
+    EXPECT_EQ(fromInts.getRProperty(), 128);
+    EXPECT_EQ(fromInts.getGProperty(), 0);
+    EXPECT_EQ(fromInts.getBProperty(), 32);
+    EXPECT_EQ(fromInts.getAProperty(), 128);
 }
 
 // --- Vector4 / Vector3 constructors ---
@@ -431,11 +449,14 @@ TEST(ColorTest, PackFromVector4SetsComponents)
     EXPECT_EQ(c.getAProperty(), 255);
 }
 
-// REMED-CORE-004: PackFromVector4's own IPackedVector contract (Color.cs's
-// "R = (byte)(vector.X * 255.0f);") does NOT clamp like the Color(Vector4) constructor does --
-// out-of-range components truncate/wrap instead of saturating at 0/255. These pin the exact,
-// documented, UB-free wraparound values CNA now produces, matching FNA's truncating (not
-// clamping) semantics for in-range-ish overflow while remaining well-defined for every input.
+// REMED-CORE-004, revised against the XNA 4.0 runtime itself
+// (tests/reference/xna40/framework/framework-packing-oracle.json, cases color/packfromvector4_*):
+// XNA's IPackedVector.PackFromVector4 saturates and rounds exactly like the Color(Vector4)
+// constructor, so an out-of-range component clamps at 0/255 rather than wrapping. FNA's does not
+// -- "R = (byte) (vector.X * 255.0f);" (Color.cs) neither clamps nor rounds, and produced the
+// wraparound these tests used to pin. XNA wins (CLAUDE.md; plans/plan_bindings_upstream.md).
+// A non-finite component stays defined here, unlike a bare C++ cast: NaN packs as 0, which is
+// what the runtime produces, and the infinities saturate with everything else.
 TEST(ColorTest, PackFromVector4AtZeroGivesZero)
 {
     Color c(255, 255, 255, 255);
@@ -456,48 +477,48 @@ TEST(ColorTest, PackFromVector4AtOneGivesTwoFiftyFive)
     EXPECT_EQ(c.getAProperty(), 255);
 }
 
-TEST(ColorTest, PackFromVector4JustOutsideRangeWrapsRatherThanClamping)
+TEST(ColorTest, PackFromVector4RoundsAndSaturatesLikeTheConstructor)
 {
-    // 2.0 * 255 = 510 -> truncated int 510 -> low byte 510 mod 256 = 254.
-    Color c(0, 0, 0, 0);
-    c.PackFromVector4(Vector4(2.0f, 0.0f, 0.0f, 0.0f));
-    EXPECT_EQ(c.getRProperty(), 254);
-}
+    // color/packfromvector4_quarters and color/packfromvector4_out_of_range.
+    Color quarters(0, 0, 0, 0);
+    quarters.PackFromVector4(Vector4(0.25f, 0.5f, 0.75f, 1.0f));
+    EXPECT_EQ(quarters.getRProperty(), 64);
+    EXPECT_EQ(quarters.getGProperty(), 128);
+    EXPECT_EQ(quarters.getBProperty(), 191);
+    EXPECT_EQ(quarters.getAProperty(), 255);
 
-TEST(ColorTest, PackFromVector4NegativeWrapsRatherThanClampingToZero)
-{
-    // -1.0 * 255 = -255 -> truncated int -255 -> low byte (-255 mod 256) = 1.
-    Color c(0, 0, 0, 0);
-    c.PackFromVector4(Vector4(-1.0f, 0.0f, 0.0f, 0.0f));
-    EXPECT_EQ(c.getRProperty(), 1);
+    Color outOfRange(0, 0, 0, 0);
+    outOfRange.PackFromVector4(Vector4(2.0f, -1.0f, 0.5f, 1.0f));
+    EXPECT_EQ(outOfRange.getRProperty(), 255);
+    EXPECT_EQ(outOfRange.getGProperty(), 0);
+    EXPECT_EQ(outOfRange.getBProperty(), 128);
+    EXPECT_EQ(outOfRange.getAProperty(), 255);
 }
 
 TEST(ColorTest, PackFromVector4NaNIsDefinedNotUndefinedBehavior)
 {
     Color c(128, 128, 128, 128);
-    c.PackFromVector4(Vector4(std::numeric_limits<float>::quiet_NaN(), 0.0f, 0.0f, 0.0f));
+    c.PackFromVector4(Vector4(std::numeric_limits<float>::quiet_NaN(), 0.5f, 0.5f, 0.5f));
     EXPECT_EQ(c.getRProperty(), 0);
+    EXPECT_EQ(c.getGProperty(), 128);
 }
 
-TEST(ColorTest, PackFromVector4PositiveInfinityIsDefinedNotUndefinedBehavior)
+TEST(ColorTest, PackFromVector4InfinitiesSaturate)
 {
     Color c(0, 0, 0, 0);
-    c.PackFromVector4(Vector4(std::numeric_limits<float>::infinity(), 0.0f, 0.0f, 0.0f));
-    EXPECT_EQ(c.getRProperty(), 0);
+    c.PackFromVector4(Vector4(std::numeric_limits<float>::infinity(),
+                              -std::numeric_limits<float>::infinity(), 0.5f, 1.0f));
+    EXPECT_EQ(c.getRProperty(), 255);
+    EXPECT_EQ(c.getGProperty(), 0);
+    EXPECT_EQ(c.getBProperty(), 128);
+    EXPECT_EQ(c.getAProperty(), 255);
 }
 
-TEST(ColorTest, PackFromVector4NegativeInfinityIsDefinedNotUndefinedBehavior)
-{
-    Color c(0, 0, 0, 0);
-    c.PackFromVector4(Vector4(-std::numeric_limits<float>::infinity(), 0.0f, 0.0f, 0.0f));
-    EXPECT_EQ(c.getRProperty(), 0);
-}
-
-TEST(ColorTest, PackFromVector4ExtremeFiniteValueIsDefinedNotUndefinedBehavior)
+TEST(ColorTest, PackFromVector4ExtremeFiniteValueSaturates)
 {
     Color c(0, 0, 0, 0);
     c.PackFromVector4(Vector4(1e30f, -1e30f, 0.0f, 0.0f));
-    EXPECT_EQ(c.getRProperty(), 0);
+    EXPECT_EQ(c.getRProperty(), 255);
     EXPECT_EQ(c.getGProperty(), 0);
 }
 
