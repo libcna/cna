@@ -540,11 +540,12 @@ Filled by `parity_report.py` into `docs/xna-content-pipeline-parity-report.md` a
 each phase close. The member denominator the report counts is 705: the inventory's 708 minus the
 3 delegate-plumbing members the report lists separately (§5).
 
-**Current (2026-09-05, after Phase 5, Phase 6 and seven Phase 7 rows): types 101/128,
-members 574/705, enum values 17/27, importers 0/10, extensions 0/18, processors 9/12,
-properties 44/47, intermediate-serializer features §13 complete against the 254-case corpus,
-targets verified 0/3, black-box-verified families 3 (intermediate XML byte for byte; the graphics
-content object model against 511 measurements; the framework's float packing against 68).** The previous plan's routes
+**Current (2026-09-05, after Phases 5–9 and `XNAPP-230`): types 109/128,
+members 622/705, enum values 27/27 (closed), importers 1/10, extensions 0/18, processors 11/12,
+properties 46/47, intermediate-serializer features §13 complete against the 265-case corpus,
+targets verified 0/3, black-box-verified families 4 (intermediate XML byte for byte, now including
+the genuine `XmlImporter`; the graphics content object model against 542 measurements; the
+framework's float packing against 68; the audio content model against 31).** The previous plan's routes
 exist and work, but by this plan's definition only XNA-namespaced types with tested behaviour
 count; the input/processor counts stay at zero until a row passes the `IMPLEMENTED+TESTED` bar,
 which requires a fixture, an importer test, a processor test, both output tests and a
@@ -837,19 +838,25 @@ Session 1 (2026-09-05): Phases 0–1 done except `XNAPP-008`/`015`/`016`; Phase 
 is edited through `tools/xna-pipeline-oracle/parity_map_edit.py` with a decision document, never
 by hand, and the report regenerates with `parity_report.py`. Phases 4 and 5 done (only the
 `XmlImporter` leg of `074` remains, as `XNAPP-230`). Phase 6 is done (`XNAPP-090`–`097`, `099`; `098` partial).
-`MeshBuilder` and `MeshHelper` are Phase 8 (`XNAPP-150`, `151`), not Phase 6. Phase 7 has started:
-`XNAPP-130`–`135` and `137` are done and `138` is partial; the one processor row left is
-`XNAPP-136` (audio and video, which waits on the 5 `…Audio` types). `XNAPP-134` generates tangent
-frames inside the model processor; `XNAPP-151`'s `MeshHelper.CalculateTangentFrames` will take that
-computation over rather than write a second one. The next phases need their measurements before their code -- extend
+Phase 7 is done except the `VideoProcessor` half of `XNAPP-136`, which waits on `XNAPP-043`'s
+`VideoContent`; `138` stays partial for the same reason. **Phase 8 is done** (`XNAPP-150`–`152`):
+`MeshBuilder`, all ten `MeshHelper` operations, and a game's own processor building a scene that
+reaches an `.xnb` CNA reads back. **Phase 9 is done** (`XNAPP-160`, `161`), with a fourth oracle at
+`tools/xna-pipeline-oracle/audio/`. `XNAPP-230` (`XmlImporter`) is done, which is the first of the
+ten importers. The next phases need their measurements before their code -- extend
 `tools/xna-pipeline-oracle/graphics/GraphicsContentOracle.cs` the way the texture side was
 measured. The intermediate serializer is
 verified byte for byte against `tests/reference/xna40/intermediate/`; extend the oracle
 (`tools/xna-pipeline-oracle/intermediate/run-intermediate-oracle.sh`) before asserting anything
 about the format that the corpus does not show. sharp-runtime (`next`, sibling checkout
 `sharp-runtimenext`) carries the XML fixes this phase needed; another session works in that
-checkout concurrently, so stage only your own hunks there. Next: the rest of Phase 6 and then Phase 7 in ID order, then `XNAPP-230` (`XmlImporter`)
-over this serializer. The owner asked for continuous commits and pushes (2026-09-05).
+checkout concurrently, so stage only your own hunks there. Next: Phase 13 in ID order
+(`XNAPP-200`, the `WavImporter` façade, is thin over `XNAPP-160`'s reader), then the other
+importers a façade can reach -- `FontDescriptionImporter` (Phase 11) and `EffectImporter`
+(Phase 12) -- before the ones that need a decoder or a modelling format. The owner asked for
+continuous commits and pushes (2026-09-05), and on the same day asked that unnecessary disk writes
+be avoided: build the one target a change needs (`ninja -C cmake-build-debug -j3
+CnaContentPipelineTests`) rather than the whole configuration, and never reconfigure or clean.
 The build directory is `cmake-build-debug/`; **this session builds with `-j3` at the owner's
 request** (a per-session cap, not a repository rule); the oracle regenerates with
 `tools/xna-pipeline-oracle/run-oracle.sh`.
