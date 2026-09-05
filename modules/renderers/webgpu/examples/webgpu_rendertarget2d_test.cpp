@@ -295,18 +295,30 @@ protected:
                   "Check E (other half): the render target itself really did receive Clear(Red)");
         }
 
-        // Check F: MultiSampleCount property fidelity -- this test's GraphicsDeviceManager never
-        // enables PreferMultiSampling, so the renderer's own global MSAA sample count (WEBGPU-58)
-        // stays disabled throughout; a RenderTarget2D unconditionally mirrors that renderer-global
-        // state (not its own per-instance request), so requesting 4 here must still honestly
-        // report 0. See examples/webgpu_msaa_test.cpp for the counterpart with MSAA actually
-        // engaged.
+        // Check F: MultiSampleCount property fidelity. This test's GraphicsDeviceManager never
+        // enables PreferMultiSampling, so the renderer's own global MSAA (WEBGPU-58) is off
+        // throughout -- and that is exactly what makes this check worth having since WEBGPU-165.
+        // A target used to mirror the renderer-global state and report 0 here whatever it asked
+        // for; it now honours its own request, so a 4x target and a single-sample one can be alive
+        // at once on a renderer that is itself single-sample.
         {
             RenderTarget2D rtMsaaRequest(dev, kRTSize, kRTSize, false, SurfaceFormat::Color,
                                         DepthFormat::None, 4, RenderTargetUsage::DiscardContents);
-            check(rtMsaaRequest.getMultiSampleCountProperty() == 0,
-                  "Check F: RenderTarget2D MultiSampleCount request 4 -> honestly reports 0 "
-                  "(renderer's own global MSAA is disabled in this test -- see webgpu_msaa_test.cpp)");
+            RenderTarget2D rtNoMsaa(dev, kRTSize, kRTSize, false, SurfaceFormat::Color,
+                                    DepthFormat::None, 0, RenderTargetUsage::DiscardContents);
+            const int appliedMsaa = rtMsaaRequest.getMultiSampleCountProperty();
+            const int appliedNone = rtNoMsaa.getMultiSampleCountProperty();
+            std::printf("[INFO] Check F: request 4 -> applied %d, request 0 -> applied %d "
+                        "(renderer global MSAA is off)\n", appliedMsaa, appliedNone);
+            check(appliedMsaa == 4 || appliedMsaa == 0,
+                  ("Check F: a RenderTarget2D requesting 4 reports a legal applied count: got " +
+                   std::to_string(appliedMsaa)).c_str());
+            check(appliedNone == 0,
+                  ("Check F: a RenderTarget2D requesting 0 reports 0, whatever its sibling asked "
+                   "for: got " + std::to_string(appliedNone)).c_str());
+            check(appliedMsaa >= appliedNone,
+                  "Check F: the two targets' counts are independent -- the 4x request is not "
+                  "dragged down to its single-sample sibling's, nor the reverse");
         }
 
         // Check G (plans/plan_webgpu.md WEBGPU-164): mipMap=true used to be a documented scope cut
@@ -381,8 +393,8 @@ protected:
                   "Check G: a level past the end of the chain still throws");
         }
 
-        std::printf("=== %d/11 PASS ===\n", passCount_);
-        result_ = (passCount_ == 11) ? 0 : 1;
+        std::printf("=== %d/13 PASS ===\n", passCount_);
+        result_ = (passCount_ == 13) ? 0 : 1;
         Exit();
     }
 

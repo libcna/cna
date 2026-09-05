@@ -190,8 +190,12 @@ namespace
     // so GetData at level > 0 returns real downsampled content. `preservesOnRebind` true since
     // REMED-GFX-136: RenderPendingDrawsToRenderTargetCubeFace() no longer hardcodes WGPULoadOp_Clear,
     // it uses the same `clearPending || !preserveContents` choice as its RenderTarget2D sibling.
+    // `msaaCubeTargets` TRUE as of WEBGPU-165: the per-instance multiSampleCount argument used to be
+    // discarded (every pipeline baked one renderer-global count until WEBGPU-197), so a standalone
+    // MSAA request degraded to single-sample; it is now honoured, clamped down to a count the
+    // adapter offers.
     constexpr Contract kContract{"WEBGPU", true, Support::Exact, Support::Exact,
-                                 true, false, Support::Exact, MipTargets::Real, true, true, false, false, false};
+                                 true, true, Support::Exact, MipTargets::Real, true, true, false, false, false};
 #elif defined(CNA_RENDERER_SDL_GPU)
     constexpr Contract kContract{"SDL_GPU", true, Support::Exact, Support::Exact,
                                  true, true, Support::Exact, MipTargets::Real, true, true, false, false, false};

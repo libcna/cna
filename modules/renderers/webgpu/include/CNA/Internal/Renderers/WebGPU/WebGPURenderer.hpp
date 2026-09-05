@@ -220,7 +220,8 @@ namespace CNA::Internal::Renderers::WebGPU
     {
     public:
         WebGPURenderTargetRenderer(WebGPURenderer& owner, int width, int height,
-                                  int depthFormat, bool preserveContents, bool mipMap = false);
+                                  int depthFormat, bool preserveContents, bool mipMap = false,
+                                  int multiSampleCount = 0);
         ~WebGPURenderTargetRenderer() override;
 
         WebGPURenderTargetRenderer(const WebGPURenderTargetRenderer&) = delete;
@@ -398,7 +399,8 @@ namespace CNA::Internal::Renderers::WebGPU
     {
     public:
         WebGPURenderTargetCubeRenderer(WebGPURenderer& owner, int size, int depthFormat,
-                                      bool preserveContents, bool mipMap);
+                                      bool preserveContents, bool mipMap,
+                                      int multiSampleCount = 0);
         ~WebGPURenderTargetCubeRenderer() override;
 
         WebGPURenderTargetCubeRenderer(const WebGPURenderTargetCubeRenderer&) = delete;

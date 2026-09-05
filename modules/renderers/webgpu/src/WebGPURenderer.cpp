@@ -1791,11 +1791,17 @@ namespace CNA::Internal::Renderers::WebGPU
     // WEBGPU-114: see this class's own header doc comment for the full architecture summary.
     WebGPURenderTargetCubeRenderer::WebGPURenderTargetCubeRenderer(WebGPURenderer& owner, int size,
                                                                   int depthFormat,
-                                                                  bool preserveContents, bool mipMap)
+                                                                  bool preserveContents, bool mipMap,
+                                                                  int multiSampleCount)
         : owner_(&owner), size_(size), preserveContents_(preserveContents)
     {
         if (size_ <= 0)
             throw std::invalid_argument("CNA WebGPU: RenderTargetCube size must be positive");
+        // WEBGPU-165: THIS cube's own requested sample count, clamped by the same empirical adapter
+        // probe the renderer-global path uses. It used to mirror `owner_->sampleCount_`; see
+        // WebGPURenderer::CreateRenderTarget2D for why that was necessary and what changed.
+        appliedMultiSampleCount_ = owner_->PickSampleCount(multiSampleCount);
+        if (appliedMultiSampleCount_ < 2) appliedMultiSampleCount_ = 0;
         // WEBGPU-114: mipMap=true allocates a full mip chain; each face's chain is regenerated from
         // its resolved level 0 after that face's render pass (see RenderPendingDrawsToRenderTarget-
         // CubeFace). The level count matches the XNA layer's CalculateMipLevels(size) =
@@ -1895,7 +1901,8 @@ namespace CNA::Internal::Renderers::WebGPU
             // attachment the face pass uses (owner_->sampleCount_ when MSAA is engaged) -- every
             // attachment in a wgpu-native render pass must agree on sample count. Still shared
             // across all six faces: only one face renders at a time.
-            depthDescriptor.sampleCount = static_cast<std::uint32_t>(owner_->sampleCount_);
+            depthDescriptor.sampleCount =
+                static_cast<std::uint32_t>(std::max(1, appliedMultiSampleCount_));  // WEBGPU-165
             depthTexture_ = wgpuDeviceCreateTexture(owner_->Device(), &depthDescriptor);
             if (depthTexture_ == nullptr)
             {
@@ -1928,7 +1935,8 @@ namespace CNA::Internal::Renderers::WebGPU
         // 6-layer image) so a PreserveContents face loads its OWN samples rather than whichever
         // face rendered last -- the per-face choice Vulkan/EasyGL settled on (REMED-GFX-141).
         // texture_/faceViews_ stay single-sample and become the resolve destinations.
-        if (owner_->sampleCount_ > 1)
+        // WEBGPU-165: THIS cube's own applied count, decided above, not the renderer's global.
+        if (appliedMultiSampleCount_ > 1)
         {
             for (int face = 0; face < 6; ++face)
             {
@@ -1939,7 +1947,7 @@ namespace CNA::Internal::Renderers::WebGPU
                 msaaDescriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(size_), static_cast<std::uint32_t>(size_), 1};
                 msaaDescriptor.format = colorFormat_;
                 msaaDescriptor.mipLevelCount = 1;
-                msaaDescriptor.sampleCount = static_cast<std::uint32_t>(owner_->sampleCount_);
+                msaaDescriptor.sampleCount = static_cast<std::uint32_t>(appliedMultiSampleCount_);
                 WGPUTexture msaaTex = wgpuDeviceCreateTexture(owner_->Device(), &msaaDescriptor);
                 WGPUTextureView msaaView = nullptr;
                 if (msaaTex != nullptr)
@@ -1967,7 +1975,7 @@ namespace CNA::Internal::Renderers::WebGPU
                 msaaColorTextures_[static_cast<std::size_t>(face)] = msaaTex;
                 msaaColorViews_[static_cast<std::size_t>(face)] = msaaView;
             }
-            appliedMultiSampleCount_ = owner_->sampleCount_;
+            // WEBGPU-165: decided before allocation, from this cube's own request.
         }
         sampled_ = std::make_shared<const WebGPUSampledResourceEXT>(texture_, cubeView_);
     }
@@ -2320,11 +2328,20 @@ namespace CNA::Internal::Renderers::WebGPU
 
     WebGPURenderTargetRenderer::WebGPURenderTargetRenderer(WebGPURenderer& owner, int width, int height,
                                                           int depthFormat, bool preserveContents,
-                                                          bool mipMap)
+                                                          bool mipMap, int multiSampleCount)
         : owner_(&owner), width_(width), height_(height), preserveContents_(preserveContents)
     {
         if (width_ <= 0 || height_ <= 0)
             throw std::invalid_argument("CNA WebGPU: RenderTarget2D dimensions must be positive");
+
+        // WEBGPU-165: THIS target's own requested sample count, clamped by the same empirical
+        // adapter probe the renderer-global path uses (`PickSampleCount`, which asks the device
+        // rather than assuming a set). It used to mirror `owner_->sampleCount_` unconditionally,
+        // because every pipeline baked one renderer-global count and a target that opted out would
+        // have been pipeline-incompatible; `WEBGPU-197` made the count a per-pass property, so a
+        // target may now differ from the renderer and from its siblings.
+        appliedMultiSampleCount_ = owner_->PickSampleCount(multiSampleCount);
+        if (appliedMultiSampleCount_ < 2) appliedMultiSampleCount_ = 0;
 
         // WEBGPU-164: the same count the XNA layer already computed with CalculateMipLevels before
         // it reached this renderer -- halving until both extents are 1 -- so what is allocated here
@@ -2420,9 +2437,10 @@ namespace CNA::Internal::Renderers::WebGPU
             depthDescriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(width_), static_cast<std::uint32_t>(height_), 1};
             depthDescriptor.format = depthMap.format;
             depthDescriptor.mipLevelCount = 1;
-            // WEBGPU-58: matches the colour attachment's own sample count exactly (wgpu-native
-            // validation requires every attachment in a render pass to agree) -- 1 outside MSAA.
-            depthDescriptor.sampleCount = static_cast<std::uint32_t>(owner_->sampleCount_);
+            // WEBGPU-58/165: matches the colour attachment's own sample count exactly (wgpu-native
+            // validation requires every attachment in a render pass to agree) -- THIS target's, not the
+            // renderer's, and 1 outside MSAA.
+            depthDescriptor.sampleCount = static_cast<std::uint32_t>(std::max(1, appliedMultiSampleCount_));
             depthTexture_ = wgpuDeviceCreateTexture(owner_->Device(), &depthDescriptor);
             if (depthTexture_ == nullptr)
             {
@@ -2447,13 +2465,11 @@ namespace CNA::Internal::Renderers::WebGPU
             }
         }
 
-        // WEBGPU-58: mirror the owner's CURRENT global sampleCount_ unconditionally -- see this
-        // class's own top-of-class doc comment (WebGPURenderer.hpp) for why the per-instance
-        // requested multiSampleCount argument is intentionally not read here at all. colorTexture_/
-        // colorView_ above stay single-sample regardless -- they become the resolve
+        // WEBGPU-165: allocated at THIS target's own applied count, not the renderer's.
+        // colorTexture_/colorView_ above stay single-sample regardless -- they become the resolve
         // destination (still what View()/GetData() read from) once this multisampled texture
         // exists alongside them.
-        if (owner_->sampleCount_ > 1)
+        if (appliedMultiSampleCount_ > 1)
         {
             WGPUTextureDescriptor msaaDescriptor{};
             msaaDescriptor.label = StringView("CNA WebGPU RenderTarget2D MSAA Colour");
@@ -2462,7 +2478,7 @@ namespace CNA::Internal::Renderers::WebGPU
             msaaDescriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(width_), static_cast<std::uint32_t>(height_), 1};
             msaaDescriptor.format = colorFormat_;
             msaaDescriptor.mipLevelCount = 1;
-            msaaDescriptor.sampleCount = static_cast<std::uint32_t>(owner_->sampleCount_);
+            msaaDescriptor.sampleCount = static_cast<std::uint32_t>(appliedMultiSampleCount_);
             msaaColorTexture_ = wgpuDeviceCreateTexture(owner_->Device(), &msaaDescriptor);
             if (msaaColorTexture_ == nullptr)
             {
@@ -2493,7 +2509,8 @@ namespace CNA::Internal::Renderers::WebGPU
                 colorTexture_ = nullptr;
                 throw std::runtime_error("CNA WebGPU: failed to create RenderTarget2D MSAA colour view");
             }
-            appliedMultiSampleCount_ = owner_->sampleCount_;
+            // WEBGPU-165: appliedMultiSampleCount_ was decided before allocation, from THIS target's
+            // own request; it is not overwritten with the renderer's global here any more.
         }
         sampled_ = std::make_shared<const WebGPUSampledResourceEXT>(colorTexture_, colorView_);
     }
@@ -8679,9 +8696,21 @@ namespace CNA::Internal::Renderers::WebGPU
 
     int WebGPURenderer::PickSampleCount(int requestedMultiSampleCount)
     {
+        // WEBGPU-165: round DOWN to a supported count, never up. This used to answer 4 for ANY
+        // request of 2 or more, which is an increase rather than a clamp: a caller asking for 2 got
+        // 4. Nothing measured it while every target mirrored the renderer-global count, and the
+        // shared cross-renderer contract is explicit -- `rendertarget_msaa_depth_contract` asserts
+        // `applied <= requested` for every legal request, and its Depth24/2 and Depth24/3 legs are
+        // exactly the ones a round-up fails.
+        //
+        // The supported set is probed, not assumed. wgpu-native's own spec text says a multisample
+        // count "must be 1 or 4", but this asks the concrete adapter -- the same reason
+        // Supports4xMsaa() exists rather than a constant.
         if (requestedMultiSampleCount < 2)
             return 1;
-        return Supports4xMsaa() ? 4 : 1;
+        if (requestedMultiSampleCount >= 4 && Supports4xMsaa())
+            return 4;
+        return 1;
     }
 
     void WebGPURenderer::ClearAllPipelineCaches()
@@ -8815,17 +8844,18 @@ namespace CNA::Internal::Renderers::WebGPU
         // refused a normal XNA constructor. The target now allocates the chain it was asked for and
         // regenerates levels 1.. from level 0 on unbind, which is FNA3D's ResolveTarget timing and
         // what the cube target (WEBGPU-114) already does per face.
-        // WEBGPU-58: the per-instance requested multiSampleCount argument is intentionally NOT
-        // read here -- WebGPURenderTargetRenderer's own constructor unconditionally mirrors this
-        // renderer's CURRENT global sampleCount_ instead (see that class's own top-of-class doc
-        // comment for exactly why a per-instance opt-out is unsafe given this renderer's single
-        // shared pipeline sample count). RenderTarget2D::RenderTarget2D() reads the real applied
-        // value back via GetMultiSampleCount() into its own MultiSampleCount property, matching
-        // FNA3D_GetMaxMultiSampleCount's real-clamped-value contract -- 0 whenever the renderer has
-        // no MSAA active, exactly as before this task.
-        (void) multiSampleCount;
+        // WEBGPU-165: the per-instance requested count is now honoured. It used to be discarded
+        // here because every pipeline baked one renderer-global sample count, so a target that
+        // opted out would have been pipeline-incompatible the moment anything drew 3D into it;
+        // WEBGPU-197 made the count a per-pass property, and the WEBGPU-58 module-reuse hazard that
+        // would otherwise have made per-target counts silently wrong was re-measured and does not
+        // reproduce on this pin (WebGPU_MsaaModuleReuseProbe). RenderTarget2D::RenderTarget2D()
+        // reads the real applied value back via GetMultiSampleCount() into its own
+        // MultiSampleCount property, matching FNA3D_GetMaxMultiSampleCount's
+        // real-clamped-value contract.
         return std::make_unique<WebGPURenderTargetRenderer>(*this, w, h, depthFormat,
-                                                           preserveContents, mipMap);
+                                                           preserveContents, mipMap,
+                                                           multiSampleCount);
     }
 
     void WebGPURenderer::SetRenderTarget2D(IRenderTargetRenderer* rt)
@@ -8967,11 +8997,13 @@ namespace CNA::Internal::Renderers::WebGPU
     std::unique_ptr<IRenderTargetCubeRenderer> WebGPURenderer::CreateRenderTargetCube(
         int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
-        (void) multiSampleCount; // see WebGPURenderTargetCubeRenderer's own doc comment: ignored.
+        // WEBGPU-165: honoured, like its 2D sibling -- see CreateRenderTarget2D for why it used to
+        // be discarded and what changed.
         // REMED-GFX-136: preserveContents is the public RenderTargetUsage, reaching a cube target
         // for the first time -- see RenderPendingDrawsToRenderTargetCubeFace().
         return std::make_unique<WebGPURenderTargetCubeRenderer>(*this, size, depthFormat,
-                                                              preserveContents, mipMap);
+                                                              preserveContents, mipMap,
+                                                              multiSampleCount);
     }
 
     std::unique_ptr<ITexture3DRenderer> WebGPURenderer::CreateTexture3D(

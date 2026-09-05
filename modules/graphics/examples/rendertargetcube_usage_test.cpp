@@ -172,13 +172,13 @@ namespace
                                  false, Support::Exact, false, true, false};
 #elif defined(CNA_RENDERER_WEBGPU)
     // `mipMapCubeTargets` true: WEBGPU-114 builds a real mip chain for a mipMap=true RenderTargetCube
-    // and regenerates each face from its resolved level 0. `msaaCubeTargets` false: like EASYGL, a
-    // WebGPU cube target multisamples only when the BACKBUFFER was created multisampled (the
-    // per-instance multiSampleCount argument is not read, mirroring RenderTarget2D), so this file's
-    // standalone MSAA request does not engage it -- the real per-face path is covered by
-    // WebGPU_RenderTargetCube Check F and rendertargetcube_msaa_face_test.
+    // and regenerates each face from its resolved level 0. `msaaCubeTargets` TRUE as of WEBGPU-165:
+    // a cube target used to multisample only when the BACKBUFFER was created multisampled, because
+    // the per-instance multiSampleCount argument was discarded (mirroring RenderTarget2D, and for
+    // the same reason -- every pipeline baked one renderer-global sample count until WEBGPU-197).
+    // It now honours its own request, clamped down to a count the adapter actually offers.
     constexpr Contract kContract{"WEBGPU", true, Support::Exact, true, true,
-                                 false, Support::Exact, false, true, false};
+                                 true, Support::Exact, false, true, false};
 #elif defined(CNA_RENDERER_SDL_GPU)
     // `msaaPreserves` was false here: this renderer's multisampled cube target rendered into ONE
     // shared single-layer scratch texture that had to be cycled on every pass and was resolved away

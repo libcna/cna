@@ -181,6 +181,17 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_BufferPoolStress COMMAND cna_test_webgpu_buffer_pool_stress
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plans/plan_webgpu.md WEBGPU-197 step (a): re-measures the WEBGPU-58 finding that a shader
+    # module / bind-group layout / pipeline layout reused across a sample-count change silently
+    # renders wrong on this pin. WEBGPU-197 made that reuse reachable (pipelines are now built at the
+    # bound pass's sample count from shared modules), and WEBGPU-165 is what would make it live, so
+    # the answer has to be measured rather than assumed in either direction. Drives wgpu-native
+    # directly off the renderer's own device/queue, so it also links WebGPU::WebGPU.
+    cna_webgpu_test(cna_test_webgpu_msaa_module_reuse_probe webgpu_msaa_module_reuse_probe_test.cpp)
+    target_link_libraries(cna_test_webgpu_msaa_module_reuse_probe PRIVATE WebGPU::WebGPU)
+    cna_register_renderer_test(NAME WebGPU_MsaaModuleReuseProbe COMMAND cna_test_webgpu_msaa_module_reuse_probe
+        TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 1105 (plans/plan_graphics.md Phase 80): GetOrCreatePipelineLitTextured3DVertexLit /
     # BasicEffect.PreferPerPixelLighting real dispatch.
     cna_webgpu_test(cna_test_webgpu_basiceffect_preferperpixellighting webgpu_basiceffect_preferperpixellighting_test.cpp)

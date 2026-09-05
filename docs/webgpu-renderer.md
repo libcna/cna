@@ -781,16 +781,46 @@ format it already recorded — and `Build3DPipelineEXT` reads those, with both f
 pipeline cache key. `PassDestination` already carried the values per target, and the SpriteBatch path
 had keyed on them since it was written; this is the 3D side catching up.
 
-It is **not finished**, for two reasons worth stating rather than discovering later. Every target this
-renderer can currently create shares the backbuffer's format and mirrors its sample count, so the new
-key dimensions are today always equal to the values they replaced — real, but unprovable until
-`WEBGPU-198`/`199` or `WEBGPU-165` land. And it makes the `WEBGPU-58` finding reachable: that task
-measured, on this pin, that a shader module / bind-group layout / pipeline layout reused unchanged for
-a pipeline with a different `WGPUMultisampleState.count` **silently renders wrong** — no validation
-error, correct-looking draw, wrong pixels — which is why `ClearAllPipelineCaches()` tears down every
-module and layout when the global sample count changes. Building per-pass sample-count variants from
-shared modules is exactly that reuse; it is harmless only while every pass in a frame shares one
-count. Re-measure it before `WEBGPU-165` gives two targets different counts.
+Its **sample-count half is finished and proven** by `WEBGPU-165` below. Its **colour-format half is
+not**: every target this renderer can currently create carries the backbuffer's format, so
+`replayColorFormat_` has yet to differ from the value it replaced. `WEBGPU-198`/`199` supply the first
+case.
+
+The `WEBGPU-58` finding had to be settled first, because per-pass sample-count variants built from
+shared shader modules are exactly the reuse that task measured as silently wrong on this pin — no
+validation error, correct-looking draw, wrong pixels — which is why `ClearAllPipelineCaches()` tears
+down every module and layout when the global sample count changes. It was **re-measured and does not
+reproduce**: `WebGPU_MsaaModuleReuseProbe` uses one module set for a 1-sample pipeline and then a
+4-sample one and compares that frame against a 4-sample frame from a fresh set — **max channel
+difference 0**, stable across runs, with non-vacuity asserted separately so two empty frames cannot
+pass. The probe asserts the equality rather than printing it, so the hazard returning on a new pin
+goes red rather than corrupting frames quietly.
+
+One methodological note from that probe, because its first version gave a confident wrong answer:
+mapping the readback buffer is not enough here. The map callback can fire while the copy that fills it
+is still queued, and the readback then returns an all-zero frame — precisely the "pipeline fine, draw
+fine, no validation error, only the pixels wrong" signature `WEBGPU-58` recorded. Waiting on
+`wgpuQueueOnSubmittedWorkDone` first is what made the answer trustworthy. That is a plausible
+explanation for the original finding, not a demonstrated one.
+
+## Per-target MultiSampleCount (2026-09-05, `WEBGPU-165`)
+
+`RenderTarget2D` and `RenderTargetCube` honour their constructor's `multiSampleCount`. Both used to
+discard it and mirror the renderer-global `sampleCount_` unconditionally — necessary while every
+pipeline baked one global count, since a target that opted out would have been pipeline-incompatible
+the moment anything drew 3D into it, but observable through the public property with nothing rendered:
+an explicit request for no multisampling reported 4 on a device where the global probe chose 4.
+
+Each target now clamps its own request through the adapter probe, allocates its MSAA colour attachment
+— and its depth attachment, which must agree — at that count, and reports it. The clamp itself was
+wrong and is fixed: `PickSampleCount` answered 4 for *any* request of 2 or more, which is an increase
+rather than a clamp, so a caller asking for 2 got 4. It now rounds **down** to a probed count, which is
+what the shared `applied <= requested` contract requires.
+
+`webgpu_msaa_test` Check D measures it in one frame with the backbuffer at 4×: a target requesting 0
+reports 0 **and renders a binary diagonal**, while a sibling requesting 4 reports 4 **and blends its
+diagonal**. Two live targets, two sample counts, both the property and the edge pixels — which also
+exercises the re-measured module-reuse path for real.
 
 ## Important limitations
 
@@ -802,10 +832,8 @@ GPU-native compressed textures, and -- since 2026-08-26 -- the browser path (`WE
 are described in their own sections above and are no longer "limitations". What is **genuinely still
 open** in `plans/plan_webgpu.md`:
 
-- **Per-`RenderTarget2D` `multiSampleCount`** -- a target's own constructor sample count is ignored;
-  it mirrors the renderer's global sample count instead. Backbuffer and `RenderTarget2D` MSAA otherwise
-  work end to end (`WEBGPU-58`, `WebGPU_Msaa` 6/6).
-- **`RenderTargetCube` per-face MSAA** -- ignored; `GetMultiSampleCount()` reports 0 (`WEBGPU-114`).
+(Per-target `multiSampleCount` on `RenderTarget2D` and `RenderTargetCube` was on this list until
+`WEBGPU-165`; see *Per-target MultiSampleCount* above.)
 
 **Multiple render targets are supported** (`WEBGPU-85`/`86`/`87`): `SupportsCapability(MultipleRenderTargets)`
 reports true, and `SetRenderTargets` binds 2..4 `RenderTarget2D` targets that share width/height/sample
