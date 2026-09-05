@@ -5712,7 +5712,17 @@ namespace CNA::Internal::Renderers::Vulkan
                 throw std::runtime_error("vkCreatePipelineLayout (AlphaTest3D) failed");
         }
 
+        // VULKAN-158: this factory already binds the record's own stride; what it did not do is put
+        // that stride in the KEY. MakeExt3DKey buckets an unlisted stride and the layout hash covers
+        // offsets only, so two records with identical element offsets and different strides -- 64
+        // and 68, say -- bucketed and hashed the same and shared one pipeline, whose binding stride
+        // belonged to whichever of them drew first.
+        const uint32_t recordStride = static_cast<uint32_t>(stride);
         PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask, vertexLayout.Hash() };
+        // VULKAN-158: and the record stride reaches the key, so two declarations that differ only in
+        // stride cannot share a pipeline. Folded only when the layout is complete, which leaves
+        // every stride-derived key exactly as it was.
+        if (vertexLayout.IsComplete()) key.a = FoldPerVertexStrideIntoKey(key.a, recordStride);
         auto it = pipelinesAlphaTest3D_.find(key);
         if (it != pipelinesAlphaTest3D_.end()) return it->second;
 
@@ -6315,6 +6325,7 @@ namespace CNA::Internal::Renderers::Vulkan
     }
 
     VkPipeline VulkanRenderer::GetOrCreatePipelineEnvMap3D(
+        std::size_t stride,
         VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
@@ -6323,7 +6334,19 @@ namespace CNA::Internal::Renderers::Vulkan
         EnsureEnvMapResources();
 
         constexpr std::size_t kEnvStride = 32;
+        // VULKAN-158: the vertex BINDING's stride is the record's own, not this family's canonical
+        // one, whenever the declaration supplied every input. Baking the constant made the
+        // declaration-driven offsets right and the interval between records wrong -- the attributes
+        // point at the correct bytes of a record the fetch never reaches. Without a declaration the
+        // canonical constant is all there is, and the key and the binding stay byte-identical.
+        const uint32_t recordStride = vertexLayout.IsComplete()
+                                          ? static_cast<uint32_t>(stride)
+                                          : static_cast<uint32_t>(kEnvStride);
         PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kEnvStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask, vertexLayout.Hash() };
+        // VULKAN-158: and the record stride reaches the key, so two declarations that differ only in
+        // stride cannot share a pipeline. Folded only when the layout is complete, which leaves
+        // every stride-derived key exactly as it was.
+        if (vertexLayout.IsComplete()) key.a = FoldPerVertexStrideIntoKey(key.a, recordStride);
         auto it = pipelinesEnvMap3D_.find(key);
         if (it != pipelinesEnvMap3D_.end()) return it->second;
 
@@ -6331,7 +6354,7 @@ namespace CNA::Internal::Renderers::Vulkan
         VkShaderModule vert = CreateShaderModule(kEnvMap3dVertSpv, kEnvMap3dVertSpv_size);
         VkShaderModule frag = CreateShaderModule(kEnvMap3dFragSpv, kEnvMap3dFragSpv_size);
 
-        VkVertexInputBindingDescription bind{ 0, kEnvStride, VK_VERTEX_INPUT_RATE_VERTEX };
+        VkVertexInputBindingDescription bind{ 0, recordStride, VK_VERTEX_INPUT_RATE_VERTEX };
         VkVertexInputAttributeDescription attrs[3]{};
         attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0  };   // aPos
         attrs[1] = { 1, 0, VK_FORMAT_R32G32B32_SFLOAT, 12 };   // aNormal
@@ -6565,6 +6588,11 @@ namespace CNA::Internal::Renderers::Vulkan
     {
         EnsureLitTexturedResources();
 
+        // VULKAN-158: this factory takes no stride, and that is safe rather than an oversight --
+        // the lit-textured route is selected by `stride == 32` and by nothing else (see
+        // `needsLitTextured` at the draw), so the record's stride IS 32 whenever this is reached.
+        // A declaration only moves the offsets WITHIN that record. If the selection rule ever
+        // widens, this constant becomes the same defect the sibling factories had.
         constexpr std::size_t kLitStride = 32;
         PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kLitStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask, vertexLayout.Hash() };
         auto it = pipelinesLitTextured3D_.find(key);
@@ -6691,6 +6719,11 @@ namespace CNA::Internal::Renderers::Vulkan
     {
         EnsureLitTexturedResources();
 
+        // VULKAN-158: this factory takes no stride, and that is safe rather than an oversight --
+        // the lit-textured route is selected by `stride == 32` and by nothing else (see
+        // `needsLitTextured` at the draw), so the record's stride IS 32 whenever this is reached.
+        // A declaration only moves the offsets WITHIN that record. If the selection rule ever
+        // widens, this constant becomes the same defect the sibling factories had.
         constexpr std::size_t kLitStride = 32;
         PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kLitStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask, vertexLayout.Hash() };
         auto it = pipelinesLitTextured3DVertexLit_.find(key);
@@ -7597,6 +7630,10 @@ namespace CNA::Internal::Renderers::Vulkan
         // Position+Colour declaration padded to 32 runs this program too -- so it has to be part
         // of the key. Make3DKey carries no stride term; bits 53..63 are free in this cache.
         PipelineKey key = { FoldPerVertexStrideIntoKey(FoldDepthFormatIntoKey(Make3DKey(topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), stride), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask, vertexLayout.Hash() };
+        // VULKAN-158: nothing to add here. This key ALREADY folds the raw stride, unconditionally,
+        // and the fold is an XOR -- a second one would cancel the first and collapse two strides
+        // onto one pipeline. Measured: adding it here turned four `VertexDeclarationLayoutTest`
+        // cases red while `-R '^Vulkan_'` stayed green, which is F-21 all over again.
         auto it = pipelinesFogColored3D_.find(key);
         if (it != pipelinesFogColored3D_.end()) return it->second;
 
@@ -7718,7 +7755,17 @@ namespace CNA::Internal::Renderers::Vulkan
     {
         EnsureFogTex3DResources();
 
+        // VULKAN-158: this factory already binds the record's own stride; what it did not do is put
+        // that stride in the KEY. MakeExt3DKey buckets an unlisted stride and the layout hash covers
+        // offsets only, so two records with identical element offsets and different strides -- 64
+        // and 68, say -- bucketed and hashed the same and shared one pipeline, whose binding stride
+        // belonged to whichever of them drew first.
+        const uint32_t recordStride = static_cast<uint32_t>(stride);
         PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask, vertexLayout.Hash() };
+        // VULKAN-158: and the record stride reaches the key, so two declarations that differ only in
+        // stride cannot share a pipeline. Folded only when the layout is complete, which leaves
+        // every stride-derived key exactly as it was.
+        if (vertexLayout.IsComplete()) key.a = FoldPerVertexStrideIntoKey(key.a, recordStride);
         auto it = pipelinesFogTex3D_.find(key);
         if (it != pipelinesFogTex3D_.end()) return it->second;
 
@@ -8022,7 +8069,19 @@ namespace CNA::Internal::Renderers::Vulkan
                 "supplying every input of its shader");
         const std::size_t skinnedStride = (stride == 56) ? 56 : 52;
         const bool colored = (skinnedStride == 56);
+        // VULKAN-158: the vertex BINDING's stride is the record's own, not this family's canonical
+        // one, whenever the declaration supplied every input. Baking the constant made the
+        // declaration-driven offsets right and the interval between records wrong -- the attributes
+        // point at the correct bytes of a record the fetch never reaches. Without a declaration the
+        // canonical constant is all there is, and the key and the binding stay byte-identical.
+        const uint32_t recordStride = vertexLayout.IsComplete()
+                                          ? static_cast<uint32_t>(stride)
+                                          : static_cast<uint32_t>(skinnedStride);
         PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(skinnedStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask, vertexLayout.Hash() };
+        // VULKAN-158: and the record stride reaches the key, so two declarations that differ only in
+        // stride cannot share a pipeline. Folded only when the layout is complete, which leaves
+        // every stride-derived key exactly as it was.
+        if (vertexLayout.IsComplete()) key.a = FoldPerVertexStrideIntoKey(key.a, recordStride);
         auto it = pipelinesSkinned3D_.find(key);
         if (it != pipelinesSkinned3D_.end()) return it->second;
 
@@ -8034,7 +8093,7 @@ namespace CNA::Internal::Renderers::Vulkan
             ? CreateShaderModule(kSkinned3dColorFragSpv, kSkinned3dColorFragSpv_size)
             : CreateShaderModule(kSkinned3dFragSpv,      kSkinned3dFragSpv_size);
 
-        VkVertexInputBindingDescription bind{ 0, static_cast<uint32_t>(skinnedStride), VK_VERTEX_INPUT_RATE_VERTEX };
+        VkVertexInputBindingDescription bind{ 0, recordStride, VK_VERTEX_INPUT_RATE_VERTEX };
         VkVertexInputAttributeDescription attrs[6]{};
         attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT,    0  }; // aPos
         attrs[1] = { 1, 0, VK_FORMAT_R32G32B32_SFLOAT,    12 }; // aNormal
@@ -8167,7 +8226,19 @@ namespace CNA::Internal::Renderers::Vulkan
                 "supplying every input of its shader");
         const std::size_t skinnedStride = (stride == 56) ? 56 : 52;
         const bool colored = (skinnedStride == 56);
+        // VULKAN-158: the vertex BINDING's stride is the record's own, not this family's canonical
+        // one, whenever the declaration supplied every input. Baking the constant made the
+        // declaration-driven offsets right and the interval between records wrong -- the attributes
+        // point at the correct bytes of a record the fetch never reaches. Without a declaration the
+        // canonical constant is all there is, and the key and the binding stay byte-identical.
+        const uint32_t recordStride = vertexLayout.IsComplete()
+                                          ? static_cast<uint32_t>(stride)
+                                          : static_cast<uint32_t>(skinnedStride);
         PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(skinnedStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask, vertexLayout.Hash() };
+        // VULKAN-158: and the record stride reaches the key, so two declarations that differ only in
+        // stride cannot share a pipeline. Folded only when the layout is complete, which leaves
+        // every stride-derived key exactly as it was.
+        if (vertexLayout.IsComplete()) key.a = FoldPerVertexStrideIntoKey(key.a, recordStride);
         auto it = pipelinesSkinned3DVertexLit_.find(key);
         if (it != pipelinesSkinned3DVertexLit_.end()) return it->second;
 
@@ -8179,7 +8250,7 @@ namespace CNA::Internal::Renderers::Vulkan
             ? CreateShaderModule(kSkinned3dVertexLitColorFragSpv, kSkinned3dVertexLitColorFragSpv_size)
             : CreateShaderModule(kSkinned3dVertexLitFragSpv,      kSkinned3dVertexLitFragSpv_size);
 
-        VkVertexInputBindingDescription bind{ 0, static_cast<uint32_t>(skinnedStride), VK_VERTEX_INPUT_RATE_VERTEX };
+        VkVertexInputBindingDescription bind{ 0, recordStride, VK_VERTEX_INPUT_RATE_VERTEX };
         VkVertexInputAttributeDescription attrs[6]{};
         attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT,    0  }; // aPos
         attrs[1] = { 1, 0, VK_FORMAT_R32G32B32_SFLOAT,    12 }; // aNormal
@@ -8450,7 +8521,17 @@ namespace CNA::Internal::Renderers::Vulkan
         if (!vertexLayout.IsComplete() && stride != 48 && stride != 60)
             throw std::runtime_error("Vulkan PbrEffect requires vertex stride 48 or 60");
         const bool dualUv = stride == 60;
+        // VULKAN-158: this factory already binds the record's own stride; what it did not do is put
+        // that stride in the KEY. MakeExt3DKey buckets an unlisted stride and the layout hash covers
+        // offsets only, so two records with identical element offsets and different strides -- 64
+        // and 68, say -- bucketed and hashed the same and shared one pipeline, whose binding stride
+        // belonged to whichever of them drew first.
+        const uint32_t recordStride = static_cast<uint32_t>(stride);
         PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask, vertexLayout.Hash() };
+        // VULKAN-158: and the record stride reaches the key, so two declarations that differ only in
+        // stride cannot share a pipeline. Folded only when the layout is complete, which leaves
+        // every stride-derived key exactly as it was.
+        if (vertexLayout.IsComplete()) key.a = FoldPerVertexStrideIntoKey(key.a, recordStride);
         auto it = pipelinesPbr3D_.find(key);
         if (it != pipelinesPbr3D_.end()) return it->second;
 
@@ -8758,7 +8839,17 @@ namespace CNA::Internal::Renderers::Vulkan
         // it is a dual-UV layout that additionally binds a colour.
         const bool dualUv  = stride == 76 || stride == 80;
         const bool colored = stride == 80;
+        // VULKAN-158: this factory already binds the record's own stride; what it did not do is put
+        // that stride in the KEY. MakeExt3DKey buckets an unlisted stride and the layout hash covers
+        // offsets only, so two records with identical element offsets and different strides -- 64
+        // and 68, say -- bucketed and hashed the same and shared one pipeline, whose binding stride
+        // belonged to whichever of them drew first.
+        const uint32_t recordStride = static_cast<uint32_t>(stride);
         PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask, vertexLayout.Hash() };
+        // VULKAN-158: and the record stride reaches the key, so two declarations that differ only in
+        // stride cannot share a pipeline. Folded only when the layout is complete, which leaves
+        // every stride-derived key exactly as it was.
+        if (vertexLayout.IsComplete()) key.a = FoldPerVertexStrideIntoKey(key.a, recordStride);
         auto it = pipelinesPbrSkinned3D_.find(key);
         if (it != pipelinesPbrSkinned3D_.end()) return it->second;
 
@@ -9729,7 +9820,7 @@ namespace CNA::Internal::Renderers::Vulkan
                                                         draw.depthTest, draw.depthWrite,
                                                         draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
                 } else if (draw.useEnvMap) {
-                    pipe = GetOrCreatePipelineEnvMap3D(draw.topology,
+                    pipe = GetOrCreatePipelineEnvMap3D(draw.stride, draw.topology,
                                                        draw.depthTest, draw.depthWrite,
                                                        draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt, draw.vertexLayout);
                 } else if (draw.useSkinned) {

@@ -1069,6 +1069,16 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_declared_effect_layout
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plans/plan_vulkan.md VULKAN-158 (F-26): the declaration says where elements sit inside a
+        # record; the stride says where the next record starts. Three factories baked the second,
+        # so a padded record produced right offsets into a record the fetch never reached. Every leg
+        # probes two widely separated pixels, because one vertex being right is the symptom.
+        cna_vulkan_test(cna_test_vulkan_record_stride_binding
+                        vulkan_record_stride_binding_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_RecordStrideBinding
+            COMMAND cna_test_vulkan_record_stride_binding
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plans/plan_vulkan.md VULKAN-155 (F-24): the legacy DrawColoredPrimitives pair reaches the one
         # pipeline whose binding stride is hard-coded to 16, while both entry points copy the buffer
         # at its real stride. Of bind it / refuse it / mis-read it, this pins which one happens.

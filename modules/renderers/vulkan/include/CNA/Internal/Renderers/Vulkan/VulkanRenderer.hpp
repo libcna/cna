@@ -2822,7 +2822,9 @@ namespace CNA::Internal::Renderers::Vulkan
         VkDescriptorSet GetOrCreateEnvMapDescSet(uint32_t frameIdx,
                                                   VkImageView view2D, VkImageView viewCube,
                                                   VkSampler sampler2D, VkSampler samplerCube);
-        VkPipeline GetOrCreatePipelineEnvMap3D(VkPrimitiveTopology,
+        /// VULKAN-158: @p stride is the caller's record stride, used for the vertex binding and the
+        /// cache key when the declaration supplied every input; the family's canonical 32 otherwise.
+        VkPipeline GetOrCreatePipelineEnvMap3D(std::size_t stride, VkPrimitiveTopology,
                                                 bool depthTest, bool depthWrite,
                                                 bool blend, int cullMode,
                                                 uint32_t colorAttachmentCount, bool wireframe,
