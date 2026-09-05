@@ -113,7 +113,7 @@ protected:
             Color markerColor(11, 222, 33, 255);
             marker.SetData(&markerColor, 1);
 
-            VulkanRenderer::SetTexSamplerDescriptorAllocationFailuresForTestEXT(1);
+            VulkanRenderer::SetDescriptorAllocationFailuresForTestEXT(1);
             dev.Clear(Color(0, 0, 0, 255));
             SamplerState pointClamp = SamplerState::PointClamp;
             {
@@ -125,7 +125,7 @@ protected:
                         SpriteEffects::None, 0.0f);
                 sb.End();
             }
-            VulkanRenderer::SetTexSamplerDescriptorAllocationFailuresForTestEXT(0);
+            VulkanRenderer::SetDescriptorAllocationFailuresForTestEXT(0);
 
             const std::size_t poolsAfter = Renderer().GetTexSamplerDescriptorPoolCountEXT();
             check(poolsAfter == poolsBefore + 1,
@@ -219,7 +219,7 @@ protected:
             doomed.SetData(&doomedColor, 1);
             // More failures than the chaining path has attempts, so the fresh pool's own first
             // allocation fails too and the refusal arm is reached.
-            VulkanRenderer::SetTexSamplerDescriptorAllocationFailuresForTestEXT(64);
+            VulkanRenderer::SetDescriptorAllocationFailuresForTestEXT(64);
             bool refused = false;
             std::string how = "no exception -- a resource was substituted or the draw silently "
                               "succeeded";
@@ -235,7 +235,7 @@ protected:
                 refused = true;
                 how = e.what();
             }
-            VulkanRenderer::SetTexSamplerDescriptorAllocationFailuresForTestEXT(0);
+            VulkanRenderer::SetDescriptorAllocationFailuresForTestEXT(0);
             check(refused && how.find("Refused rather than drawing a substituted texture")
                                  != std::string::npos,
                   "C an unsatisfiable allocation is refused by name, not substituted", how);

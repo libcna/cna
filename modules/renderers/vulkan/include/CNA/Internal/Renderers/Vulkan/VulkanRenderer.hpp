@@ -1621,8 +1621,8 @@ namespace CNA::Internal::Renderers::Vulkan
          *
          * @param count How many allocations to fail; 0 disables injection.
          */
-        CNAEXT static void SetTexSamplerDescriptorAllocationFailuresForTestEXT(
-            std::uint32_t count) noexcept;
+        CNAEXT static void SetDescriptorAllocationFailuresForTestEXT(
+            std::uint32_t count, std::uint32_t skipFirst = 0) noexcept;
 
         /**
          * @brief Reports whether the Khronos validation layer is actually active.

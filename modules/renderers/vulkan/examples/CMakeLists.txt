@@ -1069,6 +1069,16 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_declared_effect_layout
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plans/plan_vulkan.md VULKAN-391 (F-06's tail): every descriptor-set allocation answers the
+        # same way when the device refuses it -- by name, at the draw, never with a null handle a
+        # caller can only bind. One injected failure per family, with a warm-up draw first so the
+        # failure lands on that family's own pool.
+        cna_vulkan_test(cna_test_vulkan_descriptor_contract_uniformity
+                        vulkan_descriptor_contract_uniformity_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DescriptorContractUniformity
+            COMMAND cna_test_vulkan_descriptor_contract_uniformity
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plans/plan_vulkan.md VULKAN-158 (F-26): the declaration says where elements sit inside a
         # record; the stride says where the next record starts. Three factories baked the second,
         # so a padded record produced right offsets into a record the fetch never reached. Every leg

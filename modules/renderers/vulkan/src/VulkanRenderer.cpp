@@ -198,11 +198,39 @@ namespace CNA::Internal::Renderers::Vulkan
     // VK_LAYER_SETTINGS_PATH file or an environment variable a test runner may not forward.
     static bool sRequestSyncValidation = false;
 
-    // plan_vulkan.md VULKAN-390: how many more single-sampler descriptor allocations a test wants
-    // to fail. 0 in every production run. See
-    // SetTexSamplerDescriptorAllocationFailuresForTestEXT for why an injected failure is the only
-    // way to execute the chaining and refusal arms on the drivers here.
-    static std::uint32_t sTexSamplerAllocFailuresToInject = 0;
+    // plan_vulkan.md VULKAN-390, widened by VULKAN-391: how many more descriptor-set allocations a
+    // test wants to fail. 0 in every production run. See
+    // SetDescriptorAllocationFailuresForTestEXT for why an injected failure is the only way to
+    // execute the chaining and refusal arms on the drivers here -- neither is reachable by volume.
+    static std::uint32_t sDescriptorAllocFailuresToInject = 0;
+    // VULKAN-391: how many allocations to let through FIRST. A single draw can allocate from more
+    // than one pool -- the textured BasicEffect route takes a set from the shared
+    // combined-image-sampler pool before it takes one from its own -- and that shared pool CHAINS
+    // rather than refusing (VULKAN-390), so without a skip the injected failure is absorbed there
+    // and the arm under test never runs. Measured: a test written without this asserted a refusal
+    // and got a successful draw.
+    static std::uint32_t sDescriptorAllocSkipsBeforeInjection = 0;
+
+    // VULKAN-390: one allocation attempt, with the test-only failure injection folded in so every
+    // call site sees the same behaviour a real VK_ERROR_OUT_OF_POOL_MEMORY would produce.
+    //
+    // VULKAN-391 moved it here, ahead of every caller. It used to sit beside the one pool that
+    // used it, which is exactly why the other ten sites called `vkAllocateDescriptorSets` directly
+    // and none of their failure arms could be tested at all.
+    static VkResult AllocateOneDescriptorSet(VkDevice device,
+                                             const VkDescriptorSetAllocateInfo& info,
+                                             VkDescriptorSet& out)
+    {
+        if (sDescriptorAllocFailuresToInject > 0) {
+            if (sDescriptorAllocSkipsBeforeInjection > 0) {
+                --sDescriptorAllocSkipsBeforeInjection;
+            } else {
+                --sDescriptorAllocFailuresToInject;
+                return VK_ERROR_OUT_OF_POOL_MEMORY;
+            }
+        }
+        return vkAllocateDescriptorSets(device, &info, &out);
+    }
 
     // =========================================================================
     // Helpers
@@ -402,7 +430,8 @@ namespace CNA::Internal::Renderers::Vulkan
         dsInfo.descriptorPool     = owner_->descriptorPool_;
         dsInfo.descriptorSetCount = 1;
         dsInfo.pSetLayouts        = &owner_->descriptorSetLayout_;
-        if (vkAllocateDescriptorSets(dev, &dsInfo, &descriptorSet_) != VK_SUCCESS)
+        // VULKAN-391: through the shared helper, so this arm is reachable by the injection hook.
+        if (AllocateOneDescriptorSet(dev, dsInfo, descriptorSet_) != VK_SUCCESS)
             throw std::runtime_error("vkAllocateDescriptorSets (texture) failed");
 
         VkDescriptorImageInfo imgDescInfo{};
@@ -840,7 +869,8 @@ namespace CNA::Internal::Renderers::Vulkan
         dsInfo.descriptorPool     = owner_->descriptorPool_;
         dsInfo.descriptorSetCount = 1;
         dsInfo.pSetLayouts        = &owner_->descriptorSetLayout_;
-        if (vkAllocateDescriptorSets(dev, &dsInfo, &descriptorSet_) != VK_SUCCESS)
+        // VULKAN-391: through the shared helper, so this arm is reachable by the injection hook.
+        if (AllocateOneDescriptorSet(dev, dsInfo, descriptorSet_) != VK_SUCCESS)
             throw std::runtime_error("VulkanRenderTargetRenderer: vkAllocateDescriptorSets failed");
 
         VkDescriptorImageInfo imgDesc{};
@@ -3620,23 +3650,11 @@ namespace CNA::Internal::Renderers::Vulkan
             throw std::runtime_error("vkCreateDescriptorSetLayout failed");
     }
 
-    void VulkanRenderer::SetTexSamplerDescriptorAllocationFailuresForTestEXT(
-        std::uint32_t count) noexcept
+    void VulkanRenderer::SetDescriptorAllocationFailuresForTestEXT(
+        std::uint32_t count, std::uint32_t skipFirst) noexcept
     {
-        sTexSamplerAllocFailuresToInject = count;
-    }
-
-    // VULKAN-390: one allocation attempt, with the test-only failure injection folded in so every
-    // call site sees the same behaviour a real VK_ERROR_OUT_OF_POOL_MEMORY would produce.
-    static VkResult AllocateOneDescriptorSet(VkDevice device,
-                                             const VkDescriptorSetAllocateInfo& info,
-                                             VkDescriptorSet& out)
-    {
-        if (sTexSamplerAllocFailuresToInject > 0) {
-            --sTexSamplerAllocFailuresToInject;
-            return VK_ERROR_OUT_OF_POOL_MEMORY;
-        }
-        return vkAllocateDescriptorSets(device, &info, &out);
+        sDescriptorAllocFailuresToInject = count;
+        sDescriptorAllocSkipsBeforeInjection = skipFirst;
     }
 
     void VulkanRenderer::CreateDescriptorPool()
@@ -5589,7 +5607,14 @@ namespace CNA::Internal::Renderers::Vulkan
         dsAI.descriptorPool     = descriptorPool_;
         dsAI.descriptorSetCount = 1;
         dsAI.pSetLayouts        = &descriptorSetLayout_;
-        vkAllocateDescriptorSets(dev, &dsAI, &defaultWhiteDescSet_);
+        // VULKAN-391: this site did not even LOOK at the result. VULKAN-390's mutation probe
+        // showed what that costs -- `defaultWhiteDescSet_` stays VK_NULL_HANDLE, the three 3D draw
+        // routes bind it, and the process segfaults with the layer reporting
+        // `pDescriptorSets[0] (VK_NULL_HANDLE)`. Refused by name instead.
+        if (AllocateOneDescriptorSet(dev, dsAI, defaultWhiteDescSet_) != VK_SUCCESS)
+            throw std::runtime_error(
+                "The Vulkan renderer: the default white texture's descriptor set could not be "
+                "allocated. Refused rather than binding a null descriptor set.");
 
         VkDescriptorImageInfo di{};
         di.sampler     = defaultSampler_;
@@ -6020,8 +6045,16 @@ namespace CNA::Internal::Renderers::Vulkan
         ai.descriptorSetCount = 1;
         ai.pSetLayouts        = &descriptorSetLayout2Tex_;
         VkDescriptorSet ds = VK_NULL_HANDLE;
-        if (vkAllocateDescriptorSets(device_, &ai, &ds) != VK_SUCCESS)
-            return VK_NULL_HANDLE;
+        // VULKAN-391: one contract for every descriptor allocation in this renderer -- a caller
+        // never receives VK_NULL_HANDLE, because the only thing a caller could do with one is bind
+        // it, and binding a null descriptor set is a segfault (measured under VULKAN-390's
+        // mutation probe). Refused BY NAME at the draw, which is where this runs, rather than at
+        // Present. Routed through AllocateOneDescriptorSet so the test-only injection hook can
+        // reach this arm at all -- it could not before, which is why this arm had no test.
+        if (AllocateOneDescriptorSet(device_, ai, ds) != VK_SUCCESS)
+            throw std::runtime_error(
+                "The Vulkan renderer: DualTextureEffect\'s descriptor pool is full and the device "
+                "refused another set. Refused rather than binding a null descriptor set.");
 
         VkDescriptorImageInfo imgInfo[2]{};
         imgInfo[0].sampler     = sampler0;
@@ -6380,8 +6413,16 @@ namespace CNA::Internal::Renderers::Vulkan
         ai.descriptorSetCount = 1;
         ai.pSetLayouts        = &descriptorSetLayoutEnvMap_;
         VkDescriptorSet ds = VK_NULL_HANDLE;
-        if (vkAllocateDescriptorSets(device_, &ai, &ds) != VK_SUCCESS)
-            return VK_NULL_HANDLE;
+        // VULKAN-391: one contract for every descriptor allocation in this renderer -- a caller
+        // never receives VK_NULL_HANDLE, because the only thing a caller could do with one is bind
+        // it, and binding a null descriptor set is a segfault (measured under VULKAN-390's
+        // mutation probe). Refused BY NAME at the draw, which is where this runs, rather than at
+        // Present. Routed through AllocateOneDescriptorSet so the test-only injection hook can
+        // reach this arm at all -- it could not before, which is why this arm had no test.
+        if (AllocateOneDescriptorSet(device_, ai, ds) != VK_SUCCESS)
+            throw std::runtime_error(
+                "The Vulkan renderer: EnvironmentMapEffect\'s descriptor pool is full and the device "
+                "refused another set. Refused rather than binding a null descriptor set.");
 
         VkDescriptorImageInfo imgInfo[2]{};
         imgInfo[0] = { sampler2D,   view2D,   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
@@ -6643,8 +6684,16 @@ namespace CNA::Internal::Renderers::Vulkan
         ai.descriptorSetCount = 1;
         ai.pSetLayouts        = &descriptorSetLayoutLitTextured_;
         VkDescriptorSet ds = VK_NULL_HANDLE;
-        if (vkAllocateDescriptorSets(device_, &ai, &ds) != VK_SUCCESS)
-            return VK_NULL_HANDLE;
+        // VULKAN-391: one contract for every descriptor allocation in this renderer -- a caller
+        // never receives VK_NULL_HANDLE, because the only thing a caller could do with one is bind
+        // it, and binding a null descriptor set is a segfault (measured under VULKAN-390's
+        // mutation probe). Refused BY NAME at the draw, which is where this runs, rather than at
+        // Present. Routed through AllocateOneDescriptorSet so the test-only injection hook can
+        // reach this arm at all -- it could not before, which is why this arm had no test.
+        if (AllocateOneDescriptorSet(device_, ai, ds) != VK_SUCCESS)
+            throw std::runtime_error(
+                "The Vulkan renderer: the lit-textured BasicEffect\'s descriptor pool is full and the device "
+                "refused another set. Refused rather than binding a null descriptor set.");
 
         VkDescriptorImageInfo imgInfo{ sampler, view2D, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
         VkSamplerTraceEXT("desc.LitTextured hit=0 key=0x%llx set=0x%llx "
@@ -7015,8 +7064,16 @@ namespace CNA::Internal::Renderers::Vulkan
         ai.descriptorSetCount = 1;
         ai.pSetLayouts        = &descriptorSetLayoutFogTex3D_;
         VkDescriptorSet ds = VK_NULL_HANDLE;
-        if (vkAllocateDescriptorSets(device_, &ai, &ds) != VK_SUCCESS)
-            return VK_NULL_HANDLE;
+        // VULKAN-391: one contract for every descriptor allocation in this renderer -- a caller
+        // never receives VK_NULL_HANDLE, because the only thing a caller could do with one is bind
+        // it, and binding a null descriptor set is a segfault (measured under VULKAN-390's
+        // mutation probe). Refused BY NAME at the draw, which is where this runs, rather than at
+        // Present. Routed through AllocateOneDescriptorSet so the test-only injection hook can
+        // reach this arm at all -- it could not before, which is why this arm had no test.
+        if (AllocateOneDescriptorSet(device_, ai, ds) != VK_SUCCESS)
+            throw std::runtime_error(
+                "The Vulkan renderer: the textured BasicEffect\'s descriptor pool is full and the device "
+                "refused another set. Refused rather than binding a null descriptor set.");
 
         VkDescriptorImageInfo imgInfo{ sampler, view2D, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
         VkSamplerTraceEXT("desc.FogTex3D    hit=0 key=0x%llx set=0x%llx "
@@ -7387,7 +7444,8 @@ namespace CNA::Internal::Renderers::Vulkan
             ai.descriptorSetCount = 1;
             ai.pSetLayouts = &layout;
             VkDescriptorSet set = VK_NULL_HANDLE;
-            if (vkAllocateDescriptorSets(device_, &ai, &set) != VK_SUCCESS)
+            // VULKAN-391: through the shared helper, as every other site now is.
+            if (AllocateOneDescriptorSet(device_, ai, set) != VK_SUCCESS)
                 throw std::runtime_error("vkAllocateDescriptorSets (compiled effect) failed");
             VkDescriptorBufferInfo bi{};
             bi.buffer = buffer;
@@ -7634,7 +7692,8 @@ namespace CNA::Internal::Renderers::Vulkan
         ai.descriptorSetCount = 1;
         ai.pSetLayouts = &layout;
         VkDescriptorSet set = VK_NULL_HANDLE;
-        if (vkAllocateDescriptorSets(device_, &ai, &set) != VK_SUCCESS)
+        // VULKAN-391: through the shared helper, as every other site now is.
+        if (AllocateOneDescriptorSet(device_, ai, set) != VK_SUCCESS)
             throw std::runtime_error("vkAllocateDescriptorSets (compiled sampler) failed");
 
         std::vector<VkDescriptorImageInfo> images(views.size());
@@ -8088,8 +8147,16 @@ namespace CNA::Internal::Renderers::Vulkan
         ai.descriptorSetCount = 1;
         ai.pSetLayouts        = &descriptorSetLayoutSkinned_;
         VkDescriptorSet ds = VK_NULL_HANDLE;
-        if (vkAllocateDescriptorSets(device_, &ai, &ds) != VK_SUCCESS)
-            return VK_NULL_HANDLE;
+        // VULKAN-391: one contract for every descriptor allocation in this renderer -- a caller
+        // never receives VK_NULL_HANDLE, because the only thing a caller could do with one is bind
+        // it, and binding a null descriptor set is a segfault (measured under VULKAN-390's
+        // mutation probe). Refused BY NAME at the draw, which is where this runs, rather than at
+        // Present. Routed through AllocateOneDescriptorSet so the test-only injection hook can
+        // reach this arm at all -- it could not before, which is why this arm had no test.
+        if (AllocateOneDescriptorSet(device_, ai, ds) != VK_SUCCESS)
+            throw std::runtime_error(
+                "The Vulkan renderer: SkinnedEffect\'s descriptor pool is full and the device "
+                "refused another set. Refused rather than binding a null descriptor set.");
 
         VkDescriptorImageInfo imgInfo{};
         imgInfo.sampler     = sampler;
@@ -8554,8 +8621,16 @@ namespace CNA::Internal::Renderers::Vulkan
         ai.descriptorSetCount = 1;
         ai.pSetLayouts        = &descriptorSetLayoutPbr_;
         VkDescriptorSet ds = VK_NULL_HANDLE;
-        if (vkAllocateDescriptorSets(device_, &ai, &ds) != VK_SUCCESS)
-            return VK_NULL_HANDLE;
+        // VULKAN-391: one contract for every descriptor allocation in this renderer -- a caller
+        // never receives VK_NULL_HANDLE, because the only thing a caller could do with one is bind
+        // it, and binding a null descriptor set is a segfault (measured under VULKAN-390's
+        // mutation probe). Refused BY NAME at the draw, which is where this runs, rather than at
+        // Present. Routed through AllocateOneDescriptorSet so the test-only injection hook can
+        // reach this arm at all -- it could not before, which is why this arm had no test.
+        if (AllocateOneDescriptorSet(device_, ai, ds) != VK_SUCCESS)
+            throw std::runtime_error(
+                "The Vulkan renderer: PbrEffect\'s descriptor pool is full and the device "
+                "refused another set. Refused rather than binding a null descriptor set.");
 
         VkImageView views[7] = { baseColor, normalMap, metallicRoughness, emissive, occlusion,
                                  specular, specularColor };
@@ -8859,8 +8934,16 @@ namespace CNA::Internal::Renderers::Vulkan
         ai.descriptorSetCount = 1;
         ai.pSetLayouts        = &descriptorSetLayoutPbrSkinned_;
         VkDescriptorSet ds = VK_NULL_HANDLE;
-        if (vkAllocateDescriptorSets(device_, &ai, &ds) != VK_SUCCESS)
-            return VK_NULL_HANDLE;
+        // VULKAN-391: one contract for every descriptor allocation in this renderer -- a caller
+        // never receives VK_NULL_HANDLE, because the only thing a caller could do with one is bind
+        // it, and binding a null descriptor set is a segfault (measured under VULKAN-390's
+        // mutation probe). Refused BY NAME at the draw, which is where this runs, rather than at
+        // Present. Routed through AllocateOneDescriptorSet so the test-only injection hook can
+        // reach this arm at all -- it could not before, which is why this arm had no test.
+        if (AllocateOneDescriptorSet(device_, ai, ds) != VK_SUCCESS)
+            throw std::runtime_error(
+                "The Vulkan renderer: SkinnedPbrEffect\'s descriptor pool is full and the device "
+                "refused another set. Refused rather than binding a null descriptor set.");
 
         VkImageView views[7] = { baseColor, normalMap, metallicRoughness, emissive, occlusion,
                                  specular, specularColor };
