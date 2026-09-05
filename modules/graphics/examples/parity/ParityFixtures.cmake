@@ -36,6 +36,15 @@ set(CNA_PARITY_FIXTURES
     # WEBGPU-206: a DXT1 TextureCube stores blocks, reads back decoded, and samples exactly like the
     # RGBA8 cube it encodes.
     compressed_cube
+    # WEBGPU-173: each BasicEffect lighting term -- emissive, ambient, the light sum, specular --
+    # reaches the surface through its own colour channel.
+    basic_effect_light_terms
+    # WEBGPU-173: VertexColorEnabled and TextureEnabled are independent gates, and the product
+    # clamps rather than wrapping.
+    basic_effect_vertex_color
+    # WEBGPU-173: EnableDefaultLighting, Alpha's premultiply into RGB, and large-world-scale
+    # transform precision.
+    basic_effect_alpha_scale
     # WEBGPU-153: FillMode::WireFrame draws edges and leaves the interior empty.
     fill_mode_wireframe
     # WEBGPU-161: SamplerState.MaxMipLevel selects which mip level a sample comes from.
