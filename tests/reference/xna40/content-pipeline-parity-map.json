@@ -3442,62 +3442,62 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Processors.SongContent": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::SongContent",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/AudioProcessors.hpp",
+   "note": "XNA declares no public member on this type; CNA's carries the converted audio behind CNAEXT accessors so its writer can reach it.",
    "members": {}
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Processors.SongProcessor": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::SongProcessor",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/AudioProcessors.hpp",
+   "note": "the audio and the answered content are shared pointers, which is the lifetime a .NET reference gives them.",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "SongProcessor()",
      "note": ""
     },
     "property:Quality": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getQualityProperty() / setQualityProperty(ConversionQuality)",
      "note": ""
     },
     "method:Process(Microsoft.Xna.Framework.Content.Pipeline.Audio.AudioContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXTERNAL_BLOCKED",
+     "cna": "Process(const std::shared_ptr<AudioContent>&, ContentProcessorContext&)",
+     "note": "a song is Windows Media audio; that encoder exists only on the platform that owns it, and XNA's own never returns under the oracle's Wine prefix, so its behaviour could not even be measured. The null-input refusal is XNA's own."
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Processors.SoundEffectContent": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::SoundEffectContent",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/AudioProcessors.hpp",
+   "note": "XNA declares no public member on this type; CNA's carries the converted audio behind CNAEXT accessors so its writer can reach it.",
    "members": {}
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Processors.SoundEffectProcessor": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::SoundEffectProcessor",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/AudioProcessors.hpp",
+   "note": "the audio and the answered content are shared pointers, which is the lifetime a .NET reference gives them.",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "SoundEffectProcessor()",
      "note": ""
     },
     "property:Quality": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getQualityProperty() / setQualityProperty(ConversionQuality)",
      "note": ""
     },
     "method:Process(Microsoft.Xna.Framework.Content.Pipeline.Audio.AudioContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Process(const std::shared_ptr<AudioContent>&, ContentProcessorContext&)",
+     "note": "the audio and the answered content are shared pointers, which is the lifetime a .NET reference gives them. The best quality leaves the source alone and the two below it compress it to ADPCM in place, which is what XNA does; the ADPCM sample values are this host's encoder (XNAPP-161)."
     }
    }
   },

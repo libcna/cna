@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-160 and 161: the audio intermediate types -- AudioContent,
+// plans/plan_xnapipeline_parity.md XNAPP-160, 161 and 136: the audio intermediate types -- AudioContent,
 // AudioFormat and the three enumerations -- against what the genuine XNA 4.0 pipeline answers for
 // the same WAV files (tests/reference/xna40/audio/audio-content-oracle.json, cases enums/*,
 // audiocontent/* and refusals/*).
@@ -29,12 +29,16 @@
 #include "CNA/Internal/Audio/WavDecoder.hpp"
 #include "CNA/Internal/Audio/WavWrapper.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Audio/AudioContent.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/ContentBuildLogger.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/ContentProcessorContext.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Processors/AudioProcessors.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/Collections/Generic/KeyNotFoundException.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/NotSupportedException.hpp"
 
 namespace Audio = Microsoft::Xna::Framework::Content::Pipeline::Audio;
 using Audio::AudioContent;
@@ -600,3 +604,157 @@ TEST(XnaAudioConvertFormat, TheTwoPlatformEncodersAreRefusedByName)
     EXPECT_EQ(audio.getFormatProperty()->getFormatProperty(), 1);
 }
 
+
+
+// ---- XNAPP-136: the sound effect and song processors -----------------------------------------
+
+namespace Processors = Microsoft::Xna::Framework::Content::Pipeline::Processors;
+
+namespace
+{
+    /** @brief The least a processor needs, as the oracle's own driver gives it. */
+    class ProbeContext final : public Microsoft::Xna::Framework::Content::Pipeline::ContentProcessorContext
+    {
+    public:
+        [[nodiscard]] std::string getBuildConfigurationProperty() const override { return "Debug"; }
+        [[nodiscard]] std::string getIntermediateDirectoryProperty() const override { return "obj"; }
+        [[nodiscard]] Microsoft::Xna::Framework::Content::Pipeline::ContentBuildLogger& getLoggerProperty()
+            const override
+        {
+            return logger_;
+        }
+        [[nodiscard]] std::string getOutputDirectoryProperty() const override { return "bin"; }
+        [[nodiscard]] std::string getOutputFilenameProperty() const override { return "asset.xnb"; }
+        [[nodiscard]] const Microsoft::Xna::Framework::Content::Pipeline::OpaqueDataDictionary&
+        getParametersProperty() const override
+        {
+            return parameters_;
+        }
+        [[nodiscard]] Microsoft::Xna::Framework::Content::Pipeline::TargetPlatform getTargetPlatformProperty()
+            const override
+        {
+            return Microsoft::Xna::Framework::Content::Pipeline::TargetPlatform::Windows;
+        }
+        [[nodiscard]] Microsoft::Xna::Framework::Graphics::GraphicsProfile getTargetProfileProperty()
+            const override
+        {
+            return Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef;
+        }
+        void AddDependency(const std::string&) override {}
+        void AddOutputFile(const std::string&) override {}
+
+    protected:
+        [[nodiscard]] Microsoft::Xna::Framework::Content::Pipeline::ContentObject BuildAndLoadAssetCore(
+            const std::string&, const Microsoft::Xna::Framework::Content::Pipeline::ContentIdentity&,
+            const std::string&, const Microsoft::Xna::Framework::Content::Pipeline::OpaqueDataDictionary&,
+            const std::string&, const std::string&, const std::string&) override
+        {
+            throw System::NotSupportedException("BuildAndLoadAsset");
+        }
+        [[nodiscard]] std::string BuildAssetCore(
+            const std::string&, const Microsoft::Xna::Framework::Content::Pipeline::ContentIdentity&,
+            const std::string&, const Microsoft::Xna::Framework::Content::Pipeline::OpaqueDataDictionary&,
+            const std::string&, const std::string&, const std::string&, const std::string&) override
+        {
+            throw System::NotSupportedException("BuildAsset");
+        }
+        [[nodiscard]] Microsoft::Xna::Framework::Content::Pipeline::ContentObject ConvertCore(
+            const Microsoft::Xna::Framework::Content::Pipeline::ContentObject&, const std::string&,
+            const Microsoft::Xna::Framework::Content::Pipeline::OpaqueDataDictionary&, const std::string&,
+            const std::string&) override
+        {
+            throw System::NotSupportedException("Convert");
+        }
+
+    private:
+        class SilentLogger final : public Microsoft::Xna::Framework::Content::Pipeline::ContentBuildLogger
+        {
+        protected:
+            void LogMessage(const std::string&) override {}
+            void LogImportantMessage(const std::string&) override {}
+            void LogWarning(const std::string&,
+                            const Microsoft::Xna::Framework::Content::Pipeline::ContentIdentity&,
+                            const std::string&) override
+            {
+            }
+        };
+
+        mutable SilentLogger logger_;
+        Microsoft::Xna::Framework::Content::Pipeline::OpaqueDataDictionary parameters_;
+    };
+}
+
+TEST(XnaAudioProcessors, DefaultsMatchXna)
+{
+    const Processors::SoundEffectProcessor effect;
+    const Processors::SongProcessor song;
+    const auto name = [](ConversionQuality quality)
+    { return quality == ConversionQuality::Low ? "Low" : quality == ConversionQuality::Medium ? "Medium" : "Best"; };
+    EXPECT_EQ("Quality=" + std::string(name(effect.getQualityProperty())),
+              Expected("processors/SoundEffectProcessor"));
+    EXPECT_EQ("Quality=" + std::string(name(song.getQualityProperty())), Expected("processors/SongProcessor"));
+}
+
+TEST(XnaAudioProcessors, TheSoundEffectProcessorConvertsAsXnaDoes)
+{
+    ScratchDirectory scratch("effect");
+    const std::string stereo = WriteWav(scratch.Path(), "stereo44k.wav", 44100, 2, 16, 4410);
+
+    // At the best quality the source is left exactly as it is, which the corpus shows byte for
+    // byte; at the two below it the source becomes ADPCM, whose sample values are this host's
+    // encoder, so those two are held to the shape XNA answered.
+    const auto audio = std::make_shared<AudioContent>(stereo, AudioFileType::Wav);
+    ProbeContext context;
+    Processors::SoundEffectProcessor best;
+    const std::shared_ptr<Processors::SoundEffectContent> content = best.Process(audio, context);
+    ASSERT_NE(content, nullptr);
+    EXPECT_EQ("output=SoundEffectContent input=" + Describe(*audio),
+              Expected("soundeffectprocessor/process_best"));
+    EXPECT_EQ(content->Data(), audio->getDataProperty());
+    EXPECT_EQ(content->LoopLength(), audio->getLoopLengthProperty());
+
+    for (const auto& [quality, name] : std::vector<std::pair<ConversionQuality, std::string>>{
+             {ConversionQuality::Low, "soundeffectprocessor/process_low"},
+             {ConversionQuality::Medium, "soundeffectprocessor/process_medium"}})
+    {
+        const auto source = std::make_shared<AudioContent>(stereo, AudioFileType::Wav);
+        Processors::SoundEffectProcessor processor;
+        processor.setQualityProperty(quality);
+        const std::shared_ptr<Processors::SoundEffectContent> compressed = processor.Process(source, context);
+        ASSERT_NE(compressed, nullptr);
+        const std::string expected = Expected(name);
+        EXPECT_NE(expected.find("format=2"), std::string::npos) << name;
+        EXPECT_EQ(source->getFormatProperty()->getFormatProperty(), 2) << name;
+        EXPECT_EQ(source->getFormatProperty()->getBitsPerSampleProperty(), 4) << name;
+        EXPECT_EQ(source->getFormatProperty()->getBlockAlignProperty(), 140) << name;
+        EXPECT_EQ(compressed->Data().size(), source->getDataProperty().size()) << name;
+    }
+}
+
+TEST(XnaAudioProcessors, RefusalsMatchXna)
+{
+    ProbeContext context;
+    Processors::SoundEffectProcessor effect;
+    EXPECT_EQ(Result([&effect, &context]
+                     {
+                         const std::shared_ptr<Processors::SoundEffectContent> content =
+                             effect.Process(nullptr, context);
+                         return std::string("output=") + (content == nullptr ? "null" : "set");
+                     }),
+              Expected("soundeffectprocessor/null_input"));
+    Processors::SongProcessor song;
+    EXPECT_EQ(Result([&song, &context]
+                     {
+                         const std::shared_ptr<Processors::SongContent> content =
+                             song.Process(nullptr, context);
+                         return std::string("output=") + (content == nullptr ? "null" : "set");
+                     }),
+              Expected("songprocessor/null_input"));
+
+    // A song is Windows Media audio, which this build cannot write and the oracle could not
+    // measure: XNA's own encoder never returns under its Wine prefix.
+    ScratchDirectory scratch("song");
+    const std::string mono = WriteWav(scratch.Path(), "mono8k.wav", 8000, 1, 16, 800);
+    const auto audio = std::make_shared<AudioContent>(mono, AudioFileType::Wav);
+    EXPECT_THROW((void)song.Process(audio, context), InvalidContentException);
+}

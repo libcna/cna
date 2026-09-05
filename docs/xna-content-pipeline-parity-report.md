@@ -10,17 +10,17 @@
 
 | Quantity | Implemented (EXACT + SEMANTIC + HOST_SUBSTITUTION) | EXTERNAL_BLOCKED | MISSING |
 |---|---|---:|---:|
-| public/protected types | 108/128 (84.4%) | 0 | 20 |
-| public/protected members | 615/705 (87.2%) | 0 | 90 |
+| public/protected types | 112/128 (87.5%) | 0 | 16 |
+| public/protected members | 620/705 (87.9%) | 1 | 84 |
 | enum values | 27/27 (100.0%) | 0 | 0 |
 | built-in importers | 0/10 (0.0%) | 0 | 10 |
-| built-in processors | 9/12 (75.0%) | 0 | 3 |
-| processor properties | 44/47 (93.6%) | 0 | 3 |
+| built-in processors | 11/12 (91.7%) | 0 | 1 |
+| processor properties | 46/47 (97.9%) | 0 | 1 |
 
 Status vocabulary: EXACT_EQUIVALENT, SEMANTIC_EQUIVALENT (spelling differs, capability identical; note says how),
 HOST_SUBSTITUTION (Microsoft-host mechanism replaced; note says how), EXTERNAL_BLOCKED (note names the
-unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 43, SEMANTIC_EQUIVALENT 64, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 20.
-Member status by value: EXACT_EQUIVALENT 396, SEMANTIC_EQUIVALENT 213, HOST_SUBSTITUTION 6, EXTERNAL_BLOCKED 0, MISSING 90.
+unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 45, SEMANTIC_EQUIVALENT 66, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 16.
+Member status by value: EXACT_EQUIVALENT 400, SEMANTIC_EQUIVALENT 214, HOST_SUBSTITUTION 6, EXTERNAL_BLOCKED 1, MISSING 84.
 
 Rules applied mechanically: 3 delegate plumbing members are listed in section 7 and not counted; 3 exception
 serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serialization has no C++ counterpart).
@@ -32,7 +32,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `Microsoft.Xna.Framework.Content.Pipeline.Audio` | 5 | 5 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline` | 32 | 21 | 0 | 11 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Graphics` | 47 | 47 | 0 | 0 |
-| `Microsoft.Xna.Framework.Content.Pipeline.Processors` | 28 | 23 | 0 | 5 |
+| `Microsoft.Xna.Framework.Content.Pipeline.Processors` | 28 | 27 | 0 | 1 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler` | 5 | 5 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate` | 7 | 7 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Tasks` | 4 | 0 | 0 | 4 |
@@ -134,10 +134,10 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `….Processors` | `ModelProcessor` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::ModelProcessor` | the scene it is given is transformed in place and the model it answers holds shared pointers, both of which are what XNA does with .NET references. |
 | `….Processors` | `ModelTextureProcessor` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::ModelTextureProcessor` | Mipmapped and DXT-compressed by default, which is the only difference from the texture processor (measured, processor/ModelTextureProcessor). |
 | `….Processors` | `PassThroughProcessor` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::PassThroughProcessor` | An object-to-object processor, so its carrier is the pipeline's ContentObject box. |
-| `….Processors` | `SongContent` | class | MISSING |  |  |
-| `….Processors` | `SongProcessor` | class | MISSING |  |  |
-| `….Processors` | `SoundEffectContent` | class | MISSING |  |  |
-| `….Processors` | `SoundEffectProcessor` | class | MISSING |  |  |
+| `….Processors` | `SongContent` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::SongContent` | XNA declares no public member on this type; CNA's carries the converted audio behind CNAEXT accessors so its writer can reach it. |
+| `….Processors` | `SongProcessor` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::SongProcessor` | the audio and the answered content are shared pointers, which is the lifetime a .NET reference gives them. |
+| `….Processors` | `SoundEffectContent` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::SoundEffectContent` | XNA declares no public member on this type; CNA's carries the converted audio behind CNAEXT accessors so its writer can reach it. |
+| `….Processors` | `SoundEffectProcessor` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::SoundEffectProcessor` | the audio and the answered content are shared pointers, which is the lifetime a .NET reference gives them. |
 | `….Processors` | `SpriteFontContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::SpriteFontContent` | XNA publishes no member of its own on this type (measured, fontprocessor/spritefont_content_members lists none), so what it holds is reachable here only through a CNAEXT accessor -- and what it holds is the canonical sprite-font data this repository already writes. |
 | `….Processors` | `SpriteTextureProcessor` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::SpriteTextureProcessor` | The texture processor's defaults exactly (measured, processor/SpriteTextureProcessor). |
 | `….Processors` | `TextureProcessor` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::TextureProcessor` | Every default and every step is measured (processor/TextureProcessor and textureprocessor/*): the colour key runs first, then the resize, then the premultiply, then the mipmaps, and the format last; NoChange keeps the bitmap type the texture arrived with, and DxtCompressed picks Dxt1 unless a pixel is partly transparent. |
@@ -196,8 +196,8 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `ModelProcessor` | `NodeContent` | `ModelContent` | 14 | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::ModelProcessor` |
 | `ModelTextureProcessor` | `TextureContent` | `TextureContent` | 6 | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::ModelTextureProcessor` |
 | `PassThroughProcessor` | `Object` | `Object` | 0 | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::PassThroughProcessor` |
-| `SongProcessor` | `AudioContent` | `SongContent` | 1 | MISSING |  |
-| `SoundEffectProcessor` | `AudioContent` | `SoundEffectContent` | 1 | MISSING |  |
+| `SongProcessor` | `AudioContent` | `SongContent` | 1 | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::SongProcessor` |
+| `SoundEffectProcessor` | `AudioContent` | `SoundEffectContent` | 1 | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::SoundEffectProcessor` |
 | `SpriteTextureProcessor` | `TextureContent` | `TextureContent` | 6 | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::SpriteTextureProcessor` |
 | `TextureProcessor` | `TextureContent` | `TextureContent` | 6 | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::TextureProcessor` |
 | `VideoProcessor` | `VideoContent` | `VideoContent` | 1 | MISSING |  |
@@ -236,8 +236,8 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `ModelTextureProcessor` | `PremultiplyAlpha` | `Boolean` | `True` | EXACT_EQUIVALENT | `getPremultiplyAlphaProperty() / setPremultiplyAlphaProperty()` |
 | `ModelTextureProcessor` | `ResizeToPowerOfTwo` | `Boolean` | `False` | EXACT_EQUIVALENT | `getResizeToPowerOfTwoProperty() / setResizeToPowerOfTwoProperty()` |
 | `ModelTextureProcessor` | `TextureFormat` | `TextureProcessorOutputFormat` | `TextureProcessorOutputFormat.DxtCompressed` | EXACT_EQUIVALENT | `getTextureFormatProperty() / setTextureFormatProperty()` |
-| `SongProcessor` | `Quality` | `ConversionQuality` | `ConversionQuality.Best` | MISSING |  |
-| `SoundEffectProcessor` | `Quality` | `ConversionQuality` | `ConversionQuality.Best` | MISSING |  |
+| `SongProcessor` | `Quality` | `ConversionQuality` | `ConversionQuality.Best` | EXACT_EQUIVALENT | `getQualityProperty() / setQualityProperty(ConversionQuality)` |
+| `SoundEffectProcessor` | `Quality` | `ConversionQuality` | `ConversionQuality.Best` | EXACT_EQUIVALENT | `getQualityProperty() / setQualityProperty(ConversionQuality)` |
 | `SpriteTextureProcessor` | `ColorKeyColor` | `Color` | `Color:{R:255 G:0 B:255 A:255}` | EXACT_EQUIVALENT | `getColorKeyColorProperty() / setColorKeyColorProperty()` |
 | `SpriteTextureProcessor` | `ColorKeyEnabled` | `Boolean` | `True` | EXACT_EQUIVALENT | `getColorKeyEnabledProperty() / setColorKeyEnabledProperty()` |
 | `SpriteTextureProcessor` | `GenerateMipmaps` | `Boolean` | `False` | EXACT_EQUIVALENT | `getGenerateMipmapsProperty() / setGenerateMipmapsProperty()` |
@@ -799,12 +799,12 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `ModelTextureProcessor` | method | `Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | SEMANTIC_EQUIVALENT | `Process(const std::shared_ptr<TextureContent>&, ContentProcessorContext&)` | inherited from TextureProcessor, which is what XNA's override calls. |
 | `PassThroughProcessor` | constructor | `.ctor()` | EXACT_EQUIVALENT | `PassThroughProcessor()` |  |
 | `PassThroughProcessor` | method | `Process(System.Object, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | SEMANTIC_EQUIVALENT | `Process(const ContentObject&, ContentProcessorContext&)` | object is ContentObject. |
-| `SongProcessor` | constructor | `.ctor()` | MISSING |  |  |
-| `SongProcessor` | property | `Quality` | MISSING |  |  |
-| `SongProcessor` | method | `Process(Microsoft.Xna.Framework.Content.Pipeline.Audio.AudioContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | MISSING |  |  |
-| `SoundEffectProcessor` | constructor | `.ctor()` | MISSING |  |  |
-| `SoundEffectProcessor` | property | `Quality` | MISSING |  |  |
-| `SoundEffectProcessor` | method | `Process(Microsoft.Xna.Framework.Content.Pipeline.Audio.AudioContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | MISSING |  |  |
+| `SongProcessor` | constructor | `.ctor()` | EXACT_EQUIVALENT | `SongProcessor()` |  |
+| `SongProcessor` | property | `Quality` | EXACT_EQUIVALENT | `getQualityProperty() / setQualityProperty(ConversionQuality)` |  |
+| `SongProcessor` | method | `Process(Microsoft.Xna.Framework.Content.Pipeline.Audio.AudioContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | EXTERNAL_BLOCKED | `Process(const std::shared_ptr<AudioContent>&, ContentProcessorContext&)` | a song is Windows Media audio; that encoder exists only on the platform that owns it, and XNA's own never returns under the oracle's Wine prefix, so its behaviour could not even be measured. The null-input refusal is XNA's own. |
+| `SoundEffectProcessor` | constructor | `.ctor()` | EXACT_EQUIVALENT | `SoundEffectProcessor()` |  |
+| `SoundEffectProcessor` | property | `Quality` | EXACT_EQUIVALENT | `getQualityProperty() / setQualityProperty(ConversionQuality)` |  |
+| `SoundEffectProcessor` | method | `Process(Microsoft.Xna.Framework.Content.Pipeline.Audio.AudioContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | SEMANTIC_EQUIVALENT | `Process(const std::shared_ptr<AudioContent>&, ContentProcessorContext&)` | the audio and the answered content are shared pointers, which is the lifetime a .NET reference gives them. The best quality leaves the source alone and the two below it compress it to ADPCM in place, which is what XNA does; the ADPCM sample values are this host's encoder (XNAPP-161). |
 | `SpriteTextureProcessor` | constructor | `.ctor()` | EXACT_EQUIVALENT | `SpriteTextureProcessor()` |  |
 | `SpriteTextureProcessor` | property | `ColorKeyColor` | EXACT_EQUIVALENT | `getColorKeyColorProperty() / setColorKeyColorProperty()` | inherited; XNA redeclares it only to hide it from the designer. |
 | `SpriteTextureProcessor` | property | `ColorKeyEnabled` | EXACT_EQUIVALENT | `getColorKeyEnabledProperty() / setColorKeyEnabledProperty()` | inherited; XNA redeclares it only to hide it from the designer. |

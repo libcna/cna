@@ -30,7 +30,7 @@ mkdir -p "$build" "$out"
 # The Microsoft assemblies are copied only into the ignored build directory, beside the driver,
 # so the CLR finds them without a GAC; nothing Microsoft owns reaches the repository.
 cp "$refs/Microsoft.Xna.Framework.dll" "$refs/Microsoft.Xna.Framework.Graphics.dll" \
-   "$refs/Microsoft.Xna.Framework.Content.Pipeline.dll" "$build/"
+   "$refs/Microsoft.Xna.Framework.Content.Pipeline.dll" "$refs/Microsoft.Xna.Framework.Video.dll" "$build/"
 # The pipeline's native helper carries the audio conversions; without it every ConvertFormat
 # reports "Specified method is not supported", which is an environment artifact, not XNA behaviour.
 native="${CNA_XNA40_NATIVE:-$prefix/drive_c/Program Files/Common Files/Microsoft Shared/XNA/Framework/v4.0/XnaNative.dll}"
@@ -44,6 +44,7 @@ cp "$media" "$build/"
 mcs -sdk:4 -platform:x86 -target:exe -nologo -out:"$build/AudioContentOracle.exe" \
     -r:"$build/Microsoft.Xna.Framework.dll" -r:"$build/Microsoft.Xna.Framework.Graphics.dll" \
     -r:"$build/Microsoft.Xna.Framework.Content.Pipeline.dll" \
+    -r:"$build/Microsoft.Xna.Framework.Video.dll" \
     "$here/AudioContentOracle.cs"
 
 win_out="$(env WINEPREFIX="$prefix" WINEDEBUG=-all wine winepath -w "$build/out" 2>/dev/null)"

@@ -16,7 +16,10 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using Microsoft.Xna.Framework.Content.Pipeline;
 using Microsoft.Xna.Framework.Content.Pipeline.Audio;
+using Microsoft.Xna.Framework.Content.Pipeline.Processors;
+using Microsoft.Xna.Framework.Graphics;
 
 namespace Cna.Xna40.AudioOracle
 {
@@ -109,6 +112,36 @@ namespace Cna.Xna40.AudioOracle
             return "{\n \"producer\": \"Microsoft XNA Game Studio 4.0 Content Pipeline (Microsoft.Xna.Framework.Content.Pipeline.Audio), driven by tools/xna-pipeline-oracle/audio/AudioContentOracle.cs\",\n \"runtime\": \"" +
                    Environment.Version + "\",\n \"pipelineAssembly\": \"" + typeof(AudioContent).Assembly.FullName +
                    "\",\n \"cases\": [\n" + string.Join(",\n", Cases.ToArray()) + "\n ]\n}\n";
+        }
+
+        /// The least a processor needs: a context that answers, records nothing and builds nothing.
+        private sealed class ProbeContext : ContentProcessorContext
+        {
+            private readonly OpaqueDataDictionary parameters = new OpaqueDataDictionary();
+            private readonly ContentBuildLogger logger = new ProbeLogger();
+            public override string BuildConfiguration { get { return "Debug"; } }
+            public override string IntermediateDirectory { get { return "obj"; } }
+            public override ContentBuildLogger Logger { get { return logger; } }
+            public override string OutputDirectory { get { return "bin"; } }
+            public override string OutputFilename { get { return "asset.xnb"; } }
+            public override OpaqueDataDictionary Parameters { get { return parameters; } }
+            public override TargetPlatform TargetPlatform { get { return TargetPlatform.Windows; } }
+            public override GraphicsProfile TargetProfile { get { return GraphicsProfile.HiDef; } }
+            public override void AddDependency(string filename) { }
+            public override void AddOutputFile(string filename) { }
+            public override TOutput BuildAndLoadAsset<TInput, TOutput>(ExternalReference<TInput> sourceAsset, string processorName, OpaqueDataDictionary processorParameters, string importerName)
+            { throw new NotSupportedException("BuildAndLoadAsset"); }
+            public override ExternalReference<TOutput> BuildAsset<TInput, TOutput>(ExternalReference<TInput> sourceAsset, string processorName, OpaqueDataDictionary processorParameters, string importerName, string assetName)
+            { throw new NotSupportedException("BuildAsset"); }
+            public override TOutput Convert<TInput, TOutput>(TInput input, string processorName, OpaqueDataDictionary processorParameters)
+            { throw new NotSupportedException("Convert"); }
+        }
+
+        private sealed class ProbeLogger : ContentBuildLogger
+        {
+            public override void LogImportantMessage(string message, params object[] messageArgs) { }
+            public override void LogMessage(string message, params object[] messageArgs) { }
+            public override void LogWarning(string helpLink, ContentIdentity contentIdentity, string message, params object[] messageArgs) { }
         }
 
         private static int Main(string[] args)
@@ -245,6 +278,87 @@ namespace Cna.Xna40.AudioOracle
                     ReadOnlyCollection<byte> data = audio.Data;
                     return "type=" + data.GetType().Name + " count=" + data.Count;
                 }
+            });
+
+            // ---- the audio and video processors ---------------------------------------------------
+            Record("processors/SoundEffectProcessor", () =>
+            {
+                var processor = new SoundEffectProcessor();
+                return "Quality=" + processor.Quality;
+            });
+            Record("processors/SongProcessor", () =>
+            {
+                var processor = new SongProcessor();
+                return "Quality=" + processor.Quality;
+            });
+            Record("processors/VideoProcessor", () =>
+            {
+                var processor = new VideoProcessor();
+                return "VideoSoundtrackType=" + processor.VideoSoundtrackType;
+            });
+            Record("enums/VideoSoundtrackType", () =>
+            {
+                var builder = new StringBuilder();
+                foreach (Microsoft.Xna.Framework.Media.VideoSoundtrackType value in
+                         Enum.GetValues(typeof(Microsoft.Xna.Framework.Media.VideoSoundtrackType)))
+                    builder.Append((builder.Length == 0 ? "" : " ") + value + "=" + (int)value);
+                return builder.ToString();
+            });
+            Record("soundeffectprocessor/process_best", () =>
+            {
+                using (var audio = new AudioContent(stereo, AudioFileType.Wav))
+                {
+                    var processor = new SoundEffectProcessor();
+                    processor.Quality = ConversionQuality.Best;
+                    SoundEffectContent content = processor.Process(audio, new ProbeContext());
+                    return "output=" + (content == null ? "null" : content.GetType().Name) + " input=" + Describe(audio);
+                }
+            });
+            Record("soundeffectprocessor/process_low", () =>
+            {
+                using (var audio = new AudioContent(stereo, AudioFileType.Wav))
+                {
+                    var processor = new SoundEffectProcessor();
+                    processor.Quality = ConversionQuality.Low;
+                    SoundEffectContent content = processor.Process(audio, new ProbeContext());
+                    return "output=" + (content == null ? "null" : content.GetType().Name) + " input=" + Describe(audio);
+                }
+            });
+            Record("soundeffectprocessor/process_medium", () =>
+            {
+                using (var audio = new AudioContent(stereo, AudioFileType.Wav))
+                {
+                    var processor = new SoundEffectProcessor();
+                    processor.Quality = ConversionQuality.Medium;
+                    SoundEffectContent content = processor.Process(audio, new ProbeContext());
+                    return "output=" + (content == null ? "null" : content.GetType().Name) + " input=" + Describe(audio);
+                }
+            });
+            Record("soundeffectprocessor/null_input", () =>
+            {
+                var processor = new SoundEffectProcessor();
+                SoundEffectContent content = processor.Process(null, new ProbeContext());
+                return "output=" + (content == null ? "null" : content.GetType().Name);
+            });
+            Record("soundeffectcontent/members", () =>
+            {
+                var builder = new StringBuilder();
+                foreach (System.Reflection.MemberInfo member in typeof(SoundEffectContent).GetMembers(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.DeclaredOnly))
+                    builder.Append((builder.Length == 0 ? "" : " ") + member.MemberType + ":" + member.Name);
+                return builder.Length == 0 ? "none" : builder.ToString();
+            });
+            Record("songcontent/members", () =>
+            {
+                var builder = new StringBuilder();
+                foreach (System.Reflection.MemberInfo member in typeof(SongContent).GetMembers(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.DeclaredOnly))
+                    builder.Append((builder.Length == 0 ? "" : " ") + member.MemberType + ":" + member.Name);
+                return builder.Length == 0 ? "none" : builder.ToString();
+            });
+            Record("songprocessor/null_input", () =>
+            {
+                var processor = new SongProcessor();
+                SongContent content = processor.Process(null, new ProbeContext());
+                return "output=" + (content == null ? "null" : content.GetType().Name);
             });
 
             // ---- what ConvertFormat does --------------------------------------------------------
