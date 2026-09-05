@@ -19,6 +19,11 @@
 #include "System/Object.hpp"
 #include "System/Type.hpp"
 
+namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
+{
+    class VertexBufferContent;
+}
+
 namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
 {
     class VertexContent;
@@ -166,6 +171,16 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
          * @param index The entry index to remove.
          */
         CNAEXT virtual void RemoveEntry(SharpRuntime::intcs index) = 0;
+
+        /**
+         * @brief Writes every entry into a vertex buffer, one per vertex.
+         *
+         * @param buffer The buffer to write into.
+         * @param offset The byte offset of this channel within a vertex.
+         * @param stride The number of bytes one vertex occupies.
+         */
+        CNAEXT virtual void WriteInto(Processors::VertexBufferContent& buffer, SharpRuntime::intcs offset,
+                                      SharpRuntime::intcs stride) const = 0;
 
         /**
          * @brief Appends one boxed entry, for the type-erased channel routes.
@@ -376,6 +391,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
                 ThrowNoVectorConversion(getElementTypeProperty());
             }
         }
+
+        /** @brief Writes every entry into a vertex buffer, one per vertex. */
+        CNAEXT void WriteInto(Processors::VertexBufferContent& buffer, SharpRuntime::intcs offset,
+                              SharpRuntime::intcs stride) const override;
 
         /** @brief Appends one boxed entry. */
         CNAEXT void AddEntry(const ContentObject& value) override
@@ -742,4 +761,26 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
         VertexContent* owner_;
         std::vector<std::shared_ptr<VertexChannelBase>> channels_;
     };
+}
+
+#include "Microsoft/Xna/Framework/Content/Pipeline/Processors/VertexBufferContent.hpp"
+
+namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
+{
+    template<typename T>
+    void VertexChannel<T>::WriteInto(Processors::VertexBufferContent& buffer, SharpRuntime::intcs offset,
+                                     SharpRuntime::intcs stride) const
+    {
+        if constexpr (detail::ValidPixelType<T>)
+        {
+            buffer.Write<T>(offset, stride, items_);
+        }
+        else
+        {
+            // A channel of indices has no vertex element form; the buffer keeps its zeros.
+            (void)buffer;
+            (void)offset;
+            (void)stride;
+        }
+    }
 }

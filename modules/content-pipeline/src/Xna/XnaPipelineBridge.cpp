@@ -503,8 +503,10 @@ namespace CNA::Content::Pipeline
 
     Xna::ContentObject XnaBridgeProcessorContext::ConvertCore(
         const Xna::ContentObject& input, const std::string& processorName,
-        const Xna::OpaqueDataDictionary& processorParameters, const std::string& outputTypeName)
+        const Xna::OpaqueDataDictionary& processorParameters, const std::string& inputTypeName,
+        const std::string& outputTypeName)
     {
+        (void)inputTypeName;
         const ContentPipeline* pipeline = context_->Pipeline();
         if (pipeline == nullptr)
         {

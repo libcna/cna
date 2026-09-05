@@ -10,17 +10,17 @@
 
 | Quantity | Implemented (EXACT + SEMANTIC + HOST_SUBSTITUTION) | EXTERNAL_BLOCKED | MISSING |
 |---|---|---:|---:|
-| public/protected types | 91/128 (71.1%) | 0 | 37 |
-| public/protected members | 521/705 (73.9%) | 0 | 184 |
+| public/protected types | 101/128 (78.9%) | 0 | 27 |
+| public/protected members | 574/705 (81.4%) | 0 | 131 |
 | enum values | 17/27 (63.0%) | 0 | 10 |
 | built-in importers | 0/10 (0.0%) | 0 | 10 |
-| built-in processors | 8/12 (66.7%) | 0 | 4 |
-| processor properties | 30/47 (63.8%) | 0 | 17 |
+| built-in processors | 9/12 (75.0%) | 0 | 3 |
+| processor properties | 44/47 (93.6%) | 0 | 3 |
 
 Status vocabulary: EXACT_EQUIVALENT, SEMANTIC_EQUIVALENT (spelling differs, capability identical; note says how),
 HOST_SUBSTITUTION (Microsoft-host mechanism replaced; note says how), EXTERNAL_BLOCKED (note names the
-unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 40, SEMANTIC_EQUIVALENT 50, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 37.
-Member status by value: EXACT_EQUIVALENT 344, SEMANTIC_EQUIVALENT 172, HOST_SUBSTITUTION 5, EXTERNAL_BLOCKED 0, MISSING 184.
+unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 40, SEMANTIC_EQUIVALENT 60, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 27.
+Member status by value: EXACT_EQUIVALENT 376, SEMANTIC_EQUIVALENT 193, HOST_SUBSTITUTION 5, EXTERNAL_BLOCKED 0, MISSING 131.
 
 Rules applied mechanically: 3 delegate plumbing members are listed in section 7 and not counted; 3 exception
 serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serialization has no C++ counterpart).
@@ -32,7 +32,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `Microsoft.Xna.Framework.Content.Pipeline.Audio` | 5 | 0 | 0 | 5 |
 | `Microsoft.Xna.Framework.Content.Pipeline` | 32 | 21 | 0 | 11 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Graphics` | 47 | 45 | 0 | 2 |
-| `Microsoft.Xna.Framework.Content.Pipeline.Processors` | 28 | 13 | 0 | 15 |
+| `Microsoft.Xna.Framework.Content.Pipeline.Processors` | 28 | 23 | 0 | 5 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler` | 5 | 5 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate` | 7 | 7 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Tasks` | 4 | 0 | 0 | 4 |
@@ -124,14 +124,14 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `….Processors` | `FontTextureProcessor` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::FontTextureProcessor` | Defaults and the character mapping are measured (processor/FontTextureProcessor, fontprocessor/texture_character_for_index, /texture_first_character_set). What Process produces cannot be compared beyond its boundary, because SpriteFontContent publishes nothing: the two measured outcomes -- a delimited strip is accepted, a texture with no glyphs is refused with XNA's message -- are reproduced, and the glyph packing is CNA's own. |
 | `….Processors` | `MaterialProcessor` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::MaterialProcessor` | Measured against a build context that records what it is asked to build (materialprocessor/*): the material comes back as the same object with each texture reference replaced, every texture is built through `TextureProcessor` with the six parameters this processor's properties map onto, and an effect material's effect is built through `EffectProcessor` with no parameters at all. Its own defaults differ from the texture processor's: mipmaps on and DxtCompressed. |
 | `….Processors` | `MaterialProcessorDefaultEffect` | enum | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::MaterialProcessorDefaultEffect` |  |
-| `….Processors` | `ModelBoneContent` | class | MISSING |  |  |
-| `….Processors` | `ModelBoneContentCollection` | class | MISSING |  |  |
-| `….Processors` | `ModelContent` | class | MISSING |  |  |
-| `….Processors` | `ModelMeshContent` | class | MISSING |  |  |
-| `….Processors` | `ModelMeshContentCollection` | class | MISSING |  |  |
-| `….Processors` | `ModelMeshPartContent` | class | MISSING |  |  |
-| `….Processors` | `ModelMeshPartContentCollection` | class | MISSING |  |  |
-| `….Processors` | `ModelProcessor` | class | MISSING |  |  |
+| `….Processors` | `ModelBoneContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::ModelBoneContent` | a child is held by shared pointer and a parent referenced by shared pointer, which is the lifetime a .NET reference gives them. The constructor and AddChild are CNAEXT, because XNA builds these only inside its own model processor and exposes no public constructor. |
+| `….Processors` | `ModelBoneContentCollection` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::ModelBoneContentCollection` | a std::vector of shared pointers rather than a sealed ReadOnlyCollection: the collection is a std::vector of shared pointers, which is what a read-only collection of reference types is here. |
+| `….Processors` | `ModelContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::ModelContent` | a child is held by shared pointer and a parent referenced by shared pointer, which is the lifetime a .NET reference gives them. The constructor is CNAEXT: XNA builds a model only inside its own processor. |
+| `….Processors` | `ModelMeshContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::ModelMeshContent` | a child is held by shared pointer and a parent referenced by shared pointer, which is the lifetime a .NET reference gives them. The constructor is CNAEXT for the same reason ModelContent's is. |
+| `….Processors` | `ModelMeshContentCollection` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::ModelMeshContentCollection` | a std::vector of shared pointers rather than a sealed ReadOnlyCollection: the collection is a std::vector of shared pointers, which is what a read-only collection of reference types is here. |
+| `….Processors` | `ModelMeshPartContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::ModelMeshPartContent` | a child is held by shared pointer and a parent referenced by shared pointer, which is the lifetime a .NET reference gives them. The constructor is CNAEXT for the same reason ModelContent's is. |
+| `….Processors` | `ModelMeshPartContentCollection` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::ModelMeshPartContentCollection` | a std::vector of shared pointers rather than a sealed ReadOnlyCollection: the collection is a std::vector of shared pointers, which is what a read-only collection of reference types is here. |
+| `….Processors` | `ModelProcessor` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::ModelProcessor` | the scene it is given is transformed in place and the model it answers holds shared pointers, both of which are what XNA does with .NET references. |
 | `….Processors` | `ModelTextureProcessor` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::ModelTextureProcessor` | Mipmapped and DXT-compressed by default, which is the only difference from the texture processor (measured, processor/ModelTextureProcessor). |
 | `….Processors` | `PassThroughProcessor` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::PassThroughProcessor` | An object-to-object processor, so its carrier is the pipeline's ContentObject box. |
 | `….Processors` | `SongContent` | class | MISSING |  |  |
@@ -142,8 +142,8 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `….Processors` | `SpriteTextureProcessor` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::SpriteTextureProcessor` | The texture processor's defaults exactly (measured, processor/SpriteTextureProcessor). |
 | `….Processors` | `TextureProcessor` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::TextureProcessor` | Every default and every step is measured (processor/TextureProcessor and textureprocessor/*): the colour key runs first, then the resize, then the premultiply, then the mipmaps, and the format last; NoChange keeps the bitmap type the texture arrived with, and DxtCompressed picks Dxt1 unless a pixel is partly transparent. |
 | `….Processors` | `TextureProcessorOutputFormat` | enum | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::TextureProcessorOutputFormat` |  |
-| `….Processors` | `VertexBufferContent` | class | MISSING |  |  |
-| `….Processors` | `VertexDeclarationContent` | class | MISSING |  |  |
+| `….Processors` | `VertexBufferContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::VertexBufferContent` | the vertex data is a std::vector<bytecs> rather than a Byte[], and the untyped Write takes a vector of boxed values rather than an IEnumerable. |
+| `….Processors` | `VertexDeclarationContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::VertexDeclarationContent` | the nullable stride is a std::optional, which is what a Nullable<Int32> is here. |
 | `….Processors` | `VideoProcessor` | class | MISSING |  |  |
 | `….Serialization.Compiler` | `ContentCompiler` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler::ContentCompiler` |  |
 | `….Serialization.Compiler` | `ContentTypeWriter` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler::ContentTypeWriterBase` | C++ cannot give a class and a class template the same name, so the non-generic base is ContentTypeWriterBase -- the spelling CNA's runtime already uses for ContentTypeReaderBase beside ContentTypeReader<T>. |
@@ -193,7 +193,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `FontDescriptionProcessor` | `FontDescription` | `SpriteFontContent` | 0 | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::FontDescriptionProcessor` |
 | `FontTextureProcessor` | `Texture2DContent` | `SpriteFontContent` | 3 | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::FontTextureProcessor` |
 | `MaterialProcessor` | `MaterialContent` | `MaterialContent` | 7 | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::MaterialProcessor` |
-| `ModelProcessor` | `NodeContent` | `ModelContent` | 14 | MISSING |  |
+| `ModelProcessor` | `NodeContent` | `ModelContent` | 14 | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::ModelProcessor` |
 | `ModelTextureProcessor` | `TextureContent` | `TextureContent` | 6 | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::ModelTextureProcessor` |
 | `PassThroughProcessor` | `Object` | `Object` | 0 | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::PassThroughProcessor` |
 | `SongProcessor` | `AudioContent` | `SongContent` | 1 | MISSING |  |
@@ -216,20 +216,20 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `MaterialProcessor` | `PremultiplyTextureAlpha` | `Boolean` | `True` | EXACT_EQUIVALENT | `getPremultiplyTextureAlphaProperty() / setPremultiplyTextureAlphaProperty()` |
 | `MaterialProcessor` | `ResizeTexturesToPowerOfTwo` | `Boolean` | `False` | EXACT_EQUIVALENT | `getResizeTexturesToPowerOfTwoProperty() / setResizeTexturesToPowerOfTwoProperty()` |
 | `MaterialProcessor` | `TextureFormat` | `TextureProcessorOutputFormat` | `TextureProcessorOutputFormat.DxtCompressed` | EXACT_EQUIVALENT | `getTextureFormatProperty() / setTextureFormatProperty()` |
-| `ModelProcessor` | `ColorKeyColor` | `Color` | `Color:{R:255 G:0 B:255 A:255}` | MISSING |  |
-| `ModelProcessor` | `ColorKeyEnabled` | `Boolean` | `True` | MISSING |  |
-| `ModelProcessor` | `DefaultEffect` | `MaterialProcessorDefaultEffect` | `MaterialProcessorDefaultEffect.BasicEffect` | MISSING |  |
-| `ModelProcessor` | `GenerateMipmaps` | `Boolean` | `True` | MISSING |  |
-| `ModelProcessor` | `GenerateTangentFrames` | `Boolean` | `False` | MISSING |  |
-| `ModelProcessor` | `PremultiplyTextureAlpha` | `Boolean` | `True` | MISSING |  |
-| `ModelProcessor` | `PremultiplyVertexColors` | `Boolean` | `True` | MISSING |  |
-| `ModelProcessor` | `ResizeTexturesToPowerOfTwo` | `Boolean` | `False` | MISSING |  |
-| `ModelProcessor` | `RotationX` | `Single` | `0` | MISSING |  |
-| `ModelProcessor` | `RotationY` | `Single` | `0` | MISSING |  |
-| `ModelProcessor` | `RotationZ` | `Single` | `0` | MISSING |  |
-| `ModelProcessor` | `Scale` | `Single` | `1` | MISSING |  |
-| `ModelProcessor` | `SwapWindingOrder` | `Boolean` | `False` | MISSING |  |
-| `ModelProcessor` | `TextureFormat` | `TextureProcessorOutputFormat` | `TextureProcessorOutputFormat.DxtCompressed` | MISSING |  |
+| `ModelProcessor` | `ColorKeyColor` | `Color` | `Color:{R:255 G:0 B:255 A:255}` | EXACT_EQUIVALENT | `getColorKeyColorProperty() / setColorKeyColorProperty(Color)` |
+| `ModelProcessor` | `ColorKeyEnabled` | `Boolean` | `True` | EXACT_EQUIVALENT | `getColorKeyEnabledProperty() / setColorKeyEnabledProperty(bool)` |
+| `ModelProcessor` | `DefaultEffect` | `MaterialProcessorDefaultEffect` | `MaterialProcessorDefaultEffect.BasicEffect` | EXACT_EQUIVALENT | `getDefaultEffectProperty() / setDefaultEffectProperty(MaterialProcessorDefaultEffect)` |
+| `ModelProcessor` | `GenerateMipmaps` | `Boolean` | `True` | EXACT_EQUIVALENT | `getGenerateMipmapsProperty() / setGenerateMipmapsProperty(bool)` |
+| `ModelProcessor` | `GenerateTangentFrames` | `Boolean` | `False` | EXACT_EQUIVALENT | `getGenerateTangentFramesProperty() / setGenerateTangentFramesProperty(bool)` |
+| `ModelProcessor` | `PremultiplyTextureAlpha` | `Boolean` | `True` | EXACT_EQUIVALENT | `getPremultiplyTextureAlphaProperty() / setPremultiplyTextureAlphaProperty(bool)` |
+| `ModelProcessor` | `PremultiplyVertexColors` | `Boolean` | `True` | EXACT_EQUIVALENT | `getPremultiplyVertexColorsProperty() / setPremultiplyVertexColorsProperty(bool)` |
+| `ModelProcessor` | `ResizeTexturesToPowerOfTwo` | `Boolean` | `False` | EXACT_EQUIVALENT | `getResizeTexturesToPowerOfTwoProperty() / setResizeTexturesToPowerOfTwoProperty(bool)` |
+| `ModelProcessor` | `RotationX` | `Single` | `0` | EXACT_EQUIVALENT | `getRotationXProperty() / setRotationXProperty(Single)` |
+| `ModelProcessor` | `RotationY` | `Single` | `0` | EXACT_EQUIVALENT | `getRotationYProperty() / setRotationYProperty(Single)` |
+| `ModelProcessor` | `RotationZ` | `Single` | `0` | EXACT_EQUIVALENT | `getRotationZProperty() / setRotationZProperty(Single)` |
+| `ModelProcessor` | `Scale` | `Single` | `1` | EXACT_EQUIVALENT | `getScaleProperty() / setScaleProperty(Single)` |
+| `ModelProcessor` | `SwapWindingOrder` | `Boolean` | `False` | EXACT_EQUIVALENT | `getSwapWindingOrderProperty() / setSwapWindingOrderProperty(bool)` |
+| `ModelProcessor` | `TextureFormat` | `TextureProcessorOutputFormat` | `TextureProcessorOutputFormat.DxtCompressed` | EXACT_EQUIVALENT | `getTextureFormatProperty() / setTextureFormatProperty(TextureProcessorOutputFormat)` |
 | `ModelTextureProcessor` | `ColorKeyColor` | `Color` | `Color:{R:255 G:0 B:255 A:255}` | EXACT_EQUIVALENT | `getColorKeyColorProperty() / setColorKeyColorProperty()` |
 | `ModelTextureProcessor` | `ColorKeyEnabled` | `Boolean` | `True` | EXACT_EQUIVALENT | `getColorKeyEnabledProperty() / setColorKeyEnabledProperty()` |
 | `ModelTextureProcessor` | `GenerateMipmaps` | `Boolean` | `True` | EXACT_EQUIVALENT | `getGenerateMipmapsProperty() / setGenerateMipmapsProperty()` |
@@ -648,7 +648,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `VertexContent` | property | `VertexCount` | EXACT_EQUIVALENT | `getVertexCountProperty()` |  |
 | `VertexContent` | method | `Add(System.Int32)` | EXACT_EQUIVALENT | `Add(intcs)` |  |
 | `VertexContent` | method | `AddRange(System.Collections.Generic.IEnumerable<System.Int32>)` | SEMANTIC_EQUIVALENT | `AddRange(const std::vector<intcs>&)` | IEnumerable<int> is a std::vector<intcs>, which cannot be null. |
-| `VertexContent` | method | `CreateVertexBuffer()` | MISSING |  | Answers a Processors.VertexBufferContent, which XNAPP-134 implements; the measurement is already in the corpus (vertexcontent/create_vertex_buffer: 12 bytes, stride 12, one element for a positions-only batch). |
+| `VertexContent` | method | `CreateVertexBuffer()` | SEMANTIC_EQUIVALENT | `CreateVertexBuffer() -> std::shared_ptr<VertexBufferContent>` | the buffer is answered by shared pointer, which is the lifetime a .NET reference gives it; its layout is position first and then every channel a vertex element can carry, in channel order (measured, modelprocessor/triangle). |
 | `VertexContent` | method | `Insert(System.Int32, System.Int32)` | EXACT_EQUIVALENT | `Insert(intcs, intcs)` |  |
 | `VertexContent` | method | `InsertRange(System.Int32, System.Collections.Generic.IEnumerable<System.Int32>)` | SEMANTIC_EQUIVALENT | `InsertRange(intcs, const std::vector<intcs>&)` | IEnumerable<int> is a std::vector<intcs>, which cannot be null. |
 | `VertexContent` | method | `RemoveAt(System.Int32)` | EXACT_EQUIVALENT | `RemoveAt(intcs)` |  |
@@ -748,48 +748,48 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `MaterialProcessorDefaultEffect` | enum value | `EnvironmentMapEffect = 2` | EXACT_EQUIVALENT | `MaterialProcessorDefaultEffect::EnvironmentMapEffect` |  |
 | `MaterialProcessorDefaultEffect` | enum value | `DualTextureEffect = 3` | EXACT_EQUIVALENT | `MaterialProcessorDefaultEffect::DualTextureEffect` |  |
 | `MaterialProcessorDefaultEffect` | enum value | `AlphaTestEffect = 4` | EXACT_EQUIVALENT | `MaterialProcessorDefaultEffect::AlphaTestEffect` |  |
-| `ModelBoneContent` | property | `Children` | MISSING |  |  |
-| `ModelBoneContent` | property | `Index` | MISSING |  |  |
-| `ModelBoneContent` | property | `Name` | MISSING |  |  |
-| `ModelBoneContent` | property | `Parent` | MISSING |  |  |
-| `ModelBoneContent` | property | `Transform` | MISSING |  |  |
-| `ModelContent` | property | `Bones` | MISSING |  |  |
-| `ModelContent` | property | `Meshes` | MISSING |  |  |
-| `ModelContent` | property | `Root` | MISSING |  |  |
-| `ModelContent` | property | `Tag` | MISSING |  |  |
-| `ModelMeshContent` | property | `BoundingSphere` | MISSING |  |  |
-| `ModelMeshContent` | property | `MeshParts` | MISSING |  |  |
-| `ModelMeshContent` | property | `Name` | MISSING |  |  |
-| `ModelMeshContent` | property | `ParentBone` | MISSING |  |  |
-| `ModelMeshContent` | property | `SourceMesh` | MISSING |  |  |
-| `ModelMeshContent` | property | `Tag` | MISSING |  |  |
-| `ModelMeshPartContent` | property | `IndexBuffer` | MISSING |  |  |
-| `ModelMeshPartContent` | property | `Material` | MISSING |  |  |
-| `ModelMeshPartContent` | property | `NumVertices` | MISSING |  |  |
-| `ModelMeshPartContent` | property | `PrimitiveCount` | MISSING |  |  |
-| `ModelMeshPartContent` | property | `StartIndex` | MISSING |  |  |
-| `ModelMeshPartContent` | property | `Tag` | MISSING |  |  |
-| `ModelMeshPartContent` | property | `VertexBuffer` | MISSING |  |  |
-| `ModelMeshPartContent` | property | `VertexOffset` | MISSING |  |  |
-| `ModelProcessor` | constructor | `.ctor()` | MISSING |  |  |
-| `ModelProcessor` | property | `ColorKeyColor` | MISSING |  |  |
-| `ModelProcessor` | property | `ColorKeyEnabled` | MISSING |  |  |
-| `ModelProcessor` | property | `DefaultEffect` | MISSING |  |  |
-| `ModelProcessor` | property | `GenerateMipmaps` | MISSING |  |  |
-| `ModelProcessor` | property | `GenerateTangentFrames` | MISSING |  |  |
-| `ModelProcessor` | property | `PremultiplyTextureAlpha` | MISSING |  |  |
-| `ModelProcessor` | property | `PremultiplyVertexColors` | MISSING |  |  |
-| `ModelProcessor` | property | `ResizeTexturesToPowerOfTwo` | MISSING |  |  |
-| `ModelProcessor` | property | `RotationX` | MISSING |  |  |
-| `ModelProcessor` | property | `RotationY` | MISSING |  |  |
-| `ModelProcessor` | property | `RotationZ` | MISSING |  |  |
-| `ModelProcessor` | property | `Scale` | MISSING |  |  |
-| `ModelProcessor` | property | `SwapWindingOrder` | MISSING |  |  |
-| `ModelProcessor` | property | `TextureFormat` | MISSING |  |  |
-| `ModelProcessor` | method | `ConvertMaterial(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MaterialContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | MISSING |  |  |
-| `ModelProcessor` | method | `Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.NodeContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | MISSING |  |  |
-| `ModelProcessor` | method | `ProcessGeometryUsingMaterial(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MaterialContent, System.Collections.Generic.IEnumerable<Microsoft.Xna.Framework.Content.Pipeline.Graphics.GeometryContent>, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | MISSING |  |  |
-| `ModelProcessor` | method | `ProcessVertexChannel(Microsoft.Xna.Framework.Content.Pipeline.Graphics.GeometryContent, System.Int32, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | MISSING |  |  |
+| `ModelBoneContent` | property | `Children` | SEMANTIC_EQUIVALENT | `getChildrenProperty()` | the collection is a std::vector of shared pointers, which is what a read-only collection of reference types is here. |
+| `ModelBoneContent` | property | `Index` | EXACT_EQUIVALENT | `getIndexProperty()` |  |
+| `ModelBoneContent` | property | `Name` | EXACT_EQUIVALENT | `getNameProperty()` |  |
+| `ModelBoneContent` | property | `Parent` | SEMANTIC_EQUIVALENT | `getParentProperty()` | a child is held by shared pointer and a parent referenced by shared pointer, which is the lifetime a .NET reference gives them. |
+| `ModelBoneContent` | property | `Transform` | EXACT_EQUIVALENT | `getTransformProperty() / setTransformProperty(Matrix)` |  |
+| `ModelContent` | property | `Bones` | SEMANTIC_EQUIVALENT | `getBonesProperty()` | the collection is a std::vector of shared pointers, which is what a read-only collection of reference types is here. |
+| `ModelContent` | property | `Meshes` | SEMANTIC_EQUIVALENT | `getMeshesProperty()` | the collection is a std::vector of shared pointers, which is what a read-only collection of reference types is here. |
+| `ModelContent` | property | `Root` | SEMANTIC_EQUIVALENT | `getRootProperty()` | a child is held by shared pointer and a parent referenced by shared pointer, which is the lifetime a .NET reference gives them. |
+| `ModelContent` | property | `Tag` | EXACT_EQUIVALENT | `getTagProperty() / setTagProperty(ContentObject)` |  |
+| `ModelMeshContent` | property | `BoundingSphere` | EXACT_EQUIVALENT | `getBoundingSphereProperty()` |  |
+| `ModelMeshContent` | property | `MeshParts` | SEMANTIC_EQUIVALENT | `getMeshPartsProperty()` | the collection is a std::vector of shared pointers, which is what a read-only collection of reference types is here. |
+| `ModelMeshContent` | property | `Name` | EXACT_EQUIVALENT | `getNameProperty()` |  |
+| `ModelMeshContent` | property | `ParentBone` | SEMANTIC_EQUIVALENT | `getParentBoneProperty()` | a child is held by shared pointer and a parent referenced by shared pointer, which is the lifetime a .NET reference gives them. |
+| `ModelMeshContent` | property | `SourceMesh` | SEMANTIC_EQUIVALENT | `getSourceMeshProperty()` | a child is held by shared pointer and a parent referenced by shared pointer, which is the lifetime a .NET reference gives them. |
+| `ModelMeshContent` | property | `Tag` | EXACT_EQUIVALENT | `getTagProperty() / setTagProperty(ContentObject)` |  |
+| `ModelMeshPartContent` | property | `IndexBuffer` | SEMANTIC_EQUIVALENT | `getIndexBufferProperty()` | a child is held by shared pointer and a parent referenced by shared pointer, which is the lifetime a .NET reference gives them. |
+| `ModelMeshPartContent` | property | `Material` | SEMANTIC_EQUIVALENT | `getMaterialProperty() / setMaterialProperty(std::shared_ptr<MaterialContent>)` | a child is held by shared pointer and a parent referenced by shared pointer, which is the lifetime a .NET reference gives them. |
+| `ModelMeshPartContent` | property | `NumVertices` | EXACT_EQUIVALENT | `getNumVerticesProperty()` |  |
+| `ModelMeshPartContent` | property | `PrimitiveCount` | EXACT_EQUIVALENT | `getPrimitiveCountProperty()` |  |
+| `ModelMeshPartContent` | property | `StartIndex` | EXACT_EQUIVALENT | `getStartIndexProperty()` |  |
+| `ModelMeshPartContent` | property | `Tag` | EXACT_EQUIVALENT | `getTagProperty() / setTagProperty(ContentObject)` |  |
+| `ModelMeshPartContent` | property | `VertexBuffer` | SEMANTIC_EQUIVALENT | `getVertexBufferProperty()` | a child is held by shared pointer and a parent referenced by shared pointer, which is the lifetime a .NET reference gives them. |
+| `ModelMeshPartContent` | property | `VertexOffset` | EXACT_EQUIVALENT | `getVertexOffsetProperty()` |  |
+| `ModelProcessor` | constructor | `.ctor()` | EXACT_EQUIVALENT | `ModelProcessor()` |  |
+| `ModelProcessor` | property | `ColorKeyColor` | EXACT_EQUIVALENT | `getColorKeyColorProperty() / setColorKeyColorProperty(Color)` |  |
+| `ModelProcessor` | property | `ColorKeyEnabled` | EXACT_EQUIVALENT | `getColorKeyEnabledProperty() / setColorKeyEnabledProperty(bool)` |  |
+| `ModelProcessor` | property | `DefaultEffect` | EXACT_EQUIVALENT | `getDefaultEffectProperty() / setDefaultEffectProperty(MaterialProcessorDefaultEffect)` |  |
+| `ModelProcessor` | property | `GenerateMipmaps` | EXACT_EQUIVALENT | `getGenerateMipmapsProperty() / setGenerateMipmapsProperty(bool)` |  |
+| `ModelProcessor` | property | `GenerateTangentFrames` | EXACT_EQUIVALENT | `getGenerateTangentFramesProperty() / setGenerateTangentFramesProperty(bool)` |  |
+| `ModelProcessor` | property | `PremultiplyTextureAlpha` | EXACT_EQUIVALENT | `getPremultiplyTextureAlphaProperty() / setPremultiplyTextureAlphaProperty(bool)` |  |
+| `ModelProcessor` | property | `PremultiplyVertexColors` | EXACT_EQUIVALENT | `getPremultiplyVertexColorsProperty() / setPremultiplyVertexColorsProperty(bool)` |  |
+| `ModelProcessor` | property | `ResizeTexturesToPowerOfTwo` | EXACT_EQUIVALENT | `getResizeTexturesToPowerOfTwoProperty() / setResizeTexturesToPowerOfTwoProperty(bool)` |  |
+| `ModelProcessor` | property | `RotationX` | EXACT_EQUIVALENT | `getRotationXProperty() / setRotationXProperty(Single)` |  |
+| `ModelProcessor` | property | `RotationY` | EXACT_EQUIVALENT | `getRotationYProperty() / setRotationYProperty(Single)` |  |
+| `ModelProcessor` | property | `RotationZ` | EXACT_EQUIVALENT | `getRotationZProperty() / setRotationZProperty(Single)` |  |
+| `ModelProcessor` | property | `Scale` | EXACT_EQUIVALENT | `getScaleProperty() / setScaleProperty(Single)` |  |
+| `ModelProcessor` | property | `SwapWindingOrder` | EXACT_EQUIVALENT | `getSwapWindingOrderProperty() / setSwapWindingOrderProperty(bool)` |  |
+| `ModelProcessor` | property | `TextureFormat` | EXACT_EQUIVALENT | `getTextureFormatProperty() / setTextureFormatProperty(TextureProcessorOutputFormat)` |  |
+| `ModelProcessor` | method | `ConvertMaterial(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MaterialContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | SEMANTIC_EQUIVALENT | `ConvertMaterial(const std::shared_ptr<MaterialContent>&, ContentProcessorContext&)` | a child is held by shared pointer and a parent referenced by shared pointer, which is the lifetime a .NET reference gives them. |
+| `ModelProcessor` | method | `Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.NodeContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | SEMANTIC_EQUIVALENT | `Process(const std::shared_ptr<NodeContent>&, ContentProcessorContext&)` | a child is held by shared pointer and a parent referenced by shared pointer, which is the lifetime a .NET reference gives them. |
+| `ModelProcessor` | method | `ProcessGeometryUsingMaterial(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MaterialContent, System.Collections.Generic.IEnumerable<Microsoft.Xna.Framework.Content.Pipeline.Graphics.GeometryContent>, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | SEMANTIC_EQUIVALENT | `ProcessGeometryUsingMaterial(const std::shared_ptr<MaterialContent>&, const std::vector<std::shared_ptr<GeometryContent>>&, ContentProcessorContext&)` | the sequence of batches is a std::vector of shared pointers rather than an IEnumerable. |
+| `ModelProcessor` | method | `ProcessVertexChannel(Microsoft.Xna.Framework.Content.Pipeline.Graphics.GeometryContent, System.Int32, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | SEMANTIC_EQUIVALENT | `ProcessVertexChannel(const std::shared_ptr<GeometryContent>&, intcs, ContentProcessorContext&)` | a child is held by shared pointer and a parent referenced by shared pointer, which is the lifetime a .NET reference gives them. |
 | `ModelTextureProcessor` | constructor | `.ctor()` | EXACT_EQUIVALENT | `ModelTextureProcessor()` |  |
 | `ModelTextureProcessor` | property | `ColorKeyColor` | EXACT_EQUIVALENT | `getColorKeyColorProperty() / setColorKeyColorProperty()` | inherited; XNA redeclares it only to hide it from the designer. |
 | `ModelTextureProcessor` | property | `ColorKeyEnabled` | EXACT_EQUIVALENT | `getColorKeyEnabledProperty() / setColorKeyEnabledProperty()` | inherited; XNA redeclares it only to hide it from the designer. |
@@ -823,16 +823,16 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `TextureProcessorOutputFormat` | enum value | `NoChange = 0` | EXACT_EQUIVALENT | `TextureProcessorOutputFormat::NoChange` |  |
 | `TextureProcessorOutputFormat` | enum value | `Color = 1` | EXACT_EQUIVALENT | `TextureProcessorOutputFormat::Color` |  |
 | `TextureProcessorOutputFormat` | enum value | `DxtCompressed = 2` | EXACT_EQUIVALENT | `TextureProcessorOutputFormat::DxtCompressed` |  |
-| `VertexBufferContent` | constructor | `.ctor()` | MISSING |  |  |
-| `VertexBufferContent` | constructor | `.ctor(System.Int32)` | MISSING |  |  |
-| `VertexBufferContent` | property | `VertexData` | MISSING |  |  |
-| `VertexBufferContent` | property | `VertexDeclaration` | MISSING |  |  |
-| `VertexBufferContent` | method | `SizeOf(System.Type)` | MISSING |  |  |
-| `VertexBufferContent` | method | `Write(System.Int32, System.Int32, System.Type, System.Collections.IEnumerable)` | MISSING |  |  |
-| `VertexBufferContent` | method | `Write<T>(System.Int32, System.Int32, System.Collections.Generic.IEnumerable<T>)` | MISSING |  |  |
-| `VertexDeclarationContent` | constructor | `.ctor()` | MISSING |  |  |
-| `VertexDeclarationContent` | property | `VertexElements` | MISSING |  |  |
-| `VertexDeclarationContent` | property | `VertexStride` | MISSING |  |  |
+| `VertexBufferContent` | constructor | `.ctor()` | EXACT_EQUIVALENT | `VertexBufferContent()` |  |
+| `VertexBufferContent` | constructor | `.ctor(System.Int32)` | EXACT_EQUIVALENT | `VertexBufferContent(intcs)` |  |
+| `VertexBufferContent` | property | `VertexData` | SEMANTIC_EQUIVALENT | `getVertexDataProperty()` | a std::vector<bytecs> stands for the Byte[]. |
+| `VertexBufferContent` | property | `VertexDeclaration` | SEMANTIC_EQUIVALENT | `getVertexDeclarationProperty() / setVertexDeclarationProperty(std::shared_ptr<VertexDeclarationContent>)` | a child is held by shared pointer and a parent referenced by shared pointer, which is the lifetime a .NET reference gives them. |
+| `VertexBufferContent` | method | `SizeOf(System.Type)` | EXACT_EQUIVALENT | `SizeOf(System::Type)` |  |
+| `VertexBufferContent` | method | `Write(System.Int32, System.Int32, System.Type, System.Collections.IEnumerable)` | SEMANTIC_EQUIVALENT | `Write(intcs, intcs, System::Type, const std::vector<ContentObject>&)` | the untyped sequence is a vector of boxed values, which is what an IEnumerable of boxed values is here. |
+| `VertexBufferContent` | method | `Write<T>(System.Int32, System.Int32, System.Collections.Generic.IEnumerable<T>)` | SEMANTIC_EQUIVALENT | `Write<T>(intcs, intcs, const std::vector<T>&)` | the sequence is a std::vector rather than an IEnumerable<T>. |
+| `VertexDeclarationContent` | constructor | `.ctor()` | EXACT_EQUIVALENT | `VertexDeclarationContent()` |  |
+| `VertexDeclarationContent` | property | `VertexElements` | EXACT_EQUIVALENT | `getVertexElementsProperty()` |  |
+| `VertexDeclarationContent` | property | `VertexStride` | SEMANTIC_EQUIVALENT | `getVertexStrideProperty() / setVertexStrideProperty(std::optional<intcs>)` | a std::optional stands for Nullable<Int32>; an empty one is what a fresh declaration answers, as XNA's null does. |
 | `VideoProcessor` | constructor | `.ctor()` | MISSING |  |  |
 | `VideoProcessor` | property | `VideoSoundtrackType` | MISSING |  |  |
 | `VideoProcessor` | method | `Process(Microsoft.Xna.Framework.Content.Pipeline.VideoContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | MISSING |  |  |

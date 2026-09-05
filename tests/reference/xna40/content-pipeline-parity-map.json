@@ -2479,9 +2479,9 @@
      "note": "IEnumerable<int> is a std::vector<intcs>, which cannot be null."
     },
     "method:CreateVertexBuffer()": {
-     "status": "MISSING",
-     "cna": "",
-     "note": "Answers a Processors.VertexBufferContent, which XNAPP-134 implements; the measurement is already in the corpus (vertexcontent/create_vertex_buffer: 12 bytes, stride 12, one element for a positions-only batch)."
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "CreateVertexBuffer() -> std::shared_ptr<VertexBufferContent>",
+     "note": "the buffer is answered by shared pointer, which is the lifetime a .NET reference gives it; its layout is position first and then every channel a vertex element can carry, in channel order (measured, modelprocessor/triangle)."
     },
     "method:Insert(System.Int32, System.Int32)": {
      "status": "EXACT_EQUIVALENT",
@@ -3110,273 +3110,273 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Processors.ModelBoneContent": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::ModelBoneContent",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/ModelContent.hpp",
+   "note": "a child is held by shared pointer and a parent referenced by shared pointer, which is the lifetime a .NET reference gives them. The constructor and AddChild are CNAEXT, because XNA builds these only inside its own model processor and exposes no public constructor.",
    "members": {
     "property:Children": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getChildrenProperty()",
+     "note": "the collection is a std::vector of shared pointers, which is what a read-only collection of reference types is here."
     },
     "property:Index": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getIndexProperty()",
      "note": ""
     },
     "property:Name": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getNameProperty()",
      "note": ""
     },
     "property:Parent": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getParentProperty()",
+     "note": "a child is held by shared pointer and a parent referenced by shared pointer, which is the lifetime a .NET reference gives them."
     },
     "property:Transform": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getTransformProperty() / setTransformProperty(Matrix)",
      "note": ""
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Processors.ModelBoneContentCollection": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::ModelBoneContentCollection",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/ModelContent.hpp",
+   "note": "a std::vector of shared pointers rather than a sealed ReadOnlyCollection: the collection is a std::vector of shared pointers, which is what a read-only collection of reference types is here.",
    "members": {}
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Processors.ModelContent": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::ModelContent",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/ModelContent.hpp",
+   "note": "a child is held by shared pointer and a parent referenced by shared pointer, which is the lifetime a .NET reference gives them. The constructor is CNAEXT: XNA builds a model only inside its own processor.",
    "members": {
     "property:Bones": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getBonesProperty()",
+     "note": "the collection is a std::vector of shared pointers, which is what a read-only collection of reference types is here."
     },
     "property:Meshes": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getMeshesProperty()",
+     "note": "the collection is a std::vector of shared pointers, which is what a read-only collection of reference types is here."
     },
     "property:Root": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getRootProperty()",
+     "note": "a child is held by shared pointer and a parent referenced by shared pointer, which is the lifetime a .NET reference gives them."
     },
     "property:Tag": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getTagProperty() / setTagProperty(ContentObject)",
      "note": ""
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Processors.ModelMeshContent": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::ModelMeshContent",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/ModelContent.hpp",
+   "note": "a child is held by shared pointer and a parent referenced by shared pointer, which is the lifetime a .NET reference gives them. The constructor is CNAEXT for the same reason ModelContent's is.",
    "members": {
     "property:BoundingSphere": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getBoundingSphereProperty()",
      "note": ""
     },
     "property:MeshParts": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getMeshPartsProperty()",
+     "note": "the collection is a std::vector of shared pointers, which is what a read-only collection of reference types is here."
     },
     "property:Name": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getNameProperty()",
      "note": ""
     },
     "property:ParentBone": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getParentBoneProperty()",
+     "note": "a child is held by shared pointer and a parent referenced by shared pointer, which is the lifetime a .NET reference gives them."
     },
     "property:SourceMesh": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getSourceMeshProperty()",
+     "note": "a child is held by shared pointer and a parent referenced by shared pointer, which is the lifetime a .NET reference gives them."
     },
     "property:Tag": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getTagProperty() / setTagProperty(ContentObject)",
      "note": ""
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Processors.ModelMeshContentCollection": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::ModelMeshContentCollection",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/ModelContent.hpp",
+   "note": "a std::vector of shared pointers rather than a sealed ReadOnlyCollection: the collection is a std::vector of shared pointers, which is what a read-only collection of reference types is here.",
    "members": {}
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Processors.ModelMeshPartContent": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::ModelMeshPartContent",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/ModelContent.hpp",
+   "note": "a child is held by shared pointer and a parent referenced by shared pointer, which is the lifetime a .NET reference gives them. The constructor is CNAEXT for the same reason ModelContent's is.",
    "members": {
     "property:IndexBuffer": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getIndexBufferProperty()",
+     "note": "a child is held by shared pointer and a parent referenced by shared pointer, which is the lifetime a .NET reference gives them."
     },
     "property:Material": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getMaterialProperty() / setMaterialProperty(std::shared_ptr<MaterialContent>)",
+     "note": "a child is held by shared pointer and a parent referenced by shared pointer, which is the lifetime a .NET reference gives them."
     },
     "property:NumVertices": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getNumVerticesProperty()",
      "note": ""
     },
     "property:PrimitiveCount": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getPrimitiveCountProperty()",
      "note": ""
     },
     "property:StartIndex": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getStartIndexProperty()",
      "note": ""
     },
     "property:Tag": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getTagProperty() / setTagProperty(ContentObject)",
      "note": ""
     },
     "property:VertexBuffer": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getVertexBufferProperty()",
+     "note": "a child is held by shared pointer and a parent referenced by shared pointer, which is the lifetime a .NET reference gives them."
     },
     "property:VertexOffset": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getVertexOffsetProperty()",
      "note": ""
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Processors.ModelMeshPartContentCollection": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::ModelMeshPartContentCollection",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/ModelContent.hpp",
+   "note": "a std::vector of shared pointers rather than a sealed ReadOnlyCollection: the collection is a std::vector of shared pointers, which is what a read-only collection of reference types is here.",
    "members": {}
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Processors.ModelProcessor": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::ModelProcessor",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/ModelProcessor.hpp",
+   "note": "the scene it is given is transformed in place and the model it answers holds shared pointers, both of which are what XNA does with .NET references.",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "ModelProcessor()",
      "note": ""
     },
     "property:ColorKeyColor": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getColorKeyColorProperty() / setColorKeyColorProperty(Color)",
      "note": ""
     },
     "property:ColorKeyEnabled": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getColorKeyEnabledProperty() / setColorKeyEnabledProperty(bool)",
      "note": ""
     },
     "property:DefaultEffect": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getDefaultEffectProperty() / setDefaultEffectProperty(MaterialProcessorDefaultEffect)",
      "note": ""
     },
     "property:GenerateMipmaps": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getGenerateMipmapsProperty() / setGenerateMipmapsProperty(bool)",
      "note": ""
     },
     "property:GenerateTangentFrames": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getGenerateTangentFramesProperty() / setGenerateTangentFramesProperty(bool)",
      "note": ""
     },
     "property:PremultiplyTextureAlpha": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getPremultiplyTextureAlphaProperty() / setPremultiplyTextureAlphaProperty(bool)",
      "note": ""
     },
     "property:PremultiplyVertexColors": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getPremultiplyVertexColorsProperty() / setPremultiplyVertexColorsProperty(bool)",
      "note": ""
     },
     "property:ResizeTexturesToPowerOfTwo": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getResizeTexturesToPowerOfTwoProperty() / setResizeTexturesToPowerOfTwoProperty(bool)",
      "note": ""
     },
     "property:RotationX": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getRotationXProperty() / setRotationXProperty(Single)",
      "note": ""
     },
     "property:RotationY": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getRotationYProperty() / setRotationYProperty(Single)",
      "note": ""
     },
     "property:RotationZ": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getRotationZProperty() / setRotationZProperty(Single)",
      "note": ""
     },
     "property:Scale": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getScaleProperty() / setScaleProperty(Single)",
      "note": ""
     },
     "property:SwapWindingOrder": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getSwapWindingOrderProperty() / setSwapWindingOrderProperty(bool)",
      "note": ""
     },
     "property:TextureFormat": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getTextureFormatProperty() / setTextureFormatProperty(TextureProcessorOutputFormat)",
      "note": ""
     },
     "method:ConvertMaterial(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MaterialContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "ConvertMaterial(const std::shared_ptr<MaterialContent>&, ContentProcessorContext&)",
+     "note": "a child is held by shared pointer and a parent referenced by shared pointer, which is the lifetime a .NET reference gives them."
     },
     "method:Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.NodeContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Process(const std::shared_ptr<NodeContent>&, ContentProcessorContext&)",
+     "note": "a child is held by shared pointer and a parent referenced by shared pointer, which is the lifetime a .NET reference gives them."
     },
     "method:ProcessGeometryUsingMaterial(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MaterialContent, System.Collections.Generic.IEnumerable<Microsoft.Xna.Framework.Content.Pipeline.Graphics.GeometryContent>, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "ProcessGeometryUsingMaterial(const std::shared_ptr<MaterialContent>&, const std::vector<std::shared_ptr<GeometryContent>>&, ContentProcessorContext&)",
+     "note": "the sequence of batches is a std::vector of shared pointers rather than an IEnumerable."
     },
     "method:ProcessVertexChannel(Microsoft.Xna.Framework.Content.Pipeline.Graphics.GeometryContent, System.Int32, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "ProcessVertexChannel(const std::shared_ptr<GeometryContent>&, intcs, ContentProcessorContext&)",
+     "note": "a child is held by shared pointer and a parent referenced by shared pointer, which is the lifetime a .NET reference gives them."
     }
    }
   },
@@ -3621,68 +3621,68 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Processors.VertexBufferContent": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::VertexBufferContent",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/VertexBufferContent.hpp",
+   "note": "the vertex data is a std::vector<bytecs> rather than a Byte[], and the untyped Write takes a vector of boxed values rather than an IEnumerable.",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "VertexBufferContent()",
      "note": ""
     },
     "constructor:.ctor(System.Int32)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "VertexBufferContent(intcs)",
      "note": ""
     },
     "property:VertexData": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getVertexDataProperty()",
+     "note": "a std::vector<bytecs> stands for the Byte[]."
     },
     "property:VertexDeclaration": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getVertexDeclarationProperty() / setVertexDeclarationProperty(std::shared_ptr<VertexDeclarationContent>)",
+     "note": "a child is held by shared pointer and a parent referenced by shared pointer, which is the lifetime a .NET reference gives them."
     },
     "method:SizeOf(System.Type)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "SizeOf(System::Type)",
      "note": ""
     },
     "method:Write(System.Int32, System.Int32, System.Type, System.Collections.IEnumerable)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Write(intcs, intcs, System::Type, const std::vector<ContentObject>&)",
+     "note": "the untyped sequence is a vector of boxed values, which is what an IEnumerable of boxed values is here."
     },
     "method:Write<T>(System.Int32, System.Int32, System.Collections.Generic.IEnumerable<T>)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Write<T>(intcs, intcs, const std::vector<T>&)",
+     "note": "the sequence is a std::vector rather than an IEnumerable<T>."
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Processors.VertexDeclarationContent": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::VertexDeclarationContent",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/VertexBufferContent.hpp",
+   "note": "the nullable stride is a std::optional, which is what a Nullable<Int32> is here.",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "VertexDeclarationContent()",
      "note": ""
     },
     "property:VertexElements": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getVertexElementsProperty()",
      "note": ""
     },
     "property:VertexStride": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getVertexStrideProperty() / setVertexStrideProperty(std::optional<intcs>)",
+     "note": "a std::optional stands for Nullable<Int32>; an empty one is what a fresh declaration answers, as XNA's null does."
     }
    }
   },

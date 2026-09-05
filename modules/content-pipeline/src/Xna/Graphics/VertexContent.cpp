@@ -4,6 +4,9 @@
 #include <algorithm>
 
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/NodeContent.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/VertexChannelNames.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/VectorConverter.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Processors/VertexBufferContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/IntermediateSerializer.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
@@ -12,6 +15,15 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
 {
     namespace
     {
+        /** @brief The usage a channel name encodes, or `TextureCoordinate` for a name of its own. */
+        [[nodiscard]] Microsoft::Xna::Framework::Graphics::VertexElementUsage ChannelUsage(const std::string& name)
+        {
+            Microsoft::Xna::Framework::Graphics::VertexElementUsage usage =
+                Microsoft::Xna::Framework::Graphics::VertexElementUsage::TextureCoordinate;
+            (void)VertexChannelNames::TryDecodeUsage(name, usage);
+            return usage;
+        }
+
         [[noreturn]] void ThrowIndexOutOfRange()
         {
             throw System::ArgumentOutOfRangeException(
@@ -193,6 +205,53 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
                 }
             }
         }
+    }
+
+    std::shared_ptr<Processors::VertexBufferContent> VertexContent::CreateVertexBuffer() const
+    {
+        auto buffer = std::make_shared<Processors::VertexBufferContent>();
+        auto declaration = std::make_shared<Processors::VertexDeclarationContent>();
+        // Position first, then every channel in order: the layout the model processor's own
+        // buffers carry (measured, modelprocessor/triangle).
+        SharpRuntime::intcs offset = 0;
+        declaration->getVertexElementsProperty().Add(Microsoft::Xna::Framework::Graphics::VertexElement(
+            offset, Microsoft::Xna::Framework::Graphics::VertexElementFormat::Vector3,
+            Microsoft::Xna::Framework::Graphics::VertexElementUsage::Position, 0));
+        offset += Processors::VertexBufferContent::SizeOf(System::Type::From<Vector3>());
+        std::vector<std::pair<const VertexChannelBase*, SharpRuntime::intcs>> channelOffsets;
+        for (const std::shared_ptr<VertexChannelBase>& channel : *channels_)
+        {
+            Microsoft::Xna::Framework::Graphics::VertexElementFormat format{};
+            if (!VectorConverter::TryGetVertexElementFormat(channel->getElementTypeProperty(), format))
+            {
+                // A channel of a type no vertex element can carry is left out rather than written
+                // as something else.
+                continue;
+            }
+            declaration->getVertexElementsProperty().Add(Microsoft::Xna::Framework::Graphics::VertexElement(
+                offset, format, ChannelUsage(channel->getNameProperty()),
+                VertexChannelNames::DecodeUsageIndex(channel->getNameProperty())));
+            channelOffsets.emplace_back(channel.get(), offset);
+            offset += Processors::VertexBufferContent::SizeOf(channel->getElementTypeProperty());
+        }
+        const SharpRuntime::intcs stride = offset;
+        declaration->setVertexStrideProperty(stride);
+        buffer->setVertexDeclarationProperty(declaration);
+        const SharpRuntime::intcs count = getVertexCountProperty();
+        buffer->getVertexDataProperty().assign(static_cast<std::size_t>(stride) * static_cast<std::size_t>(count),
+                                               SharpRuntime::bytecs{0});
+        std::vector<Vector3> positions;
+        positions.reserve(static_cast<std::size_t>(count));
+        for (SharpRuntime::intcs i = 0; i < count; ++i)
+        {
+            positions.push_back(positions_->operator[](i));
+        }
+        buffer->Write<Vector3>(0, stride, positions);
+        for (const auto& [channel, channelOffset] : channelOffsets)
+        {
+            channel->WriteInto(*buffer, channelOffset, stride);
+        }
+        return buffer;
     }
 
     GeometryContent* VertexContent::Owner() const noexcept { return owner_; }

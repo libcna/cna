@@ -223,7 +223,7 @@ namespace CNA::Content::Pipeline
             const std::string& inputTypeName, const std::string& outputTypeName) override;
         [[nodiscard]] Xna::ContentObject ConvertCore(
             const Xna::ContentObject& input, const std::string& processorName,
-            const Xna::OpaqueDataDictionary& processorParameters,
+            const Xna::OpaqueDataDictionary& processorParameters, const std::string& inputTypeName,
             const std::string& outputTypeName) override;
 
     private:

@@ -280,3 +280,31 @@ not only materials:
 `EffectContent::EffectCode` is the one place where CNA prefers `std::optional<std::string>` to
 `std::string`: an effect with no source serializes as `<EffectCode Null="true" />`, and a
 `std::string` cannot tell that from an empty one.
+
+---
+
+## 11. The model processor, and what it does to the scene you give it
+
+`ModelProcessor` is the one processor that **changes its input**. Its `Scale` and three `Rotation`
+properties are not carried on the model's root bone: they are baked into the scene before anything
+else happens. Every mesh's positions are transformed, every direction channel is transformed and
+made unit again, and every node's transform is re-expressed in the new frame, so the scene comes
+out transformed exactly once. The `MeshContent` the caller still holds is the transformed one. That
+is XNA's own behaviour, measured; a caller that needs its scene afterwards must copy it first.
+
+Three more measured rules a reading of the API would not give:
+
+* The three rotations compose as **Z, then X, then Y**, and the uniform scale follows.
+* `PremultiplyVertexColors` scales each colour channel by its own alpha **in whole bytes, dropping
+  the remainder**. A channel value of 129 at alpha 3 answers 1, not the 2 rounding would give.
+* `GenerateTangentFrames` appends `Tangent0` and `Binormal0` after the channels already there, and
+  refuses a batch with no `TextureCoordinate0` by that name.
+
+The virtual `ProcessGeometryUsingMaterial` takes **a material and the batches that share it**,
+not one batch: the processor groups a mesh's geometry by material, converts the material once
+through `MaterialProcessor`, and gives every batch in the group the converted result. A batch with
+no material of its own is given a `BasicMaterialContent` before that conversion.
+
+`VertexBufferContent::SizeOf` answers the size .NET *marshals* a value to rather than the size C++
+gives it: `Boolean` is 4 bytes and `Char` is 1. A type no vertex element can carry is refused with
+`NotSupportedException`, and the null type with `ArgumentNullException`.

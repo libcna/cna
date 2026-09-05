@@ -178,6 +178,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                                                const OpaqueDataDictionary& processorParameters = {})
         {
             return Unbox<TOutput>(ConvertCore(Box<TInput>(input), processorName, processorParameters,
+                                              ContentTypeName<TInput>::Name(),
                                               ContentTypeName<TOutput>::Name()));
         }
 
@@ -225,11 +226,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          * @param input The boxed input.
          * @param processorName Processor name; must be registered.
          * @param processorParameters Processor parameters.
+         * @param inputTypeName Declared input type name.
          * @param outputTypeName Expected processed type name.
          * @return The processed content, boxed.
          */
         CNAEXT [[nodiscard]] virtual ContentObject ConvertCore(
             const ContentObject& input, const std::string& processorName,
-            const OpaqueDataDictionary& processorParameters, const std::string& outputTypeName) = 0;
+            const OpaqueDataDictionary& processorParameters, const std::string& inputTypeName,
+            const std::string& outputTypeName) = 0;
     };
 }

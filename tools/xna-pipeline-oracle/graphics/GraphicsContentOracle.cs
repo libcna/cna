@@ -1940,6 +1940,244 @@ namespace Cna.Xna40.GraphicsOracle
                 return builder.Length == 0 ? "none" : builder.ToString();
             });
 
+            // ---- ModelProcessor and the model graph -----------------------------------------------
+            Record("modelprocessor/triangle", () =>
+            {
+                var processor = new ModelProcessor();
+                var context = new RecordingProcessorContext();
+                ModelContent model = processor.Process(TriangleScene(), context);
+                return DescribeModel(model) + " built=" + context.Built;
+            });
+            Record("modelprocessor/bone_hierarchy", () =>
+            {
+                var processor = new ModelProcessor();
+                var root = new NodeContent();
+                root.Name = "Root";
+                root.Transform = Matrix.CreateTranslation(1, 0, 0);
+                var bone = new BoneContent();
+                bone.Name = "Bone";
+                bone.Transform = Matrix.CreateTranslation(0, 2, 0);
+                root.Children.Add(bone);
+                MeshContent mesh = TriangleMesh();
+                bone.Children.Add(mesh);
+                ModelContent model = processor.Process(root, new RecordingProcessorContext());
+                return DescribeModel(model);
+            });
+            Record("modelprocessor/scale_and_rotation", () =>
+            {
+                var processor = new ModelProcessor();
+                processor.Scale = 2.0f;
+                processor.RotationY = 90.0f;
+                ModelContent model = processor.Process(TriangleScene(), new RecordingProcessorContext());
+                return DescribeModel(model);
+            });
+            Record("modelprocessor/swap_winding", () =>
+            {
+                var processor = new ModelProcessor();
+                processor.SwapWindingOrder = true;
+                ModelContent model = processor.Process(TriangleScene(), new RecordingProcessorContext());
+                return DescribeModel(model);
+            });
+            Record("modelprocessor/default_effect_skinned", () =>
+            {
+                var processor = new ModelProcessor();
+                processor.DefaultEffect = MaterialProcessorDefaultEffect.SkinnedEffect;
+                ModelContent model = processor.Process(TriangleScene(), new RecordingProcessorContext());
+                return DescribeModel(model);
+            });
+            Record("modelprocessor/generate_tangent_frames", () =>
+            {
+                var processor = new ModelProcessor();
+                processor.GenerateTangentFrames = true;
+                ModelContent model = processor.Process(TriangleScene(), new RecordingProcessorContext());
+                return DescribeModel(model);
+            });
+            Record("modelprocessor/null_input", () =>
+            {
+                var processor = new ModelProcessor();
+                return DescribeModel(processor.Process(null, new RecordingProcessorContext()));
+            });
+            Record("modelprocessor/empty_node", () =>
+            {
+                var processor = new ModelProcessor();
+                ModelContent model = processor.Process(new NodeContent(), new RecordingProcessorContext());
+                return DescribeModel(model);
+            });
+            Record("modelprocessor/vertex_buffer_content", () =>
+            {
+                var buffer = new VertexBufferContent(24);
+                var declaration = new VertexDeclarationContent();
+                declaration.VertexElements.Add(new VertexElement(0, VertexElementFormat.Vector3, VertexElementUsage.Position, 0));
+                buffer.VertexDeclaration = declaration;
+                buffer.Write(0, 12, new Vector3[] { new Vector3(1, 2, 3), new Vector3(4, 5, 6) });
+                return "bytes=" + buffer.VertexData.Length + " stride=" + (declaration.VertexStride.HasValue ? declaration.VertexStride.Value.ToString() : "null") +
+                       " elements=" + declaration.VertexElements.Count + " data=" + Hex(buffer.VertexData) +
+                       " sizeof=" + VertexBufferContent.SizeOf(typeof(Vector3));
+            });
+            Record("modelprocessor/vertex_buffer_write_untyped", () =>
+            {
+                // The overload that names the element type rather than deducing it, and what it
+                // does when a value is of another type.
+                var buffer = new VertexBufferContent(24);
+                buffer.Write(0, 12, typeof(Vector3), new Vector3[] { new Vector3(1, 2, 3), new Vector3(4, 5, 6) });
+                string wrong;
+                try
+                {
+                    var other = new VertexBufferContent(24);
+                    other.Write(0, 12, typeof(Vector3), new object[] { new Vector2(1, 2), new Vector2(3, 4) });
+                    wrong = "accepted";
+                }
+                catch (Exception error) { wrong = error.GetType().Name; }
+                string unsupported;
+                try
+                {
+                    var other = new VertexBufferContent(24);
+                    other.Write(0, 4, typeof(string), new string[] { "a" });
+                    unsupported = "accepted";
+                }
+                catch (Exception error) { unsupported = error.GetType().Name; }
+                return "data=" + Hex(buffer.VertexData) + " wrongType=" + wrong + " unsupported=" + unsupported;
+            });
+            Record("modelprocessor/vertex_buffer_sizeof_refusals", () =>
+            {
+                var builder = new StringBuilder();
+                foreach (Type probe in new Type[] { typeof(Vector2), typeof(Vector4), typeof(Color), typeof(float), typeof(string), typeof(int), typeof(byte), typeof(short), typeof(double), typeof(bool), typeof(char), typeof(Matrix), typeof(Quaternion), typeof(DateTime), typeof(SurfaceFormat), typeof(Vector3[]), null })
+                {
+                    if (builder.Length > 0) builder.Append(' ');
+                    string name = probe == null ? "null" : probe.Name;
+                    try { builder.Append(name + "=" + VertexBufferContent.SizeOf(probe)); }
+                    catch (Exception error) { builder.Append(name + "=" + error.GetType().Name); }
+                }
+                return builder.ToString();
+            });
+            Record("modelprocessor/vertex_buffer_defaults", () =>
+            {
+                var buffer = new VertexBufferContent();
+                return "bytes=" + buffer.VertexData.Length + " declaration=" + (buffer.VertexDeclaration == null ? "null" : "set") +
+                       " name=\"" + buffer.Name + "\"";
+            });
+            Record("modelprocessor/vertex_declaration_defaults", () =>
+            {
+                var declaration = new VertexDeclarationContent();
+                return "elements=" + declaration.VertexElements.Count + " stride=" + (declaration.VertexStride.HasValue ? declaration.VertexStride.Value.ToString() : "null");
+            });
+
+            Record("modelprocessor/scale_rotation_detail", () =>
+            {
+                // Where the processor's Scale and Rotation land -- on the root bone's transform, on
+                // the geometry, or on both -- is what the plain scale_and_rotation case cannot say,
+                // because its scene is at the origin and only a translation is printed there.
+                var processor = new ModelProcessor();
+                processor.Scale = 2.0f;
+                processor.RotationY = 90.0f;
+                var root = new NodeContent();
+                root.Name = "Root";
+                root.Transform = Matrix.CreateTranslation(1, 0, 0);
+                var bone = new BoneContent();
+                bone.Name = "Bone";
+                bone.Transform = Matrix.CreateTranslation(0, 3, 0);
+                root.Children.Add(bone);
+                MeshContent mesh = TriangleMesh();
+                bone.Children.Add(mesh);
+                ModelContent model = processor.Process(root, new RecordingProcessorContext());
+                return DescribeModelFull(model) + " source=" + Positions(mesh.Positions);
+            });
+            Record("modelprocessor/identity_detail", () =>
+            {
+                // The control leg: the same description with no scale and no rotation.
+                var processor = new ModelProcessor();
+                MeshContent mesh = TriangleMesh();
+                var root = new NodeContent();
+                root.Name = "Root";
+                root.Children.Add(mesh);
+                ModelContent model = processor.Process(root, new RecordingProcessorContext());
+                return DescribeModelFull(model) + " source=" + Positions(mesh.Positions);
+            });
+            Record("modelprocessor/tangent_frames_detail", () =>
+            {
+                var processor = new ModelProcessor();
+                processor.GenerateTangentFrames = true;
+                ModelContent model = processor.Process(TriangleScene(), new RecordingProcessorContext());
+                return DescribeModelFull(model);
+            });
+            Record("modelprocessor/vertex_colors", () =>
+            {
+                // A colour channel decides two things at once: the element format the vertex buffer
+                // is given, and whether PremultiplyVertexColors touched the values.
+                var processor = new ModelProcessor();
+                MeshContent mesh = TriangleMesh();
+                mesh.Geometry[0].Vertices.Channels.Add<Color>(VertexChannelNames.Color(0),
+                    new Color[] { new Color(255, 128, 64, 128), Color.White, new Color(0, 0, 0, 0) });
+                var root = new NodeContent();
+                root.Name = "Root";
+                root.Children.Add(mesh);
+                ModelContent model = processor.Process(root, new RecordingProcessorContext());
+                return DescribeModelFull(model);
+            });
+            Record("modelprocessor/vertex_colors_unpremultiplied", () =>
+            {
+                var processor = new ModelProcessor();
+                processor.PremultiplyVertexColors = false;
+                MeshContent mesh = TriangleMesh();
+                mesh.Geometry[0].Vertices.Channels.Add<Color>(VertexChannelNames.Color(0),
+                    new Color[] { new Color(255, 128, 64, 128), Color.White, new Color(0, 0, 0, 0) });
+                var root = new NodeContent();
+                root.Name = "Root";
+                root.Children.Add(mesh);
+                ModelContent model = processor.Process(root, new RecordingProcessorContext());
+                return DescribeModelFull(model);
+            });
+
+            Record("modelprocessor/rotation_order", () =>
+            {
+                // Three rotations at once: the translation that comes out names the order they are
+                // composed in, which one rotation alone cannot.
+                var processor = new ModelProcessor();
+                processor.RotationX = 30.0f;
+                processor.RotationY = 45.0f;
+                processor.RotationZ = 60.0f;
+                var root = new NodeContent();
+                root.Name = "Root";
+                root.Transform = Matrix.CreateTranslation(1, 2, 3);
+                root.Children.Add(TriangleMesh());
+                ModelContent model = processor.Process(root, new RecordingProcessorContext());
+                return DescribeModelFull(model);
+            });
+            Record("modelprocessor/vertex_colors_rounding", () =>
+            {
+                // Colours chosen so that truncation and rounding disagree on every channel.
+                var processor = new ModelProcessor();
+                MeshContent mesh = TriangleMesh();
+                mesh.Geometry[0].Vertices.Channels.Add<Color>(VertexChannelNames.Color(0),
+                    new Color[] { new Color(1, 3, 5, 128), new Color(255, 254, 253, 1), new Color(127, 129, 191, 3) });
+                var root = new NodeContent();
+                root.Name = "Root";
+                root.Children.Add(mesh);
+                ModelContent model = processor.Process(root, new RecordingProcessorContext());
+                return DescribeModelFull(model);
+            });
+            Record("modelprocessor/tangent_frames_no_texcoords", () =>
+            {
+                // Tangent frames without the texture coordinates they are derived from.
+                var processor = new ModelProcessor();
+                processor.GenerateTangentFrames = true;
+                var mesh = new MeshContent();
+                mesh.Name = "Mesh";
+                mesh.Positions.Add(new Vector3(0, 0, 0));
+                mesh.Positions.Add(new Vector3(1, 0, 0));
+                mesh.Positions.Add(new Vector3(0, 1, 0));
+                var geometry = new GeometryContent();
+                mesh.Geometry.Add(geometry);
+                geometry.Vertices.AddRange(new int[] { 0, 1, 2 });
+                geometry.Indices.AddRange(new int[] { 0, 1, 2 });
+                geometry.Vertices.Channels.Add<Vector3>(VertexChannelNames.Normal(), new Vector3[] { Vector3.UnitZ, Vector3.UnitZ, Vector3.UnitZ });
+                var root = new NodeContent();
+                root.Name = "Root";
+                root.Children.Add(mesh);
+                ModelContent model = processor.Process(root, new RecordingProcessorContext());
+                return DescribeModelFull(model);
+            });
+
             // ---- TextureReferenceDictionary ------------------------------------------------------
             Record("texturereferencedictionary/default", () => { var d = new TextureReferenceDictionary(); return "count=" + d.Count + " ToString=\"" + d + "\""; });
 
@@ -1960,6 +2198,98 @@ namespace Cna.Xna40.GraphicsOracle
             public T ReadReference<T>(string key) where T : class { return GetReferenceTypeProperty<T>(key); }
             public T? ReadValue<T>(string key) where T : struct { return GetValueTypeProperty<T>(key); }
             public void Write<T>(string key, T value) { SetProperty(key, value); }
+        }
+
+        private static MeshContent TriangleMesh()
+        {
+            var mesh = new MeshContent();
+            mesh.Name = "Mesh";
+            mesh.Positions.Add(new Vector3(0, 0, 0));
+            mesh.Positions.Add(new Vector3(1, 0, 0));
+            mesh.Positions.Add(new Vector3(0, 1, 0));
+            var geometry = new GeometryContent();
+            mesh.Geometry.Add(geometry);
+            geometry.Vertices.AddRange(new int[] { 0, 1, 2 });
+            geometry.Indices.AddRange(new int[] { 0, 1, 2 });
+            geometry.Vertices.Channels.Add<Vector3>(VertexChannelNames.Normal(), new Vector3[] { Vector3.UnitZ, Vector3.UnitZ, Vector3.UnitZ });
+            geometry.Vertices.Channels.Add<Vector2>(VertexChannelNames.TextureCoordinate(0), new Vector2[] { new Vector2(0, 0), new Vector2(1, 0), new Vector2(0, 1) });
+            return mesh;
+        }
+
+        private static NodeContent TriangleScene()
+        {
+            var root = new NodeContent();
+            root.Name = "Root";
+            root.Children.Add(TriangleMesh());
+            return root;
+        }
+
+        /// DescribeModel, plus every bone's whole matrix and the vertex data itself: what tells a
+        /// baked transform from one left on a bone.
+        private static string DescribeModelFull(ModelContent model)
+        {
+            var builder = new StringBuilder(DescribeModel(model));
+            foreach (ModelBoneContent bone in model.Bones)
+                builder.Append(" matrix[" + bone.Index + "]=" + DescribeMatrixFull(bone.Transform));
+            foreach (ModelMeshContent mesh in model.Meshes)
+                foreach (ModelMeshPartContent part in mesh.MeshParts)
+                {
+                    if (part.VertexBuffer != null) builder.Append(" data=" + Hex(part.VertexBuffer.VertexData));
+                    if (part.IndexBuffer != null)
+                    {
+                        builder.Append(" indices=");
+                        for (int i = 0; i < part.IndexBuffer.Count; i++)
+                            builder.Append((i == 0 ? "" : ",") + part.IndexBuffer[i]);
+                    }
+                }
+            return builder.ToString();
+        }
+
+        private static string DescribeMatrixFull(Matrix m)
+        {
+            float[] values = new float[] { m.M11, m.M12, m.M13, m.M14, m.M21, m.M22, m.M23, m.M24,
+                                           m.M31, m.M32, m.M33, m.M34, m.M41, m.M42, m.M43, m.M44 };
+            var builder = new StringBuilder("[");
+            for (int i = 0; i < values.Length; i++)
+                builder.Append((i == 0 ? "" : ",") + values[i].ToString("R", CultureInfo.InvariantCulture));
+            return builder.Append("]").ToString();
+        }
+
+        private static string DescribeModel(ModelContent model)
+        {
+            var builder = new StringBuilder("bones=" + model.Bones.Count + " meshes=" + model.Meshes.Count +
+                                            " root=" + (model.Root == null ? "null" : model.Root.Name) +
+                                            " tag=" + (model.Tag == null ? "null" : model.Tag.ToString()));
+            foreach (ModelBoneContent bone in model.Bones)
+            {
+                builder.Append(" bone[" + bone.Index + "]=" + (bone.Name ?? "null") + ":" + Describe(bone.Transform) +
+                               ":parent=" + (bone.Parent == null ? "null" : bone.Parent.Index.ToString()) +
+                               ":children=" + bone.Children.Count);
+            }
+            foreach (ModelMeshContent mesh in model.Meshes)
+            {
+                builder.Append(" mesh=" + (mesh.Name ?? "null") + ":parts=" + mesh.MeshParts.Count +
+                               ":bone=" + (mesh.ParentBone == null ? "null" : mesh.ParentBone.Index.ToString()) +
+                               ":sphere=" + mesh.BoundingSphere.Radius.ToString("R", CultureInfo.InvariantCulture) +
+                               ":source=" + (mesh.SourceMesh == null ? "null" : mesh.SourceMesh.Name));
+                foreach (ModelMeshPartContent part in mesh.MeshParts)
+                {
+                    builder.Append(" part=" + part.NumVertices + "v/" + part.PrimitiveCount + "p/start=" + part.StartIndex +
+                                   "/offset=" + part.VertexOffset + "/indices=" + (part.IndexBuffer == null ? "null" : part.IndexBuffer.Count.ToString()) +
+                                   "/material=" + (part.Material == null ? "null" : part.Material.GetType().Name) +
+                                   "/stride=" + (part.VertexBuffer == null || !part.VertexBuffer.VertexDeclaration.VertexStride.HasValue ? "null" : part.VertexBuffer.VertexDeclaration.VertexStride.Value.ToString()) +
+                                   "/elements=" + (part.VertexBuffer == null ? "null" : part.VertexBuffer.VertexDeclaration.VertexElements.Count.ToString()) +
+                                   "/bytes=" + (part.VertexBuffer == null ? "null" : part.VertexBuffer.VertexData.Length.ToString()));
+                    if (part.VertexBuffer != null)
+                    {
+                        foreach (VertexElement element in part.VertexBuffer.VertexDeclaration.VertexElements)
+                        {
+                            builder.Append(" element=" + element.VertexElementUsage + element.UsageIndex + ":" + element.VertexElementFormat + "@" + element.Offset);
+                        }
+                    }
+                }
+            }
+            return builder.ToString();
         }
 
         /// A context that records every asset a processor asks it to build, and answers a
@@ -1990,7 +2320,13 @@ namespace Cna.Xna40.GraphicsOracle
                 return new ExternalReference<TOutput>(sourceAsset.Filename + ".xnb");
             }
             public override TOutput Convert<TInput, TOutput>(TInput input, string processorName, OpaqueDataDictionary processorParameters)
-            { throw new NotSupportedException("Convert"); }
+            {
+                if (built.Length > 0) built.Append(' ');
+                built.Append("convert:" + typeof(TInput).Name + "->" + (processorName ?? "null") + "(" + DescribeParameters(processorParameters) + ")->" + typeof(TOutput).Name);
+                // The processor asked for a conversion; answering the input keeps the graph whole
+                // so the rest of the processing can be measured.
+                return (TOutput)(object)input;
+            }
 
             private static string DescribeParameters(OpaqueDataDictionary values)
             {

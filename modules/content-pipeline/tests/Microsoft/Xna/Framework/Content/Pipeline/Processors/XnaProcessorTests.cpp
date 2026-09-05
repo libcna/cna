@@ -13,6 +13,9 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstring>
 #include <iomanip>
 #include <vector>
 #include <filesystem>
@@ -32,18 +35,30 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/StockMaterials.hpp"
 #include "CNA/Content/Pipeline/EffectCompilerService.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/EffectProcessor.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/VertexChannelNames.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/FontProcessors.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Processors/ModelProcessor.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/MaterialProcessor.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/PassThroughProcessor.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/ProcessorEnums.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/TextureProcessor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgr565.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
+#include "Microsoft/Xna/Framework/Quaternion.hpp"
 #include "System/ArgumentNullException.hpp"
+#include "System/DateTime.hpp"
 #include "System/NotSupportedException.hpp"
 
 namespace Graphics = Microsoft::Xna::Framework::Content::Pipeline::Graphics;
 namespace Processors = Microsoft::Xna::Framework::Content::Pipeline::Processors;
 using Microsoft::Xna::Framework::Color;
+using Microsoft::Xna::Framework::Matrix;
+using Microsoft::Xna::Framework::Vector2;
+using Microsoft::Xna::Framework::Vector3;
+using Microsoft::Xna::Framework::Vector4;
 using Microsoft::Xna::Framework::Content::Pipeline::ContentProcessorContext;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::PackedVector::Bgr565;
@@ -248,7 +263,8 @@ namespace
         }
         [[nodiscard]] Microsoft::Xna::Framework::Content::Pipeline::ContentObject ConvertCore(
             const Microsoft::Xna::Framework::Content::Pipeline::ContentObject&, const std::string&,
-            const Microsoft::Xna::Framework::Content::Pipeline::OpaqueDataDictionary&, const std::string&) override
+            const Microsoft::Xna::Framework::Content::Pipeline::OpaqueDataDictionary&, const std::string&,
+            const std::string&) override
         {
             throw System::NotSupportedException("Convert");
         }
@@ -336,11 +352,20 @@ namespace
             return sourceFilename + ".xnb";
         }
 
+        /** @brief What the driver answers a Convert with: the input, recorded on the way through. */
         [[nodiscard]] Microsoft::Xna::Framework::Content::Pipeline::ContentObject ConvertCore(
-            const Microsoft::Xna::Framework::Content::Pipeline::ContentObject&, const std::string&,
-            const Microsoft::Xna::Framework::Content::Pipeline::OpaqueDataDictionary&, const std::string&) override
+            const Microsoft::Xna::Framework::Content::Pipeline::ContentObject& input,
+            const std::string& processorName,
+            const Microsoft::Xna::Framework::Content::Pipeline::OpaqueDataDictionary& processorParameters,
+            const std::string& inputTypeName, const std::string& outputTypeName) override
         {
-            throw System::NotSupportedException("Convert");
+            if (!built_.empty())
+            {
+                built_ += ' ';
+            }
+            built_ += "convert:" + inputTypeName.substr(inputTypeName.rfind('.') + 1) + "->" + processorName + "(" +
+                      Describe(processorParameters) + ")->" + outputTypeName.substr(outputTypeName.rfind('.') + 1);
+            return input;
         }
 
     private:
@@ -404,6 +429,15 @@ namespace
                     {TextureProcessorOutputFormat::DxtCompressed, "DxtCompressed"}};
                 return names.at(Unbox<TextureProcessorOutputFormat>(value));
             }
+            if (Holds<Processors::MaterialProcessorDefaultEffect>(value))
+            {
+                static const std::map<Processors::MaterialProcessorDefaultEffect, std::string> names = {
+                    {Processors::MaterialProcessorDefaultEffect::BasicEffect, "BasicEffect"},
+                    {Processors::MaterialProcessorDefaultEffect::SkinnedEffect, "SkinnedEffect"},
+                    {Processors::MaterialProcessorDefaultEffect::EnvironmentMapEffect, "EnvironmentMapEffect"},
+                    {Processors::MaterialProcessorDefaultEffect::DualTextureEffect, "DualTextureEffect"}};
+                return names.at(Unbox<Processors::MaterialProcessorDefaultEffect>(value));
+            }
             return value.StableType();
         }
 
@@ -428,6 +462,36 @@ namespace
             }
         }
         return bitmap;
+    }
+
+    /** @brief .NET's "R" format for a float: the shortest text that reads back exactly. */
+    std::string Number(float value)
+    {
+        if (std::isnan(value))
+        {
+            return "NaN";
+        }
+        // .NET Framework's "R" tries 7 significant digits and falls back to 9, never 8, and
+        // spells the exponent with a capital E.
+        std::string spelled;
+        for (const int digits : {7, 9})
+        {
+            std::ostringstream text;
+            text.imbue(std::locale::classic());
+            text.precision(digits);
+            text << value;
+            spelled = text.str();
+            if (std::stof(spelled) == value)
+            {
+                break;
+            }
+        }
+        const std::size_t exponent = spelled.find('e');
+        if (exponent != std::string::npos)
+        {
+            spelled[exponent] = 'E';
+        }
+        return spelled;
     }
 
     std::string Hex(const std::vector<std::uint8_t>& bytes)
@@ -1085,4 +1149,560 @@ TEST(XnaFontProcessors, ATextureStripBecomesOneGlyphPerRun)
     EXPECT_EQ(font->Data().characters.size(), 2u);
     EXPECT_EQ(font->Data().characters[0], processor.getFirstCharacterProperty());
     EXPECT_EQ(font->Data().glyphBounds.size(), 2u);
+}
+
+namespace
+{
+    /** @brief The oracle's own triangle mesh: the same positions, indices and channels. */
+    std::shared_ptr<Graphics::MeshContent> TriangleMesh()
+    {
+        auto mesh = std::make_shared<Graphics::MeshContent>();
+        mesh->setNameProperty("Mesh");
+        mesh->getPositionsProperty().Add(Vector3(0, 0, 0));
+        mesh->getPositionsProperty().Add(Vector3(1, 0, 0));
+        mesh->getPositionsProperty().Add(Vector3(0, 1, 0));
+        auto geometry = std::make_shared<Graphics::GeometryContent>();
+        mesh->getGeometryProperty().Add(geometry);
+        geometry->getVerticesProperty().AddRange({0, 1, 2});
+        geometry->getIndicesProperty().AddRange({0, 1, 2});
+        geometry->getVerticesProperty().getChannelsProperty().Add<Vector3>(
+            Graphics::VertexChannelNames::Normal(), {Vector3(0, 0, 1), Vector3(0, 0, 1), Vector3(0, 0, 1)});
+        geometry->getVerticesProperty().getChannelsProperty().Add<Vector2>(
+            Graphics::VertexChannelNames::TextureCoordinate(0),
+            {Vector2(0, 0), Vector2(1, 0), Vector2(0, 1)});
+        return mesh;
+    }
+
+    std::shared_ptr<Graphics::NodeContent> TriangleScene()
+    {
+        auto root = std::make_shared<Graphics::NodeContent>();
+        root->setNameProperty("Root");
+        root->getChildrenProperty().Add(TriangleMesh());
+        return root;
+    }
+
+    /** @brief The oracle's DescribeModel, reproduced. */
+    std::string DescribeModel(const std::shared_ptr<Processors::ModelContent>& model)
+    {
+        const auto translation = [](const Matrix& matrix)
+        { return "(" + Number(matrix.M41) + "," + Number(matrix.M42) + "," + Number(matrix.M43) + ")"; };
+        std::string text = "bones=" + std::to_string(model->getBonesProperty().size()) + " meshes=" +
+                           std::to_string(model->getMeshesProperty().size()) + " root=" +
+                           (model->getRootProperty() == nullptr ? "null" : model->getRootProperty()->getNameProperty()) +
+                           " tag=" + (model->getTagProperty().Empty() ? "null" : "set");
+        for (const std::shared_ptr<Processors::ModelBoneContent>& bone : model->getBonesProperty())
+        {
+            text += " bone[" + std::to_string(bone->getIndexProperty()) + "]=" +
+                    (bone->getNameProperty().empty() ? "null" : bone->getNameProperty()) + ":" +
+                    translation(bone->getTransformProperty()) + ":parent=" +
+                    (bone->getParentProperty() == nullptr
+                         ? "null"
+                         : std::to_string(bone->getParentProperty()->getIndexProperty())) +
+                    ":children=" + std::to_string(bone->getChildrenProperty().size());
+        }
+        for (const std::shared_ptr<Processors::ModelMeshContent>& mesh : model->getMeshesProperty())
+        {
+            text += " mesh=" + (mesh->getNameProperty().empty() ? "null" : mesh->getNameProperty()) + ":parts=" +
+                    std::to_string(mesh->getMeshPartsProperty().size()) + ":bone=" +
+                    (mesh->getParentBoneProperty() == nullptr
+                         ? "null"
+                         : std::to_string(mesh->getParentBoneProperty()->getIndexProperty())) +
+                    ":sphere=" + Number(mesh->getBoundingSphereProperty().Radius) + ":source=" +
+                    (mesh->getSourceMeshProperty() == nullptr ? "null"
+                                                              : mesh->getSourceMeshProperty()->getNameProperty());
+            for (const std::shared_ptr<Processors::ModelMeshPartContent>& part : mesh->getMeshPartsProperty())
+            {
+                const std::shared_ptr<Processors::VertexBufferContent>& buffer = part->getVertexBufferProperty();
+                text += " part=" + std::to_string(part->getNumVerticesProperty()) + "v/" +
+                        std::to_string(part->getPrimitiveCountProperty()) + "p/start=" +
+                        std::to_string(part->getStartIndexProperty()) + "/offset=" +
+                        std::to_string(part->getVertexOffsetProperty()) + "/indices=" +
+                        (part->getIndexBufferProperty() == nullptr
+                             ? "null"
+                             : std::to_string(part->getIndexBufferProperty()->getCountProperty())) +
+                        "/material=" +
+                        (part->getMaterialProperty() == nullptr
+                             ? "null"
+                             : std::filesystem::path(part->getMaterialProperty()->GetTypeName()).string().substr(
+                                   part->getMaterialProperty()->GetTypeName().rfind('.') + 1)) +
+                        "/stride=" +
+                        (buffer == nullptr || !buffer->getVertexDeclarationProperty()->getVertexStrideProperty()
+                             ? "null"
+                             : std::to_string(*buffer->getVertexDeclarationProperty()->getVertexStrideProperty())) +
+                        "/elements=" +
+                        (buffer == nullptr
+                             ? "null"
+                             : std::to_string(
+                                   buffer->getVertexDeclarationProperty()->getVertexElementsProperty()
+                                       .getCountProperty())) +
+                        "/bytes=" +
+                        (buffer == nullptr ? "null" : std::to_string(buffer->getVertexDataProperty().size()));
+                if (buffer != nullptr)
+                {
+                    using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+                    using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+                    static const std::map<VertexElementUsage, std::string> usages = {
+                        {VertexElementUsage::Position, "Position"},
+                        {VertexElementUsage::Normal, "Normal"},
+                        {VertexElementUsage::TextureCoordinate, "TextureCoordinate"},
+                        {VertexElementUsage::Color, "Color"},
+                        {VertexElementUsage::Tangent, "Tangent"},
+                        {VertexElementUsage::Binormal, "Binormal"},
+                        {VertexElementUsage::BlendIndices, "BlendIndices"},
+                        {VertexElementUsage::BlendWeight, "BlendWeight"}};
+                    static const std::map<VertexElementFormat, std::string> formats = {
+                        {VertexElementFormat::Single, "Single"},
+                        {VertexElementFormat::Vector2, "Vector2"},
+                        {VertexElementFormat::Vector3, "Vector3"},
+                        {VertexElementFormat::Vector4, "Vector4"},
+                        {VertexElementFormat::Color, "Color"}};
+                    const auto& elements = buffer->getVertexDeclarationProperty()->getVertexElementsProperty();
+                    for (SharpRuntime::intcs i = 0; i < elements.getCountProperty(); ++i)
+                    {
+                        const Microsoft::Xna::Framework::Graphics::VertexElement& element = elements[i];
+                        text += " element=" + usages.at(element.getVertexElementUsageProperty()) +
+                                std::to_string(element.getUsageIndexProperty()) + ":" +
+                                formats.at(element.getVertexElementFormatProperty()) + "@" +
+                                std::to_string(element.getOffsetProperty());
+                    }
+                }
+            }
+        }
+        return text;
+    }
+
+    /** @brief The oracle's DescribeModelFull: every bone matrix and the vertex data itself. */
+    std::string DescribeModelFull(const std::shared_ptr<Processors::ModelContent>& model)
+    {
+        std::string text = DescribeModel(model);
+        const auto matrix = [](const Matrix& m)
+        {
+            const std::array<SharpRuntime::Single, 16> values = {m.M11, m.M12, m.M13, m.M14, m.M21, m.M22,
+                                                                 m.M23, m.M24, m.M31, m.M32, m.M33, m.M34,
+                                                                 m.M41, m.M42, m.M43, m.M44};
+            std::string out = "[";
+            for (std::size_t i = 0; i < values.size(); ++i)
+            {
+                out += (i == 0 ? "" : ",") + Number(values[i]);
+            }
+            return out + "]";
+        };
+        for (const std::shared_ptr<Processors::ModelBoneContent>& bone : model->getBonesProperty())
+        {
+            text += " matrix[" + std::to_string(bone->getIndexProperty()) + "]=" +
+                    matrix(bone->getTransformProperty());
+        }
+        for (const std::shared_ptr<Processors::ModelMeshContent>& mesh : model->getMeshesProperty())
+        {
+            for (const std::shared_ptr<Processors::ModelMeshPartContent>& part : mesh->getMeshPartsProperty())
+            {
+                if (part->getVertexBufferProperty() != nullptr)
+                {
+                    text += " data=" + Hex(part->getVertexBufferProperty()->getVertexDataProperty());
+                }
+                if (part->getIndexBufferProperty() != nullptr)
+                {
+                    text += " indices=";
+                    const auto& indices = static_cast<const System::Collections::ObjectModel::Collection<
+                        SharpRuntime::intcs>&>(*part->getIndexBufferProperty());
+                    for (SharpRuntime::intcs i = 0; i < indices.getCountProperty(); ++i)
+                    {
+                        text += (i == 0 ? "" : ",") + std::to_string(indices[i]);
+                    }
+                }
+            }
+        }
+        return text;
+    }
+
+    /** @brief The X of every position, as the oracle's Positions prints them. */
+    std::string PositionsText(const Graphics::MeshContent& mesh)
+    {
+        const auto& positions =
+            static_cast<const System::Collections::ObjectModel::Collection<Vector3>&>(mesh.getPositionsProperty());
+        std::string text;
+        for (SharpRuntime::intcs i = 0; i < positions.getCountProperty(); ++i)
+        {
+            text += (text.empty() ? "" : " ") + Number(positions[i].X);
+        }
+        return "[" + text + "]";
+    }
+
+    /** @brief A triangle carrying one colour channel, as the colour cases build it. */
+    std::shared_ptr<Graphics::MeshContent> ColouredTriangle(const std::vector<Color>& colours)
+    {
+        std::shared_ptr<Graphics::MeshContent> mesh = TriangleMesh();
+        const auto& geometry = static_cast<const System::Collections::ObjectModel::Collection<
+            std::shared_ptr<Graphics::GeometryContent>>&>(mesh->getGeometryProperty())[0];
+        geometry->getVerticesProperty().getChannelsProperty().Add<Color>(Graphics::VertexChannelNames::Color(0),
+                                                                          colours);
+        return mesh;
+    }
+
+    /** @brief The floats a vertex-data hex string spells, in order. */
+    std::vector<float> FloatsOf(const std::string& hex)
+    {
+        std::vector<float> values;
+        for (std::size_t i = 0; i + 8 <= hex.size(); i += 8)
+        {
+            std::uint32_t bits = 0;
+            for (int byte = 3; byte >= 0; --byte)
+            {
+                bits = (bits << 8) | static_cast<std::uint32_t>(std::stoul(
+                                         hex.substr(i + static_cast<std::size_t>(byte) * 2, 2), nullptr, 16));
+            }
+            float value = 0.0f;
+            std::memcpy(&value, &bits, sizeof(value));
+            values.push_back(value);
+        }
+        return values;
+    }
+
+    /** @brief The ` data=` field of a description, or an empty string when it has none. */
+    std::string DataOf(const std::string& described)
+    {
+        const std::size_t start = described.find(" data=");
+        if (start == std::string::npos)
+        {
+            return {};
+        }
+        const std::size_t end = described.find(' ', start + 6);
+        return described.substr(start + 6, end == std::string::npos ? end : end - start - 6);
+    }
+
+    /** @brief A scene of one named root over one mesh. */
+    std::shared_ptr<Graphics::NodeContent> SceneOf(const std::shared_ptr<Graphics::MeshContent>& mesh)
+    {
+        auto root = std::make_shared<Graphics::NodeContent>();
+        root->setNameProperty("Root");
+        root->getChildrenProperty().Add(mesh);
+        return root;
+    }
+}
+
+TEST(XnaModelProcessor, DefaultsMatchXna)
+{
+    const Processors::ModelProcessor processor;
+    static const std::map<TextureProcessorOutputFormat, std::string> formats = {
+        {TextureProcessorOutputFormat::NoChange, "NoChange"},
+        {TextureProcessorOutputFormat::Color, "Color"},
+        {TextureProcessorOutputFormat::DxtCompressed, "DxtCompressed"}};
+    const Color key = processor.getColorKeyColorProperty();
+    EXPECT_EQ("ColorKeyColor={R:" + std::to_string(static_cast<int>(key.getRProperty())) + " G:" +
+                  std::to_string(static_cast<int>(key.getGProperty())) + " B:" +
+                  std::to_string(static_cast<int>(key.getBProperty())) + " A:" +
+                  std::to_string(static_cast<int>(key.getAProperty())) + "} ColorKeyEnabled=" +
+                  (processor.getColorKeyEnabledProperty() ? "True" : "False") +
+                  " DefaultEffect=BasicEffect GenerateMipmaps=" +
+                  (processor.getGenerateMipmapsProperty() ? "True" : "False") + " GenerateTangentFrames=" +
+                  (processor.getGenerateTangentFramesProperty() ? "True" : "False") + " PremultiplyTextureAlpha=" +
+                  (processor.getPremultiplyTextureAlphaProperty() ? "True" : "False") +
+                  " PremultiplyVertexColors=" +
+                  (processor.getPremultiplyVertexColorsProperty() ? "True" : "False") +
+                  " ResizeTexturesToPowerOfTwo=" +
+                  (processor.getResizeTexturesToPowerOfTwoProperty() ? "True" : "False") + " RotationX=" +
+                  Number(processor.getRotationXProperty()) + " RotationY=" +
+                  Number(processor.getRotationYProperty()) + " RotationZ=" +
+                  Number(processor.getRotationZProperty()) + " Scale=" + Number(processor.getScaleProperty()) +
+                  " SwapWindingOrder=" + (processor.getSwapWindingOrderProperty() ? "True" : "False") +
+                  " TextureFormat=" + formats.at(processor.getTextureFormatProperty()),
+              Expected("processor/ModelProcessor"));
+}
+
+TEST(XnaModelProcessor, ProcessesASceneAsXnaDoes)
+{
+    Processors::ModelProcessor processor;
+    RecordingContext context;
+    const std::shared_ptr<Processors::ModelContent> model = processor.Process(TriangleScene(), context);
+    const std::string described = DescribeModel(model);
+    EXPECT_EQ(described + " built=" + context.Built(), Expected("modelprocessor/triangle"));
+
+    Processors::ModelProcessor hierarchy;
+    auto root = std::make_shared<Graphics::NodeContent>();
+    root->setNameProperty("Root");
+    root->setTransformProperty(Matrix::CreateTranslation(1, 0, 0));
+    auto bone = std::make_shared<Graphics::BoneContent>();
+    bone->setNameProperty("Bone");
+    bone->setTransformProperty(Matrix::CreateTranslation(0, 2, 0));
+    root->getChildrenProperty().Add(bone);
+    bone->getChildrenProperty().Add(TriangleMesh());
+    RecordingContext hierarchyContext;
+    EXPECT_EQ(DescribeModel(hierarchy.Process(root, hierarchyContext)),
+              Expected("modelprocessor/bone_hierarchy"));
+
+    Processors::ModelProcessor swapped;
+    swapped.setSwapWindingOrderProperty(true);
+    RecordingContext swappedContext;
+    EXPECT_EQ(DescribeModel(swapped.Process(TriangleScene(), swappedContext)),
+              Expected("modelprocessor/swap_winding"));
+
+    Processors::ModelProcessor empty;
+    RecordingContext emptyContext;
+    EXPECT_EQ(DescribeModel(empty.Process(std::make_shared<Graphics::NodeContent>(), emptyContext)),
+              Expected("modelprocessor/empty_node"));
+}
+
+TEST(XnaModelProcessor, RefusalsMatchXna)
+{
+    EXPECT_EQ(Result([]
+                     {
+                         Processors::ModelProcessor processor;
+                         RecordingContext context;
+                         return std::string(processor.Process(nullptr, context) == nullptr ? "null" : "built");
+                     }),
+              Expected("modelprocessor/null_input"));
+
+    EXPECT_EQ(Result([]
+                     {
+                         Processors::ModelProcessor processor;
+                         processor.setDefaultEffectProperty(
+                             Processors::MaterialProcessorDefaultEffect::SkinnedEffect);
+                         RecordingContext context;
+                         (void)processor.Process(TriangleScene(), context);
+                         return std::string("built");
+                     }),
+              Expected("modelprocessor/default_effect_skinned"));
+}
+
+TEST(XnaModelProcessor, ScaleAndRotationAreBakedIntoTheScene)
+{
+    Processors::ModelProcessor processor;
+    processor.setScaleProperty(2.0f);
+    processor.setRotationYProperty(90.0f);
+    auto root = std::make_shared<Graphics::NodeContent>();
+    root->setNameProperty("Root");
+    root->setTransformProperty(Matrix::CreateTranslation(1, 0, 0));
+    auto bone = std::make_shared<Graphics::BoneContent>();
+    bone->setNameProperty("Bone");
+    bone->setTransformProperty(Matrix::CreateTranslation(0, 3, 0));
+    root->getChildrenProperty().Add(bone);
+    const std::shared_ptr<Graphics::MeshContent> mesh = TriangleMesh();
+    bone->getChildrenProperty().Add(mesh);
+    RecordingContext context;
+    const std::shared_ptr<Processors::ModelContent> model = processor.Process(root, context);
+    // The source mesh is transformed in place, which is how the same scene answers twice over.
+    EXPECT_EQ(DescribeModelFull(model) + " source=" + PositionsText(*mesh),
+              Expected("modelprocessor/scale_rotation_detail"));
+
+    Processors::ModelProcessor plain;
+    const std::shared_ptr<Graphics::MeshContent> untouched = TriangleMesh();
+    RecordingContext plainContext;
+    EXPECT_EQ(DescribeModelFull(plain.Process(SceneOf(untouched), plainContext)) + " source=" +
+                  PositionsText(*untouched),
+              Expected("modelprocessor/identity_detail"));
+}
+
+TEST(XnaModelProcessor, ThreeRotationsComposeAsXnaComposesThem)
+{
+    // The three rotations at once carry float error XNA's own matrix inversion decides, so this
+    // one case is compared as numbers within a tolerance rather than as the corpus's own text.
+    Processors::ModelProcessor processor;
+    processor.setRotationXProperty(30.0f);
+    processor.setRotationYProperty(45.0f);
+    processor.setRotationZProperty(60.0f);
+    auto root = std::make_shared<Graphics::NodeContent>();
+    root->setNameProperty("Root");
+    root->setTransformProperty(Matrix::CreateTranslation(1, 2, 3));
+    root->getChildrenProperty().Add(TriangleMesh());
+    RecordingContext context;
+    const std::shared_ptr<Processors::ModelContent> model = processor.Process(root, context);
+    const std::string expected = Expected("modelprocessor/rotation_order");
+    const std::regex translation(R"(bone\[0\]=Root:\(([^,]+),([^,]+),([^)]+)\))");
+    std::smatch match;
+    ASSERT_TRUE(std::regex_search(expected, match, translation));
+    const Matrix& measured = model->getBonesProperty()[0]->getTransformProperty();
+    EXPECT_NEAR(measured.M41, std::stof(match[1].str()), 1e-5f);
+    EXPECT_NEAR(measured.M42, std::stof(match[2].str()), 1e-5f);
+    EXPECT_NEAR(measured.M43, std::stof(match[3].str()), 1e-5f);
+    // The geometry is compared as numbers, not as text: this case is the one whose matrix
+    // products carry the extended-precision intermediates the x86 .NET Framework evaluated the
+    // measurement in, which leaves one position component three units in the last place away
+    // from what strict single-precision arithmetic answers.
+    const std::vector<float> measuredData = FloatsOf(DataOf(DescribeModelFull(model)));
+    const std::vector<float> expectedData = FloatsOf(DataOf(expected));
+    ASSERT_EQ(measuredData.size(), expectedData.size());
+    for (std::size_t i = 0; i < expectedData.size(); ++i)
+    {
+        EXPECT_NEAR(measuredData[i], expectedData[i], 1e-6f) << "float " << i;
+    }
+}
+
+TEST(XnaModelProcessor, VertexColorsArePremultipliedAsXnaDoes)
+{
+    const std::vector<Color> colours = {Color(255, 128, 64, 128), Color(255, 255, 255, 255), Color(0, 0, 0, 0)};
+    Processors::ModelProcessor processor;
+    RecordingContext context;
+    EXPECT_EQ(DescribeModelFull(processor.Process(SceneOf(ColouredTriangle(colours)), context)),
+              Expected("modelprocessor/vertex_colors"));
+
+    Processors::ModelProcessor straight;
+    straight.setPremultiplyVertexColorsProperty(false);
+    RecordingContext straightContext;
+    EXPECT_EQ(DescribeModelFull(straight.Process(SceneOf(ColouredTriangle(colours)), straightContext)),
+              Expected("modelprocessor/vertex_colors_unpremultiplied"));
+
+    // 129 at alpha 3 answers 1, which is what says the remainder is dropped and not rounded.
+    Processors::ModelProcessor rounding;
+    RecordingContext roundingContext;
+    EXPECT_EQ(DescribeModelFull(rounding.Process(
+                  SceneOf(ColouredTriangle({Color(1, 3, 5, 128), Color(255, 254, 253, 1),
+                                            Color(127, 129, 191, 3)})),
+                  roundingContext)),
+              Expected("modelprocessor/vertex_colors_rounding"));
+}
+
+TEST(XnaModelProcessor, TangentFramesAreGeneratedAndRefusedAsXnaDoes)
+{
+    Processors::ModelProcessor processor;
+    processor.setGenerateTangentFramesProperty(true);
+    RecordingContext context;
+    const std::shared_ptr<Processors::ModelContent> model = processor.Process(TriangleScene(), context);
+    const std::string described = DescribeModelFull(model);
+    const std::string expected = Expected("modelprocessor/generate_tangent_frames");
+    (void)expected;
+    // The declaration is compared as XNA wrote it; the frame's own numbers follow, within the
+    // tolerance XNA's own orthogonalization leaves (its binormal carries a 4.4e-08 X where the
+    // cross product answers zero).
+    EXPECT_EQ(described.substr(0, described.find(" matrix[")), expected);
+    const std::vector<float> measuredData = FloatsOf(DataOf(described));
+    ASSERT_EQ(measuredData.size(), 3u * 14u);
+    const std::vector<float> reference = FloatsOf(DataOf(Expected("modelprocessor/tangent_frames_detail")));
+    ASSERT_EQ(reference.size(), measuredData.size());
+    for (std::size_t i = 0; i < reference.size(); ++i)
+    {
+        EXPECT_NEAR(measuredData[i], reference[i], 1e-6f) << "float " << i;
+    }
+
+    EXPECT_EQ(Result(
+                  []
+                  {
+                      Processors::ModelProcessor bare;
+                      bare.setGenerateTangentFramesProperty(true);
+                      auto mesh = std::make_shared<Graphics::MeshContent>();
+                      mesh->setNameProperty("Mesh");
+                      mesh->getPositionsProperty().Add(Vector3(0, 0, 0));
+                      mesh->getPositionsProperty().Add(Vector3(1, 0, 0));
+                      mesh->getPositionsProperty().Add(Vector3(0, 1, 0));
+                      auto geometry = std::make_shared<Graphics::GeometryContent>();
+                      mesh->getGeometryProperty().Add(geometry);
+                      geometry->getVerticesProperty().AddRange({0, 1, 2});
+                      geometry->getIndicesProperty().AddRange({0, 1, 2});
+                      geometry->getVerticesProperty().getChannelsProperty().Add<Vector3>(
+                          Graphics::VertexChannelNames::Normal(),
+                          {Vector3(0, 0, 1), Vector3(0, 0, 1), Vector3(0, 0, 1)});
+                      RecordingContext bareContext;
+                      (void)bare.Process(SceneOf(mesh), bareContext);
+                      return std::string("built");
+                  }),
+              Expected("modelprocessor/tangent_frames_no_texcoords"));
+}
+
+TEST(XnaVertexBufferContent, WritesAndSizesAsXnaDoes)
+{
+    Processors::VertexBufferContent buffer(24);
+    auto declaration = std::make_shared<Processors::VertexDeclarationContent>();
+    declaration->getVertexElementsProperty().Add(Microsoft::Xna::Framework::Graphics::VertexElement(
+        0, Microsoft::Xna::Framework::Graphics::VertexElementFormat::Vector3,
+        Microsoft::Xna::Framework::Graphics::VertexElementUsage::Position, 0));
+    buffer.setVertexDeclarationProperty(declaration);
+    buffer.Write<Vector3>(0, 12, {Vector3(1, 2, 3), Vector3(4, 5, 6)});
+    EXPECT_EQ("bytes=" + std::to_string(buffer.getVertexDataProperty().size()) + " stride=" +
+                  (declaration->getVertexStrideProperty() ? std::to_string(*declaration->getVertexStrideProperty())
+                                                          : "null") +
+                  " elements=" + std::to_string(declaration->getVertexElementsProperty().getCountProperty()) +
+                  " data=" + Hex(buffer.getVertexDataProperty()) + " sizeof=" +
+                  std::to_string(Processors::VertexBufferContent::SizeOf(
+                      System::Type::From<Vector3>())),
+              Expected("modelprocessor/vertex_buffer_content"));
+
+    const Processors::VertexBufferContent fresh;
+    EXPECT_EQ("bytes=" + std::to_string(fresh.getVertexDataProperty().size()) + " declaration=" +
+                  (fresh.getVertexDeclarationProperty() == nullptr ? "null" : "set") + " name=\"" +
+                  fresh.getNameProperty() + "\"",
+              Expected("modelprocessor/vertex_buffer_defaults"));
+
+    const Processors::VertexDeclarationContent bare;
+    EXPECT_EQ("elements=" + std::to_string(bare.getVertexElementsProperty().getCountProperty()) + " stride=" +
+                  (bare.getVertexStrideProperty() ? std::to_string(*bare.getVertexStrideProperty()) : "null"),
+              Expected("modelprocessor/vertex_declaration_defaults"));
+}
+
+TEST(XnaVertexBufferContent, TheUntypedWriteMatchesXna)
+{
+    Processors::VertexBufferContent buffer(24);
+    buffer.Write(0, 12, System::Type::From<Vector3>(),
+                 {Microsoft::Xna::Framework::Content::Pipeline::Box<Vector3>(Vector3(1, 2, 3)), Microsoft::Xna::Framework::Content::Pipeline::Box<Vector3>(Vector3(4, 5, 6))});
+    const auto refusal = [](const std::function<void()>& body)
+    {
+        try
+        {
+            body();
+            return std::string("accepted");
+        }
+        catch (const System::ArgumentException& error)
+        {
+            (void)error;
+            return std::string("ArgumentException");
+        }
+        catch (const System::NotSupportedException& error)
+        {
+            (void)error;
+            return std::string("NotSupportedException");
+        }
+    };
+    EXPECT_EQ("data=" + Hex(buffer.getVertexDataProperty()) + " wrongType=" +
+                  refusal(
+                      []
+                      {
+                          Processors::VertexBufferContent other(24);
+                          other.Write(0, 12, System::Type::From<Vector3>(),
+                                      {Microsoft::Xna::Framework::Content::Pipeline::Box<Vector2>(Vector2(1, 2)), Microsoft::Xna::Framework::Content::Pipeline::Box<Vector2>(Vector2(3, 4))});
+                      }) +
+                  " unsupported=" + refusal(
+                                        []
+                                        {
+                                            Processors::VertexBufferContent other(24);
+                                            other.Write(0, 4, System::Type::From<std::string>(),
+                                                        {Microsoft::Xna::Framework::Content::Pipeline::Box<std::string>(std::string("a"))});
+                                        }),
+              Expected("modelprocessor/vertex_buffer_write_untyped"));
+}
+
+TEST(XnaVertexBufferContent, SizeOfAnswersWhatXnaAnswers)
+{
+    const auto size = [](System::Type type, const std::string& name)
+    {
+        try
+        {
+            return name + "=" + std::to_string(Processors::VertexBufferContent::SizeOf(type));
+        }
+        catch (const System::ArgumentNullException&)
+        {
+            return name + "=ArgumentNullException";
+        }
+        catch (const System::NotSupportedException&)
+        {
+            return name + "=NotSupportedException";
+        }
+    };
+    // Boolean answers four and Char one: the sizes .NET marshals those values to, not the sizes
+    // C++ gives them.
+    EXPECT_EQ(size(System::Type::From<Vector2>(), "Vector2") + " " +
+                  size(System::Type::From<Vector4>(), "Vector4") + " " +
+                  size(System::Type::From<Color>(), "Color") + " " +
+                  size(System::Type::From<SharpRuntime::Single>(), "Single") + " " +
+                  size(System::Type::From<std::string>(), "String") + " " +
+                  size(System::Type::From<SharpRuntime::intcs>(), "Int32") + " " +
+                  size(System::Type::From<SharpRuntime::bytecs>(), "Byte") + " " +
+                  size(System::Type::From<SharpRuntime::shortcs>(), "Int16") + " " +
+                  size(System::Type::From<double>(), "Double") + " " +
+                  size(System::Type::From<bool>(), "Boolean") + " " +
+                  size(System::Type::From<SharpRuntime::charcs>(), "Char") + " " +
+                  size(System::Type::From<Matrix>(), "Matrix") + " " +
+                  size(System::Type::From<Microsoft::Xna::Framework::Quaternion>(), "Quaternion") + " " +
+                  size(System::Type::From<System::DateTime>(), "DateTime") + " " +
+                  size(System::Type::From<SurfaceFormat>(), "SurfaceFormat") + " " +
+                  size(System::Type::From<std::vector<Vector3>>(), "Vector3[]") + " " +
+                  size(System::Type(), "null"),
+              Expected("modelprocessor/vertex_buffer_sizeof_refusals"));
 }

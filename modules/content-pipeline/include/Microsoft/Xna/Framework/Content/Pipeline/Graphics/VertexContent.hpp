@@ -14,6 +14,11 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/ContentTypeDescription.hpp"
 #include "System/Object.hpp"
 
+namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
+{
+    class VertexBufferContent;
+}
+
 namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
 {
     class GeometryContent;
@@ -211,6 +216,19 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
          * @throws System::ArgumentOutOfRangeException when the run is outside the collection.
          */
         void RemoveRange(SharpRuntime::intcs index, SharpRuntime::intcs count);
+
+        /**
+         * @brief Builds the vertex buffer these vertices describe: the positions first, then each
+         *        channel in order, packed one vertex after another.
+         *
+         * The layout is measured on the XNA 4.0 runtime through the model processor
+         * (`tests/reference/xna40/graphics/graphics-content-oracle.json`,
+         * `modelprocessor/triangle`: Position0 at 0, Normal0 at 12, TextureCoordinate0 at 24, a
+         * stride of 32).
+         *
+         * @return The vertex buffer.
+         */
+        [[nodiscard]] std::shared_ptr<Processors::VertexBufferContent> CreateVertexBuffer() const;
 
         /**
          * @brief Gets the geometry batch these vertices belong to.
