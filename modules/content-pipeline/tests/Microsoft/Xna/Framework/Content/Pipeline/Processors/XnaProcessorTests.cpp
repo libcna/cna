@@ -29,7 +29,10 @@
 
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentBuildLogger.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentProcessorContext.hpp"
+#include "CNA/Internal/Xnb/XnbCanonicalData.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/ContentProcessor.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Serialization/Compiler/ContentCompiler.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/PixelBitmapContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/TextureContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/MeshBuilder.hpp"
@@ -53,6 +56,7 @@
 #include "System/DateTime.hpp"
 #include "System/NotSupportedException.hpp"
 
+namespace Xna = Microsoft::Xna::Framework::Content::Pipeline;
 namespace Graphics = Microsoft::Xna::Framework::Content::Pipeline::Graphics;
 namespace Processors = Microsoft::Xna::Framework::Content::Pipeline::Processors;
 using Microsoft::Xna::Framework::Color;
@@ -1747,4 +1751,155 @@ TEST(XnaVertexBufferContent, SizeOfAnswersWhatXnaAnswers)
                   size(System::Type::From<std::vector<Vector3>>(), "Vector3[]") + " " +
                   size(System::Type(), "null"),
               Expected("modelprocessor/vertex_buffer_sizeof_refusals"));
+}
+
+// ---- XNAPP-152: a processor's own scene, through ModelProcessor, to an .xnb CNA reads back ----
+
+namespace
+{
+    /** @brief A processor of a game's own: it builds a scene and hands it to ModelProcessor. */
+    class SpinnerProcessor final
+        : public Xna::ContentProcessor<std::shared_ptr<Xna::Graphics::NodeContent>,
+                                       std::shared_ptr<Processors::ModelContent>>
+    {
+    public:
+        [[nodiscard]] std::shared_ptr<Processors::ModelContent> Process(
+            const std::shared_ptr<Xna::Graphics::NodeContent>& input,
+            Xna::ContentProcessorContext& context) override
+        {
+            (void)input;
+            const std::shared_ptr<Xna::Graphics::MeshBuilder> builder =
+                Xna::Graphics::MeshBuilder::StartMesh("Spinner");
+            builder->setMergeDuplicatePositionsProperty(true);
+            const SharpRuntime::intcs normals =
+                builder->CreateVertexChannel<Vector3>(Xna::Graphics::VertexChannelNames::Normal());
+            const SharpRuntime::intcs coords = builder->CreateVertexChannel<Vector2>(
+                Xna::Graphics::VertexChannelNames::TextureCoordinate(0));
+            const SharpRuntime::intcs a = builder->CreatePosition(0, 0, 0);
+            const SharpRuntime::intcs b = builder->CreatePosition(1, 0, 0);
+            const SharpRuntime::intcs c = builder->CreatePosition(1, 1, 0);
+            const SharpRuntime::intcs d = builder->CreatePosition(0, 1, 0);
+            const std::vector<SharpRuntime::intcs> corners = {a, b, c, a, c, d};
+            const std::vector<Vector2> uv = {Vector2(0, 0), Vector2(1, 0), Vector2(1, 1),
+                                             Vector2(0, 0), Vector2(1, 1), Vector2(0, 1)};
+            for (std::size_t i = 0; i < corners.size(); ++i)
+            {
+                builder->SetVertexChannelData(normals, Xna::Box<Vector3>(Vector3(0, 0, 1)));
+                builder->SetVertexChannelData(coords, Xna::Box<Vector2>(uv[i]));
+                builder->AddTriangleVertex(corners[i]);
+            }
+            auto material = std::make_shared<Xna::Graphics::BasicMaterialContent>();
+            material->setAlphaProperty(0.25f);
+            material->setDiffuseColorProperty(Vector3(0.5f, 0.25f, 0.125f));
+            const std::shared_ptr<Xna::Graphics::MeshContent> mesh = builder->FinishMesh();
+            const auto& batches = static_cast<const System::Collections::ObjectModel::Collection<
+                std::shared_ptr<Xna::Graphics::GeometryContent>>&>(mesh->getGeometryProperty());
+            batches[0]->setMaterialProperty(material);
+            auto root = std::make_shared<Xna::Graphics::NodeContent>();
+            root->setNameProperty("Scene");
+            root->getChildrenProperty().Add(mesh);
+            Processors::ModelProcessor model;
+            return model.Process(root, context);
+        }
+    };
+
+    /** @brief A directory the test writes its one `.xnb` into and removes afterwards. */
+    class ScratchDirectory
+    {
+    public:
+        explicit ScratchDirectory(const std::string& tag)
+            : path_(std::filesystem::temp_directory_path() /
+                    ("cna_xnapp152_" + tag + "_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
+        {
+            std::filesystem::create_directories(path_);
+        }
+        ~ScratchDirectory()
+        {
+            std::error_code error;
+            std::filesystem::remove_all(path_, error);
+        }
+        ScratchDirectory(const ScratchDirectory&) = delete;
+        ScratchDirectory& operator=(const ScratchDirectory&) = delete;
+        [[nodiscard]] const std::filesystem::path& Path() const { return path_; }
+
+    private:
+        std::filesystem::path path_;
+    };
+}
+
+TEST(XnaModelPipeline, AProcessorsOwnSceneBecomesAnXnbCnaReadsBack)
+{
+    RecordingContext context;
+    SpinnerProcessor processor;
+    const std::shared_ptr<Processors::ModelContent> model =
+        processor.Process(std::make_shared<Graphics::NodeContent>(), context);
+    ASSERT_NE(model, nullptr);
+
+    Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler::ContentCompiler compiler;
+    Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler::CompileOptions options;
+    options.assetName = "Models/spinner";
+    options.outputDirectory = "/out";
+    const CNA::Internal::Xnb::XnbAssetWriteResult written =
+        compiler.Compile<Processors::ModelContent>(model, options);
+    EXPECT_EQ(written.rootReaderName,
+              "Microsoft.Xna.Framework.Content.ModelReader, Microsoft.Xna.Framework.Graphics, "
+              "Version=4.0.0.0, Culture=neutral, PublicKeyToken=842cf8be1de50553");
+
+    ScratchDirectory scratch("model");
+    const std::filesystem::path path = scratch.Path() / "spinner.xnb";
+    {
+        std::ofstream out(path, std::ios::binary);
+        out.write(reinterpret_cast<const char*>(written.bytes.data()),
+                  static_cast<std::streamsize>(written.bytes.size()));
+    }
+    // Read back through CNA's own reader, which is what a game would do with the file.
+    const CNA::Internal::Xnb::XnbCanonicalAsset asset = CNA::Internal::Xnb::DecodeXnbCanonicalAsset(path);
+    const auto& read = std::get<CNA::Internal::Xnb::XnbModelData>(asset.value);
+
+    ASSERT_EQ(read.bones.size(), 2u);
+    EXPECT_EQ(read.bones[0].name, "Scene");
+    EXPECT_EQ(read.bones[0].parent, -1);
+    EXPECT_EQ(read.bones[0].children, std::vector<std::int32_t>{1});
+    EXPECT_EQ(read.bones[1].name, "Spinner");
+    EXPECT_EQ(read.bones[1].parent, 0);
+    EXPECT_EQ(read.rootBone, 0);
+
+    ASSERT_EQ(read.meshes.size(), 1u);
+    EXPECT_EQ(read.meshes[0].name, "Spinner");
+    EXPECT_EQ(read.meshes[0].parentBone, 1);
+    ASSERT_EQ(read.meshes[0].parts.size(), 1u);
+    const CNA::Internal::Xnb::XnbModelPartData& part = read.meshes[0].parts[0];
+    EXPECT_EQ(part.vertexCount, 4);
+    EXPECT_EQ(part.primitiveCount, 2);
+    EXPECT_EQ(part.startIndex, 0);
+    EXPECT_EQ(part.vertexOffset, 0);
+    ASSERT_GE(part.vertexBufferResource, 0);
+    ASSERT_GE(part.indexBufferResource, 0);
+    ASSERT_GE(part.effectResource, 0);
+
+    const auto& vertices = std::get<CNA::Internal::Xnb::XnbVertexBufferData>(
+        read.sharedResources[static_cast<std::size_t>(part.vertexBufferResource)].value);
+    EXPECT_EQ(vertices.vertexCount, 4u);
+    EXPECT_EQ(vertices.declaration.stride, 32);
+    ASSERT_EQ(vertices.declaration.elements.size(), 3u);
+    EXPECT_EQ(vertices.declaration.elements[0].getVertexElementUsageProperty(),
+              Microsoft::Xna::Framework::Graphics::VertexElementUsage::Position);
+    EXPECT_EQ(vertices.declaration.elements[2].getVertexElementUsageProperty(),
+              Microsoft::Xna::Framework::Graphics::VertexElementUsage::TextureCoordinate);
+    EXPECT_EQ(vertices.bytes.size(), 4u * 32u);
+
+    const auto& indices = std::get<CNA::Internal::Xnb::XnbIndexBufferData>(
+        read.sharedResources[static_cast<std::size_t>(part.indexBufferResource)].value);
+    EXPECT_EQ(indices.indexElementSize, 2u);
+    ASSERT_EQ(indices.bytes.size(), 6u * 2u);
+    // The cache ordering the processor runs is visible in the file: the second triangle first.
+    const std::vector<std::uint8_t> expected = {0, 0, 1, 0, 2, 0, 0, 0, 3, 0, 1, 0};
+    EXPECT_EQ(indices.bytes, expected);
+
+    const auto& effect = std::get<CNA::Internal::Xnb::XnbBasicEffectData>(
+        read.sharedResources[static_cast<std::size_t>(part.effectResource)].value);
+    EXPECT_FLOAT_EQ(effect.alpha, 0.25f);
+    EXPECT_FLOAT_EQ(effect.diffuseColor.X, 0.5f);
+    EXPECT_FLOAT_EQ(effect.diffuseColor.Y, 0.25f);
+    EXPECT_FLOAT_EQ(effect.diffuseColor.Z, 0.125f);
 }

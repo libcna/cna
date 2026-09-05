@@ -3,6 +3,7 @@
 
 #include <algorithm>
 
+#include "CNA/Content/Pipeline/XnaModelBridge.hpp"
 #include "CNA/Internal/Xnb/XnbBuiltInWriters.hpp"
 #include "Microsoft/Xna/Framework/BoundingBox.hpp"
 #include "Microsoft/Xna/Framework/BoundingFrustum.hpp"
@@ -30,6 +31,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
     namespace
     {
         namespace Xnb = CNA::Internal::Xnb;
+        namespace Processors = Microsoft::Xna::Framework::Content::Pipeline::Processors;
 
         /// The façade view of a built-in canonical type writer, so GetTypeWriter answers for
         /// primitives and framework value types as it does for user writers.
@@ -54,6 +56,46 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
             void Write(ContentWriter& output, const Carrier<T>& value) override
             {
                 output.Output().WriteRawObject(*canonical_, &value);
+            }
+
+        private:
+            const Xnb::XnbTypeWriterBase* canonical_;
+        };
+
+        /// The one route from the XNA-shaped model graph to an `.xnb`: the graph becomes the
+        /// canonical model and goes through the canonical writer, which is the only model writer
+        /// there is. XNA's own ModelWriter is internal, so this one is too.
+        class ModelContentTypeWriter final : public ContentTypeWriter<Processors::ModelContent>
+        {
+        public:
+            explicit ModelContentTypeWriter(const Xnb::XnbTypeWriterBase& canonical) : canonical_(&canonical) {}
+
+            [[nodiscard]] std::int32_t getTypeVersionProperty() const override
+            {
+                return canonical_->ReaderIdentity().readerVersion;
+            }
+
+            [[nodiscard]] std::string GetRuntimeReader(TargetPlatform targetPlatform) const override
+            {
+                (void)targetPlatform;
+                return Xnb::FormatXnbReaderName(canonical_->ReaderIdentity(), Xnb::XnbReaderNameStyle::Xna40);
+            }
+
+            [[nodiscard]] std::string GetRuntimeType(TargetPlatform targetPlatform) const override
+            {
+                (void)targetPlatform;
+                return canonical_->ReaderIdentity().targetBaseName;
+            }
+
+        protected:
+            void Write(ContentWriter& output, const Carrier<Processors::ModelContent>& value) override
+            {
+                if (value == nullptr)
+                {
+                    throw PipelineException("ContentCompiler: a null model cannot be compiled.");
+                }
+                const Xnb::XnbModelData data = CNA::Content::Pipeline::ToCanonicalModel(*value);
+                output.Output().WriteRawObject(*canonical_, &data);
             }
 
         private:
@@ -167,6 +209,21 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
         add.template operator()<std::vector<Microsoft::Xna::Framework::Vector3>>();
         add.template operator()<std::vector<Microsoft::Xna::Framework::Matrix>>();
         add.template operator()<std::map<std::string, std::int32_t>>();
+
+        // The processed model graph is a built-in too: it reaches the same canonical model writer
+        // the rest of the engine writes through (plans/plan_xnapipeline_parity.md XNAPP-152).
+        if (const Xnb::XnbTypeWriterBase* model = builtIns.Find(Xnb::XnbTypeKey<Xnb::XnbModelData>::Id()))
+        {
+            auto facade = std::make_shared<ModelContentTypeWriter>(*model);
+            facade->Initialize(*this);
+            known_.push_back(Known{std::type_index(typeid(Processors::ModelContent)),
+                                   std::type_index(typeid(Carrier<Processors::ModelContent>)), true,
+                                   ContentTypeName<Processors::ModelContent>::Name(), facade,
+                                   [facade, this](TargetPlatform platform)
+                                       -> std::shared_ptr<Xnb::XnbTypeWriterBase>
+                                   { return std::make_shared<Adapter<Processors::ModelContent>>(
+                                         facade, platform, this); }});
+        }
     }
 
     const ContentCompiler::PlatformRegistry& ContentCompiler::Platform(const TargetPlatform platform) const

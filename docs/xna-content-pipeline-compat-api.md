@@ -308,3 +308,24 @@ no material of its own is given a `BasicMaterialContent` before that conversion.
 `VertexBufferContent::SizeOf` answers the size .NET *marshals* a value to rather than the size C++
 gives it: `Boolean` is 4 bytes and `Char` is 1. A type no vertex element can carry is refused with
 `NotSupportedException`, and the null type with `ArgumentNullException`.
+
+---
+
+## 12. How a processed model reaches an `.xnb`
+
+There is one model writer, and it is the canonical one. `ContentCompiler` knows a built-in writer
+for `ModelContent` that turns the graph into `CNA::Internal::Xnb::XnbModelData` through
+`CNA::Content::Pipeline::ToCanonicalModel` and hands it to the same writer every other model in the
+engine goes through. Nothing new appears in the XNA namespace for it: XNA's own `ModelWriter` is
+internal to its pipeline assembly, and so is this one.
+
+What the conversion decides, because the XNB format asks and the content model does not say:
+
+* One shared resource per **distinct** vertex buffer, index buffer and material, so two parts that
+  share a buffer share its resource.
+* Indices are sixteen bits unless one does not fit, and then all of them are thirty-two.
+* Each of the five stock materials becomes its own canonical effect resource, carrying the
+  properties it actually set; a material of any other type is refused by name.
+
+A game that wants its own model format writes its own `ContentTypeWriter`; a game that wants XNA's
+writes a `ModelContent` and compiles it.
