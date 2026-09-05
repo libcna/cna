@@ -846,6 +846,71 @@ namespace CNA::Internal::Renderers::WebGPU
         // Instanced3D module it has always used: 20 (VertexPositionTexture) and 32
         // (VertexPositionNormalTexture) carry no COLOR0 at all, and the skinned/PBR strides carry
         // one the instanced route has no bone palette or tangent basis to render anyway.
+        /// plans/plan_webgpu.md WEBGPU-198: bytes per texel of a native colour format, for the
+        /// render-target readback.
+        ///
+        /// The readback used to assume four, because a render target could only ever be `Color`.
+        /// The XNA layer asks for exactly `getBytesPerTexel()` bytes per texel and decodes them
+        /// itself (`Texture2D::GetDataBytes` refuses a mismatched element type before the renderer
+        /// is reached), so this has to agree with `SurfaceFormat`'s own widths rather than with
+        /// anything convenient.
+        ///
+        /// @param format The native colour format.
+        /// @return Bytes per texel, or 0 for a format this renderer does not read back.
+        [[nodiscard]] constexpr int BytesPerTexelEXT(WGPUTextureFormat format) noexcept
+        {
+            switch (format)
+            {
+            case WGPUTextureFormat_R16Float:        return 2;
+            case WGPUTextureFormat_RGBA8Unorm:
+            case WGPUTextureFormat_RGBA8UnormSrgb:
+            case WGPUTextureFormat_BGRA8Unorm:
+            case WGPUTextureFormat_BGRA8UnormSrgb:
+            case WGPUTextureFormat_RG16Float:
+            case WGPUTextureFormat_R32Float:        return 4;
+            case WGPUTextureFormat_RGBA16Float:
+            case WGPUTextureFormat_RG32Float:       return 8;
+            case WGPUTextureFormat_RGBA32Float:     return 16;
+            default:                                return 0;
+            }
+        }
+
+        /// plans/plan_webgpu.md WEBGPU-198: the `SurfaceFormat` -> `WGPUTextureFormat` map for a
+        /// RENDER TARGET's colour attachment, which is a strictly narrower question than what this
+        /// renderer can STORE (`ClassifyWebGPUTextureFormat`).
+        ///
+        /// The eight entries are the reference renderer's own set (`MapRenderTargetColorFormat`),
+        /// so a game asking for a float target gets the same answer from both. `Color` is
+        /// deliberately absent: it maps to the renderer's live `surfaceFormat_`, which is a member
+        /// rather than a constant, and keeping it out of this table is what makes every existing
+        /// `Color` target byte-identical to its pre-198 form.
+        ///
+        /// `Rgba64` is absent for a different reason: WebGPU has no 16-bit UNORM colour format at
+        /// all, so there is nothing to map it to. That is `WEBGPU-201`'s subject and is reported as
+        /// a named refusal rather than silently substituted.
+        ///
+        /// @param surfaceFormat SurfaceFormat ordinal.
+        /// @param out Receives the native format when the return value is true.
+        /// @return Whether this format has a render-target representation here at all.
+        [[nodiscard]] bool MapRenderTargetColorFormatEXT(int surfaceFormat, WGPUTextureFormat& out)
+        {
+            using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+            switch (static_cast<SurfaceFormat>(surfaceFormat))
+            {
+            case SurfaceFormat::Single:       out = WGPUTextureFormat_R32Float;    return true;
+            case SurfaceFormat::Vector2:      out = WGPUTextureFormat_RG32Float;   return true;
+            case SurfaceFormat::Vector4:      out = WGPUTextureFormat_RGBA32Float; return true;
+            case SurfaceFormat::HalfSingle:   out = WGPUTextureFormat_R16Float;    return true;
+            case SurfaceFormat::HalfVector2:  out = WGPUTextureFormat_RG16Float;   return true;
+            // HdrBlendable is XNA's "float format for HDR data"; on Windows it was RGBA16F, and CNA
+            // makes that equivalence explicit rather than inventing a third meaning for it -- the
+            // same choice the reference renderer states in its own map.
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable: out = WGPUTextureFormat_RGBA16Float; return true;
+            default:                          return false;
+            }
+        }
+
         /// plans/plan_webgpu.md WEBGPU-172: refuses a multi-stream draw on a route whose native
         /// layout is still derived from ONE byte stride.
         ///
@@ -1792,7 +1857,8 @@ namespace CNA::Internal::Renderers::WebGPU
     WebGPURenderTargetCubeRenderer::WebGPURenderTargetCubeRenderer(WebGPURenderer& owner, int size,
                                                                   int depthFormat,
                                                                   bool preserveContents, bool mipMap,
-                                                                  int multiSampleCount)
+                                                                  int multiSampleCount,
+                                                                  int surfaceFormat)
         : owner_(&owner), size_(size), preserveContents_(preserveContents)
     {
         if (size_ <= 0)
@@ -1826,7 +1892,14 @@ namespace CNA::Internal::Renderers::WebGPU
         //
         // REMED-GFX-131: surfaceFormat_ is guaranteed non-sRGB, so a cube face carries the same
         // byte-exact SurfaceFormat::Color semantics as a RenderTarget2D and a plain TextureCube.
-        colorFormat_ = owner_->surfaceFormat_;
+        // WEBGPU-198: the requested SurfaceFormat's own native format when it has one, and the
+        // renderer's swap-chain format for Color -- the same rule the 2D sibling follows.
+        // MOD-107 is why this matters here specifically: an irradiance or
+        // prefiltered-specular cube is rendered face by face into float storage, and a cube
+        // that reported HdrBlendable while holding 8-bit texels would make every
+        // image-based-lighting product quietly wrong.
+        if (!MapRenderTargetColorFormatEXT(surfaceFormat, colorFormat_))
+            colorFormat_ = owner_->surfaceFormat_;
         if (colorFormat_ == WGPUTextureFormat_Undefined)
             throw std::runtime_error("CNA WebGPU: cannot create a RenderTargetCube before the "
                                      "swapchain surface format is known");
@@ -2328,7 +2401,8 @@ namespace CNA::Internal::Renderers::WebGPU
 
     WebGPURenderTargetRenderer::WebGPURenderTargetRenderer(WebGPURenderer& owner, int width, int height,
                                                           int depthFormat, bool preserveContents,
-                                                          bool mipMap, int multiSampleCount)
+                                                          bool mipMap, int multiSampleCount,
+                                                          int surfaceFormat)
         : owner_(&owner), width_(width), height_(height), preserveContents_(preserveContents)
     {
         if (width_ <= 0 || height_ <= 0)
@@ -2372,7 +2446,12 @@ namespace CNA::Internal::Renderers::WebGPU
         // RenderTarget2D::GetData hands straight to game code. It is the same format the plain
         // Texture2D path uses, which is what makes ordinary textures and render targets share one
         // colour semantics.
-        colorFormat_ = owner_->surfaceFormat_;
+        // WEBGPU-198: the requested SurfaceFormat's own native format when it has one, and the
+        // renderer's swap-chain format for Color. Keeping Color on surfaceFormat_ is deliberate:
+        // it is what every existing target used, so nothing about the Color path moves, and it is
+        // what makes a target byte-compatible with the backbuffer's own pipelines.
+        if (!MapRenderTargetColorFormatEXT(surfaceFormat, colorFormat_))
+            colorFormat_ = owner_->surfaceFormat_;
         if (colorFormat_ == WGPUTextureFormat_Undefined)
             throw std::runtime_error("CNA WebGPU: cannot create a RenderTarget2D before the "
                                      "swapchain surface format is known");
@@ -2575,6 +2654,20 @@ namespace CNA::Internal::Renderers::WebGPU
                 "CNA WebGPU: RenderTarget2D.GetData: mip level " + std::to_string(level) +
                 " is outside this target's chain of " + std::to_string(levelCount_) +
                 " level(s). A target created with mipMap=false has level 0 only.");
+        // WEBGPU-198: this readback used to assume four UNORM8 bytes per texel, which held only
+        // while a render target could only ever be Color. A float target's texels are 16- or 32-bit
+        // floats, and the XNA layer asks for exactly `getBytesPerTexel()` bytes of them
+        // (Texture2D::GetDataBytes refuses a mismatched element type before the renderer is
+        // reached), so the width comes from the format rather than from a constant. A format with
+        // no entry is refused by name rather than read at the wrong width.
+        const int texelBytes = BytesPerTexelEXT(colorFormat_);
+        if (texelBytes == 0)
+        {
+            throw System::NotSupportedException(
+                "CNA WebGPU: RenderTarget2D.GetData does not know the texel width of this target's "
+                "colour format, so it will not guess one.");
+        }
+
         const int levelWidth = std::max(1, width_ >> level);
         const int levelHeight = std::max(1, height_ >> level);
 
@@ -2586,7 +2679,8 @@ namespace CNA::Internal::Renderers::WebGPU
         if (owner_->currentRenderTarget_ == this)
             owner_->RenderPendingDrawsToRenderTarget(const_cast<WebGPURenderTargetRenderer*>(this));
 
-        const auto bytesPerRow = AlignBytesPerRow(static_cast<std::uint32_t>(levelWidth) * 4u);
+        const auto bytesPerRow = AlignBytesPerRow(static_cast<std::uint32_t>(levelWidth) *
+                                                  static_cast<std::uint32_t>(texelBytes));
         const std::uint64_t bufferSize = static_cast<std::uint64_t>(bytesPerRow) * static_cast<std::uint64_t>(levelHeight);
 
         WGPUBufferDescriptor bufferDescriptor{};
@@ -2643,7 +2737,8 @@ namespace CNA::Internal::Renderers::WebGPU
         const bool isBgra = (colorFormat_ == WGPUTextureFormat_BGRA8Unorm ||
                              colorFormat_ == WGPUTextureFormat_BGRA8UnormSrgb);
         auto* out = static_cast<std::uint8_t*>(data);
-        const std::size_t requiredLength = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u;
+        const std::size_t requiredLength = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) *
+                                           static_cast<std::size_t>(texelBytes);
         // REMED-GFX-127: was a memset-to-zero-and-return-as-success path; report the failure and
         // leave the destination alone instead.
         if (mapped == nullptr || dataLength < 0 || static_cast<std::size_t>(dataLength) < requiredLength)
@@ -2658,16 +2753,20 @@ namespace CNA::Internal::Renderers::WebGPU
             for (int col = 0; col < w; ++col)
             {
                 const int sx = x + col;
-                std::uint8_t* d = out + (static_cast<std::size_t>(row) * w + col) * 4;
+                std::uint8_t* d = out + (static_cast<std::size_t>(row) * w + col) *
+                                        static_cast<std::size_t>(texelBytes);
                 if (sx < 0 || sx >= levelWidth || sy < 0 || sy >= levelHeight)
                 {
-                    d[0] = d[1] = d[2] = d[3] = 0;
+                    std::memset(d, 0, static_cast<std::size_t>(texelBytes));
                     continue;
                 }
                 const std::uint8_t* s = mapped + static_cast<std::size_t>(sy) * bytesPerRow +
-                                        static_cast<std::size_t>(sx) * 4;
+                                        static_cast<std::size_t>(sx) *
+                                            static_cast<std::size_t>(texelBytes);
+                // The swizzle applies to BGRA8 alone: every float format is already in the channel
+                // order the XNA layer decodes, and reordering their BYTES would corrupt them.
                 if (isBgra) { d[0] = s[2]; d[1] = s[1]; d[2] = s[0]; d[3] = s[3]; }
-                else        { d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d[3] = s[3]; }
+                else        { std::memcpy(d, s, static_cast<std::size_t>(texelBytes)); }
             }
         }
         wgpuBufferUnmap(readbackBuffer);
@@ -7647,6 +7746,71 @@ namespace CNA::Internal::Renderers::WebGPU
         return std::min(deviceBound, resolverBound);
     }
 
+    bool WebGPURenderer::ProbeRenderTargetFormatEXT(WGPUTextureFormat format) const
+    {
+        if (const auto it = renderTargetFormatProbe_.find(static_cast<std::uint32_t>(format));
+            it != renderTargetFormatProbe_.end())
+            return it->second;
+
+        // Pessimistic if the probe cannot run at all -- the same defence Supports4xMsaa() takes.
+        if (device_ == nullptr || instance_ == nullptr)
+            return false;
+
+        // WEBGPU-198: ask the DEVICE, do not tabulate a spec matrix. A scoped validation error
+        // scope around a 1x1 render-attachment texture of the real format is the same technique
+        // Supports4xMsaa() already uses, and for the same reason: what matters is the concrete
+        // adapter in front of us (which may be a software Vulkan fallback under a headless run),
+        // not what the specification permits in general.
+        wgpuDevicePushErrorScope(device_, WGPUErrorFilter_Validation);
+        WGPUTextureDescriptor descriptor{};
+        descriptor.label = StringView("CNA WebGPU RenderTarget Format Probe");
+        descriptor.usage = WGPUTextureUsage_RenderAttachment | WGPUTextureUsage_TextureBinding |
+                           WGPUTextureUsage_CopySrc;
+        descriptor.dimension = WGPUTextureDimension_2D;
+        descriptor.size = WGPUExtent3D{1, 1, 1};
+        descriptor.format = format;
+        descriptor.mipLevelCount = 1;
+        descriptor.sampleCount = 1;
+        WGPUTexture probe = wgpuDeviceCreateTexture(device_, &descriptor);
+        if (probe != nullptr)
+            wgpuTextureRelease(probe);
+
+        ErrorScopeState state;
+        WGPUPopErrorScopeCallbackInfo callback{};
+        callback.mode = kCnaWebGpuCallbackMode;
+        callback.callback = OnPopErrorScope;
+        callback.userdata1 = &state;
+        wgpuDevicePopErrorScope(device_, callback);
+        WaitForCompletion(instance_, state.completed, "render-target format probe");
+
+        const bool ok = probe != nullptr && state.ok;
+        renderTargetFormatProbe_[static_cast<std::uint32_t>(format)] = ok;
+        return ok;
+    }
+
+    RendererFormatVerdict WebGPURenderer::ClassifyRenderTargetFormatEXT(int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        // The swap chain's own format, which this renderer is already rendering into every frame --
+        // there is nothing to probe, and answering Defer here would send it to
+        // Texture::ValidateFormat for no benefit.
+        if (static_cast<SurfaceFormat>(surfaceFormat) == SurfaceFormat::Color)
+            return RendererFormatVerdict::Supported;
+
+        WGPUTextureFormat native = WGPUTextureFormat_Undefined;
+        if (!MapRenderTargetColorFormatEXT(surfaceFormat, native))
+        {
+            // No render-target representation here at all. Defer rather than Unsupported: the
+            // framework's own rule (Texture::ValidateFormat) is the right authority for a format
+            // this renderer has never had an opinion about, and it already refuses everything but
+            // Color. Rgba64 lands here deliberately -- WebGPU has no 16-bit UNORM colour format to
+            // map it to, which is WEBGPU-201's subject.
+            return RendererFormatVerdict::Defer;
+        }
+        return ProbeRenderTargetFormatEXT(native) ? RendererFormatVerdict::Supported
+                                                  : RendererFormatVerdict::Unsupported;
+    }
+
     bool WebGPURenderer::IsCompressedTransferFormatEXT(int surfaceFormat) const
     {
         // WEBGPU-144: only when the device actually enabled the BC feature. Then the DXT/BC7 formats
@@ -8858,6 +9022,27 @@ namespace CNA::Internal::Renderers::WebGPU
                                                            multiSampleCount);
     }
 
+    std::unique_ptr<IRenderTargetRenderer> WebGPURenderer::CreateRenderTarget2DEXT(
+        int w, int h, int depthFormat, bool preserveContents, bool mipMap,
+        int multiSampleCount, int surfaceFormat)
+    {
+        // WEBGPU-198: the format-carrying entry point. The default forwards to the format-less
+        // overload and DROPS the argument, which is what let a target be created in one format and
+        // then allocated in another. Refuse a format this adapter will not render into, by name,
+        // and otherwise allocate in the format that was actually asked for.
+        if (ClassifyRenderTargetFormatEXT(surfaceFormat) == RendererFormatVerdict::Unsupported)
+        {
+            throw System::NotSupportedException(
+                "CNA WebGPU: SurfaceFormat " + std::to_string(surfaceFormat) +
+                " has a WebGPU render-target format, but this adapter refused to create a "
+                "render-attachment texture of it. The refusal is probed on this device, not "
+                "assumed from the specification.");
+        }
+        return std::make_unique<WebGPURenderTargetRenderer>(*this, w, h, depthFormat,
+                                                           preserveContents, mipMap,
+                                                           multiSampleCount, surfaceFormat);
+    }
+
     void WebGPURenderer::SetRenderTarget2D(IRenderTargetRenderer* rt)
     {
         auto* newTarget = rt != nullptr ? static_cast<WebGPURenderTargetRenderer*>(rt) : nullptr;
@@ -9004,6 +9189,26 @@ namespace CNA::Internal::Renderers::WebGPU
         return std::make_unique<WebGPURenderTargetCubeRenderer>(*this, size, depthFormat,
                                                               preserveContents, mipMap,
                                                               multiSampleCount);
+    }
+
+    std::unique_ptr<IRenderTargetCubeRenderer> WebGPURenderer::CreateRenderTargetCubeEXT(
+        int size, int depthFormat, bool preserveContents, bool mipMap,
+        int multiSampleCount, int surfaceFormat)
+    {
+        // WEBGPU-198: the cube twin of CreateRenderTarget2DEXT. Without it the default forwards to
+        // the format-less overload and drops the argument, so a cube would report the float format
+        // it was asked for while holding 8-bit texels -- MOD-107's silent substitution, in the one
+        // path image-based lighting depends on.
+        if (ClassifyRenderTargetFormatEXT(surfaceFormat) == RendererFormatVerdict::Unsupported)
+        {
+            throw System::NotSupportedException(
+                "CNA WebGPU: SurfaceFormat " + std::to_string(surfaceFormat) +
+                " has a WebGPU render-target format, but this adapter refused to create a "
+                "render-attachment texture of it.");
+        }
+        return std::make_unique<WebGPURenderTargetCubeRenderer>(*this, size, depthFormat,
+                                                              preserveContents, mipMap,
+                                                              multiSampleCount, surfaceFormat);
     }
 
     std::unique_ptr<ITexture3DRenderer> WebGPURenderer::CreateTexture3D(

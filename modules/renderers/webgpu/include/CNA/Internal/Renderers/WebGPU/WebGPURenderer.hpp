@@ -221,7 +221,7 @@ namespace CNA::Internal::Renderers::WebGPU
     public:
         WebGPURenderTargetRenderer(WebGPURenderer& owner, int width, int height,
                                   int depthFormat, bool preserveContents, bool mipMap = false,
-                                  int multiSampleCount = 0);
+                                  int multiSampleCount = 0, int surfaceFormat = 0);
         ~WebGPURenderTargetRenderer() override;
 
         WebGPURenderTargetRenderer(const WebGPURenderTargetRenderer&) = delete;
@@ -400,7 +400,7 @@ namespace CNA::Internal::Renderers::WebGPU
     public:
         WebGPURenderTargetCubeRenderer(WebGPURenderer& owner, int size, int depthFormat,
                                       bool preserveContents, bool mipMap,
-                                      int multiSampleCount = 0);
+                                      int multiSampleCount = 0, int surfaceFormat = 0);
         ~WebGPURenderTargetCubeRenderer() override;
 
         WebGPURenderTargetCubeRenderer(const WebGPURenderTargetCubeRenderer&) = delete;
@@ -1197,6 +1197,65 @@ namespace CNA::Internal::Renderers::WebGPU
          * @return True when this renderer can genuinely honour @p capability.
          */
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
+
+        /**
+         * @brief WEBGPU-198: whether a `RenderTarget2D` may be created with @p surfaceFormat here.
+         *
+         * Probed, not tabulated: a 1x1 `WGPUTextureUsage_RenderAttachment` texture of the real
+         * native format is created inside a `WGPUErrorFilter_Validation` scope, the same technique
+         * `Supports4xMsaa()` uses, so the answer describes the adapter in front of us rather than a
+         * spec table. `Color` is `Supported` without a probe -- it is the swap chain's own format,
+         * which the renderer is already rendering into.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return Supported, Unsupported, or Defer for a format with no render-target mapping.
+         */
+        [[nodiscard]] CNA::Internal::Renderers::RendererFormatVerdict
+        ClassifyRenderTargetFormatEXT(int surfaceFormat) const override;
+
+        /**
+         * @brief WEBGPU-198: the cached render-attachment probe behind
+         *        @ref ClassifyRenderTargetFormatEXT.
+         *
+         * @param format The native format to probe.
+         * @return Whether the device will create a render-attachment texture of it.
+         */
+        [[nodiscard]] bool ProbeRenderTargetFormatEXT(WGPUTextureFormat format) const;
+
+        /**
+         * @brief WEBGPU-198: creates a `RenderTarget2D` in the format it was actually asked for.
+         *
+         * `IGraphicsRenderer`'s default forwards to the format-less overload and drops the
+         * argument, which is what let a target be classified in one format and allocated in
+         * another. A format this adapter refuses is refused here by name.
+         *
+         * @param w Width in pixels.
+         * @param h Height in pixels.
+         * @param depthFormat XNA DepthFormat ordinal.
+         * @param preserveContents Whether the target's contents survive a rebind.
+         * @param mipMap Whether to allocate and regenerate a mip chain.
+         * @param multiSampleCount This target's own requested sample count.
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return The target renderer.
+         */
+        std::unique_ptr<IRenderTargetRenderer> CreateRenderTarget2DEXT(
+            int w, int h, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int surfaceFormat) override;
+
+        /**
+         * @brief WEBGPU-198: the cube twin of @ref CreateRenderTarget2DEXT.
+         *
+         * @param size Edge length in pixels.
+         * @param depthFormat XNA DepthFormat ordinal.
+         * @param preserveContents Whether the target's contents survive a rebind.
+         * @param mipMap Whether to allocate and regenerate a mip chain per face.
+         * @param multiSampleCount This target's own requested sample count.
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return The cube target renderer.
+         */
+        std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCubeEXT(
+            int size, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int surfaceFormat) override;
 
         /**
          * @brief WEBGPU-172: how many `VertexBufferBinding`s of one input rate this device takes.
@@ -2439,6 +2498,11 @@ namespace CNA::Internal::Renderers::WebGPU
         // Cached result of Supports4xMsaa()'s own real device-capability probe: -1 = not probed
         // yet, 0 = unsupported, 1 = supported.
         int msaa4xSupported_ = -1;
+
+        /// WEBGPU-198: cached results of the render-attachment probe, one entry per native format
+        /// actually asked about. Empty until something asks; a probe costs a 1x1 texture creation
+        /// inside a validation error scope, so it is worth caching but not worth pre-warming.
+        mutable std::unordered_map<std::uint32_t, bool> renderTargetFormatProbe_;
         // WEBGPU-58: the backbuffer's own multisampled colour attachment, only non-null while
         // sampleCount_ > 1 -- the swapchain's own per-frame texture (acquiredTexture_) becomes the
         // RESOLVE target every frame instead of being drawn into directly (see

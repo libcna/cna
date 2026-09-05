@@ -781,10 +781,13 @@ format it already recorded — and `Build3DPipelineEXT` reads those, with both f
 pipeline cache key. `PassDestination` already carried the values per target, and the SpriteBatch path
 had keyed on them since it was written; this is the 3D side catching up.
 
-Its **sample-count half is finished and proven** by `WEBGPU-165` below. Its **colour-format half is
-not**: every target this renderer can currently create carries the backbuffer's format, so
-`replayColorFormat_` has yet to differ from the value it replaced. `WEBGPU-198`/`199` supply the first
-case.
+Both halves are finished and proven — the sample count by `WEBGPU-165` below, the colour format by
+`WEBGPU-198`, which makes a non-`Color` target creatable. The measurement that matters for this
+section is the 3D-draw leg of `RenderTargetFormatAgreement`: a pipeline built against the swap
+chain's format and then used in a float target's pass is a **hard native error** on this pin
+(`"Render pipeline targets are incompatible with render pass"` — demonstrated the same day by the
+mip-blit bug `WEBGPU-164` found), so eight such draws landing is the key change working rather than
+an absence of evidence.
 
 The `WEBGPU-58` finding had to be settled first, because per-pass sample-count variants built from
 shared shader modules are exactly the reuse that task measured as silently wrong on this pin — no
@@ -802,6 +805,48 @@ is still queued, and the readback then returns an all-zero frame — precisely t
 fine, no validation error, only the pixels wrong" signature `WEBGPU-58` recorded. Waiting on
 `wgpuQueueOnSubmittedWorkDone` first is what made the answer trustworthy. That is a plausible
 explanation for the original finding, not a demonstrated one.
+
+## Render-target colour formats (2026-09-05, `WEBGPU-198`)
+
+`ClassifyRenderTargetFormatEXT` is overridden here and answered by a **device probe**, not a table: a
+1×1 `WGPUTextureUsage_RenderAttachment` texture of the real native format is created inside a
+`WGPUErrorFilter_Validation` scope — the technique `Supports4xMsaa()` already used — and the answer
+is cached per format. On this adapter all six float formats come back renderable, so WebGPU reports 8
+of 27 `SurfaceFormat` values renderable against EasyGL's 9.
+
+The map is the reference renderer's own eight-format set: `Single`→`R32Float`,
+`Vector2`→`RG32Float`, `Vector4`→`RGBA32Float`, `HalfSingle`→`R16Float`, `HalfVector2`→`RG16Float`,
+`HalfVector4`/`HdrBlendable`→`RGBA16Float`. `Color` is deliberately absent from it — it maps to the
+live `surfaceFormat_`, which keeps every existing `Color` target byte-identical to its earlier form.
+**`Rgba64` is absent for a different reason: WebGPU has no 16-bit UNORM colour format at all**, so
+there is nothing to map it to. That is a platform absence rather than an unimplemented path.
+
+`CreateRenderTarget2DEXT` is overridden so the target is **allocated in the format it was asked
+for** — `IGraphicsRenderer`'s default forwards to the format-less overload and drops the argument,
+which is exactly what would let a target be classified in one format and allocated in another — and
+an `Unsupported` format is refused there by name.
+
+**The readback is typed by the target's format.** It assumed four UNORM8 bytes per texel, which held
+only while a render target could only be `Color`; the width now comes from the format (2/4/8/16) and
+the BGRA swizzle applies to BGRA8 alone, since reordering a float texel's bytes would corrupt it.
+That was not optional: nine `HdrRenderTargetRoundTripTest` cases had been skipping on
+`SupportsSurfaceFormatAsRenderTargetEXT` and started running the moment float targets became
+creatable. Five of them failed against an earlier cut of this work that refused the float readback —
+a game could query the format, create the target, render HDR into it, and then not read it back,
+which is the shape `WEBGPU-163` exists to prevent. All nine pass now, including values above 1.0
+surviving, a multisampled float target resolving without clamping, and a float target generating a
+mip chain (this section and `WEBGPU-164` composing).
+
+The **cube** path carried the same defect and got the same fix: `CreateRenderTargetCubeEXT` was not
+overridden, so a `RenderTargetCube(HdrBlendable)` reported the float format it was asked for while
+holding 8-bit texels — MOD-107's silent substitution, in the one path image-based lighting depends
+on, and passing its own test only because that test does not read values back.
+
+One divergence is recorded rather than encoded: EasyGL samples an `R16Float` target back as
+(255,255,255) and `RG16Float` as (255,0,255), where WebGPU gives (255,0,0) for both — GL broadcasting
+a one-channel texture against WGSL's `texture_2d<f32>` returning `(r, 0, 0, 1)`. The shared test
+asserts the red channel only, which every format in that family carries, so it bakes in neither
+renderer's swizzle. Which one XNA means is `WEBGPU-199`/`200`'s to settle.
 
 ## Per-target MultiSampleCount (2026-09-05, `WEBGPU-165`)
 
