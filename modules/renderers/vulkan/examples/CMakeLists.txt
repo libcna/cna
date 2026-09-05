@@ -98,6 +98,32 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_DrawInstanced_3Instances COMMAND cna_test_vulkan_instanced
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-134: DrawUserPrimitives / DrawUserIndexedPrimitives on Vulkan.
+        # All four sources are renderer-agnostic (public XNA API only, zero renderer includes), so
+        # they run here unchanged -- the same reuse pattern as the other EasyGL sources above.
+        # These routes allocate a throwaway VertexBuffer per call (GraphicsDevice.cpp:1753+), which
+        # on Vulkan is a vkCreateBuffer/vkAllocateMemory per draw, so they are also VULKAN-392's
+        # exercising scene.
+        cna_vulkan_test(cna_test_vulkan_draw_user_primitives_vpc
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_draw_user_primitives_vpc_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DrawUserPrimitives_VPC COMMAND cna_test_vulkan_draw_user_primitives_vpc
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_draw_user_primitives_custom
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_draw_user_primitives_custom_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DrawUserPrimitives_CustomVertex COMMAND cna_test_vulkan_draw_user_primitives_custom
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_draw_user_indexed_primitives_vpc
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_draw_user_indexed_primitives_vpc_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DrawUserIndexedPrimitives_VPC COMMAND cna_test_vulkan_draw_user_indexed_primitives_vpc
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_draw_user_indexed_primitives_32
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_draw_user_indexed_primitives_32_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DrawUserIndexedPrimitives_32 COMMAND cna_test_vulkan_draw_user_indexed_primitives_32
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-347: the echoed multisample count must be the applied one
         cna_vulkan_test(cna_test_vulkan_applied_multisample
                         vulkan_applied_multisample_test.cpp)
