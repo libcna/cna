@@ -192,6 +192,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_MsaaModuleReuseProbe COMMAND cna_test_webgpu_msaa_module_reuse_probe
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plans/plan_webgpu.md WEBGPU-200: the two optional 32-bit-float adapter features. Every adapter
+    # available here HAS both, so the paths that depend on their absence would be branches no test
+    # executes; this one forces the renderer to report them absent and checks that the refusal fires,
+    # names the feature, and stays narrow. Reads the concrete WebGPURenderer, so it links
+    # WebGPU::WebGPU.
+    cna_webgpu_test(cna_test_webgpu_float32_features webgpu_float32_features_test.cpp)
+    target_link_libraries(cna_test_webgpu_float32_features PRIVATE WebGPU::WebGPU)
+    cna_register_renderer_test(NAME WebGPU_Float32Features COMMAND cna_test_webgpu_float32_features
+        TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 1105 (plans/plan_graphics.md Phase 80): GetOrCreatePipelineLitTextured3DVertexLit /
     # BasicEffect.PreferPerPixelLighting real dispatch.
     cna_webgpu_test(cna_test_webgpu_basiceffect_preferperpixellighting webgpu_basiceffect_preferperpixellighting_test.cpp)

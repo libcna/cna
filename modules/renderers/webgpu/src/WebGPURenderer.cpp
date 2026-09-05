@@ -857,6 +857,22 @@ namespace CNA::Internal::Renderers::WebGPU
         ///
         /// @param format The native colour format.
         /// @return Bytes per texel, or 0 for a format this renderer does not read back.
+        /// plans/plan_webgpu.md WEBGPU-200: whether a native colour format is one of the 32-bit
+        /// float formats whose FILTERING and BLENDING are optional adapter features.
+        ///
+        /// The 16-bit float formats are deliberately absent: `R16Float`/`RG16Float`/`RGBA16Float`
+        /// are renderable, filterable AND blendable in core WebGPU, which is why `WEBGPU-199` was
+        /// the cheap half of the family and this one is not.
+        ///
+        /// @param format The native colour format.
+        /// @return Whether it is a 32-bit float format.
+        [[nodiscard]] constexpr bool IsThirtyTwoBitFloatFormatEXT(WGPUTextureFormat format) noexcept
+        {
+            return format == WGPUTextureFormat_R32Float ||
+                   format == WGPUTextureFormat_RG32Float ||
+                   format == WGPUTextureFormat_RGBA32Float;
+        }
+
         [[nodiscard]] constexpr int BytesPerTexelEXT(WGPUTextureFormat format) noexcept
         {
             switch (format)
@@ -3258,14 +3274,30 @@ namespace CNA::Internal::Renderers::WebGPU
         // WEBGPU-144: request native block-compressed texture support when the adapter has it, so
         // BC1/2/3/7 (DXT/BC7) textures upload as blocks instead of being CPU-decompressed to RGBA8.
         bcSupported_ = wgpuAdapterHasFeature(adapter_, WGPUFeatureName_TextureCompressionBC) != 0;
-        std::array<WGPUFeatureName, 1> requiredFeatures{WGPUFeatureName_TextureCompressionBC};
+        // WEBGPU-200: the two 32-bit-float target features. Both are ordinary optional features --
+        // R32/RG32/RGBA32Float are RENDERABLE in core WebGPU without either, so their absence is
+        // never a reason to refuse the format; what they add is SAMPLING one with a filtering
+        // sampler (`Float32Filterable`) and BLENDING into one (`Float32Blendable`). Asked for when
+        // the adapter has them, and remembered either way so the paths that depend on them can say
+        // which one was missing rather than degrading in silence.
+        float32Filterable_ = wgpuAdapterHasFeature(adapter_, WGPUFeatureName_Float32Filterable) != 0;
+        float32Blendable_ = wgpuAdapterHasFeature(adapter_, WGPUFeatureName_Float32Blendable) != 0;
+
+        std::array<WGPUFeatureName, 3> requiredFeatures{};
+        std::size_t requiredFeatureCount = 0;
+        if (bcSupported_)
+            requiredFeatures[requiredFeatureCount++] = WGPUFeatureName_TextureCompressionBC;
+        if (float32Filterable_)
+            requiredFeatures[requiredFeatureCount++] = WGPUFeatureName_Float32Filterable;
+        if (float32Blendable_)
+            requiredFeatures[requiredFeatureCount++] = WGPUFeatureName_Float32Blendable;
 
         DeviceRequestState deviceState;
         WGPUDeviceDescriptor descriptor{};
         descriptor.label = StringView("CNA WebGPU Device");
-        if (bcSupported_)
+        if (requiredFeatureCount > 0)
         {
-            descriptor.requiredFeatureCount = requiredFeatures.size();
+            descriptor.requiredFeatureCount = requiredFeatureCount;
             descriptor.requiredFeatures = requiredFeatures.data();
         }
         descriptor.defaultQueue.label = StringView("CNA WebGPU Queue");
@@ -7847,6 +7879,31 @@ namespace CNA::Internal::Renderers::WebGPU
         return ClassifySurfaceFormatEXT(surfaceFormat);
     }
 
+    void WebGPURenderer::RequireFloat32SamplingAllowedEXT(const GpuDrawParams& params,
+                                                          const char* route) const
+    {
+        if (Float32FilterableEXT()) return;
+
+        // Point filtering is a non-filtering sampler, which needs no feature at all -- so the
+        // refusal is about the SamplerState as much as about the texture, and a game that sets
+        // TextureFilter::Point keeps working on an adapter without the feature.
+        const auto slotFilters = std::array<int, 2>{slotSamplers_[0].filter, slotSamplers_[1].filter};
+        const auto sources = std::array<const ITextureRenderer*, 2>{params.texture0, params.texture1};
+        for (std::size_t slot = 0; slot < sources.size(); ++slot)
+        {
+            if (slotFilters[slot] == 1) continue;   // XNA TextureFilter::Point
+            const auto* target = dynamic_cast<const WebGPURenderTargetRenderer*>(sources[slot]);
+            if (target == nullptr) continue;
+            if (!IsThirtyTwoBitFloatFormatEXT(target->ColorFormat())) continue;
+            throw System::NotSupportedException(
+                std::string("CNA WebGPU: sampling a 32-bit float render target (SurfaceFormat "
+                            "Single, Vector2 or Vector4) with a filtering SamplerState requires the "
+                            "adapter feature Float32Filterable, which this device does not have (") +
+                route + " route, texture slot " + std::to_string(slot) +
+                "). TextureFilter::Point samples such a target without it.");
+        }
+    }
+
     void WebGPURenderer::RequireSupportedFillModeEXT(PrimitiveType primitive,
                                                              const char* route) const
     {
@@ -7864,6 +7921,26 @@ namespace CNA::Internal::Renderers::WebGPU
         // silent solid fill is the outcome neither row will accept.
         (void) primitive;
         (void) route;
+
+        // WEBGPU-200: blending INTO a 32-bit float colour target is an optional adapter feature
+        // (`WGPUFeatureName_Float32Blendable`). The format is renderable without it, so its absence
+        // must refuse only this draw, by name -- ignoring the blend state instead would render an
+        // opaque overwrite while the caller believed it had asked for a blend.
+        //
+        // Checked HERE, at the public draw entry, rather than in Build3DPipelineEXT where it was
+        // first written. A pipeline builder only runs on a cache MISS, so the refusal fired for the
+        // first such draw and then silently stopped firing for every later one that hit the cache --
+        // caught by WebGPU_Float32Features check B, which blends into the same target twice.
+        if (!blendEnabled_ || Float32BlendableEXT()) return;
+        const WGPUTextureFormat targetFormat =
+            currentRenderTarget_ != nullptr ? currentRenderTarget_->ColorFormat()
+                                            : surfaceFormat_;
+        if (!IsThirtyTwoBitFloatFormatEXT(targetFormat)) return;
+        throw System::NotSupportedException(
+            std::string("CNA WebGPU: blending into a 32-bit float render target requires the "
+                        "adapter feature Float32Blendable, which this device does not have (") +
+            route + " route). The target itself is renderable and drawable; only a non-opaque "
+            "BlendState on it is refused.");
     }
 
     void WebGPURenderer::ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
@@ -7907,6 +7984,28 @@ namespace CNA::Internal::Renderers::WebGPU
 
     std::string_view WebGPURenderer::GetAdditionalLimitationsTextEXT() const
     {
+        // WEBGPU-200: the two float32 adapter features, when this device does not have them. Kept
+        // ahead of the sampler text below because a caller choosing a render-target format needs it
+        // before it chooses a sampler state. Both are ordinary optional features: R32/RG32/RGBA32
+        // Float stay RENDERABLE without either, so neither absence refuses the format itself.
+        if (!Float32FilterableEXT() || !Float32BlendableEXT())
+        {
+            if (!Float32FilterableEXT() && !Float32BlendableEXT())
+                return "This adapter has neither Float32Filterable nor Float32Blendable, so a "
+                       "32-bit float render target (Single, Vector2, Vector4) cannot be sampled "
+                       "with a filtering SamplerState and cannot be blended into. The formats "
+                       "themselves remain renderable, and a blend on one is refused by name rather "
+                       "than silently dropped.";
+            if (!Float32BlendableEXT())
+                return "This adapter has no Float32Blendable, so a non-opaque BlendState on a "
+                       "32-bit float render target (Single, Vector2, Vector4) is refused by name "
+                       "rather than silently rendered as an opaque overwrite. The formats remain "
+                       "renderable and drawable.";
+            return "This adapter has no Float32Filterable, so a 32-bit float texture (Single, "
+                   "Vector2, Vector4) may only be sampled with a non-filtering SamplerState. The "
+                   "formats remain renderable and readable back.";
+        }
+
         // WEBGPU-205. SamplerState.MipMapLevelOfDetailBias IS implemented here -- WGPUSamplerDescriptor
         // carries no lodBias field, but WGSL's textureSampleBias applies XNA's semantic exactly, and
         // every stock 3D family does so. What this text exists for is the three routes that do NOT,
@@ -9393,6 +9492,12 @@ namespace CNA::Internal::Renderers::WebGPU
         // vertex's semantic content from its byte count -- is now `SelectStockVertexShapeEXT`
         // asking the declaration, with the stride consulted only for the routes this task did not
         // convert (skinned, PBR) and for a buffer that carries no declaration at all.
+        // WEBGPU-200: sampling a 32-bit float texture with a FILTERING sampler needs the adapter
+        // feature Float32Filterable. Refused by name here rather than left to wgpu-native, which
+        // raises a validation error naming the native format -- true, but it names neither the XNA
+        // SurfaceFormat the caller chose nor the SamplerState that made it a filtering sample.
+        RequireFloat32SamplingAllowedEXT(params, route);
+
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
         const std::size_t stride = webgpuVb.Stride();
         // WEBGPU-172: the family is chosen from ALL the bound per-vertex declarations. The shared

@@ -1223,6 +1223,45 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] bool ProbeRenderTargetFormatEXT(WGPUTextureFormat format) const;
 
         /**
+         * @brief WEBGPU-200: whether 32-bit float colour targets may be blended into.
+         *
+         * The device feature, unless a test has forced it off -- see
+         * @ref DebugForceFloat32FeaturesAbsentEXT.
+         *
+         * @return Whether blending into an R32/RG32/RGBA32Float target is available.
+         */
+        [[nodiscard]] bool Float32BlendableEXT() const
+        {
+            return float32Blendable_ && !forceFloat32FeaturesAbsent_;
+        }
+
+        /**
+         * @brief WEBGPU-200: whether 32-bit float textures may be sampled with a filtering sampler.
+         *
+         * @return Whether `WGPUFeatureName_Float32Filterable` is in effect.
+         */
+        [[nodiscard]] bool Float32FilterableEXT() const
+        {
+            return float32Filterable_ && !forceFloat32FeaturesAbsent_;
+        }
+
+        /**
+         * @brief WEBGPU-200: makes this renderer behave as if the two float32 features were absent.
+         *
+         * Every adapter available to this project has both, so the refusal paths that depend on
+         * their absence would otherwise be unreachable code that no test ever executes -- a branch
+         * asserted only by reading it. This forces the flags off so those paths run; it does not
+         * remove the real device features, and what it therefore tests is CNA's own behaviour,
+         * which is the part that can be wrong.
+         *
+         * @param absent Whether to report both features absent.
+         */
+        CNAEXT void DebugForceFloat32FeaturesAbsentEXT(bool absent)
+        {
+            forceFloat32FeaturesAbsent_ = absent;
+        }
+
+        /**
          * @brief WEBGPU-198: creates a `RenderTarget2D` in the format it was actually asked for.
          *
          * `IGraphicsRenderer`'s default forwards to the format-less overload and drops the
@@ -1841,6 +1880,19 @@ namespace CNA::Internal::Renderers::WebGPU
          *         and @p primitive is a polygon topology.
          */
         void RequireSupportedFillModeEXT(PrimitiveType primitive, const char* route) const;
+
+        /**
+         * @brief WEBGPU-200: refuses a filtering sample of a 32-bit float target by name.
+         *
+         * `WGPUFeatureName_Float32Filterable` is what makes a filtering sampler legal on an
+         * R32/RG32/RGBA32Float texture. Without it wgpu-native raises a validation error naming the
+         * native format, which is true but names neither the XNA `SurfaceFormat` the caller chose
+         * nor the `SamplerState` that made the sample a filtering one.
+         *
+         * @param params The draw's parameters, whose texture slots are examined.
+         * @param route The public route name, for the diagnostic.
+         */
+        void RequireFloat32SamplingAllowedEXT(const GpuDrawParams& params, const char* route) const;
 
         /** @brief Appends @p index of @p family to the ordered stream at its public call. */
         void RecordDrawOrder(DrawFamily family, std::size_t index);
@@ -2498,6 +2550,18 @@ namespace CNA::Internal::Renderers::WebGPU
         // Cached result of Supports4xMsaa()'s own real device-capability probe: -1 = not probed
         // yet, 0 = unsupported, 1 = supported.
         int msaa4xSupported_ = -1;
+
+        /// WEBGPU-200: whether the device was created with `WGPUFeatureName_Float32Filterable`.
+        /// Without it a 32-bit float texture may only be sampled with a NON-filtering sampler --
+        /// the format is still renderable, so this gates the sampler, never the target.
+        bool float32Filterable_ = false;
+        /// WEBGPU-200: whether the device was created with `WGPUFeatureName_Float32Blendable`.
+        /// Without it a 32-bit float colour target may not be blended into; a blend state on such a
+        /// target is refused by name rather than silently ignored.
+        bool float32Blendable_ = false;
+        /// WEBGPU-200: test-only override making both float32 features report absent. See
+        /// `DebugForceFloat32FeaturesAbsentEXT`.
+        bool forceFloat32FeaturesAbsent_ = false;
 
         /// WEBGPU-198: cached results of the render-attachment probe, one entry per native format
         /// actually asked about. Empty until something asks; a probe costs a 1x1 texture creation

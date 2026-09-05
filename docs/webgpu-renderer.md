@@ -842,6 +842,29 @@ overridden, so a `RenderTargetCube(HdrBlendable)` reported the float format it w
 holding 8-bit texels — MOD-107's silent substitution, in the one path image-based lighting depends
 on, and passing its own test only because that test does not read values back.
 
+**32-bit float targets and their two optional features** (`WEBGPU-200`). `R32Float`, `RG32Float` and
+`RGBA32Float` are renderable in core WebGPU, but *sampling* one with a filtering sampler needs
+`WGPUFeatureName_Float32Filterable` and *blending* into one needs `Float32Blendable`. Both are
+requested at device creation when the adapter offers them — this one has both. Where they are
+absent, neither refuses the format: the targets stay renderable, drawable, clearable and readable,
+and only the feature-dependent operation is refused, **by name**. A non-opaque `BlendState` on such a
+target throws naming `Float32Blendable`; a filtering sample throws naming `Float32Filterable` and
+says that `TextureFilter::Point` samples it without the feature.
+`GetAdditionalLimitationsTextEXT()` names whichever is missing.
+
+Both refusals sit at the **public draw entry**, not in the pipeline builder. That distinction was
+found the hard way: a builder only runs on a cache miss, so a refusal written there fired for the
+first such draw and then silently stopped firing for every later one that hit the pipeline cache.
+`WebGPU_Float32Features` blends into the same target twice, which is what caught it. That test also
+exists because every adapter here *has* both features, so these branches would otherwise never
+execute — `DebugForceFloat32FeaturesAbsentEXT` makes the renderer report them absent without removing
+the real device features, so what runs is CNA's own decision-making.
+
+The row's alternative — binding an unfilterable-float view with a non-filtering sampler instead of
+refusing — is deliberately not implemented. It needs a second bind-group layout declaring
+`UnfilterableFloat`/`NonFiltering` and cannot be verified on any adapter available here, so a named
+refusal a caller can act on was chosen over an unverifiable bind path.
+
 One divergence is recorded rather than encoded: EasyGL samples an `R16Float` target back as
 (255,255,255) and `RG16Float` as (255,0,255), where WebGPU gives (255,0,0) for both — GL broadcasting
 a one-channel texture against WGSL's `texture_2d<f32>` returning `(r, 0, 0, 1)`. The shared test
