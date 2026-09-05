@@ -51,6 +51,9 @@ set(CNA_PARITY_FIXTURES
     # WEBGPU-174: the two AlphaTestEffect inputs the sweep cannot reach -- a null Texture, and
     # VertexColorEnabled combined with DiffuseColor.
     alpha_test_sources
+    # WEBGPU-175: DualTextureEffect's `color.rgb *= 2` doubling, the overlay, DiffuseColor, Alpha
+    # and the two null-texture fallbacks.
+    dual_texture_terms
     # WEBGPU-153: FillMode::WireFrame draws edges and leaves the interior empty.
     fill_mode_wireframe
     # WEBGPU-161: SamplerState.MaxMipLevel selects which mip level a sample comes from.

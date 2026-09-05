@@ -4275,8 +4275,11 @@ namespace CNA::Internal::Renderers::WebGPU
                             : StockVertexShapeEXT::AlphaTest;
         }
         const bool needsDualTexture = !needsAlphaTest && params.dualTexture;
-        if (needsDualTexture && hasUv &&
-            params.texture0 != nullptr && params.texture1 != nullptr)
+        // WEBGPU-175: as for alpha test one branch up, a missing texture is a BINDING question and
+        // not a shape one -- QueueDualTextureDraw now takes the neutral-white default for either
+        // layer, so requiring both here would only push a legitimate dual-texture vertex into the
+        // stride-derived ladder that cannot represent it.
+        if (needsDualTexture && hasUv)
         {
             return hasColor ? StockVertexShapeEXT::DualTexturedColored
                             : StockVertexShapeEXT::DualTextured;
@@ -10743,9 +10746,12 @@ namespace CNA::Internal::Renderers::WebGPU
         // WEBGPU-155/159: no stride requirement -- the canonical XNA dual-texture vertex is
         // `PositionNormalDualTexture` at stride 40, which this route used to refuse outright.
         const std::size_t stride = webgpuVb.Stride();
-        if (params.texture0 == nullptr || params.texture1 == nullptr)
-            throw std::invalid_argument("CNA WebGPU: QueueDualTextureDraw requires both texture0 "
-                                        "and texture1 to be bound");
+        // WEBGPU-175: an unbound layer is no longer refused. FNA's PSDualTexture is
+        // `color.rgb *= 2; color *= overlay * pin.Diffuse`, so opaque white is the identity for
+        // either factor, and EasyGLRenderer binds exactly that from EnsureDefaultWhiteTexture()
+        // when a layer is missing -- the two renderers now agree to the byte on a null `Texture`,
+        // a null `Texture2` and on both null at once (parity_dual_texture_terms).
+        EnsurePbrDefaultTextures();
 
         DualTextureDrawCommand command;
         command.hasVertexColor = (shape == StockVertexShapeEXT::DualTexturedColored);
@@ -10781,7 +10787,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // in one frame differ, so it cannot be read as frame-global at replay).
         command.stencil = CaptureStencilStateEXT();
         command.stencilRef = referenceStencil_;
-        command.texture0 = ResolveSamplable(params.texture0);
+        command.texture0 = params.texture0 != nullptr
+            ? ResolveSamplable(params.texture0)
+            : ResolveSamplable(pbrDefaultWhiteTexture_.get());
         // WEBGPU-82: real per-slot SamplerState (slot 0) instead of the struct's hardcoded
         // Linear/Clamp/Clamp defaults -- see ApplySamplerState().
         command.textureFilter = slotSamplers_[0].filter;
@@ -10790,7 +10798,9 @@ namespace CNA::Internal::Renderers::WebGPU
         command.addressW = slotSamplers_[0].addressW;  // WEBGPU-160
         command.maxMipLevel = slotSamplers_[0].maxMipLevel;  // WEBGPU-161
         command.maxAnisotropy = slotSamplers_[0].maxAnisotropy;
-        command.texture1 = ResolveSamplable(params.texture1);
+        command.texture1 = params.texture1 != nullptr
+            ? ResolveSamplable(params.texture1)
+            : ResolveSamplable(pbrDefaultWhiteTexture_.get());
         // REMED-GFX-172: and the SECOND layer's own slot, captured here for the same reason. Both
         // descriptions travel with the command, so replay never reads live sampler state.
         command.texture1Filter = slotSamplers_[1].filter;
