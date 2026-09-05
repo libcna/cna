@@ -98,6 +98,12 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_DrawInstanced_3Instances COMMAND cna_test_vulkan_instanced
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-347: the echoed multisample count must be the applied one
+        cna_vulkan_test(cna_test_vulkan_applied_multisample
+                        vulkan_applied_multisample_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_AppliedMultiSampleCount COMMAND cna_test_vulkan_applied_multisample
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-025: what AcquireThreadContextLeaseEXT() means here, and what it does not
         cna_vulkan_test(cna_test_vulkan_thread_context_lease
                         vulkan_thread_context_lease_test.cpp)

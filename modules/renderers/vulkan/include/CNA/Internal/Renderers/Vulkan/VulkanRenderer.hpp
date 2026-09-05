@@ -1526,6 +1526,25 @@ namespace CNA::Internal::Renderers::Vulkan
         // cascading invalidation of live render targets is tracked separately as a follow-up.
         int ApplyMultiSampleCount(int requestedMultiSampleCount) override;
         [[nodiscard]] int GetMultiSampleCount() const override;
+        /**
+         * @brief Reports the multisample count actually in effect, ignoring the request.
+         *
+         * plans/plan_vulkan.md `VULKAN-347`. `GraphicsDevice` writes this value back into
+         * `PresentationParameters` after construction, so the identity default let a request the
+         * device never applied be echoed to the game -- ask for 3 on any device and
+         * `PickSampleCount` gives 2 while the identity reported 3. The argument is deliberately
+         * unused, matching GDI's override: both call sites pass the current request and use the
+         * answer as a write-back, so the question is *what is in effect*, not *what would this
+         * request become*.
+         *
+         * @param requestedMultiSampleCount Ignored.
+         * @return The applied count; 0 when no multisampling is in effect, as XNA spells it.
+         */
+        [[nodiscard]] int GetAppliedMultiSampleCountEXT(int requestedMultiSampleCount) const override
+        {
+            (void)requestedMultiSampleCount;
+            return GetMultiSampleCount();
+        }
         // REMED-GFX-091 test diagnostic: total graphics-pipeline cache entries. BlendFactor's
         // RGBA value is dynamic and must never increase this count; only static state does.
         [[nodiscard]] std::size_t GetGraphicsPipelineCacheEntryCountEXT() const noexcept
