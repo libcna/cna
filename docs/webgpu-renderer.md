@@ -953,7 +953,19 @@ mip chain, renders correctly). Baking this Phase-2 path exposed and fixed a comp
 a sub-4x4 tail mip (2x2/1x1) must be written with its **block-aligned** copy extent (`ceil(dim/4)*4`),
 which wgpu-native validates against, not its logical size -- Phase 1's single 4x4 level never hit it.
 
-**Block compression is `Texture2D`-only; a `TextureCube` refuses it at construction** (`WEBGPU-163`).
+**Block-compressed `TextureCube` works end to end** (`WEBGPU-206`). `CreateTextureCube` passes the
+requested format through — it used to discard it, which is why every cube was RGBA8 whatever it was
+asked for — and the cube is classified by the *same* `ClassifyWebGPUTextureFormat` the 2D path uses:
+a cube here is a six-layer 2D texture plus a cube view, and the BC feature does not restrict block
+storage to non-array 2D. Blocks upload per face and per mip through `SetCompressedDataEXT`, whole
+level at a time; `GetData` returns them **decoded**, through the framework's own `DxtUtil`/`Bc7Util`,
+because that is what the shared contract asks for and decoding stored blocks is not fabrication. A
+DDS/XNB cube keeps its blocks, since the cube content reader has always gated on
+`IsCompressedCubeTransferFormatEXT`, which this renderer now overrides to match its 2D answer.
+`WEBGPU-163`'s refusal survives exactly where it should: on a device without the BC feature.
+
+(What follows is the state before that, kept because it explains why the refusal existed.)
+**Block compression was `Texture2D`-only; a `TextureCube` refused it at construction** (`WEBGPU-163`).
 `CreateTextureCube` discards the requested `surfaceFormat` and `WebGPUTextureCubeRenderer` stores RGBA8,
 so the support above does not extend to a cube. Until `WEBGPU-163`, one classifier answered for both
 resource kinds, and a `TextureCube(device, size, mipMap, SurfaceFormat::Dxt1)` therefore **constructed**

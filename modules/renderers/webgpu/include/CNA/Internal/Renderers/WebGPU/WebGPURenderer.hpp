@@ -325,7 +325,8 @@ namespace CNA::Internal::Renderers::WebGPU
     class WebGPUTextureCubeRenderer final : public ITextureCubeRenderer, public IWebGPUCubeSamplable
     {
     public:
-        WebGPUTextureCubeRenderer(WebGPURenderer& owner, int size, bool mipMap);
+        WebGPUTextureCubeRenderer(WebGPURenderer& owner, int size, bool mipMap,
+                                  int surfaceFormat = 0);
         ~WebGPUTextureCubeRenderer() override;
 
         WebGPUTextureCubeRenderer(const WebGPUTextureCubeRenderer&) = delete;
@@ -337,6 +338,26 @@ namespace CNA::Internal::Renderers::WebGPU
         /// Those rejections used to be `std::out_of_range`/`std::invalid_argument` thrown from a
         /// renderer, which escaped the public API as raw std exceptions instead of the shared
         /// layer's own deterministic `System::NotSupportedException`.
+        /**
+         * @brief WEBGPU-206: uploads one cube face's mip level as raw block-compressed blocks.
+         *
+         * `TextureCube::SetData`'s compressed overload has already validated block alignment and
+         * computed the exact payload size, so this performs the native copy and keeps the blocks as
+         * the authoritative store a readback would need.
+         *
+         * @param face Cube face index, 0..5.
+         * @param level Mip level.
+         * @param x Left edge in texels; must be 0.
+         * @param y Top edge in texels; must be 0.
+         * @param w Width in texels; must be the level's full size.
+         * @param h Height in texels; must be the level's full size.
+         * @param data The blocks.
+         * @param dataLength Size of @p data in bytes.
+         * @return Whether the whole level was stored.
+         */
+        [[nodiscard]] bool SetCompressedDataEXT(int face, int level, int x, int y, int w, int h,
+                                                const void* data, int dataLength) override;
+
         [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
                                    const void* data, int dataLength) override;
         /// WEBGPU-113: real per-face CPU readback, closing this class's former no-op
@@ -365,6 +386,21 @@ namespace CNA::Internal::Renderers::WebGPU
         std::shared_ptr<const WebGPUSampledResourceEXT> sampled_;
         int size_ = 0;
         int mipLevels_ = 1;
+        /**
+         * @brief WEBGPU-206: this cube's requested `SurfaceFormat` and what it means natively.
+         *
+         * A cube used to be RGBA8 whatever it was asked for, which is why `WEBGPU-163` had to stop
+         * the format query promising otherwise. The pieces mirror `WebGPUTextureRenderer`'s exactly:
+         * `blockBytes_` is bytes per 4x4 block (8 for BC1, 16 for BC2/3/7) and `compressedLevels_`
+         * is the authoritative per-face, per-mip block store the framework's `GetData` reads back,
+         * because a compressed level cannot be recovered from the GPU as blocks on every backend.
+         */
+        int surfaceFormat_ = 0;
+        WGPUTextureFormat wgpuFormat_ = WGPUTextureFormat_RGBA8Unorm;
+        bool compressed_ = false;
+        int blockBytes_ = 4;
+        /// Indexed `[face * mipLevels_ + level]`, so one flat vector covers all six faces.
+        std::vector<std::vector<std::uint8_t>> compressedLevels_;
     };
 
     /// WEBGPU-114: off-screen render target backing a RenderTargetCube -- the cube-map sibling of
@@ -1563,6 +1599,19 @@ namespace CNA::Internal::Renderers::WebGPU
          * device creation); the framework then routes SetData/GetData through the block path.
          */
         [[nodiscard]] bool IsCompressedTransferFormatEXT(int surfaceFormat) const override;
+
+        /**
+         * @brief WEBGPU-206: whether a `TextureCube` transfers @p surfaceFormat as raw BC blocks.
+         *
+         * The same answer as the 2D query. A cube in WebGPU is a six-layer 2D texture plus a cube
+         * view, and the BC feature does not restrict block-compressed storage to non-array 2D, so
+         * there is no reason for the two to differ -- and while they did, `WEBGPU-163` had to refuse
+         * a BC cube at construction to stop the format query promising what `SetData` would refuse.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return Whether a cube stores this format as blocks here.
+         */
+        [[nodiscard]] bool IsCompressedCubeTransferFormatEXT(int surfaceFormat) const override;
 
         /**
          * @brief WEBGPU-144 Phase 2: WebGPU keeps loaded block-compressed content compressed.

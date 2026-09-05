@@ -113,6 +113,7 @@ exactly 1 or 0, a point-sampled texel).
 | `multi_stream_split` | `WEBGPU-172` | A vertex split across two `VertexBufferBinding`s (position-only at stride 12, colour-only at stride 4) renders the same picture as the same vertex in one packed stride-16 buffer, and each binding's `VertexOffset` is converted with its own stride. |
 | `render_target_mip` | `WEBGPU-164` | A `mipMap: true` `RenderTarget2D` has a real chain: `GetData` at both ends returns the drawn quadrants and their regenerated mean, and sampling the target unrestricted versus pinned to its coarsest level gives materially different pictures. |
 | `hdr_render_target` | `WEBGPU-199` | An `HdrBlendable` target keeps values above 1.0: drawn at half tint, a target holding 2.0 saturates at 255 while one holding 1.0 gives 128, so a target that clamped its own storage renders both columns the same and fails. |
+| `compressed_cube` | `WEBGPU-206` | A `Dxt1` `TextureCube` stores blocks, reads back decoded, and samples exactly like the RGBA8 cube it encodes. **The only fixture whose oracle is internal rather than cross-renderer**: both quads are rendered offscreen at identical geometry so the reflection is the same for both cubes, but the reflection *direction* still differs between renderers (pixel-centre convention, `WEBGPU-187`), so its frames are deliberately not byte-comparable across renderers. |
 | `fill_mode_wireframe` | `WEBGPU-153` | `FillMode::WireFrame` draws all three triangle edges and leaves the interior empty, while `FillMode::Solid` fills it. |
 
 ## Adding a renderer

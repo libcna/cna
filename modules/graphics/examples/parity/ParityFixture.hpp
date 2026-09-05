@@ -330,6 +330,42 @@ namespace CNA::Parity
         }
 
         /**
+         * @brief Asserts two regions hold the SAME colour, within a tolerance.
+         *
+         * plans/plan_webgpu.md WEBGPU-206. The inverse of @ref ExpectDistinct, and the shape a
+         * fixture needs when its oracle is another region of the same frame rather than a value
+         * written into the file -- "this encoding samples like the thing it encodes". Pair it with
+         * an `ExpectDistinct` against the background: two regions that both rendered nothing are
+         * trivially equal, and that comparison would prove nothing.
+         *
+         * @param label What this check proves.
+         * @param a The first region.
+         * @param b The second region.
+         * @param tolerance Per-channel absolute tolerance between the two means.
+         * @return Whether the check passed.
+         */
+        bool ExpectSameRegion(const char* label,
+                              const Microsoft::Xna::Framework::Rectangle& a,
+                              const Microsoft::Xna::Framework::Rectangle& b,
+                              int tolerance)
+        {
+            using Microsoft::Xna::Framework::Color;
+            const Color first = Average(a);
+            const Color second = Average(b);
+            const auto close = [tolerance](int x, int y) { return std::abs(x - y) <= tolerance; };
+            const bool pass = close(first.getRProperty(), second.getRProperty()) &&
+                              close(first.getGProperty(), second.getGProperty()) &&
+                              close(first.getBProperty(), second.getBProperty());
+            std::printf("[%s] %s: (%d,%d,%d) vs (%d,%d,%d), tolerance %d\n",
+                        pass ? "PASS" : "FAIL", label,
+                        first.getRProperty(), first.getGProperty(), first.getBProperty(),
+                        second.getRProperty(), second.getGProperty(), second.getBProperty(),
+                        tolerance);
+            if (!pass) MarkFailedEXT();
+            return pass;
+        }
+
+        /**
          * @brief Asserts two regions differ by at least @p minDelta in some channel.
          *
          * This is the assertion that stops "both renderers drew nothing" from passing: a fixture

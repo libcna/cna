@@ -33,6 +33,9 @@ set(CNA_PARITY_FIXTURES
     # WEBGPU-199: an HdrBlendable render target keeps values above 1.0, visible in 8-bit output
     # through a half tint, and both renderers agree on the sampled result.
     hdr_render_target
+    # WEBGPU-206: a DXT1 TextureCube stores blocks, reads back decoded, and samples exactly like the
+    # RGBA8 cube it encodes.
+    compressed_cube
     # WEBGPU-153: FillMode::WireFrame draws edges and leaves the interior empty.
     fill_mode_wireframe
     # WEBGPU-161: SamplerState.MaxMipLevel selects which mip level a sample comes from.

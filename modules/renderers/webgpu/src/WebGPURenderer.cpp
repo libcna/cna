@@ -36,6 +36,8 @@
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"  // WEBGPU-142: Effect::GetEffectRendererPtr()
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"  // WEBGPU-144: BC format classify
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
+#include "CNA/Internal/Graphics/Bc7Util.hpp"
+#include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "System/NotSupportedException.hpp"
 
 // plans/plan_webgpu.md WEBGPU-201: `WGPUNativeFeature_TextureFormat16bitNorm`, which is what makes
@@ -1688,11 +1690,31 @@ namespace CNA::Internal::Renderers::WebGPU
     // CalculateCubeMipLevels(size) mip-count convention. A WebGPU cube map is a plain
     // WGPUTextureDimension_2D texture with 6 array layers; only the *view* (created below with
     // WGPUTextureViewDimension_Cube) makes it sampleable as texture_cube<f32> in WGSL.
-    WebGPUTextureCubeRenderer::WebGPUTextureCubeRenderer(WebGPURenderer& owner, int size, bool mipMap)
+    WebGPUTextureCubeRenderer::WebGPUTextureCubeRenderer(WebGPURenderer& owner, int size, bool mipMap,
+                                                        int surfaceFormat)
         : owner_(&owner), size_(size)
     {
         if (size_ <= 0)
             throw std::invalid_argument("CNA WebGPU: TextureCube size must be positive");
+
+        // WEBGPU-206: the requested format, natively. A cube in WebGPU is a 2D texture with six
+        // array layers plus a cube view, and WGPUFeatureName_TextureCompressionBC does not restrict
+        // BC to non-array 2D -- so the same classifier the 2D path uses answers here unchanged.
+        const WebGPUTexFormatInfo info = ClassifyWebGPUTextureFormat(surfaceFormat);
+        surfaceFormat_ = surfaceFormat;
+        wgpuFormat_ = info.format;
+        compressed_ = info.compressed;
+        blockBytes_ = info.blockBytes;
+
+        // A block-compressed cube's edge must be a multiple of the 4-texel block: a partial block
+        // has no representation to upload, and the framework has already computed a level count
+        // from the same edge. Refused here rather than accepted and then failed per face.
+        if (compressed_ && (size_ % 4) != 0)
+        {
+            throw System::NotSupportedException(
+                "CNA WebGPU: a block-compressed TextureCube's size must be a multiple of 4 (the BC "
+                "block edge); " + std::to_string(size_) + " is not.");
+        }
 
         mipLevels_ = 1;
         if (mipMap)
@@ -1700,6 +1722,8 @@ namespace CNA::Internal::Renderers::WebGPU
             int s = size_;
             while (s > 1) { s = std::max(1, s / 2); ++mipLevels_; }
         }
+        if (compressed_)
+            compressedLevels_.resize(static_cast<std::size_t>(6 * mipLevels_));
 
         WGPUTextureDescriptor descriptor{};
         descriptor.label = StringView("CNA WebGPU TextureCube");
@@ -1708,11 +1732,15 @@ namespace CNA::Internal::Renderers::WebGPU
         // GenerateMipsCubeFace()'s render-pass-based mip blit -- see that method's own doc
         // comment; only actually used when mipLevels_ > 1, declared unconditionally since usage
         // flags are fixed at texture-creation time.
+        // WEBGPU-206: a block-compressed cube is never a render attachment and never mip-generated
+        // (its mips arrive pre-compressed), so RenderAttachment is dropped for it -- exactly the
+        // choice WebGPUTextureRenderer makes for a compressed Texture2D.
         descriptor.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst |
-                           WGPUTextureUsage_CopySrc | WGPUTextureUsage_RenderAttachment;
+                           WGPUTextureUsage_CopySrc |
+                           (compressed_ ? WGPUTextureUsage_None : WGPUTextureUsage_RenderAttachment);
         descriptor.dimension = WGPUTextureDimension_2D;
         descriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(size_), static_cast<std::uint32_t>(size_), 6};
-        descriptor.format = WGPUTextureFormat_RGBA8Unorm;
+        descriptor.format = wgpuFormat_;
         descriptor.mipLevelCount = static_cast<std::uint32_t>(mipLevels_);
         descriptor.sampleCount = 1;
         texture_ = wgpuDeviceCreateTexture(owner.Device(), &descriptor);
@@ -1721,7 +1749,7 @@ namespace CNA::Internal::Renderers::WebGPU
 
         WGPUTextureViewDescriptor viewDescriptor{};
         viewDescriptor.label = StringView("CNA WebGPU TextureCube View");
-        viewDescriptor.format = WGPUTextureFormat_RGBA8Unorm;
+        viewDescriptor.format = wgpuFormat_;
         viewDescriptor.dimension = WGPUTextureViewDimension_Cube;
         viewDescriptor.baseMipLevel = 0;
         viewDescriptor.mipLevelCount = static_cast<std::uint32_t>(mipLevels_);
@@ -1760,6 +1788,11 @@ namespace CNA::Internal::Renderers::WebGPU
         if (data == nullptr || w <= 0 || h <= 0) return false;
         const int levelSize = MipDim(size_, level);
         if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
+        // WEBGPU-206: a compressed cube's blocks arrive through SetCompressedDataEXT, which is
+        // the method TextureCube::SetData's compressed overload calls. This one is the RGBA8 route
+        // and must not pretend to serve a block format.
+        if (compressed_) return false;
+
         const std::size_t required = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u;
         if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required) return false;
 
@@ -1795,6 +1828,54 @@ namespace CNA::Internal::Renderers::WebGPU
     // WEBGPU-113: real per-face CPU readback, same staged-copy/row-alignment/async-map technique
     // as WebGPUTextureRenderer::GetData() (WEBGPU-51) -- origin.z = face selects the array layer,
     // matching SetData()'s own established convention above. Always RGBA8Unorm, so no BGRA swap.
+    bool WebGPUTextureCubeRenderer::SetCompressedDataEXT(int face, int level, int x, int y,
+                                                         int w, int h,
+                                                         const void* data, int dataLength)
+    {
+        // WEBGPU-206: the block route. TextureCube::SetData's compressed overload has already
+        // checked block alignment and computed the exact payload size, so what is left here is the
+        // native copy and keeping the blocks as the authoritative store.
+        if (!compressed_) return false;
+        if (face < 0 || face >= 6) return false;
+        if (level < 0 || level >= mipLevels_) return false;
+        if (data == nullptr || w <= 0 || h <= 0) return false;
+        const int levelSize = MipDim(size_, level);
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
+        // Whole-level only. A block-aligned sub-rectangle is expressible natively, but the block
+        // STORE this renderer keeps for readback is per level, so accepting a partial write would
+        // make that store disagree with the texture. Refused rather than half-tracked.
+        if (x != 0 || y != 0 || w != levelSize || h != levelSize) return false;
+
+        const int blockCols = (w + 3) / 4;
+        const int blockRows = (h + 3) / 4;
+        const std::size_t byteCount = static_cast<std::size_t>(blockCols) * blockRows *
+                                      static_cast<std::size_t>(blockBytes_);
+        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < byteCount) return false;
+
+        const auto* blocks = static_cast<const std::uint8_t*>(data);
+        compressedLevels_[static_cast<std::size_t>(face * mipLevels_ + level)]
+            .assign(blocks, blocks + byteCount);
+
+        WGPUTexelCopyTextureInfo destination{};
+        destination.texture = texture_;
+        destination.mipLevel = static_cast<std::uint32_t>(level);
+        destination.origin = WGPUOrigin3D{0, 0, static_cast<std::uint32_t>(face)};
+        destination.aspect = WGPUTextureAspect_All;
+
+        WGPUTexelCopyBufferLayout layout{};
+        layout.bytesPerRow = static_cast<std::uint32_t>(blockCols * blockBytes_);
+        layout.rowsPerImage = static_cast<std::uint32_t>(blockRows);
+        // WEBGPU-144's finding, per cube face: the copy extent must be the BLOCK-ALIGNED physical
+        // size, not the logical texel size, or a sub-4x4 tail mip is rejected as "Copy width is not
+        // a multiple of block width".
+        const WGPUExtent3D extent{static_cast<std::uint32_t>(blockCols * 4),
+                                  static_cast<std::uint32_t>(blockRows * 4), 1};
+        wgpuQueueWriteTexture(owner_->Queue(), &destination, blocks, byteCount, &layout, &extent);
+        // No mip generation: a compressed cube's mips arrive pre-compressed, and the render-pass
+        // blit cascade could not write into a BC texture anyway -- it is not a render attachment.
+        return true;
+    }
+
     bool WebGPUTextureCubeRenderer::GetData(int face, int level, int x, int y, int w, int h,
                                             void* data, int dataLength) const
     {
@@ -1808,6 +1889,65 @@ namespace CNA::Internal::Renderers::WebGPU
             throw std::out_of_range("CNA WebGPU: TextureCube.GetData: mip level out of range");
 
         const int levelSize = MipDim(size_, level);
+
+        // WEBGPU-206: this readback's contract is tightly packed RGBA8 rows, and -- unlike
+        // `Texture2D`, which has `GetCompressedDataBytes` -- `TextureCube` has no block-shaped
+        // GetData to route a compressed face to. The shared contract is explicit about what must
+        // happen instead: `TextureCubeTest.SetDataCompressedBytesUploadsAnEntireDxt1Face` uploads
+        // DXT1 blocks and expects `GetData(Color*)` to return the DECODED texels. That is not
+        // fabrication -- the blocks are the real stored content and decoding them is a defined,
+        // lossless-in-both-directions operation -- so this decodes from the block store rather than
+        // refusing. The decoders are the framework's own, shared with every other renderer that
+        // stores blocks, so a decoded cube face reads identically wherever it is read.
+        if (compressed_)
+        {
+            const std::size_t index = static_cast<std::size_t>(face * mipLevels_ + level);
+            if (index >= compressedLevels_.size() || compressedLevels_[index].empty())
+                return false;
+            const std::vector<std::uint8_t>& blocks = compressedLevels_[index];
+
+            using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+            std::vector<std::uint8_t> rgba;
+            switch (static_cast<SurfaceFormat>(surfaceFormat_))
+            {
+            case SurfaceFormat::Dxt1:
+                rgba = CNA::Internal::Graphics::DxtUtil::DecompressDxt1(
+                    blocks.data(), blocks.size(), levelSize, levelSize);
+                break;
+            case SurfaceFormat::Dxt3:
+                rgba = CNA::Internal::Graphics::DxtUtil::DecompressDxt3(
+                    blocks.data(), blocks.size(), levelSize, levelSize);
+                break;
+            case SurfaceFormat::Dxt5:
+            case SurfaceFormat::Dxt5SrgbEXT:
+                rgba = CNA::Internal::Graphics::DxtUtil::DecompressDxt5(
+                    blocks.data(), blocks.size(), levelSize, levelSize);
+                break;
+            case SurfaceFormat::Bc7EXT:
+            case SurfaceFormat::Bc7SrgbEXT:
+                rgba = CNA::Internal::Graphics::Bc7Util::DecompressBc7(
+                    blocks.data(), blocks.size(), levelSize, levelSize);
+                break;
+            default:
+                // A compressed format with no decoder here refuses rather than inventing texels.
+                return false;
+            }
+            if (rgba.size() < static_cast<std::size_t>(levelSize) * levelSize * 4u) return false;
+
+            const std::size_t requiredLength =
+                static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u;
+            if (dataLength < 0 || static_cast<std::size_t>(dataLength) < requiredLength)
+                return false;
+            auto* out = static_cast<std::uint8_t*>(data);
+            for (int row = 0; row < h; ++row)
+            {
+                std::memcpy(out + static_cast<std::size_t>(row) * w * 4u,
+                            rgba.data() + (static_cast<std::size_t>(y + row) * levelSize + x) * 4u,
+                            static_cast<std::size_t>(w) * 4u);
+            }
+            return true;
+        }
+
         const auto bytesPerRow = AlignBytesPerRow(static_cast<std::uint32_t>(levelSize) * 4u);
         const std::uint64_t bufferSize = static_cast<std::uint64_t>(bytesPerRow) * static_cast<std::uint64_t>(levelSize);
 
@@ -7899,6 +8039,15 @@ namespace CNA::Internal::Renderers::WebGPU
         return bcSupported_ && ClassifyWebGPUTextureFormat(surfaceFormat).compressed;
     }
 
+    bool WebGPURenderer::IsCompressedCubeTransferFormatEXT(int surfaceFormat) const
+    {
+        // WEBGPU-206: the same answer as the 2D route, which is the point of the row. A cube stores
+        // BC blocks natively now, so the cube content reader (TextureCubeContentTypeReader, which
+        // has always gated on THIS query rather than the 2D one) keeps a DDS/XNB cube compressed
+        // instead of decoding it to Color.
+        return IsCompressedTransferFormatEXT(surfaceFormat);
+    }
+
     bool WebGPURenderer::LoadsCompressedContentNativelyEXT() const
     {
         // WEBGPU-144 Phase 2: the content loaders keep DXT/BC content compressed. The specific
@@ -7918,13 +8067,14 @@ namespace CNA::Internal::Renderers::WebGPU
 
     RendererFormatVerdict WebGPURenderer::ClassifyTextureCubeFormatEXT(int surfaceFormat) const
     {
-        // WEBGPU-163, interim. The 2D BC support WEBGPU-144 delivered has no cube counterpart yet:
-        // CreateTextureCube discards the format and WebGPUTextureCubeRenderer stores RGBA8 only. So
-        // the same answer for both kinds promised a format at construction that every SetData
-        // refused -- the exact shape a capability query exists to prevent. Refuse it here instead,
-        // by name, and let WEBGPU-206 replace this with the real cube storage path.
-        if (ClassifyWebGPUTextureFormat(surfaceFormat).compressed)
-            return RendererFormatVerdict::Unsupported;
+        // WEBGPU-163 refused every block-compressed format here, because CreateTextureCube
+        // discarded the requested format and the cube stored RGBA8 -- so a promise made at
+        // construction was contradicted by every SetData. WEBGPU-206 removed the cause rather than
+        // the symptom: a cube is now allocated in the format it was asked for, and BC works on a
+        // cube for the same reason it works on a Texture2D (a cube is a six-layer 2D texture plus a
+        // cube view, and WGPUFeatureName_TextureCompressionBC does not restrict BC to non-array 2D).
+        // The verdict is therefore the same one the 2D path gives -- including its device-feature
+        // gate, so 163's refusal survives exactly where it should: on a device without BC.
         return ClassifySurfaceFormatEXT(surfaceFormat);
     }
 
@@ -9345,9 +9495,11 @@ namespace CNA::Internal::Renderers::WebGPU
     }
 
     std::unique_ptr<ITextureCubeRenderer> WebGPURenderer::CreateTextureCube(
-        int size, bool mipMap, int /*surfaceFormat*/)
+        int size, bool mipMap, int surfaceFormat)
     {
-        return std::make_unique<WebGPUTextureCubeRenderer>(*this, size, mipMap);
+        // WEBGPU-206: the format was discarded here, which is why every cube was RGBA8 whatever it
+        // was asked for and why WEBGPU-163 had to stop the format query promising otherwise.
+        return std::make_unique<WebGPUTextureCubeRenderer>(*this, size, mipMap, surfaceFormat);
     }
 
     // WEBGPU-114: this renderer's first real RenderTargetCube support -- see
