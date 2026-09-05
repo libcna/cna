@@ -13,6 +13,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <vector>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -26,6 +27,8 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentProcessorContext.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/PixelBitmapContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/TextureContent.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/StockMaterials.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Processors/MaterialProcessor.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/PassThroughProcessor.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/ProcessorEnums.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/TextureProcessor.hpp"
@@ -116,7 +119,22 @@ namespace
             const std::size_t end = text.find(')', core);
             text = text.substr(0, core) + (end == std::string::npos ? "" : text.substr(end + 1));
         }
-        return text;
+        // The runtime resolved every relative reference against its own working directory; that
+        // drive letter is a property of the host, not of XNA.
+        static const std::regex windowsPath("[A-Za-z]:\\\\[^ <\"\\n]*");
+        std::string reduced;
+        std::size_t copied = 0;
+        for (auto it = std::sregex_iterator(text.begin(), text.end(), windowsPath); it != std::sregex_iterator();
+             ++it)
+        {
+            reduced += text.substr(copied, static_cast<std::size_t>(it->position()) - copied);
+            const std::string path = it->str();
+            const std::size_t slash = path.find_last_of("/\\\\");
+            reduced += slash == std::string::npos ? path : path.substr(slash + 1);
+            copied = static_cast<std::size_t>(it->position() + it->length());
+        }
+        reduced += text.substr(copied);
+        return reduced;
     }
 
     const std::map<std::string, std::string>& Oracle()
@@ -233,6 +251,144 @@ namespace
 
         mutable SilentLogger logger_;
         Microsoft::Xna::Framework::Content::Pipeline::OpaqueDataDictionary parameters_;
+    };
+
+    /**
+     * @brief A context that records what it is asked to build, as the oracle's driver does.
+     */
+    class RecordingContext final : public ContentProcessorContext
+    {
+    public:
+        [[nodiscard]] std::string getBuildConfigurationProperty() const override { return "Debug"; }
+        [[nodiscard]] std::string getIntermediateDirectoryProperty() const override { return "obj"; }
+        [[nodiscard]] Microsoft::Xna::Framework::Content::Pipeline::ContentBuildLogger& getLoggerProperty()
+            const override
+        {
+            return logger_;
+        }
+        [[nodiscard]] std::string getOutputDirectoryProperty() const override { return "bin"; }
+        [[nodiscard]] std::string getOutputFilenameProperty() const override { return "asset.xnb"; }
+        [[nodiscard]] const Microsoft::Xna::Framework::Content::Pipeline::OpaqueDataDictionary&
+        getParametersProperty() const override
+        {
+            return parameters_;
+        }
+        [[nodiscard]] Microsoft::Xna::Framework::Content::Pipeline::TargetPlatform getTargetPlatformProperty()
+            const override
+        {
+            return Microsoft::Xna::Framework::Content::Pipeline::TargetPlatform::Windows;
+        }
+        [[nodiscard]] Microsoft::Xna::Framework::Graphics::GraphicsProfile getTargetProfileProperty() const override
+        {
+            return Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef;
+        }
+        void AddDependency(const std::string& filename) override { (void)filename; }
+        void AddOutputFile(const std::string& filename) override { (void)filename; }
+
+        /** @brief What was built, in the oracle's own wording. */
+        [[nodiscard]] std::string Built() const { return "[" + built_ + "]"; }
+
+    protected:
+        [[nodiscard]] Microsoft::Xna::Framework::Content::Pipeline::ContentObject BuildAndLoadAssetCore(
+            const std::string&, const Microsoft::Xna::Framework::Content::Pipeline::ContentIdentity&,
+            const std::string&, const Microsoft::Xna::Framework::Content::Pipeline::OpaqueDataDictionary&,
+            const std::string&, const std::string&, const std::string&) override
+        {
+            throw System::NotSupportedException("BuildAndLoadAsset");
+        }
+
+        [[nodiscard]] std::string BuildAssetCore(
+            const std::string& sourceFilename,
+            const Microsoft::Xna::Framework::Content::Pipeline::ContentIdentity&, const std::string& processorName,
+            const Microsoft::Xna::Framework::Content::Pipeline::OpaqueDataDictionary& processorParameters,
+            const std::string& importerName, const std::string& assetName, const std::string&,
+            const std::string& outputTypeName) override
+        {
+            if (!built_.empty())
+            {
+                built_ += ' ';
+            }
+            built_ += std::filesystem::path(sourceFilename).filename().string() + "->" + processorName + "(" +
+                      Describe(processorParameters) + ") importer=" + (importerName.empty() ? "null" : importerName) +
+                      " asset=" + (assetName.empty() ? "null" : assetName) + " out=" +
+                      outputTypeName.substr(outputTypeName.rfind('.') + 1);
+            return sourceFilename + ".xnb";
+        }
+
+        [[nodiscard]] Microsoft::Xna::Framework::Content::Pipeline::ContentObject ConvertCore(
+            const Microsoft::Xna::Framework::Content::Pipeline::ContentObject&, const std::string&,
+            const Microsoft::Xna::Framework::Content::Pipeline::OpaqueDataDictionary&, const std::string&) override
+        {
+            throw System::NotSupportedException("Convert");
+        }
+
+    private:
+        class SilentLogger final : public Microsoft::Xna::Framework::Content::Pipeline::ContentBuildLogger
+        {
+        protected:
+            void LogMessage(const std::string&) override {}
+            void LogImportantMessage(const std::string&) override {}
+            void LogWarning(const std::string&,
+                            const Microsoft::Xna::Framework::Content::Pipeline::ContentIdentity&,
+                            const std::string&) override
+            {
+            }
+        };
+
+        /** @brief The parameters as the oracle prints them: key=value in key order. */
+        static std::string Describe(
+            const Microsoft::Xna::Framework::Content::Pipeline::OpaqueDataDictionary& parameters)
+        {
+            if (parameters.getCountProperty() == 0)
+            {
+                return "null";
+            }
+            std::vector<std::string> keys = parameters.getKeysProperty();
+            std::sort(keys.begin(), keys.end());
+            std::string text;
+            for (const std::string& key : keys)
+            {
+                if (!text.empty())
+                {
+                    text += ',';
+                }
+                Microsoft::Xna::Framework::Content::Pipeline::ContentObject value;
+                parameters.TryGetValue(key, value);
+                text += key + "=" + DescribeValue(value);
+            }
+            return text;
+        }
+
+        static std::string DescribeValue(const Microsoft::Xna::Framework::Content::Pipeline::ContentObject& value)
+        {
+            using Microsoft::Xna::Framework::Content::Pipeline::Holds;
+            using Microsoft::Xna::Framework::Content::Pipeline::Unbox;
+            if (Holds<bool>(value))
+            {
+                return Unbox<bool>(value) ? "True" : "False";
+            }
+            if (Holds<Color>(value))
+            {
+                const Color color = Unbox<Color>(value);
+                return "{R:" + std::to_string(static_cast<int>(color.getRProperty())) + " G:" +
+                       std::to_string(static_cast<int>(color.getGProperty())) + " B:" +
+                       std::to_string(static_cast<int>(color.getBProperty())) + " A:" +
+                       std::to_string(static_cast<int>(color.getAProperty())) + "}";
+            }
+            if (Holds<TextureProcessorOutputFormat>(value))
+            {
+                static const std::map<TextureProcessorOutputFormat, std::string> names = {
+                    {TextureProcessorOutputFormat::NoChange, "NoChange"},
+                    {TextureProcessorOutputFormat::Color, "Color"},
+                    {TextureProcessorOutputFormat::DxtCompressed, "DxtCompressed"}};
+                return names.at(Unbox<TextureProcessorOutputFormat>(value));
+            }
+            return value.StableType();
+        }
+
+        mutable SilentLogger logger_;
+        Microsoft::Xna::Framework::Content::Pipeline::OpaqueDataDictionary parameters_;
+        std::string built_;
     };
 
     /** @brief The oracle's own gradient bitmap: byte-for-byte the same inputs it measured. */
@@ -530,4 +686,150 @@ TEST(XnaPassThroughProcessor, ReturnsItsInput)
         processor.Process(boxed, context);
     EXPECT_EQ(Microsoft::Xna::Framework::Content::Pipeline::Unbox<std::shared_ptr<TextureContent>>(result), value);
     EXPECT_EQ(Expected("processor/PassThroughProcessor"), "");
+}
+
+namespace
+{
+    /** @brief The oracle's DescribeMaterial, reduced to what these cases vary. */
+    std::string DescribeMaterial(const std::shared_ptr<Graphics::MaterialContent>& material,
+                                 const std::string& typeName)
+    {
+        std::string text = typeName + " opaque={";
+        bool first = true;
+        for (const std::string& key : material->getOpaqueDataProperty().getKeysProperty())
+        {
+            if (!first)
+            {
+                text += ' ';
+            }
+            first = false;
+            Microsoft::Xna::Framework::Content::Pipeline::ContentObject value;
+            material->getOpaqueDataProperty().TryGetValue(key, value);
+            text += key + "=" + value.StableType() + ":ExternalReference`1";
+        }
+        text += "} textures={";
+        first = true;
+        for (const std::string& key : material->getTexturesProperty().getKeysProperty())
+        {
+            if (!first)
+            {
+                text += ' ';
+            }
+            first = false;
+            std::shared_ptr<Microsoft::Xna::Framework::Content::Pipeline::ExternalReference<TextureContent>> reference;
+            material->getTexturesProperty().TryGetValue(key, reference);
+            text += key + "=" +
+                    (reference == nullptr
+                         ? "null"
+                         : std::filesystem::path(reference->getFilenameProperty()).filename().string());
+        }
+        return text + "}";
+    }
+}
+
+TEST(XnaMaterialProcessor, DefaultsMatchXna)
+{
+    const Processors::MaterialProcessor processor;
+    const Color key = processor.getColorKeyColorProperty();
+    static const std::map<TextureProcessorOutputFormat, std::string> formats = {
+        {TextureProcessorOutputFormat::NoChange, "NoChange"},
+        {TextureProcessorOutputFormat::Color, "Color"},
+        {TextureProcessorOutputFormat::DxtCompressed, "DxtCompressed"}};
+    static const std::map<Processors::MaterialProcessorDefaultEffect, std::string> effects = {
+        {Processors::MaterialProcessorDefaultEffect::BasicEffect, "BasicEffect"},
+        {Processors::MaterialProcessorDefaultEffect::SkinnedEffect, "SkinnedEffect"},
+        {Processors::MaterialProcessorDefaultEffect::EnvironmentMapEffect, "EnvironmentMapEffect"},
+        {Processors::MaterialProcessorDefaultEffect::DualTextureEffect, "DualTextureEffect"},
+        {Processors::MaterialProcessorDefaultEffect::AlphaTestEffect, "AlphaTestEffect"}};
+    EXPECT_EQ("ColorKeyColor={R:" + std::to_string(static_cast<int>(key.getRProperty())) + " G:" +
+                  std::to_string(static_cast<int>(key.getGProperty())) + " B:" +
+                  std::to_string(static_cast<int>(key.getBProperty())) + " A:" +
+                  std::to_string(static_cast<int>(key.getAProperty())) + "} ColorKeyEnabled=" +
+                  (processor.getColorKeyEnabledProperty() ? "True" : "False") + " DefaultEffect=" +
+                  effects.at(processor.getDefaultEffectProperty()) + " GenerateMipmaps=" +
+                  (processor.getGenerateMipmapsProperty() ? "True" : "False") + " PremultiplyTextureAlpha=" +
+                  (processor.getPremultiplyTextureAlphaProperty() ? "True" : "False") +
+                  " ResizeTexturesToPowerOfTwo=" +
+                  (processor.getResizeTexturesToPowerOfTwoProperty() ? "True" : "False") + " TextureFormat=" +
+                  formats.at(processor.getTextureFormatProperty()),
+              Expected("processor/MaterialProcessor"));
+}
+
+TEST(XnaMaterialProcessor, BuildsEveryTextureItNames)
+{
+    Processors::MaterialProcessor processor;
+    auto material = std::make_shared<Graphics::BasicMaterialContent>();
+    material->setTextureProperty(
+        std::make_shared<Microsoft::Xna::Framework::Content::Pipeline::ExternalReference<TextureContent>>("cat.tga"));
+    RecordingContext context;
+    const std::shared_ptr<Graphics::MaterialContent> result = processor.Process(material, context);
+    const std::string basicResult = DescribeMaterial(result, "BasicMaterialContent");
+    EXPECT_EQ(basicResult + " built=" + context.Built() + " same=" + (result == material ? "True" : "False"),
+              Expected("materialprocessor/basic_with_texture"));
+
+    Processors::MaterialProcessor untextured;
+    RecordingContext empty;
+    // Process first, then read what was built: the two are separate arguments of one expression,
+    // whose evaluation order C++ leaves unspecified.
+    const std::string untexturedResult =
+        DescribeMaterial(untextured.Process(std::make_shared<Graphics::BasicMaterialContent>(), empty),
+                         "BasicMaterialContent");
+    EXPECT_EQ(untexturedResult + " built=" + empty.Built(), Expected("materialprocessor/no_texture"));
+
+    Processors::MaterialProcessor dual;
+    auto twoTextures = std::make_shared<Graphics::DualTextureMaterialContent>();
+    twoTextures->setTextureProperty(
+        std::make_shared<Microsoft::Xna::Framework::Content::Pipeline::ExternalReference<TextureContent>>("one.tga"));
+    twoTextures->setTexture2Property(
+        std::make_shared<Microsoft::Xna::Framework::Content::Pipeline::ExternalReference<TextureContent>>("two.tga"));
+    RecordingContext both;
+    const std::string dualResult = DescribeMaterial(dual.Process(twoTextures, both), "DualTextureMaterialContent");
+    EXPECT_EQ(dualResult + " built=" + both.Built(), Expected("materialprocessor/two_textures"));
+
+    Processors::MaterialProcessor plain;
+    RecordingContext none;
+    const std::string plainResult =
+        DescribeMaterial(plain.Process(std::make_shared<Graphics::MaterialContent>(), none), "MaterialContent");
+    EXPECT_EQ(plainResult + " built=" + none.Built(), Expected("materialprocessor/base_material"));
+}
+
+TEST(XnaMaterialProcessor, ForwardsItsPropertiesAndBuildsTheEffect)
+{
+    Processors::MaterialProcessor processor;
+    processor.setColorKeyColorProperty(Color(1, 2, 3, 4));
+    processor.setColorKeyEnabledProperty(false);
+    processor.setGenerateMipmapsProperty(false);
+    processor.setPremultiplyTextureAlphaProperty(false);
+    processor.setResizeTexturesToPowerOfTwoProperty(true);
+    processor.setTextureFormatProperty(TextureProcessorOutputFormat::NoChange);
+    auto material = std::make_shared<Graphics::BasicMaterialContent>();
+    material->setTextureProperty(
+        std::make_shared<Microsoft::Xna::Framework::Content::Pipeline::ExternalReference<TextureContent>>("cat.tga"));
+    RecordingContext context;
+    (void)processor.Process(material, context);
+    EXPECT_EQ(context.Built(), Expected("materialprocessor/properties_forwarded"));
+
+    Processors::MaterialProcessor effects;
+    auto effectMaterial = std::make_shared<Graphics::EffectMaterialContent>();
+    effectMaterial->setEffectProperty(
+        std::make_shared<Microsoft::Xna::Framework::Content::Pipeline::ExternalReference<Graphics::EffectContent>>(
+            "shader.fx"));
+    RecordingContext effectContext;
+    const std::shared_ptr<Graphics::MaterialContent> built = effects.Process(effectMaterial, effectContext);
+    EXPECT_NE(effectMaterial->getCompiledEffectProperty(), nullptr);
+    EXPECT_EQ(effectContext.Built(),
+              Expected("materialprocessor/effect_material")
+                  .substr(Expected("materialprocessor/effect_material").find("built=") + 6));
+    EXPECT_EQ(built, effectMaterial);
+}
+
+TEST(XnaMaterialProcessor, RefusesANullMaterial)
+{
+    EXPECT_EQ(Result([]
+                     {
+                         Processors::MaterialProcessor processor;
+                         RecordingContext context;
+                         return DescribeMaterial(processor.Process(nullptr, context), "MaterialContent");
+                     }),
+              Expected("materialprocessor/null_input"));
 }

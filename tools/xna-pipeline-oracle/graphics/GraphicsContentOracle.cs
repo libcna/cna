@@ -1717,6 +1717,72 @@ namespace Cna.Xna40.GraphicsOracle
             Record("textureprocessor/sprite_defaults", () => DescribeTexture(Process(new SpriteTextureProcessor(), ColorTexture(4, 4))));
             Record("textureprocessor/model_defaults", () => DescribeTexture(Process(new ModelTextureProcessor(), ColorTexture(4, 4))));
 
+            // ---- MaterialProcessor -----------------------------------------------------------------
+            // The build context records what the processor asks it to build, which is the only way
+            // to see the processor and parameters a material passes on to its textures.
+            Record("materialprocessor/basic_with_texture", () =>
+            {
+                var processor = new MaterialProcessor();
+                var material = new BasicMaterialContent();
+                material.Texture = new ExternalReference<TextureContent>("cat.tga");
+                var context = new RecordingProcessorContext();
+                MaterialContent result = processor.Process(material, context);
+                return DescribeMaterial(result) + " built=" + context.Built + " same=" + object.ReferenceEquals(result, material);
+            });
+            Record("materialprocessor/no_texture", () =>
+            {
+                var processor = new MaterialProcessor();
+                var context = new RecordingProcessorContext();
+                MaterialContent result = processor.Process(new BasicMaterialContent(), context);
+                return DescribeMaterial(result) + " built=" + context.Built;
+            });
+            Record("materialprocessor/two_textures", () =>
+            {
+                var processor = new MaterialProcessor();
+                var material = new DualTextureMaterialContent();
+                material.Texture = new ExternalReference<TextureContent>("one.tga");
+                material.Texture2 = new ExternalReference<TextureContent>("two.tga");
+                var context = new RecordingProcessorContext();
+                MaterialContent result = processor.Process(material, context);
+                return DescribeMaterial(result) + " built=" + context.Built;
+            });
+            Record("materialprocessor/effect_material", () =>
+            {
+                var processor = new MaterialProcessor();
+                var material = new EffectMaterialContent();
+                material.Effect = new ExternalReference<EffectContent>("shader.fx");
+                var context = new RecordingProcessorContext();
+                MaterialContent result = processor.Process(material, context);
+                return DescribeMaterial(result) + " built=" + context.Built;
+            });
+            Record("materialprocessor/properties_forwarded", () =>
+            {
+                var processor = new MaterialProcessor();
+                processor.ColorKeyColor = new Color(1, 2, 3, 4);
+                processor.ColorKeyEnabled = false;
+                processor.GenerateMipmaps = false;
+                processor.PremultiplyTextureAlpha = false;
+                processor.ResizeTexturesToPowerOfTwo = true;
+                processor.TextureFormat = TextureProcessorOutputFormat.NoChange;
+                var material = new BasicMaterialContent();
+                material.Texture = new ExternalReference<TextureContent>("cat.tga");
+                var context = new RecordingProcessorContext();
+                processor.Process(material, context);
+                return context.Built;
+            });
+            Record("materialprocessor/null_input", () =>
+            {
+                var processor = new MaterialProcessor();
+                return DescribeMaterial(processor.Process(null, new RecordingProcessorContext()));
+            });
+            Record("materialprocessor/base_material", () =>
+            {
+                var processor = new MaterialProcessor();
+                var context = new RecordingProcessorContext();
+                MaterialContent result = processor.Process(new MaterialContent(), context);
+                return DescribeMaterial(result) + " built=" + context.Built;
+            });
+
             // ---- TextureReferenceDictionary ------------------------------------------------------
             Record("texturereferencedictionary/default", () => { var d = new TextureReferenceDictionary(); return "count=" + d.Count + " ToString=\"" + d + "\""; });
 
@@ -1737,6 +1803,53 @@ namespace Cna.Xna40.GraphicsOracle
             public T ReadReference<T>(string key) where T : class { return GetReferenceTypeProperty<T>(key); }
             public T? ReadValue<T>(string key) where T : struct { return GetValueTypeProperty<T>(key); }
             public void Write<T>(string key, T value) { SetProperty(key, value); }
+        }
+
+        /// A context that records every asset a processor asks it to build, and answers a
+        /// reference so the processor can carry on.
+        private sealed class RecordingProcessorContext : ContentProcessorContext
+        {
+            private readonly OpaqueDataDictionary parameters = new OpaqueDataDictionary();
+            private readonly ContentBuildLogger logger = new ProbeLogger();
+            private readonly StringBuilder built = new StringBuilder();
+            public string Built { get { return "[" + built + "]"; } }
+            public override string BuildConfiguration { get { return "Debug"; } }
+            public override string IntermediateDirectory { get { return "obj"; } }
+            public override ContentBuildLogger Logger { get { return logger; } }
+            public override string OutputDirectory { get { return "bin"; } }
+            public override string OutputFilename { get { return "asset.xnb"; } }
+            public override OpaqueDataDictionary Parameters { get { return parameters; } }
+            public override TargetPlatform TargetPlatform { get { return TargetPlatform.Windows; } }
+            public override GraphicsProfile TargetProfile { get { return GraphicsProfile.HiDef; } }
+            public override void AddDependency(string filename) { }
+            public override void AddOutputFile(string filename) { }
+            public override TOutput BuildAndLoadAsset<TInput, TOutput>(ExternalReference<TInput> sourceAsset, string processorName, OpaqueDataDictionary processorParameters, string importerName)
+            { throw new NotSupportedException("BuildAndLoadAsset"); }
+            public override ExternalReference<TOutput> BuildAsset<TInput, TOutput>(ExternalReference<TInput> sourceAsset, string processorName, OpaqueDataDictionary processorParameters, string importerName, string assetName)
+            {
+                if (built.Length > 0) built.Append(' ');
+                built.Append(System.IO.Path.GetFileName(sourceAsset.Filename) + "->" + (processorName ?? "null") + "(" + DescribeParameters(processorParameters) + ")" +
+                             " importer=" + (importerName ?? "null") + " asset=" + (assetName ?? "null") + " out=" + typeof(TOutput).Name);
+                return new ExternalReference<TOutput>(sourceAsset.Filename + ".xnb");
+            }
+            public override TOutput Convert<TInput, TOutput>(TInput input, string processorName, OpaqueDataDictionary processorParameters)
+            { throw new NotSupportedException("Convert"); }
+
+            private static string DescribeParameters(OpaqueDataDictionary values)
+            {
+                if (values == null) return "null";
+                var keys = new List<string>();
+                foreach (KeyValuePair<string, object> entry in values) keys.Add(entry.Key);
+                keys.Sort(StringComparer.Ordinal);
+                var builder = new StringBuilder();
+                foreach (string key in keys)
+                {
+                    if (builder.Length > 0) builder.Append(',');
+                    object value = values[key];
+                    builder.Append(key + "=" + (value == null ? "null" : Convert.ToString(value, CultureInfo.InvariantCulture)));
+                }
+                return builder.ToString();
+            }
         }
 
         /// A build context that answers what a processor asks of it and refuses the rest, so a

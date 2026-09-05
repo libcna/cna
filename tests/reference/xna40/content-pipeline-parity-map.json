@@ -3018,65 +3018,65 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Processors.MaterialProcessor": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::MaterialProcessor",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/MaterialProcessor.hpp",
+   "note": "Measured against a build context that records what it is asked to build (materialprocessor/*): the material comes back as the same object with each texture reference replaced, every texture is built through `TextureProcessor` with the six parameters this processor's properties map onto, and an effect material's effect is built through `EffectProcessor` with no parameters at all. Its own defaults differ from the texture processor's: mipmaps on and DxtCompressed.",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "MaterialProcessor()",
      "note": ""
     },
     "property:ColorKeyColor": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getColorKeyColorProperty() / setColorKeyColorProperty()",
      "note": ""
     },
     "property:ColorKeyEnabled": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getColorKeyEnabledProperty() / setColorKeyEnabledProperty()",
      "note": ""
     },
     "property:DefaultEffect": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getDefaultEffectProperty() / setDefaultEffectProperty()",
      "note": ""
     },
     "property:GenerateMipmaps": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getGenerateMipmapsProperty() / setGenerateMipmapsProperty()",
      "note": ""
     },
     "property:PremultiplyTextureAlpha": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getPremultiplyTextureAlphaProperty() / setPremultiplyTextureAlphaProperty()",
      "note": ""
     },
     "property:ResizeTexturesToPowerOfTwo": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getResizeTexturesToPowerOfTwoProperty() / setResizeTexturesToPowerOfTwoProperty()",
      "note": ""
     },
     "property:TextureFormat": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getTextureFormatProperty() / setTextureFormatProperty()",
      "note": ""
     },
     "method:BuildEffect(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<Microsoft.Xna.Framework.Content.Pipeline.Graphics.EffectContent>, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "BuildEffect(const std::shared_ptr<ExternalReference<EffectContent>>&, ContentProcessorContext&)",
+     "note": "external references are owned shared_ptr carriers; protected in both."
     },
     "method:BuildTexture(System.String, Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureContent>, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "BuildTexture(const std::string&, const std::shared_ptr<ExternalReference<TextureContent>>&, ContentProcessorContext&)",
+     "note": "external references are owned shared_ptr carriers; protected in both."
     },
     "method:Process(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MaterialContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Process(const std::shared_ptr<MaterialContent>&, ContentProcessorContext&)",
+     "note": "the material is an owned shared_ptr, and the processed material is the same object, as XNA's is."
     }
    }
   },
