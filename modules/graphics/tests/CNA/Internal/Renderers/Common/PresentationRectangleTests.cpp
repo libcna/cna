@@ -44,10 +44,20 @@ namespace
     /// The renderers that implement a real virtual resolution, i.e. whose `GetDefaultViewportRect()`
     /// can differ from the whole drawable at all. A renderer with no scaling has nothing to centre,
     /// and asserting a centred rectangle there would be asserting someone else's contract.
+    ///
+    /// WEBGPU IS DELIBERATELY ABSENT, and the reason is measured rather than assumed.
+    /// plans/plan_webgpu.md `WEBGPU-162` added the override and had to withdraw it: WebGPU's own
+    /// sprite and 3D paths treat `GraphicsDevice.Viewport` as a LOGICAL rectangle and project into
+    /// it directly, so returning the physical one here moves every draw. Traced on an 800x480
+    /// drawable with a 96x72 virtual resolution under `FixedHeightDynamicWidth`: the logical size is
+    /// 120x72 and the physical rectangle 800x480, and a sprite the caller placed at logical (24,15)
+    /// landed at physical (160,100) -- outside the region the test read, so
+    /// `WebGPU_SpriteBatch_CustomViewport` and `WebGPU_BackbufferFirstRead` both saw an empty frame.
+    /// The row is re-opened with that finding; adding WebGPU back here is part of closing it, not a
+    /// separate step.
     [[nodiscard]] bool HasVirtualResolution()
     {
-        return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, OpenGL2, SdlGpu,
-                               WebGPU);
+        return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, OpenGL2, SdlGpu);
     }
 
     [[nodiscard]] std::string RendererName()
