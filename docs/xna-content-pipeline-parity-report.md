@@ -10,17 +10,17 @@
 
 | Quantity | Implemented (EXACT + SEMANTIC + HOST_SUBSTITUTION) | EXTERNAL_BLOCKED | MISSING |
 |---|---|---:|---:|
-| public/protected types | 47/128 (36.7%) | 0 | 81 |
-| public/protected members | 265/705 (37.6%) | 0 | 440 |
-| enum values | 3/27 (11.1%) | 0 | 24 |
+| public/protected types | 49/128 (38.3%) | 0 | 79 |
+| public/protected members | 275/705 (39.0%) | 0 | 430 |
+| enum values | 6/27 (22.2%) | 0 | 21 |
 | built-in importers | 0/10 (0.0%) | 0 | 10 |
 | built-in processors | 0/12 (0.0%) | 0 | 12 |
 | processor properties | 0/47 (0.0%) | 0 | 47 |
 
 Status vocabulary: EXACT_EQUIVALENT, SEMANTIC_EQUIVALENT (spelling differs, capability identical; note says how),
 HOST_SUBSTITUTION (Microsoft-host mechanism replaced; note says how), EXTERNAL_BLOCKED (note names the
-unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 29, SEMANTIC_EQUIVALENT 17, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 81.
-Member status by value: EXACT_EQUIVALENT 196, SEMANTIC_EQUIVALENT 64, HOST_SUBSTITUTION 5, EXTERNAL_BLOCKED 0, MISSING 440.
+unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 30, SEMANTIC_EQUIVALENT 18, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 79.
+Member status by value: EXACT_EQUIVALENT 205, SEMANTIC_EQUIVALENT 65, HOST_SUBSTITUTION 5, EXTERNAL_BLOCKED 0, MISSING 430.
 
 Rules applied mechanically: 3 delegate plumbing members are listed in section 7 and not counted; 3 exception
 serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serialization has no C++ counterpart).
@@ -31,7 +31,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 |---|---:|---:|---:|---:|
 | `Microsoft.Xna.Framework.Content.Pipeline.Audio` | 5 | 0 | 0 | 5 |
 | `Microsoft.Xna.Framework.Content.Pipeline` | 32 | 21 | 0 | 11 |
-| `Microsoft.Xna.Framework.Content.Pipeline.Graphics` | 47 | 14 | 0 | 33 |
+| `Microsoft.Xna.Framework.Content.Pipeline.Graphics` | 47 | 16 | 0 | 31 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Processors` | 28 | 0 | 0 | 28 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler` | 5 | 5 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate` | 7 | 7 | 0 | 0 |
@@ -79,8 +79,8 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `….Graphics` | `EffectContent` | class | MISSING |  |  |
 | `….Graphics` | `EffectMaterialContent` | class | MISSING |  |  |
 | `….Graphics` | `EnvironmentMapMaterialContent` | class | MISSING |  |  |
-| `….Graphics` | `FontDescription` | class | MISSING |  |  |
-| `….Graphics` | `FontDescriptionStyle` | enum | MISSING |  |  |
+| `….Graphics` | `FontDescription` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::FontDescription` | Every member and every refusal text is pinned to tests/reference/xna40/graphics (cases font/*), including the measured surprises: all three constructors leave UseKerning false, a NaN size and an undefined style are accepted while a size that is not greater than zero is refused, and the constructors refuse through the property setters, so their messages name the parameter `value`. One member exists here that the inventory does not list: a public parameterless constructor, marked CNAEXT. XNA has one too and keeps it private, because its serializer reaches a private constructor by reflection; C++ has none, so the serializer needs a constructor it can call. |
+| `….Graphics` | `FontDescriptionStyle` | enum | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::FontDescriptionStyle` |  |
 | `….Graphics` | `GeometryContent` | class | MISSING |  |  |
 | `….Graphics` | `GeometryContentCollection` | class | MISSING |  |  |
 | `….Graphics` | `IndexCollection` | class | MISSING |  |  |
@@ -468,19 +468,19 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `EnvironmentMapMaterialContent` | property | `EnvironmentMapSpecular` | MISSING |  |  |
 | `EnvironmentMapMaterialContent` | property | `FresnelFactor` | MISSING |  |  |
 | `EnvironmentMapMaterialContent` | property | `Texture` | MISSING |  |  |
-| `FontDescription` | constructor | `.ctor(System.String, System.Single, System.Single)` | MISSING |  |  |
-| `FontDescription` | constructor | `.ctor(System.String, System.Single, System.Single, Microsoft.Xna.Framework.Content.Pipeline.Graphics.FontDescriptionStyle)` | MISSING |  |  |
-| `FontDescription` | constructor | `.ctor(System.String, System.Single, System.Single, Microsoft.Xna.Framework.Content.Pipeline.Graphics.FontDescriptionStyle, System.Boolean)` | MISSING |  |  |
-| `FontDescription` | property | `Characters` | MISSING |  |  |
-| `FontDescription` | property | `DefaultCharacter` | MISSING |  |  |
-| `FontDescription` | property | `FontName` | MISSING |  |  |
-| `FontDescription` | property | `Size` | MISSING |  |  |
-| `FontDescription` | property | `Spacing` | MISSING |  |  |
-| `FontDescription` | property | `Style` | MISSING |  |  |
-| `FontDescription` | property | `UseKerning` | MISSING |  |  |
-| `FontDescriptionStyle` | enum value | `Regular = 0` | MISSING |  |  |
-| `FontDescriptionStyle` | enum value | `Bold = 1` | MISSING |  |  |
-| `FontDescriptionStyle` | enum value | `Italic = 2` | MISSING |  |  |
+| `FontDescription` | constructor | `.ctor(System.String, System.Single, System.Single)` | EXACT_EQUIVALENT | `FontDescription(std::string, Single, Single)` |  |
+| `FontDescription` | constructor | `.ctor(System.String, System.Single, System.Single, Microsoft.Xna.Framework.Content.Pipeline.Graphics.FontDescriptionStyle)` | EXACT_EQUIVALENT | `FontDescription(std::string, Single, Single, FontDescriptionStyle)` |  |
+| `FontDescription` | constructor | `.ctor(System.String, System.Single, System.Single, Microsoft.Xna.Framework.Content.Pipeline.Graphics.FontDescriptionStyle, System.Boolean)` | EXACT_EQUIVALENT | `FontDescription(std::string, Single, Single, FontDescriptionStyle, bool)` |  |
+| `FontDescription` | property | `Characters` | SEMANTIC_EQUIVALENT | `getCharactersProperty()` | ICollection<char> is a std::set<charcs>&, which is what XNA's private CharacterCollection behaves as: measured, a character added twice appears once and the collection reads back in ascending order. |
+| `FontDescription` | property | `DefaultCharacter` | EXACT_EQUIVALENT | `getDefaultCharacterProperty() / setDefaultCharacterProperty()` | Nullable<char> is std::optional<charcs>. |
+| `FontDescription` | property | `FontName` | EXACT_EQUIVALENT | `getFontNameProperty() / setFontNameProperty()` | C++ has no null std::string, so the empty name carries both of the refusals XNA gives for null and for empty. |
+| `FontDescription` | property | `Size` | EXACT_EQUIVALENT | `getSizeProperty() / setSizeProperty()` |  |
+| `FontDescription` | property | `Spacing` | EXACT_EQUIVALENT | `getSpacingProperty() / setSpacingProperty()` |  |
+| `FontDescription` | property | `Style` | EXACT_EQUIVALENT | `getStyleProperty() / setStyleProperty()` |  |
+| `FontDescription` | property | `UseKerning` | EXACT_EQUIVALENT | `getUseKerningProperty() / setUseKerningProperty()` |  |
+| `FontDescriptionStyle` | enum value | `Regular = 0` | EXACT_EQUIVALENT | `FontDescriptionStyle::Regular` |  |
+| `FontDescriptionStyle` | enum value | `Bold = 1` | EXACT_EQUIVALENT | `FontDescriptionStyle::Bold` |  |
+| `FontDescriptionStyle` | enum value | `Italic = 2` | EXACT_EQUIVALENT | `FontDescriptionStyle::Italic` |  |
 | `GeometryContent` | constructor | `.ctor()` | MISSING |  |  |
 | `GeometryContent` | property | `Indices` | MISSING |  |  |
 | `GeometryContent` | property | `Material` | MISSING |  |  |

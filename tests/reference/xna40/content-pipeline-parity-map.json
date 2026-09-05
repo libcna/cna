@@ -1359,81 +1359,81 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Graphics.FontDescription": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::FontDescription",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/FontDescription.hpp",
+   "note": "Every member and every refusal text is pinned to tests/reference/xna40/graphics (cases font/*), including the measured surprises: all three constructors leave UseKerning false, a NaN size and an undefined style are accepted while a size that is not greater than zero is refused, and the constructors refuse through the property setters, so their messages name the parameter `value`. One member exists here that the inventory does not list: a public parameterless constructor, marked CNAEXT. XNA has one too and keeps it private, because its serializer reaches a private constructor by reflection; C++ has none, so the serializer needs a constructor it can call.",
    "members": {
     "constructor:.ctor(System.String, System.Single, System.Single)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "FontDescription(std::string, Single, Single)",
      "note": ""
     },
     "constructor:.ctor(System.String, System.Single, System.Single, Microsoft.Xna.Framework.Content.Pipeline.Graphics.FontDescriptionStyle)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "FontDescription(std::string, Single, Single, FontDescriptionStyle)",
      "note": ""
     },
     "constructor:.ctor(System.String, System.Single, System.Single, Microsoft.Xna.Framework.Content.Pipeline.Graphics.FontDescriptionStyle, System.Boolean)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "FontDescription(std::string, Single, Single, FontDescriptionStyle, bool)",
      "note": ""
     },
     "property:Characters": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getCharactersProperty()",
+     "note": "ICollection<char> is a std::set<charcs>&, which is what XNA's private CharacterCollection behaves as: measured, a character added twice appears once and the collection reads back in ascending order."
     },
     "property:DefaultCharacter": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getDefaultCharacterProperty() / setDefaultCharacterProperty()",
+     "note": "Nullable<char> is std::optional<charcs>."
     },
     "property:FontName": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getFontNameProperty() / setFontNameProperty()",
+     "note": "C++ has no null std::string, so the empty name carries both of the refusals XNA gives for null and for empty."
     },
     "property:Size": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getSizeProperty() / setSizeProperty()",
      "note": ""
     },
     "property:Spacing": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getSpacingProperty() / setSpacingProperty()",
      "note": ""
     },
     "property:Style": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getStyleProperty() / setStyleProperty()",
      "note": ""
     },
     "property:UseKerning": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getUseKerningProperty() / setUseKerningProperty()",
      "note": ""
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Graphics.FontDescriptionStyle": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
+   "status": "EXACT_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::FontDescriptionStyle",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/FontDescription.hpp",
    "note": "",
    "members": {},
    "enumValues": {
     "Regular": {
-     "status": "MISSING",
-     "cna": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "FontDescriptionStyle::Regular"
     },
     "Bold": {
-     "status": "MISSING",
-     "cna": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "FontDescriptionStyle::Bold"
     },
     "Italic": {
-     "status": "MISSING",
-     "cna": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "FontDescriptionStyle::Italic"
     }
    }
   },

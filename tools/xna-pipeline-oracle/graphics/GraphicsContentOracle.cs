@@ -15,8 +15,11 @@ using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Threading;
+using System.Xml;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Content.Pipeline;
 using Microsoft.Xna.Framework.Content.Pipeline.Graphics;
+using Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Graphics.PackedVector;
 
@@ -566,6 +569,158 @@ namespace Cna.Xna40.GraphicsOracle
             Record("vectorconverter/converter_byte4_to_color", () => { var c = VectorConverter.GetConverter<Byte4, Color>(); return c(new Byte4(10, 20, 30, 40)).ToString(); });
             Record("vectorconverter/converter_vector4_clamped", () => { var c = VectorConverter.GetConverter<Vector4, Color>(); return c(new Vector4(2, -1, 0.5f, 1)).ToString(); });
 
+            // ---- FontDescription -------------------------------------------------------------------
+            Record("font/ctor3_defaults", () => DescribeFont(new FontDescription("Arial", 14.0f, 2.0f)));
+            Record("font/ctor4_style", () => DescribeFont(new FontDescription("Arial", 14.0f, 2.0f, FontDescriptionStyle.Bold)));
+            Record("font/ctor5_kerning", () => DescribeFont(new FontDescription("Arial", 14.0f, 2.0f, FontDescriptionStyle.Italic, false)));
+            Record("font/ctor5_kerning_true", () => DescribeFont(new FontDescription("Arial", 14.0f, 2.0f, FontDescriptionStyle.Italic, true)));
+            Record("font/set_use_kerning", () => { var f = new FontDescription("Arial", 14.0f, 2.0f); f.UseKerning = true; return DescribeFont(f); });
+            Record("font/ctor_null_name", () => DescribeFont(new FontDescription(null, 14.0f, 2.0f)));
+            Record("font/ctor_empty_name", () => DescribeFont(new FontDescription("", 14.0f, 2.0f)));
+            Record("font/ctor_whitespace_name", () => DescribeFont(new FontDescription("   ", 14.0f, 2.0f)));
+            Record("font/ctor_negative_size", () => DescribeFont(new FontDescription("Arial", -1.0f, 2.0f)));
+            Record("font/ctor_zero_size", () => DescribeFont(new FontDescription("Arial", 0.0f, 2.0f)));
+            Record("font/ctor_negative_spacing", () => DescribeFont(new FontDescription("Arial", 14.0f, -3.0f)));
+            Record("font/ctor_nan_size", () => DescribeFont(new FontDescription("Arial", float.NaN, 2.0f)));
+            Record("font/ctor_undefined_style", () => DescribeFont(new FontDescription("Arial", 14.0f, 2.0f, (FontDescriptionStyle)99)));
+            Record("font/set_font_name_null", () => { var f = new FontDescription("Arial", 14.0f, 2.0f); f.FontName = null; return DescribeFont(f); });
+            Record("font/set_font_name_empty", () => { var f = new FontDescription("Arial", 14.0f, 2.0f); f.FontName = ""; return DescribeFont(f); });
+            Record("font/set_size_negative", () => { var f = new FontDescription("Arial", 14.0f, 2.0f); f.Size = -2.0f; return DescribeFont(f); });
+            Record("font/set_spacing_negative", () => { var f = new FontDescription("Arial", 14.0f, 2.0f); f.Spacing = -2.0f; return DescribeFont(f); });
+            Record("font/set_style_undefined", () => { var f = new FontDescription("Arial", 14.0f, 2.0f); f.Style = (FontDescriptionStyle)99; return DescribeFont(f); });
+            Record("font/set_default_character", () => { var f = new FontDescription("Arial", 14.0f, 2.0f); f.DefaultCharacter = '?'; return DescribeFont(f); });
+            Record("font/characters_type", () => new FontDescription("Arial", 14.0f, 2.0f).Characters.GetType().Name);
+            Record("font/characters_add_duplicate", () =>
+            {
+                var f = new FontDescription("Arial", 14.0f, 2.0f);
+                f.Characters.Add('a'); f.Characters.Add('b'); f.Characters.Add('a');
+                return "count=" + f.Characters.Count + " contains_a=" + f.Characters.Contains('a') + " chars=" + Characters(f);
+            });
+            Record("font/characters_remove_and_clear", () =>
+            {
+                var f = new FontDescription("Arial", 14.0f, 2.0f);
+                f.Characters.Add('a'); f.Characters.Add('b');
+                bool removed = f.Characters.Remove('a');
+                bool missing = f.Characters.Remove('z');
+                f.Characters.Clear();
+                return "removed=" + removed + " missing=" + missing + " count=" + f.Characters.Count + " readonly=" + f.Characters.IsReadOnly;
+            });
+            Record("font/contentitem_members", () =>
+            {
+                var f = new FontDescription("Arial", 14.0f, 2.0f);
+                return "name=\"" + f.Name + "\" identity=" + (f.Identity == null ? "null" : "set") + " opaquedata=" + f.OpaqueData.Count;
+            });
+            Record("font/serialize", () =>
+            {
+                var f = new FontDescription("Segoe UI Mono", 14.0f, 1.5f, FontDescriptionStyle.Bold, false);
+                f.DefaultCharacter = '?';
+                f.Characters.Add('A'); f.Characters.Add('B');
+                return SerializeIntermediate(f);
+            });
+            Record("font/serialize_minimal", () => SerializeIntermediate(new FontDescription("Arial", 12.0f, 0.0f)));
+            Record("font/deserialize_spritefont", () => DescribeFont(DeserializeIntermediate<FontDescription>(
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n" +
+                "<XnaContent xmlns:Graphics=\"Microsoft.Xna.Framework.Content.Pipeline.Graphics\">\r\n" +
+                "  <Asset Type=\"Graphics:FontDescription\">\r\n" +
+                "    <FontName>Segoe UI Mono</FontName>\r\n" +
+                "    <Size>14</Size>\r\n" +
+                "    <Spacing>0</Spacing>\r\n" +
+                "    <UseKerning>true</UseKerning>\r\n" +
+                "    <Style>Regular</Style>\r\n" +
+                "    <CharacterRegions>\r\n" +
+                "      <CharacterRegion>\r\n" +
+                "        <Start>&#32;</Start>\r\n" +
+                "        <End>&#38;</End>\r\n" +
+                "      </CharacterRegion>\r\n" +
+                "    </CharacterRegions>\r\n" +
+                "  </Asset>\r\n" +
+                "</XnaContent>\r\n")));
+            Record("font/deserialize_spritefont_defaultchar", () => DescribeFont(DeserializeIntermediate<FontDescription>(
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n" +
+                "<XnaContent xmlns:Graphics=\"Microsoft.Xna.Framework.Content.Pipeline.Graphics\">\r\n" +
+                "  <Asset Type=\"Graphics:FontDescription\">\r\n" +
+                "    <FontName>Arial</FontName>\r\n" +
+                "    <Size>10</Size>\r\n" +
+                "    <Style>Italic</Style>\r\n" +
+                "    <DefaultCharacter>*</DefaultCharacter>\r\n" +
+                "  </Asset>\r\n" +
+                "</XnaContent>\r\n")));
+            // Style is required (measured); is anything else? These drop one element at a time.
+            Record("font/deserialize_spritefont_no_regions", () => DescribeFont(DeserializeIntermediate<FontDescription>(
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n" +
+                "<XnaContent xmlns:Graphics=\"Microsoft.Xna.Framework.Content.Pipeline.Graphics\">\r\n" +
+                "  <Asset Type=\"Graphics:FontDescription\">\r\n" +
+                "    <FontName>Arial</FontName>\r\n" +
+                "    <Size>10</Size>\r\n" +
+                "    <Style>Regular</Style>\r\n" +
+                "  </Asset>\r\n" +
+                "</XnaContent>\r\n")));
+            Record("font/deserialize_spritefont_no_size", () => DescribeFont(DeserializeIntermediate<FontDescription>(
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n" +
+                "<XnaContent xmlns:Graphics=\"Microsoft.Xna.Framework.Content.Pipeline.Graphics\">\r\n" +
+                "  <Asset Type=\"Graphics:FontDescription\">\r\n" +
+                "    <FontName>Arial</FontName>\r\n" +
+                "    <Style>Regular</Style>\r\n" +
+                "  </Asset>\r\n" +
+                "</XnaContent>\r\n")));
+            Record("font/deserialize_spritefont_empty_regions", () => DescribeFont(DeserializeIntermediate<FontDescription>(
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n" +
+                "<XnaContent xmlns:Graphics=\"Microsoft.Xna.Framework.Content.Pipeline.Graphics\">\r\n" +
+                "  <Asset Type=\"Graphics:FontDescription\">\r\n" +
+                "    <FontName>Arial</FontName>\r\n" +
+                "    <Size>10</Size>\r\n" +
+                "    <Style>Regular</Style>\r\n" +
+                "    <CharacterRegions />\r\n" +
+                "  </Asset>\r\n" +
+                "</XnaContent>\r\n")));
+            Record("font/deserialize_spritefont_roundtrip", () => SerializeIntermediate(DeserializeIntermediate<FontDescription>(
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n" +
+                "<XnaContent xmlns:Graphics=\"Microsoft.Xna.Framework.Content.Pipeline.Graphics\">\r\n" +
+                "  <Asset Type=\"Graphics:FontDescription\">\r\n" +
+                "    <FontName>Arial</FontName>\r\n" +
+                "    <Size>10</Size>\r\n" +
+                "    <Spacing>2</Spacing>\r\n" +
+                "    <UseKerning>true</UseKerning>\r\n" +
+                "    <Style>Bold</Style>\r\n" +
+                "    <CharacterRegions>\r\n" +
+                "      <CharacterRegion><Start>a</Start><End>c</End></CharacterRegion>\r\n" +
+                "      <CharacterRegion><Start>x</Start><End>x</End></CharacterRegion>\r\n" +
+                "    </CharacterRegions>\r\n" +
+                "  </Asset>\r\n" +
+                "</XnaContent>\r\n")));
+            Record("font/deserialize_spritefont_no_fontname", () => DescribeFont(DeserializeIntermediate<FontDescription>(
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n" +
+                "<XnaContent xmlns:Graphics=\"Microsoft.Xna.Framework.Content.Pipeline.Graphics\">\r\n" +
+                "  <Asset Type=\"Graphics:FontDescription\">\r\n" +
+                "    <Size>10</Size>\r\n" +
+                "  </Asset>\r\n" +
+                "</XnaContent>\r\n")));
+            Record("font/deserialize_spritefont_two_regions", () => DescribeFont(DeserializeIntermediate<FontDescription>(
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n" +
+                "<XnaContent xmlns:Graphics=\"Microsoft.Xna.Framework.Content.Pipeline.Graphics\">\r\n" +
+                "  <Asset Type=\"Graphics:FontDescription\">\r\n" +
+                "    <FontName>Arial</FontName>\r\n" +
+                "    <Size>10</Size>\r\n" +
+                "    <Style>Regular</Style>\r\n" +
+                "    <CharacterRegions>\r\n" +
+                "      <CharacterRegion><Start>a</Start><End>c</End></CharacterRegion>\r\n" +
+                "      <CharacterRegion><Start>c</Start><End>e</End></CharacterRegion>\r\n" +
+                "    </CharacterRegions>\r\n" +
+                "  </Asset>\r\n" +
+                "</XnaContent>\r\n")));
+            Record("font/deserialize_spritefont_reversed_region", () => DescribeFont(DeserializeIntermediate<FontDescription>(
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n" +
+                "<XnaContent xmlns:Graphics=\"Microsoft.Xna.Framework.Content.Pipeline.Graphics\">\r\n" +
+                "  <Asset Type=\"Graphics:FontDescription\">\r\n" +
+                "    <FontName>Arial</FontName>\r\n" +
+                "    <Size>10</Size>\r\n" +
+                "    <Style>Regular</Style>\r\n" +
+                "    <CharacterRegions>\r\n" +
+                "      <CharacterRegion><Start>e</Start><End>a</End></CharacterRegion>\r\n" +
+                "    </CharacterRegions>\r\n" +
+                "  </Asset>\r\n" +
+                "</XnaContent>\r\n")));
+
             // ---- TextureReferenceDictionary ------------------------------------------------------
             Record("texturereferencedictionary/default", () => { var d = new TextureReferenceDictionary(); return "count=" + d.Count + " ToString=\"" + d + "\""; });
 
@@ -574,6 +729,48 @@ namespace Cna.Xna40.GraphicsOracle
                 Environment.Version + "\",\n \"pipelineAssembly\": \"" + typeof(BitmapContent).Assembly.FullName + "\",\n \"cases\": [\n" +
                 string.Join(",\n", Cases.ToArray()) + "\n ]\n}\n");
             Console.WriteLine("recorded " + Cases.Count + " measurements");
+        }
+
+        private static string Characters(FontDescription font)
+        {
+            var builder = new StringBuilder();
+            foreach (char c in font.Characters)
+            {
+                if (builder.Length > 0) builder.Append(' ');
+                builder.Append("U+" + ((int)c).ToString("X4"));
+            }
+            return builder.ToString();
+        }
+
+        private static string DescribeFont(FontDescription font)
+        {
+            return "name=\"" + font.FontName + "\" size=" + font.Size.ToString("R", CultureInfo.InvariantCulture) +
+                   " spacing=" + font.Spacing.ToString("R", CultureInfo.InvariantCulture) +
+                   " style=" + font.Style + " kerning=" + font.UseKerning +
+                   " default=" + (font.DefaultCharacter.HasValue ? "U+" + ((int)font.DefaultCharacter.Value).ToString("X4") : "null") +
+                   " chars=[" + Characters(font) + "]";
+        }
+
+        private static string SerializeIntermediate(object value)
+        {
+            var text = new StringWriter(CultureInfo.InvariantCulture);
+            var settings = new XmlWriterSettings();
+            settings.Indent = true;
+            using (XmlWriter writer = XmlWriter.Create(text, settings))
+            {
+                IntermediateSerializer.Serialize(writer, value, null);
+            }
+            string xml = text.ToString();
+            int cut = xml.IndexOf("?>");
+            return cut < 0 ? xml : xml.Substring(cut + 2).TrimStart('\r', '\n');
+        }
+
+        private static T DeserializeIntermediate<T>(string xml)
+        {
+            using (XmlReader reader = XmlReader.Create(new StringReader(xml)))
+            {
+                return IntermediateSerializer.Deserialize<T>(reader, null);
+            }
         }
 
         private static string DescribeChain(MipmapChain chain)
