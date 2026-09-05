@@ -4910,6 +4910,27 @@ namespace CNA::Internal::Renderers::Vulkan
         /// CNB-67's stride-56 sibling: the same with a vertex colour appended.
         constexpr StockProgramInput kSkinnedColored[]   = { kPos, kNormal, kUv, kWeights, kIndices,
                                                             kColor };
+
+        // VULKAN-148.
+        constexpr StockProgramInput kTangent{
+            VertexElementUsage::Tangent, 0, VertexElementFormat::Vector4, "aTangent"};
+        constexpr StockProgramInput kUv1{
+            VertexElementUsage::TextureCoordinate, 1, VertexElementFormat::Vector2, "aUV1"};
+
+        /// pbr3d, stride 48.
+        constexpr StockProgramInput kPbr[]              = { kPos, kNormal, kTangent, kUv };
+        /// pbr3d's dual-UV variant, stride 60 -- which also carries a vertex colour.
+        constexpr StockProgramInput kPbrDualUv[]        = { kPos, kNormal, kTangent, kUv, kUv1,
+                                                            kColor };
+        /// pbr3d_skinned, stride 68.
+        constexpr StockProgramInput kPbrSkinned[]       = { kPos, kNormal, kTangent, kUv, kWeights,
+                                                            kIndices };
+        /// Its dual-UV variant, stride 76.
+        constexpr StockProgramInput kPbrSkinnedDualUv[] = { kPos, kNormal, kTangent, kUv, kWeights,
+                                                            kIndices, kUv1 };
+        /// plans/plan_gltf.md GLTF-463's stride-80 variant: the above plus a vertex colour.
+        constexpr StockProgramInput kPbrSkinnedColored[] = { kPos, kNormal, kTangent, kUv, kWeights,
+                                                             kIndices, kUv1, kColor };
     }
 
     // VULKAN-146: swap a factory's baked attribute array for the declaration-derived one when the
@@ -5003,6 +5024,33 @@ namespace CNA::Internal::Renderers::Vulkan
             return StockInputs::kSkinned;
         }
         return nullptr;
+    }
+
+    // VULKAN-148: the PBR families' input tables. The variant a stride selects is unchanged --
+    // which SHADER runs is still the stride's decision here, exactly as in VULKAN-146 -- so a
+    // declaration is asked only where each of that shader's inputs lives.
+    static const CNA::Internal::Graphics::StockProgramInput* PbrFamilyStockInputsEXT(
+        bool skinned, std::size_t stride, std::size_t& countOut)
+    {
+        countOut = 0;
+        if (skinned) {
+            if (stride == 80) {
+                countOut = std::size(StockInputs::kPbrSkinnedColored);
+                return StockInputs::kPbrSkinnedColored;
+            }
+            if (stride == 76) {
+                countOut = std::size(StockInputs::kPbrSkinnedDualUv);
+                return StockInputs::kPbrSkinnedDualUv;
+            }
+            countOut = std::size(StockInputs::kPbrSkinned);
+            return StockInputs::kPbrSkinned;
+        }
+        if (stride == 60) {
+            countOut = std::size(StockInputs::kPbrDualUv);
+            return StockInputs::kPbrDualUv;
+        }
+        countOut = std::size(StockInputs::kPbr);
+        return StockInputs::kPbr;
     }
 
     // VULKAN-146: the input table for the program SelectBasicProgramShapeEXT chose. Null for a
@@ -8299,14 +8347,16 @@ namespace CNA::Internal::Renderers::Vulkan
         std::size_t stride, VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
-        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
+        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt, const VulkanVertexInputLayoutEXT& vertexLayout)
     {
         EnsurePbrResources();
 
-        if (stride != 48 && stride != 60)
+        // VULKAN-148: the stride list judges a buffer with NO declaration. One that supplies every
+        // input of the shader this stride selects says where they are, whatever the stride.
+        if (!vertexLayout.IsComplete() && stride != 48 && stride != 60)
             throw std::runtime_error("Vulkan PbrEffect requires vertex stride 48 or 60");
         const bool dualUv = stride == 60;
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask };
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask, vertexLayout.Hash() };
         auto it = pipelinesPbr3D_.find(key);
         if (it != pipelinesPbr3D_.end()) return it->second;
 
@@ -8337,8 +8387,10 @@ namespace CNA::Internal::Renderers::Vulkan
 
         VkPipelineVertexInputStateCreateInfo vis{};
         vis.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        uint32_t attrCount = dualUv ? 6u : 4u;
+        ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, std::size(attrs), attrCount);
         vis.vertexBindingDescriptionCount   = 1; vis.pVertexBindingDescriptions   = &bind;
-        vis.vertexAttributeDescriptionCount = dualUv ? 6u : 4u;
+        vis.vertexAttributeDescriptionCount = attrCount;
         vis.pVertexAttributeDescriptions = attrs;
 
         VkPipelineShaderStageCreateInfo stages[2]{};
@@ -8600,17 +8652,19 @@ namespace CNA::Internal::Renderers::Vulkan
         std::size_t stride, VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
-        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
+        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt, const VulkanVertexInputLayoutEXT& vertexLayout)
     {
         EnsurePbrSkinnedResources();
 
-        if (stride != 68 && stride != 76 && stride != 80)
+        // VULKAN-148: same rule as GetOrCreatePipelinePbr3D's -- the stride list judges a buffer
+        // with no declaration.
+        if (!vertexLayout.IsComplete() && stride != 68 && stride != 76 && stride != 80)
             throw std::runtime_error("Vulkan SkinnedPbrEffect requires vertex stride 68, 76 or 80");
         // plans/plan_gltf.md GLTF-463: stride 80 is stride 76's record with a packed COLOR_0 appended, so
         // it is a dual-UV layout that additionally binds a colour.
         const bool dualUv  = stride == 76 || stride == 80;
         const bool colored = stride == 80;
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask };
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask, vertexLayout.Hash() };
         auto it = pipelinesPbrSkinned3D_.find(key);
         if (it != pipelinesPbrSkinned3D_.end()) return it->second;
 
@@ -8641,8 +8695,10 @@ namespace CNA::Internal::Renderers::Vulkan
 
         VkPipelineVertexInputStateCreateInfo vis{};
         vis.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        uint32_t attrCount = colored ? 8u : dualUv ? 7u : 6u;
+        ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, std::size(attrs), attrCount);
         vis.vertexBindingDescriptionCount   = 1; vis.pVertexBindingDescriptions   = &bind;
-        vis.vertexAttributeDescriptionCount = colored ? 8u : dualUv ? 7u : 6u;
+        vis.vertexAttributeDescriptionCount = attrCount;
         vis.pVertexAttributeDescriptions = attrs;
 
         VkPipelineShaderStageCreateInfo stages[2]{};
@@ -9585,11 +9641,11 @@ namespace CNA::Internal::Renderers::Vulkan
                 } else if (draw.usePbrSkinned) {
                     pipe = GetOrCreatePipelinePbrSkinned3D(draw.stride, draw.topology,
                                                         draw.depthTest, draw.depthWrite,
-                                                        draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
+                                                        draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt, draw.vertexLayout);
                 } else if (draw.usePbr) {
                     pipe = GetOrCreatePipelinePbr3D(draw.stride, draw.topology,
                                                         draw.depthTest, draw.depthWrite,
-                                                        draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
+                                                        draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt, draw.vertexLayout);
                 } else if (draw.useInstanced) {
                     pipe = GetOrCreatePipelineInstanced3D(draw.stride, draw.topology,
                                                           draw.depthTest, draw.depthWrite,
@@ -11483,6 +11539,9 @@ namespace CNA::Internal::Renderers::Vulkan
             if (inputs == nullptr)
                 inputs = EffectFamilyStockInputsEXT(needsAlphaTest, needsEnvMap,
                                                     needsSkinned && !needsPbr, stride, inputCount);
+            // VULKAN-148: and the two PBR families.
+            if (inputs == nullptr && needsPbr)
+                inputs = PbrFamilyStockInputsEXT(needsSkinned, stride, inputCount);
             if (inputs != nullptr)
                 declaredLayout = BuildVulkanVertexInputLayoutEXT(
                     vb.GetDeclarationEXT(), inputs, inputCount);
@@ -11549,7 +11608,11 @@ namespace CNA::Internal::Renderers::Vulkan
         d.usePbrSkinned  = needsPbr && needsSkinned;
         d.usePbr         = needsPbr && !needsSkinned;
         // VULKAN-346: refuse here, not at Present. Nothing is queued that the replay cannot build.
-        if (d.usePbr || d.usePbrSkinned) RequirePbrStrideEXT(stride, d.usePbrSkinned);
+        // VULKAN-148: the stride list is what a buffer with NO declaration is judged by. A
+        // declaration that supplies every one of the selected shader's inputs says where they are,
+        // whatever the stride, so it is not held to the list.
+        if ((d.usePbr || d.usePbrSkinned) && !declaredLayout.IsComplete())
+            RequirePbrStrideEXT(stride, d.usePbrSkinned);
         d.useSkinned     = needsSkinned && !needsPbr;
         d.useLitTextured = needsLitTextured;
         // VULKAN-146: taken at DRAW time, above, because the record is replayed at Present(), by
@@ -11804,6 +11867,9 @@ namespace CNA::Internal::Renderers::Vulkan
             if (inputs == nullptr)
                 inputs = EffectFamilyStockInputsEXT(needsAlphaTest, needsEnvMap,
                                                     needsSkinned && !needsPbr, stride, inputCount);
+            // VULKAN-148: and the two PBR families.
+            if (inputs == nullptr && needsPbr)
+                inputs = PbrFamilyStockInputsEXT(needsSkinned, stride, inputCount);
             if (inputs != nullptr)
                 declaredLayout = BuildVulkanVertexInputLayoutEXT(
                     vb.GetDeclarationEXT(), inputs, inputCount);
@@ -11871,7 +11937,11 @@ namespace CNA::Internal::Renderers::Vulkan
         d.usePbrSkinned  = needsPbr && needsSkinned;
         d.usePbr         = needsPbr && !needsSkinned;
         // VULKAN-346: refuse here, not at Present. Nothing is queued that the replay cannot build.
-        if (d.usePbr || d.usePbrSkinned) RequirePbrStrideEXT(stride, d.usePbrSkinned);
+        // VULKAN-148: the stride list is what a buffer with NO declaration is judged by. A
+        // declaration that supplies every one of the selected shader's inputs says where they are,
+        // whatever the stride, so it is not held to the list.
+        if ((d.usePbr || d.usePbrSkinned) && !declaredLayout.IsComplete())
+            RequirePbrStrideEXT(stride, d.usePbrSkinned);
         d.useSkinned     = needsSkinned && !needsPbr;
         d.useLitTextured = needsLitTextured;
         // VULKAN-146: taken at DRAW time, above, because the record is replayed at Present(), by

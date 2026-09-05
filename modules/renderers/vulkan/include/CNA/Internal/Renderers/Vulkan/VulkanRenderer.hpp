@@ -2848,7 +2848,8 @@ namespace CNA::Internal::Renderers::Vulkan
                                              uint32_t colorAttachmentCount, bool wireframe,
                                              bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
-                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {});
         void       EnsurePbrSkinnedResources();
         /// REMED-GFX-169: as GetOrCreatePbrDescSet, slots 0..6.
         VkDescriptorSet GetOrCreatePbrSkinnedDescSet(uint32_t frameIdx, VkImageView baseColor,
@@ -2862,7 +2863,8 @@ namespace CNA::Internal::Renderers::Vulkan
                                              uint32_t colorAttachmentCount, bool wireframe,
                                              bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
-                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {});
         void       EnsureDefaultWhiteTexture();
         void       EnsureDefaultFlatNormalTexture();
         void       FillExtPushConst(float (&pc)[32], const Matrix& wvp, const GpuDrawParams& p);

@@ -23,6 +23,11 @@
 //   D  Each pair leaves TWO pipeline entries behind, not one. This is the half that fails if the
 //      declaration reaches the pipeline but not its key, which would otherwise show up only as
 //      whichever declaration drew first winning for the rest of the process.
+//   D2 VULKAN-148: a PbrEffect draw at a stride the renderer's own list does not contain --
+//      RequirePbrStrideEXT names 48 and 60 -- renders, because the declaration says where each of
+//      pbr3d.vert.glsl's inputs lives. The same record without a declaration is still refused BY
+//      NAME, which is the half that must not be lost: the stride list is what a buffer with
+//      nothing to go on is judged by.
 //   E  No validation messages.
 //
 // Exit code 0 = all PASS, 1 = any FAIL.
@@ -39,6 +44,7 @@
 #include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerStateCollection.hpp"
@@ -103,6 +109,7 @@ class VulkanDeclaredEffectLayoutTest : public Game
     void check(bool ok, const std::string& label, const std::string& detail)
     {
         std::printf("[%s] %s: %s\n", ok ? "PASS" : "FAIL", label.c_str(), detail.c_str());
+        std::fflush(stdout);
         if (ok) ++pass_; else ++fail_;
     }
 
@@ -293,6 +300,68 @@ protected:
                       fx.setProjectionProperty(Matrix::getIdentityProperty());
                       return DrawWith(dev, fx, vb);
                   });
+
+        // ---- D2: PbrEffect at stride 64, which is on no list -----------------------------------
+        // pbr3d.vert.glsl takes {position, normal, tangent, uv}. Canonically that is 48 bytes;
+        // here it is 64, with four bytes of padding after each of the last three elements -- the
+        // shape a content pipeline produces when it aligns elements. Nothing about it is
+        // expressible from the stride.
+        {
+            const int kPad = 64;
+            VertexDeclaration declPbr(kPad, {
+                VertexElement(0,  VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+                VertexElement(16, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0),
+                VertexElement(32, VertexElementFormat::Vector4, VertexElementUsage::Tangent, 0),
+                VertexElement(52, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+            });
+            std::vector<std::uint8_t> bytes(static_cast<std::size_t>(6 * kPad), 0);
+            for (int i = 0; i < 6; ++i) {
+                std::uint8_t* v = bytes.data() + i * kPad;
+                PutFloat3(v + 0,  kQuad[i].x, kQuad[i].y, 0.0f);
+                PutFloat3(v + 16, 0.0f, 0.0f, 1.0f);
+                PutFloat4(v + 32, 1.0f, 0.0f, 0.0f, 1.0f);
+                PutFloat2(v + 52, 0.25f, 0.5f);      // the LEFT texel
+            }
+            VertexBuffer vbPbr(dev, declPbr, 6, BufferUsage::None);
+            vbPbr.SetDataRaw(bytes.data(), 6, kPad);
+
+            auto drawPbr = [&](VertexBuffer& vb) {
+                PbrEffect fx(dev);
+                fx.setTextureProperty(strip_.get());
+                fx.setNormalMapProperty(nullptr);
+                fx.setMetallicFactorProperty(0.0f);
+                fx.setRoughnessFactorProperty(1.0f);
+                fx.setBaseColorTextureIsSrgbEXTProperty(false);
+                fx.setEncodeOutputToSrgbEXTProperty(false);
+                fx.setAmbientLightColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+                fx.DirectionalLight0.setEnabledProperty(false);
+                fx.DirectionalLight1.setEnabledProperty(false);
+                fx.DirectionalLight2.setEnabledProperty(false);
+                fx.setWorldProperty(Matrix::getIdentityProperty());
+                fx.setViewProperty(Matrix::getIdentityProperty());
+                fx.setProjectionProperty(Matrix::getIdentityProperty());
+                return DrawWith(dev, fx, vb);
+            };
+
+            std::string how;
+            Color gotPbr(0, 0, 0, 0);
+            try { gotPbr = drawPbr(vbPbr); }
+            catch (const std::exception& e) { how = std::string("refused: ") + e.what(); }
+            check(how.empty() && gotPbr.getRProperty() > gotPbr.getBProperty(),
+                  "D2 PbrEffect at stride 64 renders from its declaration, off the stride list",
+                  how.empty() ? Show(gotPbr) + " (the left texel is the red one)" : how);
+
+            // And the same record with NO declaration is still refused by name. The stride list is
+            // what a buffer with nothing to go on is judged by, and losing that would turn an
+            // honest refusal into a draw from undefined bytes.
+            VertexBuffer bare(dev, 6);
+            bare.SetDataRaw(bytes.data(), 6, kPad);
+            std::string bareHow = "accepted";
+            try { (void)drawPbr(bare); }
+            catch (const std::exception& e) { bareHow = e.what(); }
+            check(bareHow.find("requires vertex stride 48 or 60") != std::string::npos,
+                  "D2 the same record with no declaration is still refused by name", bareHow);
+        }
 
         const auto& messages = Renderer().GetValidationMessagesEXT();
         check(messages.empty(), "E no validation messages",
