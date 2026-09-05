@@ -98,6 +98,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_DrawInstanced_3Instances COMMAND cna_test_vulkan_instanced
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-400: is the EasyGL-documented "full-backbuffer SpriteBatch draw before
+        # a 3D draw breaks the frame" finding (migration-guide known issues, Task 933) present here?
+        # Renderer-neutral source so the same file can answer it for any family.
+        cna_vulkan_test(cna_test_vulkan_fullscreen_sprite_then_3d
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/fullscreen_spritebatch_then_3d_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_FullscreenSpriteThen3D COMMAND cna_test_vulkan_fullscreen_sprite_then_3d
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-055: a 3D draw after a SpriteBatch Begin()/End() pair inherits
         # whatever GraphicsDevice.BlendState currently is -- FNA's own lasting side effect, asserted
         # by pixel arithmetic (Additive: red(200,0,0) + gray(100,100,100) clamps to (255,100,100),

@@ -1884,6 +1884,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_SpriteBatch_BlendStateLeak COMMAND cna_test_easygl_spritebatch_blendstate_leak
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-400: the control run. The finding this checks is documented as
+        # EasyGL's (migration-guide known issues, Task 933), so a Vulkan-only registration could
+        # not tell "absent on Vulkan" from "the test cannot detect it anywhere".
+        cna_easygl_test(cna_test_easygl_fullscreen_sprite_then_3d
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/fullscreen_spritebatch_then_3d_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_FullscreenSpriteThen3D COMMAND cna_test_easygl_fullscreen_sprite_then_3d
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # GraphicsDeviceManager.SynchronizeWithVerticalRetrace/ApplyChanges() must actually reach
         # IGraphicsRenderer::SetSwapInterval() -- renderer-independent fix in GraphicsDevice::Reset().
         cna_easygl_test(cna_test_easygl_graphicsdevicemanager_vsync
