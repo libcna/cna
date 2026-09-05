@@ -1069,6 +1069,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_declared_effect_layout
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plans/plan_vulkan.md VULKAN-394: the sibling question for the ~20 PipelineKey-keyed caches.
+        cna_vulkan_test(cna_test_vulkan_pipeline_cache_bound
+                        vulkan_pipeline_cache_bound_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_PipelineCacheBound
+            COMMAND cna_test_vulkan_pipeline_cache_bound
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plans/plan_vulkan.md VULKAN-395: how large the VkSampler cache can get. Two of its seven key
         # fields are caller-supplied numbers rather than enumerations, so the key space is not the
         # few hundred the row assumed.
