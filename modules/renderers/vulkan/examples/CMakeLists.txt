@@ -98,6 +98,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_DrawInstanced_3Instances COMMAND cna_test_vulkan_instanced
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-055: a 3D draw after a SpriteBatch Begin()/End() pair inherits
+        # whatever GraphicsDevice.BlendState currently is -- FNA's own lasting side effect, asserted
+        # by pixel arithmetic (Additive: red(200,0,0) + gray(100,100,100) clamps to (255,100,100),
+        # versus (200,0,0) if the batch's blend did not survive End()). Renderer-agnostic source.
+        cna_vulkan_test(cna_test_vulkan_spritebatch_blendstate_leak
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritebatch_blendstate_leak_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SpriteBatch_BlendStateLeak COMMAND cna_test_vulkan_spritebatch_blendstate_leak
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-392: disposing a buffer must not stall the whole device
         cna_vulkan_test(cna_test_vulkan_buffer_dispose_stall
                         vulkan_buffer_dispose_stall_test.cpp)
@@ -1535,12 +1544,20 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
 
         # REMED-GFX-169: every stock 3D effect must sample its textures through the public
-        # GraphicsDevice.SamplerStates[slot], exactly like SpriteBatch already does. Vulkan's
-        # ApplySamplerState is correct and SpriteBatch reads slotSamplers_[0], but six stock 3D
-        # descriptor builders take NO sampler parameter at all, so all 15 of their combined-image-
-        # sampler bindings are hardcoded to defaultSampler_ (LINEAR + CLAMP_TO_EDGE) and the sampler is
-        # absent from their cache keys too. Vulkan is where the defect lives; the other renderers run the
-        # same public fixture as controls.
+        # GraphicsDevice.SamplerStates[slot], exactly like SpriteBatch already does.
+        #
+        # WHAT THIS SAID WHEN IT WAS WRITTEN, and why it is worth keeping: six stock 3D descriptor
+        # builders took no sampler parameter at all, so all 15 of their combined-image-sampler
+        # bindings were hardcoded to defaultSampler_ (LINEAR + CLAMP_TO_EDGE), and the sampler was
+        # absent from their cache keys too. Vulkan was where that defect lived.
+        #
+        # WHAT IS TRUE NOW (measured by plan_vulkan.md VULKAN-055, 2026-09-06): the builders take
+        # samplers. Exactly TWO descriptor sites still name defaultSampler_ -- the texture's and the
+        # render target's own pre-baked sets (VulkanRenderer.cpp:465, :904) -- and every stock-effect
+        # path builds from slotSamplers_[] (:12734, :12780, :12815, :12824, :12858, :12861). The
+        # fixture stays registered as the regression guard for that; the other renderers run the same
+        # public fixture as controls. A comment describing a fixed defect as current is how the next
+        # audit reaches the wrong conclusion, which is why this one now says both.
         cna_vulkan_test(cna_test_vulkan_stock_effect_sampler
             ${CNA_GRAPHICS_EXAMPLES_DIR}/stock_effect_sampler_contract_test.cpp)
         cna_register_renderer_test(NAME Vulkan_StockEffectSamplerContract COMMAND cna_test_vulkan_stock_effect_sampler
