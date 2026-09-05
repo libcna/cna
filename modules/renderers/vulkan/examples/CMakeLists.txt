@@ -1069,6 +1069,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_declared_effect_layout
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plans/plan_vulkan.md VULKAN-094: SamplerState.AddressW is plumbed and inert here, because
+        # Vulkan has no Texture3D sampling path -- and the public API that would make it observable
+        # accepts a binding and silently drops it (F-31).
+        cna_vulkan_test(cna_test_vulkan_sampler_addressw
+                        vulkan_sampler_addressw_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SamplerAddressW
+            COMMAND cna_test_vulkan_sampler_addressw
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plans/plan_vulkan.md VULKAN-141: baseVertex/startIndex/minVertexIndex/numVertices mean what
         # XNA says. Four quads, one per quadrant, so the parameters are separable and every leg
         # asserts all four quadrants rather than only the one it expects to light.
