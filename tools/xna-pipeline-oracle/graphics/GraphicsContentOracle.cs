@@ -2680,6 +2680,31 @@ namespace Cna.Xna40.GraphicsOracle
                 probe("wrong_extension", WriteImage(directory, "probe.xyz", System.Drawing.Imaging.ImageFormat.Png));
                 return builder.ToString();
             });
+            Record("textureimporter/dds_variants", () =>
+            {
+                string directory = Path.Combine(outputDirectory, "work");
+                Directory.CreateDirectory(directory);
+                var builder = new StringBuilder();
+                Action<string, string> probe = delegate(string label, string path)
+                {
+                    if (builder.Length > 0) builder.Append(' ');
+                    try
+                    {
+                        TextureContent texture = new TextureImporter().Import(path, new ProbeImporterContext());
+                        builder.Append(label + "=[" + DescribeTexture(texture) + "]");
+                    }
+                    catch (Exception error) { builder.Append(label + "=" + error.GetType().Name + ": " + error.Message); }
+                };
+                probe("uncompressed", WriteDds(directory, "u.dds"));
+                probe("dxt1", WriteDdsCompressed(directory, "dxt1.dds", "DXT1", 4, 4, 1, false, false));
+                probe("dxt3", WriteDdsCompressed(directory, "dxt3.dds", "DXT3", 4, 4, 1, false, false));
+                probe("dxt5", WriteDdsCompressed(directory, "dxt5.dds", "DXT5", 4, 4, 1, false, false));
+                probe("dxt1_mips", WriteDdsCompressed(directory, "dxt1_mips.dds", "DXT1", 8, 8, 4, false, false));
+                probe("dxt1_cube", WriteDdsCompressed(directory, "dxt1_cube.dds", "DXT1", 4, 4, 1, true, false));
+                probe("dxt1_volume", WriteDdsCompressed(directory, "dxt1_volume.dds", "DXT1", 4, 4, 1, false, true));
+                probe("dx10", WriteDdsCompressed(directory, "dx10.dds", "DX10", 4, 4, 1, false, false));
+                return builder.ToString();
+            });
             Record("textureimporter/pfm_pixels", () =>
             {
                 string directory = Path.Combine(outputDirectory, "work");
@@ -3208,6 +3233,64 @@ namespace Cna.Xna40.GraphicsOracle
                 bytes.Add(pixel[0]);
                 bytes.Add(pixel[3]);
             }
+            File.WriteAllBytes(path, bytes.ToArray());
+            return path;
+        }
+
+        /// Writes a DDS carrying compressed blocks (or a DX10 header), with the shape asked for.
+        private static string WriteDdsCompressed(string directory, string name, string fourCc, int width,
+                                                 int height, int mipCount, bool cube, bool volume)
+        {
+            string path = Path.Combine(directory, name);
+            var bytes = new List<byte>(Encoding.ASCII.GetBytes("DDS "));
+            Action<int> Word = delegate(int value) { bytes.AddRange(BitConverter.GetBytes(value)); };
+            int blockBytes = fourCc == "DXT1" ? 8 : 16;
+            int depth = volume ? 2 : 0;
+            Word(124);
+            int flags = 0x1 | 0x2 | 0x4 | 0x1000 | 0x80000;    // caps, height, width, pixel format, linear size
+            if (mipCount > 1) flags |= 0x20000;
+            if (volume) flags |= 0x800000;
+            Word(flags);
+            Word(height);
+            Word(width);
+            Word(Math.Max(1, width / 4) * Math.Max(1, height / 4) * blockBytes);
+            Word(depth);
+            Word(mipCount);
+            for (int i = 0; i < 11; i++) { Word(0); }
+            Word(32);
+            Word(0x4);                                          // four cc
+            bytes.AddRange(Encoding.ASCII.GetBytes(fourCc));
+            Word(0);
+            Word(0);
+            Word(0);
+            Word(0);
+            Word(0);
+            int caps = 0x1000 | (mipCount > 1 ? 0x400000 | 0x8 : 0) | (cube || volume ? 0x8 : 0);
+            Word(caps);
+            Word(cube ? 0x200 | 0x400 | 0x800 | 0x1000 | 0x2000 | 0x4000 | 0x8000 : (volume ? 0x200000 : 0));
+            Word(0);
+            Word(0);
+            Word(0);
+            if (fourCc == "DX10")
+            {
+                Word(71);                                       // DXGI_FORMAT_BC1_UNORM
+                Word(3);                                        // TEXTURE2D
+                Word(0);
+                Word(1);                                        // array size
+                Word(0);
+            }
+            int faces = cube ? 6 : 1;
+            int slices = volume ? 2 : 1;
+            for (int face = 0; face < faces; face++)
+                for (int level = 0; level < mipCount; level++)
+                {
+                    int levelWidth = Math.Max(1, width >> level);
+                    int levelHeight = Math.Max(1, height >> level);
+                    int blocks = Math.Max(1, levelWidth / 4) * Math.Max(1, levelHeight / 4) * slices;
+                    for (int block = 0; block < blocks; block++)
+                        for (int i = 0; i < blockBytes; i++)
+                            bytes.Add((byte)((block * 31 + i * 7 + face * 13 + level * 3) & 0xFF));
+                }
             File.WriteAllBytes(path, bytes.ToArray());
             return path;
         }

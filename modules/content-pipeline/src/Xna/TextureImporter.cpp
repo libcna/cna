@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Content/Pipeline/TextureImporter.hpp"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -8,8 +9,10 @@
 #include <vector>
 
 #include "CNA/Content/Cnb/CnbSourceImport.hpp"
+#include "CNA/Internal/Graphics/DdsSurfaceReader.hpp"
 #include "CNA/Internal/Graphics/PfmDecoder.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentIdentity.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/DxtBitmapContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/PixelBitmapContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
 #include "System/IO/FileNotFoundException.hpp"
@@ -73,6 +76,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                                                                       ContentImporterContext& context)
     {
         (void)context;
+        const std::string tool(XnaTypeName);
         std::error_code error;
         if (!std::filesystem::exists(filename, error) || error)
         {
@@ -81,7 +85,6 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         }
         const std::vector<std::uint8_t> bytes = ReadAll(filename);
         auto texture = std::make_shared<Graphics::Texture2DContent>();
-        const std::string tool(XnaTypeName);
         texture->setIdentityProperty(ContentIdentity(filename, tool.substr(tool.rfind('.') + 1)));
         if (CNA::Internal::Graphics::IsPfm(bytes))
         {
@@ -112,6 +115,74 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             }
             texture->getMipmapsProperty().Add(std::move(bitmap));
             return texture;
+        }
+        if (CNA::Internal::Graphics::IsDds(bytes))
+        {
+            // A DDS keeps whatever it stores: its compressed blocks reach an `.xnb` compressed,
+            // its cube becomes a TextureCubeContent and its volume a Texture3DContent (measured,
+            // textureimporter/dds_variants).
+            CNA::Internal::Graphics::DdsSurfaces surfaces;
+            try
+            {
+                surfaces = CNA::Internal::Graphics::ReadDdsSurfaces(bytes, filename);
+            }
+            catch (const std::exception&)
+            {
+                throw InvalidContentException(
+                    "Can not read the texture file. The file is corrupted or invalid.");
+            }
+            std::shared_ptr<Graphics::TextureContent> content;
+            if (surfaces.isCube)
+            {
+                content = std::make_shared<Graphics::TextureCubeContent>();
+            }
+            else if (surfaces.isVolume)
+            {
+                auto volume = std::make_shared<Graphics::Texture3DContent>();
+                for (std::size_t slice = 0; slice < surfaces.surfaces.size(); ++slice)
+                {
+                    volume->getFacesProperty().Add(std::make_shared<Graphics::MipmapChain>());
+                }
+                content = volume;
+            }
+            else
+            {
+                content = std::make_shared<Graphics::Texture2DContent>();
+            }
+            content->setIdentityProperty(ContentIdentity(filename, tool.substr(tool.rfind('.') + 1)));
+            for (std::size_t face = 0; face < surfaces.surfaces.size(); ++face)
+            {
+                for (std::size_t level = 0; level < surfaces.surfaces[face].size(); ++level)
+                {
+                    const auto width = static_cast<SharpRuntime::intcs>(
+                        std::max<std::uint32_t>(1u, surfaces.width >> level));
+                    const auto height = static_cast<SharpRuntime::intcs>(
+                        std::max<std::uint32_t>(1u, surfaces.height >> level));
+                    std::shared_ptr<Graphics::BitmapContent> bitmap;
+                    if (surfaces.format == CNA::Internal::Graphics::DdsSurfaceFormat::Color)
+                    {
+                        bitmap = std::make_shared<Graphics::PixelBitmapContent<Color>>(width, height);
+                    }
+                    else if (surfaces.format == CNA::Internal::Graphics::DdsSurfaceFormat::Dxt1)
+                    {
+                        bitmap = std::make_shared<Graphics::Dxt1BitmapContent>(width, height);
+                    }
+                    else if (surfaces.format == CNA::Internal::Graphics::DdsSurfaceFormat::Dxt3)
+                    {
+                        bitmap = std::make_shared<Graphics::Dxt3BitmapContent>(width, height);
+                    }
+                    else
+                    {
+                        bitmap = std::make_shared<Graphics::Dxt5BitmapContent>(width, height);
+                    }
+                    const std::vector<std::uint8_t>& payload = surfaces.surfaces[face][level];
+                    bitmap->SetPixelData(std::vector<SharpRuntime::bytecs>(payload.begin(), payload.end()));
+                    const std::shared_ptr<Graphics::MipmapChain>& chain =
+                        content->getFacesProperty()[static_cast<SharpRuntime::intcs>(face)];
+                    chain->Add(std::move(bitmap));
+                }
+            }
+            return content;
         }
         // Everything else goes through the one image decoder this repository has, so a texture
         // built here holds the pixels the runtime would have loaded from the same file.

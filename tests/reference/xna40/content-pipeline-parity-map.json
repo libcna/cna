@@ -4489,10 +4489,10 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.TextureImporter": {
-   "status": "HOST_SUBSTITUTION",
+   "status": "SEMANTIC_EQUIVALENT",
    "cna": "Microsoft::Xna::Framework::Content::Pipeline::TextureImporter",
    "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/TextureImporter.hpp",
-   "note": "the texture is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(); DDS sources wait on XNAPP-165.",
+   "note": "the texture is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute().",
    "members": {
     "constructor:.ctor()": {
      "status": "EXACT_EQUIVALENT",
@@ -4500,9 +4500,9 @@
      "note": ""
     },
     "method:Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)": {
-     "status": "HOST_SUBSTITUTION",
+     "status": "SEMANTIC_EQUIVALENT",
      "cna": "Import(const std::string&, ContentImporterContext&) -> std::shared_ptr<TextureContent>",
-     "note": "the texture is answered by shared pointer; every source XNA reads is read the same way and answers the same pixels, except a DDS, which this route does not read yet -- that is XNAPP-165, and the importer refuses one meanwhile."
+     "note": "the texture is answered by shared pointer; every source XNA reads is read the same way and answers the same content -- a DDS included, whose compressed blocks stay compressed, whose cube becomes a TextureCubeContent and whose volume a Texture3DContent, and whose DX10 extension is refused as XNA refuses it."
     }
    }
   },

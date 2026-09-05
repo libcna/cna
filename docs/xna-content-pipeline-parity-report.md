@@ -19,8 +19,8 @@
 
 Status vocabulary: EXACT_EQUIVALENT, SEMANTIC_EQUIVALENT (spelling differs, capability identical; note says how),
 HOST_SUBSTITUTION (Microsoft-host mechanism replaced; note says how), EXTERNAL_BLOCKED (note names the
-unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 45, SEMANTIC_EQUIVALENT 70, HOST_SUBSTITUTION 2, EXTERNAL_BLOCKED 0, MISSING 11.
-Member status by value: EXACT_EQUIVALENT 405, SEMANTIC_EQUIVALENT 218, HOST_SUBSTITUTION 7, EXTERNAL_BLOCKED 1, MISSING 74.
+unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 45, SEMANTIC_EQUIVALENT 71, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 11.
+Member status by value: EXACT_EQUIVALENT 405, SEMANTIC_EQUIVALENT 219, HOST_SUBSTITUTION 6, EXTERNAL_BLOCKED 1, MISSING 74.
 
 Rules applied mechanically: 3 delegate plumbing members are listed in section 7 and not counted; 3 exception
 serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serialization has no C++ counterpart).
@@ -162,7 +162,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `….Tasks` | `BuildXact` | class | MISSING |  |  |
 | `….Tasks` | `CleanContent` | class | MISSING |  |  |
 | `….Tasks` | `GetLastOutputs` | class | MISSING |  |  |
-| `…` | `TextureImporter` | class | HOST_SUBSTITUTION | `Microsoft::Xna::Framework::Content::Pipeline::TextureImporter` | the texture is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(); DDS sources wait on XNAPP-165. |
+| `…` | `TextureImporter` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::TextureImporter` | the texture is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). |
 | `…` | `VideoContent` | class | MISSING |  |  |
 | `…` | `WavImporter` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::WavImporter` | the audio is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). |
 | `…` | `WmaImporter` | class | MISSING |  |  |
@@ -178,7 +178,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `FbxImporter` | .fbx | `ModelProcessor` | MISSING |  |  |
 | `FontDescriptionImporter` | .spritefont | `FontDescriptionProcessor` | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::FontDescriptionImporter` | the description is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). |
 | `Mp3Importer` | .mp3 | `SongProcessor` | MISSING |  |  |
-| `TextureImporter` | .bmp, .dds, .dib, .hdr, .jpg, .pfm, .png, .ppm, .tga | `SpriteTextureProcessor` | HOST_SUBSTITUTION | `Microsoft::Xna::Framework::Content::Pipeline::TextureImporter` | the texture is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(); DDS sources wait on XNAPP-165. |
+| `TextureImporter` | .bmp, .dds, .dib, .hdr, .jpg, .pfm, .png, .ppm, .tga | `SpriteTextureProcessor` | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::TextureImporter` | the texture is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). |
 | `WavImporter` | .wav | `SoundEffectProcessor` | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::WavImporter` | the audio is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). |
 | `WmaImporter` | .wma | `SongProcessor` | MISSING |  |  |
 | `WmvImporter` | .wmv | `VideoProcessor` | MISSING |  |  |
@@ -966,7 +966,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `GetLastOutputs` | property | `OutputContentFiles` | MISSING |  |  |
 | `GetLastOutputs` | method | `Execute()` | MISSING |  |  |
 | `TextureImporter` | constructor | `.ctor()` | EXACT_EQUIVALENT | `TextureImporter()` |  |
-| `TextureImporter` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | HOST_SUBSTITUTION | `Import(const std::string&, ContentImporterContext&) -> std::shared_ptr<TextureContent>` | the texture is answered by shared pointer; every source XNA reads is read the same way and answers the same pixels, except a DDS, which this route does not read yet -- that is XNAPP-165, and the importer refuses one meanwhile. |
+| `TextureImporter` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | SEMANTIC_EQUIVALENT | `Import(const std::string&, ContentImporterContext&) -> std::shared_ptr<TextureContent>` | the texture is answered by shared pointer; every source XNA reads is read the same way and answers the same content -- a DDS included, whose compressed blocks stay compressed, whose cube becomes a TextureCubeContent and whose volume a Texture3DContent, and whose DX10 extension is refused as XNA refuses it. |
 | `VideoContent` | constructor | `.ctor(System.String)` | MISSING |  |  |
 | `VideoContent` | property | `BitsPerSecond` | MISSING |  |  |
 | `VideoContent` | property | `Duration` | MISSING |  |  |

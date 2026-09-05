@@ -272,6 +272,44 @@ namespace
         return bytes;
     }
 
+    /** @brief The oracle's own uncompressed DDS: thirty-two bits with the usual masks. */
+    std::vector<std::uint8_t> UncompressedDds()
+    {
+        std::vector<std::uint8_t> bytes = {'D', 'D', 'S', ' '};
+        AppendUInt32(bytes, 124u);
+        AppendUInt32(bytes, 0x1u | 0x2u | 0x4u | 0x1000u | 0x8u);
+        AppendUInt32(bytes, 2u);
+        AppendUInt32(bytes, 2u);
+        AppendUInt32(bytes, 8u);
+        AppendUInt32(bytes, 0u);
+        AppendUInt32(bytes, 0u);
+        for (int i = 0; i < 11; ++i)
+        {
+            AppendUInt32(bytes, 0u);
+        }
+        AppendUInt32(bytes, 32u);
+        AppendUInt32(bytes, 0x1u | 0x40u);
+        AppendUInt32(bytes, 0u);
+        AppendUInt32(bytes, 32u);
+        AppendUInt32(bytes, 0x00FF0000u);
+        AppendUInt32(bytes, 0x0000FF00u);
+        AppendUInt32(bytes, 0x000000FFu);
+        AppendUInt32(bytes, 0xFF000000u);
+        AppendUInt32(bytes, 0x1000u);
+        AppendUInt32(bytes, 0u);
+        AppendUInt32(bytes, 0u);
+        AppendUInt32(bytes, 0u);
+        AppendUInt32(bytes, 0u);
+        for (const auto& pixel : ProbePixels())
+        {
+            bytes.push_back(pixel[2]);
+            bytes.push_back(pixel[1]);
+            bytes.push_back(pixel[0]);
+            bytes.push_back(pixel[3]);
+        }
+        return bytes;
+    }
+
     /** @brief The oracle's DescribeTexture, for a one-level texture. */
     std::string Describe(const std::shared_ptr<Graphics::TextureContent>& texture,
                          const ImporterContext& context)
@@ -330,6 +368,7 @@ TEST(XnaTextureImporter, EveryFormatAnswersWhatXnaAnswers)
                                        {"ppm", scratch.Write("probe.ppm", Ppm())},
                                        {"pfm", scratch.Write("probe.pfm", Pfm())},
                                        {"dib", scratch.Write("probe.dib", Bitmap(false))},
+                                       {"dds", scratch.Write("probe.dds", UncompressedDds())},
                                        {"wrong_extension", scratch.Write("probe.xyz", png)}};
     for (const Probe& probe : probes)
     {
@@ -377,50 +416,180 @@ TEST(XnaTextureImporter, APortableFloatMapAnswersItsOwnFloats)
     EXPECT_EQ(text, Expected("textureimporter/pfm_pixels"));
 }
 
-TEST(XnaTextureImporter, ADdsSourceIsNotReadYet)
+namespace
 {
-    // XNA reads a DDS, and the corpus shows exactly what it answers for this one. CNA has no DDS
-    // reader on this route yet -- that is XNAPP-165, whose row lists the whole DX9/DX10 surface --
-    // so the importer refuses it, and this test holds that refusal until the row lands.
-    const std::string expected = Expected("textureimporter/formats");
-    EXPECT_NE(expected.find("dds=[Texture2DContent faces=1 [2x2:Color] pixels=FF0000FF00FF00FF0000FFFFFFFFFF80"),
-              std::string::npos);
-    std::vector<std::uint8_t> dds = {'D', 'D', 'S', ' '};
-    AppendUInt32(dds, 124u);
-    AppendUInt32(dds, 0x1u | 0x2u | 0x4u | 0x1000u | 0x8u);
-    AppendUInt32(dds, 2u);
-    AppendUInt32(dds, 2u);
-    AppendUInt32(dds, 8u);
-    AppendUInt32(dds, 0u);
-    AppendUInt32(dds, 0u);
-    for (int i = 0; i < 11; ++i)
+    /** @brief The oracle's own compressed DDS, in the shape asked for. */
+    std::vector<std::uint8_t> Dds(const std::string& fourCc, int width, int height, int mipCount, bool cube,
+                                  bool volume)
     {
-        AppendUInt32(dds, 0u);
+        std::vector<std::uint8_t> bytes = {'D', 'D', 'S', ' '};
+        const int blockBytes = fourCc == "DXT1" ? 8 : 16;
+        const int depth = volume ? 2 : 0;
+        AppendUInt32(bytes, 124u);
+        std::uint32_t flags = 0x1u | 0x2u | 0x4u | 0x1000u | 0x80000u;
+        if (mipCount > 1)
+        {
+            flags |= 0x20000u;
+        }
+        if (volume)
+        {
+            flags |= 0x800000u;
+        }
+        AppendUInt32(bytes, flags);
+        AppendUInt32(bytes, static_cast<std::uint32_t>(height));
+        AppendUInt32(bytes, static_cast<std::uint32_t>(width));
+        AppendUInt32(bytes, static_cast<std::uint32_t>(std::max(1, width / 4) * std::max(1, height / 4) *
+                                                       blockBytes));
+        AppendUInt32(bytes, static_cast<std::uint32_t>(depth));
+        AppendUInt32(bytes, static_cast<std::uint32_t>(mipCount));
+        for (int i = 0; i < 11; ++i)
+        {
+            AppendUInt32(bytes, 0u);
+        }
+        AppendUInt32(bytes, 32u);
+        AppendUInt32(bytes, 0x4u);
+        for (const char letter : fourCc)
+        {
+            bytes.push_back(static_cast<std::uint8_t>(letter));
+        }
+        for (int i = 0; i < 5; ++i)
+        {
+            AppendUInt32(bytes, 0u);
+        }
+        std::uint32_t caps = 0x1000u;
+        if (mipCount > 1)
+        {
+            caps |= 0x400000u | 0x8u;
+        }
+        if (cube || volume)
+        {
+            caps |= 0x8u;
+        }
+        AppendUInt32(bytes, caps);
+        AppendUInt32(bytes, cube ? 0x200u | 0x400u | 0x800u | 0x1000u | 0x2000u | 0x4000u | 0x8000u
+                                 : (volume ? 0x200000u : 0u));
+        AppendUInt32(bytes, 0u);
+        AppendUInt32(bytes, 0u);
+        AppendUInt32(bytes, 0u);
+        if (fourCc == "DX10")
+        {
+            AppendUInt32(bytes, 71u);
+            AppendUInt32(bytes, 3u);
+            AppendUInt32(bytes, 0u);
+            AppendUInt32(bytes, 1u);
+            AppendUInt32(bytes, 0u);
+        }
+        const int faces = cube ? 6 : 1;
+        const int slices = volume ? 2 : 1;
+        for (int face = 0; face < faces; ++face)
+        {
+            for (int level = 0; level < mipCount; ++level)
+            {
+                const int levelWidth = std::max(1, width >> level);
+                const int levelHeight = std::max(1, height >> level);
+                const int blocks = std::max(1, levelWidth / 4) * std::max(1, levelHeight / 4) * slices;
+                for (int block = 0; block < blocks; ++block)
+                {
+                    for (int i = 0; i < blockBytes; ++i)
+                    {
+                        bytes.push_back(
+                            static_cast<std::uint8_t>((block * 31 + i * 7 + face * 13 + level * 3) & 0xFF));
+                    }
+                }
+            }
+        }
+        return bytes;
     }
-    AppendUInt32(dds, 32u);
-    AppendUInt32(dds, 0x1u | 0x40u);
-    AppendUInt32(dds, 0u);
-    AppendUInt32(dds, 32u);
-    AppendUInt32(dds, 0x00FF0000u);
-    AppendUInt32(dds, 0x0000FF00u);
-    AppendUInt32(dds, 0x000000FFu);
-    AppendUInt32(dds, 0xFF000000u);
-    AppendUInt32(dds, 0x1000u);
-    AppendUInt32(dds, 0u);
-    AppendUInt32(dds, 0u);
-    AppendUInt32(dds, 0u);
-    AppendUInt32(dds, 0u);
-    for (const auto& pixel : ProbePixels())
+
+    /** @brief The oracle's DescribeTexture for a texture of any face and level count. */
+    std::string DescribeAll(const std::shared_ptr<Graphics::TextureContent>& texture)
     {
-        dds.push_back(pixel[2]);
-        dds.push_back(pixel[1]);
-        dds.push_back(pixel[0]);
-        dds.push_back(pixel[3]);
+        const auto& faces = static_cast<const System::Collections::ObjectModel::Collection<
+            std::shared_ptr<Graphics::MipmapChain>>&>(texture->getFacesProperty());
+        std::string text = texture->GetTypeName().substr(texture->GetTypeName().rfind('.') + 1) +
+                           " faces=" + std::to_string(faces.getCountProperty());
+        static const std::map<Microsoft::Xna::Framework::Graphics::SurfaceFormat, std::string> names = {
+            {Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color, "Color"},
+            {Microsoft::Xna::Framework::Graphics::SurfaceFormat::Dxt1, "Dxt1"},
+            {Microsoft::Xna::Framework::Graphics::SurfaceFormat::Dxt3, "Dxt3"},
+            {Microsoft::Xna::Framework::Graphics::SurfaceFormat::Dxt5, "Dxt5"},
+            {Microsoft::Xna::Framework::Graphics::SurfaceFormat::Vector4, "Vector4"}};
+        for (SharpRuntime::intcs face = 0; face < faces.getCountProperty(); ++face)
+        {
+            text += " [";
+            const std::shared_ptr<Graphics::MipmapChain>& chain = faces[face];
+            for (SharpRuntime::intcs level = 0; level < chain->getCountProperty(); ++level)
+            {
+                const std::shared_ptr<Graphics::BitmapContent> bitmap = (*chain)[level];
+                Microsoft::Xna::Framework::Graphics::SurfaceFormat format{};
+                const bool hasFormat = bitmap->TryGetFormat(format);
+                text += (level > 0 ? " " : "") + std::to_string(bitmap->getWidthProperty()) + "x" +
+                        std::to_string(bitmap->getHeightProperty()) + ":" +
+                        (hasFormat && names.count(format) != 0 ? names.at(format) : "none");
+            }
+            text += "]";
+        }
+        return text;
     }
+}
+
+TEST(XnaTextureImporter, EveryDdsShapeIsReadAsXnaReadsIt)
+{
     const Scratch scratch;
     TextureImporter importer;
     ImporterContext context;
-    EXPECT_THROW((void)importer.Import(scratch.Write("probe.dds", dds), context), InvalidContentException);
+    const std::string expected = Expected("textureimporter/dds_variants");
+    struct Probe
+    {
+        std::string label;
+        std::vector<std::uint8_t> bytes;
+    };
+    const std::vector<Probe> probes = {{"dxt1", Dds("DXT1", 4, 4, 1, false, false)},
+                                       {"dxt3", Dds("DXT3", 4, 4, 1, false, false)},
+                                       {"dxt5", Dds("DXT5", 4, 4, 1, false, false)},
+                                       {"dxt1_mips", Dds("DXT1", 8, 8, 4, false, false)},
+                                       {"dxt1_cube", Dds("DXT1", 4, 4, 1, true, false)},
+                                       {"dxt1_volume", Dds("DXT1", 4, 4, 1, false, true)}};
+    for (const Probe& probe : probes)
+    {
+        const std::shared_ptr<Graphics::TextureContent> texture =
+            importer.Import(scratch.Write(probe.label + ".dds", probe.bytes), context);
+        ASSERT_NE(texture, nullptr) << probe.label;
+        const std::size_t at = expected.find(probe.label + "=[");
+        ASSERT_NE(at, std::string::npos) << probe.label;
+        const std::size_t end = expected.find("]]", at);
+        ASSERT_NE(end, std::string::npos) << probe.label;
+        EXPECT_EQ(probe.label + "=[" + DescribeAll(texture) + "]", expected.substr(at, end + 2 - at))
+            << probe.label;
+    }
+    // The blocks reach the bitmap as they were stored: a compressed source stays compressed.
+    const std::vector<std::uint8_t> dxt1 = Dds("DXT1", 4, 4, 1, false, false);
+    const std::shared_ptr<Graphics::TextureContent> texture =
+        importer.Import(scratch.Write("blocks.dds", dxt1), context);
+    const auto& faces = static_cast<const System::Collections::ObjectModel::Collection<
+        std::shared_ptr<Graphics::MipmapChain>>&>(texture->getFacesProperty());
+    const std::shared_ptr<Graphics::BitmapContent> bitmap = (*faces[0])[0];
+    const std::vector<SharpRuntime::bytecs> stored = bitmap->GetPixelData();
+    ASSERT_EQ(stored.size(), 8u);
+    EXPECT_EQ(std::vector<SharpRuntime::bytecs>(dxt1.end() - 8, dxt1.end()), stored);
+    EXPECT_TRUE(context.dependencies.empty());
+}
+
+TEST(XnaTextureImporter, ADx10HeaderIsRefusedAsXnaRefusesIt)
+{
+    // The runtime's own reader refuses a DX10 extension outright, which is measured rather than
+    // assumed: the corpus's dx10 case is an InvalidContentException, not a texture.
+    const std::string expected = Expected("textureimporter/dds_variants");
+    EXPECT_NE(expected.find("dx10=InvalidContentException"), std::string::npos);
+    const std::vector<std::uint8_t> dds = UncompressedDds();
+    const Scratch scratch;
+    TextureImporter importer;
+    ImporterContext context;
+    // An uncompressed DDS of the same shape is read, so what the refusal rejects is the extension
+    // and not the file.
+    EXPECT_NE(importer.Import(scratch.Write("plain.dds", dds), context), nullptr);
+    EXPECT_THROW((void)importer.Import(scratch.Write("probe.dds", Dds("DX10", 4, 4, 1, false, false)), context),
+                 InvalidContentException);
 }
 
 TEST(XnaTextureImporter, RefusalsMatchXna)
