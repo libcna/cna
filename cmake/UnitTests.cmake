@@ -1210,6 +1210,16 @@ if(CNA_BUILD_TESTS)
     cna_register_renderer_test(NAME CnaPlatformWindowTests COMMAND CnaTests --gtest_filter=Sdl3WindowTest.*:Sdl3DisplayTest.*:Sdl3GraphicsServiceTest.*:Sdl3PresenterTest.*:Sdl3InputTest.TextInputLifecycleAndAreaReachALivePlatformWindow:DisplayInfoTests.*:GraphicsDevicePlatformWindowTests.*:GameWindowPlatformTest.*:*PlatformWindowConformance*
         LABELS "platform" ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy")
 
+    # plans/plan_vulkan.md VULKAN-154/VULKAN-157: the Xlib error-handler regression is the one
+    # platform test that needs a REAL X11 connection rather than SDL's dummy driver -- its whole
+    # subject is what Xlib does with a failing X request. Its own ctest, with the video driver and
+    # the display forced, because the gtest-discovered copy inside the shared binary inherits the
+    # shell's DISPLAY (finding F-22) and usually finds SDL already committed to another driver.
+    cna_register_renderer_test(NAME CnaPlatformXErrorHandlerTests
+        COMMAND CnaTests --gtest_filter=Sdl3XErrorHandlerTest.*
+        LABELS "platform" TIMEOUT 60
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;SDL_AUDIODRIVER=dummy;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # The rest of the platform contract is display-independent by construction, so it runs
     # unconditionally. Shuffled and repeated for the same reason the input suite is: SDL's
     # subsystem refcount is process-global, and an acquire/release imbalance would show up as

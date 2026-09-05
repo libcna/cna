@@ -12,7 +12,13 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 
+#include <atomic>
+#include <cstdio>
 #include <mutex>
+
+#if defined(__linux__) || defined(__unix__)
+#include <dlfcn.h>
+#endif
 
 namespace CNA::Platform::Sdl3 {
 
@@ -32,6 +38,82 @@ namespace CNA::Platform::Sdl3 {
                 case PlatformSubsystem::Sensor:  return SDL_INIT_SENSOR;
             }
             return SDL_INIT_VIDEO;
+        }
+
+        /**
+         * @brief Stops an Xlib protocol error from ending the process.
+         *
+         * plans/plan_vulkan.md `VULKAN-154`/`VULKAN-157`, findings F-22 and F-23 -- which turned
+         * out to be **one** defect, and this is it.
+         *
+         * Xlib's default error handler calls `exit()`. When the failing request comes from inside
+         * a platform call, `exit()` runs the static `unique_ptr<IPlatform>` destructor, which is
+         * `~Sdl3Platform`, which locks `SdlGlobalStateMutex()` -- **on the same thread that is
+         * still holding it**, because `CreateWindow` took it before calling `SDL_CreateWindow`.
+         * A non-recursive mutex re-locked by its own owner never returns. Measured with `gdb`
+         * (2026-09-05): one thread, `pthread_mutex_lock` <- `~Sdl3Platform` <- `exit` <-
+         * `_XDefaultError` <- `_XError` <- `XSync` <- `X11_PumpEvents` <- `SDL_CreateWindow` <-
+         * `Sdl3Platform::CreateWindow`. So the same X error either killed the test binary outright
+         * or hung it forever, depending only on whether the lock happened to be held.
+         *
+         * An X protocol error is not fatal to the connection -- a genuinely dead connection
+         * arrives through `XSetIOErrorHandler`, which is deliberately left alone because that one
+         * must not return. Recording the error and returning is what toolkits do, and it turns a
+         * process-ending event into one failed operation.
+         *
+         * Resolved through `dlsym` rather than by linking Xlib: libX11 is loaded only when SDL
+         * chose its x11 video driver, and CNA must not grow an X11 build dependency for a
+         * diagnostic. On any other driver this is a no-op.
+         */
+        void InstallX11NonFatalErrorHandlerOnce()
+        {
+#if defined(__linux__) || defined(__unix__)
+            static std::atomic<bool> installed{false};
+            bool expected = false;
+            if (!installed.compare_exchange_strong(expected, true)) { return; }
+
+            const char* driver = SDL_GetCurrentVideoDriver();
+            if (driver == nullptr || std::string(driver) != "x11") { return; }
+
+            // The public XErrorEvent layout, mirrored so this file needs no X11 headers. It has
+            // been ABI-frozen since X11R4. The field ORDER is the part that is easy to get wrong
+            // -- `resourceid` comes before `serial`, not after the codes -- and the regression in
+            // Sdl3XErrorHandlerTests asserts the decoded values precisely so a mistake here cannot
+            // pass as a plausible-looking message. It did, once: the first version of this struct
+            // reported the resource id in the serial field.
+            struct XErrorEventLayout
+            {
+                int            type;
+                void*          display;
+                unsigned long  resourceid;
+                unsigned long  serial;
+                unsigned char  error_code;
+                unsigned char  request_code;
+                unsigned char  minor_code;
+            };
+            using HandlerFn = int (*)(void*, XErrorEventLayout*);
+            using SetHandlerFn = HandlerFn (*)(HandlerFn);
+
+            auto* setHandler =
+                reinterpret_cast<SetHandlerFn>(dlsym(RTLD_DEFAULT, "XSetErrorHandler"));
+            if (setHandler == nullptr) { return; }
+
+            setHandler([](void*, XErrorEventLayout* e) -> int {
+                if (e != nullptr)
+                {
+                    std::fprintf(stderr,
+                                 "[CNA][platform] X protocol error ignored: error_code=%u "
+                                 "request=%u.%u serial=%lu resource=0x%lx. Xlib's default handler "
+                                 "would have called exit() here; see plans/plan_vulkan.md "
+                                 "VULKAN-154.\n",
+                                 static_cast<unsigned>(e->error_code),
+                                 static_cast<unsigned>(e->request_code),
+                                 static_cast<unsigned>(e->minor_code), e->serial, e->resourceid);
+                    std::fflush(stderr);
+                }
+                return 0;
+            });
+#endif
         }
 
         std::string LastSdlError()
@@ -240,6 +322,12 @@ namespace CNA::Platform::Sdl3 {
                     : "; this SDL build contains these video drivers: " + drivers;
             }
             throw PlatformException("AcquireSubsystem(" + ToString(subsystem) + ")", detail);
+        }
+        if (subsystem == PlatformSubsystem::Video)
+        {
+            // VULKAN-154/VULKAN-157: as soon as there is an X connection, and before any window
+            // exists to fail a request about.
+            InstallX11NonFatalErrorHandlerOnce();
         }
         ++ownedRefCounts_[subsystem];
     }

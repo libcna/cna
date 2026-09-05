@@ -201,6 +201,10 @@
       "category": "platform-sdl3-integration",
       "max_references": 18
     },
+    "modules/platform/tests/CNA/Platform/Sdl3XErrorHandlerTests.cpp": {
+      "category": "platform-sdl3-integration",
+      "max_references": 2
+    },
     "modules/platform/tests/CNA/Platform/TerminalPresenterTests.cpp": {
       "category": "containment-assertion",
       "max_references": 1
