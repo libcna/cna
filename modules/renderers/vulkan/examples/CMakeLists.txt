@@ -1069,6 +1069,16 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_declared_effect_layout
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plans/plan_vulkan.md VULKAN-098 (F-19): this renderer's clip-space depth range is XNA's
+        # [0,1], and EasyGL's is OpenGL's [-1,1]. Measured positively across the range -- a 5x4
+        # truth table plus both planes -- rather than inferred from a depth-bias experiment, which
+        # can only ever pin one point.
+        cna_vulkan_test(cna_test_vulkan_depth_range_contract
+                        vulkan_depth_range_contract_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DepthRangeContract
+            COMMAND cna_test_vulkan_depth_range_contract
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plans/plan_vulkan.md VULKAN-391 (F-06's tail): every descriptor-set allocation answers the
         # same way when the device refuses it -- by name, at the draw, never with a null handle a
         # caller can only bind. One injected failure per family, with a warm-up draw first so the
