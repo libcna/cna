@@ -45,6 +45,12 @@ set(CNA_PARITY_FIXTURES
     # WEBGPU-173: EnableDefaultLighting, Alpha's premultiply into RGB, and large-world-scale
     # transform precision.
     basic_effect_alpha_scale
+    # WEBGPU-174: all eight AlphaTestEffect CompareFunctions, each given a unique draw/discard
+    # signature across three texel alphas (below, at, above the reference).
+    alpha_test_sweep
+    # WEBGPU-174: the two AlphaTestEffect inputs the sweep cannot reach -- a null Texture, and
+    # VertexColorEnabled combined with DiffuseColor.
+    alpha_test_sources
     # WEBGPU-153: FillMode::WireFrame draws edges and leaves the interior empty.
     fill_mode_wireframe
     # WEBGPU-161: SamplerState.MaxMipLevel selects which mip level a sample comes from.

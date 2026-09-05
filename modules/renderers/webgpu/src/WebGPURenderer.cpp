@@ -4261,7 +4261,15 @@ namespace CNA::Internal::Renderers::WebGPU
         // question rather than a stride one.
         const bool needsAlphaTest = !params.pbr &&
                                     (params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f);
-        if (needsAlphaTest && hasUv && params.texture0 != nullptr)
+        // WEBGPU-174: a NULL Texture no longer takes the family away. Whether this vertex is an
+        // alpha-tested one is a question about the effect and the declaration; whether a texture is
+        // bound is a question about the BINDING, and QueueAlphaTestDraw has answered it since
+        // plans/plan_gltf.md GLTF-474 by sampling the neutral-white default (the identity for
+        // `tex * colour`), exactly as EasyGLRenderer's own EnsureDefaultWhiteTexture() fallback
+        // does for texture unit 0. Requiring the texture here instead dropped the draw into the
+        // stride-derived ladder, where a Position+Colour+UV record was rejected outright as "not a
+        // stride-16 VertexPositionColor buffer" -- a crash where EasyGL renders.
+        if (needsAlphaTest && hasUv)
         {
             return hasColor ? StockVertexShapeEXT::AlphaTestColored
                             : StockVertexShapeEXT::AlphaTest;
