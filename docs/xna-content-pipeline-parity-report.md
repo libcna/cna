@@ -10,8 +10,8 @@
 
 | Quantity | Implemented (EXACT + SEMANTIC + HOST_SUBSTITUTION) | EXTERNAL_BLOCKED | MISSING |
 |---|---|---:|---:|
-| public/protected types | 102/128 (79.7%) | 0 | 26 |
-| public/protected members | 584/705 (82.8%) | 0 | 121 |
+| public/protected types | 103/128 (80.5%) | 0 | 25 |
+| public/protected members | 597/705 (84.7%) | 0 | 108 |
 | enum values | 17/27 (63.0%) | 0 | 10 |
 | built-in importers | 0/10 (0.0%) | 0 | 10 |
 | built-in processors | 9/12 (75.0%) | 0 | 3 |
@@ -19,8 +19,8 @@
 
 Status vocabulary: EXACT_EQUIVALENT, SEMANTIC_EQUIVALENT (spelling differs, capability identical; note says how),
 HOST_SUBSTITUTION (Microsoft-host mechanism replaced; note says how), EXTERNAL_BLOCKED (note names the
-unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 40, SEMANTIC_EQUIVALENT 61, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 26.
-Member status by value: EXACT_EQUIVALENT 376, SEMANTIC_EQUIVALENT 203, HOST_SUBSTITUTION 5, EXTERNAL_BLOCKED 0, MISSING 121.
+unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 40, SEMANTIC_EQUIVALENT 62, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 25.
+Member status by value: EXACT_EQUIVALENT 384, SEMANTIC_EQUIVALENT 208, HOST_SUBSTITUTION 5, EXTERNAL_BLOCKED 0, MISSING 108.
 
 Rules applied mechanically: 3 delegate plumbing members are listed in section 7 and not counted; 3 exception
 serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serialization has no C++ counterpart).
@@ -31,7 +31,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 |---|---:|---:|---:|---:|
 | `Microsoft.Xna.Framework.Content.Pipeline.Audio` | 5 | 0 | 0 | 5 |
 | `Microsoft.Xna.Framework.Content.Pipeline` | 32 | 21 | 0 | 11 |
-| `Microsoft.Xna.Framework.Content.Pipeline.Graphics` | 47 | 46 | 0 | 1 |
+| `Microsoft.Xna.Framework.Content.Pipeline.Graphics` | 47 | 47 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Processors` | 28 | 23 | 0 | 5 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler` | 5 | 5 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate` | 7 | 7 | 0 | 0 |
@@ -86,7 +86,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `….Graphics` | `IndexCollection` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::IndexCollection` | AddRange takes a std::vector rather than an IEnumerable, so the ArgumentNullException XNA gives for a null sequence has no counterpart (measured, indexcollection/addrange_null). |
 | `….Graphics` | `IndirectPositionCollection` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::IndirectPositionCollection` | A read-only view: the parent mesh's positions in the order the position indices name them (measured, vertexcontent/indirect_positions). |
 | `….Graphics` | `MaterialContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::MaterialContent` | The five accessors XNA declares protected stay protected, and a C++ null is an empty std::optional or a null shared_ptr. Every behaviour is pinned to tests/reference/xna40/graphics (cases material/*): a property set to null removes its entry, a property whose stored value has another type reads as null rather than refusing, and an empty key is refused the way the runtime refuses a null one. |
-| `….Graphics` | `MeshBuilder` | class | MISSING |  |  |
+| `….Graphics` | `MeshBuilder` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::MeshBuilder` | a builder and the mesh it answers are shared pointers, which is the lifetime a .NET reference gives them. An empty name stands for XNA's null one, which the runtime accepts. |
 | `….Graphics` | `MeshContent` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::MeshContent` |  |
 | `….Graphics` | `MeshHelper` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::MeshHelper` | the mesh, batch and node are shared pointers, which is the lifetime a .NET reference gives them. A channel name left empty stands for XNA's null name. |
 | `….Graphics` | `MipmapChain` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::MipmapChain` | A Collection<BitmapContent> of shared_ptr elements; the null check XNA's InsertItem/SetItem perform is kept (ArgumentNullException, parameter name item). |
@@ -503,19 +503,19 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `MaterialContent` | method | `GetValueTypeProperty<T>(System.String)` | EXACT_EQUIVALENT | `GetValueTypeProperty<T>(const std::string&) -> std::optional<T>` | Nullable<T> is std::optional<T>. |
 | `MaterialContent` | method | `SetProperty<T>(System.String, T)` | SEMANTIC_EQUIVALENT | `SetProperty<T>(const std::string&, const T&)` | T is the value's carrier -- std::optional for a value type, std::shared_ptr for a reference -- and an empty one removes the entry, which is what passing null does in XNA. |
 | `MaterialContent` | method | `SetTexture(System.String, Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureContent>)` | SEMANTIC_EQUIVALENT | `SetTexture(const std::string&, const std::shared_ptr<ExternalReference<TextureContent>>&)` | a null pointer removes the slot, as null does in XNA. |
-| `MeshBuilder` | property | `MergeDuplicatePositions` | MISSING |  |  |
-| `MeshBuilder` | property | `MergePositionTolerance` | MISSING |  |  |
-| `MeshBuilder` | property | `Name` | MISSING |  |  |
-| `MeshBuilder` | property | `SwapWindingOrder` | MISSING |  |  |
-| `MeshBuilder` | method | `AddTriangleVertex(System.Int32)` | MISSING |  |  |
-| `MeshBuilder` | method | `CreatePosition(Microsoft.Xna.Framework.Vector3)` | MISSING |  |  |
-| `MeshBuilder` | method | `CreatePosition(System.Single, System.Single, System.Single)` | MISSING |  |  |
-| `MeshBuilder` | method | `CreateVertexChannel<T>(System.String)` | MISSING |  |  |
-| `MeshBuilder` | method | `FinishMesh()` | MISSING |  |  |
-| `MeshBuilder` | method | `SetMaterial(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MaterialContent)` | MISSING |  |  |
-| `MeshBuilder` | method | `SetOpaqueData(Microsoft.Xna.Framework.Content.Pipeline.OpaqueDataDictionary)` | MISSING |  |  |
-| `MeshBuilder` | method | `SetVertexChannelData(System.Int32, System.Object)` | MISSING |  |  |
-| `MeshBuilder` | method | `StartMesh(System.String)` | MISSING |  |  |
+| `MeshBuilder` | property | `MergeDuplicatePositions` | EXACT_EQUIVALENT | `getMergeDuplicatePositionsProperty() / setMergeDuplicatePositionsProperty(bool)` |  |
+| `MeshBuilder` | property | `MergePositionTolerance` | EXACT_EQUIVALENT | `getMergePositionToleranceProperty() / setMergePositionToleranceProperty(Single)` |  |
+| `MeshBuilder` | property | `Name` | EXACT_EQUIVALENT | `getNameProperty() / setNameProperty(std::string)` |  |
+| `MeshBuilder` | property | `SwapWindingOrder` | EXACT_EQUIVALENT | `getSwapWindingOrderProperty() / setSwapWindingOrderProperty(bool)` |  |
+| `MeshBuilder` | method | `AddTriangleVertex(System.Int32)` | EXACT_EQUIVALENT | `AddTriangleVertex(intcs)` |  |
+| `MeshBuilder` | method | `CreatePosition(Microsoft.Xna.Framework.Vector3)` | EXACT_EQUIVALENT | `CreatePosition(const Vector3&)` |  |
+| `MeshBuilder` | method | `CreatePosition(System.Single, System.Single, System.Single)` | EXACT_EQUIVALENT | `CreatePosition(Single, Single, Single)` |  |
+| `MeshBuilder` | method | `CreateVertexChannel<T>(System.String)` | EXACT_EQUIVALENT | `CreateVertexChannel<T>(const std::string&)` |  |
+| `MeshBuilder` | method | `FinishMesh()` | SEMANTIC_EQUIVALENT | `FinishMesh() -> std::shared_ptr<MeshContent>` | a builder and the mesh it answers are shared pointers, which is the lifetime a .NET reference gives them. Finishing twice answers the same mesh, as XNA's does. |
+| `MeshBuilder` | method | `SetMaterial(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MaterialContent)` | SEMANTIC_EQUIVALENT | `SetMaterial(std::shared_ptr<MaterialContent>)` | a builder and the mesh it answers are shared pointers, which is the lifetime a .NET reference gives them. |
+| `MeshBuilder` | method | `SetOpaqueData(Microsoft.Xna.Framework.Content.Pipeline.OpaqueDataDictionary)` | SEMANTIC_EQUIVALENT | `SetOpaqueData(const OpaqueDataDictionary*)` | the dictionary is borrowed rather than retained, and its entries are copied into the batch; a null pointer stands for XNA's null, which the runtime accepts. |
+| `MeshBuilder` | method | `SetVertexChannelData(System.Int32, System.Object)` | SEMANTIC_EQUIVALENT | `SetVertexChannelData(intcs, const ContentObject&)` | the boxed value is a ContentObject, which is what System.Object is here. |
+| `MeshBuilder` | method | `StartMesh(System.String)` | SEMANTIC_EQUIVALENT | `StartMesh(const std::string&) -> std::shared_ptr<MeshBuilder>` | a builder and the mesh it answers are shared pointers, which is the lifetime a .NET reference gives them. |
 | `MeshContent` | constructor | `.ctor()` | EXACT_EQUIVALENT | `MeshContent()` |  |
 | `MeshContent` | property | `Geometry` | EXACT_EQUIVALENT | `getGeometryProperty()` |  |
 | `MeshContent` | property | `Positions` | EXACT_EQUIVALENT | `getPositionsProperty()` |  |

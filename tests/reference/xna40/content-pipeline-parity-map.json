@@ -1588,75 +1588,75 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Graphics.MeshBuilder": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::MeshBuilder",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/MeshBuilder.hpp",
+   "note": "a builder and the mesh it answers are shared pointers, which is the lifetime a .NET reference gives them. An empty name stands for XNA's null one, which the runtime accepts.",
    "members": {
     "property:MergeDuplicatePositions": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getMergeDuplicatePositionsProperty() / setMergeDuplicatePositionsProperty(bool)",
      "note": ""
     },
     "property:MergePositionTolerance": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getMergePositionToleranceProperty() / setMergePositionToleranceProperty(Single)",
      "note": ""
     },
     "property:Name": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getNameProperty() / setNameProperty(std::string)",
      "note": ""
     },
     "property:SwapWindingOrder": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getSwapWindingOrderProperty() / setSwapWindingOrderProperty(bool)",
      "note": ""
     },
     "method:AddTriangleVertex(System.Int32)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "AddTriangleVertex(intcs)",
      "note": ""
     },
     "method:CreatePosition(Microsoft.Xna.Framework.Vector3)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "CreatePosition(const Vector3&)",
      "note": ""
     },
     "method:CreatePosition(System.Single, System.Single, System.Single)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "CreatePosition(Single, Single, Single)",
      "note": ""
     },
     "method:CreateVertexChannel<T>(System.String)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "CreateVertexChannel<T>(const std::string&)",
      "note": ""
     },
     "method:FinishMesh()": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "FinishMesh() -> std::shared_ptr<MeshContent>",
+     "note": "a builder and the mesh it answers are shared pointers, which is the lifetime a .NET reference gives them. Finishing twice answers the same mesh, as XNA's does."
     },
     "method:SetMaterial(Microsoft.Xna.Framework.Content.Pipeline.Graphics.MaterialContent)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "SetMaterial(std::shared_ptr<MaterialContent>)",
+     "note": "a builder and the mesh it answers are shared pointers, which is the lifetime a .NET reference gives them."
     },
     "method:SetOpaqueData(Microsoft.Xna.Framework.Content.Pipeline.OpaqueDataDictionary)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "SetOpaqueData(const OpaqueDataDictionary*)",
+     "note": "the dictionary is borrowed rather than retained, and its entries are copied into the batch; a null pointer stands for XNA's null, which the runtime accepts."
     },
     "method:SetVertexChannelData(System.Int32, System.Object)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "SetVertexChannelData(intcs, const ContentObject&)",
+     "note": "the boxed value is a ContentObject, which is what System.Object is here."
     },
     "method:StartMesh(System.String)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "StartMesh(const std::string&) -> std::shared_ptr<MeshBuilder>",
+     "note": "a builder and the mesh it answers are shared pointers, which is the lifetime a .NET reference gives them."
     }
    }
   },

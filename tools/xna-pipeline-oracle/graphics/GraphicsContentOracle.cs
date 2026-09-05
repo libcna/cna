@@ -2575,6 +2575,45 @@ namespace Cna.Xna40.GraphicsOracle
                 return builder.ToString();
             });
 
+            Record("meshbuilder/channel_data_persistence", () =>
+            {
+                // Is the channel value set once carried into the vertices that follow, or does it
+                // apply to one vertex only?
+                MeshBuilder builder = MeshBuilder.StartMesh("Mesh");
+                int normals = builder.CreateVertexChannel<Vector3>(VertexChannelNames.Normal());
+                int coords = builder.CreateVertexChannel<Vector2>(VertexChannelNames.TextureCoordinate(0));
+                builder.CreatePosition(0, 0, 0);
+                builder.CreatePosition(1, 0, 0);
+                builder.CreatePosition(0, 1, 0);
+                builder.SetVertexChannelData(normals, new Vector3(0, 0, 1));
+                builder.SetVertexChannelData(coords, new Vector2(5, 6));
+                builder.AddTriangleVertex(0);
+                builder.AddTriangleVertex(1);
+                builder.SetVertexChannelData(coords, new Vector2(7, 8));
+                builder.AddTriangleVertex(2);
+                return DescribeMeshFull(builder.FinishMesh());
+            });
+            Record("meshbuilder/finish_twice", () =>
+            {
+                MeshBuilder builder = MeshBuilder.StartMesh("Mesh");
+                builder.CreatePosition(0, 0, 0);
+                builder.CreatePosition(1, 0, 0);
+                builder.CreatePosition(0, 1, 0);
+                builder.AddTriangleVertex(0);
+                builder.AddTriangleVertex(1);
+                builder.AddTriangleVertex(2);
+                MeshContent first = builder.FinishMesh();
+                MeshContent second = builder.FinishMesh();
+                return "same=" + object.ReferenceEquals(first, second) + " first=" + DescribeMeshFull(first) +
+                       " second=" + DescribeMeshFull(second);
+            });
+            Record("meshbuilder/no_triangles", () =>
+            {
+                MeshBuilder builder = MeshBuilder.StartMesh("Empty");
+                builder.CreatePosition(0, 0, 0);
+                return DescribeMeshFull(builder.FinishMesh());
+            });
+
             // ---- TextureReferenceDictionary ------------------------------------------------------
             Record("texturereferencedictionary/default", () => { var d = new TextureReferenceDictionary(); return "count=" + d.Count + " ToString=\"" + d + "\""; });
 

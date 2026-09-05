@@ -32,6 +32,7 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/PixelBitmapContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/TextureContent.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/MeshBuilder.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/StockMaterials.hpp"
 #include "CNA/Content/Pipeline/EffectCompilerService.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/EffectProcessor.hpp"
@@ -1448,6 +1449,39 @@ TEST(XnaModelProcessor, ProcessesASceneAsXnaDoes)
     RecordingContext emptyContext;
     EXPECT_EQ(DescribeModel(empty.Process(std::make_shared<Graphics::NodeContent>(), emptyContext)),
               Expected("modelprocessor/empty_node"));
+}
+
+TEST(XnaModelProcessor, TrianglesAndVerticesComeOutInTheOrderXnaGivesThem)
+{
+    // Two triangles through the processor: their order and their vertices say that the cache
+    // ordering runs here, reversing the triangles and renumbering the vertices.
+    const std::shared_ptr<Graphics::MeshBuilder> builder = Graphics::MeshBuilder::StartMesh("Quad");
+    builder->setMergeDuplicatePositionsProperty(true);
+    const SharpRuntime::intcs normals =
+        builder->CreateVertexChannel<Vector3>(Graphics::VertexChannelNames::Normal());
+    const SharpRuntime::intcs coords =
+        builder->CreateVertexChannel<Vector2>(Graphics::VertexChannelNames::TextureCoordinate(0));
+    const SharpRuntime::intcs a = builder->CreatePosition(0, 0, 0);
+    const SharpRuntime::intcs b = builder->CreatePosition(1, 0, 0);
+    const SharpRuntime::intcs c = builder->CreatePosition(1, 1, 0);
+    const SharpRuntime::intcs d = builder->CreatePosition(0, 1, 0);
+    const std::vector<SharpRuntime::intcs> corners = {a, b, c, a, c, d};
+    const std::vector<Vector2> uv = {Vector2(0, 0), Vector2(1, 0), Vector2(1, 1),
+                                     Vector2(0, 0), Vector2(1, 1), Vector2(0, 1)};
+    for (std::size_t i = 0; i < corners.size(); ++i)
+    {
+        builder->SetVertexChannelData(normals,
+                                      Microsoft::Xna::Framework::Content::Pipeline::Box<Vector3>(Vector3(0, 0, 1)));
+        builder->SetVertexChannelData(coords,
+                                      Microsoft::Xna::Framework::Content::Pipeline::Box<Vector2>(uv[i]));
+        builder->AddTriangleVertex(corners[i]);
+    }
+    auto root = std::make_shared<Graphics::NodeContent>();
+    root->setNameProperty("Root");
+    root->getChildrenProperty().Add(builder->FinishMesh());
+    Processors::ModelProcessor processor;
+    RecordingContext context;
+    EXPECT_EQ(DescribeModelFull(processor.Process(root, context)), Expected("modelprocessor/quad_ordering"));
 }
 
 TEST(XnaModelProcessor, RefusalsMatchXna)

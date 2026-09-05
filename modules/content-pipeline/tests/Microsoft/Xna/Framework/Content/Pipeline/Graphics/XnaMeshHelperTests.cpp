@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-151: MeshHelper -- normals, tangent frames, skeletons,
-// merging, ordering and whole-scene transforms -- against what the genuine XNA 4.0 pipeline does
-// with the same meshes (tests/reference/xna40/graphics/graphics-content-oracle.json, cases
-// meshhelper/*).
+// plans/plan_xnapipeline_parity.md XNAPP-150 and 151: MeshBuilder and MeshHelper -- building a
+// mesh a triangle at a time, and the operations on a finished one: normals, tangent frames,
+// skeletons, merging, ordering and whole-scene transforms -- against what the genuine XNA 4.0
+// pipeline does with the same meshes (tests/reference/xna40/graphics/graphics-content-oracle.json,
+// cases meshbuilder/* and meshhelper/*).
 //
 // What the measurements settle, none of which the documentation says: a face normal is the
 // clockwise one, so a triangle wound counter-clockwise in the XY plane answers -Z; a vertex normal
@@ -25,7 +26,9 @@
 #include <string>
 #include <vector>
 
+#include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/MeshBuilder.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/MeshHelper.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/StockMaterials.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/NodeContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/VectorConverter.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/VertexChannelNames.hpp"
@@ -48,6 +51,8 @@ using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Content::Pipeline::InvalidContentException;
 using Graphics::BoneContent;
 using Graphics::GeometryContent;
+using Microsoft::Xna::Framework::Content::Pipeline::Box;
+using Graphics::MeshBuilder;
 using Graphics::MeshContent;
 using Graphics::MeshHelper;
 using Graphics::NodeContent;
@@ -428,6 +433,14 @@ namespace
         {
             return name + "=ArgumentNullException:" + Normalize(error.getMessageProperty());
         }
+        catch (const System::ArgumentOutOfRangeException& error)
+        {
+            return name + "=ArgumentOutOfRangeException:" + Normalize(error.getMessageProperty());
+        }
+        catch (const System::InvalidOperationException& error)
+        {
+            return name + "=InvalidOperationException:" + Normalize(error.getMessageProperty());
+        }
         catch (const System::ArgumentException& error)
         {
             return name + "=ArgumentException:" + Normalize(error.getMessageProperty());
@@ -726,4 +739,231 @@ TEST(XnaMeshHelper, NullAndRangeRefusalsMatchXna)
     text += " " + Probe("findSkeletonNull", [] { (void)MeshHelper::FindSkeleton(nullptr); });
     text += " " + Probe("flattenNull", [] { (void)MeshHelper::FlattenSkeleton(nullptr); });
     EXPECT_EQ(StripParameterNames(text), StripParameterNames(RawExpected("meshhelper/null_and_range_refusals")));
+}
+
+
+namespace
+{
+    /** @brief The oracle's own BuiltQuad: the same builder calls in the same order. */
+    std::shared_ptr<MeshContent> BuiltQuad(bool merge, bool swap)
+    {
+        const std::shared_ptr<MeshBuilder> builder = MeshBuilder::StartMesh("Quad");
+        builder->setMergeDuplicatePositionsProperty(merge);
+        builder->setSwapWindingOrderProperty(swap);
+        const SharpRuntime::intcs normals = builder->CreateVertexChannel<Vector3>(VertexChannelNames::Normal());
+        const SharpRuntime::intcs coords =
+            builder->CreateVertexChannel<Vector2>(VertexChannelNames::TextureCoordinate(0));
+        const SharpRuntime::intcs a = builder->CreatePosition(0, 0, 0);
+        const SharpRuntime::intcs b = builder->CreatePosition(1, 0, 0);
+        const SharpRuntime::intcs c = builder->CreatePosition(1, 1, 0);
+        const SharpRuntime::intcs d = builder->CreatePosition(0, 1, 0);
+        const std::vector<SharpRuntime::intcs> corners = {a, b, c, a, c, d};
+        const std::vector<Vector2> uv = {Vector2(0, 0), Vector2(1, 0), Vector2(1, 1),
+                                         Vector2(0, 0), Vector2(1, 1), Vector2(0, 1)};
+        for (std::size_t i = 0; i < corners.size(); ++i)
+        {
+            builder->SetVertexChannelData(normals, Box<Vector3>(Vector3(0, 0, 1)));
+            builder->SetVertexChannelData(coords, Box<Vector2>(uv[i]));
+            builder->AddTriangleVertex(corners[i]);
+        }
+        return builder->FinishMesh();
+    }
+}
+
+TEST(XnaMeshBuilder, DefaultsMatchXna)
+{
+    const std::shared_ptr<MeshBuilder> builder = MeshBuilder::StartMesh("Mesh");
+    EXPECT_EQ("MergeDuplicatePositions=" +
+                  std::string(builder->getMergeDuplicatePositionsProperty() ? "True" : "False") +
+                  " MergePositionTolerance=" + Number(builder->getMergePositionToleranceProperty()) +
+                  " Name=\"" + builder->getNameProperty() + "\" SwapWindingOrder=" +
+                  (builder->getSwapWindingOrderProperty() ? "True" : "False"),
+              Expected("meshbuilder/defaults"));
+}
+
+TEST(XnaMeshBuilder, BuildsAQuadAsXnaDoes)
+{
+    EXPECT_EQ(DescribeMeshFull(BuiltQuad(false, false)), Expected("meshbuilder/quad"));
+    EXPECT_EQ(DescribeMeshFull(BuiltQuad(true, false)), Expected("meshbuilder/quad_merged"));
+    EXPECT_EQ(DescribeMeshFull(BuiltQuad(false, true)), Expected("meshbuilder/quad_swapped"));
+}
+
+TEST(XnaMeshBuilder, MergesPositionsAtTheEndNotAtCreation)
+{
+    const std::shared_ptr<MeshBuilder> builder = MeshBuilder::StartMesh("Mesh");
+    builder->setMergeDuplicatePositionsProperty(true);
+    builder->setMergePositionToleranceProperty(0.01f);
+    const SharpRuntime::intcs a = builder->CreatePosition(Vector3(0, 0, 0));
+    const SharpRuntime::intcs b = builder->CreatePosition(Vector3(0, 0, 0));
+    const SharpRuntime::intcs c = builder->CreatePosition(Vector3(0.005f, 0, 0));
+    const SharpRuntime::intcs d = builder->CreatePosition(Vector3(1, 0, 0));
+    builder->AddTriangleVertex(a);
+    builder->AddTriangleVertex(d);
+    builder->AddTriangleVertex(c);
+    EXPECT_EQ("a=" + std::to_string(a) + " b=" + std::to_string(b) + " c=" + std::to_string(c) + " d=" +
+                  std::to_string(d) + " " + DescribeMeshFull(builder->FinishMesh()),
+              Expected("meshbuilder/duplicate_positions"));
+}
+
+TEST(XnaMeshBuilder, CarriesTheMaterialTheOpaqueDataAndTheGeneratedNormals)
+{
+    const std::shared_ptr<MeshBuilder> builder = MeshBuilder::StartMesh("Mesh");
+    auto material = std::make_shared<Graphics::BasicMaterialContent>();
+    material->setAlphaProperty(0.5f);
+    builder->SetMaterial(material);
+    Microsoft::Xna::Framework::Content::Pipeline::OpaqueDataDictionary data;
+    data.SetValue<SharpRuntime::intcs>("Key", 7);
+    builder->SetOpaqueData(&data);
+    builder->CreatePosition(0, 0, 0);
+    builder->CreatePosition(1, 0, 0);
+    builder->CreatePosition(0, 1, 0);
+    builder->AddTriangleVertex(0);
+    builder->AddTriangleVertex(1);
+    builder->AddTriangleVertex(2);
+    EXPECT_EQ(DescribeMeshFull(builder->FinishMesh()), Expected("meshbuilder/material_and_opaque_data"));
+}
+
+TEST(XnaMeshBuilder, ChannelDataIsCarriedIntoTheCornersThatFollow)
+{
+    const std::shared_ptr<MeshBuilder> builder = MeshBuilder::StartMesh("Mesh");
+    const SharpRuntime::intcs normals = builder->CreateVertexChannel<Vector3>(VertexChannelNames::Normal());
+    const SharpRuntime::intcs coords =
+        builder->CreateVertexChannel<Vector2>(VertexChannelNames::TextureCoordinate(0));
+    builder->CreatePosition(0, 0, 0);
+    builder->CreatePosition(1, 0, 0);
+    builder->CreatePosition(0, 1, 0);
+    builder->SetVertexChannelData(normals, Box<Vector3>(Vector3(0, 0, 1)));
+    builder->SetVertexChannelData(coords, Box<Vector2>(Vector2(5, 6)));
+    builder->AddTriangleVertex(0);
+    builder->AddTriangleVertex(1);
+    builder->SetVertexChannelData(coords, Box<Vector2>(Vector2(7, 8)));
+    builder->AddTriangleVertex(2);
+    EXPECT_EQ(DescribeMeshFull(builder->FinishMesh()), Expected("meshbuilder/channel_data_persistence"));
+}
+
+TEST(XnaMeshBuilder, FinishingTwiceAnswersTheSameMesh)
+{
+    const std::shared_ptr<MeshBuilder> builder = MeshBuilder::StartMesh("Mesh");
+    builder->CreatePosition(0, 0, 0);
+    builder->CreatePosition(1, 0, 0);
+    builder->CreatePosition(0, 1, 0);
+    builder->AddTriangleVertex(0);
+    builder->AddTriangleVertex(1);
+    builder->AddTriangleVertex(2);
+    const std::shared_ptr<MeshContent> first = builder->FinishMesh();
+    const std::shared_ptr<MeshContent> second = builder->FinishMesh();
+    EXPECT_EQ("same=" + std::string(first == second ? "True" : "False") + " first=" + DescribeMeshFull(first) +
+                  " second=" + DescribeMeshFull(second),
+              Expected("meshbuilder/finish_twice"));
+
+    const std::shared_ptr<MeshBuilder> empty = MeshBuilder::StartMesh("Empty");
+    empty->CreatePosition(0, 0, 0);
+    EXPECT_EQ(DescribeMeshFull(empty->FinishMesh()), Expected("meshbuilder/no_triangles"));
+}
+
+TEST(XnaMeshBuilder, RefusalsMatchXna)
+{
+    std::string text = Probe("nullName", [] { (void)MeshBuilder::StartMesh(""); });
+    text += " " + Probe("channelAfterVertex",
+                        []
+                        {
+                            const std::shared_ptr<MeshBuilder> one = MeshBuilder::StartMesh("Mesh");
+                            one->CreatePosition(0, 0, 0);
+                            one->AddTriangleVertex(0);
+                            (void)one->CreateVertexChannel<Vector3>(VertexChannelNames::Normal());
+                        });
+    text += " " + Probe("badVertexIndex",
+                        []
+                        {
+                            const std::shared_ptr<MeshBuilder> one = MeshBuilder::StartMesh("Mesh");
+                            one->CreatePosition(0, 0, 0);
+                            one->AddTriangleVertex(4);
+                        });
+    text += " " + Probe("wrongChannelType",
+                        []
+                        {
+                            const std::shared_ptr<MeshBuilder> one = MeshBuilder::StartMesh("Mesh");
+                            const SharpRuntime::intcs channel =
+                                one->CreateVertexChannel<Vector3>(VertexChannelNames::Normal());
+                            one->CreatePosition(0, 0, 0);
+                            one->SetVertexChannelData(channel, Box<Vector2>(Vector2(1, 2)));
+                            one->AddTriangleVertex(0);
+                            (void)one->FinishMesh();
+                        });
+    text += " " + Probe("badChannelIndex",
+                        []
+                        {
+                            MeshBuilder::StartMesh("Mesh")->SetVertexChannelData(
+                                3, Box<Vector3>(Vector3(0, 0, 1)));
+                        });
+    text += " " + Probe("unfinishedTriangle",
+                        []
+                        {
+                            const std::shared_ptr<MeshBuilder> one = MeshBuilder::StartMesh("Mesh");
+                            one->CreatePosition(0, 0, 0);
+                            one->AddTriangleVertex(0);
+                            (void)one->FinishMesh();
+                        });
+    text += " " + Probe("nullMaterial", [] { MeshBuilder::StartMesh("Mesh")->SetMaterial(nullptr); });
+    text += " " + Probe("nullOpaqueData", [] { MeshBuilder::StartMesh("Mesh")->SetOpaqueData(nullptr); });
+    EXPECT_EQ(StripParameterNames(text), StripParameterNames(RawExpected("meshbuilder/refusals")));
+}
+
+TEST(XnaMeshBuilder, ChannelRefusalsMatchXna)
+{
+    std::string text = Probe("nullChannelName",
+                             [] { (void)MeshBuilder::StartMesh("Mesh")->CreateVertexChannel<Vector3>(""); });
+    text += " " + Probe("duplicateChannel",
+                        []
+                        {
+                            const std::shared_ptr<MeshBuilder> one = MeshBuilder::StartMesh("Mesh");
+                            (void)one->CreateVertexChannel<Vector3>(VertexChannelNames::Normal());
+                            (void)one->CreateVertexChannel<Vector3>(VertexChannelNames::Normal());
+                        });
+    text += " " + Probe("intChannel",
+                        []
+                        {
+                            (void)MeshBuilder::StartMesh("Mesh")->CreateVertexChannel<SharpRuntime::intcs>(
+                                "Custom0");
+                        });
+    text += " " + Probe("stringChannel",
+                        [] { (void)MeshBuilder::StartMesh("Mesh")->CreateVertexChannel<std::string>("Custom0"); });
+    text += " " + Probe("dataBeforePosition",
+                        []
+                        {
+                            const std::shared_ptr<MeshBuilder> one = MeshBuilder::StartMesh("Mesh");
+                            const SharpRuntime::intcs channel =
+                                one->CreateVertexChannel<Vector3>(VertexChannelNames::Normal());
+                            one->SetVertexChannelData(channel, Box<Vector3>(Vector3(0, 0, 1)));
+                        });
+    text += " " + Probe("finishTwice",
+                        []
+                        {
+                            const std::shared_ptr<MeshBuilder> one = MeshBuilder::StartMesh("Mesh");
+                            one->CreatePosition(0, 0, 0);
+                            one->CreatePosition(1, 0, 0);
+                            one->CreatePosition(0, 1, 0);
+                            one->AddTriangleVertex(0);
+                            one->AddTriangleVertex(1);
+                            one->AddTriangleVertex(2);
+                            (void)one->FinishMesh();
+                            (void)one->FinishMesh();
+                        });
+    text += " " + Probe("nameAfterStart",
+                        []
+                        {
+                            const std::shared_ptr<MeshBuilder> one = MeshBuilder::StartMesh("Given");
+                            one->setNameProperty("Renamed");
+                            one->CreatePosition(0, 0, 0);
+                            one->CreatePosition(1, 0, 0);
+                            one->CreatePosition(0, 1, 0);
+                            one->AddTriangleVertex(0);
+                            one->AddTriangleVertex(1);
+                            one->AddTriangleVertex(2);
+                            if (one->FinishMesh()->getNameProperty() != "Renamed")
+                            {
+                                throw System::Exception("name=" + one->FinishMesh()->getNameProperty());
+                            }
+                        });
+    EXPECT_EQ(StripParameterNames(text), StripParameterNames(RawExpected("meshbuilder/channel_refusals")));
 }
