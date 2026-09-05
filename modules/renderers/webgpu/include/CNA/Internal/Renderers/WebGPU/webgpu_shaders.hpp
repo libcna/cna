@@ -662,6 +662,8 @@ struct VertexOutput {
     @location(1) eyeDir: vec3f,
     @location(2) uv: vec2f,
     @location(3) fogFactor: f32,
+    // WEBGPU-176: the environment blend weight is a VERTEX output, not a fragment recompute.
+    @location(4) envBlend: f32,
 };
 
 @vertex fn vs_main(input: VertexInput) -> VertexOutput {
@@ -672,6 +674,27 @@ struct VertexOutput {
     output.worldNormal = normalMatrix * input.normal;
     output.eyeDir = ep.eyePos.xyz - worldPos;
     output.uv = input.uv;
+    // WEBGPU-176: XNA's EnvironmentMapEffect.fx computes ComputeFresnelFactor in the VERTEX
+    // shader, from each vertex's own un-interpolated normal and eye vector, and Gouraud-
+    // interpolates the resulting scalar. Recomputing it per fragment from an interpolated normal
+    // is NOT the same function once vertices carry different normals -- both `normalize` and the
+    // `pow` are non-linear, so the two gradients differ across any curved surface. EasyGL records
+    // the same point at its own `vFresnel` (Task 1112), and this renderer was the outlier.
+    //
+    // The clamp is XNA's as well, not a safety net: the scalar travels to the pixel shader in
+    // `float4 Specular : COLOR1`, and Direct3D 9 saturates a vertex shader's COLOR outputs to
+    // [0,1] BEFORE interpolating them. `ComputeFresnelFactor` multiplies by EnvironmentMapAmount,
+    // whose XNA range reaches past 1, and the result is the weight of a `lerp` -- without the
+    // clamp that lerp extrapolates past the environment colour and the rim over-brightens
+    // (EasyGL's SAMPLE-037). Clamping here rather than per fragment matters for the same reason
+    // the whole term belongs here: clamping later would interpolate the unclamped value first.
+    let vsNormal = normalize(output.worldNormal);
+    let vsEye = normalize(output.eyeDir);
+    let vsViewAngle = dot(vsEye, vsNormal);
+    output.envBlend = clamp(select(
+        ep.emissiveAmount.w,
+        pow(max(1.0 - abs(vsViewAngle), 0.0), ep.envMapSpecFresnelF.w) * ep.emissiveAmount.w,
+        ep.light0DiffuseFresnelEn.w > 0.5), 0.0, 1.0);
     // REMED-GFX-100: FNA view-space fog. fogVector is prepared once by the public effect from
     // World*View; all-zero disables fog and {0,0,0,1} gives the defined full-fog zero range.
     output.fogFactor = 1.0 - clamp(dot(vec4f(input.position, 1.0), ep.fogVector), 0.0, 1.0);
@@ -698,11 +721,8 @@ struct VertexOutput {
     let combinedAlpha = ep.diffuseColor.a * texColor.a;
     let reflDir = reflect(-e, n);
     let envSample = textureSampleBias(envMap, envMapSampler, reflDir, ep.samplerBias.y);
-    let viewAngle = dot(e, n);
-    let fresnelEnabled = ep.light0DiffuseFresnelEn.w;
-    let blendFactor = select(ep.emissiveAmount.w,
-                             pow(max(1.0 - abs(viewAngle), 0.0), ep.envMapSpecFresnelF.w) * ep.emissiveAmount.w,
-                             fresnelEnabled > 0.5);
+    // WEBGPU-176: the interpolated per-vertex weight, not a per-fragment recompute. See vs_main.
+    let blendFactor = input.envBlend;
     var rgb = mix(baseColor, envSample.rgb * combinedAlpha, blendFactor)
             + ep.envMapSpecFresnelF.xyz * envSample.a * combinedAlpha;
     rgb = mix(ep.fogColor.xyz * combinedAlpha, rgb, input.fogFactor);
