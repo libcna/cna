@@ -4560,20 +4560,20 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.WavImporter": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::WavImporter",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/WavImporter.hpp",
+   "note": "the audio is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute().",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "WavImporter()",
      "note": ""
     },
     "method:Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Import(const std::string&, ContentImporterContext&) -> std::shared_ptr<AudioContent>",
+     "note": "the audio is answered by shared pointer; every WAV variant XNA accepts is accepted with the same fields, including the unformatted \"{0}\" its missing-file message carries."
     }
    }
   },

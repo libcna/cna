@@ -10,17 +10,17 @@
 
 | Quantity | Implemented (EXACT + SEMANTIC + HOST_SUBSTITUTION) | EXTERNAL_BLOCKED | MISSING |
 |---|---|---:|---:|
-| public/protected types | 113/128 (88.3%) | 0 | 15 |
-| public/protected members | 622/705 (88.2%) | 1 | 82 |
+| public/protected types | 114/128 (89.1%) | 0 | 14 |
+| public/protected members | 624/705 (88.5%) | 1 | 80 |
 | enum values | 27/27 (100.0%) | 0 | 0 |
-| built-in importers | 1/10 (10.0%) | 0 | 9 |
+| built-in importers | 2/10 (20.0%) | 0 | 8 |
 | built-in processors | 11/12 (91.7%) | 0 | 1 |
 | processor properties | 46/47 (97.9%) | 0 | 1 |
 
 Status vocabulary: EXACT_EQUIVALENT, SEMANTIC_EQUIVALENT (spelling differs, capability identical; note says how),
 HOST_SUBSTITUTION (Microsoft-host mechanism replaced; note says how), EXTERNAL_BLOCKED (note names the
-unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 45, SEMANTIC_EQUIVALENT 67, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 15.
-Member status by value: EXACT_EQUIVALENT 401, SEMANTIC_EQUIVALENT 215, HOST_SUBSTITUTION 6, EXTERNAL_BLOCKED 1, MISSING 82.
+unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 45, SEMANTIC_EQUIVALENT 68, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 14.
+Member status by value: EXACT_EQUIVALENT 402, SEMANTIC_EQUIVALENT 216, HOST_SUBSTITUTION 6, EXTERNAL_BLOCKED 1, MISSING 80.
 
 Rules applied mechanically: 3 delegate plumbing members are listed in section 7 and not counted; 3 exception
 serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serialization has no C++ counterpart).
@@ -30,7 +30,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | Namespace | Types | Implemented | Blocked | Missing |
 |---|---:|---:|---:|---:|
 | `Microsoft.Xna.Framework.Content.Pipeline.Audio` | 5 | 5 | 0 | 0 |
-| `Microsoft.Xna.Framework.Content.Pipeline` | 32 | 22 | 0 | 10 |
+| `Microsoft.Xna.Framework.Content.Pipeline` | 32 | 23 | 0 | 9 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Graphics` | 47 | 47 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Processors` | 28 | 27 | 0 | 1 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler` | 5 | 5 | 0 | 0 |
@@ -164,7 +164,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `….Tasks` | `GetLastOutputs` | class | MISSING |  |  |
 | `…` | `TextureImporter` | class | MISSING |  |  |
 | `…` | `VideoContent` | class | MISSING |  |  |
-| `…` | `WavImporter` | class | MISSING |  |  |
+| `…` | `WavImporter` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::WavImporter` | the audio is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). |
 | `…` | `WmaImporter` | class | MISSING |  |  |
 | `…` | `WmvImporter` | class | MISSING |  |  |
 | `…` | `XImporter` | class | MISSING |  |  |
@@ -179,7 +179,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `FontDescriptionImporter` | .spritefont | `FontDescriptionProcessor` | MISSING |  |  |
 | `Mp3Importer` | .mp3 | `SongProcessor` | MISSING |  |  |
 | `TextureImporter` | .bmp, .dds, .dib, .hdr, .jpg, .pfm, .png, .ppm, .tga | `SpriteTextureProcessor` | MISSING |  |  |
-| `WavImporter` | .wav | `SoundEffectProcessor` | MISSING |  |  |
+| `WavImporter` | .wav | `SoundEffectProcessor` | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::WavImporter` | the audio is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). |
 | `WmaImporter` | .wma | `SongProcessor` | MISSING |  |  |
 | `WmvImporter` | .wmv | `VideoProcessor` | MISSING |  |  |
 | `XImporter` | .x | `ModelProcessor` | MISSING |  |  |
@@ -976,8 +976,8 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `VideoContent` | property | `VideoSoundtrackType` | MISSING |  |  |
 | `VideoContent` | property | `Width` | MISSING |  |  |
 | `VideoContent` | method | `Dispose()` | MISSING |  |  |
-| `WavImporter` | constructor | `.ctor()` | MISSING |  |  |
-| `WavImporter` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | MISSING |  |  |
+| `WavImporter` | constructor | `.ctor()` | EXACT_EQUIVALENT | `WavImporter()` |  |
+| `WavImporter` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | SEMANTIC_EQUIVALENT | `Import(const std::string&, ContentImporterContext&) -> std::shared_ptr<AudioContent>` | the audio is answered by shared pointer; every WAV variant XNA accepts is accepted with the same fields, including the unformatted "{0}" its missing-file message carries. |
 | `WmaImporter` | constructor | `.ctor()` | MISSING |  |  |
 | `WmaImporter` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | MISSING |  |  |
 | `WmvImporter` | constructor | `.ctor()` | MISSING |  |  |

@@ -20,7 +20,8 @@ refs="${CNA_XNA40_REFERENCES:-/rv/tmp/samples/_tools/xna-game-studio-4-refresh/a
 prefix="${CNA_XNA40_WINEPREFIX:-$HOME/.wine-cna-xna40}"
 build="$repo/build/xna-pipeline-oracle/audio"
 
-for dll in Microsoft.Xna.Framework.dll Microsoft.Xna.Framework.Content.Pipeline.dll; do
+for dll in Microsoft.Xna.Framework.dll Microsoft.Xna.Framework.Content.Pipeline.dll \
+           Microsoft.Xna.Framework.Content.Pipeline.AudioImporters.dll; do
     [ -f "$refs/$dll" ] || { echo "run-audio-oracle: missing $refs/$dll" >&2; exit 3; }
 done
 command -v mcs >/dev/null || { echo "run-audio-oracle: mcs not found" >&2; exit 3; }
@@ -30,7 +31,8 @@ mkdir -p "$build" "$out"
 # The Microsoft assemblies are copied only into the ignored build directory, beside the driver,
 # so the CLR finds them without a GAC; nothing Microsoft owns reaches the repository.
 cp "$refs/Microsoft.Xna.Framework.dll" "$refs/Microsoft.Xna.Framework.Graphics.dll" \
-   "$refs/Microsoft.Xna.Framework.Content.Pipeline.dll" "$refs/Microsoft.Xna.Framework.Video.dll" "$build/"
+   "$refs/Microsoft.Xna.Framework.Content.Pipeline.dll" "$refs/Microsoft.Xna.Framework.Video.dll" \
+   "$refs/Microsoft.Xna.Framework.Content.Pipeline.AudioImporters.dll" "$build/"
 # The pipeline's native helper carries the audio conversions; without it every ConvertFormat
 # reports "Specified method is not supported", which is an environment artifact, not XNA behaviour.
 native="${CNA_XNA40_NATIVE:-$prefix/drive_c/Program Files/Common Files/Microsoft Shared/XNA/Framework/v4.0/XnaNative.dll}"
@@ -45,6 +47,7 @@ mcs -sdk:4 -platform:x86 -target:exe -nologo -out:"$build/AudioContentOracle.exe
     -r:"$build/Microsoft.Xna.Framework.dll" -r:"$build/Microsoft.Xna.Framework.Graphics.dll" \
     -r:"$build/Microsoft.Xna.Framework.Content.Pipeline.dll" \
     -r:"$build/Microsoft.Xna.Framework.Video.dll" \
+    -r:"$build/Microsoft.Xna.Framework.Content.Pipeline.AudioImporters.dll" \
     "$here/AudioContentOracle.cs"
 
 win_out="$(env WINEPREFIX="$prefix" WINEDEBUG=-all wine winepath -w "$build/out" 2>/dev/null)"

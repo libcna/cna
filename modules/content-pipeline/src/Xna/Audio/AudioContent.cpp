@@ -5,24 +5,18 @@
 #include <filesystem>
 
 #include <algorithm>
+#include <fstream>
+#include <iterator>
+#include <span>
 
-#include "CNA/Content/Cnb/CnbSourceImport.hpp"
 #include "CNA/Internal/Audio/MsAdpcmEncoder.hpp"
+#include "CNA/Internal/Audio/WavFormatReader.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
 
 namespace Microsoft::Xna::Framework::Content::Pipeline::Audio
 {
     namespace
     {
-        namespace Import = CNA::Content::Import;
-
-        /** @brief The `WAVEFORMATEX` tag an imported encoding is written under. */
-        [[nodiscard]] SharpRuntime::intcs FormatTagOf(const Import::ImportedPcmEncoding encoding)
-        {
-            // Three is IEEE float; everything else here is integer PCM.
-            return encoding == Import::ImportedPcmEncoding::Float32LittleEndian ? 3 : 1;
-        }
-
         /** @brief The message XNA gives for a file it cannot read as audio. */
         [[nodiscard]] std::string OpenFailure(const std::string& fileName)
         {
@@ -43,7 +37,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Audio
     AudioContent::AudioContent(const std::string& audioFileName, const AudioFileType audioFileType)
         : fileName_(audioFileName), fileType_(audioFileType)
     {
-        Import::ImportedSound imported;
+        CNA::Internal::Audio::WavFormatAndData source;
         try
         {
             if (audioFileName.empty() || audioFileType != AudioFileType::Wav)
@@ -53,33 +47,40 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Audio
                 // refusals/wrong_file_type).
                 throw std::runtime_error("unsupported");
             }
-            imported = CNA::Content::Cnb::ImportWavAsImportedSound(audioFileName);
+            std::ifstream file(audioFileName, std::ios::binary);
+            if (!file)
+            {
+                throw std::runtime_error("unreadable");
+            }
+            const std::vector<char> bytes((std::istreambuf_iterator<char>(file)),
+                                          std::istreambuf_iterator<char>());
+            source = CNA::Internal::Audio::ReadWavFormatAndData(
+                std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(bytes.data()),
+                                              bytes.size()),
+                audioFileName);
         }
         catch (const std::exception&)
         {
             throw InvalidContentException(OpenFailure(audioFileName));
         }
-        const auto sampleBytes =
-            static_cast<SharpRuntime::intcs>(Import::ImportedPcmSampleBytes(imported.encoding));
-        const auto channels = static_cast<SharpRuntime::intcs>(imported.channels);
-        const auto sampleRate = static_cast<SharpRuntime::intcs>(imported.sampleRate);
-        const SharpRuntime::intcs blockAlign = sampleBytes * channels;
-        format_ = std::make_shared<AudioFormat>(FormatTagOf(imported.encoding), channels, sampleRate,
-                                                sampleRate * blockAlign, blockAlign, sampleBytes * 8);
-        data_ = std::move(imported.samples);
-        loopStart_ = static_cast<SharpRuntime::intcs>(imported.loopStart);
-        // A file with no loop region of its own answers the whole sound, which is what XNA does
-        // (measured, audiocontent/mono_pcm16 answers 800 frames for an 800-frame file).
-        loopLength_ = imported.loopLength > 0u ? static_cast<SharpRuntime::intcs>(imported.loopLength)
-                                               : static_cast<SharpRuntime::intcs>(imported.frameCount);
-        // The duration is whole milliseconds, and the remainder is dropped: 13228 bytes at
-        // 132300 bytes a second answers 99, not 100 (measured, convert/pcm_medium).
-        const SharpRuntime::intcs bytesPerSecond = format_->getAverageBytesPerSecondProperty();
-        const auto milliseconds =
-            bytesPerSecond <= 0
-                ? SharpRuntime::longcs{0}
-                : static_cast<SharpRuntime::longcs>(data_.size()) * 1000 / bytesPerSecond;
-        duration_ = System::TimeSpan::FromTicks(milliseconds * 10000);
+        // The format fields are the file's own, whatever encoding they name: an ADPCM or an
+        // extensible source is carried as it is rather than decoded (measured, wav/variants, where
+        // the extensible tag even comes back as -2, the sixteen-bit 0xFFFE read as a signed int).
+        format_ = std::make_shared<AudioFormat>(
+            static_cast<SharpRuntime::intcs>(static_cast<std::int16_t>(source.formatTag)),
+            static_cast<SharpRuntime::intcs>(source.channels),
+            static_cast<SharpRuntime::intcs>(source.sampleRate),
+            static_cast<SharpRuntime::intcs>(source.averageBytesPerSecond),
+            static_cast<SharpRuntime::intcs>(source.blockAlign),
+            static_cast<SharpRuntime::intcs>(source.bitsPerSample));
+        data_ = std::vector<SharpRuntime::bytecs>(source.data.begin(), source.data.end());
+        loopStart_ = static_cast<SharpRuntime::intcs>(source.loopStart);
+        // A file with no loop region of its own answers its whole length in blocks, which is what
+        // XNA answers for every variant measured -- frames for PCM, blocks for ADPCM.
+        loopLength_ = source.loopLength > 0u
+                          ? static_cast<SharpRuntime::intcs>(source.loopLength)
+                          : static_cast<SharpRuntime::intcs>(source.data.size() / source.blockAlign);
+        RecomputeDuration();
     }
 
     AudioContent::~AudioContent() { data_.clear(); }

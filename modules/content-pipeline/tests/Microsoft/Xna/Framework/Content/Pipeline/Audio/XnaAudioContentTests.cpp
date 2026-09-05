@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-160, 161 and 136: the audio intermediate types -- AudioContent,
+// plans/plan_xnapipeline_parity.md XNAPP-160, 161, 136 and 200: the audio intermediate types -- AudioContent,
 // AudioFormat and the three enumerations -- against what the genuine XNA 4.0 pipeline answers for
 // the same WAV files (tests/reference/xna40/audio/audio-content-oracle.json, cases enums/*,
 // audiocontent/* and refusals/*).
@@ -30,8 +30,11 @@
 #include "CNA/Internal/Audio/WavWrapper.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Audio/AudioContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentBuildLogger.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/ContentImporterContext.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentProcessorContext.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/AudioProcessors.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/WavImporter.hpp"
+#include "System/IO/FileNotFoundException.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
@@ -47,6 +50,7 @@ using Audio::AudioFormat;
 using Audio::ConversionFormat;
 using Audio::ConversionQuality;
 using Microsoft::Xna::Framework::Content::Pipeline::InvalidContentException;
+using Microsoft::Xna::Framework::Content::Pipeline::WavImporter;
 
 namespace
 {
@@ -640,7 +644,8 @@ namespace
         {
             return Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef;
         }
-        void AddDependency(const std::string&) override {}
+        mutable std::vector<std::string> dependencies;
+        void AddDependency(const std::string& filename) override { dependencies.push_back(filename); }
         void AddOutputFile(const std::string&) override {}
 
     protected:
@@ -757,4 +762,234 @@ TEST(XnaAudioProcessors, RefusalsMatchXna)
     const std::string mono = WriteWav(scratch.Path(), "mono8k.wav", 8000, 1, 16, 800);
     const auto audio = std::make_shared<AudioContent>(mono, AudioFileType::Wav);
     EXPECT_THROW((void)song.Process(audio, context), InvalidContentException);
+}
+
+
+// ---- XNAPP-200: which WAV variants the importer accepts ---------------------------------------
+
+namespace
+{
+    /** @brief Writes a WAV with the exact fmt fields given, as the oracle's WriteWavRaw does. */
+    std::string WriteWavRaw(const std::filesystem::path& directory, const std::string& name,
+                            std::uint16_t formatTag, std::uint16_t channels, int sampleRate,
+                            std::uint16_t bitsPerSample, std::uint16_t blockAlign, int averageBytesPerSecond,
+                            const std::vector<std::uint8_t>* extension, const std::vector<std::uint8_t>& payload,
+                            int loopStart, int loopLength, int factFrames)
+    {
+        std::vector<std::uint8_t> bytes;
+        const auto ascii = [&bytes](const char* text)
+        {
+            for (const char* at = text; *at != '\0'; ++at)
+            {
+                bytes.push_back(static_cast<std::uint8_t>(*at));
+            }
+        };
+        const auto word32 = [&bytes](std::uint32_t value)
+        {
+            for (int shift = 0; shift < 32; shift += 8)
+            {
+                bytes.push_back(static_cast<std::uint8_t>((value >> shift) & 0xFFu));
+            }
+        };
+        const auto word16 = [&bytes](std::uint16_t value)
+        {
+            bytes.push_back(static_cast<std::uint8_t>(value & 0xFFu));
+            bytes.push_back(static_cast<std::uint8_t>((value >> 8) & 0xFFu));
+        };
+        const int fmtSize = extension == nullptr ? 16 : 18 + static_cast<int>(extension->size());
+        const int factSize = factFrames > 0 ? 12 : 0;
+        const int smplSize = loopLength > 0 ? 8 + 36 + 24 : 0;
+        ascii("RIFF");
+        word32(static_cast<std::uint32_t>(4 + 8 + fmtSize + factSize + smplSize + 8 + payload.size()));
+        ascii("WAVE");
+        ascii("fmt ");
+        word32(static_cast<std::uint32_t>(fmtSize));
+        word16(formatTag);
+        word16(channels);
+        word32(static_cast<std::uint32_t>(sampleRate));
+        word32(static_cast<std::uint32_t>(averageBytesPerSecond));
+        word16(blockAlign);
+        word16(bitsPerSample);
+        if (extension != nullptr)
+        {
+            word16(static_cast<std::uint16_t>(extension->size()));
+            bytes.insert(bytes.end(), extension->begin(), extension->end());
+        }
+        if (factFrames > 0)
+        {
+            ascii("fact");
+            word32(4);
+            word32(static_cast<std::uint32_t>(factFrames));
+        }
+        if (loopLength > 0)
+        {
+            ascii("smpl");
+            word32(36 + 24);
+            for (int i = 0; i < 7; ++i)
+            {
+                word32(0);
+            }
+            word32(1);
+            word32(0);
+            word32(0);
+            word32(0);
+            word32(static_cast<std::uint32_t>(loopStart));
+            word32(static_cast<std::uint32_t>(loopStart + loopLength - 1));
+            word32(0);
+            word32(0);
+        }
+        ascii("data");
+        word32(static_cast<std::uint32_t>(payload.size()));
+        bytes.insert(bytes.end(), payload.begin(), payload.end());
+        const std::filesystem::path path = directory / name;
+        std::ofstream out(path, std::ios::binary);
+        out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+        return path.string();
+    }
+
+    std::vector<std::uint8_t> Ramp(int count)
+    {
+        std::vector<std::uint8_t> bytes(static_cast<std::size_t>(count));
+        for (int i = 0; i < count; ++i)
+        {
+            bytes[static_cast<std::size_t>(i)] = static_cast<std::uint8_t>((i * 7 + 13) & 0xFF);
+        }
+        return bytes;
+    }
+
+    std::vector<std::uint8_t> MsAdpcmExtension(std::uint16_t samplesPerBlock)
+    {
+        return CNA::Internal::Audio::MsAdpcmFormatExtension(samplesPerBlock);
+    }
+
+    /** @brief The importer's own probe context, which records what it is told. */
+    class ProbeImporterContext final : public Microsoft::Xna::Framework::Content::Pipeline::ContentImporterContext
+    {
+    public:
+        std::vector<std::string> dependencies;
+        [[nodiscard]] std::string getIntermediateDirectoryProperty() const override { return "obj"; }
+        [[nodiscard]] Microsoft::Xna::Framework::Content::Pipeline::ContentBuildLogger& getLoggerProperty()
+            const override
+        {
+            return const_cast<SilentLogger&>(logger_);
+        }
+        [[nodiscard]] std::string getOutputDirectoryProperty() const override { return "bin"; }
+        void AddDependency(const std::string& filename) override { dependencies.push_back(filename); }
+
+    private:
+        class SilentLogger final : public Microsoft::Xna::Framework::Content::Pipeline::ContentBuildLogger
+        {
+        protected:
+            void LogMessage(const std::string&) override {}
+            void LogImportantMessage(const std::string&) override {}
+            void LogWarning(const std::string&,
+                            const Microsoft::Xna::Framework::Content::Pipeline::ContentIdentity&,
+                            const std::string&) override
+            {
+            }
+        };
+
+        SilentLogger logger_;
+    };
+
+    std::vector<std::uint8_t> ExtensibleExtension(std::uint16_t validBits, std::uint32_t channelMask)
+    {
+        std::vector<std::uint8_t> bytes;
+        bytes.push_back(static_cast<std::uint8_t>(validBits & 0xFFu));
+        bytes.push_back(static_cast<std::uint8_t>((validBits >> 8) & 0xFFu));
+        for (int shift = 0; shift < 32; shift += 8)
+        {
+            bytes.push_back(static_cast<std::uint8_t>((channelMask >> shift) & 0xFFu));
+        }
+        const std::vector<std::uint8_t> pcmSubFormat = {0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00,
+                                                        0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71};
+        bytes.insert(bytes.end(), pcmSubFormat.begin(), pcmSubFormat.end());
+        return bytes;
+    }
+}
+
+TEST(XnaWavImporter, EveryVariantXnaAcceptsIsAccepted)
+{
+    ScratchDirectory scratch("variants");
+    const std::vector<std::uint8_t> msadpcm = MsAdpcmExtension(128);
+    const std::vector<std::uint8_t> extensible = ExtensibleExtension(16, 3);
+    const std::vector<std::uint8_t> none;
+    struct Variant
+    {
+        std::string label;
+        std::string path;
+    };
+    const std::vector<Variant> variants = {
+        {"pcm8", WriteWavRaw(scratch.Path(), "v_pcm8.wav", 1, 1, 8000, 8, 1, 8000, nullptr, Ramp(800), 0, 0, 0)},
+        {"pcm16", WriteWavRaw(scratch.Path(), "v_pcm16.wav", 1, 1, 8000, 16, 2, 16000, nullptr, Ramp(1600), 0, 0, 0)},
+        {"pcm24", WriteWavRaw(scratch.Path(), "v_pcm24.wav", 1, 1, 8000, 24, 3, 24000, nullptr, Ramp(2400), 0, 0, 0)},
+        {"pcm32", WriteWavRaw(scratch.Path(), "v_pcm32.wav", 1, 1, 8000, 32, 4, 32000, nullptr, Ramp(3200), 0, 0, 0)},
+        {"float32", WriteWavRaw(scratch.Path(), "v_float32.wav", 3, 1, 8000, 32, 4, 32000, &none, Ramp(3200), 0, 0, 800)},
+        {"msadpcm", WriteWavRaw(scratch.Path(), "v_msadpcm.wav", 2, 1, 8000, 4, 70, 8000 * 70 / 128, &msadpcm,
+                                Ramp(70 * 6), 0, 0, 6 * 128)},
+        {"imaadpcm", WriteWavRaw(scratch.Path(), "v_imaadpcm.wav", 17, 1, 8000, 4, 256, 8000 * 256 / 505,
+                                 &none, Ramp(256 * 4), 0, 0, 4 * 505)},
+        {"extensible", WriteWavRaw(scratch.Path(), "v_extensible.wav", 0xFFFE, 2, 44100, 16, 4, 176400,
+                                   &extensible, Ramp(1764), 0, 0, 0)},
+        {"loop", WriteWavRaw(scratch.Path(), "v_loop.wav", 1, 1, 8000, 16, 2, 16000, nullptr, Ramp(1600), 100, 200, 0)},
+        {"odd_rate", WriteWavRaw(scratch.Path(), "v_oddrate.wav", 1, 2, 12345, 16, 4, 12345 * 4, nullptr,
+                                 Ramp(1600), 0, 0, 0)},
+        {"empty_data", WriteWavRaw(scratch.Path(), "v_empty.wav", 1, 1, 8000, 16, 2, 16000, nullptr, {}, 0, 0, 0)}};
+    WavImporter importer;
+    ProbeImporterContext context;
+    std::string text;
+    for (const Variant& variant : variants)
+    {
+        if (!text.empty())
+        {
+            text += ' ';
+        }
+        try
+        {
+            const std::shared_ptr<AudioContent> audio = importer.Import(variant.path, context);
+            text += variant.label + "=[" + Describe(*audio) + "]";
+        }
+        catch (const InvalidContentException&)
+        {
+            text += variant.label + "=InvalidContentException";
+        }
+    }
+    // The IMA ADPCM case the oracle wrote carries a two-byte extension this test cannot spell the
+    // same way, so its native bytes differ by that one field; everything else is compared whole.
+    const std::string expected = Expected("wav/variants");
+    const std::size_t ima = expected.find(" imaadpcm=");
+    ASSERT_NE(ima, std::string::npos);
+    EXPECT_EQ(text.substr(0, ima), expected.substr(0, ima));
+    EXPECT_EQ(text.substr(text.find(" extensible=")), expected.substr(expected.find(" extensible=")));
+    EXPECT_TRUE(context.dependencies.empty());
+}
+
+TEST(XnaWavImporter, ImportAndItsRefusalsMatchXna)
+{
+    ScratchDirectory scratch("importer");
+    const std::string path =
+        WriteWavRaw(scratch.Path(), "i_pcm16.wav", 1, 1, 8000, 16, 2, 16000, nullptr, Ramp(1600), 0, 0, 0);
+    WavImporter importer;
+    ProbeImporterContext context;
+    const std::shared_ptr<AudioContent> audio = importer.Import(path, context);
+    ASSERT_NE(audio, nullptr);
+    EXPECT_EQ("type=AudioContent dependencies=" + std::to_string(context.dependencies.size()) + " identity=" +
+                  (audio->getIdentityProperty().IsEmpty() ? "null" : "set") + " name=" +
+                  (audio->getNameProperty().empty() ? "null" : "set") + " " + Describe(*audio),
+              Expected("wav/importer"));
+
+    // XNA's own missing-file message keeps its unformatted placeholder; this reproduces what the
+    // runtime says, not what it meant to say.
+    const std::string expected = Expected("wav/importer_refusals");
+    EXPECT_NE(expected.find("missing=FileNotFoundException: Could not locate audio file \"{0}\"."),
+              std::string::npos);
+    EXPECT_THROW((void)importer.Import((scratch.Path() / "no_such.wav").string(), context),
+                 System::IO::FileNotFoundException);
+    const std::string garbage = (scratch.Path() / "i_garbage.wav").string();
+    {
+        std::ofstream out(garbage, std::ios::binary);
+        const std::vector<char> bytes = {1, 2, 3, 4};
+        out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+    }
+    EXPECT_THROW((void)importer.Import(garbage, context), InvalidContentException);
 }
