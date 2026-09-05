@@ -100,6 +100,30 @@ namespace CNA::Internal::Renderers::Vulkan
     };
 
     /**
+     * @brief Whether an XNA vertex element format presents integer components to a shader.
+     *
+     * plan_vulkan.md VULKAN-147. `Byte4` is `VK_FORMAT_R8G8B8A8_UINT` and feeds a `uvec4`; `Color`
+     * is `R8G8B8A8_UNORM` and feeds a `vec4`. The distinction is not cosmetic -- binding one to the
+     * other is a Vulkan usage error rather than a conversion.
+     *
+     * @param format The element format.
+     * @return True for the formats that present integer components.
+     */
+    [[nodiscard]] inline bool IsIntegerVertexElementFormat(
+        Microsoft::Xna::Framework::Graphics::VertexElementFormat format) noexcept
+    {
+        using F = Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+        switch (format) {
+            case F::Byte4:
+            case F::Short2:
+            case F::Short4:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /**
      * @brief Builds the attribute set @p inputs needs from @p declared.
      *
      * plans/plan_vulkan.md `VULKAN-145`. Location `i` is `inputs[i]`, matching this project's
@@ -154,6 +178,19 @@ namespace CNA::Internal::Renderers::Vulkan
             const VkFormat format =
                 VertexElementFormatToVk(match->getVertexElementFormatProperty());
             if (format == VK_FORMAT_UNDEFINED) {
+                layout.unrepresentableInputMask |= (1u << location);
+                continue;
+            }
+            // plan_vulkan.md VULKAN-147. Compared against the input's PRIMARY format, which is what
+            // the shader actually declares -- deliberately not against `alternateFormat`. That
+            // field records a second legal way to SPELL a semantic in a declaration
+            // (`BlendIndices` may arrive as `Byte4` or `Vector4`, plans/plan_fx.md FX-127); it does
+            // not make both bindable. The shader says `uvec4`, and handing a float attribute to an
+            // integer input is a Vulkan usage error rather than a conversion. Reported as
+            // unrepresentable, so the caller refuses by name instead of binding it.
+            if (IsIntegerVertexElementFormat(match->getVertexElementFormatProperty()) !=
+                IsIntegerVertexElementFormat(in.format))
+            {
                 layout.unrepresentableInputMask |= (1u << location);
                 continue;
             }

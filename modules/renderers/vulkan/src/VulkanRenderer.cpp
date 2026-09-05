@@ -4888,6 +4888,28 @@ namespace CNA::Internal::Renderers::Vulkan
         constexpr StockProgramInput kColTextured[]  = { kPos, kColor, kUv };
         /// lit_textured3d and its vertex-lit sibling: float3 position + float3 normal + float2 uv.
         constexpr StockProgramInput kLitTextured[]  = { kPos, kNormal, kUv };
+
+        // VULKAN-147.
+        constexpr StockProgramInput kWeights{
+            VertexElementUsage::BlendWeight, 0, VertexElementFormat::Vector4, "aBoneWeights"};
+        /// The shader declares `uvec4`, so only the integer spelling binds here -- see
+        /// BuildVulkanVertexInputLayoutEXT's note on `alternateFormat`.
+        constexpr StockProgramInput kIndices{
+            VertexElementUsage::BlendIndices, 0, VertexElementFormat::Byte4, "aBoneIndices",
+            VertexElementFormat::Vector4};
+
+        /// alpha_test3d: one VS for strides 20 and 32, with the UV remapped to location 1 --
+        /// which is exactly the offset guess (24 for stride 32, 12 for 20) the declaration removes.
+        constexpr StockProgramInput kAlphaTest[]        = { kPos, kUv };
+        /// alpha_test_colored3d, stride 24.
+        constexpr StockProgramInput kAlphaTestColored[] = { kPos, kColor, kUv };
+        /// env_map3d, stride 32.
+        constexpr StockProgramInput kEnvMapped[]        = { kPos, kNormal, kUv };
+        /// skinned3d and its vertex-lit sibling, stride 52.
+        constexpr StockProgramInput kSkinned[]          = { kPos, kNormal, kUv, kWeights, kIndices };
+        /// CNB-67's stride-56 sibling: the same with a vertex colour appended.
+        constexpr StockProgramInput kSkinnedColored[]   = { kPos, kNormal, kUv, kWeights, kIndices,
+                                                            kColor };
     }
 
     // VULKAN-146: swap a factory's baked attribute array for the declaration-derived one when the
@@ -4950,6 +4972,37 @@ namespace CNA::Internal::Renderers::Vulkan
                 return BasicProgramShapeEXT::None;
             default: return BasicProgramShapeEXT::None;
         }
+    }
+
+    // VULKAN-147: the input table for the stock EFFECT program this draw selected. The family is
+    // already decided by the caller's own needsX flags -- unlike the BasicEffect bundle, none of
+    // these strides is ambiguous -- so only the table is needed here, not a recorded shape.
+    static const CNA::Internal::Graphics::StockProgramInput* EffectFamilyStockInputsEXT(
+        bool needsAlphaTest, bool needsEnvMap, bool needsSkinned, std::size_t stride,
+        std::size_t& countOut)
+    {
+        countOut = 0;
+        if (needsAlphaTest) {
+            if (stride == 24) {
+                countOut = std::size(StockInputs::kAlphaTestColored);
+                return StockInputs::kAlphaTestColored;
+            }
+            countOut = std::size(StockInputs::kAlphaTest);
+            return StockInputs::kAlphaTest;
+        }
+        if (needsEnvMap) {
+            countOut = std::size(StockInputs::kEnvMapped);
+            return StockInputs::kEnvMapped;
+        }
+        if (needsSkinned) {
+            if (stride == 56) {
+                countOut = std::size(StockInputs::kSkinnedColored);
+                return StockInputs::kSkinnedColored;
+            }
+            countOut = std::size(StockInputs::kSkinned);
+            return StockInputs::kSkinned;
+        }
+        return nullptr;
     }
 
     // VULKAN-146: the input table for the program SelectBasicProgramShapeEXT chose. Null for a
@@ -5521,7 +5574,7 @@ namespace CNA::Internal::Renderers::Vulkan
         std::size_t stride, VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
-        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
+        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt, const VulkanVertexInputLayoutEXT& vertexLayout)
     {
         if (pipelineLayoutAlphaTest3D_ == VK_NULL_HANDLE) {
             VkPushConstantRange pcRange{ VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, 128 };
@@ -5533,7 +5586,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 throw std::runtime_error("vkCreatePipelineLayout (AlphaTest3D) failed");
         }
 
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask };
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask, vertexLayout.Hash() };
         auto it = pipelinesAlphaTest3D_.find(key);
         if (it != pipelinesAlphaTest3D_.end()) return it->second;
 
@@ -5559,10 +5612,15 @@ namespace CNA::Internal::Renderers::Vulkan
         } else {
             // Position always at location=0, UV always remapped to location=1.
             attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0 };   // position
-            uint32_t uvOffset = (stride == 32) ? 24 : 12;         // past float3 normal, else stride 20
+            // VULKAN-147: this guess is exactly what a declaration removes -- 24 past a float3
+            // normal at stride 32, 12 at stride 20. ApplyDeclaredVertexLayoutEXT below replaces it
+            // with the declared offset whenever there is one.
+            uint32_t uvOffset = (stride == 32) ? 24 : 12;
             attrs[1] = { 1, 0, VK_FORMAT_R32G32_SFLOAT, uvOffset }; // UV remapped to location=1
             attrCount = 2;
         }
+
+        ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, std::size(attrs), attrCount);
 
         VkPipelineVertexInputStateCreateInfo vis{};
         vis.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -6134,12 +6192,12 @@ namespace CNA::Internal::Renderers::Vulkan
         VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
-        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
+        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt, const VulkanVertexInputLayoutEXT& vertexLayout)
     {
         EnsureEnvMapResources();
 
         constexpr std::size_t kEnvStride = 32;
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kEnvStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask };
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kEnvStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask, vertexLayout.Hash() };
         auto it = pipelinesEnvMap3D_.find(key);
         if (it != pipelinesEnvMap3D_.end()) return it->second;
 
@@ -6152,11 +6210,13 @@ namespace CNA::Internal::Renderers::Vulkan
         attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0  };   // aPos
         attrs[1] = { 1, 0, VK_FORMAT_R32G32B32_SFLOAT, 12 };   // aNormal
         attrs[2] = { 2, 0, VK_FORMAT_R32G32_SFLOAT,    24 };   // aUV
+        uint32_t attrCount = 3;
+        ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, std::size(attrs), attrCount);
 
         VkPipelineVertexInputStateCreateInfo vis{};
         vis.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
         vis.vertexBindingDescriptionCount   = 1; vis.pVertexBindingDescriptions   = &bind;
-        vis.vertexAttributeDescriptionCount = 3; vis.pVertexAttributeDescriptions = attrs;
+        vis.vertexAttributeDescriptionCount = attrCount; vis.pVertexAttributeDescriptions = attrs;
 
         VkPipelineShaderStageCreateInfo stages[2]{};
         stages[0] = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
@@ -7814,7 +7874,7 @@ namespace CNA::Internal::Renderers::Vulkan
         std::size_t stride, VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
-        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
+        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt, const VulkanVertexInputLayoutEXT& vertexLayout)
     {
         EnsureSkinnedResources();
 
@@ -7828,7 +7888,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // (locations 0-4 identical to stride 52; location 5 = aColor is new).
         const std::size_t skinnedStride = (stride == 56) ? 56 : 52;
         const bool colored = (skinnedStride == 56);
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(skinnedStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask };
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(skinnedStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask, vertexLayout.Hash() };
         auto it = pipelinesSkinned3D_.find(key);
         if (it != pipelinesSkinned3D_.end()) return it->second;
 
@@ -7852,6 +7912,8 @@ namespace CNA::Internal::Renderers::Vulkan
             attrs[5] = { 5, 0, VK_FORMAT_R8G8B8A8_UNORM, 52 }; // aColor
             attrCount = 6;
         }
+
+        ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, std::size(attrs), attrCount);
 
         VkPipelineVertexInputStateCreateInfo vis{};
         vis.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -7955,7 +8017,7 @@ namespace CNA::Internal::Renderers::Vulkan
         std::size_t stride, VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
-        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
+        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt, const VulkanVertexInputLayoutEXT& vertexLayout)
     {
         EnsureSkinnedResources();
 
@@ -7963,7 +8025,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // per-vertex-color shader/attribute-layout variant.
         const std::size_t skinnedStride = (stride == 56) ? 56 : 52;
         const bool colored = (skinnedStride == 56);
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(skinnedStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask };
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(skinnedStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask, vertexLayout.Hash() };
         auto it = pipelinesSkinned3DVertexLit_.find(key);
         if (it != pipelinesSkinned3DVertexLit_.end()) return it->second;
 
@@ -7987,6 +8049,8 @@ namespace CNA::Internal::Renderers::Vulkan
             attrs[5] = { 5, 0, VK_FORMAT_R8G8B8A8_UNORM, 52 }; // aColor
             attrCount = 6;
         }
+
+        ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, std::size(attrs), attrCount);
 
         VkPipelineVertexInputStateCreateInfo vis{};
         vis.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -9497,7 +9561,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 if (draw.useAlphaTest) {
                     pipe = GetOrCreatePipelineAlphaTest3D(draw.stride, draw.topology,
                                                           draw.depthTest, draw.depthWrite,
-                                                          draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
+                                                          draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt, draw.vertexLayout);
                 } else if (draw.useDualTexture) {
                     pipe = GetOrCreatePipelineDualTex3D(draw.stride, draw.topology,
                                                         draw.depthTest, draw.depthWrite,
@@ -9505,7 +9569,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 } else if (draw.useEnvMap) {
                     pipe = GetOrCreatePipelineEnvMap3D(draw.topology,
                                                        draw.depthTest, draw.depthWrite,
-                                                       draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
+                                                       draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt, draw.vertexLayout);
                 } else if (draw.useSkinned) {
                     // Task 1103: real XNA default is PreferPerPixelLighting=false (per-vertex/
                     // Gouraud lighting) -- select that sibling pipeline unless the effect asked
@@ -9514,10 +9578,10 @@ namespace CNA::Internal::Renderers::Vulkan
                     pipe = draw.preferVertexLit
                            ? GetOrCreatePipelineSkinned3DVertexLit(draw.stride, draw.topology,
                                                         draw.depthTest, draw.depthWrite,
-                                                        draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt)
+                                                        draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt, draw.vertexLayout)
                            : GetOrCreatePipelineSkinned3D(draw.stride, draw.topology,
                                                         draw.depthTest, draw.depthWrite,
-                                                        draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
+                                                        draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt, draw.vertexLayout);
                 } else if (draw.usePbrSkinned) {
                     pipe = GetOrCreatePipelinePbrSkinned3D(draw.stride, draw.topology,
                                                         draw.depthTest, draw.depthWrite,
@@ -11414,7 +11478,12 @@ namespace CNA::Internal::Renderers::Vulkan
         VulkanVertexInputLayoutEXT declaredLayout;
         {
             std::size_t inputCount = 0;
-            if (const auto* inputs = BasicShapeStockInputsEXT(basicShape, inputCount))
+            const auto* inputs = BasicShapeStockInputsEXT(basicShape, inputCount);
+            // VULKAN-147: the stock effect families, which the BasicEffect shape does not cover.
+            if (inputs == nullptr)
+                inputs = EffectFamilyStockInputsEXT(needsAlphaTest, needsEnvMap,
+                                                    needsSkinned && !needsPbr, stride, inputCount);
+            if (inputs != nullptr)
                 declaredLayout = BuildVulkanVertexInputLayoutEXT(
                     vb.GetDeclarationEXT(), inputs, inputCount);
         }
@@ -11730,7 +11799,12 @@ namespace CNA::Internal::Renderers::Vulkan
         VulkanVertexInputLayoutEXT declaredLayout;
         {
             std::size_t inputCount = 0;
-            if (const auto* inputs = BasicShapeStockInputsEXT(basicShape, inputCount))
+            const auto* inputs = BasicShapeStockInputsEXT(basicShape, inputCount);
+            // VULKAN-147: the stock effect families, which the BasicEffect shape does not cover.
+            if (inputs == nullptr)
+                inputs = EffectFamilyStockInputsEXT(needsAlphaTest, needsEnvMap,
+                                                    needsSkinned && !needsPbr, stride, inputCount);
+            if (inputs != nullptr)
                 declaredLayout = BuildVulkanVertexInputLayoutEXT(
                     vb.GetDeclarationEXT(), inputs, inputCount);
         }

@@ -2773,7 +2773,8 @@ namespace CNA::Internal::Renderers::Vulkan
                                                    uint32_t colorAttachmentCount, bool wireframe,
                                                    bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
-                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {});
         void       EnsureDualTexResources();
         VkDescriptorSet GetOrCreateDualTexDescSet(uint32_t frameIdx, VkImageView view0, VkImageView view1,
                                                     VkSampler sampler0, VkSampler sampler1);
@@ -2799,7 +2800,8 @@ namespace CNA::Internal::Renderers::Vulkan
                                                 uint32_t colorAttachmentCount, bool wireframe,
                                                 bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
-                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {});
         void       FillEnvMapPushConst(float (&pc)[32], const Matrix& wvp, const Matrix& world);
         // SkinnedEffect
         void       EnsureSkinnedResources();
@@ -2816,7 +2818,8 @@ namespace CNA::Internal::Renderers::Vulkan
                                                  uint32_t colorAttachmentCount, bool wireframe,
                                                  bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
-                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {});
         // Task 1103: PreferPerPixelLighting=false sibling of GetOrCreatePipelineSkinned3D above
         // (real per-vertex/Gouraud lighting, XNA's own default) — same signature/layout, different
         // shader modules and pipeline cache only.
@@ -2826,7 +2829,8 @@ namespace CNA::Internal::Renderers::Vulkan
                                                  uint32_t colorAttachmentCount, bool wireframe,
                                                  bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
-                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {});
         // PbrEffect (unskinned, stride 48) / SkinnedPbrEffect (PBR + skinning combo, stride 68).
         // Metallic-roughness BRDF ported from EasyGLRenderer::EnsurePbrProgram()/
         // EnsurePbrSkinnedProgram() unchanged; only the resource-binding plumbing differs.

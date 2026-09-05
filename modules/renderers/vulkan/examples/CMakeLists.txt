@@ -1058,6 +1058,17 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_VertexBufferIndexBufferGetData COMMAND cna_test_vulkan_vertexbuffer_indexbuffer_getdata
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plans/plan_vulkan.md VULKAN-147 (F-15): the same conversion for the stock EFFECT
+        # families. Alpha test had the offset guess in its most explicit form -- one VS for strides
+        # 20 and 32 with `uvOffset = (stride == 32) ? 24 : 12`. Each leg draws the same geometry at
+        # the same stride with the UV element moved, over a two-texel texture, so a stride-derived
+        # offset gives both draws the same pixel and a declaration-derived one gives two.
+        cna_vulkan_test(cna_test_vulkan_declared_effect_layout
+                        vulkan_declared_effect_layout_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DeclaredEffectLayout
+            COMMAND cna_test_vulkan_declared_effect_layout
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plans/plan_vulkan.md VULKAN-146 (F-15): the BasicEffect pipelines take their attribute
         # offsets from the caller's VertexDeclaration. Two 24-byte declarations the stride table
         # cannot tell apart -- colour at 12 and colour at 20 -- must draw their own colours and get
