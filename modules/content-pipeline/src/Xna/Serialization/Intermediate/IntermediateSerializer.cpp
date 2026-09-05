@@ -15,6 +15,7 @@
 #include <unordered_set>
 
 #include "Microsoft/Xna/Framework/BoundingBox.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/TextureReferenceDictionary.hpp"
 #include "Microsoft/Xna/Framework/BoundingSphere.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Curve.hpp"
@@ -385,6 +386,23 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
             // A `string` is a reference in .NET, so XNA writes and accepts Null="true" for it; a
             // std::string has no null, so reading one yields the empty string (recorded divergence).
             [[nodiscard]] bool IsNullable() const noexcept override { return Traits::NullReadsAsDefault; }
+
+            // An optional member whose value is an empty string is omitted, exactly as an optional
+            // empty collection is: measured on ContentItem's own Name, which XNA writes only once
+            // it has been given one (tests/reference/xna40/graphics, material/serialize_with_name
+            // versus material/serialize_basic).
+            [[nodiscard]] bool ObjectIsEmpty(const ContentObject& value) const override
+            {
+                if constexpr (std::is_same_v<T, std::string>)
+                {
+                    return Unbox<T>(value).empty();
+                }
+                else
+                {
+                    (void)value;
+                    return false;
+                }
+            }
 
             [[nodiscard]] ContentObject NullObject() const override
             {
@@ -1126,6 +1144,35 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
             return AliasFor(ns, aliases) + ":" + base.substr(dot + 1);
         }
 
+        /**
+         * @brief Spells a type name with an alias only when one is already declared.
+         *
+         * The external-reference section is written after the root element, so it cannot declare a
+         * new namespace alias -- and XNA does not: the same target type is spelled
+         * `Graphics:TextureContent` in a document whose root already declares that alias and
+         * `Microsoft.Xna.Framework.Content.Pipeline.Graphics.Texture2DContent` in one that does not
+         * (measured: tests/reference/xna40/graphics case material/serialize_basic against
+         * tests/reference/xna40/intermediate/accept_external_relocated_relative.normalized.xml).
+         */
+        std::string SpellWithExistingAlias(const std::string& canonical,
+                                           const std::vector<std::pair<std::string, std::string>>& aliases)
+        {
+            const std::size_t dot = canonical.rfind('.');
+            if (dot == std::string::npos)
+            {
+                return canonical;
+            }
+            const std::string ns = canonical.substr(0, dot);
+            for (const auto& [alias, existing] : aliases)
+            {
+                if (existing == ns)
+                {
+                    return alias + ":" + canonical.substr(dot + 1);
+                }
+            }
+            return canonical;
+        }
+
         std::string SpellCanonical(IntermediateSerializer& serializer, const std::string& canonical,
                                    std::vector<std::pair<std::string, std::string>>& aliases)
         {
@@ -1219,6 +1266,11 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
     std::string IntermediateSerializer::SpellTypeName(const ContentTypeSerializerBase& serializer)
     {
         return SpellCanonical(*this, CanonicalTypeName(serializer.TargetTypeName()), aliases_);
+    }
+
+    std::string IntermediateSerializer::SpellDeclaredTypeName(const std::string& typeName) const
+    {
+        return SpellWithExistingAlias(CanonicalTypeName(typeName), aliases_);
     }
 
     ContentTypeSerializerBase& IntermediateSerializer::ResolveTypeName(const std::string& spelledName,
@@ -1433,6 +1485,16 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
         RegisterTypeSerializer(std::make_unique<RaySerializer>());
         RegisterTypeSerializer(std::make_unique<CurveSerializer>());
         RegisterTypeSerializer(std::make_unique<NamedValueDictionarySerializer<OpaqueDataDictionary, ContentObject>>());
+        // A material's texture collection writes its entries as <Texture Key="…">, the collection
+        // item name the type declares (measured, tests/reference/xna40/graphics,
+        // material/serialize_basic).
+        RegisterTypeSerializer(
+            std::make_unique<NamedValueDictionarySerializer<Graphics::TextureReferenceDictionary,
+                                                            std::shared_ptr<ExternalReference<Graphics::TextureContent>>>>(
+                std::string(Graphics::TextureReferenceDictionary::CollectionItemName)));
+        // ...and its value type, which the dictionary looks up by type rather than instantiating,
+        // so the on-demand factory would never have run for it.
+        IntermediateSerializer::TypeSerializerFor<ExternalReference<Graphics::TextureContent>>();
         ContentTypeSerializerBase& object = RegisterTypeSerializer(std::make_unique<ObjectSerializer>());
         {
             Registry& registry = TheRegistry();

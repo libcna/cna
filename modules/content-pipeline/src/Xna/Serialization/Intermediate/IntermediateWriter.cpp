@@ -315,7 +315,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
         {
             xml_.WriteStartElement("ExternalReference");
             xml_.WriteAttributeString("ID", external.id);
-            xml_.WriteAttributeString("TargetType", external.targetTypeName);
+            xml_.WriteAttributeString("TargetType", serializer_.SpellDeclaredTypeName(external.targetTypeName));
             xml_.WriteString(RelativeFilename(external.filename));
             xml_.WriteEndElement();
         }

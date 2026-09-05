@@ -235,6 +235,18 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
         CNAEXT [[nodiscard]] std::string SpellTypeName(const ContentTypeSerializerBase& serializer);
 
         /**
+         * @brief Spells a .NET type name the way the external-reference section does: with a
+         *        namespace alias when the document already declares one, and in full otherwise.
+         *
+         * That section is written after the root element, so it cannot declare a new alias, and
+         * the runtime does not (measured, docs/xna-intermediate-xml-format.md §8).
+         *
+         * @param typeName The .NET full name of the type.
+         * @return The spelled name.
+         */
+        CNAEXT [[nodiscard]] std::string SpellDeclaredTypeName(const std::string& typeName) const;
+
+        /**
          * @brief Resolves a `Type` attribute value in the scope of the reader's current node.
          *
          * @param spelledName The attribute text.

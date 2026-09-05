@@ -257,3 +257,26 @@ kernel, CNA enlarges bilinearly and reduces with a box filter, and the corpus te
 measured difference (at most 8 channel units on the cases they cover) rather than pretending the
 filters are the same. DXT blocks are compared by decoding XNA's blocks with CNA's decoder for the
 same reason.
+
+## 10. Materials, and where a content item's own members go
+
+`MaterialContent` has no fields: every property of a stock material is a view over two
+dictionaries, `OpaqueData` for values and references and `Textures` for texture references. That is
+why setting one to null removes its entry instead of storing a null, and why reading one whose
+stored value has another type answers null rather than refusing -- both measured, both reproduced.
+In C++ the null is an empty `std::optional` for a value property and a null `std::shared_ptr` for a
+reference, and the five accessors XNA declares `protected` stay protected, so a game's own material
+reaches them the same way.
+
+Two things about serialization follow from the same measurements and apply to every content type,
+not only materials:
+
+* **`Name` and `OpaqueData` are serialized members of `ContentItem` itself**, written before a
+  derived type's own and omitted while empty; `Identity` is not serialized at all. A described type
+  gets them by calling `d.BaseType<ContentItem>()`, which every content type here does.
+* **An optional member whose value is an empty string is omitted**, exactly as an optional empty
+  collection is. That is how a content item with no name writes no `<Name>` element.
+
+`EffectContent::EffectCode` is the one place where CNA prefers `std::optional<std::string>` to
+`std::string`: an effect with no source serializes as `<EffectCode Null="true" />`, and a
+`std::string` cannot tell that from an empty one.

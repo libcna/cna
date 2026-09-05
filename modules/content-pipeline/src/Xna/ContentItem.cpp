@@ -3,6 +3,8 @@
 
 #include <utility>
 
+#include "Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/IntermediateSerializer.hpp"
+
 namespace Microsoft::Xna::Framework::Content::Pipeline
 {
     const ContentIdentity& ContentItem::getIdentityProperty() const noexcept
@@ -33,6 +35,14 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
     const OpaqueDataDictionary& ContentItem::getOpaqueDataProperty() const noexcept
     {
         return opaqueData_;
+    }
+
+    void ContentItem::DescribeContent(Serialization::Intermediate::ContentTypeDescriptor<ContentItem>& d)
+    {
+        d.Property("Name", &ContentItem::getNameProperty, &ContentItem::setNameProperty).Optional();
+        d.ReadOnlyProperty("OpaqueData", [](ContentItem& item) -> OpaqueDataDictionary&
+                           { return item.getOpaqueDataProperty(); })
+            .Optional();
     }
 
     const std::string& ContentItem::GetTypeName() const

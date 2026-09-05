@@ -9,6 +9,12 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/OpaqueDataDictionary.hpp"
 #include "System/Object.hpp"
 
+namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermediate
+{
+    template<typename T>
+    class ContentTypeDescriptor;
+}
+
 namespace Microsoft::Xna::Framework::Content::Pipeline
 {
     /**
@@ -70,6 +76,19 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          * @return The read-only dictionary owned by this item.
          */
         [[nodiscard]] const OpaqueDataDictionary& getOpaqueDataProperty() const noexcept;
+
+        /**
+         * @brief Describes the members every content item serializes: its name and its opaque
+         *        data, each written only once it has one.
+         *
+         * Measured on the runtime (tests/reference/xna40/graphics, cases
+         * material/serialize_with_name and effectcontent/serialize_with_opaquedata): `Name` and
+         * `OpaqueData` are serialized members of this base and come before a derived type's own,
+         * while `Identity` is not serialized at all.
+         *
+         * @param d The descriptor being filled.
+         */
+        static void DescribeContent(Serialization::Intermediate::ContentTypeDescriptor<ContentItem>& d);
 
         /** @brief Returns the .NET full name of this class. */
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;

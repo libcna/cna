@@ -10,8 +10,8 @@
 
 | Quantity | Implemented (EXACT + SEMANTIC + HOST_SUBSTITUTION) | EXTERNAL_BLOCKED | MISSING |
 |---|---|---:|---:|
-| public/protected types | 49/128 (38.3%) | 0 | 79 |
-| public/protected members | 275/705 (39.0%) | 0 | 430 |
+| public/protected types | 58/128 (45.3%) | 0 | 70 |
+| public/protected members | 362/705 (51.3%) | 0 | 343 |
 | enum values | 6/27 (22.2%) | 0 | 21 |
 | built-in importers | 0/10 (0.0%) | 0 | 10 |
 | built-in processors | 0/12 (0.0%) | 0 | 12 |
@@ -19,8 +19,8 @@
 
 Status vocabulary: EXACT_EQUIVALENT, SEMANTIC_EQUIVALENT (spelling differs, capability identical; note says how),
 HOST_SUBSTITUTION (Microsoft-host mechanism replaced; note says how), EXTERNAL_BLOCKED (note names the
-unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 30, SEMANTIC_EQUIVALENT 18, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 79.
-Member status by value: EXACT_EQUIVALENT 205, SEMANTIC_EQUIVALENT 65, HOST_SUBSTITUTION 5, EXTERNAL_BLOCKED 0, MISSING 430.
+unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 30, SEMANTIC_EQUIVALENT 27, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 70.
+Member status by value: EXACT_EQUIVALENT 242, SEMANTIC_EQUIVALENT 115, HOST_SUBSTITUTION 5, EXTERNAL_BLOCKED 0, MISSING 343.
 
 Rules applied mechanically: 3 delegate plumbing members are listed in section 7 and not counted; 3 exception
 serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serialization has no C++ counterpart).
@@ -31,8 +31,8 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 |---|---:|---:|---:|---:|
 | `Microsoft.Xna.Framework.Content.Pipeline.Audio` | 5 | 0 | 0 | 5 |
 | `Microsoft.Xna.Framework.Content.Pipeline` | 32 | 21 | 0 | 11 |
-| `Microsoft.Xna.Framework.Content.Pipeline.Graphics` | 47 | 16 | 0 | 31 |
-| `Microsoft.Xna.Framework.Content.Pipeline.Processors` | 28 | 0 | 0 | 28 |
+| `Microsoft.Xna.Framework.Content.Pipeline.Graphics` | 47 | 24 | 0 | 23 |
+| `Microsoft.Xna.Framework.Content.Pipeline.Processors` | 28 | 1 | 0 | 27 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler` | 5 | 5 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate` | 7 | 7 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Tasks` | 4 | 0 | 0 | 4 |
@@ -60,32 +60,32 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `…` | `ExternalReference<T>` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::ExternalReference<T>` |  |
 | `…` | `FbxImporter` | class | MISSING |  |  |
 | `…` | `FontDescriptionImporter` | class | MISSING |  |  |
-| `….Graphics` | `AlphaTestMaterialContent` | class | MISSING |  |  |
+| `….Graphics` | `AlphaTestMaterialContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::AlphaTestMaterialContent` | Adds no state: every property is a view over the base's OpaqueData or Textures, verified entry by entry against tests/reference/xna40/graphics (case material/alphatest_properties or material/basic_properties). |
 | `….Graphics` | `AnimationChannel` | class | MISSING |  |  |
 | `….Graphics` | `AnimationChannelDictionary` | class | MISSING |  |  |
 | `….Graphics` | `AnimationContent` | class | MISSING |  |  |
 | `….Graphics` | `AnimationContentDictionary` | class | MISSING |  |  |
 | `….Graphics` | `AnimationKeyframe` | class | MISSING |  |  |
-| `….Graphics` | `BasicMaterialContent` | class | MISSING |  |  |
+| `….Graphics` | `BasicMaterialContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::BasicMaterialContent` | Adds no state: every property is a view over the base's OpaqueData or Textures, verified entry by entry against tests/reference/xna40/graphics (case material/basic_properties or material/basic_properties). |
 | `….Graphics` | `BitmapContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::BitmapContent` | All 13 members present. The copy protocol runs in XNA's order -- argument validation, zero-size no-op, same-instance snapshot, destination TryCopyFrom, source TryCopyTo, then the Vector4 intermediate -- verified against tests/reference/xna40/graphics. |
 | `….Graphics` | `BoneContent` | class | MISSING |  |  |
 | `….Graphics` | `BoneWeight` | struct | MISSING |  |  |
 | `….Graphics` | `BoneWeightCollection` | class | MISSING |  |  |
-| `….Graphics` | `DualTextureMaterialContent` | class | MISSING |  |  |
+| `….Graphics` | `DualTextureMaterialContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::DualTextureMaterialContent` | Adds no state: every property is a view over the base's OpaqueData or Textures, verified entry by entry against tests/reference/xna40/graphics (case material/dualtexture_properties or material/basic_properties). |
 | `….Graphics` | `Dxt1BitmapContent` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::Dxt1BitmapContent` |  |
 | `….Graphics` | `Dxt3BitmapContent` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::Dxt3BitmapContent` |  |
 | `….Graphics` | `Dxt5BitmapContent` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::Dxt5BitmapContent` |  |
 | `….Graphics` | `DxtBitmapContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::DxtBitmapContent` | Block storage sized as XNA sizes it (ceil(w/4) * ceil(h/4) * blockSize). Decode/Encode are CNAEXT hooks over CNA's existing BC codec; XNA reaches D3DX for the same step. |
-| `….Graphics` | `EffectContent` | class | MISSING |  |  |
-| `….Graphics` | `EffectMaterialContent` | class | MISSING |  |  |
-| `….Graphics` | `EnvironmentMapMaterialContent` | class | MISSING |  |  |
+| `….Graphics` | `EffectContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::EffectContent` | The effect source is a nullable C# string and the difference is observable, so it is a std::optional<std::string> here rather than a std::string; everything else is the direct translation. |
+| `….Graphics` | `EffectMaterialContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::EffectMaterialContent` | Adds no state: every property is a view over the base's OpaqueData or Textures, verified entry by entry against tests/reference/xna40/graphics (case material/effect_properties or material/basic_properties). |
+| `….Graphics` | `EnvironmentMapMaterialContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::EnvironmentMapMaterialContent` | Adds no state: every property is a view over the base's OpaqueData or Textures, verified entry by entry against tests/reference/xna40/graphics (case material/environmentmap_properties or material/basic_properties). |
 | `….Graphics` | `FontDescription` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::FontDescription` | Every member and every refusal text is pinned to tests/reference/xna40/graphics (cases font/*), including the measured surprises: all three constructors leave UseKerning false, a NaN size and an undefined style are accepted while a size that is not greater than zero is refused, and the constructors refuse through the property setters, so their messages name the parameter `value`. One member exists here that the inventory does not list: a public parameterless constructor, marked CNAEXT. XNA has one too and keeps it private, because its serializer reaches a private constructor by reflection; C++ has none, so the serializer needs a constructor it can call. |
 | `….Graphics` | `FontDescriptionStyle` | enum | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::FontDescriptionStyle` |  |
 | `….Graphics` | `GeometryContent` | class | MISSING |  |  |
 | `….Graphics` | `GeometryContentCollection` | class | MISSING |  |  |
 | `….Graphics` | `IndexCollection` | class | MISSING |  |  |
 | `….Graphics` | `IndirectPositionCollection` | class | MISSING |  |  |
-| `….Graphics` | `MaterialContent` | class | MISSING |  |  |
+| `….Graphics` | `MaterialContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::MaterialContent` | The five accessors XNA declares protected stay protected, and a C++ null is an empty std::optional or a null shared_ptr. Every behaviour is pinned to tests/reference/xna40/graphics (cases material/*): a property set to null removes its entry, a property whose stored value has another type reads as null rather than refusing, and an empty key is refused the way the runtime refuses a null one. |
 | `….Graphics` | `MeshBuilder` | class | MISSING |  |  |
 | `….Graphics` | `MeshContent` | class | MISSING |  |  |
 | `….Graphics` | `MeshHelper` | class | MISSING |  |  |
@@ -95,7 +95,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `….Graphics` | `NodeContentCollection` | class | MISSING |  |  |
 | `….Graphics` | `PixelBitmapContent<T>` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::PixelBitmapContent<T>` | T is constrained by a concept to the 22 pixel types XNA permits (detail/PixelTraits.hpp), where XNA discovers them through VectorConverter at run time. |
 | `….Graphics` | `PositionCollection` | class | MISSING |  |  |
-| `….Graphics` | `SkinnedMaterialContent` | class | MISSING |  |  |
+| `….Graphics` | `SkinnedMaterialContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::SkinnedMaterialContent` | Adds no state: every property is a view over the base's OpaqueData or Textures, verified entry by entry against tests/reference/xna40/graphics (case material/skinned_properties or material/basic_properties). |
 | `….Graphics` | `Texture2DContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::Texture2DContent` | The Mipmaps property is the single fixed face, so the setter takes the owning shared_ptr that replaces it rather than assigning a value; everything else is the direct translation. |
 | `….Graphics` | `Texture3DContent` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::Texture3DContent` | The one texture whose face collection is resizable, and whose mipmap generation halves the depth as well. |
 | `….Graphics` | `TextureContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::TextureContent` | Validate's refusal texts, the mipmap halving rule and ConvertBitmapType are pinned to tests/reference/xna40/graphics. |
@@ -117,7 +117,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `…` | `PipelineException` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::PipelineException` |  |
 | `…` | `ProcessorParameter` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::ProcessorParameter` |  |
 | `…` | `ProcessorParameterCollection` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::ProcessorParameterCollection` |  |
-| `….Processors` | `CompiledEffectContent` | class | MISSING |  |  |
+| `….Processors` | `CompiledEffectContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::CompiledEffectContent` | Landed with XNAPP-094 rather than XNAPP-135, because EffectMaterialContent references it. It carries one CNAEXT member the inventory does not list: a public parameterless constructor, which the intermediate serializer needs where XNA's reflection reaches a private one. |
 | `….Processors` | `EffectProcessor` | class | MISSING |  |  |
 | `….Processors` | `EffectProcessorDebugMode` | enum | MISSING |  |  |
 | `….Processors` | `FontDescriptionProcessor` | class | MISSING |  |  |
@@ -354,19 +354,19 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `FbxImporter` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | MISSING |  |  |
 | `FontDescriptionImporter` | constructor | `.ctor()` | MISSING |  |  |
 | `FontDescriptionImporter` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | MISSING |  |  |
-| `AlphaTestMaterialContent` | constant | `AlphaFunctionKey` | MISSING |  |  |
-| `AlphaTestMaterialContent` | constant | `AlphaKey` | MISSING |  |  |
-| `AlphaTestMaterialContent` | constant | `DiffuseColorKey` | MISSING |  |  |
-| `AlphaTestMaterialContent` | constant | `ReferenceAlphaKey` | MISSING |  |  |
-| `AlphaTestMaterialContent` | constant | `TextureKey` | MISSING |  |  |
-| `AlphaTestMaterialContent` | constant | `VertexColorEnabledKey` | MISSING |  |  |
-| `AlphaTestMaterialContent` | constructor | `.ctor()` | MISSING |  |  |
-| `AlphaTestMaterialContent` | property | `Alpha` | MISSING |  |  |
-| `AlphaTestMaterialContent` | property | `AlphaFunction` | MISSING |  |  |
-| `AlphaTestMaterialContent` | property | `DiffuseColor` | MISSING |  |  |
-| `AlphaTestMaterialContent` | property | `ReferenceAlpha` | MISSING |  |  |
-| `AlphaTestMaterialContent` | property | `Texture` | MISSING |  |  |
-| `AlphaTestMaterialContent` | property | `VertexColorEnabled` | MISSING |  |  |
+| `AlphaTestMaterialContent` | constant | `AlphaFunctionKey` | SEMANTIC_EQUIVALENT | `AlphaTestMaterialContent::AlphaFunctionKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `AlphaTestMaterialContent` | constant | `AlphaKey` | SEMANTIC_EQUIVALENT | `AlphaTestMaterialContent::AlphaKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `AlphaTestMaterialContent` | constant | `DiffuseColorKey` | SEMANTIC_EQUIVALENT | `AlphaTestMaterialContent::DiffuseColorKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `AlphaTestMaterialContent` | constant | `ReferenceAlphaKey` | SEMANTIC_EQUIVALENT | `AlphaTestMaterialContent::ReferenceAlphaKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `AlphaTestMaterialContent` | constant | `TextureKey` | SEMANTIC_EQUIVALENT | `AlphaTestMaterialContent::TextureKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `AlphaTestMaterialContent` | constant | `VertexColorEnabledKey` | SEMANTIC_EQUIVALENT | `AlphaTestMaterialContent::VertexColorEnabledKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `AlphaTestMaterialContent` | constructor | `.ctor()` | EXACT_EQUIVALENT | `AlphaTestMaterialContent()` |  |
+| `AlphaTestMaterialContent` | property | `Alpha` | EXACT_EQUIVALENT | `getAlphaProperty() / setAlphaProperty()` | Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured. |
+| `AlphaTestMaterialContent` | property | `AlphaFunction` | EXACT_EQUIVALENT | `getAlphaFunctionProperty() / setAlphaFunctionProperty()` | Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured. |
+| `AlphaTestMaterialContent` | property | `DiffuseColor` | EXACT_EQUIVALENT | `getDiffuseColorProperty() / setDiffuseColorProperty()` | Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured. |
+| `AlphaTestMaterialContent` | property | `ReferenceAlpha` | EXACT_EQUIVALENT | `getReferenceAlphaProperty() / setReferenceAlphaProperty()` | Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured. |
+| `AlphaTestMaterialContent` | property | `Texture` | SEMANTIC_EQUIVALENT | `getTextureProperty() / setTextureProperty()` | the external reference is an owned shared_ptr; a null one removes the entry, as measured. |
+| `AlphaTestMaterialContent` | property | `VertexColorEnabled` | EXACT_EQUIVALENT | `getVertexColorEnabledProperty() / setVertexColorEnabledProperty()` | Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured. |
 | `AnimationChannel` | constructor | `.ctor()` | MISSING |  |  |
 | `AnimationChannel` | property | `Count` | MISSING |  |  |
 | `AnimationChannel` | indexer | `Item[System.Int32]` | MISSING |  |  |
@@ -386,21 +386,21 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `AnimationKeyframe` | property | `Time` | MISSING |  |  |
 | `AnimationKeyframe` | property | `Transform` | MISSING |  |  |
 | `AnimationKeyframe` | method | `CompareTo(Microsoft.Xna.Framework.Content.Pipeline.Graphics.AnimationKeyframe)` | MISSING |  |  |
-| `BasicMaterialContent` | constant | `AlphaKey` | MISSING |  |  |
-| `BasicMaterialContent` | constant | `DiffuseColorKey` | MISSING |  |  |
-| `BasicMaterialContent` | constant | `EmissiveColorKey` | MISSING |  |  |
-| `BasicMaterialContent` | constant | `SpecularColorKey` | MISSING |  |  |
-| `BasicMaterialContent` | constant | `SpecularPowerKey` | MISSING |  |  |
-| `BasicMaterialContent` | constant | `TextureKey` | MISSING |  |  |
-| `BasicMaterialContent` | constant | `VertexColorEnabledKey` | MISSING |  |  |
-| `BasicMaterialContent` | constructor | `.ctor()` | MISSING |  |  |
-| `BasicMaterialContent` | property | `Alpha` | MISSING |  |  |
-| `BasicMaterialContent` | property | `DiffuseColor` | MISSING |  |  |
-| `BasicMaterialContent` | property | `EmissiveColor` | MISSING |  |  |
-| `BasicMaterialContent` | property | `SpecularColor` | MISSING |  |  |
-| `BasicMaterialContent` | property | `SpecularPower` | MISSING |  |  |
-| `BasicMaterialContent` | property | `Texture` | MISSING |  |  |
-| `BasicMaterialContent` | property | `VertexColorEnabled` | MISSING |  |  |
+| `BasicMaterialContent` | constant | `AlphaKey` | SEMANTIC_EQUIVALENT | `BasicMaterialContent::AlphaKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `BasicMaterialContent` | constant | `DiffuseColorKey` | SEMANTIC_EQUIVALENT | `BasicMaterialContent::DiffuseColorKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `BasicMaterialContent` | constant | `EmissiveColorKey` | SEMANTIC_EQUIVALENT | `BasicMaterialContent::EmissiveColorKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `BasicMaterialContent` | constant | `SpecularColorKey` | SEMANTIC_EQUIVALENT | `BasicMaterialContent::SpecularColorKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `BasicMaterialContent` | constant | `SpecularPowerKey` | SEMANTIC_EQUIVALENT | `BasicMaterialContent::SpecularPowerKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `BasicMaterialContent` | constant | `TextureKey` | SEMANTIC_EQUIVALENT | `BasicMaterialContent::TextureKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `BasicMaterialContent` | constant | `VertexColorEnabledKey` | SEMANTIC_EQUIVALENT | `BasicMaterialContent::VertexColorEnabledKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `BasicMaterialContent` | constructor | `.ctor()` | EXACT_EQUIVALENT | `BasicMaterialContent()` |  |
+| `BasicMaterialContent` | property | `Alpha` | EXACT_EQUIVALENT | `getAlphaProperty() / setAlphaProperty()` | Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured. |
+| `BasicMaterialContent` | property | `DiffuseColor` | EXACT_EQUIVALENT | `getDiffuseColorProperty() / setDiffuseColorProperty()` | Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured. |
+| `BasicMaterialContent` | property | `EmissiveColor` | EXACT_EQUIVALENT | `getEmissiveColorProperty() / setEmissiveColorProperty()` | Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured. |
+| `BasicMaterialContent` | property | `SpecularColor` | EXACT_EQUIVALENT | `getSpecularColorProperty() / setSpecularColorProperty()` | Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured. |
+| `BasicMaterialContent` | property | `SpecularPower` | EXACT_EQUIVALENT | `getSpecularPowerProperty() / setSpecularPowerProperty()` | Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured. |
+| `BasicMaterialContent` | property | `Texture` | SEMANTIC_EQUIVALENT | `getTextureProperty() / setTextureProperty()` | the external reference is an owned shared_ptr; a null one removes the entry, as measured. |
+| `BasicMaterialContent` | property | `VertexColorEnabled` | EXACT_EQUIVALENT | `getVertexColorEnabledProperty() / setVertexColorEnabledProperty()` | Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured. |
 | `BitmapContent` | constructor | `.ctor()` | EXACT_EQUIVALENT | `BitmapContent()` |  |
 | `BitmapContent` | constructor | `.ctor(System.Int32, System.Int32)` | EXACT_EQUIVALENT | `BitmapContent(intcs, intcs)` |  |
 | `BitmapContent` | property | `Height` | EXACT_EQUIVALENT | `getHeightProperty() / setHeightProperty()` |  |
@@ -421,17 +421,17 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `BoneWeightCollection` | constructor | `.ctor()` | MISSING |  |  |
 | `BoneWeightCollection` | method | `NormalizeWeights()` | MISSING |  |  |
 | `BoneWeightCollection` | method | `NormalizeWeights(System.Int32)` | MISSING |  |  |
-| `DualTextureMaterialContent` | constant | `AlphaKey` | MISSING |  |  |
-| `DualTextureMaterialContent` | constant | `DiffuseColorKey` | MISSING |  |  |
-| `DualTextureMaterialContent` | constant | `Texture2Key` | MISSING |  |  |
-| `DualTextureMaterialContent` | constant | `TextureKey` | MISSING |  |  |
-| `DualTextureMaterialContent` | constant | `VertexColorEnabledKey` | MISSING |  |  |
-| `DualTextureMaterialContent` | constructor | `.ctor()` | MISSING |  |  |
-| `DualTextureMaterialContent` | property | `Alpha` | MISSING |  |  |
-| `DualTextureMaterialContent` | property | `DiffuseColor` | MISSING |  |  |
-| `DualTextureMaterialContent` | property | `Texture` | MISSING |  |  |
-| `DualTextureMaterialContent` | property | `Texture2` | MISSING |  |  |
-| `DualTextureMaterialContent` | property | `VertexColorEnabled` | MISSING |  |  |
+| `DualTextureMaterialContent` | constant | `AlphaKey` | SEMANTIC_EQUIVALENT | `DualTextureMaterialContent::AlphaKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `DualTextureMaterialContent` | constant | `DiffuseColorKey` | SEMANTIC_EQUIVALENT | `DualTextureMaterialContent::DiffuseColorKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `DualTextureMaterialContent` | constant | `Texture2Key` | SEMANTIC_EQUIVALENT | `DualTextureMaterialContent::Texture2Key` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `DualTextureMaterialContent` | constant | `TextureKey` | SEMANTIC_EQUIVALENT | `DualTextureMaterialContent::TextureKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `DualTextureMaterialContent` | constant | `VertexColorEnabledKey` | SEMANTIC_EQUIVALENT | `DualTextureMaterialContent::VertexColorEnabledKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `DualTextureMaterialContent` | constructor | `.ctor()` | EXACT_EQUIVALENT | `DualTextureMaterialContent()` |  |
+| `DualTextureMaterialContent` | property | `Alpha` | EXACT_EQUIVALENT | `getAlphaProperty() / setAlphaProperty()` | Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured. |
+| `DualTextureMaterialContent` | property | `DiffuseColor` | EXACT_EQUIVALENT | `getDiffuseColorProperty() / setDiffuseColorProperty()` | Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured. |
+| `DualTextureMaterialContent` | property | `Texture` | SEMANTIC_EQUIVALENT | `getTextureProperty() / setTextureProperty()` | the external reference is an owned shared_ptr; a null one removes the entry, as measured. |
+| `DualTextureMaterialContent` | property | `Texture2` | SEMANTIC_EQUIVALENT | `getTexture2Property() / setTexture2Property()` | the external reference is an owned shared_ptr; a null one removes the entry, as measured. |
+| `DualTextureMaterialContent` | property | `VertexColorEnabled` | EXACT_EQUIVALENT | `getVertexColorEnabledProperty() / setVertexColorEnabledProperty()` | Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured. |
 | `Dxt1BitmapContent` | constructor | `.ctor(System.Int32, System.Int32)` | EXACT_EQUIVALENT | `Dxt1BitmapContent(intcs, intcs)` |  |
 | `Dxt1BitmapContent` | method | `TryGetFormat(out Microsoft.Xna.Framework.Graphics.SurfaceFormat)` | EXACT_EQUIVALENT | `TryGetFormat(SurfaceFormat&)` | SurfaceFormat::Dxt1 |
 | `Dxt3BitmapContent` | constructor | `.ctor(System.Int32, System.Int32)` | EXACT_EQUIVALENT | `Dxt3BitmapContent(intcs, intcs)` |  |
@@ -444,30 +444,30 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `DxtBitmapContent` | method | `SetPixelData(System.Byte[])` | EXACT_EQUIVALENT | `SetPixelData(const std::vector<bytecs>&)` |  |
 | `DxtBitmapContent` | method | `TryCopyFrom(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Rectangle)` | SEMANTIC_EQUIVALENT | `TryCopyFrom(const std::shared_ptr<BitmapContent>&, Rectangle, Rectangle)` | reference parameters are shared_ptr carriers: a BitmapContent is polymorphic and owned, so CNA passes std::shared_ptr<BitmapContent> where XNA passes the reference itself. |
 | `DxtBitmapContent` | method | `TryCopyTo(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Rectangle)` | SEMANTIC_EQUIVALENT | `TryCopyTo(const std::shared_ptr<BitmapContent>&, Rectangle, Rectangle)` | reference parameters are shared_ptr carriers: a BitmapContent is polymorphic and owned, so CNA passes std::shared_ptr<BitmapContent> where XNA passes the reference itself. |
-| `EffectContent` | constructor | `.ctor()` | MISSING |  |  |
-| `EffectContent` | property | `EffectCode` | MISSING |  |  |
-| `EffectMaterialContent` | constant | `CompiledEffectKey` | MISSING |  |  |
-| `EffectMaterialContent` | constant | `EffectKey` | MISSING |  |  |
-| `EffectMaterialContent` | constructor | `.ctor()` | MISSING |  |  |
-| `EffectMaterialContent` | property | `CompiledEffect` | MISSING |  |  |
-| `EffectMaterialContent` | property | `Effect` | MISSING |  |  |
-| `EnvironmentMapMaterialContent` | constant | `AlphaKey` | MISSING |  |  |
-| `EnvironmentMapMaterialContent` | constant | `DiffuseColorKey` | MISSING |  |  |
-| `EnvironmentMapMaterialContent` | constant | `EmissiveColorKey` | MISSING |  |  |
-| `EnvironmentMapMaterialContent` | constant | `EnvironmentMapAmountKey` | MISSING |  |  |
-| `EnvironmentMapMaterialContent` | constant | `EnvironmentMapKey` | MISSING |  |  |
-| `EnvironmentMapMaterialContent` | constant | `EnvironmentMapSpecularKey` | MISSING |  |  |
-| `EnvironmentMapMaterialContent` | constant | `FresnelFactorKey` | MISSING |  |  |
-| `EnvironmentMapMaterialContent` | constant | `TextureKey` | MISSING |  |  |
-| `EnvironmentMapMaterialContent` | constructor | `.ctor()` | MISSING |  |  |
-| `EnvironmentMapMaterialContent` | property | `Alpha` | MISSING |  |  |
-| `EnvironmentMapMaterialContent` | property | `DiffuseColor` | MISSING |  |  |
-| `EnvironmentMapMaterialContent` | property | `EmissiveColor` | MISSING |  |  |
-| `EnvironmentMapMaterialContent` | property | `EnvironmentMap` | MISSING |  |  |
-| `EnvironmentMapMaterialContent` | property | `EnvironmentMapAmount` | MISSING |  |  |
-| `EnvironmentMapMaterialContent` | property | `EnvironmentMapSpecular` | MISSING |  |  |
-| `EnvironmentMapMaterialContent` | property | `FresnelFactor` | MISSING |  |  |
-| `EnvironmentMapMaterialContent` | property | `Texture` | MISSING |  |  |
+| `EffectContent` | constructor | `.ctor()` | EXACT_EQUIVALENT | `EffectContent()` |  |
+| `EffectContent` | property | `EffectCode` | SEMANTIC_EQUIVALENT | `getEffectCodeProperty() / setEffectCodeProperty()` | the nullable C# string is a std::optional<std::string>, because the difference is observable: an effect with no source serializes as <EffectCode Null="true" /> (measured, effectcontent/serialize_null_code), which a plain std::string could not express. |
+| `EffectMaterialContent` | constant | `CompiledEffectKey` | SEMANTIC_EQUIVALENT | `EffectMaterialContent::CompiledEffectKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `EffectMaterialContent` | constant | `EffectKey` | SEMANTIC_EQUIVALENT | `EffectMaterialContent::EffectKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `EffectMaterialContent` | constructor | `.ctor()` | EXACT_EQUIVALENT | `EffectMaterialContent()` |  |
+| `EffectMaterialContent` | property | `CompiledEffect` | SEMANTIC_EQUIVALENT | `getCompiledEffectProperty() / setCompiledEffectProperty()` | the external reference is an owned shared_ptr; a null one removes the entry, as measured. |
+| `EffectMaterialContent` | property | `Effect` | SEMANTIC_EQUIVALENT | `getEffectProperty() / setEffectProperty()` | the external reference is an owned shared_ptr; a null one removes the entry, as measured. |
+| `EnvironmentMapMaterialContent` | constant | `AlphaKey` | SEMANTIC_EQUIVALENT | `EnvironmentMapMaterialContent::AlphaKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `EnvironmentMapMaterialContent` | constant | `DiffuseColorKey` | SEMANTIC_EQUIVALENT | `EnvironmentMapMaterialContent::DiffuseColorKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `EnvironmentMapMaterialContent` | constant | `EmissiveColorKey` | SEMANTIC_EQUIVALENT | `EnvironmentMapMaterialContent::EmissiveColorKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `EnvironmentMapMaterialContent` | constant | `EnvironmentMapAmountKey` | SEMANTIC_EQUIVALENT | `EnvironmentMapMaterialContent::EnvironmentMapAmountKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `EnvironmentMapMaterialContent` | constant | `EnvironmentMapKey` | SEMANTIC_EQUIVALENT | `EnvironmentMapMaterialContent::EnvironmentMapKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `EnvironmentMapMaterialContent` | constant | `EnvironmentMapSpecularKey` | SEMANTIC_EQUIVALENT | `EnvironmentMapMaterialContent::EnvironmentMapSpecularKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `EnvironmentMapMaterialContent` | constant | `FresnelFactorKey` | SEMANTIC_EQUIVALENT | `EnvironmentMapMaterialContent::FresnelFactorKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `EnvironmentMapMaterialContent` | constant | `TextureKey` | SEMANTIC_EQUIVALENT | `EnvironmentMapMaterialContent::TextureKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `EnvironmentMapMaterialContent` | constructor | `.ctor()` | EXACT_EQUIVALENT | `EnvironmentMapMaterialContent()` |  |
+| `EnvironmentMapMaterialContent` | property | `Alpha` | EXACT_EQUIVALENT | `getAlphaProperty() / setAlphaProperty()` | Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured. |
+| `EnvironmentMapMaterialContent` | property | `DiffuseColor` | EXACT_EQUIVALENT | `getDiffuseColorProperty() / setDiffuseColorProperty()` | Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured. |
+| `EnvironmentMapMaterialContent` | property | `EmissiveColor` | EXACT_EQUIVALENT | `getEmissiveColorProperty() / setEmissiveColorProperty()` | Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured. |
+| `EnvironmentMapMaterialContent` | property | `EnvironmentMap` | SEMANTIC_EQUIVALENT | `getEnvironmentMapProperty() / setEnvironmentMapProperty()` | the external reference is an owned shared_ptr; a null one removes the entry, as measured. |
+| `EnvironmentMapMaterialContent` | property | `EnvironmentMapAmount` | EXACT_EQUIVALENT | `getEnvironmentMapAmountProperty() / setEnvironmentMapAmountProperty()` | Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured. |
+| `EnvironmentMapMaterialContent` | property | `EnvironmentMapSpecular` | EXACT_EQUIVALENT | `getEnvironmentMapSpecularProperty() / setEnvironmentMapSpecularProperty()` | Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured. |
+| `EnvironmentMapMaterialContent` | property | `FresnelFactor` | EXACT_EQUIVALENT | `getFresnelFactorProperty() / setFresnelFactorProperty()` | Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured. |
+| `EnvironmentMapMaterialContent` | property | `Texture` | SEMANTIC_EQUIVALENT | `getTextureProperty() / setTextureProperty()` | the external reference is an owned shared_ptr; a null one removes the entry, as measured. |
 | `FontDescription` | constructor | `.ctor(System.String, System.Single, System.Single)` | EXACT_EQUIVALENT | `FontDescription(std::string, Single, Single)` |  |
 | `FontDescription` | constructor | `.ctor(System.String, System.Single, System.Single, Microsoft.Xna.Framework.Content.Pipeline.Graphics.FontDescriptionStyle)` | EXACT_EQUIVALENT | `FontDescription(std::string, Single, Single, FontDescriptionStyle)` |  |
 | `FontDescription` | constructor | `.ctor(System.String, System.Single, System.Single, Microsoft.Xna.Framework.Content.Pipeline.Graphics.FontDescriptionStyle, System.Boolean)` | EXACT_EQUIVALENT | `FontDescription(std::string, Single, Single, FontDescriptionStyle, bool)` |  |
@@ -496,13 +496,13 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `IndirectPositionCollection` | method | `CopyTo(Microsoft.Xna.Framework.Vector3[], System.Int32)` | MISSING |  |  |
 | `IndirectPositionCollection` | method | `GetEnumerator()` | MISSING |  |  |
 | `IndirectPositionCollection` | method | `IndexOf(Microsoft.Xna.Framework.Vector3)` | MISSING |  |  |
-| `MaterialContent` | constructor | `.ctor()` | MISSING |  |  |
-| `MaterialContent` | property | `Textures` | MISSING |  |  |
-| `MaterialContent` | method | `GetReferenceTypeProperty<T>(System.String)` | MISSING |  |  |
-| `MaterialContent` | method | `GetTexture(System.String)` | MISSING |  |  |
-| `MaterialContent` | method | `GetValueTypeProperty<T>(System.String)` | MISSING |  |  |
-| `MaterialContent` | method | `SetProperty<T>(System.String, T)` | MISSING |  |  |
-| `MaterialContent` | method | `SetTexture(System.String, Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureContent>)` | MISSING |  |  |
+| `MaterialContent` | constructor | `.ctor()` | EXACT_EQUIVALENT | `MaterialContent()` |  |
+| `MaterialContent` | property | `Textures` | EXACT_EQUIVALENT | `getTexturesProperty()` |  |
+| `MaterialContent` | method | `GetReferenceTypeProperty<T>(System.String)` | SEMANTIC_EQUIVALENT | `GetReferenceTypeProperty<T>(const std::string&) -> std::shared_ptr<T>` | a reference travels as a shared_ptr, and a missing or mistyped entry answers null as XNA's does. |
+| `MaterialContent` | method | `GetTexture(System.String)` | SEMANTIC_EQUIVALENT | `GetTexture(const std::string&) -> std::shared_ptr<ExternalReference<TextureContent>>` | the external reference is an owned shared_ptr; null when the slot is empty. |
+| `MaterialContent` | method | `GetValueTypeProperty<T>(System.String)` | EXACT_EQUIVALENT | `GetValueTypeProperty<T>(const std::string&) -> std::optional<T>` | Nullable<T> is std::optional<T>. |
+| `MaterialContent` | method | `SetProperty<T>(System.String, T)` | SEMANTIC_EQUIVALENT | `SetProperty<T>(const std::string&, const T&)` | T is the value's carrier -- std::optional for a value type, std::shared_ptr for a reference -- and an empty one removes the entry, which is what passing null does in XNA. |
+| `MaterialContent` | method | `SetTexture(System.String, Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureContent>)` | SEMANTIC_EQUIVALENT | `SetTexture(const std::string&, const std::shared_ptr<ExternalReference<TextureContent>>&)` | a null pointer removes the slot, as null does in XNA. |
 | `MeshBuilder` | property | `MergeDuplicatePositions` | MISSING |  |  |
 | `MeshBuilder` | property | `MergePositionTolerance` | MISSING |  |  |
 | `MeshBuilder` | property | `Name` | MISSING |  |  |
@@ -559,21 +559,21 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `PixelBitmapContent<T>` | method | `TryCopyTo(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Rectangle)` | SEMANTIC_EQUIVALENT | `TryCopyTo(const std::shared_ptr<BitmapContent>&, Rectangle, Rectangle)` | reference parameters are shared_ptr carriers: a BitmapContent is polymorphic and owned, so CNA passes std::shared_ptr<BitmapContent> where XNA passes the reference itself. |
 | `PixelBitmapContent<T>` | method | `TryGetFormat(out Microsoft.Xna.Framework.Graphics.SurfaceFormat)` | EXACT_EQUIVALENT | `TryGetFormat(SurfaceFormat&)` |  |
 | `PositionCollection` | constructor | `.ctor()` | MISSING |  |  |
-| `SkinnedMaterialContent` | constant | `AlphaKey` | MISSING |  |  |
-| `SkinnedMaterialContent` | constant | `DiffuseColorKey` | MISSING |  |  |
-| `SkinnedMaterialContent` | constant | `EmissiveColorKey` | MISSING |  |  |
-| `SkinnedMaterialContent` | constant | `SpecularColorKey` | MISSING |  |  |
-| `SkinnedMaterialContent` | constant | `SpecularPowerKey` | MISSING |  |  |
-| `SkinnedMaterialContent` | constant | `TextureKey` | MISSING |  |  |
-| `SkinnedMaterialContent` | constant | `WeightsPerVertexKey` | MISSING |  |  |
-| `SkinnedMaterialContent` | constructor | `.ctor()` | MISSING |  |  |
-| `SkinnedMaterialContent` | property | `Alpha` | MISSING |  |  |
-| `SkinnedMaterialContent` | property | `DiffuseColor` | MISSING |  |  |
-| `SkinnedMaterialContent` | property | `EmissiveColor` | MISSING |  |  |
-| `SkinnedMaterialContent` | property | `SpecularColor` | MISSING |  |  |
-| `SkinnedMaterialContent` | property | `SpecularPower` | MISSING |  |  |
-| `SkinnedMaterialContent` | property | `Texture` | MISSING |  |  |
-| `SkinnedMaterialContent` | property | `WeightsPerVertex` | MISSING |  |  |
+| `SkinnedMaterialContent` | constant | `AlphaKey` | SEMANTIC_EQUIVALENT | `SkinnedMaterialContent::AlphaKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `SkinnedMaterialContent` | constant | `DiffuseColorKey` | SEMANTIC_EQUIVALENT | `SkinnedMaterialContent::DiffuseColorKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `SkinnedMaterialContent` | constant | `EmissiveColorKey` | SEMANTIC_EQUIVALENT | `SkinnedMaterialContent::EmissiveColorKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `SkinnedMaterialContent` | constant | `SpecularColorKey` | SEMANTIC_EQUIVALENT | `SkinnedMaterialContent::SpecularColorKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `SkinnedMaterialContent` | constant | `SpecularPowerKey` | SEMANTIC_EQUIVALENT | `SkinnedMaterialContent::SpecularPowerKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `SkinnedMaterialContent` | constant | `TextureKey` | SEMANTIC_EQUIVALENT | `SkinnedMaterialContent::TextureKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `SkinnedMaterialContent` | constant | `WeightsPerVertexKey` | SEMANTIC_EQUIVALENT | `SkinnedMaterialContent::WeightsPerVertexKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |
+| `SkinnedMaterialContent` | constructor | `.ctor()` | EXACT_EQUIVALENT | `SkinnedMaterialContent()` |  |
+| `SkinnedMaterialContent` | property | `Alpha` | EXACT_EQUIVALENT | `getAlphaProperty() / setAlphaProperty()` | Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured. |
+| `SkinnedMaterialContent` | property | `DiffuseColor` | EXACT_EQUIVALENT | `getDiffuseColorProperty() / setDiffuseColorProperty()` | Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured. |
+| `SkinnedMaterialContent` | property | `EmissiveColor` | EXACT_EQUIVALENT | `getEmissiveColorProperty() / setEmissiveColorProperty()` | Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured. |
+| `SkinnedMaterialContent` | property | `SpecularColor` | EXACT_EQUIVALENT | `getSpecularColorProperty() / setSpecularColorProperty()` | Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured. |
+| `SkinnedMaterialContent` | property | `SpecularPower` | EXACT_EQUIVALENT | `getSpecularPowerProperty() / setSpecularPowerProperty()` | Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured. |
+| `SkinnedMaterialContent` | property | `Texture` | SEMANTIC_EQUIVALENT | `getTextureProperty() / setTextureProperty()` | the external reference is an owned shared_ptr; a null one removes the entry, as measured. |
+| `SkinnedMaterialContent` | property | `WeightsPerVertex` | EXACT_EQUIVALENT | `getWeightsPerVertexProperty() / setWeightsPerVertexProperty()` | Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured. |
 | `Texture2DContent` | constructor | `.ctor()` | EXACT_EQUIVALENT | `Texture2DContent()` |  |
 | `Texture2DContent` | property | `Mipmaps` | SEMANTIC_EQUIVALENT | `getMipmapsProperty() / setMipmapsProperty(std::shared_ptr<MipmapChain>)` | the getter answers a reference to the single face, the setter takes the owning shared_ptr that replaces it. |
 | `Texture2DContent` | method | `Validate(System.Nullable<Microsoft.Xna.Framework.Graphics.GraphicsProfile>)` | EXACT_EQUIVALENT | `Validate(std::optional<GraphicsProfile>)` |  |
@@ -715,8 +715,8 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `ProcessorParameter` | property | `PossibleEnumValues` | EXACT_EQUIVALENT | `getPossibleEnumValuesProperty()` |  |
 | `ProcessorParameter` | property | `PropertyName` | EXACT_EQUIVALENT | `getPropertyNameProperty()` |  |
 | `ProcessorParameter` | property | `PropertyType` | EXACT_EQUIVALENT | `getPropertyTypeProperty()` |  |
-| `CompiledEffectContent` | constructor | `.ctor(System.Byte[])` | MISSING |  |  |
-| `CompiledEffectContent` | method | `GetEffectCode()` | MISSING |  |  |
+| `CompiledEffectContent` | constructor | `.ctor(System.Byte[])` | SEMANTIC_EQUIVALENT | `CompiledEffectContent(std::vector<bytecs>)` | byte[] is std::vector<bytecs>, which cannot be null, so the ArgumentNullException XNA gives for a null array has no counterpart (measured: compiledeffect/null). |
+| `CompiledEffectContent` | method | `GetEffectCode()` | EXACT_EQUIVALENT | `GetEffectCode()` |  |
 | `EffectProcessor` | constructor | `.ctor()` | MISSING |  |  |
 | `EffectProcessor` | property | `DebugMode` | MISSING |  |  |
 | `EffectProcessor` | property | `Defines` | MISSING |  |  |

@@ -637,75 +637,75 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Graphics.AlphaTestMaterialContent": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::AlphaTestMaterialContent",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/StockMaterials.hpp",
+   "note": "Adds no state: every property is a view over the base's OpaqueData or Textures, verified entry by entry against tests/reference/xna40/graphics (case material/alphatest_properties or material/basic_properties).",
    "members": {
     "constant:AlphaFunctionKey": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "AlphaTestMaterialContent::AlphaFunctionKey",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constant:AlphaKey": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "AlphaTestMaterialContent::AlphaKey",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constant:DiffuseColorKey": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "AlphaTestMaterialContent::DiffuseColorKey",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constant:ReferenceAlphaKey": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "AlphaTestMaterialContent::ReferenceAlphaKey",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constant:TextureKey": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "AlphaTestMaterialContent::TextureKey",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constant:VertexColorEnabledKey": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "AlphaTestMaterialContent::VertexColorEnabledKey",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "AlphaTestMaterialContent()",
      "note": ""
     },
     "property:Alpha": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getAlphaProperty() / setAlphaProperty()",
+     "note": "Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured."
     },
     "property:AlphaFunction": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getAlphaFunctionProperty() / setAlphaFunctionProperty()",
+     "note": "Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured."
     },
     "property:DiffuseColor": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getDiffuseColorProperty() / setDiffuseColorProperty()",
+     "note": "Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured."
     },
     "property:ReferenceAlpha": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getReferenceAlphaProperty() / setReferenceAlphaProperty()",
+     "note": "Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured."
     },
     "property:Texture": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getTextureProperty() / setTextureProperty()",
+     "note": "the external reference is an owned shared_ptr; a null one removes the entry, as measured."
     },
     "property:VertexColorEnabled": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getVertexColorEnabledProperty() / setVertexColorEnabledProperty()",
+     "note": "Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured."
     }
    }
   },
@@ -845,85 +845,85 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Graphics.BasicMaterialContent": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::BasicMaterialContent",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/StockMaterials.hpp",
+   "note": "Adds no state: every property is a view over the base's OpaqueData or Textures, verified entry by entry against tests/reference/xna40/graphics (case material/basic_properties or material/basic_properties).",
    "members": {
     "constant:AlphaKey": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "BasicMaterialContent::AlphaKey",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constant:DiffuseColorKey": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "BasicMaterialContent::DiffuseColorKey",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constant:EmissiveColorKey": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "BasicMaterialContent::EmissiveColorKey",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constant:SpecularColorKey": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "BasicMaterialContent::SpecularColorKey",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constant:SpecularPowerKey": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "BasicMaterialContent::SpecularPowerKey",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constant:TextureKey": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "BasicMaterialContent::TextureKey",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constant:VertexColorEnabledKey": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "BasicMaterialContent::VertexColorEnabledKey",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "BasicMaterialContent()",
      "note": ""
     },
     "property:Alpha": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getAlphaProperty() / setAlphaProperty()",
+     "note": "Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured."
     },
     "property:DiffuseColor": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getDiffuseColorProperty() / setDiffuseColorProperty()",
+     "note": "Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured."
     },
     "property:EmissiveColor": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getEmissiveColorProperty() / setEmissiveColorProperty()",
+     "note": "Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured."
     },
     "property:SpecularColor": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getSpecularColorProperty() / setSpecularColorProperty()",
+     "note": "Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured."
     },
     "property:SpecularPower": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getSpecularPowerProperty() / setSpecularPowerProperty()",
+     "note": "Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured."
     },
     "property:Texture": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getTextureProperty() / setTextureProperty()",
+     "note": "the external reference is an owned shared_ptr; a null one removes the entry, as measured."
     },
     "property:VertexColorEnabled": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getVertexColorEnabledProperty() / setVertexColorEnabledProperty()",
+     "note": "Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured."
     }
    }
   },
@@ -1060,65 +1060,65 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Graphics.DualTextureMaterialContent": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::DualTextureMaterialContent",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/StockMaterials.hpp",
+   "note": "Adds no state: every property is a view over the base's OpaqueData or Textures, verified entry by entry against tests/reference/xna40/graphics (case material/dualtexture_properties or material/basic_properties).",
    "members": {
     "constant:AlphaKey": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "DualTextureMaterialContent::AlphaKey",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constant:DiffuseColorKey": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "DualTextureMaterialContent::DiffuseColorKey",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constant:Texture2Key": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "DualTextureMaterialContent::Texture2Key",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constant:TextureKey": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "DualTextureMaterialContent::TextureKey",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constant:VertexColorEnabledKey": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "DualTextureMaterialContent::VertexColorEnabledKey",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "DualTextureMaterialContent()",
      "note": ""
     },
     "property:Alpha": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getAlphaProperty() / setAlphaProperty()",
+     "note": "Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured."
     },
     "property:DiffuseColor": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getDiffuseColorProperty() / setDiffuseColorProperty()",
+     "note": "Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured."
     },
     "property:Texture": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getTextureProperty() / setTextureProperty()",
+     "note": "the external reference is an owned shared_ptr; a null one removes the entry, as measured."
     },
     "property:Texture2": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getTexture2Property() / setTexture2Property()",
+     "note": "the external reference is an owned shared_ptr; a null one removes the entry, as measured."
     },
     "property:VertexColorEnabled": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getVertexColorEnabledProperty() / setVertexColorEnabledProperty()",
+     "note": "Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured."
     }
    }
   },
@@ -1215,146 +1215,146 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Graphics.EffectContent": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::EffectContent",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/EffectContent.hpp",
+   "note": "The effect source is a nullable C# string and the difference is observable, so it is a std::optional<std::string> here rather than a std::string; everything else is the direct translation.",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "EffectContent()",
      "note": ""
     },
     "property:EffectCode": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getEffectCodeProperty() / setEffectCodeProperty()",
+     "note": "the nullable C# string is a std::optional<std::string>, because the difference is observable: an effect with no source serializes as <EffectCode Null=\"true\" /> (measured, effectcontent/serialize_null_code), which a plain std::string could not express."
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Graphics.EffectMaterialContent": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::EffectMaterialContent",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/StockMaterials.hpp",
+   "note": "Adds no state: every property is a view over the base's OpaqueData or Textures, verified entry by entry against tests/reference/xna40/graphics (case material/effect_properties or material/basic_properties).",
    "members": {
     "constant:CompiledEffectKey": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "EffectMaterialContent::CompiledEffectKey",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constant:EffectKey": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "EffectMaterialContent::EffectKey",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "EffectMaterialContent()",
      "note": ""
     },
     "property:CompiledEffect": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getCompiledEffectProperty() / setCompiledEffectProperty()",
+     "note": "the external reference is an owned shared_ptr; a null one removes the entry, as measured."
     },
     "property:Effect": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getEffectProperty() / setEffectProperty()",
+     "note": "the external reference is an owned shared_ptr; a null one removes the entry, as measured."
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Graphics.EnvironmentMapMaterialContent": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::EnvironmentMapMaterialContent",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/StockMaterials.hpp",
+   "note": "Adds no state: every property is a view over the base's OpaqueData or Textures, verified entry by entry against tests/reference/xna40/graphics (case material/environmentmap_properties or material/basic_properties).",
    "members": {
     "constant:AlphaKey": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "EnvironmentMapMaterialContent::AlphaKey",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constant:DiffuseColorKey": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "EnvironmentMapMaterialContent::DiffuseColorKey",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constant:EmissiveColorKey": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "EnvironmentMapMaterialContent::EmissiveColorKey",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constant:EnvironmentMapAmountKey": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "EnvironmentMapMaterialContent::EnvironmentMapAmountKey",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constant:EnvironmentMapKey": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "EnvironmentMapMaterialContent::EnvironmentMapKey",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constant:EnvironmentMapSpecularKey": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "EnvironmentMapMaterialContent::EnvironmentMapSpecularKey",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constant:FresnelFactorKey": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "EnvironmentMapMaterialContent::FresnelFactorKey",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constant:TextureKey": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "EnvironmentMapMaterialContent::TextureKey",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "EnvironmentMapMaterialContent()",
      "note": ""
     },
     "property:Alpha": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getAlphaProperty() / setAlphaProperty()",
+     "note": "Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured."
     },
     "property:DiffuseColor": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getDiffuseColorProperty() / setDiffuseColorProperty()",
+     "note": "Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured."
     },
     "property:EmissiveColor": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getEmissiveColorProperty() / setEmissiveColorProperty()",
+     "note": "Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured."
     },
     "property:EnvironmentMap": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getEnvironmentMapProperty() / setEnvironmentMapProperty()",
+     "note": "the external reference is an owned shared_ptr; a null one removes the entry, as measured."
     },
     "property:EnvironmentMapAmount": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getEnvironmentMapAmountProperty() / setEnvironmentMapAmountProperty()",
+     "note": "Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured."
     },
     "property:EnvironmentMapSpecular": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getEnvironmentMapSpecularProperty() / setEnvironmentMapSpecularProperty()",
+     "note": "Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured."
     },
     "property:FresnelFactor": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getFresnelFactorProperty() / setFresnelFactorProperty()",
+     "note": "Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured."
     },
     "property:Texture": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getTextureProperty() / setTextureProperty()",
+     "note": "the external reference is an owned shared_ptr; a null one removes the entry, as measured."
     }
    }
   },
@@ -1545,45 +1545,45 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Graphics.MaterialContent": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::MaterialContent",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/MaterialContent.hpp",
+   "note": "The five accessors XNA declares protected stay protected, and a C++ null is an empty std::optional or a null shared_ptr. Every behaviour is pinned to tests/reference/xna40/graphics (cases material/*): a property set to null removes its entry, a property whose stored value has another type reads as null rather than refusing, and an empty key is refused the way the runtime refuses a null one.",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "MaterialContent()",
      "note": ""
     },
     "property:Textures": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getTexturesProperty()",
      "note": ""
     },
     "method:GetReferenceTypeProperty<T>(System.String)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "GetReferenceTypeProperty<T>(const std::string&) -> std::shared_ptr<T>",
+     "note": "a reference travels as a shared_ptr, and a missing or mistyped entry answers null as XNA's does."
     },
     "method:GetTexture(System.String)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "GetTexture(const std::string&) -> std::shared_ptr<ExternalReference<TextureContent>>",
+     "note": "the external reference is an owned shared_ptr; null when the slot is empty."
     },
     "method:GetValueTypeProperty<T>(System.String)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "GetValueTypeProperty<T>(const std::string&) -> std::optional<T>",
+     "note": "Nullable<T> is std::optional<T>."
     },
     "method:SetProperty<T>(System.String, T)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "SetProperty<T>(const std::string&, const T&)",
+     "note": "T is the value's carrier -- std::optional for a value type, std::shared_ptr for a reference -- and an empty one removes the entry, which is what passing null does in XNA."
     },
     "method:SetTexture(System.String, Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureContent>)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "SetTexture(const std::string&, const std::shared_ptr<ExternalReference<TextureContent>>&)",
+     "note": "a null pointer removes the slot, as null does in XNA."
     }
    }
   },
@@ -1940,85 +1940,85 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Graphics.SkinnedMaterialContent": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::SkinnedMaterialContent",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/StockMaterials.hpp",
+   "note": "Adds no state: every property is a view over the base's OpaqueData or Textures, verified entry by entry against tests/reference/xna40/graphics (case material/skinned_properties or material/basic_properties).",
    "members": {
     "constant:AlphaKey": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "SkinnedMaterialContent::AlphaKey",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constant:DiffuseColorKey": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "SkinnedMaterialContent::DiffuseColorKey",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constant:EmissiveColorKey": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "SkinnedMaterialContent::EmissiveColorKey",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constant:SpecularColorKey": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "SkinnedMaterialContent::SpecularColorKey",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constant:SpecularPowerKey": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "SkinnedMaterialContent::SpecularPowerKey",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constant:TextureKey": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "SkinnedMaterialContent::TextureKey",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constant:WeightsPerVertexKey": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "SkinnedMaterialContent::WeightsPerVertexKey",
+     "note": "a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy."
     },
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "SkinnedMaterialContent()",
      "note": ""
     },
     "property:Alpha": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getAlphaProperty() / setAlphaProperty()",
+     "note": "Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured."
     },
     "property:DiffuseColor": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getDiffuseColorProperty() / setDiffuseColorProperty()",
+     "note": "Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured."
     },
     "property:EmissiveColor": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getEmissiveColorProperty() / setEmissiveColorProperty()",
+     "note": "Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured."
     },
     "property:SpecularColor": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getSpecularColorProperty() / setSpecularColorProperty()",
+     "note": "Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured."
     },
     "property:SpecularPower": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getSpecularPowerProperty() / setSpecularPowerProperty()",
+     "note": "Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured."
     },
     "property:Texture": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getTextureProperty() / setTextureProperty()",
+     "note": "the external reference is an owned shared_ptr; a null one removes the entry, as measured."
     },
     "property:WeightsPerVertex": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getWeightsPerVertexProperty() / setWeightsPerVertexProperty()",
+     "note": "Nullable<T> is std::optional<T>; an empty optional is the null XNA stores nothing for: setting the property to it removes the entry, as measured."
     }
    }
   },
@@ -2895,19 +2895,19 @@
    "members": {}
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Processors.CompiledEffectContent": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::CompiledEffectContent",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/CompiledEffectContent.hpp",
+   "note": "Landed with XNAPP-094 rather than XNAPP-135, because EffectMaterialContent references it. It carries one CNAEXT member the inventory does not list: a public parameterless constructor, which the intermediate serializer needs where XNA's reflection reaches a private one.",
    "members": {
     "constructor:.ctor(System.Byte[])": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "CompiledEffectContent(std::vector<bytecs>)",
+     "note": "byte[] is std::vector<bytecs>, which cannot be null, so the ArgumentNullException XNA gives for a null array has no counterpart (measured: compiledeffect/null)."
     },
     "method:GetEffectCode()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "GetEffectCode()",
      "note": ""
     }
    }

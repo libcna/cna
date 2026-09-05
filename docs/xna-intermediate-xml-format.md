@@ -232,9 +232,16 @@ constructor's objects surviving). Inline content in a shared-resource member is 
 ## 8. External references
 
 An `ExternalReference<T>` member is written as `<X><Reference>#External1</Reference></X>` with the
-filename under `<ExternalReferences>` as `<ExternalReference ID="#External1" TargetType="<full
-CLR name of T>">path</ExternalReference>`, numbered from 1 in first-use order and deduplicated by
-object identity (`external_references`). A null member is `<X Null="true" />`; an `ExternalReference`
+filename under `<ExternalReferences>` as `<ExternalReference ID="#External1" TargetType="<name of
+T>">path</ExternalReference>`, numbered from 1 in first-use order and deduplicated by
+object identity (`external_references`). `TargetType` is spelled with a namespace alias **only when
+the document already declares one**, and in full otherwise: the same `TextureContent` is
+`Graphics:TextureContent` in a material's document, whose root declares that alias for its own
+`Asset Type`, and
+`Microsoft.Xna.Framework.Content.Pipeline.Graphics.Texture2DContent` in a document that declares
+only the oracle's namespace (`tests/reference/xna40/graphics` case `material/serialize_basic`
+against `accept_external_relocated_relative`). The section is written after the root element, so it
+cannot declare a new alias, and the runtime does not try. A null member is `<X Null="true" />`; an `ExternalReference`
 with no filename is `<X />` and reads back as such (`accept_external_reference_empty_element`).
 
 The filename is made relative to the `referenceRelocationPath` argument's **directory** when both
@@ -262,8 +269,12 @@ with `T = object` needs the `Type` attribute (`accept_object_root_no_type`).
 
 ## 10. NamedValueDictionary and OpaqueDataDictionary
 
-`opaque_data_dictionary.xml`: a `NamedValueDictionary<T>` is written as one `<Data Key="…">`
-element per entry, in insertion order, with a `Type` attribute only when the value's type is not
+`opaque_data_dictionary.xml`: a `NamedValueDictionary<T>` is written as one element per entry, in
+insertion order, each carrying a `Key` attribute. The element is `<Data>` unless the dictionary
+declares a collection item name, as `TextureReferenceDictionary` declares `Texture` and writes
+`<Texture Key="Texture"><Reference>#External1</Reference></Texture>`
+(`tests/reference/xna40/graphics` case `material/serialize_basic`). Each entry is written with a
+`Type` attribute only when the value's type is not
 the dictionary's default serializer type -- for `OpaqueDataDictionary` that default is `string`,
 so `<Data Key="Name">wall</Data>` carries no `Type` while `<Data Key="Count" Type="int">3</Data>`
 and `<Data Key="Scale" Type="Framework:Vector3">1 2 3</Data>` do. `OpaqueDataDictionary.Add(key,

@@ -167,6 +167,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
 
     void FontDescription::DescribeContent(Serialization::Intermediate::ContentTypeDescriptor<FontDescription>& d)
     {
+        // ContentItem's own Name and OpaqueData come first, as they do for every content type
+        // (measured: font/serialize_with_opaquedata).
+        d.BaseType<ContentItem>();
         // The order, and which elements a document may leave out, are measured
         // (tests/reference/xna40/graphics, cases font/serialize* and font/deserialize_spritefont*).
         // Characters carries [ContentSerializerIgnore] in XNA and is not described at all here.

@@ -19,6 +19,7 @@ using System.Xml;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Content.Pipeline;
 using Microsoft.Xna.Framework.Content.Pipeline.Graphics;
+using Microsoft.Xna.Framework.Content.Pipeline.Processors;
 using Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Graphics.PackedVector;
@@ -721,6 +722,189 @@ namespace Cna.Xna40.GraphicsOracle
                 "  </Asset>\r\n" +
                 "</XnaContent>\r\n")));
 
+            // ---- MaterialContent and the stock materials -------------------------------------------
+            Record("material/base_defaults", () => DescribeMaterial(new MaterialContent()));
+            Record("material/basic_defaults", () => DescribeMaterial(new BasicMaterialContent()));
+            Record("material/basic_properties", () =>
+            {
+                var m = new BasicMaterialContent();
+                m.Alpha = 0.5f;
+                m.DiffuseColor = new Vector3(1, 0, 0);
+                m.EmissiveColor = new Vector3(0, 1, 0);
+                m.SpecularColor = new Vector3(0, 0, 1);
+                m.SpecularPower = 16.0f;
+                m.VertexColorEnabled = true;
+                m.Texture = new ExternalReference<TextureContent>("cat.tga");
+                return DescribeMaterial(m) + " read=" + m.Alpha + "," + m.DiffuseColor + "," + m.SpecularPower +
+                       "," + m.VertexColorEnabled + "," + (m.Texture == null ? "null" : m.Texture.Filename);
+            });
+            Record("material/basic_property_cleared", () =>
+            {
+                var m = new BasicMaterialContent();
+                m.Alpha = 0.5f;
+                m.Alpha = null;
+                return DescribeMaterial(m) + " read=" + (m.Alpha.HasValue ? m.Alpha.ToString() : "null");
+            });
+            Record("material/basic_texture_cleared", () =>
+            {
+                var m = new BasicMaterialContent();
+                m.Texture = new ExternalReference<TextureContent>("cat.tga");
+                m.Texture = null;
+                return DescribeMaterial(m) + " read=" + (m.Texture == null ? "null" : m.Texture.Filename);
+            });
+            Record("material/opaque_data_is_the_store", () =>
+            {
+                var m = new BasicMaterialContent();
+                m.OpaqueData.Add(BasicMaterialContent.AlphaKey, 0.25f);
+                return "alpha=" + m.Alpha + " " + DescribeMaterial(m);
+            });
+            Record("material/value_property_wrong_type", () =>
+            {
+                var m = new BasicMaterialContent();
+                m.OpaqueData.Add(BasicMaterialContent.AlphaKey, "not a float");
+                return "alpha=" + m.Alpha;
+            });
+            Record("material/reference_property_wrong_type", () =>
+            {
+                var m = new BasicMaterialContent();
+                m.OpaqueData.Add(BasicMaterialContent.TextureKey, 42);
+                return "texture=" + (m.Texture == null ? "null" : m.Texture.Filename);
+            });
+            Record("material/value_property_missing", () => "alpha=" + new ProbeMaterial().ReadValue<float>("Nothing"));
+            Record("material/reference_property_missing", () => "value=" + (new ProbeMaterial().ReadReference<string>("Nothing") ?? "null"));
+            Record("material/get_texture_missing", () => { var t = new ProbeMaterial().ReadTexture("Nothing"); return "texture=" + (t == null ? "null" : t.Filename); });
+            Record("material/set_property_null_name", () => { var m = new ProbeMaterial(); m.Write<float?>(null, 1.0f); return DescribeMaterial(m); });
+            Record("material/set_property_null_value", () => { var m = new ProbeMaterial(); m.Write<float?>("Alpha", 1.0f); m.Write<float?>("Alpha", null); return DescribeMaterial(m); });
+            Record("material/set_property_value_type", () => { var m = new ProbeMaterial(); m.Write("Count", 3); m.Write("Flag", true); return DescribeMaterial(m); });
+            Record("material/set_texture_null_name", () => { var m = new ProbeMaterial(); m.WriteTexture(null, new ExternalReference<TextureContent>("cat.tga")); return DescribeMaterial(m); });
+            Record("material/set_texture_null_value", () => { var m = new ProbeMaterial(); m.WriteTexture("Slot", null); return DescribeMaterial(m); });
+            Record("material/set_texture_then_read", () => { var m = new ProbeMaterial(); m.WriteTexture("Slot", new ExternalReference<TextureContent>("cat.tga")); return DescribeMaterial(m) + " read=" + m.ReadTexture("Slot").Filename; });
+            Record("material/read_value_wrong_type", () => { var m = new ProbeMaterial(); m.Write("Alpha", "text"); return "alpha=" + m.ReadValue<float>("Alpha"); });
+            Record("material/read_reference_wrong_type", () => { var m = new ProbeMaterial(); m.Write("Ref", 42); return "value=" + (m.ReadReference<string>("Ref") ?? "null"); });
+            Record("material/textures_direct", () =>
+            {
+                var m = new BasicMaterialContent();
+                m.Textures.Add("Texture", new ExternalReference<TextureContent>("cat.tga"));
+                return "texture=" + (m.Texture == null ? "null" : m.Texture.Filename) + " " + DescribeMaterial(m);
+            });
+            Record("material/alphatest_properties", () =>
+            {
+                var m = new AlphaTestMaterialContent();
+                m.Alpha = 1.0f;
+                m.AlphaFunction = CompareFunction.GreaterEqual;
+                m.DiffuseColor = new Vector3(0.5f, 0.5f, 0.5f);
+                m.ReferenceAlpha = 128;
+                m.VertexColorEnabled = false;
+                m.Texture = new ExternalReference<TextureContent>("cat.tga");
+                return DescribeMaterial(m) + " function=" + m.AlphaFunction + " reference=" + m.ReferenceAlpha;
+            });
+            Record("material/dualtexture_properties", () =>
+            {
+                var m = new DualTextureMaterialContent();
+                m.Alpha = 1.0f;
+                m.DiffuseColor = Vector3.One;
+                m.VertexColorEnabled = true;
+                m.Texture = new ExternalReference<TextureContent>("one.tga");
+                m.Texture2 = new ExternalReference<TextureContent>("two.tga");
+                return DescribeMaterial(m);
+            });
+            Record("material/environmentmap_properties", () =>
+            {
+                var m = new EnvironmentMapMaterialContent();
+                m.Alpha = 1.0f;
+                m.DiffuseColor = Vector3.One;
+                m.EmissiveColor = Vector3.Zero;
+                m.EnvironmentMapAmount = 0.5f;
+                m.EnvironmentMapSpecular = new Vector3(0.25f, 0.25f, 0.25f);
+                m.FresnelFactor = 0.75f;
+                m.Texture = new ExternalReference<TextureContent>("one.tga");
+                m.EnvironmentMap = new ExternalReference<TextureContent>("cube.dds");
+                return DescribeMaterial(m);
+            });
+            Record("material/skinned_properties", () =>
+            {
+                var m = new SkinnedMaterialContent();
+                m.Alpha = 1.0f;
+                m.DiffuseColor = Vector3.One;
+                m.EmissiveColor = Vector3.Zero;
+                m.SpecularColor = Vector3.One;
+                m.SpecularPower = 8.0f;
+                m.WeightsPerVertex = 2;
+                m.Texture = new ExternalReference<TextureContent>("one.tga");
+                return DescribeMaterial(m);
+            });
+            Record("material/effect_properties", () =>
+            {
+                var m = new EffectMaterialContent();
+                m.Effect = new ExternalReference<EffectContent>("shader.fx");
+                m.CompiledEffect = new ExternalReference<CompiledEffectContent>("shader.xnb");
+                return DescribeMaterial(m) + " effect=" + m.Effect.Filename + " compiled=" + m.CompiledEffect.Filename;
+            });
+            Record("material/tostring", () => new BasicMaterialContent() + "|" + new MaterialContent() + "|" + new EffectMaterialContent());
+            Record("material/serialize_basic", () =>
+            {
+                var m = new BasicMaterialContent();
+                m.Alpha = 0.5f;
+                m.DiffuseColor = new Vector3(1, 0, 0);
+                m.VertexColorEnabled = true;
+                m.Texture = new ExternalReference<TextureContent>("cat.tga");
+                return SerializeIntermediate(m);
+            });
+            Record("material/serialize_empty_basic", () => SerializeIntermediate(new BasicMaterialContent()));
+            Record("material/serialize_base", () => SerializeIntermediate(new MaterialContent()));
+
+            // Is OpaqueData a serialized member of ContentItem itself, or something the materials
+            // add? These two ask the question on types that are not materials.
+            Record("effectcontent/serialize_with_opaquedata", () =>
+            {
+                var e = new EffectContent();
+                e.EffectCode = "technique T { }";
+                e.OpaqueData.Add("Note", "hello");
+                e.Name = "TheName";
+                return SerializeIntermediate(e);
+            });
+            Record("font/serialize_with_opaquedata", () =>
+            {
+                var f = new FontDescription("Arial", 12.0f, 0.0f);
+                f.OpaqueData.Add("Note", 7);
+                f.Name = "TheName";
+                return SerializeIntermediate(f);
+            });
+            Record("material/serialize_with_name", () =>
+            {
+                var m = new BasicMaterialContent();
+                m.Name = "TheName";
+                m.Alpha = 1.0f;
+                return SerializeIntermediate(m);
+            });
+            Record("material/deserialize_basic", () =>
+            {
+                var m = DeserializeIntermediate<BasicMaterialContent>(
+                    "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n" +
+                    "<XnaContent xmlns:Graphics=\"Microsoft.Xna.Framework.Content.Pipeline.Graphics\" xmlns:Framework=\"Microsoft.Xna.Framework\">\r\n" +
+                    "  <Asset Type=\"Graphics:BasicMaterialContent\">\r\n" +
+                    "    <OpaqueData>\r\n" +
+                    "      <Data Key=\"Alpha\" Type=\"float\">0.5</Data>\r\n" +
+                    "      <Data Key=\"DiffuseColor\" Type=\"Framework:Vector3\">1 0 0</Data>\r\n" +
+                    "    </OpaqueData>\r\n" +
+                    "  </Asset>\r\n" +
+                    "</XnaContent>\r\n");
+                return DescribeMaterial(m) + " alpha=" + m.Alpha + " diffuse=" + m.DiffuseColor;
+            });
+
+            // ---- EffectContent -----------------------------------------------------------------
+            Record("effectcontent/defaults", () => { var e = new EffectContent(); return "code=" + (e.EffectCode ?? "null") + " name=\"" + e.Name + "\" opaquedata=" + e.OpaqueData.Count; });
+            Record("effectcontent/set_code", () => { var e = new EffectContent(); e.EffectCode = "technique T { }"; return "code=" + e.EffectCode; });
+            Record("effectcontent/set_code_null", () => { var e = new EffectContent(); e.EffectCode = "x"; e.EffectCode = null; return "code=" + (e.EffectCode ?? "null"); });
+            Record("effectcontent/serialize", () => { var e = new EffectContent(); e.EffectCode = "technique T { }"; return SerializeIntermediate(e); });
+
+            // ---- CompiledEffectContent ---------------------------------------------------------
+            Record("compiledeffect/roundtrip", () => { var c = new CompiledEffectContent(new byte[] { 1, 2, 3 }); return "code=" + Hex(c.GetEffectCode()) + " name=\"" + c.Name + "\""; });
+            Record("compiledeffect/empty", () => { var c = new CompiledEffectContent(new byte[0]); return "code=" + Hex(c.GetEffectCode()) + " length=" + c.GetEffectCode().Length; });
+            Record("compiledeffect/null", () => { var c = new CompiledEffectContent(null); return "code=" + Hex(c.GetEffectCode()); });
+            Record("compiledeffect/serialize", () => SerializeIntermediate(new CompiledEffectContent(new byte[] { 1, 2, 3 })));
+            Record("effectcontent/serialize_null_code", () => SerializeIntermediate(new EffectContent()));
+
             // ---- TextureReferenceDictionary ------------------------------------------------------
             Record("texturereferencedictionary/default", () => { var d = new TextureReferenceDictionary(); return "count=" + d.Count + " ToString=\"" + d + "\""; });
 
@@ -729,6 +913,46 @@ namespace Cna.Xna40.GraphicsOracle
                 Environment.Version + "\",\n \"pipelineAssembly\": \"" + typeof(BitmapContent).Assembly.FullName + "\",\n \"cases\": [\n" +
                 string.Join(",\n", Cases.ToArray()) + "\n ]\n}\n");
             Console.WriteLine("recorded " + Cases.Count + " measurements");
+        }
+
+        /// The five accessors MaterialContent declares protected are reachable only from a derived
+        /// type, which is how a game's own material reaches them too.
+        private sealed class ProbeMaterial : MaterialContent
+        {
+            public const string ProbeKey = "Alpha";
+            public ExternalReference<TextureContent> ReadTexture(string key) { return GetTexture(key); }
+            public void WriteTexture(string key, ExternalReference<TextureContent> value) { SetTexture(key, value); }
+            public T ReadReference<T>(string key) where T : class { return GetReferenceTypeProperty<T>(key); }
+            public T? ReadValue<T>(string key) where T : struct { return GetValueTypeProperty<T>(key); }
+            public void Write<T>(string key, T value) { SetProperty(key, value); }
+        }
+
+        private static string DescribeMaterial(MaterialContent material)
+        {
+            var builder = new StringBuilder(material.GetType().Name);
+            builder.Append(" opaque={");
+            bool first = true;
+            foreach (KeyValuePair<string, object> entry in material.OpaqueData)
+            {
+                if (!first) builder.Append(' ');
+                first = false;
+                object value = entry.Value;
+                string text;
+                if (value == null) text = "null";
+                else if (value is float) text = ((float)value).ToString("R", CultureInfo.InvariantCulture);
+                else text = Convert.ToString(value, CultureInfo.InvariantCulture);
+                builder.Append(entry.Key + "=" + text + ":" + (value == null ? "null" : value.GetType().Name));
+            }
+            builder.Append("} textures={");
+            first = true;
+            foreach (KeyValuePair<string, ExternalReference<TextureContent>> entry in material.Textures)
+            {
+                if (!first) builder.Append(' ');
+                first = false;
+                builder.Append(entry.Key + "=" + (entry.Value == null ? "null" : entry.Value.Filename));
+            }
+            builder.Append('}');
+            return builder.ToString();
         }
 
         private static string Characters(FontDescription font)

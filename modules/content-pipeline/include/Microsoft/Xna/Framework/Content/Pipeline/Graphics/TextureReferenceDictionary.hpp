@@ -32,5 +32,18 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
 
         /** @brief Returns the type's full name, as XNA's `ToString` does. */
         CNAEXT [[nodiscard]] std::string ToString() const;
+
+    protected:
+        /**
+         * @brief Gets the serializer type of an entry: an external texture reference, which is why
+         *        no entry carries a `Type` attribute (measured, tests/reference/xna40/graphics case
+         *        material/serialize_basic).
+         *
+         * @return `System::Type::From<ExternalReference<TextureContent>>()`.
+         */
+        [[nodiscard]] System::Type getDefaultSerializerTypeProperty() const override
+        {
+            return System::Type::From<ExternalReference<TextureContent>>();
+        }
     };
 }
