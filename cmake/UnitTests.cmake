@@ -1035,8 +1035,15 @@ if(CNA_BUILD_TESTS)
     # Headless-safe audio everywhere; the video driver is left to the runner (Xvfb+x11 in CI, real
     # display or `xvfb-run` locally) because the MouseCursor tests need real cursors (the SDL dummy
     # driver has null cursors).
+    # plans/plan_vulkan.md VULKAN-153 (finding F-22): this test carried NO timeout, and it can
+    # deadlock -- observed twice on 2026-09-05, single-threaded in futex_wait with 2 seconds of CPU
+    # after 45 minutes of wall clock, both times while a second copy of this same suite was running
+    # from another checkout. Without a TIMEOUT, ctest never reaps it and the whole run stops there;
+    # the only way to finish was to kill the process by hand. Bounding it turns an unbounded stall
+    # into one reported failure. 1200s is generous against the measured range: 221s alone, 628s as
+    # the slowest healthy run seen under -j6. The deadlock itself is a separate row.
     cna_register_renderer_test(NAME CnaInputTests COMMAND CnaTests --gtest_filter=${CNA_INPUT_TEST_FILTER} --gtest_shuffle --gtest_repeat=5
-        LABELS "input" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
+        TIMEOUT 1200 LABELS "input" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
 
     # plans/plan_gltf.md GLTF-010: the glTF conformance ladder as one runnable label.
     #
