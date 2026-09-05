@@ -15,10 +15,10 @@
 
 ## 1. Current status
 
-**Implementation under way.** Thirty-one tasks are ✅ (`VULKAN-004`, `-008`, `-020`, `-021`, `-091`,
+**Implementation under way.** Thirty-two tasks are ✅ (`VULKAN-004`, `-008`, `-020`, `-021`, `-091`,
 `-097`, `-098`, `-130`, `-131`, `-144`, `-145`, `-146`, `-147`, `-148`, `-149`, `-150`, `-151`, `-152`,
 `-153`, `-154`, `-155`, `-156`, `-157`, `-158`, `-250`, `-332`, `-333`, `-346`, `-370`, `-390`,
-`-391`), plus
+`-391`, `-470`), plus
 `VULKAN-011` from the planning session. `VULKAN-146` took two attempts: the first was reverted for a regression
 only the full `ctest` could see (F-21), and the second added the piece the original scope was
 missing — which stock program runs has to ask the declaration too, not just where its inputs live.
@@ -51,8 +51,9 @@ completed task. **Both numbers matter, and F-21 is why**: `-R '^Vulkan_'` is 228
 9083 registered CTests, and a regression this session caused was invisible to it.
 
 **This is not parity.** A green dedicated suite is `VULKAN-476`, one row of the twelve-row Phase 13 gate
-in §25, and every row of that gate is still ⬜ — including `VULKAN-487`, which forbids declaring parity
-while it has open children of its own.
+in §25. `VULKAN-470` is the first of those rows to close — capability reporting is now checked against
+a test that observes the behaviour, for all 93 entries. Eleven rows remain, including `VULKAN-487`,
+which forbids declaring parity while it has open children of its own.
 
 Four findings were corrected rather than confirmed, and those are the entries worth reading:
 `Vulkan_DepthBias` was a **test** written against OpenGL's depth range, not a renderer defect
@@ -380,6 +381,7 @@ against the top of this section.
 | `VULKAN-391` | **232/232** `^Vulkan_`, **9070/9090** full `ctest` | the added test is `Vulkan_DescriptorContractUniformity`, 13/13; `Vulkan_DescriptorPoolOverflow` stays 5/5. All 20 full-suite failures are the known audio/content/lifecycle/C-API set — none is a `Vulkan_*` test. |
 | `VULKAN-098` | **233/233** `^Vulkan_`, **9072/9091** full `ctest` | the added test is `Vulkan_DepthRangeContract`, 6/6 with 20/20 truth-table cells. The same source scores **15/20 on EasyGL**, which is F-19 measured rather than inferred. All 19 full-suite failures are the known audio/content/lifecycle/C-API set — none is a `Vulkan_*` test. |
 | `VULKAN-008` | **234/234** `^Vulkan_`, **9072/9092** full `ctest` | the added test is `Vulkan_CapabilitySnapshot`, 9/9 over 93 recorded entries (52 renderer-fixed, 41 device-dependent) and 19 capability/feature mirror pairs. All 20 full-suite failures are the known audio/content/lifecycle/C-API set — none is a `Vulkan_*` test. |
+| `VULKAN-470` | **234/234** `^Vulkan_`, **9073/9092** full `ctest` | no test added; `Vulkan_CapabilityContract` grows 25/25 → **27/27** with the two legs that closed the four capabilities nothing observed. All 19 full-suite failures are the known audio/content/lifecycle/C-API set — none is a `Vulkan_*` test. **First row of the Phase 13 gate to close.** |
 
 ### 7.6 The EasyGL cross-check (the measurement that reclassified four failures)
 
@@ -1051,7 +1053,7 @@ throwing" as proof of a visual feature.
 
 | ID | Task | Status | Acceptance criterion |
 |---|---|---|---|
-| VULKAN-470 | Re-verify capability reporting against measured behaviour | ⬜ | Re-run `VULKAN-008`'s snapshot and check every entry against a test that observes the behaviour. A capability reported true with no reachable path, or false with a working path, blocks the gate. |
+| VULKAN-470 | Re-verify capability reporting against measured behaviour | ✅ | **Every one of the 93 snapshot entries now has a test that observes the behaviour, and four capabilities did not before this row.** The audit ran against `VULKAN-008`'s snapshot as its oracle. **The 19 `GraphicsCapability` members, each with its observer:** `ThreeD` → the 65 stock-effect draw tests; `DepthStencilBuffer` → `Vulkan_DepthStencilState_CompareFunction` and `Vulkan_DepthRangeContract`; `MultiSampleAntiAliasing` → `Vulkan_MSAA_4x_Readback` plus `Vulkan_CapabilityContract` leg E, which compares the report against the count `ApplyMultiSampleCount` actually reaches; `MultipleRenderTargets` → `Vulkan_MRT_MixedFormats`; `AnisotropicFiltering` → `Vulkan_TextureAnisotropic_DualTextureEffect`; `WireFrame` → `Vulkan_FillMode_WireFrame`; `OcclusionQuery` → `Vulkan_OcclusionQuery_PixelCount` and `_Precision`; `CustomEffects` → `Vulkan_ShaderEffect_SpirV`; `Texture3D` → `Vulkan_Texture3D_Slices_RoundTrip`; `Instancing` → `Vulkan_DrawInstanced_3Instances`; `StencilBuffer` → `Vulkan_DepthStencilState_StencilOps`; `AdditiveBlending` → `Vulkan_AdditiveBlendContract`; `MultiStreamVertexInput`, `FloatRenderTargets` and `HalfFloatRenderTargets` → `Vulkan_CapabilityContract` leg C, which already observed each false report as a real refusal. **The four that had no observer, closed here rather than filed as gaps:** `HalfFloatTextureLinearFiltering` — its falseness is one step earlier than filtering, and the new leg shows why: a half-float `Texture2D` cannot be created at all, so there is no surface for a sampler to filter (and the refusal names `GraphicsProfile.Reach` as the layer that turned it away, which is worth knowing — it is the profile's restriction, not the renderer's). `IndirectDraw` and `ComputeShaders` — both need a storage buffer for their arguments and their memory, and `CreateStorageBuffer` returns null here, so the route does not exist rather than being checked and turned away. That is a **stronger** observation than a refusal message, and it is the only one available: `DrawPrimitivesIndirectEXT` takes its argument buffer by reference, so there is literally nothing to hand it. `CompiledEffects` — false because `CNA_VULKAN_COMPILED_EFFECTS` is **OFF** in `cmake-build-vulkan`, verified in that directory's `CMakeCache.txt`. Only a build that turns it on can observe the other answer, so this entry is **build-scoped**, and no test here can close it; that is stated rather than papered over. **The derived rows:** the 30 `RendererFeature` rows are covered by `VULKAN-008`'s 19 mirror-pair assertions plus `Vulkan_ShaderDialectContract` and `Vulkan_ShaderEffect_SpirV` for the source-execution and dialect rows; the 10 `RendererLimit` rows by the multi-stream refusal, the storage-buffer absence and the snapshot's own limit-vs-query invariant; the 27 render-target format rows by `Vulkan_SurfaceFormat_Throws` for the class, with `Vector4` and `HdrBlendable` observed individually. **The one thing that looks like a blocker and is not:** `GetShaderDialectEXT` says `GlslVulkan` while every `feature.ShaderDialect*` row says `unsupported`. Under this row's own rule — *true with no reachable path, or false with a working path* — the feature rows are **right**: there is no GLSL-source path, the renderer takes SPIR-V. It is the query that cannot express that, which is `VULKAN-264`, not a gate blocker. Saying so explicitly matters in both directions: the gate is not falsely blocked, and the discrepancy is not quietly cleared. **Evidence:** `Vulkan_CapabilityContract` grows from 25/25 to **27/27**. |
 | VULKAN-471 | Confirm every in-scope parity-matrix row is resolved | ⬜ | Every row in §10 is `PARITY`, `VULKAN_STRONGER`, or an explicitly justified `NOT_APPLICABLE`/`SEMANTIC_DIVERGENCE`/`CNAEXT_OUT_OF_SCOPE`. No row may still say `NEEDS_DEEPER_AUDIT`. |
 | VULKAN-472 | Confirm every `IMPLEMENTATION_GAP` row has a closed task | ⬜ | Each of F-01…F-14 either has a ✅ task or a ⛔ row with the reason written here. |
 | VULKAN-473 | Confirm every meaningful `TEST_GAP` row is closed | ⬜ | Every `TEST_GAP` row in §10 points at a registered, passing Vulkan CTest, or at a written justification for why it is not a Vulkan requirement. |

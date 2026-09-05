@@ -216,6 +216,52 @@ class VulkanCapabilityContractTest : public Game
                   std::string("C ") + c.name + " matches what RenderTarget2D actually does",
                   std::string("capability=") + (supported ? "true" : "false") + ", " + how);
         }
+
+        // VULKAN-470. HalfFloatTextureLinearFiltering is about SAMPLING a half-float texture, not
+        // about rendering to one, so the leg above does not cover it. The reason it is false here
+        // is one step earlier than filtering: the format cannot be given to a Texture2D at all, so
+        // there is no surface for a sampler to filter. Asserting that is what makes "false" an
+        // observation rather than a claim.
+        {
+            const bool supported =
+                r.SupportsCapability(GraphicsCapability::HalfFloatTextureLinearFiltering);
+            bool created = false;
+            std::string how;
+            try {
+                Texture2D half(dev, 8, 8, false, SurfaceFormat::HalfVector4);
+                created = true;
+                how = "created";
+            } catch (const std::exception& e) {
+                how = std::string("refused: ") + e.what();
+            }
+            check(!supported && !created,
+                  "C HalfFloatTextureLinearFiltering=false has no surface to filter: a half-float "
+                  "Texture2D is refused outright",
+                  std::string("capability=") + (supported ? "true" : "false") + ", " + how);
+        }
+
+        // VULKAN-470. IndirectDraw=false, observed one step before the draw: an indirect draw needs
+        // its arguments in a storage buffer, and this renderer cannot make one. `CreateStorageBuffer`
+        // returns null, so `DrawPrimitivesIndirectEXT` has no argument buffer that could be passed
+        // to it -- the capability is false because the route does not exist, not because a check
+        // turns it away. That is a stronger observation than a refusal message would be, and it is
+        // the only one available: the parameter is a reference, so there is nothing to hand it.
+        //
+        // ComputeShaders is false for the same reason and is checked the same way -- storage
+        // buffers are the compute path's own memory. CompiledEffects is different: it is false
+        // because `CNA_VULKAN_COMPILED_EFFECTS` is OFF in this build, and only a build that turns
+        // it on can observe the other answer. plan_vulkan.md's VULKAN-470 row records that.
+        {
+            const bool indirect = r.SupportsCapability(GraphicsCapability::IndirectDraw);
+            const bool compute  = r.SupportsCapability(GraphicsCapability::ComputeShaders);
+            const auto buffer   = const_cast<VulkanRenderer&>(r).CreateStorageBuffer(64);
+            check(!indirect && !compute && buffer == nullptr,
+                  "C IndirectDraw=false and ComputeShaders=false have no route: this renderer "
+                  "cannot create the storage buffer both would need",
+                  std::string("indirect=") + (indirect ? "true" : "false")
+                      + " compute=" + (compute ? "true" : "false")
+                      + " storageBuffer=" + (buffer == nullptr ? "null" : "created"));
+        }
     }
 
     // ── Leg E: the MSAA answer matches what the device actually applies ──────
