@@ -12,7 +12,7 @@ file(GLOB_RECURSE CNA_CONTENT_PIPELINE_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 
 cna_add_module(cna_content_pipeline ContentPipelineBuild ${CNA_CONTENT_PIPELINE_SOURCES})
 target_link_libraries(cna_content_pipeline PUBLIC cna_content)
-cna_link_sharp_runtime(cna_content_pipeline PUBLIC Core.Base IO)
+cna_link_sharp_runtime(cna_content_pipeline PUBLIC Core.Base IO Collections.Core)
 
 # CNA_ENABLE_FONT_PIPELINE is a three-state switch, matching CNA_ENABLE_VIDEO's shape:
 #   OFF  -- do not probe or link FreeType; a .spritefont build fails with a message saying so.
