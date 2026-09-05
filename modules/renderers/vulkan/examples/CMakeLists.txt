@@ -1069,6 +1069,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_declared_effect_layout
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plans/plan_vulkan.md VULKAN-008: capability reporting captured as a checked-in snapshot,
+        # read through the GraphicsDevice seam because six of the nineteen members are answered
+        # above the renderer. The oracle VULKAN-470 re-verifies against.
+        cna_vulkan_test(cna_test_vulkan_capability_snapshot
+                        vulkan_capability_snapshot_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_CapabilitySnapshot
+            COMMAND cna_test_vulkan_capability_snapshot
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plans/plan_vulkan.md VULKAN-098 (F-19): this renderer's clip-space depth range is XNA's
         # [0,1], and EasyGL's is OpenGL's [-1,1]. Measured positively across the range -- a 5x4
         # truth table plus both planes -- rather than inferred from a depth-bias experiment, which
