@@ -1681,16 +1681,21 @@ namespace CNA::Internal::Renderers::Vulkan
     void VulkanVertexBufferRenderer::ReleaseVulkanResources()
     {
         if (!owner_ || !owner_->device_) return;
-        vkDeviceWaitIdle(owner_->device_);
-        VkDevice dev = owner_->device_;
-        if (buffer_ != VK_NULL_HANDLE) {
-            vkDestroyBuffer(dev, buffer_, nullptr);
-            buffer_ = VK_NULL_HANDLE;
-        }
-        if (memory_ != VK_NULL_HANDLE) {
-            vkFreeMemory(dev, memory_, nullptr);
-            memory_ = VK_NULL_HANDLE;
-        }
+        // plan_vulkan.md VULKAN-392 (F-13): this used to open with vkDeviceWaitIdle, which made
+        // every DrawUserPrimitives call a full-device stall -- that route allocates and destroys a
+        // throwaway VertexBuffer per call (GraphicsDevice.cpp:1753+). Retire the handles into the
+        // same fence-gated queue textures and render targets already use, so the free happens once
+        // the consuming frame's fence has completed and no thread waits for it.
+        //
+        // Retiring is strictly safer here than the stall it replaces, not merely cheaper: the
+        // deferred replay in RecordCommandBuffer binds only renderer-owned per-frame buffers
+        // (spriteVB_, frame3DVB_, frame3DInstVB_) and never this handle, because a queued draw
+        // carries COPIED vertex bytes. The only command that ever names this buffer is the staging
+        // copy inside SetData, which EndOneTimeCommands has already waited on.
+        VulkanRenderer::RetiredResources r;
+        if (buffer_ != VK_NULL_HANDLE) { r.buffers.push_back(buffer_);  buffer_ = VK_NULL_HANDLE; }
+        if (memory_ != VK_NULL_HANDLE) { r.memories.push_back(memory_); memory_ = VK_NULL_HANDLE; }
+        owner_->RetireResources(std::move(r));
     }
 
     VulkanVertexBufferRenderer::~VulkanVertexBufferRenderer()
@@ -1757,16 +1762,12 @@ namespace CNA::Internal::Renderers::Vulkan
     void VulkanIndexBufferRenderer::ReleaseVulkanResources()
     {
         if (!owner_ || !owner_->device_) return;
-        vkDeviceWaitIdle(owner_->device_);
-        VkDevice dev = owner_->device_;
-        if (buffer_ != VK_NULL_HANDLE) {
-            vkDestroyBuffer(dev, buffer_, nullptr);
-            buffer_ = VK_NULL_HANDLE;
-        }
-        if (memory_ != VK_NULL_HANDLE) {
-            vkFreeMemory(dev, memory_, nullptr);
-            memory_ = VK_NULL_HANDLE;
-        }
+        // VULKAN-392: the index-buffer twin of the vertex-buffer path above, for the same reason
+        // and with the same safety argument -- a queued draw carries copied index bytes.
+        VulkanRenderer::RetiredResources r;
+        if (buffer_ != VK_NULL_HANDLE) { r.buffers.push_back(buffer_);  buffer_ = VK_NULL_HANDLE; }
+        if (memory_ != VK_NULL_HANDLE) { r.memories.push_back(memory_); memory_ = VK_NULL_HANDLE; }
+        owner_->RetireResources(std::move(r));
     }
 
     VulkanIndexBufferRenderer::~VulkanIndexBufferRenderer()
@@ -2123,7 +2124,7 @@ namespace CNA::Internal::Renderers::Vulkan
         }
 
         // Step 1: wait for all in-flight GPU work to complete.
-        vkDeviceWaitIdle(device_);
+        DeviceWaitIdleEXT();
 
         // Step 1b: destroy every MRT framebuffer before releasing the render-target views it
         // borrows. The device is idle, so both current and frame-retired proxies are safe now.
@@ -3578,7 +3579,7 @@ namespace CNA::Internal::Renderers::Vulkan
         const int w = surfaceInfo_.drawableSize.width;
         const int h = surfaceInfo_.drawableSize.height;
         if (w == 0 || h == 0) return;
-        vkDeviceWaitIdle(device_);
+        DeviceWaitIdleEXT();
         CleanupSwapchain();
         CleanupDepthResources();
         CreateSwapchain();
@@ -11227,6 +11228,17 @@ namespace CNA::Internal::Renderers::Vulkan
             RecreateSwapchain();
     }
 
+    void VulkanRenderer::DeviceWaitIdleEXT()
+    {
+        // plan_vulkan.md VULKAN-392: the ONLY place this renderer calls vkDeviceWaitIdle, so
+        // GetDeviceWaitIdleCountEXT() cannot under-count and a stall reintroduced anywhere is
+        // visible to a test. The four remaining callers are all reconfiguration or teardown --
+        // the destructor, RecreateSwapchain, ApplyMultiSampleCount and FlushDeferredRenderTarget
+        // -- never a per-draw path.
+        ++deviceWaitIdleCountEXT_;
+        vkDeviceWaitIdle(device_);
+    }
+
     int VulkanRenderer::GetMultiSampleCount() const
     {
         return SampleCountToInt(sampleCount_);
@@ -11238,7 +11250,7 @@ namespace CNA::Internal::Renderers::Vulkan
         if (newCount == sampleCount_)
             return SampleCountToInt(sampleCount_);
 
-        vkDeviceWaitIdle(device_);
+        DeviceWaitIdleEXT();
 
         // Tear down every piece of state whose creation baked in the OLD sampleCount_ --
         // the backbuffer's MSAA render pass, every depth-format-keyed render-target/2D-sprite
@@ -11615,6 +11627,9 @@ namespace CNA::Internal::Renderers::Vulkan
                            r.imageViews.size(), r.images.size(), r.memories.size(),
                            r.framebuffers.size(), r.descriptorSets.size(),
                            r.poolDescriptorSets.size());
+        // plan_vulkan.md VULKAN-392: counted so a test can show the buffer create/destroy cycles
+        // it is measuring really happened, rather than inferring it from a pixel.
+        retiredBufferCountEXT_ += r.buffers.size();
         r.generation = frameGeneration_;
         retiredResources_.push_back(std::move(r));
     }
@@ -11821,6 +11836,8 @@ namespace CNA::Internal::Renderers::Vulkan
             for (VkSampler sm : r.samplers)          if (sm != VK_NULL_HANDLE) vkDestroySampler(device_, sm, nullptr);
             for (VkImageView v : r.imageViews)       if (v  != VK_NULL_HANDLE) vkDestroyImageView(device_, v, nullptr);
             for (VkImage im : r.images)              if (im != VK_NULL_HANDLE) vkDestroyImage(device_, im, nullptr);
+            // VULKAN-392: before the memories below -- a VkBuffer must die before the memory it is bound to.
+            for (VkBuffer b : r.buffers)             if (b  != VK_NULL_HANDLE) vkDestroyBuffer(device_, b, nullptr);
             for (VkDeviceMemory m : r.memories)      if (m  != VK_NULL_HANDLE) vkFreeMemory(device_, m, nullptr);
             for (VkFramebuffer fb : r.framebuffers)  if (fb != VK_NULL_HANDLE) vkDestroyFramebuffer(device_, fb, nullptr);
             for (VkPipeline p : r.pipelines)         if (p  != VK_NULL_HANDLE) vkDestroyPipeline(device_, p, nullptr);
@@ -12043,7 +12060,7 @@ namespace CNA::Internal::Renderers::Vulkan
         }
         std::sort(flushSegments.begin(), flushSegments.end());
 
-        vkDeviceWaitIdle(device_);
+        DeviceWaitIdleEXT();
 
         VkCommandBufferAllocateInfo ai{};
         ai.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;

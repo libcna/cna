@@ -1757,6 +1757,34 @@ namespace CNA::Internal::Renderers::Vulkan
         /** @brief Number of vkAcquireNextImageKHR calls that returned an image. */
         CNAEXT [[nodiscard]] uint64_t GetAcquireCountEXT() const noexcept { return acquireCountEXT_; }
         /**
+         * @brief Test-only: how many full-device stalls this renderer has performed.
+         *
+         * plans/plan_vulkan.md `VULKAN-392` (finding F-13). `vkDeviceWaitIdle` in a routine path
+         * is a named pathology, and "we removed it" is a claim a test must be able to check rather
+         * than take on trust. Every call inside this renderer goes through one helper that
+         * increments this, so the count is complete by construction: a stall reintroduced anywhere
+         * shows up here.
+         *
+         * @return Number of `vkDeviceWaitIdle` calls since construction.
+         */
+        CNAEXT [[nodiscard]] uint64_t GetDeviceWaitIdleCountEXT() const noexcept
+        {
+            return deviceWaitIdleCountEXT_;
+        }
+        /**
+         * @brief Test-only: how many vertex/index buffers have been retired for deferred free.
+         *
+         * plans/plan_vulkan.md `VULKAN-392`. Lets a test show that the buffer create/destroy
+         * cycles whose cost it is measuring really occurred, instead of inferring them from a
+         * pixel and a route's documented behaviour.
+         *
+         * @return Number of `VkBuffer` handles handed to the retirement queue since construction.
+         */
+        CNAEXT [[nodiscard]] uint64_t GetRetiredBufferCountEXT() const noexcept
+        {
+            return retiredBufferCountEXT_;
+        }
+        /**
          * @brief Test-only: how many deferred 3D draws are still queued for the next submit.
          *
          * plans/plan_vulkan.md `VULKAN-026`. The queue is cleared inside `RecordCommandBuffer`,
@@ -1934,6 +1962,12 @@ namespace CNA::Internal::Renderers::Vulkan
         // frame; every frame slot and every swapchain image genuinely re-entered; and no per-frame
         // growth in the objects that carry synchronization.
         uint64_t acquireCountEXT_          = 0;
+        /// plan_vulkan.md VULKAN-392: counts every DeviceWaitIdleEXT() call.
+        uint64_t deviceWaitIdleCountEXT_ = 0;
+        /// plan_vulkan.md VULKAN-392: VkBuffer handles handed to the retirement queue.
+        uint64_t retiredBufferCountEXT_ = 0;
+        /// The single funnel for vkDeviceWaitIdle, so the counter above cannot miss one.
+        void DeviceWaitIdleEXT();
         uint64_t frameSubmitCountEXT_      = 0;
         uint64_t presentCountEXT_          = 0;
         uint64_t frameFenceWaitCountEXT_   = 0;
@@ -2782,6 +2816,11 @@ namespace CNA::Internal::Renderers::Vulkan
             uint64_t                       generation = 0;
             std::vector<VkImageView>       imageViews;
             std::vector<VkImage>           images;
+            /// plan_vulkan.md `VULKAN-392` (finding F-13): vertex and index buffers. They used to
+            /// be destroyed immediately behind a `vkDeviceWaitIdle`, which made every
+            /// `DrawUserPrimitives` call a full-device stall, because that route allocates and
+            /// destroys a throwaway `VertexBuffer` per call.
+            std::vector<VkBuffer>          buffers;
             std::vector<VkDeviceMemory>    memories;
             std::vector<VkFramebuffer>     framebuffers;
             std::vector<VkPipeline>        pipelines;

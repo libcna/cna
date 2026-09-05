@@ -98,6 +98,12 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_DrawInstanced_3Instances COMMAND cna_test_vulkan_instanced
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-392: disposing a buffer must not stall the whole device
+        cna_vulkan_test(cna_test_vulkan_buffer_dispose_stall
+                        vulkan_buffer_dispose_stall_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_BufferDisposeStall COMMAND cna_test_vulkan_buffer_dispose_stall
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-134: DrawUserPrimitives / DrawUserIndexedPrimitives on Vulkan.
         # All four sources are renderer-agnostic (public XNA API only, zero renderer includes), so
         # they run here unchanged -- the same reuse pattern as the other EasyGL sources above.
