@@ -1736,7 +1736,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // this concrete adapter/device/surfaceFormat_ combination can really create a
         // sampleCount=4 RENDER_ATTACHMENT texture. Cached after the first call (a real GPU
         // round-trip, not free) since ApplyMultiSampleCount() may be called more than once.
-        [[nodiscard]] bool Supports4xMsaa();
+        [[nodiscard]] bool Supports4xMsaa() const;
         // WEBGPU-58: clamps a requested MultiSampleCount to this renderer's only two legal
         // WGPUMultisampleState.count values (1 or 4 -- unlike Vulkan's 1/2/4/8/16/32/64 range,
         // wgpu-native/WebGPU has no adjustable per-device "max sample count" limit at all; see
@@ -2693,7 +2693,10 @@ namespace CNA::Internal::Renderers::WebGPU
         int sampleCount_ = 1;
         // Cached result of Supports4xMsaa()'s own real device-capability probe: -1 = not probed
         // yet, 0 = unsupported, 1 = supported.
-        int msaa4xSupported_ = -1;
+        /// WEBGPU-195: the probe's cached answer. Mutable because the probe is a
+        /// question about the device, not a change to the renderer, and
+        /// `SupportsCapability()` is const and has to be able to ask it.
+        mutable int msaa4xSupported_ = -1;
 
         /// WEBGPU-200: whether the device was created with `WGPUFeatureName_Float32Filterable`.
         /// Without it a 32-bit float texture may only be sampled with a NON-filtering sampler --

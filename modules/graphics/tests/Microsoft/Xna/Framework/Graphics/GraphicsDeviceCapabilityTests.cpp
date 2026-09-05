@@ -366,6 +366,56 @@ TEST(GraphicsDeviceCapabilityTest, MultiSampleAntiAliasingQueryDoesNotThrow)
     EXPECT_NO_THROW({ (void)gd.SupportsCapability(GraphicsCapability::MultiSampleAntiAliasing); });
 }
 
+// plans/plan_webgpu.md WEBGPU-195: the value is device-dependent and this test still does not
+// assert one -- what it asserts is that the DECLARATION and its CONSUMER agree, which is a claim
+// that holds on any machine and fails on exactly the divergence the row exists to stop: a
+// capability reporting true while every requested sample count silently became 1.
+//
+// The direction matters. `applied <= requested` is the shared contract, so a renderer may honour
+// 4x, 2x, or refuse and give 1 -- but if the capability says false, no target may come back
+// multisampled at all, and if a target DOES come back multisampled, the capability cannot be
+// claiming the device has no MSAA.
+TEST(GraphicsDeviceCapabilityTest, MultiSampleAntiAliasingAgreesWithWhatARenderTargetGets)
+{
+    using Microsoft::Xna::Framework::Graphics::DepthFormat;
+    using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
+    using Microsoft::Xna::Framework::Graphics::RenderTargetUsage;
+    using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+
+    GraphicsDevice gd;
+    const bool capability = gd.SupportsCapability(GraphicsCapability::MultiSampleAntiAliasing);
+
+    RenderTarget2D target(gd, 32, 32, false, SurfaceFormat::Color, DepthFormat::None, 4,
+                          RenderTargetUsage::DiscardContents);
+    const int applied = target.getMultiSampleCountProperty();
+
+    EXPECT_LE(applied, 4) << "the applied sample count may never exceed the requested one";
+    EXPECT_GE(applied, 1);
+    if (!capability)
+    {
+        EXPECT_EQ(applied, 1)
+            << "a renderer that reports no MSAA support must not hand back a multisampled target";
+    }
+    if (applied > 1)
+    {
+        EXPECT_TRUE(capability)
+            << "a renderer that hands back a multisampled target must not report that it has no "
+               "MSAA support";
+    }
+    // The strong arm, and the one that catches the divergence WEBGPU-195 is about -- a capability
+    // reporting true while every requested count silently becomes 1. It is asserted only where the
+    // row establishes that both answers come from the SAME probe: on WEBGPU,
+    // SupportsCapability(MultiSampleAntiAliasing) and PickSampleCount() both call Supports4xMsaa(),
+    // so they cannot legitimately disagree. Renderers that report the shared permissive default
+    // while giving 1 sample are not covered by it, because for them the two are not yet one answer.
+    if (CNA_RENDERER_IS(WebGPU) && capability)
+    {
+        EXPECT_GT(applied, 1)
+            << "WEBGPU-195: this renderer's capability and its applied sample count come from one "
+               "probe, so a true capability must produce a multisampled target";
+    }
+}
+
 TEST(GraphicsDeviceCapabilityTest, AnisotropicFilteringQueryDoesNotThrow)
 {
     GraphicsDevice gd;

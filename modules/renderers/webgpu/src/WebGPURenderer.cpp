@@ -7970,6 +7970,21 @@ namespace CNA::Internal::Renderers::WebGPU
         // mode, so a vertex split across bindings is WebGPU's native shape rather than an
         // emulation. GetMaxVertexStreams() below says how many the device will take.
         if (capability == CNA::GraphicsCapability::MultiStreamVertexInput) return true;
+
+        // WEBGPU-195: answer from the probe, not from the shared permissive default. This renderer
+        // already asks the device empirically -- Supports4xMsaa() creates a scratch multisampled
+        // texture inside a WGPUErrorFilter_Validation scope and reads whether it was rejected -- so
+        // reporting `true` unconditionally was claiming something it had the means to know and did
+        // not check. Same truthfulness rule as WEBGPU-115/134/135, and the same shape as
+        // EasyGLRenderer's own answer, which reads GL_MAX_SAMPLES and returns false on ES 2.
+        //
+        // The probe is cached after its first run, so this is one scratch texture per process, and
+        // it is deliberately the SAME answer ApplyMultiSampleCount()/PickSampleCount() act on:
+        // a capability that said true while every requested count silently became 1 is exactly the
+        // divergence between a declaration and its consumer that this rule exists to stop.
+        if (capability == CNA::GraphicsCapability::MultiSampleAntiAliasing)
+            return Supports4xMsaa();
+
         return IGraphicsRenderer::SupportsCapability(capability);
     }
 
@@ -9215,7 +9230,7 @@ namespace CNA::Internal::Renderers::WebGPU
         }
     }
 
-    bool WebGPURenderer::Supports4xMsaa()
+    bool WebGPURenderer::Supports4xMsaa() const
     {
         if (msaa4xSupported_ >= 0)
             return msaa4xSupported_ != 0;
