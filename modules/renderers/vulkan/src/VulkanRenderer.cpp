@@ -14351,13 +14351,20 @@ namespace CNA::Internal::Renderers::Vulkan
         // transition that assumption is false the first time any face is ever rendered,
         // producing live VUID-vkCmdDraw-None-09600 validation errors (mirrors
         // VulkanRenderTargetRenderer's identical Task 878 fix).
-        // REMED-GFX-136: `|| preserveContents_` is the second reason this barrier is needed. A
+        // REMED-GFX-136: `|| preserveContents_` was the second reason this barrier is needed. A
         // PreserveContents face uses the LOAD render-pass variant, whose colour initialLayout is
         // SHADER_READ_ONLY_OPTIMAL, so every layer must already be in that layout the FIRST time
         // any face is bound -- otherwise vkCmdBeginRenderPass sees an image still in UNDEFINED.
-        // The discard variant declares initialLayout UNDEFINED and never needed it, which is why
-        // Task 907's mip-cascade precondition used to be the only trigger.
-        if (levelCount_ > 1 || preserveContents_)
+        // The discard variant declares initialLayout UNDEFINED and did not need it for BINDING,
+        // which is why Task 907's mip-cascade precondition used to be the only other trigger.
+        // plan_vulkan.md VULKAN-406: it is now unconditional, because binding is not the only way
+        // a layer is reached. A face that is never rendered at all is still readable and still
+        // sampleable, and both of those paths declare `oldLayout = SHADER_READ_ONLY_OPTIMAL` for
+        // the whole cube -- GetData's own barrier says so in as many words, and cubeView_ exposes
+        // all six layers to the descriptor. On a single-level DiscardContents cube neither of the
+        // two old conditions held, so layers nobody had rendered stayed in UNDEFINED and
+        // `vkQueueSubmit` reported the mismatch (`arrayLayer = 2`) while llvmpipe returned the
+        // right pixels anyway. This is what the 2D twin has done unconditionally since Task 878.
         {
             VkCommandBuffer initCb = owner_->BeginOneTimeCommands();
             VkImageMemoryBarrier initBarrier{};

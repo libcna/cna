@@ -68,6 +68,14 @@
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
+#if defined(CNA_RENDERER_VULKAN)
+// plan_vulkan.md VULKAN-406: reading a cube face is the one thing this file does that touches an
+// image ARRAY LAYER other than 0, and a layer nobody has written is exactly the case a renderer can
+// leave in an undefined image layout while still returning the right bytes. The Khronos layer is
+// the only observer of that, so the Vulkan build of this fixture judges it.
+#include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
+#endif
+
 #include <cstdint>
 #include <cstdio>
 #include <memory>
@@ -985,12 +993,44 @@ class CubeVolumeSetDataContractTest : public Game
         // REMED-GFX-134 gave this resource a public readback, so the upload is now VERIFIED here
         // rather than merely "did not throw". A uniform colour cannot tell a stored face from a
         // dropped one, so the source carries the same per-texel pattern the plain-cube checks use.
-        const std::vector<Color> src = CubeFacePattern(2, 0);
-        const WriteProbe w = WriteCube(*rt, 2, 0, nullptr, src, 0, static_cast<int>(src.size()));
-        const ReadProbe r = ReadCube(*rt, 2, 0, nullptr, kCube, kCube);
-        JudgeWrite(w, r, src, kContract.rtCube,
-                   "R1 rtcube: RenderTargetCube::SetData must either store the face or refuse -- "
-                   "never accept it and drop it");
+        //
+        // plan_vulkan.md VULKAN-406: ALL SIX faces, not just face 2. One face cannot tell a cube
+        // whose layers are each independently initialised from one that got the single layer this
+        // check happened to touch -- which is the shape of the defect that row names, and face 2 is
+        // simply the one it named because it was the only one asked for.
+        for (int face = 0; face < 6; ++face)
+        {
+            const std::vector<Color> src = CubeFacePattern(face, 0);
+            const WriteProbe w = WriteCube(*rt, face, 0, nullptr, src, 0, static_cast<int>(src.size()));
+            const ReadProbe r = ReadCube(*rt, face, 0, nullptr, kCube, kCube);
+            JudgeWrite(w, r, src, kContract.rtCube,
+                       "R1 rtcube face " + std::to_string(face) +
+                           ": RenderTargetCube::SetData must either store the face or refuse -- "
+                           "never accept it and drop it");
+        }
+    }
+
+    /**
+     * @brief VULKAN-406 -- the Khronos layer's verdict on every cube, volume and cube-target
+     *        subresource this fixture just touched.
+     *
+     * The layer's own liveness is asserted first: an empty message list from a layer that never
+     * loaded is not evidence. Compiled only for the Vulkan build; the thirteen other renderers
+     * registering this source are unaffected.
+     */
+    void CheckValidationClean()
+    {
+#if defined(CNA_RENDERER_VULKAN)
+        using CNA::Internal::Renderers::Vulkan::VulkanRenderer;
+        check(VulkanRenderer::IsValidationActiveEXT(),
+              "V1 VK_LAYER_KHRONOS_validation is loaded, so the count below means something");
+        auto* vk = dynamic_cast<VulkanRenderer*>(&getGraphicsDeviceProperty().GetRenderer());
+        if (!vk) { check(false, "V2 Vulkan renderer not reachable"); return; }
+        const auto& msgs = vk->GetValidationMessagesEXT();
+        check(msgs.empty(),
+              "V2 no Vulkan validation message" +
+                  (msgs.empty() ? std::string{} : std::string(" -- first: ") + msgs.front()));
+#endif
     }
 
     // =====================================================================
@@ -1353,6 +1393,7 @@ protected:
         }
         RunRenderTargetCubeCheck(dev);
         RunVolumeChecks(dev);
+        CheckValidationClean();
 
         std::printf("%d/%d checks passed on %s\n", passCount_, totalCount_, kContract.name);
         result_ = (passCount_ == totalCount_) ? 0 : 1;
