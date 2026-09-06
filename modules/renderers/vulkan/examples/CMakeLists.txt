@@ -98,6 +98,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_DrawInstanced_3Instances COMMAND cna_test_vulkan_instanced
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-132 (F-12): does the deferred draw model make a dynamic-buffer
+        # update between two draws in one frame observable?
+        cna_vulkan_test(cna_test_vulkan_dynamic_buffer_update
+                        vulkan_dynamic_buffer_update_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DynamicBufferUpdate COMMAND cna_test_vulkan_dynamic_buffer_update
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-348: the stored back-buffer and depth formats must be the applied ones
         cna_vulkan_test(cna_test_vulkan_applied_formats
                         vulkan_applied_formats_test.cpp)
