@@ -219,6 +219,22 @@ class WebGpuBrowserCompiledEffectTest : public Game
             quad[i] = QuadVertexUVW{kCorners[i][0], kCorners[i][1], 0.0f, u, v, w};
     }
 
+    /// plans/plan_webgpu.md WEBGPU-208. A quad whose texture coordinate RAMPS from 0 to 1 across
+    /// the target rather than sitting at one value. Every other check here samples at a constant
+    /// coordinate, whose screen-space derivative is zero and whose computed level of detail is
+    /// therefore implementation-defined -- fine when the level does not matter, useless when it is
+    /// the thing being measured. With the target exactly as wide as the texture this is one texel
+    /// per pixel, so the computed level is 0 and a +1 bias must select level 1.
+    static void FillRampQuad(QuadVertexUV (&quad)[6])
+    {
+        for (int i = 0; i < 6; ++i)
+        {
+            quad[i] = QuadVertexUV{kCorners[i][0], kCorners[i][1], 0.0f,
+                                   (kCorners[i][0] + 1.0f) * 0.5f,
+                                   (1.0f - kCorners[i][1]) * 0.5f};
+        }
+    }
+
     /// The drawable fixture with the identity transform and a chosen Tint.
     static void Configure(Effect& effect, const Vector4& tint)
     {
@@ -462,6 +478,66 @@ public:
                 check(Near(pixel.getRProperty(), 200) && Near(pixel.getGProperty(), 120) &&
                           Near(pixel.getBProperty(), 40),
                       "a compiled pixel shader samples a render target");
+                break;
+            }
+            case 11:
+            {
+                // plans/plan_webgpu.md WEBGPU-208 -- rung 10: SamplerState.MipMapLevelOfDetailBias
+                // on a compiled Effect, IN THE BROWSER and in pixels.
+                //
+                // This is the rung that cannot be inferred from the native run. The bias reaches
+                // the shader as a SPIR-V image operand, and the browser never sees that SPIR-V: it
+                // sees the WGSL `SpirvToWgsl` writes, where the operand has become a different
+                // builtin (`textureSampleBias`) that TINT -- not Naga -- has to accept and lower.
+                // A translator that dropped the operand, or a Tint that refused it, would still
+                // render a picture; it would just be the unbiased one.
+                //
+                // Four mip levels of flat distinct colours, because a real chain is nearly
+                // self-similar and could not tell level 1 from level 0.
+                const Color levels[4] = {Color(255, 0, 0, 255), Color(0, 255, 0, 255),
+                                         Color(0, 0, 255, 255), Color(255, 255, 0, 255)};
+                Texture2D mipped(device, kTargetSize, kTargetSize, /*mipMap=*/true,
+                                 SurfaceFormat::Color);
+                for (int level = 0; level < mipped.getLevelCountProperty(); ++level)
+                {
+                    const int extent = kTargetSize >> level > 0 ? kTargetSize >> level : 1;
+                    const Rectangle whole(0, 0, extent, extent);
+                    std::vector<Color> texels(static_cast<std::size_t>(extent * extent),
+                                              levels[level < 3 ? level : 3]);
+                    mipped.SetData(level, &whole, texels.data(), 0,
+                                   static_cast<int>(texels.size()));
+                }
+
+                const auto sampleWithBias = [&](float bias) {
+                    Effect effect(device, CNA::TestSupport::BuildSyntheticSamplingEffect(
+                        {
+                            {CNA::TestSupport::EffectFormat::SampMagFilter,
+                             CNA::TestSupport::EffectFormat::FilterPoint},
+                            {CNA::TestSupport::EffectFormat::SampMinFilter,
+                             CNA::TestSupport::EffectFormat::FilterPoint},
+                            {CNA::TestSupport::EffectFormat::SampMipFilter,
+                             CNA::TestSupport::EffectFormat::FilterPoint},
+                            {CNA::TestSupport::EffectFormat::SampAddressU,
+                             CNA::TestSupport::EffectFormat::AddressClamp},
+                            {CNA::TestSupport::EffectFormat::SampAddressV,
+                             CNA::TestSupport::EffectFormat::AddressClamp},
+                            {CNA::TestSupport::EffectFormat::SampMipMapLodBias,
+                             CNA::TestSupport::FloatBits(bias), true},
+                        },
+                        0));
+                    Configure(effect, Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+                    effect.getParametersProperty()["FxTexture"]->SetValue(&mipped);
+                    QuadVertexUV quad[6];
+                    FillRampQuad(quad);
+                    return DrawQuadAndRead(device, effect, 1, quad, PositionUvDeclaration());
+                };
+
+                const Color unbiased = sampleWithBias(0.0f);
+                check(Near(unbiased.getRProperty(), 255) && Near(unbiased.getGProperty(), 0),
+                      "a compiled Effect with no LOD bias samples the base level");
+                const Color biased = sampleWithBias(1.0f);
+                check(Near(biased.getGProperty(), 255) && Near(biased.getRProperty(), 0),
+                      "a compiled Effect's MipMapLevelOfDetailBias of +1 selects the next level");
                 break;
             }
             default:

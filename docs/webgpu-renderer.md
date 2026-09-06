@@ -97,7 +97,7 @@ stock effect shader -- `PbrEffect`, cube-map `EnvironmentMapEffect`, bone-palett
 `DualTextureEffect` and `AlphaTestEffect` -- compiles and renders in-browser (`plans/plan_webgpu.md`
 `WEBGPU-121`/`122`, both ✅). Since 2026-09-06,
 `CNA_WEBGPU_DEMO=cna_webgpu_compiled_effect_page` drives **compiled XNA Effects** through the same
-harness (11/11; needs `-DCNA_WEBGPU_COMPILED_EFFECTS=ON` on the Emscripten configure):
+harness (13/13; needs `-DCNA_WEBGPU_COMPILED_EFFECTS=ON` on the Emscripten configure):
 
 ```sh
 emcmake cmake -S . -B cmake-build-wasm-webgpu -DCNA_GRAPHICS_RENDERER=WEBGPU \
@@ -132,9 +132,12 @@ custom-WGSL `ShaderEffect` compiles under the browser's **Tint** -- a different 
 native's Naga, which is why this needed a run at all -- and draws. And a device loss recovers, after
 the adapter fix described above, which this page is what found. Compiled (bytecode) Effects have
 their own page, `cna_webgpu_compiled_effect_page` (`webgpu_browser_compiled_effect_test.cpp`), which
-runs **11/11** in headless Chrome: the capability, a compiled vertex+pixel pair, uniforms, a
+runs **13/13** in headless Chrome: the capability, a compiled vertex+pixel pair, uniforms, a
 Texture2D sampler, SpriteBatch with a custom compiled Effect, both passes of a multi-pass technique,
-a cube sampler, both slices of a volume sampler, and a render target as the sampled source. It
+a cube sampler, both slices of a volume sampler, a render target as the sampled source, and -- since
+`WEBGPU-208` -- a `SamplerState.MipMapLevelOfDetailBias` of 0 and of +1 selecting two different mip
+levels, which is the rung that proves Tint accepts and lowers the biased sample rather than merely
+that the translator emitted one. It
 settles two things the native suites cannot: whether **Tint** accepts the WGSL this route generates
 (native goes through Naga), and whether MojoShader's C parser and SPIR-V emitter behave compiled to
 WebAssembly. Until 2026-09-06 this paragraph said compiled Effects needed no browser run because
@@ -740,18 +743,31 @@ Emscripten, through WGSL translated from the same SPIR-V.
 **What does not, and why:**
 * **A vertex shader that samples a texture** is refused by name. Renderer-wide and CNA-wide:
   `IGraphicsRenderer` has no vertex-sampler hook (`plans/plan_fx.md` `FX-109`).
-* **`SamplerState.MipMapLevelOfDetailBias`** is not applied **on this route**. A compiled effect's
-  sampling call arrives from MojoShader as a plain `textureSample`, and `SpirvToWgsl` refuses image
-  operands (bias, lod, offset) as outside the translated subset, so there is nowhere to put the
-  value. `MaxMipLevel` does work, through `lodMinClamp`.
+* **Nothing else.** `SamplerState.MipMapLevelOfDetailBias` was on this list twice and is now
+  implemented -- see *Compiled-effect LOD bias* below.
 
-  **Corrected 2026-09-06: this bullet used to add "`WGPUSamplerDescriptor` has no LOD-bias field at
-  all … so every stock draw family discards it too", and that generalization is false.** The
-  descriptor indeed has no such field, but the stock 3D families do not discard the value: they
-  carry it in the per-draw uniform block and sample with WGSL `textureSampleBias`
-  (`plans/plan_webgpu.md` `WEBGPU-205`). See the `sampler_lod_bias` and `sprite_sampler_state` rows in *Cross-renderer parity fixtures*
-  above, and `docs/sampler-state-support.md`.
-  The limitation here is the compiled-effect route's alone.
+**Compiled-effect LOD bias (`plans/plan_webgpu.md` `WEBGPU-208`, 2026-09-06).** All six
+`SamplerState` fields a compiled pass can set now reach the GPU. The first five ride
+`WGPUSamplerDescriptor`; the sixth cannot, because that descriptor has no bias field at all, so it
+reaches the **shader** instead -- and it does so in the SPIR-V, before the native and browser routes
+divide, which is what makes the two incapable of disagreeing about it.
+
+`MojoShaderEffect::InjectSamplerLodBias` adds one uniform block to the normalized module (a `vec4`
+per D3D9 sampler register, in the pixel sampler group at a binding the combined-sampler split cannot
+reach) and rewrites every implicit sample to carry a `Bias` image operand loaded from **its own
+register's** element. The index is a constant at each sample site, resolved from the sampler
+variable the sample loaded, so a shader that samples `s0` and `s1` with different biases keeps them
+apart -- there is no per-shader bias and no dynamic indexing. Natively the module is handed to
+wgpu-native as SPIR-V and naga lowers the operand; in a browser `SpirvToWgsl` turns exactly that
+operand into `textureSampleBias(...)` for Tint. Zero bias is byte-identical to the old behaviour,
+and the value is uniform DATA: changing a bias rewrites a buffer and never rebuilds a pipeline.
+
+The bias is captured with the deferred draw like every other piece of pass state, so a later
+`Apply()` cannot change what an already-queued draw samples. WGSL clamps a sample bias to roughly
+[-16, +16) and CNA clamps on the way in, the same clamp `ApplySamplerMipState` makes for the stock
+routes. Two corrections this made to what this document used to say: the bullet above claimed the
+value was "discarded ... so every stock draw family discards it too" (false since `WEBGPU-205`), and
+then that it was unavailable on the compiled route (false since `WEBGPU-208`).
 
 **The browser route (`plans/plan_webgpu.md` `WEBGPU-203`, 2026-09-06).** Browser WebGPU ingests WGSL
 and nothing else -- emdawnwebgpu's own `createShaderModule` has a single chained-struct case -- so
@@ -767,9 +783,12 @@ and the entry point NAME all come out as the SPIR-V carried them, so the rendere
 pipelines are identical between routes -- which is what makes the native SPIR-V route a usable
 oracle: `SetCompiledEffectShaderLanguageEXT` re-runs 16 shared cross-renderer contracts natively
 through the browser's representation, pixel checks included. In a browser,
-`cna_webgpu_compiled_effect_page` runs 11/11 (see *Browser coverage* above). The one thing WGSL
+`cna_webgpu_compiled_effect_page` runs 13/13 (see *Browser coverage* above). The one thing WGSL
 cannot express from this corpus is a shader that writes `gl_PointSize` or reads `gl_PointCoord`;
-WebGPU has neither, and the translator refuses such a module by name.
+WebGPU has neither, and the translator refuses such a module by name. Since `WEBGPU-208` the
+translated subset also carries exactly one image operand, `Bias` -- every other operand mask is
+still refused by name, and `textureSampleBias` is emitted only where the injected SPIR-V asked for
+it.
 
 **One trap for anyone reading the pin's headers.** `wgpuHasInstanceFeature` and
 `wgpuGetInstanceFeatures` are exported symbols that PANIC (`not implemented`) on wgpu-native

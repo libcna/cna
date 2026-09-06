@@ -4509,6 +4509,13 @@ namespace CNA::Internal::Renderers::WebGPU
                 std::uint32_t samplerBinding = 0;
                 WebGPUSampledTextureEXT texture;
                 WGPUSampler sampler = nullptr;
+                /// WEBGPU-208: the D3D9 register this pair came from, which is the index its LOD
+                /// bias occupies in the injected uniform block.
+                std::uint32_t slot = 0;
+                /// WEBGPU-208: `SamplerState.MipMapLevelOfDetailBias` as the pass set it, captured
+                /// by VALUE here because this draw is replayed at Present() and the effect's
+                /// sampler state may have moved on by then.
+                float lodBias = 0.0f;
             };
             std::vector<Stream> streams;
             std::vector<std::uint8_t> indexData;   ///< empty for a non-indexed draw
@@ -4523,6 +4530,9 @@ namespace CNA::Internal::Renderers::WebGPU
             std::vector<std::uint8_t> vertexUniforms;  ///< the pass's vertex register file, by value
             std::vector<std::uint8_t> pixelUniforms;   ///< the pass's pixel register file, by value
             std::vector<SamplerBinding> pixelSamplers;
+            /// WEBGPU-208: the pixel stage's LOD-bias uniform block, one float4 per D3D9 sampler
+            /// register with the bias in `.x`. Empty when the pass samples nothing.
+            std::vector<std::uint8_t> pixelLodBias;
             WebGPUCompiledEffect::LinkedPassEXT linked;
             bool depthTest = false;
             bool depthWrite = false;

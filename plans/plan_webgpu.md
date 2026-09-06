@@ -2,9 +2,17 @@
 
 ## Status summary (2026-09-06)
 
-**200 rows — ✅ 199 · 🟨 1 · ⬜ 0** (counted from the row tables by
+**201 rows — ✅ 200 · 🟨 1 · ⬜ 0** (counted from the row tables by
 `tools/count_webgpu_plan_status.sh`, not by hand). **The only open row is `WEBGPU-1`, whose
 Windows, macOS and aarch64 legs cannot be executed on this machine.**
+
+**`WEBGPU-208` is the 201st row, added and closed on 2026-09-06.** The closeout documentation pass
+found one real parity gap that no row represented -- a compiled XNA Effect accepted
+`SamplerState.MipMapLevelOfDetailBias` and did not apply it -- and recorded it rather than smoothing
+it over. It got its own row instead of an amendment, because it was observable XNA behaviour the
+reference renderer supports, and it was implemented rather than documented: the bias now reaches a
+compiled shader as a SPIR-V `Bias` image operand injected before the native and browser routes
+diverge. See Phase 70.4.
 
 **Read the row count as a count of ROWS, not as a parity claim.** Until 2026-09-06 this banner
 listed two implementation gaps that no `WEBGPU-*` row represented — browser WebGPU could not run a
@@ -81,21 +89,15 @@ duplicate `WEBGPU-*` rows for them**):
 * `plans/plan_fx.md` **`FX-109`** -- vertex-stage sampler support is absent from the shared
   renderer/device surface.
 
-**Two source/documentation contradictions found by this closeout pass, REPORTED not fixed** (both
-need a code or test edit, which a documentation pass must not make):
-
-1. **`GetAdditionalLimitationsTextEXT()` does not name the compiled-effect route among those that
-   do not apply the LOD bias.** It names three -- `SpriteBatch`, a custom CNAEXT `ShaderEffect`, and
-   `PbrEffect`/`SkinnedPbrEffect` -- and a *compiled* XNA Effect is a fourth: its sampling call
-   arrives from MojoShader as a plain `textureSample`, and `SpirvToWgsl` refuses image operands
-   (bias, lod, offset) as outside the translated subset, so the value is accepted and has no effect.
-   `WEBGPU-205`'s own rule is that "no route may silently ignore the state", so this is a one-clause
-   addition to that string, in `modules/renderers/webgpu/src/WebGPURenderer.cpp`.
-2. **A stale justification comment in a test.**
-   `modules/renderers/webgpu/tests/.../WebGPUCompiledEffectTests.cpp` sets `supportsLodBias = false`
-   -- **the value is correct**, for the reason in (1) -- but justifies it with "Every stock draw
-   family discards the value for the same reason, so this is a renderer-wide gap". That sentence has
-   been false since `WEBGPU-205`. The assertion behaviour is unaffected; only the comment misleads.
+**The two source/documentation contradictions this closeout pass reported are both CLOSED by
+`WEBGPU-208` (2026-09-06), and the fix was implementation, not wording.** They were: (1)
+`GetAdditionalLimitationsTextEXT()` did not name the compiled-effect route among those that ignore
+the LOD bias, and (2) `WebGPUCompiledEffectTests.cpp` justified `supportsLodBias = false` with a
+sentence that had stopped being true. Naming the fourth route would have been an honest interim
+state and would NOT have been parity, so the route was given the state instead: `supportsLodBias` is
+true, the shared pixel contract passes on both the native SPIR-V and the native WGSL route, and the
+limitation text now says compiled effects apply the bias rather than listing them as a route that
+cannot.
 
 **On the phrase "EasyGL-equivalent".** It is now true in exactly one sense, and the qualifier is
 load-bearing: WebGPU is EasyGL-equivalent **for the locally tested, in-scope XNA renderer surface**,
@@ -142,7 +144,8 @@ reader would reasonably assume:
   switch has a single case, and that is still true. **What changed on 2026-09-06 is that CNA now
   TRANSLATES this route's SPIR-V into WGSL** (`WEBGPU-203`), so compiled effects are no longer
   native-only: the Emscripten refusal is gone, `SupportsCompiledEffects()` is true there, and
-  `cna_webgpu_compiled_effect_page` runs the acceptance ladder 11/11 in headless Chrome.
+  `cna_webgpu_compiled_effect_page` runs the acceptance ladder 11/11 in headless Chrome --
+  **13/13 since `WEBGPU-208` added the two LOD-bias rungs.**
 
 **Wave 0 and Wave 1 are closed (2026-09-04, implementation pass).** `WEBGPU-207` stood up the shared
 EasyGL↔WebGPU behavioural fixture mechanism, and `WEBGPU-155`–`159` replaced the stride-derived stock
@@ -195,6 +198,11 @@ No WebGPU graphics test regressed.
 **Re-measured again after `WEBGPU-198` (2026-09-05, 9015 tests): 19 failed, the same accounted-for
 set, and **five fewer than the intermediate run**: the `HdrRenderTargetRoundTripTest` cases that
 started running when float targets became creatable all pass. No WebGPU graphics test regressed.
+
+**FULL-SUITE BASELINE after `WEBGPU-208` (2026-09-06, `cmake-build-webgpu/CnaTests`,
+`DISPLAY=:131`, one process, 623 s): 8912 tests from 844 suites — 8829 passed, 6 failed, 77
+skipped. Zero new failures; the six are the same six by name, and the 27 extra tests are this row's
+own.** The previous baseline, immediately below, is kept because the six are explained there.
 
 **FULL-SUITE BASELINE after the compiled-Effect work (2026-09-06, `cmake-build-webgpu/CnaTests`,
 `DISPLAY=:131`, one process, 711 s): 8885 tests from 840 suites — 8802 passed, 6 failed, 77
@@ -800,6 +808,19 @@ not upload itself. Anything that cannot meet that must refuse by name, not degra
 | # | Task | Status | Notes |
 | --- | --- | --- | --- |
 | WEBGPU-196 | Re-run the parity corpus and the new state/effect coverage in a real browser. | ✅ | The Emscripten path shares `WebGPURenderer.cpp` and every WGSL shader, but five `#if defined(__EMSCRIPTEN__)` seams differ (surface source, callback mode + Asyncify pump, no explicit present, depth/MSAA resync to the canvas backing store, the `ThirdPartyWebGPU.cmake` branch) and browser WebGPU accepts **WGSL only**. So the browser answer is not implied by the native one for: the wireframe line pipeline (`WEBGPU-153`), semantic vertex layouts (`WEBGPU-155`), multi-stream input (`WEBGPU-172`), compiled effects (`WEBGPU-166`–`171` — likely a documented browser-only refusal), and device loss (`WEBGPU-182`). **Expected:** each of those states its browser answer explicitly, driven through `scripts/run-webgpu-browser-test.sh`. **Environment:** needs headless Chrome with a real GPU-backed adapter, which this machine has; it is listed here because it is a separate run, not because it is impossible. **Done 2026-09-06, and it found a browser-only defect — which is the whole reason this row exists as a separate run.** `cna_webgpu_coverage_page` (`webgpu_browser_coverage_test.cpp`), driven by `scripts/run-webgpu-browser-test.sh` against headless Chrome 152 on the real AMD Vulkan path: **9/9**, one check per frame because `WEBGPU-133` measured that a readback yields to the browser, which presents and invalidates the canvas surface texture during the yield. Every check reads PIXELS back rather than trusting an absence of errors. The `cna_demo_2d` smoke also still passes at 120 frames with this session's renderer changes in. **THE DEFECT, browser-only and now fixed: a device loss could not be recovered from in a browser at all.** `DebugRestoreContext()` requested a second device from the adapter it already held, which `WEBGPU-180` had measured to be fine natively. In a browser it is not: a `GPUAdapter` is **consumed** by `requestDevice()` — that is the WebGPU specification, not a Dawn quirk — so the request was rejected with `adapter is "consumed": it has already been used to create a device` and the Emscripten main loop aborted. The restore path now releases the spent adapter and calls `RequestAdapterAndDevice()` on the web target, which also re-reads the optional features from the NEW adapter, since a replacement adapter is not obliged to offer the same feature set. Native is inside the `#else` and is byte-identical; `WebGPU_ContextRecovery` is still 22/22. **This is exactly the shape of finding the row predicted** — the browser answer was not implied by the native one, and no amount of native testing would have produced it. **The other four areas' browser answers, each measured rather than inferred:** `FillMode::WireFrame` draws EDGES in the browser for both a 3D quad and a `SpriteBatch` quad (1036 lit pixels against a solid 96000) — which is only possible because `WEBGPU-153` chose index expansion over a polygon mode, and browser WebGPU has no polygon mode at all; a declaration whose elements are listed in the other ORDER produces a byte-identical picture (`WEBGPU-155`); position from stream 0 and colour from stream 1 both reach one draw (`WEBGPU-172`); and a custom-WGSL `ShaderEffect` compiles under the browser's **Tint** — a different compiler from native's Naga, which is the reason this needed a browser run — and draws. **Compiled (bytecode) Effects (`WEBGPU-166`/`203`/`204`) need no browser run and the page says so rather than pretending to test them:** they are out of scope on EVERY target and the refusal lives in shared code with no Emscripten seam, so the browser answer is the native one by construction. **Build:** `cmake-build-wasm-webgpu/` (190 MB), `emcmake cmake -G Ninja -DCNA_GRAPHICS_RENDERER=WEBGPU -DCNA_BUILD_EXAMPLES=ON -DCNA_ENABLE_NET=OFF -DCNA_ENABLE_VIDEO=OFF -DCNA_ENABLE_DRACO=OFF` with `-DCNA_SHARP_RUNTIME_ROOT` pointed at the same checkout the native build uses. **ONE STATEMENT IN THIS CELL IS SUPERSEDED, 2026-09-06 (closeout pass).** "**Compiled (bytecode) Effects … need no browser run and the page says so rather than pretending to test them:** they are out of scope on EVERY target and the refusal lives in shared code with no Emscripten seam, so the browser answer is the native one by construction" was true when this run happened and is not true now. `WEBGPU-203` gave the browser its own route and its own seam (`GetOrCreateCompiledEffectShaderModuleEXT`), so the browser answer is **no longer implied by the native one** — exactly the property this row exists to respect. Compiled effects therefore got the browser run this cell said they did not need: `cna_webgpu_compiled_effect_page` (`webgpu_browser_compiled_effect_test.cpp`), **11/11** in headless Chrome, which is what settles that **Tint** accepts the generated WGSL and that MojoShader's C parser and SPIR-V emitter behave compiled to WebAssembly. |
+
+### Phase 70.4 — the gap the 2026-09-06 closeout pass exposed
+
+The documentation consistency pass that closed Phase 70 found one thing it could not fix as
+documentation, and recorded it rather than smoothing it over: **a compiled XNA Effect accepted
+`SamplerState.MipMapLevelOfDetailBias` and did not apply it.** That is observable XNA behaviour the
+reference renderer supports, so it is a parity gap and gets a row of its own rather than an
+amendment to a closed one. It is the reason the live parity claim briefly said more than the
+renderer could support.
+
+| # | Task | Status | Notes |
+| --- | --- | --- | --- |
+| WEBGPU-208 | Compiled XNA Effect sampler LOD-bias parity. | ✅ | **The gap, stated exactly:** `WEBGPU-205` gave `SamplerState.MipMapLevelOfDetailBias` to every stock 3D route by shader emulation, and the compiled-effect route did not get it. The value was captured all the way to `GetBoundSamplerEXT`, and then the draw read the sampler's filter, both address modes, `AddressW`, `MaxMipLevel` and `MaxAnisotropy` and **not** the bias -- the one field of the six that no `WGPUSamplerDescriptor` can carry. `WebGPUCompiledEffectTests.cpp` set `supportsLodBias = false` and justified it as a renderer-wide WebGPU limitation, which had stopped being true. **EasyGL evidence:** its compiled route calls `ApplySamplerMipState()` with `samplerState.getMipMapLevelOfDetailBiasProperty()`, and the shared `RunCompiledEffectSamplerPixelContract` proves the behaviour in pixels. **Expected:** the bias applies to an ordinary implicit sample on every compiled-effect texture dimension WGSL permits a biased sample for, per D3D9 sampler REGISTER rather than per shader, captured with the deferred draw, and identically on the native and browser routes. **A documentation-only answer is explicitly not acceptable:** WGSL has `textureSampleBias` and SPIR-V has a `Bias` image operand, so a refusal would need to show that BOTH are impossible. **Acceptance:** `supportsLodBias` set to true and the shared contract passing on the native SPIR-V route AND the native WGSL route, plus a browser pixel case. **Done 2026-09-06, implemented rather than documented.** **Where the value was lost, exactly:** `WebGPURenderer.cpp`'s `QueueCompiledEffectDraw`. `GetBoundSamplerEXT` returned the whole `SamplerState`; the next six lines read the filter, `AddressU`, `AddressV`, `AddressW`, `MaxMipLevel` and `MaxAnisotropy` into `GetOrCreateSlotSampler` and never touched `getMipMapLevelOfDetailBiasProperty()`. There was nowhere to put it -- that call builds a `WGPUSamplerDescriptor`, which has no bias field -- so the field was simply not read. **The architecture, chosen so the two targets cannot diverge:** ONE semantic transformation, in the SPIR-V, before the routes split. `modules/renderers/common/mojoshader/{include,src}/.../SpirvSamplerLodBias.{hpp,cpp}` injects a uniform block (a `vec4` per D3D9 register, `ArrayStride` 16, `Block`-decorated) and rewrites every `OpImageSampleImplicitLod` that names a split sampler to carry a `Bias` image operand loaded from **that sample's own register's** element. Natively wgpu-native takes the module as SPIR-V and naga lowers the operand; in a browser `SpirvToWgsl` renders the same operand as `textureSampleBias(...)` for Tint. Neither target has a private path, so an XNA semantic cannot depend on the ingestion language. **Slot identity is preserved end to end and is a CONSTANT at each sample site**, never a per-shader bias and never dynamic indexing: `SplitCombinedImageSamplers` already reports `originalBinding` (the D3D9 register) and doubles it into `2*r`/`2*r+1`, and the injector walks `OpLoad`/`OpCopyObject`/`OpSampledImage` back from each sample to the variable it loaded, then halves that variable's `Binding` decoration. A sample it cannot attribute is left exactly as it was rather than given someone else's bias. **No fifth bind group, because WebGPU guarantees only four and MojoShader's fixed descriptor sets use all four:** the block shares group 2 (pixel samplers) at binding 32, the first binding the doubling cannot reach since D3D9 stops at `s15`. `pixelHasLodBias` is a STRUCTURAL member of the pipeline-layout cache key; the bias VALUES are not, so a new float rewrites a transient uniform buffer and never builds a pipeline. **Captured with the deferred draw**, beside the rest of the pass state, and clamped to WGSL's own [-16, +16) sample-bias range on the way in -- the same clamp `ApplySamplerMipState` makes for the stock routes. **Evidence, and the A/B that makes it non-vacuous.** The shared `RunCompiledEffectSamplerPixelContract` -- the authoritative oracle, which draws one texel per pixel so the computed level is exactly 0 and a +1 bias must select level 1 -- passes on the native SPIR-V route AND on the native WGSL route. With the injection disabled and nothing else changed, **both routes fail on exactly that assertion** ("a +1 LOD bias must select the next smaller level"), so the flipped option measures something. **Browser: `cna_webgpu_compiled_effect_page` is 13/13** (was 11/11), the two new rungs being a compiled Effect at bias 0 reading the base level and at +1 reading the next -- in pixels, through Tint, not merely translated. **Slot identity in pixels:** `LodBiasAppliesToTheSamplersOwnRegisterRatherThanSlotZero` builds the same effect with its sampler at `s2`; an implementation reading index 0 stays on level 0 and fails. **Deferred capture in pixels:** `LodBiasIsCapturedWithTheDeferredDrawRatherThanReadAtReplay` queues two draws into one target with no readback between, the second `Apply()` overwriting the sampler state a replay-time read would find; the first half must still come back on level 0. **Structural, over the whole committed corpus:** `SpirvSamplerLodBiasTests.cpp` (in the SHARED half, so Vulkan and SDL_GPU builds run it too) walks all 27 passes and asserts per sample that the bias index equals the sample's own register, that the id bound covers the new result ids, that a stage sampling nothing is returned byte-identical, and -- non-vacuity -- that the corpus really does contain a pass sampling two different registers. **The translator's three cases are distinguished rather than broadened:** no operands → `textureSample`; `Bias` → `textureSampleBias`; any other operand mask → refused by name. That last is built by flipping an injected module's mask from `Bias` to `Lod`, the smallest possible difference from a module the translator accepts. **Every in-scope dimension works, measured not assumed:** the injection is unconditional, so `SharedCubeAndVolumeSamplerContract` and `AddressWSelectsADifferentVolumeSliceForEachMode` passing on both routes is itself the proof that naga and Tint accept a biased **cube** and **3D** sample; `EnvironmentMapEffect.fxb` in the corpus test is the two-register 2D-plus-cube case. Only 1D is refused, by name, and for a real reason: WGSL has no `textureSampleBias` for `texture_1d`, which has no mip chain in WebGPU for a bias to move. **Suites:** `CnaRendererTests` **334/334**; compiled-effect + shared SPIR-V slice **50/50**; the `ps_1_x` guard still **27/27**; the cross-renderer parity corpus reports every fixture passing under both renderers and meeting its frame policy; the browser 2D smoke still passes at 120 frames with a clean teardown. **What this row did NOT do:** add any CNAEXT feature. The uniform block is a private renderer-owned emulation of an ordinary XNA sampler property, invisible to the public API. |
 
 **Windows / macOS / linux-aarch64** get no new row: that is `WEBGPU-1`, unchanged. Every Phase 70
 row inherits the same platform caveat — "verified" in a Phase 70 row means *verified on Linux

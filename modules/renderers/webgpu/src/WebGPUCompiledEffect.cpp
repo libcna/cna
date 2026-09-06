@@ -11,6 +11,7 @@
 #include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
 #include "CNA/Internal/Renderers/MojoShader/EffectTranslation.hpp"
 #include "CNA/Internal/Renderers/MojoShader/SpirvCombinedSamplerSplit.hpp"
+#include "CNA/Internal/Renderers/MojoShader/SpirvSamplerLodBias.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerStateCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
@@ -702,7 +703,7 @@ namespace CNA::Internal::Renderers::WebGPU
 
         const auto finishStage = [&](const MOJOSHADER_parseData* data,
                                      std::vector<WebGPUCompiledSamplerBindingEXT>& samplersOut,
-                                     std::uint32_t expectedSet) {
+                                     std::uint32_t expectedSet, bool* lodBiasOut) {
             if (data->output == nullptr ||
                 static_cast<std::size_t>(data->output_len) <=
                     static_cast<std::size_t>(patchTableSize))
@@ -732,18 +733,39 @@ namespace CNA::Internal::Renderers::WebGPU
                 out.viewDimension = ToViewDimension(binding.dim, binding.arrayed);
                 samplersOut.push_back(out);
             }
+            // WEBGPU-208: SamplerState.MipMapLevelOfDetailBias is XNA sampler state that no
+            // WebGPU sampler descriptor can carry, so it has to reach the shader. This is the ONE
+            // place it is injected, before the native and browser routes diverge, so the two
+            // cannot end up with different XNA semantics. It is a no-op for a stage that samples
+            // nothing, which is why the vertex stage passes a null flag.
+            std::vector<std::uint32_t> stageWords = std::move(split.words);
+            if (lodBiasOut != nullptr)
+            {
+                MojoShaderEffect::SpirvLodBiasResult biased = MojoShaderEffect::InjectSamplerLodBias(
+                    stageWords.data(), stageWords.size(), expectedSet,
+                    kWebGPUCompiledEffectLodBiasBinding);
+                if (!biased.error.empty())
+                {
+                    throw std::runtime_error(
+                        "CNA WebGPU: could not give a compiled effect's sampling its LOD bias: " +
+                        biased.error);
+                }
+                *lodBiasOut = biased.changed;
+                stageWords = std::move(biased.words);
+            }
             // Linking PATCHES the SPIR-V in place, so the bytes only mean this draw's vertex
             // format right now. wgpuDeviceCreateShaderModule copies them, so a module made here
             // stays correct forever -- which is why it is asked for by content and owned by the
             // renderer rather than held on the shader and replaced at the next link.
             return renderer_.GetOrCreateCompiledEffectShaderModuleEXT(
-                split.words.data(), split.words.size(),
-                HashWords(split.words.data(), split.words.size()));
+                stageWords.data(), stageWords.size(),
+                HashWords(stageWords.data(), stageWords.size()));
         };
 
         linked.vertexModule = finishStage(vertexData, linked.vertexSamplers,
-                                          /*expectedSet=*/0u);
-        linked.pixelModule = finishStage(pixelData, linked.pixelSamplers, /*expectedSet=*/2u);
+                                          /*expectedSet=*/0u, /*lodBiasOut=*/nullptr);
+        linked.pixelModule = finishStage(pixelData, linked.pixelSamplers, /*expectedSet=*/2u,
+                                         &linked.pixelHasLodBias);
         linked.vertexEntryPoint = vertexData->mainfn != nullptr ? vertexData->mainfn : "main";
         linked.pixelEntryPoint = pixelData->mainfn != nullptr ? pixelData->mainfn : "main";
         linked.vertexHasUniforms = vertexData->uniform_count > 0;

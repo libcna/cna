@@ -119,6 +119,16 @@ namespace CNA::Internal::Renderers::WebGPU
     };
 
     /**
+     * @brief Binding the compiled-effect LOD-bias uniform block occupies in the pixel sampler group.
+     *
+     * plans/plan_webgpu.md WEBGPU-208. It shares group 2 with the samplers rather than claiming a
+     * fifth bind group, because WebGPU guarantees only four and MojoShader's fixed descriptor-set
+     * model already uses all of them. 32 is the first binding the split cannot reach: it doubles a
+     * register into `2*r` and `2*r + 1`, and D3D9 stops at `s15`.
+     */
+    inline constexpr std::uint32_t kWebGPUCompiledEffectLodBiasBinding = 32u;
+
+    /**
      * @brief One D3D9 sampler register after the combined-sampler split, as a draw must bind it.
      * CNAEXT.
      */
@@ -315,6 +325,14 @@ namespace CNA::Internal::Renderers::WebGPU
             bool vertexHasUniforms = false;
             /** @brief Whether the pixel shader declares a uniform block. */
             bool pixelHasUniforms = false;
+            /**
+             * @brief Whether the pixel module carries the WEBGPU-208 LOD-bias uniform block.
+             *
+             * True exactly when the shader samples at least one texture, because that is when the
+             * injection has somewhere to apply. It is a property of the module's SHAPE, so it
+             * belongs in the pipeline-layout cache key alongside the sampler bindings.
+             */
+            bool pixelHasLodBias = false;
             /** @brief Identity of the shader pair plus vertex layout, for the pipeline cache key. */
             std::uint64_t pipelineKey = 0;
         };

@@ -124,7 +124,7 @@ change what the GPU samples. That was true of **every** renderer except FNA3D un
 | EasyGL, `OPENGL33` | **implemented** — `GL_TEXTURE_MIN_LOD` | **implemented** — `GL_TEXTURE_LOD_BIAS` |
 | EasyGL, ES 2 profiles (`OPENGLES2`, `WEBGL1`) | **not representable**: no sampler objects and no `GL_TEXTURE_MIN_LOD` | not representable |
 | EasyGL `AddressW` | **implemented on the ES 3 and desktop profiles** since FX-092 — sampler-object `GL_TEXTURE_WRAP_R`; not representable on the ES 2 profiles, which have neither sampler objects nor volume textures | — |
-| WebGPU | **implemented** (`WEBGPU-161`) — `WGPUSamplerDescriptor::lodMinClamp`, and part of the 64-bit sampler cache key | **implemented** (`WEBGPU-205`) — by WGSL `textureSampleBias` on every stock 3D route, since `WGPUSamplerDescriptor` has no `lodBias` field at all |
+| WebGPU | **implemented** (`WEBGPU-161`) — `WGPUSamplerDescriptor::lodMinClamp`, and part of the 64-bit sampler cache key | **implemented** — by WGSL `textureSampleBias` on every stock 3D route (`WEBGPU-205`) and, by rewriting the compiled shader's SPIR-V, on compiled XNA Effects too (`WEBGPU-208`); `WGPUSamplerDescriptor` has no `lodBias` field at all, so both are shader emulations |
 | WebGPU `AddressW` | **implemented** (`WEBGPU-160`) — `WGPUSamplerDescriptor::addressModeW`, through the same ordinal table U and V use | — |
 | every other renderer | default no-op | default no-op |
 
@@ -150,6 +150,16 @@ Two things a caller needs to know, and both are reported through
   `ShaderEffect`, which supplies its own WGSL and therefore its own sampling calls; and the
   metallic-roughness `PbrEffect`/`SkinnedPbrEffect` families, which are the glTF route rather than
   an XNA stock effect.
+
+**Compiled XNA Effects apply it too, since `WEBGPU-208` (2026-09-06).** They were a fourth route on
+that list for one day. A compiled pass's sampling call comes from MojoShader, not from a shader CNA
+writes, so the emulation moves one level down: `MojoShaderEffect::InjectSamplerLodBias` rewrites the
+normalized SPIR-V so each implicit sample carries a `Bias` image operand fed from **its own D3D9
+sampler register's** slot in a small renderer-owned uniform block. Because the rewrite happens
+before the native and browser routes diverge, both targets execute the same semantic -- natively
+naga lowers the SPIR-V operand, and in a browser `SpirvToWgsl` renders it as `textureSampleBias`
+for Tint. The shared compiled-effect sampler pixel contract runs on both routes with
+`supportsLodBias` true.
 
 **`SpriteBatch` drops four `SamplerState` fields before any renderer sees them**
 (`plans/plan_graphics.md` row 1119, measured 2026-09-06). `SpriteBatch::Begin` applies the blend,

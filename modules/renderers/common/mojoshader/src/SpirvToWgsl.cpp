@@ -119,6 +119,10 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
             DecorationOffset = 35,
         };
 
+        /// WEBGPU-208: the single image-operand mask this subset accepts. `SpirvSamplerLodBias`
+        /// is the only thing that puts one on a sample, and Bias is the only one it uses.
+        constexpr std::uint32_t kImageOperandsBias = 0x1u;
+
         enum StorageClass : std::uint32_t
         {
             StorageUniformConstant = 0,
@@ -1230,11 +1234,28 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
                 const std::uint32_t resultId = instruction.operand(1);
                 const std::uint32_t sampledId = instruction.operand(2);
                 const std::uint32_t coordinateId = instruction.operand(3);
+
+                // WEBGPU-208: exactly ONE image operand is in this subset -- Bias, which
+                // `SpirvSamplerLodBias` injects so `SamplerState.MipMapLevelOfDetailBias` reaches
+                // a compiled effect's sampling. Everything else still refuses by name: this is not
+                // general image-operand support, and Lod/Grad/Offset/ConstOffset would each change
+                // the sampling semantic rather than shift the level the same sample computes.
+                std::string bias;
                 if (instruction.length > 5)
                 {
-                    Refuse("image operands (bias, lod, offset) are outside the compiled-effect "
-                           "subset");
+                    const std::uint32_t mask = instruction.operand(4);
+                    if (mask != kImageOperandsBias)
+                    {
+                        Refuse("image operands other than Bias (lod, grad, offset) are outside the "
+                               "compiled-effect subset");
+                    }
+                    if (instruction.length < 7)
+                        Refuse("an image sample whose Bias operand carries no value");
+                    if (instruction.length > 7)
+                        Refuse("an image sample carrying more image operands than Bias");
+                    bias = ValueExpression(instruction.operand(5));
                 }
+
                 const auto pair = sampledPairs_.find(sampledId);
                 if (pair == sampledPairs_.end())
                     Refuse("an image sample whose sampled image was never formed");
@@ -1246,9 +1267,22 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
                 const std::uint32_t needed = CoordinateComponents(image);
                 const std::string coordinate =
                     Narrow(ValueExpression(coordinateId), TypeIdOfValue(coordinateId), needed);
+                if (bias.empty())
+                {
+                    Define(resultId, instruction.operand(0),
+                           "textureSample(" + pair->second.first + ", " + pair->second.second +
+                               ", " + coordinate + ")");
+                    return;
+                }
+                // WGSL spells a biased implicit sample as its own builtin. It exists for
+                // texture_2d, texture_2d_array, texture_3d, texture_cube and texture_cube_array --
+                // every dimension this route supports -- but NOT for texture_1d, which has no mip
+                // chain in WebGPU and therefore nothing for a bias to move.
+                if (image.dim == 0)
+                    Refuse("WGSL has no biased sample for a 1D texture, which has no mip levels");
                 Define(resultId, instruction.operand(0),
-                       "textureSample(" + pair->second.first + ", " + pair->second.second + ", " +
-                           coordinate + ")");
+                       "textureSampleBias(" + pair->second.first + ", " + pair->second.second +
+                           ", " + coordinate + ", " + bias + ")");
             }
 
             /// Swizzles a value down to @p components, which is what a texture coordinate needs

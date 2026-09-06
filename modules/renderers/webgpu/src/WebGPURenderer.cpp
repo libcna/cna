@@ -57,6 +57,7 @@
 #include "System/NotSupportedException.hpp"
 #if defined(CNA_WEBGPU_COMPILED_EFFECTS)
 // plans/plan_webgpu.md WEBGPU-203: the browser half of the compiled-effect route.
+#include "CNA/Internal/Renderers/MojoShader/SpirvSamplerLodBias.hpp"
 #include "CNA/Internal/Renderers/MojoShader/SpirvToWgsl.hpp"
 #endif
 
@@ -8444,6 +8445,10 @@ namespace CNA::Internal::Renderers::WebGPU
         // which is what keeps a per-draw pipeline layout from being created for every sprite.
         std::uint64_t key = command.linked.vertexHasUniforms ? 1u : 0u;
         key = key * 31u + (command.linked.pixelHasUniforms ? 1u : 0u);
+        // WEBGPU-208: the bias block is a STRUCTURAL member of group 2, so two passes that differ
+        // only in whether they carry one must not share a pipeline layout. The bias VALUES are not
+        // in the key -- they are uniform data, and a new float must never build a new pipeline.
+        key = key * 31u + (command.linked.pixelHasLodBias ? 1u : 0u);
         for (const auto& sampler : command.linked.pixelSamplers)
         {
             key = key * 1099511628211ull ^ sampler.textureBinding;
@@ -8493,6 +8498,17 @@ namespace CNA::Internal::Renderers::WebGPU
             samplerEntry.visibility = WGPUShaderStage_Fragment;
             samplerEntry.sampler.type = WGPUSamplerBindingType_Filtering;
             pixelEntries.push_back(samplerEntry);
+        }
+        if (command.linked.pixelHasLodBias)
+        {
+            // WEBGPU-208. Group 2 rather than a fifth group: core WebGPU guarantees only four, and
+            // MojoShader's fixed descriptor sets already use all four.
+            WGPUBindGroupLayoutEntry biasEntry{};
+            biasEntry.binding = kWebGPUCompiledEffectLodBiasBinding;
+            biasEntry.visibility = WGPUShaderStage_Fragment;
+            biasEntry.buffer.type = WGPUBufferBindingType_Uniform;
+            biasEntry.buffer.minBindingSize = MojoShaderEffect::kSpirvLodBiasBlockBytes;
+            pixelEntries.push_back(biasEntry);
         }
         WGPUBindGroupLayoutDescriptor pixelDescriptor{};
         pixelDescriptor.label = StringView("CNA WebGPU compiled Effect group2 (pixel samplers)");
@@ -8638,7 +8654,30 @@ namespace CNA::Internal::Renderers::WebGPU
                 static_cast<int>(state.getAddressWProperty()),
                 state.getMaxMipLevelProperty(), state.getMaxAnisotropyProperty(),
                 "compiledEffect");
+            // WEBGPU-208: the sixth SamplerState field, and the only one no WGPUSamplerDescriptor
+            // can hold. Captured BY VALUE with the rest of the pass state, because this draw is
+            // replayed at Present(): a later Apply(), a later effect or another draw must not be
+            // able to change what this one samples. Clamped to WGSL's own sample-bias range, the
+            // same clamp ApplySamplerMipState makes for the stock routes.
+            binding.slot = sampler.slot;
+            binding.lodBias =
+                std::clamp(state.getMipMapLevelOfDetailBiasProperty(), -15.99f, 15.99f);
             command.pixelSamplers.push_back(binding);
+        }
+
+        // WEBGPU-208: pack the captured biases into the block the injected SPIR-V reads. std140
+        // gives an array element a 16-byte stride, so each register owns a float4 whose .x is its
+        // bias; a register the pass never bound keeps 0, which samples exactly as before.
+        if (command.linked.pixelHasLodBias)
+        {
+            command.pixelLodBias.assign(MojoShaderEffect::kSpirvLodBiasBlockBytes, 0u);
+            for (const auto& binding : command.pixelSamplers)
+            {
+                if (binding.slot >= MojoShaderEffect::kSpirvLodBiasSlotCount) continue;
+                const float value = binding.lodBias;
+                std::memcpy(command.pixelLodBias.data() + binding.slot * 16u, &value,
+                            sizeof(value));
+            }
         }
 
         command.topology = ToTopology(primitive);
@@ -8916,6 +8955,18 @@ namespace CNA::Internal::Renderers::WebGPU
             samplerEntry.binding = binding.samplerBinding;
             samplerEntry.sampler = binding.sampler;
             pixelEntries.push_back(samplerEntry);
+        }
+        if (command.linked.pixelHasLodBias)
+        {
+            // WEBGPU-208: ordinary transient uniform data, from the same pool the two register
+            // files use. A changed bias rewrites these bytes; it never touches the pipeline.
+            const auto [biasBuffer, biasSize] =
+                makeUniformBuffer(command.pixelLodBias, "CNA WebGPU compiled Effect LOD bias UBO");
+            WGPUBindGroupEntry biasEntry{};
+            biasEntry.binding = kWebGPUCompiledEffectLodBiasBinding;
+            biasEntry.buffer = biasBuffer;
+            biasEntry.size = biasSize;
+            pixelEntries.push_back(biasEntry);
         }
         {
             WGPUBindGroupDescriptor descriptor{};
@@ -9561,9 +9612,11 @@ namespace CNA::Internal::Renderers::WebGPU
             text += clause;
         };
 
-        // WEBGPU-205. SamplerState.MipMapLevelOfDetailBias IS implemented here -- WGPUSamplerDescriptor
-        // carries no lodBias field, but WGSL's textureSampleBias applies XNA's semantic exactly, and
-        // every stock 3D family does so. What this text exists for is the three routes that do NOT,
+        // WEBGPU-205/208. SamplerState.MipMapLevelOfDetailBias IS implemented here --
+        // WGPUSamplerDescriptor carries no lodBias field, but WGSL's textureSampleBias applies XNA's
+        // semantic exactly, and every stock 3D family does so; WEBGPU-208 extended the same semantic
+        // to compiled XNA Effects by rewriting their SPIR-V rather than their (absent) sampler
+        // descriptor. What this text exists for is the three routes that do NOT,
         // because the row's rule is that a route which cannot apply the state says so by name rather
         // than ignoring it quietly. SpriteBatch's reason is deliberately named as a FRAMEWORK one:
         // measuring it showed the value never reaches any renderer, so calling it a WebGPU
@@ -9582,7 +9635,10 @@ namespace CNA::Internal::Renderers::WebGPU
             "renderer ones.");
         add("SamplerState.MipMapLevelOfDetailBias is applied on every stock 3D effect route "
             "(BasicEffect, AlphaTestEffect, DualTextureEffect -- both samplers -- EnvironmentMapEffect "
-            "and SkinnedEffect) via WGSL textureSampleBias, and WGSL clamps a sample bias to roughly "
+            "and SkinnedEffect) via WGSL textureSampleBias, and on compiled XNA Effects, whose "
+            "MojoShader-emitted SPIR-V is rewritten so each implicit sample consumes its own D3D9 "
+            "sampler register's bias (WEBGPU-208) -- the same module on both targets, so the native "
+            "and browser routes cannot disagree about it. WGSL clamps a sample bias to roughly "
             "[-16, +16), so a larger magnitude saturates rather than extrapolating. Three routes do "
             "not apply it: SpriteBatch, which never receives the value in the first place -- "
             "SpriteBatch::Begin forwards only the filter and the two address modes through "

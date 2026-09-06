@@ -322,15 +322,16 @@ TEST(WebGPUCompiledEffectDrawTest, SharedSamplerPixelContract)
     GraphicsDevice device;
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
-    CNA::TestSupport::CompiledEffectSamplerContractOptions options;
-    // plans/plan_webgpu.md WEBGPU-161: `SamplerState.MipMapLevelOfDetailBias` has nowhere to go on
-    // this renderer, and that is a property of WebGPU rather than of this compiled-effect route:
-    // `WGPUSamplerDescriptor` carries `lodMinClamp` and `lodMaxClamp` and no bias field at all --
-    // the string "lodBias" does not appear anywhere in the pinned webgpu.h. Every stock draw
-    // family discards the value for the same reason, so this is a renderer-wide gap, not an FX one.
-    // `MaxMipLevel` stays true: WEBGPU-161 expresses it through `lodMinClamp`.
-    options.supportsLodBias = false;
-    CNA::TestSupport::RunCompiledEffectSamplerPixelContract(device, options);
+    // plans/plan_webgpu.md WEBGPU-208: every option is on, LOD bias included.
+    // `WGPUSamplerDescriptor` still has no bias field -- it carries `lodMinClamp` and
+    // `lodMaxClamp` and nothing else -- but that was never the question. The value reaches the
+    // SHADER: `SpirvSamplerLodBias` injects a uniform block into the normalized SPIR-V and turns
+    // each implicit sample into one that consumes its OWN sampler register's bias, and both
+    // targets consume that same module (natively as SPIR-V, in a browser as the WGSL
+    // `SpirvToWgsl` translates it to, where the operand becomes `textureSampleBias`). The bias is
+    // captured by value with the rest of the deferred draw, so a later Apply() cannot change it.
+    // `MaxMipLevel` is expressed through `lodMinClamp` (WEBGPU-161).
+    CNA::TestSupport::RunCompiledEffectSamplerPixelContract(device);
 }
 
 TEST(WebGPUCompiledEffectDrawTest, SharedPassSelectionContract)
@@ -407,6 +408,214 @@ TEST(WebGPUCompiledEffectDrawTest, SharedTruncationContract)
     CNA::TestSupport::RunCompiledEffectTruncationContract(device);
 }
 
+
+// plans/plan_webgpu.md WEBGPU-208: the LOD bias reaches the SAMPLER'S OWN REGISTER, in PIXELS.
+//
+// The shared sampler contract already proves a bias moves the level, but it declares its sampler
+// at `s0` -- so it passes just as well against an implementation that applies "the" bias globally,
+// or that always reads index 0 of the injected block. XNA's contract is per sampler register, and
+// this is the test that can tell the difference: the SAME effect is built with its sampler at `s2`,
+// and nothing else changes. An implementation keyed on slot 0 reads a bias of 0 here and stays on
+// level 0.
+//
+// One texel per pixel across the target, so the computed level of detail is exactly 0 and a +1 bias
+// must select level 1 -- the same geometry the shared contract uses, for the same reason: with a
+// constant coordinate the derivative is zero and the level is implementation-defined.
+TEST(WebGPUCompiledEffectDrawTest, LodBiasAppliesToTheSamplersOwnRegisterRatherThanSlotZero)
+{
+    namespace Fx = CNA::TestSupport::EffectFormat;
+    using CNA::TestSupport::SamplingQuadVertex;
+    using Microsoft::Xna::Framework::Color;
+    using Microsoft::Xna::Framework::Matrix;
+    using Microsoft::Xna::Framework::Rectangle;
+    using Microsoft::Xna::Framework::Vector4;
+
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+
+    constexpr int kSize = 8;
+    constexpr std::uint32_t kRegister = 2;  // deliberately NOT s0
+    const Color background(9, 19, 29, 255);
+    const auto declaration = CNA::TestSupport::SamplingQuadDeclaration();
+
+    // Four mip levels, each a flat distinct colour. A real chain is nearly self-similar and a test
+    // built on one cannot tell level 1 from level 0 at all.
+    const Color levelColors[4] = {Color(255, 0, 0, 255), Color(0, 255, 0, 255),
+                                  Color(0, 0, 255, 255), Color(255, 255, 0, 255)};
+    Texture2D mipped(device, kSize, kSize, /*mipMap=*/true, SurfaceFormat::Color);
+    ASSERT_GE(mipped.getLevelCountProperty(), 2);
+    for (int level = 0; level < mipped.getLevelCountProperty(); ++level)
+    {
+        const int extent = std::max(1, kSize >> level);
+        const Rectangle whole(0, 0, extent, extent);
+        std::vector<Color> texels(static_cast<std::size_t>(extent * extent),
+                                  levelColors[std::min(level, 3)]);
+        mipped.SetData(level, &whole, texels.data(), 0, static_cast<int>(texels.size()));
+    }
+
+    const SamplingQuadVertex ramp[6] = {
+        {-1.0f,  1.0f, 0.0f, 0.0f, 0.0f}, {-1.0f, -1.0f, 0.0f, 0.0f, 1.0f},
+        { 1.0f, -1.0f, 0.0f, 1.0f, 1.0f}, {-1.0f,  1.0f, 0.0f, 0.0f, 0.0f},
+        { 1.0f, -1.0f, 0.0f, 1.0f, 1.0f}, { 1.0f,  1.0f, 0.0f, 1.0f, 0.0f},
+    };
+
+    const auto sampleWithBias = [&](float bias) {
+        Effect effect(device, CNA::TestSupport::BuildSyntheticSamplingEffect(
+            {
+                {Fx::SampMagFilter, Fx::FilterPoint},
+                {Fx::SampMinFilter, Fx::FilterPoint},
+                {Fx::SampMipFilter, Fx::FilterPoint},
+                {Fx::SampAddressU, Fx::AddressClamp},
+                {Fx::SampAddressV, Fx::AddressClamp},
+                {Fx::SampMipMapLodBias, CNA::TestSupport::FloatBits(bias), true},
+            },
+            kRegister));
+        auto& parameters = effect.getParametersProperty();
+        parameters["Transform"]->SetValue(Matrix::getIdentityProperty());
+        parameters["Tint"]->SetValue(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+        parameters["FxTexture"]->SetValue(&mipped);
+
+        RenderTarget2D target(device, kSize, kSize);
+        device.SetRenderTarget(&target);
+        device.Clear(background);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(ramp), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        Color pixel(0, 0, 0, 0);
+        const Rectangle centre(kSize / 2, kSize / 2, 1, 1);
+        target.GetData(0, &centre, &pixel, 0, 1);
+        return pixel;
+    };
+
+    const Color unbiased = sampleWithBias(0.0f);
+    const Color biased = sampleWithBias(1.0f);
+
+    const auto expectLevel = [](const Color& actual, const Color& expected, const char* label) {
+        SCOPED_TRACE(label);
+        EXPECT_NEAR(actual.getRProperty(), expected.getRProperty(), 3);
+        EXPECT_NEAR(actual.getGProperty(), expected.getGProperty(), 3);
+        EXPECT_NEAR(actual.getBProperty(), expected.getBProperty(), 3);
+    };
+    expectLevel(unbiased, levelColors[0], "no bias on s2 keeps the computed level 0");
+    expectLevel(biased, levelColors[1],
+                "a +1 bias on s2 selects level 1 -- reading slot 0 would have stayed on level 0");
+}
+
+// plans/plan_webgpu.md WEBGPU-208: the bias is CAPTURED at draw submission, not read at replay.
+//
+// This renderer records its draws and replays them at `Present()`, so every piece of pass state a
+// draw depends on has to be snapshotted when the draw is issued. The LOD bias is no different, and
+// this is the A/B that can tell a captured value from a live one: TWO draws are queued into one
+// target with NO readback between them, the first with no bias and the second with +1. Applying the
+// second effect's pass is itself the mutation -- it overwrites the sampler state a replay-time read
+// would find. An implementation that read the bias at replay would give BOTH halves the last bias
+// applied, so the left half would come back on level 1 instead of level 0.
+//
+// Each half is its own 8x8 quad with the full 0..1 coordinate range across it, which keeps one
+// texel per pixel -- and therefore a computed level of exactly 0 -- in both halves.
+TEST(WebGPUCompiledEffectDrawTest, LodBiasIsCapturedWithTheDeferredDrawRatherThanReadAtReplay)
+{
+    namespace Fx = CNA::TestSupport::EffectFormat;
+    using CNA::TestSupport::SamplingQuadVertex;
+    using Microsoft::Xna::Framework::Color;
+    using Microsoft::Xna::Framework::Matrix;
+    using Microsoft::Xna::Framework::Rectangle;
+    using Microsoft::Xna::Framework::Vector4;
+
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+
+    constexpr int kTexture = 8;
+    const Color background(9, 19, 29, 255);
+    const auto declaration = CNA::TestSupport::SamplingQuadDeclaration();
+
+    const Color levelColors[4] = {Color(255, 0, 0, 255), Color(0, 255, 0, 255),
+                                  Color(0, 0, 255, 255), Color(255, 255, 0, 255)};
+    Texture2D mipped(device, kTexture, kTexture, /*mipMap=*/true, SurfaceFormat::Color);
+    ASSERT_GE(mipped.getLevelCountProperty(), 2);
+    for (int level = 0; level < mipped.getLevelCountProperty(); ++level)
+    {
+        const int extent = std::max(1, kTexture >> level);
+        const Rectangle whole(0, 0, extent, extent);
+        std::vector<Color> texels(static_cast<std::size_t>(extent * extent),
+                                  levelColors[std::min(level, 3)]);
+        mipped.SetData(level, &whole, texels.data(), 0, static_cast<int>(texels.size()));
+    }
+
+    const auto makeEffect = [&](float bias) {
+        auto effect = std::make_unique<Effect>(device, CNA::TestSupport::BuildSyntheticSamplingEffect(
+            {
+                {Fx::SampMagFilter, Fx::FilterPoint},
+                {Fx::SampMinFilter, Fx::FilterPoint},
+                {Fx::SampMipFilter, Fx::FilterPoint},
+                {Fx::SampAddressU, Fx::AddressClamp},
+                {Fx::SampAddressV, Fx::AddressClamp},
+                {Fx::SampMipMapLodBias, CNA::TestSupport::FloatBits(bias), true},
+            },
+            0));
+        auto& parameters = effect->getParametersProperty();
+        parameters["Transform"]->SetValue(Matrix::getIdentityProperty());
+        parameters["Tint"]->SetValue(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+        parameters["FxTexture"]->SetValue(&mipped);
+        return effect;
+    };
+    auto unbiasedEffect = makeEffect(0.0f);
+    auto biasedEffect = makeEffect(1.0f);
+
+    // Half-width quads, each carrying the whole 0..1 coordinate range.
+    const auto halfQuad = [](float x0, float x1, SamplingQuadVertex* out) {
+        const SamplingQuadVertex quad[6] = {
+            {x0,  1.0f, 0.0f, 0.0f, 0.0f}, {x0, -1.0f, 0.0f, 0.0f, 1.0f},
+            {x1, -1.0f, 0.0f, 1.0f, 1.0f}, {x0,  1.0f, 0.0f, 0.0f, 0.0f},
+            {x1, -1.0f, 0.0f, 1.0f, 1.0f}, {x1,  1.0f, 0.0f, 1.0f, 0.0f},
+        };
+        for (int i = 0; i < 6; ++i) out[i] = quad[i];
+    };
+    SamplingQuadVertex left[6];
+    SamplingQuadVertex right[6];
+    halfQuad(-1.0f, 0.0f, left);
+    halfQuad(0.0f, 1.0f, right);
+
+    RenderTarget2D target(device, kTexture * 2, kTexture);
+    device.SetRenderTarget(&target);
+    device.Clear(background);
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    device.setDepthStencilStateProperty(DepthStencilState::None);
+    device.setBlendStateProperty(BlendState::Opaque);
+
+    unbiasedEffect->getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+    device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                              static_cast<const void*>(left), 0, 2, declaration);
+    // The mutation: this Apply() overwrites the sampler state a replay-time read would find.
+    biasedEffect->getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+    device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                              static_cast<const void*>(right), 0, 2, declaration);
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+    Color leftPixel(0, 0, 0, 0);
+    Color rightPixel(0, 0, 0, 0);
+    const Rectangle leftCentre(kTexture / 2, kTexture / 2, 1, 1);
+    const Rectangle rightCentre(kTexture + kTexture / 2, kTexture / 2, 1, 1);
+    target.GetData(0, &leftCentre, &leftPixel, 0, 1);
+    target.GetData(0, &rightCentre, &rightPixel, 0, 1);
+
+    const auto expectLevel = [](const Color& actual, const Color& expected, const char* label) {
+        SCOPED_TRACE(label);
+        EXPECT_NEAR(actual.getRProperty(), expected.getRProperty(), 3);
+        EXPECT_NEAR(actual.getGProperty(), expected.getGProperty(), 3);
+        EXPECT_NEAR(actual.getBProperty(), expected.getBProperty(), 3);
+    };
+    expectLevel(leftPixel, levelColors[0],
+                "the FIRST draw keeps its own zero bias even though a +1 pass was applied after it");
+    expectLevel(rightPixel, levelColors[1], "the second draw carries its own +1 bias");
+}
 
 // plans/plan_webgpu.md WEBGPU-160: `SamplerState.AddressW`, measured in PIXELS.
 //
@@ -817,6 +1026,13 @@ CNA_WEBGPU_WGSL_ROUTE_TEST(SharedOrientationContract,
                            CNA::TestSupport::RunCompiledEffectOrientationContract(device))
 CNA_WEBGPU_WGSL_ROUTE_TEST(SharedEffectSwitchingContract,
                            CNA::TestSupport::RunCompiledEffectSwitchingContract(device))
+// plans/plan_webgpu.md WEBGPU-208. Rung 10's comment claimed "sampler pixels" before this rung
+// existed; it does now, and it is the rung that matters most for the two routes AGREEING. The
+// biased sample is the one construct whose SPIR-V spelling (an image operand) and WGSL spelling
+// (a different builtin) genuinely differ, so running the same pixel oracle through both is what
+// proves the XNA semantic does not depend on which language the module was built from.
+CNA_WEBGPU_WGSL_ROUTE_TEST(SharedSamplerPixelContract,
+                           CNA::TestSupport::RunCompiledEffectSamplerPixelContract(device))
 CNA_WEBGPU_WGSL_ROUTE_TEST(SharedStockDrawIsolationContract,
                            CNA::TestSupport::RunCompiledEffectStockDrawIsolationContract(device))
 CNA_WEBGPU_WGSL_ROUTE_TEST(SharedSpriteBatchTextureSlotContract,
