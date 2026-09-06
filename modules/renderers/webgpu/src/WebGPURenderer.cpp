@@ -5,6 +5,15 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+// WEBGPU-170: the compiled SpriteBatch route declares its own vertex and drives the effect's own
+// technique/pass objects.
+#include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectPass.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
+#include "System/InvalidOperationException.hpp"
 #endif
 #include "CNA/Internal/Renderers/WebGPU/webgpu_shaders.hpp"
 #include "CNA/Internal/Renderers/WebGPU/WebGPUPresentMode.hpp"
@@ -3317,6 +3326,11 @@ namespace CNA::Internal::Renderers::WebGPU
     {
         if (!begun_)
             throw std::logic_error("CNA WebGPU SpriteBatch.End called without Begin");
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+        // WEBGPU-170: the compiled route accumulates a same-texture run and draws it once per
+        // pass, so End() is where the last run of the batch is submitted.
+        owner_->FlushCompiledSpriteBatchEXT();
+#endif
         begun_ = false;
     }
 
@@ -3328,15 +3342,36 @@ namespace CNA::Internal::Renderers::WebGPU
         // so its GetEffectRendererPtr() is not a WebGPUEffectRenderer and the draw is refused.
         if (effect == nullptr)
         {
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+            // A run still pending from the previous effect belongs to that effect's passes.
+            owner_->FlushCompiledSpriteBatchEXT();
+            owner_->activeSpriteCompiledEffect_ = nullptr;
+#endif
             owner_->activeSpriteCustomEffect_ = nullptr;
             return;
         }
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+        // plans/plan_webgpu.md WEBGPU-170: a compiled Effect-Framework effect gets its own route.
+        // Before it existed this threw, which was honest but a hard refusal of an ordinary XNA
+        // call: `SpriteBatch.Begin(..., effect)` with a compiled effect is what Microsoft's own
+        // SpriteEffects sample does.
+        if (effect->GetCompiledRuntimePtr() != nullptr)
+        {
+            if (owner_->activeSpriteCompiledEffect_ != effect)
+                owner_->FlushCompiledSpriteBatchEXT();
+            owner_->activeSpriteCompiledEffect_ = effect;
+            owner_->activeSpriteCustomEffect_ = nullptr;
+            return;
+        }
+        owner_->FlushCompiledSpriteBatchEXT();
+        owner_->activeSpriteCompiledEffect_ = nullptr;
+#endif
         auto* effectRenderer = dynamic_cast<WebGPUEffectRenderer*>(effect->GetEffectRendererPtr());
         if (effectRenderer == nullptr)
             throw System::NotSupportedException(
                 "CNA WebGPU: SpriteBatch.Begin was given an effect this renderer cannot run. Only a "
-                "custom-WGSL ShaderEffect is supported for SpriteBatch; compiled Effect-Framework "
-                "effects are not.");
+                "custom-WGSL ShaderEffect and a compiled Effect-Framework effect are supported for "
+                "SpriteBatch.");
         owner_->activeSpriteCustomEffect_ = effectRenderer;
     }
 
@@ -6822,6 +6857,24 @@ namespace CNA::Internal::Renderers::WebGPU
         const std::array<Vector2, 4> uv{Vector2{u0, v0}, Vector2{u1, v0}, Vector2{u0, v1}, Vector2{u1, v1}};
         constexpr int indices[6] = {0, 1, 2, 2, 1, 3};
 
+        const float spriteRgba[4] = {
+            static_cast<float>(color.getRProperty()) / 255.0f,
+            static_cast<float>(color.getGProperty()) / 255.0f,
+            static_cast<float>(color.getBProperty()) / 255.0f,
+            static_cast<float>(color.getAProperty()) / 255.0f
+        };
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+        // WEBGPU-170: a compiled effect owns the whole sprite, including the transform from these
+        // sprite-space points to clip space -- so it must receive `points` rather than the NDC the
+        // stock route bakes just below.
+        if (activeSpriteCompiledEffect_ != nullptr)
+        {
+            QueueCompiledSprite(texture, samplable, points, uv, spriteRgba, textureFilter,
+                                addressU, addressV);
+            return;
+        }
+#endif
+
         SpriteCommand command{};
         // REMED-GFX-167: the resolved view plus its keep-alive, never `&samplable` -- a SpriteBatch
         // draw is replayed at Present too, by which time a short-lived Texture2D may be gone.
@@ -6846,12 +6899,6 @@ namespace CNA::Internal::Renderers::WebGPU
         // queued draw, and SetRenderTarget resets the rectangle to the target's full size
         // on every bind, so the live value at flush time is never this draw's.
         command.scissor = CaptureScissor();
-        const float rgba[4] = {
-            static_cast<float>(color.getRProperty()) / 255.0f,
-            static_cast<float>(color.getGProperty()) / 255.0f,
-            static_cast<float>(color.getBProperty()) / 255.0f,
-            static_cast<float>(color.getAProperty()) / 255.0f
-        };
         for (int i = 0; i < 6; ++i)
         {
             const int corner = indices[i];
@@ -6878,7 +6925,7 @@ namespace CNA::Internal::Renderers::WebGPU
             vertex.position[2] = std::clamp(layerDepth, 0.0f, 1.0f);
             vertex.uv[0] = uv[corner].X;
             vertex.uv[1] = uv[corner].Y;
-            std::copy(std::begin(rgba), std::end(rgba), vertex.color);
+            std::copy(std::begin(spriteRgba), std::end(spriteRgba), vertex.color);
         }
         // WEBGPU-142: capture the active SpriteBatch custom effect (if any) and its uniform block by
         // value, so a later Begin with different uniforms does not change this sprite at replay.
@@ -8410,7 +8457,8 @@ namespace CNA::Internal::Renderers::WebGPU
     void WebGPURenderer::QueueCompiledEffectDraw(const IVertexBufferRenderer& vb,
                                                  const IIndexBufferRenderer* ib,
                                                  PrimitiveType primitive, int primitiveCount,
-                                                 int instanceCount, const GpuDrawParams& params)
+                                                 int instanceCount, const GpuDrawParams& params,
+                                                 const WebGPUSampledTextureEXT* spriteTextureOverride)
     {
         auto* runtime = static_cast<WebGPUCompiledEffect*>(params.compiledEffectRuntime);
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
@@ -8509,6 +8557,16 @@ namespace CNA::Internal::Renderers::WebGPU
             binding.textureBinding = sampler.textureBinding;
             binding.samplerBinding = sampler.samplerBinding;
             binding.texture = ResolveCompiledEffectTextureEXT(texture);
+            if (spriteTextureOverride != nullptr && sampler.slot == 0)
+            {
+                // WEBGPU-170: XNA's SpriteBatch assigns the run's texture to
+                // GraphicsDevice.Textures[0] AFTER applying the pass, so for slot 0 the sprite's
+                // own texture WINS over whatever the effect assigned to that sampler -- it is an
+                // override, not a fallback. That is what lets Microsoft's SpriteEffects sample
+                // hand a pixel shader the sprite it was given, and it is the difference the
+                // shared suite's texture-slot section measures.
+                binding.texture = *spriteTextureOverride;
+            }
             if (!binding.texture)
                 binding.texture = ResolveSamplable(pbrDefaultWhiteTexture_.get());
             binding.sampler = GetOrCreateSlotSampler(
@@ -8847,6 +8905,114 @@ namespace CNA::Internal::Renderers::WebGPU
         pendingBufferReleases_.push_back(pixelUbo);
         for (WGPUBuffer buffer : vertexBuffers)
             pendingBufferReleases_.push_back(buffer);
+    }
+
+    void WebGPURenderer::QueueCompiledSprite(const ITextureRenderer& texture,
+                                             const IWebGPUSamplable& samplable,
+                                             const std::array<Vector2, 4>& points,
+                                             const std::array<Vector2, 4>& uv,
+                                             const float (&rgba)[4],
+                                             int textureFilter, int addressU, int addressV)
+    {
+        // XNA's SpriteBatch splits a batch into same-texture runs and applies the effect's passes
+        // per run, so a change of texture ends this run rather than joining it.
+        if (pendingCompiledSpriteTextureId_ != nullptr &&
+            pendingCompiledSpriteTextureId_ != &texture)
+        {
+            FlushCompiledSpriteBatchEXT();
+        }
+        pendingCompiledSpriteTextureId_ = &texture;
+        pendingCompiledSpriteTexture_ = samplable.Sampled();
+        pendingCompiledSpriteFilter_ = textureFilter;
+        pendingCompiledSpriteAddressU_ = addressU;
+        pendingCompiledSpriteAddressV_ = addressV;
+
+        constexpr int kCorners[6] = {0, 1, 2, 2, 1, 3};
+        for (const int corner : kCorners)
+        {
+            CompiledSpriteVertexEXT vertex{};
+            vertex.position[0] = points[static_cast<std::size_t>(corner)].X;
+            vertex.position[1] = points[static_cast<std::size_t>(corner)].Y;
+            vertex.uv[0] = uv[static_cast<std::size_t>(corner)].X;
+            vertex.uv[1] = uv[static_cast<std::size_t>(corner)].Y;
+            std::copy(std::begin(rgba), std::end(rgba), vertex.color);
+            pendingCompiledSpriteVertices_.push_back(vertex);
+        }
+    }
+
+    void WebGPURenderer::FlushCompiledSpriteBatchEXT()
+    {
+        if (pendingCompiledSpriteVertices_.empty() || activeSpriteCompiledEffect_ == nullptr)
+        {
+            pendingCompiledSpriteVertices_.clear();
+            pendingCompiledSpriteTextureId_ = nullptr;
+            return;
+        }
+
+        // The vertex this route builds: two floats of position in the sprite's own coordinate
+        // space, two of texture coordinate and four of colour, tightly packed. Declared rather
+        // than derived from a stride, because that is what a compiled effect resolves against.
+        static const VertexDeclaration kSpriteDeclaration(
+            static_cast<int>(sizeof(CompiledSpriteVertexEXT)),
+            {
+                Microsoft::Xna::Framework::Graphics::VertexElement(
+                    static_cast<int>(offsetof(CompiledSpriteVertexEXT, position)),
+                    VertexElementFormat::Vector2,
+                    Microsoft::Xna::Framework::Graphics::VertexElementUsage::Position, 0),
+                Microsoft::Xna::Framework::Graphics::VertexElement(
+                    static_cast<int>(offsetof(CompiledSpriteVertexEXT, uv)),
+                    VertexElementFormat::Vector2,
+                    Microsoft::Xna::Framework::Graphics::VertexElementUsage::TextureCoordinate, 0),
+                Microsoft::Xna::Framework::Graphics::VertexElement(
+                    static_cast<int>(offsetof(CompiledSpriteVertexEXT, color)),
+                    VertexElementFormat::Vector4,
+                    Microsoft::Xna::Framework::Graphics::VertexElementUsage::Color, 0),
+            });
+
+        const int vertexCount = static_cast<int>(pendingCompiledSpriteVertices_.size());
+        // Retained across flushes: a buffer created per flush would allocate and free once per
+        // batch, and this route can run several times within one frame.
+        if (compiledSpriteVertexBuffer_ == nullptr ||
+            compiledSpriteVertexBuffer_->GetVertexCount() < vertexCount)
+        {
+            compiledSpriteVertexBuffer_ = CreateVertexBuffer(vertexCount);
+            compiledSpriteVertexBuffer_->SetVertexDeclaration(kSpriteDeclaration);
+        }
+        compiledSpriteVertexBuffer_->SetData(pendingCompiledSpriteVertices_.data(), vertexCount,
+                                             sizeof(CompiledSpriteVertexEXT));
+
+        // The batch's own sampler state, so a pass that assigns none still samples the way
+        // SpriteBatch.Begin asked (and a pass that assigns some overrides it in ApplyPass).
+        ApplySamplerState(0, pendingCompiledSpriteFilter_, pendingCompiledSpriteAddressU_,
+                          pendingCompiledSpriteAddressV_, 1);
+
+        // XNA draws the run once per pass of the effect's current technique
+        // (plans/plan_fx.md FX-102), which makes the submission order pass-major over the run.
+        auto* technique = activeSpriteCompiledEffect_->getCurrentTechniqueProperty();
+        const int passCount =
+            technique != nullptr ? technique->getPassesProperty().getCountProperty() : 0;
+        if (passCount == 0)
+        {
+            pendingCompiledSpriteVertices_.clear();
+            pendingCompiledSpriteTextureId_ = nullptr;
+            throw System::InvalidOperationException(
+                "CNA WebGPU: a compiled Effect used with SpriteBatch must have a current technique "
+                "with at least one pass.");
+        }
+
+        const WebGPUSampledTextureEXT runTexture = pendingCompiledSpriteTexture_;
+        for (int pass = 0; pass < passCount; ++pass)
+        {
+            technique->getPassesProperty()[pass].Apply();
+            GpuDrawParams params{};
+            params.compiledEffectRuntime = activeSpriteCompiledEffect_->GetCompiledRuntimePtr();
+            QueueCompiledEffectDraw(*compiledSpriteVertexBuffer_, nullptr,
+                                    PrimitiveType::TriangleList, vertexCount / 3, 1, params,
+                                    &runTexture);
+        }
+
+        pendingCompiledSpriteVertices_.clear();
+        pendingCompiledSpriteTextureId_ = nullptr;
     }
 #endif  // CNA_WEBGPU_COMPILED_EFFECTS
 

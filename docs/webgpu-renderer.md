@@ -120,9 +120,12 @@ all. A declaration whose elements are listed in the other order gives a byte-ide
 (`WEBGPU-155`). Position from stream 0 and colour from stream 1 both reach one draw (`WEBGPU-172`). A
 custom-WGSL `ShaderEffect` compiles under the browser's **Tint** -- a different compiler from
 native's Naga, which is why this needed a run at all -- and draws. And a device loss recovers, after
-the adapter fix described above, which this page is what found. Compiled (bytecode) Effects need no
-browser run: they are out of scope on every target and the refusal is in shared code with no
-Emscripten seam.
+the adapter fix described above, which this page is what found. Compiled (bytecode) Effects still
+need no browser run, but the reason changed on 2026-09-06: they are now supported NATIVELY (see
+*Compiled XNA Effects* below) and refused in an Emscripten build at CONFIGURE time, because browser
+WebGPU ingests WGSL exclusively -- emdawnwebgpu's own `createShaderModule` has a single
+chained-struct case, `ShaderSourceWGSL`, and aborts on anything else. So there is no browser code
+path to exercise.
 
 **Cross-backend pixel parity (`WEBGPU-123`).** `cna_diag_webgpu` builds the shared, renderer-agnostic
 `cross_renderer_diagnostic_scene` (one unlit vertex-colour triangle -> 64x64 RGBA8) for WEBGPU,
@@ -677,6 +680,62 @@ before. (The **instanced** route was on this list until `WEBGPU-172` converted i
 Verified by the shared EasyGL↔WebGPU parity fixtures (`WEBGPU-207`, see
 [`cross-renderer-parity-fixtures.md`](cross-renderer-parity-fixtures.md)) plus the renderer-neutral
 `VertexDeclarationLayoutTests`, where WebGPU moved from the refusing arm to the translating one.
+
+## Compiled XNA Effects (2026-09-06, `WEBGPU-166`-`171`)
+
+`Effect(GraphicsDevice&, byte[])` -- the XNA Effect Framework binary a game's `.xnb` carries --
+runs on this renderer **natively**, behind the off-by-default `CNA_WEBGPU_COMPILED_EFFECTS` option
+(MojoShader is a fetched dependency the renderer does not otherwise need, the same arrangement
+SDL_GPU, EasyGL and Vulkan use). It passes the shared `plans/plan_fx.md` `FX-060` conformance suite
+**23/23 with no skips**, and `GraphicsCapability::CompiledEffects` reports true at the
+`GraphicsDevice` seam.
+
+**The route.** XNA/D3D9 bytecode -> MojoShader's portable `spirv` profile -> a combined-image-sampler
+rewrite -> `WGPUShaderSourceSPIRV`. There is no MojoShader WebGPU adapter, so the nine-function
+`MOJOSHADER_effectShaderContext` is CNA's own, as it is for Vulkan.
+
+**The one translation step, and why it is needed.** MojoShader's Vulkan-mode SPIR-V emits one
+`OpTypeSampledImage` global per D3D9 sampler register -- Vulkan's combined-image-sampler shape.
+**WGSL has no such type**: a texture binding and a sampler binding are always two separate
+resources, and naga's SPIR-V frontend refuses to load a combined global. Everything else MojoShader
+emits passes naga untouched, so `SpirvCombinedSamplerSplit` (in the shared MojoShader module,
+because it depends on no graphics API) is the whole gap: it rewrites each combined global into an
+image variable plus a sampler variable and rebuilds the combined value with `OpSampledImage` under
+the original load's result id, which keeps every downstream instruction valid with no renumbering.
+
+**Bindings.** MojoShader's four fixed descriptor sets ARE core WebGPU's four bind groups -- 0 vertex
+samplers, 1 vertex uniforms, 2 pixel samplers, 3 pixel uniforms -- so nothing is remapped. Each
+sampler register occupies two bindings after the split, and which two is reported by the rewrite
+rather than assumed. Uniform blocks follow MojoShader's own 16-byte-slot-per-declared-register
+layout, snapshotted at pass-apply time because this renderer records its draws at `Present()`.
+
+**What works:** reflection, techniques, passes, annotations, scalar/vector/matrix/array parameters,
+textures and samplers, per-pass render and sampler state, clone isolation, ordinary non-indexed and
+indexed (16- and 32-bit) draws, instancing, multiple vertex streams, `SpriteBatch.Begin(...,
+effect)` including multi-pass and the sprite-texture override of slot 0, a `RenderTarget2D` as a
+sampler source, and pixel-stage cube AND volume sampling. Real XNA 4.0 game content with `ps_1_x`
+pixel shaders works too, which needed three additive MojoShader patches (`TEXCRD` in the SPIR-V
+profile, and two `ps_1_x` entry-point-interface fixes) -- all three are gaps the GLSL profile does
+not have, so they were EasyGL-parity gaps rather than WebGPU ones.
+
+**What does not, and why:**
+
+* **The browser.** Native only. `CNA_WEBGPU_COMPILED_EFFECTS` is refused at configure time under
+  Emscripten rather than reporting a capability that build cannot execute. This is an
+  implementation gap with a named route (`plans/plan_webgpu.md` `WEBGPU-203` compares the
+  candidates), not a property of WGSL.
+* **A vertex shader that samples a texture** is refused by name. Renderer-wide and CNA-wide:
+  `IGraphicsRenderer` has no vertex-sampler hook (`plans/plan_fx.md` `FX-109`).
+* **`SamplerState.MipMapLevelOfDetailBias`** is discarded. `WGPUSamplerDescriptor` has no LOD-bias
+  field at all -- the string does not appear anywhere in the pinned `webgpu.h` -- so every stock
+  draw family discards it too. `MaxMipLevel` does work, through `lodMinClamp`.
+
+**One trap for anyone reading the pin's headers.** `wgpuHasInstanceFeature` and
+`wgpuGetInstanceFeatures` are exported symbols that PANIC (`not implemented`) on wgpu-native
+v29.0.1.1 and take the process with them -- `panic_cannot_unwind`, not a catchable failure and not a
+false return. An instance feature can only be requested in `WGPUInstanceDescriptor::requiredFeatures`.
+`wgpuDeviceCreateShaderModuleSpirV` is not an alternative route either: it requires
+`PASSTHROUGH_SHADERS`, whose enum this release comments out.
 
 ## Multiple vertex streams (2026-09-05, `WEBGPU-172`)
 

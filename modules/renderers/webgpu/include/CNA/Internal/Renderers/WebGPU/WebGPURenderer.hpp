@@ -2268,6 +2268,49 @@ namespace CNA::Internal::Renderers::WebGPU
         /// WEBGPU-142: the custom-WGSL ShaderEffect bound by the currently-open `SpriteBatch.Begin`
         /// (set via `WebGPUSpriteBatchRenderer::SetCustomEffect`), captured into each queued sprite.
         WebGPUEffectRenderer* activeSpriteCustomEffect_ = nullptr;
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+        /**
+         * @brief plans/plan_webgpu.md WEBGPU-170: one sprite vertex of a compiled-effect batch.
+         *
+         * Deliberately NOT the stock `SpriteVertex`: that one carries clip-space positions baked at
+         * enqueue, and a compiled effect's own vertex shader expects the sprite's coordinates in the
+         * space its `Transform` parameter maps from. The conformance fixture makes this observable --
+         * it sets `Transform` to `CreateOrthographicOffCenter(0, size, size, 0, -1, 1)`, so handing
+         * it clip space would square the transform and draw nothing recognisable.
+         */
+        struct CompiledSpriteVertexEXT
+        {
+            float position[2];
+            float uv[2];
+            float color[4];
+        };
+        /// The compiled Effect bound by the currently-open `SpriteBatch.Begin`, or null.
+        Microsoft::Xna::Framework::Graphics::Effect* activeSpriteCompiledEffect_ = nullptr;
+        /// The sprites accumulated for the current same-texture run, six vertices each.
+        std::vector<CompiledSpriteVertexEXT> pendingCompiledSpriteVertices_;
+        /// The texture that run samples, resolved at enqueue and kept alive for the replay.
+        WebGPUSampledTextureEXT pendingCompiledSpriteTexture_;
+        /// Identity of that texture, so a change of texture flushes the run the way XNA does.
+        const ITextureRenderer* pendingCompiledSpriteTextureId_ = nullptr;
+        /// The sampler state the batch asked for, applied to the run's draws.
+        int pendingCompiledSpriteFilter_ = 0;
+        int pendingCompiledSpriteAddressU_ = 1;
+        int pendingCompiledSpriteAddressV_ = 1;
+        /// Retained across flushes: a buffer created per flush would re-allocate every batch.
+        std::unique_ptr<IVertexBufferRenderer> compiledSpriteVertexBuffer_;
+        /**
+         * @brief WEBGPU-170: draws the accumulated run once per pass of the effect's technique.
+         *
+         * XNA runs a compiled Effect's passes at FLUSH granularity over a whole contiguous run of
+         * same-texture sprites (`plans/plan_fx.md` `FX-102`), so the submission order is pass-major.
+         */
+        void FlushCompiledSpriteBatchEXT();
+        /// WEBGPU-170: appends one sprite's six vertices to the current run, flushing on a texture change.
+        void QueueCompiledSprite(const ITextureRenderer& texture, const IWebGPUSamplable& samplable,
+                                 const std::array<Vector2, 4>& points,
+                                 const std::array<Vector2, 4>& uv, const float (&rgba)[4],
+                                 int textureFilter, int addressU, int addressV);
+#endif
         /**
          * @brief REMED-GFX-116: the complete GraphicsDevice.Viewport as it stands right now.
          *
@@ -4443,9 +4486,15 @@ namespace CNA::Internal::Renderers::WebGPU
         std::vector<CompiledEffectDrawCommand> compiledEffectDrawCommands_;
         /// WEBGPU-169: builds the deferred compiled-effect command from a public draw whose
         /// `params.compiledEffectRuntime` is set. `instanceCount` is 1 for an ordinary draw.
+        /// @param spriteTextureOverride WEBGPU-170: the texture a SpriteBatch assigned to the
+        ///        device's slot 0 for this run. XNA assigns it AFTER applying the pass, so it
+        ///        OVERRIDES whatever the effect bound to sampler register 0 rather than filling in
+        ///        for it. Null for an ordinary 3D draw, where the effect's own assignment stands and
+        ///        the shared default white texture is the fallback for an unassigned register.
         void QueueCompiledEffectDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                      PrimitiveType primitive, int primitiveCount, int instanceCount,
-                                     const GpuDrawParams& params);
+                                     const GpuDrawParams& params,
+                                     const WebGPUSampledTextureEXT* spriteTextureOverride = nullptr);
         /// WEBGPU-169: replays one compiled-effect command -- builds/fetches its bind-group layouts
         /// and pipeline (keyed by the linked pass plus the concrete pass state) and issues the draw.
         void IssueCompiledEffectDraw(WGPURenderPassEncoder pass,

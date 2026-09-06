@@ -1125,10 +1125,11 @@ be presented as universal CNA renderer support.
 
 #### Assessment (2026-08-17, re-confirmed and extended 2026-08-18)
 
-**Not yet closed**, and the plan says so rather than declaring victory on four backends. The
-2026-08-18 closure pass added the fourth (Vulkan) and stopped there deliberately: the three that
-remain are DirectX 11, DirectX 9 and Metal, and not one of them can be built, run or verified on
-the Linux machine this work happens on. Writing them blind behind a capability gate is exactly what
+**Not yet closed**, and the plan says so rather than declaring victory. The 2026-08-18 closure pass
+added the fourth backend (Vulkan); **2026-09-06 added the fifth, WebGPU**
+(`plans/plan_webgpu.md` `WEBGPU-166`-`171`), which also retired this document's own §10.3 entry
+excluding it. The three that remain are DirectX 11, DirectX 9 and Metal, and not one of them can be
+built, run or verified on the Linux machine this work happens on. Writing them blind behind a capability gate is exactly what
 this section forbids -- a backend is promoted on executed evidence or not at all.
 
 | Renderer | `CompiledEffects` | Evidence |
@@ -1137,6 +1138,7 @@ this section forbids -- a backend is promoted on executed evidence or not at all
 | SDL_GPU (`CNA_SDL_GPU_COMPILED_EFFECTS=ON`) | true | 33 passed, 3 skipped. Multi-stream: renderer-wide (advertises no `MultiStreamVertexInput`). Instancing: renderer-wide, and now skipped on the renderer's OWN named refusal rather than on a capability that did not describe the shape (`FX-112`). Volume sampler: renderer-wide -- SDL_GPU samples a `Texture3D` nowhere at all, in any route (`FX-110`) |
 | EasyGL family (`CNA_EASYGL_COMPILED_EFFECTS=ON`) | true | 27 passed, 1 skipped. Volume sampler on the GLSL ES profiles only, and the refusal comes from MojoShader's own emitted source (`No precision specified in this scope for type 'sampler3D'`), not from CNA -- CNA's compiled route resolves and binds all three texture kinds (`FX-110`) |
 | Vulkan (`CNA_VULKAN_COMPILED_EFFECTS=ON`) | **true** | 24 passed, 1 skipped. `FX-065`/`FX-112`: CNA's own MojoShader SPIR-V backend, a pipeline per linked shader pair and vertex layout, the profile's four fixed descriptor sets, growable per-frame uniform chunks for a `Present()`-deferred replay, compiled instancing, and pixel-stage cube AND volume sampling. The single skip is multi-stream vertex input, which is renderer-wide (`MultiStreamVertexInput` false for stock draws equally, REMED-GFX-201) rather than an FX gap |
+| WebGPU (`CNA_WEBGPU_COMPILED_EFFECTS=ON`) | **true** | **23 passed, 0 skipped** (2026-09-06). `plans/plan_webgpu.md` `WEBGPU-166`-`171`: MojoShader's SPIR-V profile with CNA's own nine-function backend, plus `SpirvCombinedSamplerSplit` -- WGSL has no combined image sampler, and that one construct is the whole gap between MojoShader's output and a WebGPU shader module. MojoShader's four fixed descriptor sets ARE WebGPU's four bind groups. Declaration-driven vertex input, compiled instancing and multi-stream, pixel-stage cube AND volume sampling, and a `Present()`-deferred replay whose uniforms and sampler bindings are snapshotted at apply time. No skips: the one suite option set to false is `supportsLodBias`, and that is renderer-wide -- `WGPUSamplerDescriptor` has no LOD-bias field at all. **Native only**: browser WebGPU ingests WGSL exclusively, so the option is refused at configure time under Emscripten (`WEBGPU-204`) |
 | DirectX 11 (`FX-063`) | false | Not implemented. Requires an executable Windows environment; see the requirements note on `FX-063` |
 | DirectX 9 (`FX-070`) | false | Not implemented. Requires an executable Windows (or DXVK-native) environment; see the requirements note on `FX-070` |
 | Metal (`FX-066`) | false | Not implemented. Requires macOS; see the requirements note on `FX-066` |
@@ -1282,17 +1284,27 @@ refuses a compiled `Effect` explicitly.
   `DIRECT2D`, `CANVAS`, `HTML_DOM`, `SVG_DOM`, `SKIA`, `BLEND2D`, `SOFTWARE`, `FREEDIRECT`.
 - **Programmable, but not through anything MojoShader emits**: `PORTABLEGL`, whose shader stage is
   a pair of C function pointers rather than a compiled program -- there is nothing for a translated
-  shader to become. `WEBGPU`'s own shader language is WGSL, which the pinned MojoShader does not
-  emit, and it stays out of scope for v1 -- but the reason recorded here was wrong and
-  `plans/plan_webgpu.md` `WEBGPU-194` corrected it on 2026-09-06. This entry used to say WebGPU
-  "consumes WGSL" full stop, reconsidered "only if a SPIR-V route into wgpu-native is proven". A
-  SPIR-V route is in the pinned headers: `WGPUShaderSourceSPIRV` and the instance feature
-  `WGPUInstanceFeatureName_ShaderSourceSPIRV` are declared by BOTH `wgpu-native v29.0.1.1` and the
-  browser's `emdawnwebgpu` port, with `wgpuHasInstanceFeature()` to ask for it at runtime. What is
-  NOT established is whether either implementation actually advertises the feature -- that is a
-  runtime question nobody here has measured, and SPIR-V is not part of the WebGPU specification, so
-  a browser answering yes would be surprising. The scope verdict is unchanged; only its stated
-  premise is. `plans/plan_webgpu.md` `WEBGPU-166`/`203`/`204` own the measurement.
+  shader to become.
+
+  **`WEBGPU` is no longer in this list. Superseded 2026-09-06 by `plans/plan_webgpu.md`
+  `WEBGPU-166`/`203`/`204`/`167`-`171`, which implemented compiled effects on it.** The history is
+  kept because both of this entry's successive rationales turned out to be wrong, and in different
+  ways. It first said WebGPU "consumes WGSL" full stop, reconsidered "only if a SPIR-V route into
+  wgpu-native is proven"; `WEBGPU-194` corrected that on 2026-09-06 by pointing at
+  `WGPUShaderSourceSPIRV` in the pinned headers, and left the scope verdict standing on the ground
+  that nobody had measured whether an implementation advertises the feature. Measuring it produced
+  three answers, none of them the expected one: the runtime query aborts the process rather than
+  answering (`wgpuHasInstanceFeature` is an unimplemented panic on this pin, so the feature can only
+  be requested, never asked about); requesting it works and naga accepts MojoShader's SPIR-V for
+  every technique and pass of all nine committed fixtures; and the ONE construct WGSL's shading
+  model cannot express is the combined image sampler, which a ~350-line rewrite of MojoShader's own
+  fixed emission pattern removes. The native route is therefore XNA/D3D9 bytecode -> MojoShader
+  `spirv` -> `SplitCombinedImageSamplers` -> `WGPUShaderSourceSPIRV`, and it passes the `FX-060`
+  suite 23/23 with no skips. **Browser WebGPU remains unsupported**, on measured rather than assumed
+  grounds -- emdawnwebgpu's own `createShaderModule` accepts `ShaderSourceWGSL` and aborts on
+  anything else -- and `CNA_WEBGPU_COMPILED_EFFECTS` is refused at configure time for an Emscripten
+  build rather than reporting a capability that build cannot execute. That is an implementation gap
+  with a named route, not a property of the target API.
 - **Not rendering backends**: `HEADLESS`, `STUB`.
 
 #### What this assessment does not claim
