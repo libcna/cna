@@ -26,6 +26,9 @@
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
@@ -39,6 +42,13 @@ using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 using CNA::Internal::Renderers::WebGPU::WebGPURenderer;
 using CNA::Internal::Renderers::WebGPU::WebGPUTextureRenderer;
+
+namespace
+{
+    constexpr int kSize = 64;
+    const Color kClearColor(9, 13, 17, 255);
+    const Color kSprite(220, 90, 40, 255);
+}
 
 class WebGpuContextRecoveryTest : public Game
 {
@@ -58,6 +68,22 @@ class WebGpuContextRecoveryTest : public Game
     /// Creates a filled 4x4 texture and reports the two pointers that must, or must not, agree.
     struct SharedPointers { const void* framework; const void* renderer; };
 
+    [[nodiscard]] static std::unique_ptr<Texture2D> MakeSprite(GraphicsDevice& device)
+    {
+        auto texture = std::make_unique<Texture2D>(device, 2, 2, false, SurfaceFormat::Color);
+        const std::array<Color, 4> texels{kSprite, kSprite, kSprite, kSprite};
+        texture->SetData(texels.data(), static_cast<int>(texels.size()));
+        return texture;
+    }
+
+    [[nodiscard]] static Color ReadCentre(GraphicsDevice& device)
+    {
+        const Rectangle region(kSize / 2, kSize / 2, 1, 1);
+        Color pixel(0, 0, 0, 0);
+        device.GetBackBufferData(&region, &pixel, 0, 1);
+        return pixel;
+    }
+
     [[nodiscard]] static SharedPointers MakeTextureAndCompare(GraphicsDevice& device)
     {
         Texture2D texture(device, 4, 4, false, SurfaceFormat::Color);
@@ -75,8 +101,8 @@ public:
     WebGpuContextRecoveryTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
-        gdm_->setPreferredBackBufferWidthProperty(64);
-        gdm_->setPreferredBackBufferHeightProperty(64);
+        gdm_->setPreferredBackBufferWidthProperty(kSize);
+        gdm_->setPreferredBackBufferHeightProperty(kSize);
     }
 
     void Draw(const GameTime&) override
@@ -85,6 +111,9 @@ public:
         done_ = true;
         auto& device = getGraphicsDeviceProperty();
         auto& renderer = static_cast<WebGPURenderer&>(device.GetRenderer());
+        const SamplerState pointClamp = SamplerState::PointClamp;
+        const auto errors = [&renderer]() { return renderer.GetUncapturedErrorCountEXT(); };
+        const std::size_t baseline = errors();
 
         // A -- the gate's baseline.
         check(renderer.CanBeginDrawEXT(),
@@ -120,6 +149,45 @@ public:
         const SharedPointers reEnabled = MakeTextureAndCompare(device);
         check(reEnabled.renderer == reEnabled.framework && reEnabled.renderer != nullptr,
               "turning it back on makes the NEXT texture share again");
+
+        // --- D -- WEBGPU-182: a real destroy and recreate ------------------------------------
+        // Nothing between the loss and the restore may touch the device: WEBGPU-180 measured that
+        // wgpuSurfaceGetCurrentTexture on a lost device aborts the process rather than returning a
+        // status, which is exactly what CanBeginDrawEXT() exists to stop a caller from reaching.
+        int lost = 0, resetting = 0, reset = 0;
+        device.DeviceLost += [&lost](System::Object*, const System::EventArgs&) { ++lost; };
+        device.DeviceResetting += [&resetting](System::Object*, const System::EventArgs&) {
+            ++resetting;
+        };
+        device.DeviceReset += [&reset](System::Object*, const System::EventArgs&) { ++reset; };
+
+        renderer.DebugSimulateContextLoss();
+        check(!renderer.CanBeginDrawEXT(),
+              "after a simulated loss CanBeginDrawEXT() reports false -- the gate that stands "
+              "between a lost device and the process abort WEBGPU-180 measured");
+        check(lost == 1, "the loss raised GraphicsDevice::DeviceLost exactly once");
+
+        renderer.DebugRestoreContext();
+        check(renderer.CanBeginDrawEXT(), "after a restore the device is usable again");
+        check(resetting == 1 && reset == 1,
+              "the restore raised DeviceResetting and DeviceReset exactly once each");
+
+        // The device really works afterwards, not merely reports that it does: a clear, a fresh
+        // texture, a sprite draw and a readback all on the NEW device.
+        {
+            device.Clear(kClearColor);
+            auto texture = MakeSprite(device);
+            SpriteBatch batch(device);
+            batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &pointClamp, nullptr, nullptr);
+            batch.Draw(*texture, Rectangle(0, 0, kSize, kSize), Color::White);
+            batch.End();
+            const Color centre = ReadCentre(device);
+            check(std::abs(centre.getRProperty() - kSprite.getRProperty()) <= 8,
+                  "a texture created and drawn AFTER the recreate renders correctly on the new "
+                  "device");
+            check(errors() == baseline,
+                  "and the whole loss/restore cycle raised no validation error");
+        }
 
         std::printf("=== %d/%d PASS ===\n", passCount_, checkCount_);
         result_ = (passCount_ == checkCount_) ? 0 : 1;

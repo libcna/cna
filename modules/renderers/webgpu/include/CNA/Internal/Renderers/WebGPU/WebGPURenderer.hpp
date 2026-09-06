@@ -16,6 +16,7 @@
 #endif
 
 #include <array>
+#include <functional>
 #include <atomic>
 #include <cstdint>
 #include <memory>
@@ -1706,6 +1707,27 @@ namespace CNA::Internal::Renderers::WebGPU
 
         void CreateSurface();
         void RequestAdapterAndDevice();
+
+        /**
+         * @brief Requests a fresh device and queue from the adapter this renderer already holds.
+         *
+         * `WEBGPU-182`, split out of @ref RequestAdapterAndDevice so a recovery can re-run the
+         * device half alone. `WEBGPU-180` measured that the instance, the adapter and the surface
+         * all survive a device replace, so a recovery never has to rebuild them.
+         */
+        void RequestDeviceOnlyEXT();
+
+        /**
+         * @brief Releases every native object this renderer owns that belongs to the current device.
+         *
+         * `WEBGPU-182`. Everything created FROM `device_`: the stock shader modules and their
+         * pipeline caches, the mip-blit set, the depth and MSAA attachments, the sampler cache, the
+         * transient buffer pool, the readback and occlusion buffers, and the default textures.
+         * Every pointer it releases is also nulled, so the ordinary lazy re-creation paths rebuild
+         * them on the next use -- which is what makes this reusable by both the destructor and a
+         * device recreate. The instance, adapter and surface are NOT touched.
+         */
+        void ReleaseDeviceOwnedObjectsEXT();
         void ConfigureSurface(bool force = false);
         void CreateSpriteResources();
         void DestroySpriteResources();
@@ -2566,6 +2588,29 @@ namespace CNA::Internal::Renderers::WebGPU
         /** @brief Whether CPU shadows are being retained. @return The current setting. */
         [[nodiscard]] bool IsContextRecoveryEnabledEXT() const { return contextRecoveryEnabled_; }
 
+        /**
+         * @brief Destroys the native device, as a driver-reported loss would.
+         *
+         * `WEBGPU-182`. Releases every device-owned object, destroys the `WGPUDevice`, sets the
+         * lost flag so @ref CanBeginDrawEXT reports false, and raises `RendererDeviceEvent::Lost`.
+         * The instance, adapter and surface survive (`WEBGPU-180`).
+         *
+         * On this pin the device-lost CALLBACK never fires for an application-initiated destroy --
+         * `WEBGPU-180` measured that under four different callback modes and pump strategies -- so
+         * the flag is set here rather than from the callback, and the callback stays wired for a
+         * real driver-reported loss it may one day deliver.
+         */
+        void DebugSimulateContextLoss() override;
+
+        /**
+         * @brief Requests a new device and rebuilds everything that lived on the old one.
+         *
+         * `WEBGPU-182`. Raises `DeviceResetting`, requests a device from the surviving adapter,
+         * re-configures the surface with it, clears the lost flag and raises `DeviceReset`.
+         * Recreating the game's own resources is `WEBGPU-182`'s second half and is not done here.
+         */
+        void DebugRestoreContext() override;
+
     private:
         /// WEBGPU-181: set while the device is unusable; the only thing standing between a lost
         /// device and the process abort WEBGPU-180 measured. WEBGPU-182 is what will set it from a
@@ -2573,6 +2618,11 @@ namespace CNA::Internal::Renderers::WebGPU
         bool deviceLost_ = false;
         /// WEBGPU-181: whether texture renderers keep a reference to the framework's CPU pixels.
         bool contextRecoveryEnabled_ = true;
+        /// WEBGPU-182: how a device-loss/reset reaches `GraphicsDevice`'s own public events. Kept
+        /// from `GraphicsRendererCreateArgs` because this renderer raises them itself -- the pinned
+        /// wgpu-native never delivers the device-lost callback for an application-initiated
+        /// destroy, which `WEBGPU-180` measured under four different modes.
+        std::function<void(CNA::Internal::Renderers::RendererDeviceEvent)> deviceEventCallback_;
 
 
         /**

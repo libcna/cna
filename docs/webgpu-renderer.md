@@ -986,6 +986,17 @@ device is lost (`WEBGPU-181`), and on this pin that is a safety mechanism rather
 return a failure status but panics inside wgpu-native and aborts the process. See *Device loss: what
 the pin actually does* above.
 
+**The device can now be destroyed and recreated, but the game's resources cannot yet survive it**
+(`WEBGPU-182`, partial). `DebugSimulateContextLoss()` releases every device-owned object and
+destroys the `WGPUDevice`; `DebugRestoreContext()` requests a new one from the surviving adapter,
+re-configures the same surface and raises `DeviceResetting`/`DeviceReset`. Verified end to end:
+`CanBeginDrawEXT()` goes false and back, each event fires exactly once, and a texture created and
+drawn AFTER the recreate renders correctly with no validation error. **What is NOT yet handled is a
+resource created BEFORE the loss** — a `Texture2D`, `VertexBuffer`, `IndexBuffer` or
+`RenderTarget2D` still holds a dead native handle afterwards, because the renderer has no registry
+of live resources to walk. Until it does, the debug hooks are safe only for a caller that recreates
+its own resources.
+
 **A stale `GraphicsDevice.Viewport` was scaling every sprite** (`WEBGPU-178`). `GetViewportSize()`
 answered from the last surface CONFIGURATION rather than the last surface the platform REPORTED, so
 in a one-frame program the device's `Viewport` kept its 800x480 default over a 128x96 backbuffer and

@@ -3230,7 +3230,8 @@ namespace CNA::Internal::Renderers::WebGPU
           virtualWidth_(args.virtualWidth),
           virtualHeight_(args.virtualHeight),
           presentationMode_(args.presentationMode),
-          swapInterval_(args.swapInterval)
+          swapInterval_(args.swapInterval),
+          deviceEventCallback_(args.deviceEventCallback)
     {
         instance_ = wgpuCreateInstance(nullptr);
         if (instance_ == nullptr)
@@ -3338,13 +3339,16 @@ namespace CNA::Internal::Renderers::WebGPU
         transientBufferPool_.clear();
     }
 
-    WebGPURenderer::~WebGPURenderer()
+
+    void WebGPURenderer::ReleaseDeviceOwnedObjectsEXT()
     {
-        IGraphicsRenderer::UnregisterForWindow(surfaceState_.GetWindowId());
-        // REMED-GFX-167: FIRST, before any native handle below is released. A queued command holds
-        // a reference to the texture it samples, and these vectors are members -- destroyed after
-        // this body, i.e. after device_/adapter_/instance_ are gone. A frame abandoned rather than
-        // presented (surface acquisition failure) is the path that can still hold commands here.
+        // WEBGPU-182. Everything below was created FROM device_, and every pointer released here is
+        // also nulled so the ordinary lazy re-creation paths rebuild it on next use -- which is what
+        // lets the destructor and a device recreate share this one function.
+        //
+        // DiscardQueuedCommands FIRST, for REMED-GFX-167's reason: a queued command holds a
+        // shared_ptr to the texture it samples, and dropping the commands is what releases those
+        // before the native handles underneath them go.
         DiscardQueuedCommands();
         DestroySpriteResources();
         DestroyColoredResources();
@@ -3362,26 +3366,99 @@ namespace CNA::Internal::Renderers::WebGPU
         envMapDefaultWhiteTexture_.reset();
         envMapDefaultWhiteCube_.reset();
         for (WGPUBindGroup bg : pendingBindGroupReleases_) wgpuBindGroupRelease(bg);
-        for (WGPUBuffer buf : pendingBufferReleases_) wgpuBufferRelease(buf);  // any not yet recycled
-        DestroyTransientBufferPool();  // WEBGPU-12/59
+        pendingBindGroupReleases_.clear();
+        for (WGPUBuffer buf : pendingBufferReleases_) wgpuBufferRelease(buf);
+        pendingBufferReleases_.clear();
+        DestroyTransientBufferPool();
         ReleaseSamplerCache();
-        // WEBGPU-52: mip-blit resources -- see EnsureMipBlitPipeline()'s own doc comment.
-        for (const auto& [format, pipe] : mipBlitPipelines_)  // WEBGPU-114: one pipeline per format
+        for (const auto& [format, pipe] : mipBlitPipelines_)
             if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
+        mipBlitPipelines_.clear();
         if (mipBlitPipelineLayout_ != nullptr) wgpuPipelineLayoutRelease(mipBlitPipelineLayout_);
+        mipBlitPipelineLayout_ = nullptr;
         if (mipBlitBindGroupLayout_ != nullptr) wgpuBindGroupLayoutRelease(mipBlitBindGroupLayout_);
+        mipBlitBindGroupLayout_ = nullptr;
         if (mipBlitShader_ != nullptr) wgpuShaderModuleRelease(mipBlitShader_);
+        mipBlitShader_ = nullptr;
         if (mipBlitSampler_ != nullptr) wgpuSamplerRelease(mipBlitSampler_);
+        mipBlitSampler_ = nullptr;
         if (msaaColorView_ != nullptr) wgpuTextureViewRelease(msaaColorView_);
+        msaaColorView_ = nullptr;
         if (msaaColorTexture_ != nullptr) wgpuTextureRelease(msaaColorTexture_);
+        msaaColorTexture_ = nullptr;
         if (depthView_ != nullptr) wgpuTextureViewRelease(depthView_);
+        depthView_ = nullptr;
         if (depthTexture_ != nullptr) wgpuTextureRelease(depthTexture_);
+        depthTexture_ = nullptr;
         if (readbackBuffer_ != nullptr) wgpuBufferRelease(readbackBuffer_);
-        // WEBGPU-84: the shared occlusion query set and its resolve/readback buffers.
+        readbackBuffer_ = nullptr;
+        readbackBufferCapacity_ = 0;
         if (occlusionReadbackBuffer_ != nullptr) wgpuBufferRelease(occlusionReadbackBuffer_);
+        occlusionReadbackBuffer_ = nullptr;
         if (occlusionResolveBuffer_ != nullptr) wgpuBufferRelease(occlusionResolveBuffer_);
+        occlusionResolveBuffer_ = nullptr;
         if (occlusionQuerySet_ != nullptr) wgpuQuerySetRelease(occlusionQuerySet_);
+        occlusionQuerySet_ = nullptr;
         if (hasAcquiredTexture_ && acquiredTexture_ != nullptr) wgpuTextureRelease(acquiredTexture_);
+        acquiredTexture_ = nullptr;
+        hasAcquiredTexture_ = false;
+        framePending_ = false;
+    }
+
+    void WebGPURenderer::DebugSimulateContextLoss()
+    {
+        if (deviceLost_) return;
+        // WEBGPU-180 measured that this pin delivers NO device-lost callback for an
+        // application-initiated destroy -- not under AllowProcessEvents with the instance pumped,
+        // not with wgpuDevicePoll, not on releasing the last reference, not under AllowSpontaneous.
+        // So the flag is set here, and OnDeviceLost stays wired for a real driver-reported loss
+        // that this pin may one day deliver.
+        ReleaseDeviceOwnedObjectsEXT();
+        if (surfaceConfigured_ && surface_ != nullptr)
+        {
+            wgpuSurfaceUnconfigure(surface_);
+            surfaceConfigured_ = false;
+        }
+        if (queue_ != nullptr) { wgpuQueueRelease(queue_); queue_ = nullptr; }
+        if (device_ != nullptr)
+        {
+            wgpuDeviceDestroy(device_);
+            wgpuDeviceRelease(device_);
+            device_ = nullptr;
+        }
+        deviceLost_ = true;
+        // CanBeginDrawEXT() now reports false, which on this pin is a safety mechanism rather than
+        // a convenience: WEBGPU-180 measured that wgpuSurfaceGetCurrentTexture on a surface whose
+        // device is lost does not return a failure status but panics and aborts the process.
+        if (deviceEventCallback_) deviceEventCallback_(RendererDeviceEvent::Lost);
+    }
+
+    void WebGPURenderer::DebugRestoreContext()
+    {
+        if (!deviceLost_) return;
+        if (deviceEventCallback_) deviceEventCallback_(RendererDeviceEvent::Resetting);
+        // The adapter, instance and surface were never released: WEBGPU-180 measured that a second
+        // device from the SAME adapter re-configures the SAME surface and acquires from it.
+        RequestDeviceOnlyEXT();
+        // force=true because physicalWidth_/physicalHeight_ still hold the old size and the early
+        // "already configured at this size" return would otherwise skip the reconfigure the new
+        // device needs. This also recreates the depth and MSAA attachments and every stock shader
+        // module and pipeline cache, all of which ReleaseDeviceOwnedObjectsEXT nulled.
+        ConfigureSurface(true);
+        deviceLost_ = false;
+        if (deviceEventCallback_) deviceEventCallback_(RendererDeviceEvent::Reset);
+    }
+
+    WebGPURenderer::~WebGPURenderer()
+    {
+        IGraphicsRenderer::UnregisterForWindow(surfaceState_.GetWindowId());
+        // REMED-GFX-167: FIRST, before any native handle below is released. A queued command holds
+        // a reference to the texture it samples, and these vectors are members -- destroyed after
+        // this body, i.e. after device_/adapter_/instance_ are gone. A frame abandoned rather than
+        // presented (surface acquisition failure) is the path that can still hold commands here.
+        // WEBGPU-182: one function for both the destructor and a device recreate, so the two can
+        // never drift apart about what belongs to the device.
+        ReleaseDeviceOwnedObjectsEXT();
         if (surfaceConfigured_ && surface_ != nullptr) wgpuSurfaceUnconfigure(surface_);
         if (queue_ != nullptr) wgpuQueueRelease(queue_);
         if (device_ != nullptr) wgpuDeviceRelease(device_);
@@ -3506,6 +3583,14 @@ namespace CNA::Internal::Renderers::WebGPU
         float32Filterable_ = wgpuAdapterHasFeature(adapter_, WGPUFeatureName_Float32Filterable) != 0;
         float32Blendable_ = wgpuAdapterHasFeature(adapter_, WGPUFeatureName_Float32Blendable) != 0;
 
+        RequestDeviceOnlyEXT();
+    }
+
+    void WebGPURenderer::RequestDeviceOnlyEXT()
+    {
+        // WEBGPU-182: the device half alone, so a recovery can re-run it against the adapter this
+        // renderer already holds. WEBGPU-180 measured that the instance, adapter and surface all
+        // survive a device replace, so none of them is rebuilt here.
         std::array<WGPUFeatureName, 4> requiredFeatures{};
         std::size_t requiredFeatureCount = 0;
         if (bcSupported_)
@@ -3519,7 +3604,6 @@ namespace CNA::Internal::Renderers::WebGPU
             requiredFeatures[requiredFeatureCount++] =
                 static_cast<WGPUFeatureName>(WGPUNativeFeature_TextureFormat16bitNorm);
 #endif
-
 
         DeviceRequestState deviceState;
         WGPUDeviceDescriptor descriptor{};
