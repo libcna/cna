@@ -18,11 +18,12 @@
 //        OFFSET must produce the same picture; the layout is built from the declaration's semantics
 //        rather than from its stride.
 //   C -- Multi-stream input (WEBGPU-172). Position from stream 0, colour from stream 1, in one draw.
-//   D -- Custom-WGSL ShaderEffect. This is the compiled-effect bullet's real browser question:
-//        COMPILED (bytecode) effects are out of scope for this renderer on every target -- the
-//        refusal is in shared code with no Emscripten seam, so the browser answer is the native one
-//        by construction and needs no run. What genuinely differs is whether a hand-written WGSL
-//        pair that Naga accepts is also accepted by Tint, and whether the draw lands.
+//   D -- Custom-WGSL ShaderEffect. What differs between the targets is whether a hand-written WGSL
+//        pair that Naga accepts is also accepted by Tint, and whether the draw lands. This is the
+//        CNAEXT `ShaderEffect` source API, NOT a compiled XNA Effect -- the two are independent.
+//        Compiled (bytecode) Effects were out of scope for this renderer when this page was
+//        written; WEBGPU-203 gave them a browser route (SPIR-V translated to WGSL) and they have
+//        their own page, `webgpu_browser_compiled_effect_test.cpp`.
 //   E -- Device loss (WEBGPU-182). DebugSimulateContextLoss/DebugRestoreContext carry no Emscripten
 //        seam of their own, but the device REQUEST underneath them does, so a destroy-and-recreate
 //        cycle is a genuinely open browser question rather than an implied answer.
@@ -421,11 +422,11 @@ protected:
         case 6: StepShaderEffect(device); break;
         case 7: StepDeviceLoss(device); break;
         default:
-            std::printf("[INFO] compiled (bytecode) Effects are out of scope for this renderer on "
-                        "EVERY target -- the refusal lives in shared code with no Emscripten seam, "
-                        "so the browser answer is the native one by construction (plan_fx.md 10.3, "
-                        "plans/plan_webgpu.md WEBGPU-166/203/204). What this page measures instead "
-                        "is the custom-WGSL route, check D.\n");
+            std::printf("[INFO] compiled (bytecode) Effects were out of scope when this page was "
+                        "written; WEBGPU-203 translated their SPIR-V to WGSL and they now run in "
+                        "the browser too. Their own page is "
+                        "cna_webgpu_compiled_effect_page. This page keeps measuring the "
+                        "custom-WGSL ShaderEffect route, check D, which is a different API.\n");
             std::printf("=== %d/%d PASS ===\n", pass_, total_);
             Exit();
             return;

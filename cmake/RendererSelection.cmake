@@ -777,16 +777,12 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU")
     option(CNA_WEBGPU_COMPILED_EFFECTS
            "Build WebGPU support for compiled XNA Effect bytecode (plans/plan_webgpu.md WEBGPU-167)" OFF)
     if(CNA_WEBGPU_COMPILED_EFFECTS)
-        # WEBGPU-204: the browser's WebGPU implementation ingests WGSL and nothing else --
-        # emdawnwebgpu's own createShaderModule switch has a single case, ShaderSourceWGSL, and
-        # aborts on any other sType (spikes/webgpu-spirv-spike/README.md, Q5). Refusing here is
-        # what keeps the Emscripten build from advertising a capability it cannot execute.
-        if(EMSCRIPTEN)
-            message(FATAL_ERROR
-                "CNA WebGPU: CNA_WEBGPU_COMPILED_EFFECTS is native-only. Browser WebGPU accepts "
-                "WGSL shader sources exclusively, and this renderer's compiled-effect route feeds "
-                "SPIR-V. See plans/plan_webgpu.md WEBGPU-204.")
-        endif()
+        # WEBGPU-203/204: browser WebGPU still ingests WGSL and nothing else -- emdawnwebgpu's own
+        # createShaderModule switch has a single case, ShaderSourceWGSL. What changed on 2026-09-06
+        # is that CNA now TRANSLATES the SPIR-V this route emits into WGSL
+        # (modules/renderers/common/mojoshader/src/SpirvToWgsl.cpp), so the Emscripten build no
+        # longer has to be refused here. The option is buildable on every target; the shader-module
+        # representation is the only thing that differs, and under Emscripten it is fixed at WGSL.
         include(cmake/ThirdPartyFNA3D.cmake)
         cna_configure_mojoshader()
         add_compile_definitions(CNA_WEBGPU_COMPILED_EFFECTS)

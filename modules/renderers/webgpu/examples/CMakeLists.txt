@@ -1082,6 +1082,26 @@ if(EMSCRIPTEN AND CNA_BUILD_EXAMPLES AND CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU"
     cna_webgpu_effect_page(cna_webgpu_coverage_page webgpu_browser_coverage_test.cpp)
     target_link_libraries(cna_webgpu_coverage_page PRIVATE WebGPU::WebGPU)
 
+    # plans/plan_webgpu.md WEBGPU-203: compiled XNA Effects, in a browser. The native suites prove
+    # the translator and every shared contract through it, but two things are open until this runs:
+    # whether TINT (not Naga) accepts the generated WGSL, and whether MojoShader's C parser and
+    # SPIR-V emitter behave when compiled to WebAssembly. Built only where the compiled-effect
+    # option is on, because without it there is no route to exercise.
+    if(CNA_WEBGPU_COMPILED_EFFECTS)
+        cna_webgpu_effect_page(cna_webgpu_compiled_effect_page
+                               webgpu_browser_compiled_effect_test.cpp)
+        # The synthetic fixture builders are header-only and build their bytecode in code, so this
+        # page needs no preloaded asset -- which is what keeps it drivable by the same harness as
+        # every other page here.
+        target_include_directories(cna_webgpu_compiled_effect_page PRIVATE
+            "${CMAKE_SOURCE_DIR}/tests/support")
+        # Same reason cna_webgpu_coverage_page needs it: this page includes the renderer's own
+        # public headers, which include webgpu.h and (for the compiled-effect half) mojoshader.h,
+        # and CNA keeps both PRIVATE on the renderer target.
+        target_link_libraries(cna_webgpu_compiled_effect_page PRIVATE
+            WebGPU::WebGPU cna_mojoshader)
+    endif()
+
     cna_webgpu_effect_page(cna_diag_webgpu ${CNA_GRAPHICS_EXAMPLES_DIR}/cross_renderer_diagnostic_scene.cpp)
     # The scene writes its dump into MEMFS; export FS so the driver page (run-webgpu-parity-test.sh)
     # can read the bytes back out of the browser without modifying the renderer-agnostic scene.

@@ -223,9 +223,10 @@ struct CapabilityExpectation
 // not enough to expect the capability true for any of those four.
 //
 // plans/plan_webgpu.md WEBGPU-171 added the WebGPU arm. Its route is MojoShader's SPIR-V profile
-// plus the combined-image-sampler rewrite WGSL's shading model requires; it is native-only, and
-// CNA_WEBGPU_COMPILED_EFFECTS is refused at configure time for an Emscripten build because browser
-// WebGPU ingests WGSL and nothing else.
+// plus the combined-image-sampler rewrite WGSL's shading model requires. WEBGPU-203 removed the
+// "native-only" half of that sentence: browser WebGPU still ingests WGSL and nothing else, but CNA
+// now translates this route's SPIR-V into WGSL, so an Emscripten build configures the option and
+// answers true here for the same reason a native one does.
 #if defined(CNA_RENDERER_FNA3D) || \
     (defined(CNA_RENDERER_SDL_GPU) && defined(CNA_SDL_GPU_COMPILED_EFFECTS)) || \
     (defined(CNA_RENDERER_EASYGL) && defined(CNA_EASYGL_COMPILED_EFFECTS)) || \

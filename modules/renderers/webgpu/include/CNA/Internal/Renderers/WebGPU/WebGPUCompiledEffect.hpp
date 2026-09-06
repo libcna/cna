@@ -38,7 +38,17 @@
 
 #include "mojoshader.h"
 
+// The header's own name differs between wgpu-native packages and emdawnwebgpu, exactly as
+// WebGPURenderer.hpp already has to account for.
+#if __has_include(<webgpu/webgpu.h>)
 #include <webgpu/webgpu.h>
+#elif __has_include(<webgpu-headers/webgpu.h>)
+#include <webgpu-headers/webgpu.h>
+#elif __has_include(<webgpu.h>)
+#include <webgpu.h>
+#else
+#error "CNA WebGPU compiled effects require webgpu.h"
+#endif
 
 #include <array>
 #include <cstddef>
