@@ -2048,6 +2048,16 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_Swapchain_Sync COMMAND cna_test_vulkan_swapchain_sync
             TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-170: the renderer's SurfaceFormat verdict must predict what
+        # Texture2D construction actually does, for every value of the enum -- with the
+        # GraphicsProfile's own eleven Reach refusals kept separate from the renderer's verdict,
+        # because they are different questions with different exception types.
+        cna_vulkan_test(cna_test_vulkan_surface_format_classification
+                        vulkan_surface_format_classification_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SurfaceFormatClassification
+            COMMAND cna_test_vulkan_surface_format_classification
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # ==================================================================================
         # plan_vulkan.md VULKAN-393 -- the suite-level Vulkan validation gate.
         #

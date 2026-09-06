@@ -117,8 +117,15 @@ namespace Microsoft::Xna::Framework::Graphics
             case CNA::Internal::Renderers::RendererFormatVerdict::Supported:
                 return;
             case CNA::Internal::Renderers::RendererFormatVerdict::Unsupported:
+                // plan_vulkan.md VULKAN-170: name the format. A bare "has not passed the
+                // renderer's promotion gate" tells a caller nothing it did not already know, and
+                // the sibling refusal one branch down (Texture::ValidateFormat) has always named
+                // the ordinal. This is the renderer's own no -- distinct from the profile's
+                // System::NotSupportedException above -- so it says which format and whose no it is.
                 throw std::runtime_error(
-                    "Texture2D SurfaceFormat has not passed the renderer's promotion gate.");
+                    "Texture2D: SurfaceFormat " + std::to_string(static_cast<int>(format)) +
+                    " has not passed the renderer's promotion gate -- this renderer classified it "
+                    "Unsupported on this device.");
             case CNA::Internal::Renderers::RendererFormatVerdict::Defer:
                 Texture::ValidateFormat(format);
                 return;

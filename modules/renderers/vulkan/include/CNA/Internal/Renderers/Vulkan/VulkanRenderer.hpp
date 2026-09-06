@@ -216,6 +216,28 @@ namespace CNA::Internal::Renderers::Vulkan
         // VulkanTexture3DRenderer::SetData's established staging-buffer pattern (Task 864).
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
 
+        /**
+         * @brief The SurfaceFormat ordinal this texture was created with. CNAEXT.
+         *
+         * plan_vulkan.md VULKAN-170, finding F-11. The shared default returns 0, which happens to
+         * BE `Color` -- correct today by coincidence rather than by report. This returns what the
+         * ImageData actually carried.
+         *
+         * @return The SurfaceFormat ordinal.
+         */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
+
+        /**
+         * @brief The native `VkFormat` this texture's image was actually created in. CNAEXT.
+         *
+         * plan_vulkan.md VULKAN-170. Exposed so a test can assert that the format the renderer
+         * *claims* through `ClassifySurfaceFormatEXT` is the one it *allocates* -- the two used to
+         * be unrelated, because the image format was a constant in the constructor.
+         *
+         * @return The native storage format.
+         */
+        [[nodiscard]] VkFormat GetVkFormatEXT() const noexcept { return vkFormat_; }
+
     private:
         // Task 925: transitions exactly ONE mip level's layout -- the shared
         // VulkanRenderer::TransitionImageLayout always barriers level 0 regardless of
@@ -227,6 +249,11 @@ namespace CNA::Internal::Renderers::Vulkan
         int                 width_         = 0;
         int                 height_        = 0;
         int                 levelCount_    = 1;
+        /// VULKAN-170: the SurfaceFormat ordinal this texture was created with (F-11).
+        int                 surfaceFormat_ = 0;
+        /// VULKAN-170: the native storage this renderer chose for that format, from the one table.
+        VkFormat            vkFormat_      = VK_FORMAT_R8G8B8A8_UNORM;
+        int                 bytesPerTexel_ = 4;
         VkImage             image_         = VK_NULL_HANDLE;
         VkDeviceMemory      memory_        = VK_NULL_HANDLE;
         VkImageView         imageView_     = VK_NULL_HANDLE;
@@ -1393,6 +1420,45 @@ namespace CNA::Internal::Renderers::Vulkan
             int surfaceFormatOrdinal) const;
 
         /**
+         * @brief How one public `SurfaceFormat` is stored natively by this renderer.
+         *
+         * plan_vulkan.md VULKAN-170.
+         */
+        struct VulkanSurfaceFormatStorageEXT
+        {
+            VkFormat format        = VK_FORMAT_UNDEFINED;  ///< The native storage format.
+            int      bytesPerTexel = 0;                    ///< Bytes one texel occupies in it.
+        };
+
+        /**
+         * @brief The one table saying which `SurfaceFormat` values have native storage here.
+         *
+         * plan_vulkan.md VULKAN-170. Deliberately the only answer to that question: both
+         * @ref ClassifySurfaceFormatEXT and `VulkanTextureRenderer`'s constructor read it, so a
+         * verdict can never be wider than what `CreateTexture` will actually allocate.
+         *
+         * @param surfaceFormatOrdinal The `SurfaceFormat` ordinal to look up.
+         * @param out Receives the native storage description when the format is known.
+         * @return True when this renderer stores that format natively.
+         */
+        CNAEXT static bool MapSurfaceFormatToStorageEXT(int surfaceFormatOrdinal,
+                                                        VulkanSurfaceFormatStorageEXT& out);
+
+        /**
+         * @brief Whether a `Texture2D` may be created with the given surface format.
+         *
+         * plan_vulkan.md VULKAN-170. `Supported`/`Unsupported` for a format this renderer stores
+         * natively, decided from the physical device's own `VkFormatProperties`; `Defer` for every
+         * other format, so the framework's rule applies rather than a verdict this renderer has
+         * not earned.
+         *
+         * @param surfaceFormat The `SurfaceFormat` ordinal.
+         * @return This renderer's verdict.
+         */
+        [[nodiscard]] CNA::Internal::Renderers::RendererFormatVerdict ClassifySurfaceFormatEXT(
+            int surfaceFormat) const override;
+
+        /**
          * @brief CNAEXT. XNA's Direct3D 9 pixel-centre correction, as a clip-space translation.
          *
          * plan_vulkan.md VULKAN-097. XNA 4.0 addresses pixel CENTRES with integer coordinates;
@@ -1866,6 +1932,20 @@ namespace CNA::Internal::Renderers::Vulkan
          * @param unsupported true to pretend the preferred depth formats are unavailable.
          */
         CNAEXT static void SetDepthFormatPreferredUnsupportedForTestEXT(bool unsupported) noexcept;
+
+        /**
+         * @brief Forces @ref ClassifySurfaceFormatEXT to answer `Unsupported` for one format.
+         *
+         * plan_vulkan.md VULKAN-170. Without it that arm is unreachable here: every driver this
+         * renderer runs on reports `SAMPLED_IMAGE`|`TRANSFER_DST` for the formats in the storage
+         * table, so the only format it stores is also the only one it could refuse, and a test
+         * could never observe the refusal it is meant to guarantee. Same instrument, and the same
+         * reason, as @ref SetDepthFormatPreferredUnsupportedForTestEXT: force a state the DEVICE
+         * owns rather than assert around it.
+         *
+         * @param surfaceFormatOrdinal The ordinal to refuse, or -1 to refuse none.
+         */
+        CNAEXT static void SetSurfaceFormatUnsupportedForTestEXT(int surfaceFormatOrdinal) noexcept;
 
         /**
          * @brief Reports whether the Khronos validation layer is actually active.

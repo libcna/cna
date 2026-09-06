@@ -292,6 +292,14 @@ namespace CNA::Internal::Renderers::Vulkan
     /// substitution" would be comparing a request with itself.
     static bool sDepthFormatPreferredUnsupportedForTest = false;
 
+    // plan_vulkan.md VULKAN-170: forces ClassifySurfaceFormatEXT's `Unsupported` arm for one
+    // SurfaceFormat ordinal. Without it that arm is unreachable here -- llvmpipe (and every
+    // desktop driver) reports SAMPLED_IMAGE|TRANSFER_DST for R8G8B8A8_UNORM, so the only format
+    // this renderer stores is also the only one it could ever refuse, and a test could never see
+    // the refusal it is supposed to guarantee. Same instrument, and the same reason, as
+    // SetDepthFormatPreferredUnsupportedForTestEXT: force a state the DEVICE owns.
+    static int sSurfaceFormatUnsupportedForTest = -1;
+
     static VkFormat PickDepthFormat(VkPhysicalDevice pd, DepthFormat requested)
     {
         auto supports = [pd](VkFormat fmt) {
@@ -367,12 +375,32 @@ namespace CNA::Internal::Renderers::Vulkan
 
     VulkanTextureRenderer::VulkanTextureRenderer(const ImageData& data, VulkanRenderer* owner)
         : width_(data.width), height_(data.height),
-          levelCount_(data.mipLevels > 0 ? data.mipLevels : 1), owner_(owner)
+          levelCount_(data.mipLevels > 0 ? data.mipLevels : 1),
+          // plan_vulkan.md VULKAN-170 (finding F-11): remember the format this texture was created
+          // with, so GetSurfaceFormatEXT() reports it instead of the shared `0` default. Nothing in
+          // this renderer branches on it yet -- Color is the only format CreateTexture allocates --
+          // but a texture that cannot say what it is cannot be asked, and EasyGL's own sampler path
+          // asks exactly this question.
+          surfaceFormat_(data.surfaceFormat),
+          owner_(owner)
     {
         VkDevice dev = owner_->device_;
 
+        // plan_vulkan.md VULKAN-170: the native storage comes from the ONE table, not from a
+        // constant here. With Color the only entry this is byte-for-byte what the hardcoded
+        // VK_FORMAT_R8G8B8A8_UNORM / *4 did; what changes is that a format added to the table is
+        // allocated and uploaded correctly instead of being silently stored as RGBA8. The fallback
+        // is unreachable through the public API -- Texture2D refuses a format this renderer defers
+        // on before it gets here -- and is the old behaviour rather than a throw so that an
+        // internal caller constructing an ImageData with a format ordinal nobody classified keeps
+        // working exactly as it did.
+        VulkanRenderer::VulkanSurfaceFormatStorageEXT storage{ VK_FORMAT_R8G8B8A8_UNORM, 4 };
+        VulkanRenderer::MapSurfaceFormatToStorageEXT(data.surfaceFormat, storage);
+        vkFormat_      = storage.format;
+        bytesPerTexel_ = storage.bytesPerTexel;
+
         // --- Staging buffer ---
-        VkDeviceSize size = static_cast<VkDeviceSize>(data.width) * data.height * 4;
+        VkDeviceSize size = static_cast<VkDeviceSize>(data.width) * data.height * bytesPerTexel_;
         VkBuffer stagingBuf = VK_NULL_HANDLE;
         VkDeviceMemory stagingMem = VK_NULL_HANDLE;
         owner_->CreateBuffer(size,
@@ -389,7 +417,7 @@ namespace CNA::Internal::Renderers::Vulkan
         VkImageCreateInfo imgInfo{};
         imgInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         imgInfo.imageType     = VK_IMAGE_TYPE_2D;
-        imgInfo.format        = VK_FORMAT_R8G8B8A8_UNORM;
+        imgInfo.format        = vkFormat_;
         imgInfo.extent        = { static_cast<uint32_t>(data.width), static_cast<uint32_t>(data.height), 1 };
         imgInfo.mipLevels     = static_cast<uint32_t>(levelCount_);
         imgInfo.arrayLayers   = 1;
@@ -464,7 +492,7 @@ namespace CNA::Internal::Renderers::Vulkan
         viewInfo.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfo.image    = image_;
         viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewInfo.format   = VK_FORMAT_R8G8B8A8_UNORM;
+        viewInfo.format   = vkFormat_;
         viewInfo.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
         viewInfo.subresourceRange.baseMipLevel   = 0;
         viewInfo.subresourceRange.levelCount     = static_cast<uint32_t>(levelCount_);
@@ -519,7 +547,10 @@ namespace CNA::Internal::Renderers::Vulkan
     {
         if (!owner_ || !owner_->device_ || !rgba) return;
         VkDevice dev = owner_->device_;
-        VkDeviceSize size = static_cast<VkDeviceSize>(width_) * height_ * 4;
+        // VULKAN-170: sized by the texture's own texel size, not by an assumed 4. The shared layer
+        // hands SetData the format's real bytes-per-texel as the stride (Texture2D.cpp's
+        // `levelW * bytesPerTexel`), so both ends now agree for any format in the table.
+        VkDeviceSize size = static_cast<VkDeviceSize>(width_) * height_ * bytesPerTexel_;
 
         VkBuffer stagingBuf = VK_NULL_HANDLE;
         VkDeviceMemory stagingMem = VK_NULL_HANDLE;
@@ -530,15 +561,16 @@ namespace CNA::Internal::Renderers::Vulkan
 
         void* mapped = nullptr;
         vkMapMemory(dev, stagingMem, 0, size, 0, &mapped);
-        if (stride == width_ * 4)
+        const int rowBytes = width_ * bytesPerTexel_;
+        if (stride == rowBytes)
         {
             std::memcpy(mapped, rgba, static_cast<std::size_t>(size));
         }
         else
         {
             for (int y = 0; y < height_; ++y)
-                std::memcpy(static_cast<uint8_t*>(mapped) + y * width_ * 4,
-                            rgba + y * stride, static_cast<std::size_t>(width_) * 4);
+                std::memcpy(static_cast<uint8_t*>(mapped) + y * rowBytes,
+                            rgba + y * stride, static_cast<std::size_t>(rowBytes));
         }
         vkUnmapMemory(dev, stagingMem);
 
@@ -602,7 +634,7 @@ namespace CNA::Internal::Renderers::Vulkan
     {
         if (!owner_ || !owner_->device_ || !rgba || level < 0 || level >= levelCount_) return;
         VkDevice dev = owner_->device_;
-        VkDeviceSize size = static_cast<VkDeviceSize>(levelW) * levelH * 4;
+        VkDeviceSize size = static_cast<VkDeviceSize>(levelW) * levelH * bytesPerTexel_;   // VULKAN-170
 
         VkBuffer stagingBuf = VK_NULL_HANDLE;
         VkDeviceMemory stagingMem = VK_NULL_HANDLE;
@@ -2126,6 +2158,62 @@ namespace CNA::Internal::Renderers::Vulkan
         return Matrix::CreateTranslation(xnaPixelCenterScale_ / static_cast<float>(vpW),
                                          -xnaPixelCenterScale_ / static_cast<float>(vpH),
                                          0.0f);
+    }
+
+    // plan_vulkan.md VULKAN-170: the single table that says which public SurfaceFormat values this
+    // renderer has native storage for, and in which VkFormat each one is stored.
+    //
+    // It is deliberately the ONLY place that answers that question, because two answers are how a
+    // renderer ends up classifying a format it cannot allocate. ClassifySurfaceFormatEXT reads it
+    // to decide its verdict and VulkanTextureRenderer reads it to create the image, so a format
+    // added here is offered and allocated in one step, and a format missing from it is deferred to
+    // the framework rule rather than half-supported.
+    //
+    // Every entry that follows Color is added by its own row -- VULKAN-172 (Dxt1/3/5),
+    // VULKAN-173 (Bgr565/Bgra5551/Bgra4444), VULKAN-174 (NormalizedByte2/4) -- and the verdict is
+    // never widened ahead of the storage.
+    bool VulkanRenderer::MapSurfaceFormatToStorageEXT(int surfaceFormatOrdinal,
+                                                      VulkanRenderer::VulkanSurfaceFormatStorageEXT& out)
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        switch (static_cast<SurfaceFormat>(surfaceFormatOrdinal))
+        {
+            case SurfaceFormat::Color:
+                out = { VK_FORMAT_R8G8B8A8_UNORM, 4 };
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    RendererFormatVerdict VulkanRenderer::ClassifySurfaceFormatEXT(int surfaceFormat) const
+    {
+        // plan_vulkan.md VULKAN-170. Two gates, in this order, and the order is the point.
+        //
+        // 1. Storage. A format this renderer has no VkFormat for is `Defer`, never `Unsupported`:
+        //    the framework's own rule (Texture::ValidateFormat) is what applies then, and saying
+        //    `Unsupported` would be this renderer claiming to have judged a format it has never
+        //    looked at.
+        // 2. The device. For a format it DOES store, the answer comes from the physical device's
+        //    real VkFormatProperties rather than from this table -- a build that maps a format is
+        //    not a device that can sample it, and a driver that cannot is entitled to say so.
+        //    SAMPLED_IMAGE and TRANSFER_DST are exactly what VulkanTextureRenderer needs: it
+        //    creates every texture with USAGE_SAMPLED_BIT | USAGE_TRANSFER_DST_BIT in
+        //    TILING_OPTIMAL, so anything less would classify a format vkCreateImage would refuse.
+        VulkanSurfaceFormatStorageEXT storage{};
+        if (!MapSurfaceFormatToStorageEXT(surfaceFormat, storage))
+            return RendererFormatVerdict::Defer;
+        if (surfaceFormat == sSurfaceFormatUnsupportedForTest)
+            return RendererFormatVerdict::Unsupported;
+        if (physicalDevice_ == VK_NULL_HANDLE)
+            return RendererFormatVerdict::Defer;
+        VkFormatProperties props{};
+        vkGetPhysicalDeviceFormatProperties(physicalDevice_, storage.format, &props);
+        constexpr VkFormatFeatureFlags required =
+            VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
+        return (props.optimalTilingFeatures & required) == required
+            ? RendererFormatVerdict::Supported
+            : RendererFormatVerdict::Unsupported;
     }
 
     bool VulkanRenderer::SupportsRenderTargetSurfaceFormatEXT(int surfaceFormatOrdinal) const
@@ -3762,6 +3850,11 @@ namespace CNA::Internal::Renderers::Vulkan
     void VulkanRenderer::SetDepthFormatPreferredUnsupportedForTestEXT(bool unsupported) noexcept
     {
         sDepthFormatPreferredUnsupportedForTest = unsupported;
+    }
+
+    void VulkanRenderer::SetSurfaceFormatUnsupportedForTestEXT(int surfaceFormatOrdinal) noexcept
+    {
+        sSurfaceFormatUnsupportedForTest = surfaceFormatOrdinal;
     }
 
     void VulkanRenderer::CreateDescriptorPool()
