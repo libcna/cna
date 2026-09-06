@@ -768,6 +768,29 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU")
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_WEBGPU")
     include(cmake/ThirdPartyWebGPU.cmake)
     cna_configure_webgpu()
+    # plans/plan_webgpu.md WEBGPU-167: compiled XNA Effect bytecode through MojoShader's portable
+    # SPIR-V profile plus the combined-image-sampler split WebGPU's shading model needs. Off by
+    # default and shaped exactly like the CNA_EASYGL_COMPILED_EFFECTS, CNA_SDL_GPU_COMPILED_EFFECTS
+    # and CNA_VULKAN_COMPILED_EFFECTS options, for the same reason: MojoShader is a fetched
+    # dependency this renderer does not otherwise need. Like Vulkan there is no MojoShader-provided
+    # adapter -- the nine-function effect backend is CNA's own.
+    option(CNA_WEBGPU_COMPILED_EFFECTS
+           "Build WebGPU support for compiled XNA Effect bytecode (plans/plan_webgpu.md WEBGPU-167)" OFF)
+    if(CNA_WEBGPU_COMPILED_EFFECTS)
+        # WEBGPU-204: the browser's WebGPU implementation ingests WGSL and nothing else --
+        # emdawnwebgpu's own createShaderModule switch has a single case, ShaderSourceWGSL, and
+        # aborts on any other sType (spikes/webgpu-spirv-spike/README.md, Q5). Refusing here is
+        # what keeps the Emscripten build from advertising a capability it cannot execute.
+        if(EMSCRIPTEN)
+            message(FATAL_ERROR
+                "CNA WebGPU: CNA_WEBGPU_COMPILED_EFFECTS is native-only. Browser WebGPU accepts "
+                "WGSL shader sources exclusively, and this renderer's compiled-effect route feeds "
+                "SPIR-V. See plans/plan_webgpu.md WEBGPU-204.")
+        endif()
+        include(cmake/ThirdPartyFNA3D.cmake)
+        cna_configure_mojoshader()
+        add_compile_definitions(CNA_WEBGPU_COMPILED_EFFECTS)
+    endif()
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "MAGNUM")
     message(STATUS "CNA: Using MAGNUM graphics renderer")
     set(RENDERER_DIR "modules/renderers/magnum")

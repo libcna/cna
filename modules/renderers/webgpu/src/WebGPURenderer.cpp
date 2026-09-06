@@ -1,4 +1,11 @@
 #include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+// WEBGPU-169: a compiled sampler can name any of the three public texture kinds, and sorting them
+// apart with dynamic_cast needs each complete type.
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#endif
 #include "CNA/Internal/Renderers/WebGPU/webgpu_shaders.hpp"
 #include "CNA/Internal/Renderers/WebGPU/WebGPUPresentMode.hpp"
 #include "CNA/Internal/Renderers/WebGPU/WebGPUMetalSurface.hpp"
@@ -2560,6 +2567,9 @@ namespace CNA::Internal::Renderers::WebGPU
     {
         // WEBGPU-182.
         if (owner_ != nullptr) owner_->CountUnrecoverableResourceEXT(-1);
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+        if (sampledView_ != nullptr) wgpuTextureViewRelease(sampledView_);
+#endif
         if (texture_ != nullptr) wgpuTextureRelease(texture_);
     }
 
@@ -3507,6 +3517,12 @@ namespace CNA::Internal::Renderers::WebGPU
         // shared_ptr to the texture it samples, and dropping the commands is what releases those
         // before the native handles underneath them go.
         DiscardQueuedCommands();
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+        // WEBGPU-167: the compiled-effect shader modules, bind-group layouts and pipelines are all
+        // device-owned, so they belong here rather than in the destructor alone -- a device recreate
+        // must rebuild them from the same lazy paths every other family uses.
+        ReleaseCompiledEffectCachesEXT();
+#endif
         DestroySpriteResources();
         DestroyColoredResources();
         DestroyTexturedResources();
@@ -7233,6 +7249,7 @@ namespace CNA::Internal::Renderers::WebGPU
         case DrawFamily::Skinned:     return "skinned3d";
         case DrawFamily::SkinnedPbr:  return "skinnedPbr3d";
         case DrawFamily::CustomEffect: return "customEffect";
+        case DrawFamily::CompiledEffect: return "compiledEffect";
         }
         return "unknown";
     }
@@ -7515,6 +7532,9 @@ namespace CNA::Internal::Renderers::WebGPU
         skinnedDrawCommands_.clear();
         skinnedPbrDrawCommands_.clear();
         customEffectDrawCommands_.clear();
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+        compiledEffectDrawCommands_.clear();
+#endif
     }
 
     // ---- WEBGPU-84: occlusion queries -----------------------------------------------------------
@@ -8207,6 +8227,629 @@ namespace CNA::Internal::Renderers::WebGPU
         pendingBufferReleases_.push_back(vertexBuffer);
     }
 
+
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+    // ---- plans/plan_webgpu.md WEBGPU-167..171: compiled XNA Effect Framework draws --------------
+    //
+    // A compiled sampler can name any of the three public texture kinds, and dynamic_cast needs
+    // each complete type to sort them apart.
+
+    WGPUTextureView WebGPUTexture3DRenderer::SampledView() const
+    {
+        if (sampledView_ == nullptr && texture_ != nullptr)
+        {
+            WGPUTextureViewDescriptor descriptor{};
+            descriptor.label = StringView("CNA WebGPU Texture3D SampledView");
+            descriptor.format = WGPUTextureFormat_RGBA8Unorm;
+            descriptor.dimension = WGPUTextureViewDimension_3D;
+            descriptor.baseMipLevel = 0;
+            descriptor.mipLevelCount = static_cast<std::uint32_t>(mipLevels_);
+            descriptor.baseArrayLayer = 0;
+            descriptor.arrayLayerCount = 1;
+            descriptor.aspect = WGPUTextureAspect_All;
+            sampledView_ = wgpuTextureCreateView(texture_, &descriptor);
+        }
+        return sampledView_;
+    }
+
+    WebGPUMojoShaderContextEXT* WebGPURenderer::GetMojoShaderContextEXT()
+    {
+        if (mojoShaderContext_ == nullptr)
+            mojoShaderContext_ = std::make_unique<WebGPUMojoShaderContextEXT>();
+        return mojoShaderContext_.get();
+    }
+
+    WGPUShaderModule WebGPURenderer::GetOrCreateCompiledEffectShaderModuleEXT(
+        const std::uint32_t* words, std::size_t wordCount, std::uint64_t hash)
+    {
+        if (const auto it = compiledEffectShaderModules_.find(hash);
+            it != compiledEffectShaderModules_.end())
+        {
+            return it->second;
+        }
+        if (words == nullptr || wordCount == 0)
+            throw std::runtime_error("CNA WebGPU: a compiled effect shader produced no SPIR-V.");
+
+        WGPUShaderSourceSPIRV source{};
+        source.chain.sType = WGPUSType_ShaderSourceSPIRV;
+        source.codeSize = static_cast<std::uint32_t>(wordCount);
+        source.code = words;
+        WGPUShaderModuleDescriptor descriptor{};
+        descriptor.nextInChain = &source.chain;
+        descriptor.label = StringView("CNA WebGPU compiled Effect shader");
+        // An error scope is the only way to learn that naga rejected the module: WebGPU always
+        // hands back a non-null object and reports the failure asynchronously, so without this a
+        // rejected module would first surface as a process-killing panic at queue submit.
+        wgpuDevicePushErrorScope(device_, WGPUErrorFilter_Validation);
+        WGPUShaderModule module = wgpuDeviceCreateShaderModule(device_, &descriptor);
+        struct ScopeState
+        {
+            bool done = false;
+            WGPUErrorType type = WGPUErrorType_NoError;
+            std::string message;
+        } scope;
+        WGPUPopErrorScopeCallbackInfo scopeCallback{};
+        scopeCallback.mode = kCnaWebGpuCallbackMode;
+        scopeCallback.callback = [](WGPUPopErrorScopeStatus, WGPUErrorType type,
+                                    WGPUStringView message, void* userdata1, void*) {
+            auto& state = *static_cast<ScopeState*>(userdata1);
+            state.type = type;
+            state.message = ToString(message);
+            state.done = true;
+        };
+        scopeCallback.userdata1 = &scope;
+        wgpuDevicePopErrorScope(device_, scopeCallback);
+        WaitForCompletion(instance_, scope.done, "compiled effect shader module validation");
+        if (scope.type != WGPUErrorType_NoError)
+        {
+            if (module != nullptr) wgpuShaderModuleRelease(module);
+            throw std::runtime_error(
+                "CNA WebGPU: a compiled effect's translated SPIR-V was rejected: " + scope.message);
+        }
+        compiledEffectShaderModules_[hash] = module;
+        return module;
+    }
+
+    void WebGPURenderer::ReleaseCompiledEffectCachesEXT()
+    {
+        for (auto& [key, pipeline] : compiledEffectPipelines_)
+            if (pipeline != nullptr) wgpuRenderPipelineRelease(pipeline);
+        compiledEffectPipelines_.clear();
+        for (auto& [key, layouts] : compiledEffectLayouts_)
+        {
+            if (layouts.pipelineLayout != nullptr) wgpuPipelineLayoutRelease(layouts.pipelineLayout);
+            for (WGPUBindGroupLayout group : layouts.groups)
+                if (group != nullptr) wgpuBindGroupLayoutRelease(group);
+        }
+        compiledEffectLayouts_.clear();
+        for (auto& [key, module] : compiledEffectShaderModules_)
+            if (module != nullptr) wgpuShaderModuleRelease(module);
+        compiledEffectShaderModules_.clear();
+    }
+
+    const WebGPURenderer::CompiledEffectLayoutsEXT&
+    WebGPURenderer::GetOrCreateCompiledEffectLayoutsEXT(const CompiledEffectDrawCommand& command)
+    {
+        // The layout set depends only on the SHAPE of the pass: which uniform blocks exist and
+        // which sampler bindings the split produced. Two passes with the same shape share one set,
+        // which is what keeps a per-draw pipeline layout from being created for every sprite.
+        std::uint64_t key = command.linked.vertexHasUniforms ? 1u : 0u;
+        key = key * 31u + (command.linked.pixelHasUniforms ? 1u : 0u);
+        for (const auto& sampler : command.linked.pixelSamplers)
+        {
+            key = key * 1099511628211ull ^ sampler.textureBinding;
+            key = key * 1099511628211ull ^ sampler.samplerBinding;
+            key = key * 1099511628211ull ^ static_cast<std::uint64_t>(sampler.viewDimension);
+        }
+        if (const auto it = compiledEffectLayouts_.find(key); it != compiledEffectLayouts_.end())
+            return it->second;
+
+        CompiledEffectLayoutsEXT layouts;
+        const auto makeUniformGroup = [&](WGPUShaderStage stage, bool present, const char* label) {
+            WGPUBindGroupLayoutEntry entry{};
+            entry.binding = 0;
+            entry.visibility = stage;
+            entry.buffer.type = WGPUBufferBindingType_Uniform;
+            WGPUBindGroupLayoutDescriptor descriptor{};
+            descriptor.label = StringView(label);
+            // An absent uniform block still gets a group, with no entries: MojoShader's set
+            // numbering is fixed, so group 1 and group 3 keep their meaning whether or not the
+            // stage declared a block, and the pipeline layout stays four groups wide.
+            descriptor.entryCount = present ? 1u : 0u;
+            descriptor.entries = present ? &entry : nullptr;
+            return wgpuDeviceCreateBindGroupLayout(device_, &descriptor);
+        };
+
+        // Group 0 -- vertex-stage samplers. Always empty: LinkAndGetShadersEXT refuses a pass that
+        // declares one (plans/plan_fx.md FX-109), so reaching here means there are none.
+        WGPUBindGroupLayoutDescriptor emptyDescriptor{};
+        emptyDescriptor.label = StringView("CNA WebGPU compiled Effect group0 (vertex samplers)");
+        layouts.groups[0] = wgpuDeviceCreateBindGroupLayout(device_, &emptyDescriptor);
+        layouts.groups[1] = makeUniformGroup(WGPUShaderStage_Vertex,
+                                             command.linked.vertexHasUniforms,
+                                             "CNA WebGPU compiled Effect group1 (vertex uniforms)");
+
+        std::vector<WGPUBindGroupLayoutEntry> pixelEntries;
+        pixelEntries.reserve(command.linked.pixelSamplers.size() * 2u);
+        for (const auto& sampler : command.linked.pixelSamplers)
+        {
+            WGPUBindGroupLayoutEntry textureEntry{};
+            textureEntry.binding = sampler.textureBinding;
+            textureEntry.visibility = WGPUShaderStage_Fragment;
+            textureEntry.texture.sampleType = WGPUTextureSampleType_Float;
+            textureEntry.texture.viewDimension = sampler.viewDimension;
+            pixelEntries.push_back(textureEntry);
+            WGPUBindGroupLayoutEntry samplerEntry{};
+            samplerEntry.binding = sampler.samplerBinding;
+            samplerEntry.visibility = WGPUShaderStage_Fragment;
+            samplerEntry.sampler.type = WGPUSamplerBindingType_Filtering;
+            pixelEntries.push_back(samplerEntry);
+        }
+        WGPUBindGroupLayoutDescriptor pixelDescriptor{};
+        pixelDescriptor.label = StringView("CNA WebGPU compiled Effect group2 (pixel samplers)");
+        pixelDescriptor.entryCount = pixelEntries.size();
+        pixelDescriptor.entries = pixelEntries.data();
+        layouts.groups[2] = wgpuDeviceCreateBindGroupLayout(device_, &pixelDescriptor);
+        layouts.groups[3] = makeUniformGroup(WGPUShaderStage_Fragment,
+                                             command.linked.pixelHasUniforms,
+                                             "CNA WebGPU compiled Effect group3 (pixel uniforms)");
+
+        WGPUPipelineLayoutDescriptor pipelineLayoutDescriptor{};
+        pipelineLayoutDescriptor.label = StringView("CNA WebGPU compiled Effect PipelineLayout");
+        pipelineLayoutDescriptor.bindGroupLayoutCount = layouts.groups.size();
+        pipelineLayoutDescriptor.bindGroupLayouts = layouts.groups.data();
+        layouts.pipelineLayout = wgpuDeviceCreatePipelineLayout(device_, &pipelineLayoutDescriptor);
+        if (layouts.pipelineLayout == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create a compiled effect pipeline layout");
+
+        auto [inserted, ok] = compiledEffectLayouts_.emplace(key, layouts);
+        (void) ok;
+        return inserted->second;
+    }
+
+    void WebGPURenderer::QueueCompiledEffectDraw(const IVertexBufferRenderer& vb,
+                                                 const IIndexBufferRenderer* ib,
+                                                 PrimitiveType primitive, int primitiveCount,
+                                                 int instanceCount, const GpuDrawParams& params)
+    {
+        auto* runtime = static_cast<WebGPUCompiledEffect*>(params.compiledEffectRuntime);
+        const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
+
+        // Every stream the draw bound, in the caller's order, per-vertex first. A compiled effect
+        // derives its vertex input from the DECLARATIONS rather than from a byte stride, so this
+        // route is the one place in this renderer where a split vertex is ordinary.
+        struct SourceStream
+        {
+            const WebGPUVertexBufferRenderer* buffer = nullptr;
+            std::uint32_t stride = 0;
+            std::size_t baseByteOffset = 0;
+            bool perInstance = false;
+        };
+        std::vector<SourceStream> sources;
+        for (int i = 0; i < params.vertexStreamCount; ++i)
+        {
+            const GpuVertexStreamBinding& binding =
+                params.vertexStreams[static_cast<std::size_t>(i)];
+            const auto* buffer = static_cast<const WebGPUVertexBufferRenderer*>(binding.buffer);
+            if (buffer == nullptr) continue;
+            SourceStream source;
+            source.buffer = buffer;
+            source.stride = binding.strideInBytes > 0
+                                ? static_cast<std::uint32_t>(binding.strideInBytes)
+                                : static_cast<std::uint32_t>(buffer->Stride());
+            source.perInstance = binding.instanceFrequency > 0;
+            source.baseByteOffset = static_cast<std::size_t>(std::max(binding.vertexOffset, 0)) *
+                                    source.stride;
+            sources.push_back(source);
+        }
+        if (sources.empty())
+        {
+            SourceStream source;
+            source.buffer = &webgpuVb;
+            source.stride = static_cast<std::uint32_t>(webgpuVb.Stride());
+            source.baseByteOffset = static_cast<std::size_t>(std::max(params.vertexStart, 0)) *
+                                    source.stride;
+            sources.push_back(source);
+        }
+        else if (params.vertexStart > 0)
+        {
+            // The single-stream routes fold vertexStart into the copied bytes; keep that here so
+            // both shapes agree on where a draw's vertices begin.
+            for (auto& source : sources)
+                if (!source.perInstance)
+                    source.baseByteOffset += static_cast<std::size_t>(params.vertexStart) *
+                                             source.stride;
+        }
+
+        std::vector<WebGPUCompiledEffect::CompiledVertexStreamEXT> declaredStreams;
+        declaredStreams.reserve(sources.size());
+        for (const SourceStream& source : sources)
+        {
+            WebGPUCompiledEffect::CompiledVertexStreamEXT declared;
+            declared.elements = &source.buffer->Declaration().GetElements();
+            declared.stride = source.stride;
+            declared.perInstance = source.perInstance;
+            if (declared.elements->empty())
+            {
+                throw System::NotSupportedException(
+                    "CNA WebGPU: a compiled effect draw needs every bound vertex buffer's "
+                    "VertexDeclaration, and one of this draw's streams carries none.");
+            }
+            declaredStreams.push_back(declared);
+        }
+
+        CompiledEffectDrawCommand command;
+        command.linked = runtime->LinkAndGetShadersEXT(declaredStreams);
+        runtime->CaptureUniformSnapshotEXT(command.vertexUniforms, command.pixelUniforms);
+
+        command.streams.resize(sources.size());
+        for (std::size_t i = 0; i < sources.size(); ++i)
+        {
+            command.streams[i].arrayStride = sources[i].stride;
+            command.streams[i].perInstance = sources[i].perInstance;
+            const auto& shadow = sources[i].buffer->ShadowData();
+            if (sources[i].baseByteOffset <= shadow.size())
+            {
+                command.streams[i].data.assign(
+                    shadow.begin() + static_cast<std::ptrdiff_t>(sources[i].baseByteOffset),
+                    shadow.end());
+            }
+        }
+
+        // Each sampler slot the pass bound, resolved to a keep-alive view and a native sampler
+        // NOW, while the public texture is unambiguously alive.
+        for (const auto& sampler : command.linked.pixelSamplers)
+        {
+            Microsoft::Xna::Framework::Graphics::Texture* texture = nullptr;
+            Microsoft::Xna::Framework::Graphics::SamplerState state;
+            bool assigned = false;
+            runtime->GetBoundSamplerEXT(sampler.slot, /*vertexStage=*/false, texture, state,
+                                        &assigned);
+            CompiledEffectDrawCommand::SamplerBinding binding;
+            binding.textureBinding = sampler.textureBinding;
+            binding.samplerBinding = sampler.samplerBinding;
+            binding.texture = ResolveCompiledEffectTextureEXT(texture);
+            if (!binding.texture)
+                binding.texture = ResolveSamplable(pbrDefaultWhiteTexture_.get());
+            binding.sampler = GetOrCreateSlotSampler(
+                static_cast<int>(state.getFilterProperty()),
+                static_cast<int>(state.getAddressUProperty()),
+                static_cast<int>(state.getAddressVProperty()),
+                static_cast<int>(state.getAddressWProperty()),
+                state.getMaxMipLevelProperty(), state.getMaxAnisotropyProperty(),
+                "compiledEffect");
+            command.pixelSamplers.push_back(binding);
+        }
+
+        command.topology = ToTopology(primitive);
+        command.depthTest = depthTestEnabled_;
+        command.depthWrite = depthWriteEnabled_;
+        command.depthFunc = depthCompareFunction_;
+        command.blend = blendEnabled_;
+        command.blendParams = blendParams_;
+        command.colorWriteChannels = colorWriteChannels_;
+        command.cullMode = cullMode_;
+        command.wireframe = fillModeWireframe_;
+        command.depthBias = depthBias_;
+        command.slopeScaleDepthBias = slopeScaleDepthBias_;
+        command.viewport = CaptureViewport();
+        command.scissor = CaptureScissor();
+        command.instanceCount = static_cast<std::uint32_t>(std::max(instanceCount, 1));
+
+        if (ib != nullptr)
+        {
+            const auto& webgpuIb = static_cast<const WebGPUIndexBufferRenderer&>(*ib);
+            command.indexed = true;
+            command.index32 = webgpuIb.IsThirtyTwoBit();
+            command.indexData = webgpuIb.ShadowData();
+            command.indexCount =
+                static_cast<std::uint32_t>(PrimitiveIndexCount(primitive, primitiveCount));
+            command.firstIndex = static_cast<std::uint32_t>(params.startIndex);
+            command.baseVertex = params.baseVertex;
+            command.vertexCount = static_cast<std::uint32_t>(webgpuVb.GetVertexCount());
+        }
+        else
+        {
+            command.vertexCount =
+                static_cast<std::uint32_t>(PrimitiveVertexCount(primitive, primitiveCount));
+        }
+
+        if (command.wireframe)
+        {
+            ExpandTriangleEdgesForWireframeEXT(
+                command, primitive, primitiveCount,
+                static_cast<const WebGPUIndexBufferRenderer*>(ib), params.startIndex);
+        }
+
+        compiledEffectDrawCommands_.push_back(std::move(command));
+        RecordDrawOrder(DrawFamily::CompiledEffect, compiledEffectDrawCommands_.size() - 1);
+        framePending_ = true;
+    }
+
+    WebGPUSampledTextureEXT WebGPURenderer::ResolveCompiledEffectTextureEXT(
+        Microsoft::Xna::Framework::Graphics::Texture* texture) const
+    {
+        if (texture == nullptr) return {};
+        using namespace Microsoft::Xna::Framework::Graphics;
+        if (auto* textureCube = dynamic_cast<TextureCube*>(texture))
+        {
+            const auto* samplable =
+                dynamic_cast<const IWebGPUCubeSamplable*>(&textureCube->GetRenderer());
+            return samplable != nullptr ? samplable->SampledCube() : WebGPUSampledTextureEXT{};
+        }
+        if (auto* texture3D = dynamic_cast<Texture3D*>(texture))
+        {
+            const auto* volume =
+                dynamic_cast<const WebGPUTexture3DRenderer*>(&texture3D->GetRenderer());
+            if (volume == nullptr) return {};
+            WebGPUSampledTextureEXT resolved;
+            resolved.view = volume->SampledView();
+            return resolved;
+        }
+        if (auto* texture2D = dynamic_cast<Texture2D*>(texture))
+        {
+            const auto* samplable =
+                dynamic_cast<const IWebGPUSamplable*>(&texture2D->GetRenderer());
+            return samplable != nullptr ? samplable->Sampled() : WebGPUSampledTextureEXT{};
+        }
+        return {};
+    }
+
+    void WebGPURenderer::IssueCompiledEffectDraw(WGPURenderPassEncoder pass,
+                                                 const CompiledEffectDrawCommand& command,
+                                                 const PassDestination& destination,
+                                                 ReplayState& state)
+    {
+        Begin3DDrawState(pass, state);
+        if (command.linked.vertexModule == nullptr || command.linked.pixelModule == nullptr ||
+            command.streams.empty() || command.streams[0].data.empty())
+        {
+            return;
+        }
+
+        const CompiledEffectLayoutsEXT& layouts = GetOrCreateCompiledEffectLayoutsEXT(command);
+
+        const int colorAttachmentCount = std::max(1, destination.colorAttachmentCount);
+        auto mix = [](std::uint64_t h, std::uint64_t v) {
+            return (h ^ (v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2)));
+        };
+        // Pipeline identity: the linked pass (its two modules AND its vertex layout, both folded
+        // into pipelineKey) plus every property a WebGPU pipeline bakes. Parameter VALUES are not
+        // here: they live in the uniform buffers, so two draws of the same pass with different
+        // parameters share one pipeline.
+        std::uint64_t key = mix(0, command.linked.pipelineKey);
+        key = mix(key, destination.sampleCount);
+        key = mix(key, static_cast<std::uint64_t>(colorAttachmentCount));
+        for (int c = 0; c < colorAttachmentCount; ++c)
+            key = mix(key, static_cast<std::uint64_t>(destination.ColorFormatAt(c)));
+        key = mix(key, static_cast<std::uint64_t>(replayDepthFormat_));
+        key = mix(key, static_cast<std::uint64_t>(command.topology));
+        key = mix(key, (command.depthTest ? 1u : 0u) | (command.depthWrite ? 2u : 0u));
+        key = mix(key, static_cast<std::uint64_t>(command.depthFunc));
+        key = mix(key, command.blend ? 1u : 0u);
+        key = mix(key, static_cast<std::uint64_t>(command.blendParams.colorSrc) |
+                       (static_cast<std::uint64_t>(command.blendParams.colorDst) << 8) |
+                       (static_cast<std::uint64_t>(command.blendParams.alphaSrc) << 16) |
+                       (static_cast<std::uint64_t>(command.blendParams.alphaDst) << 24) |
+                       (static_cast<std::uint64_t>(command.blendParams.colorFunc) << 32) |
+                       (static_cast<std::uint64_t>(command.blendParams.alphaFunc) << 40));
+        key = mix(key, static_cast<std::uint64_t>(command.cullMode));
+        for (int c = 0; c < colorAttachmentCount; ++c)
+            key = mix(key, static_cast<std::uint64_t>(
+                               command.colorWriteChannels[static_cast<std::size_t>(c)] & 0xF));
+        key = mix(key, static_cast<std::uint64_t>(command.depthBias * 16777215.0f));
+        key = mix(key, static_cast<std::uint64_t>(command.slopeScaleDepthBias * 65536.0f));
+
+        WGPURenderPipeline pipe = nullptr;
+        if (const auto it = compiledEffectPipelines_.find(key); it != compiledEffectPipelines_.end())
+        {
+            pipe = it->second;
+        }
+        else
+        {
+            std::vector<WGPUVertexBufferLayout> vertexLayouts;
+            vertexLayouts.reserve(command.linked.streams.size());
+            for (const auto& stream : command.linked.streams)
+            {
+                WGPUVertexBufferLayout layout{};
+                layout.arrayStride = stream.arrayStride;
+                layout.stepMode = stream.perInstance ? WGPUVertexStepMode_Instance
+                                                     : WGPUVertexStepMode_Vertex;
+                layout.attributeCount = stream.attributes.size();
+                layout.attributes = stream.attributes.data();
+                vertexLayouts.push_back(layout);
+            }
+
+            std::array<WGPUColorTargetState, 4> targets{};
+            std::array<WGPUBlendState, 4> blendStates{};
+            for (int c = 0; c < colorAttachmentCount; ++c)
+            {
+                const auto slot = static_cast<std::size_t>(c);
+                targets[slot].format = destination.ColorFormatAt(c);
+                targets[slot].writeMask =
+                    static_cast<WGPUColorWriteMask>(command.colorWriteChannels[slot] & 0xF);
+                blendStates[slot] = WGPU_BLEND_STATE_INIT;
+                FillWGPUBlendState(blendStates[slot], command.blendParams);
+                targets[slot].blend = command.blend ? &blendStates[slot] : nullptr;
+            }
+
+            WGPUFragmentState fragment{};
+            fragment.module = command.linked.pixelModule;
+            fragment.entryPoint = StringView(command.linked.pixelEntryPoint.c_str());
+            fragment.targetCount = static_cast<std::size_t>(colorAttachmentCount);
+            fragment.targets = targets.data();
+
+            WGPURenderPipelineDescriptor pipeline{};
+            pipeline.label = StringView("CNA WebGPU compiled Effect Pipeline");
+            pipeline.layout = layouts.pipelineLayout;
+            pipeline.vertex.module = command.linked.vertexModule;
+            pipeline.vertex.entryPoint = StringView(command.linked.vertexEntryPoint.c_str());
+            pipeline.vertex.bufferCount = vertexLayouts.size();
+            pipeline.vertex.buffers = vertexLayouts.data();
+            pipeline.primitive.topology = command.topology;
+            pipeline.primitive.stripIndexFormat = RequiredStripIndexFormat(command);
+            pipeline.primitive.frontFace = WGPUFrontFace_CCW;
+            pipeline.primitive.cullMode = ToWGPUCullMode(command.cullMode);
+            pipeline.multisample.count = destination.sampleCount;
+            pipeline.multisample.mask = 0xFFFFFFFFu;
+            pipeline.multisample.alphaToCoverageEnabled = false;
+            pipeline.fragment = &fragment;
+
+            WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
+            depthStencil.format = replayDepthFormat_;
+            depthStencil.depthWriteEnabled =
+                command.depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
+            depthStencil.depthCompare = command.depthTest
+                ? ToWGPUCompareFunction(command.depthFunc) : WGPUCompareFunction_Always;
+            const bool biasApplies = TopologyHasPolygonInterior(command.topology);
+            depthStencil.depthBias =
+                biasApplies ? static_cast<std::int32_t>(command.depthBias * 16777215.0f) : 0;
+            depthStencil.depthBiasSlopeScale = biasApplies ? command.slopeScaleDepthBias : 0.0f;
+            pipeline.depthStencil =
+                (replayDepthFormat_ != WGPUTextureFormat_Undefined) ? &depthStencil : nullptr;
+
+            wgpuDevicePushErrorScope(device_, WGPUErrorFilter_Validation);
+            pipe = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
+            struct PipelineScope
+            {
+                bool done = false;
+                WGPUErrorType type = WGPUErrorType_NoError;
+                std::string message;
+            } scope;
+            WGPUPopErrorScopeCallbackInfo scopeCallback{};
+            scopeCallback.mode = kCnaWebGpuCallbackMode;
+            scopeCallback.callback = [](WGPUPopErrorScopeStatus, WGPUErrorType type,
+                                        WGPUStringView message, void* userdata1, void*) {
+                auto& s = *static_cast<PipelineScope*>(userdata1);
+                s.type = type;
+                s.message = ToString(message);
+                s.done = true;
+            };
+            scopeCallback.userdata1 = &scope;
+            wgpuDevicePopErrorScope(device_, scopeCallback);
+            WaitForCompletion(instance_, scope.done, "compiled effect pipeline validation");
+            if (pipe == nullptr || scope.type != WGPUErrorType_NoError)
+            {
+                if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
+                throw std::runtime_error(
+                    "CNA WebGPU: failed to create a compiled Effect pipeline: " + scope.message);
+            }
+            compiledEffectPipelines_[key] = pipe;
+        }
+
+        // Uniform buffers. A stage with no declared block still gets a bindable 16-byte buffer,
+        // because its bind group exists either way (see GetOrCreateCompiledEffectLayoutsEXT).
+        const auto makeUniformBuffer = [&](const std::vector<std::uint8_t>& bytes,
+                                           const char* label) {
+            const std::uint64_t size =
+                std::max<std::uint64_t>(16u, (bytes.size() + 15u) & ~std::uint64_t{15u});
+            WGPUBuffer buffer = AcquireTransientBuffer(
+                static_cast<WGPUBufferUsage>(WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst),
+                size);
+            if (!bytes.empty())
+                wgpuQueueWriteBuffer(queue_, buffer, 0, bytes.data(), bytes.size());
+            (void) label;
+            return std::pair<WGPUBuffer, std::uint64_t>{buffer, size};
+        };
+        const auto [vertexUbo, vertexUboSize] =
+            makeUniformBuffer(command.vertexUniforms, "CNA WebGPU compiled Effect VS UBO");
+        const auto [pixelUbo, pixelUboSize] =
+            makeUniformBuffer(command.pixelUniforms, "CNA WebGPU compiled Effect PS UBO");
+
+        std::array<WGPUBindGroup, 4> bindGroups{};
+        {
+            WGPUBindGroupDescriptor descriptor{};
+            descriptor.label = StringView("CNA WebGPU compiled Effect group0");
+            descriptor.layout = layouts.groups[0];
+            bindGroups[0] = wgpuDeviceCreateBindGroup(device_, &descriptor);
+        }
+        const auto makeUniformGroup = [&](WGPUBindGroupLayout layout, bool present,
+                                          WGPUBuffer buffer, std::uint64_t size,
+                                          const char* label) {
+            WGPUBindGroupEntry entry{};
+            entry.binding = 0;
+            entry.buffer = buffer;
+            entry.size = size;
+            WGPUBindGroupDescriptor descriptor{};
+            descriptor.label = StringView(label);
+            descriptor.layout = layout;
+            descriptor.entryCount = present ? 1u : 0u;
+            descriptor.entries = present ? &entry : nullptr;
+            return wgpuDeviceCreateBindGroup(device_, &descriptor);
+        };
+        bindGroups[1] = makeUniformGroup(layouts.groups[1], command.linked.vertexHasUniforms,
+                                         vertexUbo, vertexUboSize,
+                                         "CNA WebGPU compiled Effect group1");
+        bindGroups[3] = makeUniformGroup(layouts.groups[3], command.linked.pixelHasUniforms,
+                                         pixelUbo, pixelUboSize,
+                                         "CNA WebGPU compiled Effect group3");
+
+        std::vector<WGPUBindGroupEntry> pixelEntries;
+        pixelEntries.reserve(command.pixelSamplers.size() * 2u);
+        for (const auto& binding : command.pixelSamplers)
+        {
+            WGPUBindGroupEntry textureEntry{};
+            textureEntry.binding = binding.textureBinding;
+            textureEntry.textureView = binding.texture.View();
+            pixelEntries.push_back(textureEntry);
+            WGPUBindGroupEntry samplerEntry{};
+            samplerEntry.binding = binding.samplerBinding;
+            samplerEntry.sampler = binding.sampler;
+            pixelEntries.push_back(samplerEntry);
+        }
+        {
+            WGPUBindGroupDescriptor descriptor{};
+            descriptor.label = StringView("CNA WebGPU compiled Effect group2");
+            descriptor.layout = layouts.groups[2];
+            descriptor.entryCount = pixelEntries.size();
+            descriptor.entries = pixelEntries.data();
+            bindGroups[2] = wgpuDeviceCreateBindGroup(device_, &descriptor);
+        }
+
+        ApplyDrawViewport(pass, command.viewport);
+        ApplyDrawScissor(pass, command.scissor);
+        wgpuRenderPassEncoderSetPipeline(pass, pipe);
+        for (std::uint32_t group = 0; group < bindGroups.size(); ++group)
+            wgpuRenderPassEncoderSetBindGroup(pass, group, bindGroups[group], 0, nullptr);
+
+        std::vector<WGPUBuffer> vertexBuffers;
+        vertexBuffers.reserve(command.streams.size());
+        for (std::size_t i = 0; i < command.streams.size(); ++i)
+        {
+            const auto& stream = command.streams[i];
+            if (stream.data.empty()) continue;
+            WGPUBuffer buffer = AcquireTransientBuffer(
+                static_cast<WGPUBufferUsage>(WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst),
+                Align4(stream.data.size()));
+            wgpuQueueWriteBuffer(queue_, buffer, 0, stream.data.data(), stream.data.size());
+            wgpuRenderPassEncoderSetVertexBuffer(pass, static_cast<std::uint32_t>(i), buffer, 0,
+                                                 stream.data.size());
+            vertexBuffers.push_back(buffer);
+        }
+
+        if (command.indexed && !command.indexData.empty())
+        {
+            WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
+                device_, queue_, pass, "CNA WebGPU compiled Effect IndexBuffer",
+                command.indexData, command.index32);
+            wgpuRenderPassEncoderDrawIndexed(pass, command.indexCount, command.instanceCount,
+                                             command.firstIndex, command.baseVertex, 0);
+            pendingBufferReleases_.push_back(indexBuffer);
+        }
+        else
+        {
+            wgpuRenderPassEncoderDraw(pass, command.vertexCount, command.instanceCount, 0, 0);
+        }
+
+        for (WGPUBindGroup group : bindGroups)
+            pendingBindGroupReleases_.push_back(group);
+        pendingBufferReleases_.push_back(vertexUbo);
+        pendingBufferReleases_.push_back(pixelUbo);
+        for (WGPUBuffer buffer : vertexBuffers)
+            pendingBufferReleases_.push_back(buffer);
+    }
+#endif  // CNA_WEBGPU_COMPILED_EFFECTS
+
     int WebGPURenderer::InitStockColorTargetsEXT(std::array<WGPUColorTargetState, 4>& out) const
     {
         const int count = std::max(1, replayColorAttachmentCount_);
@@ -8317,6 +8960,11 @@ namespace CNA::Internal::Renderers::WebGPU
             case DrawFamily::SkinnedPbr:  IssueSkinnedPbrDraw(pass, skinnedPbrDrawCommands_[i], state); break;
             case DrawFamily::CustomEffect:
                 IssueCustomEffectDraw(pass, customEffectDrawCommands_[i], destination, state);
+                break;
+            case DrawFamily::CompiledEffect:
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+                IssueCompiledEffectDraw(pass, compiledEffectDrawCommands_[i], destination, state);
+#endif
                 break;
             }
         }
@@ -10414,6 +11062,17 @@ namespace CNA::Internal::Renderers::WebGPU
                                                   const GpuDrawParams& params)
     {
         RequireSupportedFillModeEXT(primitive, "ordinary-nonindexed");
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+        // plans/plan_webgpu.md WEBGPU-169: a compiled effect's vertex layout comes from the bound
+        // declarations and is validated against the applied pass's own shader reflection, not
+        // against this renderer's fixed stride-to-layout table -- so it dispatches before the
+        // stock route's declaration guard rather than after it.
+        if (params.compiledEffectRuntime != nullptr)
+        {
+            QueueCompiledEffectDraw(vb, nullptr, primitive, primitiveCount, 1, params);
+            return;
+        }
+#endif
         // WEBGPU-76: a bound custom WGSL ShaderEffect owns the whole draw -- its own shaders,
         // vertex layout and uniforms -- so it is routed before any stock dispatch below.
         if (params.customEffectRenderer != nullptr)
@@ -10431,6 +11090,14 @@ namespace CNA::Internal::Renderers::WebGPU
                                                          const GpuDrawParams& params)
     {
         RequireSupportedFillModeEXT(primitive, "ordinary-indexed");
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+        // WEBGPU-169: see the non-indexed twin.
+        if (params.compiledEffectRuntime != nullptr)
+        {
+            QueueCompiledEffectDraw(vb, &ib, primitive, primitiveCount, 1, params);
+            return;
+        }
+#endif
         // WEBGPU-76: a bound custom WGSL ShaderEffect owns the whole draw (see the non-indexed twin).
         if (params.customEffectRenderer != nullptr)
         {
@@ -10451,6 +11118,15 @@ namespace CNA::Internal::Renderers::WebGPU
         // names its own route rather than re-entering DrawIndexedPrimitivesEx and reporting the
         // ordinary one.
         RequireSupportedFillModeEXT(primitive, "instanced");
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+        // WEBGPU-169: a compiled effect binds both rates from the declarations it was given, so it
+        // needs neither the instance-stream search below nor the stock stride table.
+        if (params.compiledEffectRuntime != nullptr)
+        {
+            QueueCompiledEffectDraw(vb, &ib, primitive, primitiveCount, instanceCount, params);
+            return;
+        }
+#endif
         // REMED-GFX-202: the per-instance stream is the lowest-slot entry of the shared
         // GpuVertexStreamBinding array whose InstanceFrequency is greater than zero.
         const auto* instanceStream = FirstInstanceStream(params);

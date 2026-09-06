@@ -1,5 +1,12 @@
 #pragma once
 
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+// plans/plan_webgpu.md WEBGPU-167: the compiled-effect runtime's types appear in this renderer's own
+// members and signatures. Same arrangement VulkanRenderer.hpp uses, and for the same reason: the
+// runtime header depends on no renderer type, so there is no cycle.
+#include "CNA/Internal/Renderers/WebGPU/WebGPUCompiledEffect.hpp"
+#endif
+
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/Common/PlatformRendererSurfaceState.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
@@ -659,10 +666,23 @@ namespace CNA::Internal::Renderers::WebGPU
                                    void* data, int dataLength) const override;
 
         [[nodiscard]] WGPUTexture Texture() const { return texture_; }
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+        /**
+         * @brief WEBGPU-160/169: the whole-volume view a shader samples this texture through.
+         *
+         * Created lazily, because until a compiled effect could sample a `Texture3D` no route in
+         * this renderer needed one -- which is exactly why `SamplerState.AddressW` had no
+         * observable pixel effect before `WEBGPU-169`.
+         */
+        [[nodiscard]] WGPUTextureView SampledView() const;
+#endif
 
     private:
         WebGPURenderer* owner_ = nullptr;
         WGPUTexture texture_ = nullptr;
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+        mutable WGPUTextureView sampledView_ = nullptr;
+#endif
         int width_ = 0;
         int height_ = 0;
         int depth_ = 0;
@@ -1707,6 +1727,62 @@ namespace CNA::Internal::Renderers::WebGPU
         std::unique_ptr<IEffectRenderer> CreateEffectRenderer(const std::string& vertSrc,
                                                               const std::string& fragSrc) override;
 
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+        /**
+         * @brief plans/plan_webgpu.md WEBGPU-171: compiled XNA Effect Framework bytecode runs here.
+         *
+         * True only because the whole draw route exists: MojoShader's SPIR-V profile, the
+         * combined-image-sampler rewrite WGSL's shading model requires, MojoShader's four fixed
+         * descriptor sets as WebGPU bind groups, and the deferred-replay uniform snapshot. A
+         * capability that said true while a compiled draw fell through to a stock shader is exactly
+         * the defect `plans/plan_fx.md` `FX-080` removed from the other backends.
+         */
+        [[nodiscard]] bool SupportsCompiledEffects() const override { return true; }
+
+        /**
+         * @brief Creates the device-bound runtime for one compiled effect binary.
+         * @param effectCode Compiled Effect Framework bytes.
+         * @param effectCodeBytes Number of bytes at @p effectCode.
+         * @return The runtime; never null (it throws instead).
+         */
+        std::unique_ptr<ICompiledEffectRuntime> CreateCompiledEffect(
+            const std::uint8_t* effectCode, std::size_t effectCodeBytes) override;
+
+        /**
+         * @brief CNAEXT. The shared MojoShader effect-backend context this renderer owns.
+         * @return The context, created on first use.
+         */
+        CNAEXT [[nodiscard]] WebGPUMojoShaderContextEXT* GetMojoShaderContextEXT();
+
+        /**
+         * @brief CNAEXT. Returns a shader module over @p words, creating it once per distinct body.
+         *
+         * Linking patches MojoShader's SPIR-V in place and the combined-sampler split rewrites it
+         * again, so the finished bytes -- not the shader object -- identify a module. A module
+         * copies its source, so one made here stays correct for a draw replayed at `Present()`.
+         *
+         * @param words Finished SPIR-V words.
+         * @param wordCount Number of words at @p words.
+         * @param hash Caller-computed identity of those words.
+         * @return The cached or newly created module.
+         * @throws std::runtime_error if the module cannot be created.
+         */
+        CNAEXT [[nodiscard]] WGPUShaderModule GetOrCreateCompiledEffectShaderModuleEXT(
+            const std::uint32_t* words, std::size_t wordCount, std::uint64_t hash);
+
+        /**
+         * @brief CNAEXT. Whether this renderer created @p texture and can sample it.
+         *
+         * `ITextureRenderer`, `ITexture3DRenderer` and `ITextureCubeRenderer` are three unrelated
+         * interfaces, so this cannot be answered by one pointer cast.
+         *
+         * @param texture Public texture to test.
+         * @return True if this renderer owns it.
+         */
+        CNAEXT [[nodiscard]] bool OwnsSampleableTextureEXT(
+            Microsoft::Xna::Framework::Graphics::Texture* texture) const;
+#endif
+
         /**
          * @brief WEBGPU-76: this renderer genuinely compiles and runs the WGSL source a
          * `ShaderEffect` carries (unlike Vulkan, which takes SPIR-V, or SOFTWARE/HEADLESS, which
@@ -1893,7 +1969,8 @@ namespace CNA::Internal::Renderers::WebGPU
             Pbr,          ///< pbrDrawCommands_
             Skinned,      ///< skinnedDrawCommands_
             SkinnedPbr,   ///< skinnedPbrDrawCommands_
-            CustomEffect  ///< customEffectDrawCommands_ (WEBGPU-76)
+            CustomEffect, ///< customEffectDrawCommands_ (WEBGPU-76)
+            CompiledEffect ///< compiledEffectDrawCommands_ (WEBGPU-169)
         };
 
         /**
@@ -4308,6 +4385,96 @@ namespace CNA::Internal::Renderers::WebGPU
             WebGPUScissorSnapshot scissor{};
         };
         std::vector<CustomEffectDrawCommand> customEffectDrawCommands_;
+
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+        /**
+         * @brief plans/plan_webgpu.md WEBGPU-169: one deferred compiled-XNA-effect draw.
+         *
+         * Everything a compiled pass decided is captured BY VALUE here, because the draw is
+         * recorded at `Present()` long after `ApplyPass()` ran and the MojoShader register files
+         * are shared by every compiled effect this renderer owns. The `LinkedPassEXT` carries the
+         * two shader modules (owned by the renderer's module cache, so they outlive the effect),
+         * the vertex layout the pass's own reflection produced, and the split sampler bindings.
+         */
+        struct CompiledEffectDrawCommand
+        {
+            /// One captured stream of vertex bytes, in the order the draw bound them.
+            struct Stream
+            {
+                std::vector<std::uint8_t> data;
+                std::uint64_t arrayStride = 0;
+                bool perInstance = false;
+            };
+            /// One resolved sampler slot: the view, its keep-alive, and the native sampler.
+            struct SamplerBinding
+            {
+                std::uint32_t textureBinding = 0;
+                std::uint32_t samplerBinding = 0;
+                WebGPUSampledTextureEXT texture;
+                WGPUSampler sampler = nullptr;
+            };
+            std::vector<Stream> streams;
+            std::vector<std::uint8_t> indexData;   ///< empty for a non-indexed draw
+            bool indexed = false;
+            bool index32 = false;
+            std::uint32_t vertexCount = 0;
+            std::uint32_t indexCount = 0;
+            std::uint32_t firstIndex = 0;
+            std::int32_t baseVertex = 0;
+            std::uint32_t instanceCount = 1;
+            WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
+            std::vector<std::uint8_t> vertexUniforms;  ///< the pass's vertex register file, by value
+            std::vector<std::uint8_t> pixelUniforms;   ///< the pass's pixel register file, by value
+            std::vector<SamplerBinding> pixelSamplers;
+            WebGPUCompiledEffect::LinkedPassEXT linked;
+            bool depthTest = false;
+            bool depthWrite = false;
+            int depthFunc = 3;  ///< XNA CompareFunction ordinal; 3 = LessEqual
+            bool blend = true;
+            BlendKeyParams blendParams{};
+            std::array<int, 4> colorWriteChannels{15, 15, 15, 15};
+            int cullMode = 0;
+            bool wireframe = false;
+            float depthBias = 0.0f;
+            float slopeScaleDepthBias = 0.0f;
+            WebGPUViewportSnapshot viewport{};
+            WebGPUScissorSnapshot scissor{};
+        };
+        std::vector<CompiledEffectDrawCommand> compiledEffectDrawCommands_;
+        /// WEBGPU-169: builds the deferred compiled-effect command from a public draw whose
+        /// `params.compiledEffectRuntime` is set. `instanceCount` is 1 for an ordinary draw.
+        void QueueCompiledEffectDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
+                                     PrimitiveType primitive, int primitiveCount, int instanceCount,
+                                     const GpuDrawParams& params);
+        /// WEBGPU-169: replays one compiled-effect command -- builds/fetches its bind-group layouts
+        /// and pipeline (keyed by the linked pass plus the concrete pass state) and issues the draw.
+        void IssueCompiledEffectDraw(WGPURenderPassEncoder pass,
+                                     const CompiledEffectDrawCommand& command,
+                                     const PassDestination& destination, ReplayState& state);
+        /// WEBGPU-168: the four bind-group layouts one linked pass needs, cached per pass shape.
+        struct CompiledEffectLayoutsEXT
+        {
+            std::array<WGPUBindGroupLayout, 4> groups{};
+            WGPUPipelineLayout pipelineLayout = nullptr;
+        };
+        [[nodiscard]] const CompiledEffectLayoutsEXT& GetOrCreateCompiledEffectLayoutsEXT(
+            const CompiledEffectDrawCommand& command);
+        /// The shared MojoShader effect backend, created on first compiled-effect construction.
+        std::unique_ptr<WebGPUMojoShaderContextEXT> mojoShaderContext_;
+        /// One WGPUShaderModule per distinct finished SPIR-V body.
+        std::unordered_map<std::uint64_t, WGPUShaderModule> compiledEffectShaderModules_;
+        /// One layout set per distinct pass shape (which sampler bindings, which uniform blocks).
+        std::unordered_map<std::uint64_t, CompiledEffectLayoutsEXT> compiledEffectLayouts_;
+        /// One pipeline per (linked pass, vertex layout, render-pass state).
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> compiledEffectPipelines_;
+        /// Releases every cached compiled-effect module, layout and pipeline.
+        void ReleaseCompiledEffectCachesEXT();
+        /// WEBGPU-169: resolves a public texture of ANY of the three kinds a compiled sampler can
+        /// name to its sampleable view plus keep-alive, at queue time while it is unambiguously
+        /// alive. Returns an empty value for a texture this renderer does not own.
+        [[nodiscard]] WebGPUSampledTextureEXT ResolveCompiledEffectTextureEXT(
+            Microsoft::Xna::Framework::Graphics::Texture* texture) const;
+#endif
         /// WEBGPU-76: builds the deferred custom-effect command from a `DrawPrimitivesEx` /
         /// `DrawIndexedPrimitivesEx` call whose `params.customEffectRenderer` is set.
         void QueueCustomEffectDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,

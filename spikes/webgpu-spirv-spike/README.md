@@ -10,7 +10,7 @@ No in the browser, because the browser's shader ingestion accepts WGSL and nothi
 ## Build and run
 
 ```sh
-export CCACHE_DIR=/rv/cnaccache CCACHE_BASEDIR=/rv
+export CCACHE_DIR=$HOME/.cache/ccache CCACHE_BASEDIR=/rv
 W=$HOME/deps/wgpu-native-v29.0.1.1
 M=$HOME/deps/FNA3D/MojoShader
 D="-DMOJOSHADER_NO_VERSION_INCLUDE -DMOJOSHADER_USE_SDL_STDLIB -DUSE_SDL3 \
