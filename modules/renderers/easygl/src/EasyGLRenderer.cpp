@@ -5374,19 +5374,33 @@ if (!ProfileIsEs2ApiGeneration())
     EasyGLRenderer::AcquireThreadContextLeaseEXT(
         const RendererThreadContextLeaseRelease release)
     {
-#if defined(__EMSCRIPTEN__)
-        // Emscripten's OFFSCREEN_FRAMEBUFFER path proxies GL work to the browser thread and does
-        // not expose native thread-affine context ownership that can be released here.
-        return nullptr;
-#else
+        // The lease is a mutual exclusion between a frame and a background content load, and that
+        // half is needed on EVERY platform. Emscripten used to return null here on the grounds
+        // that it has no thread-affine context ownership to hand over -- true, but it is only
+        // half the contract, and dropping the other half made the web the one target where a
+        // loading thread and the drawing thread issue GL concurrently. With
+        // -sOFFSCREEN_FRAMEBUFFER=1 each individual GL call is proxied to the browser thread and
+        // executed against ONE shared context, so the loader's glBindTexture/glTexImage2D pair
+        // can be split by the frame's own binds: the upload lands on whatever the frame bound,
+        // and a texture comes out empty. Measured on SAMPLE-067 CatapultWars before this change,
+        // as a different subset of background-loaded textures rendering black in 2 of 5 Firefox
+        // and 1 of 5 Chrome runs, with no GL error reported anywhere.
+        //
+        // What stays platform-specific is only the BINDING handover below: on the web the context
+        // is current on the browser thread for everyone, so there is no per-thread binding to
+        // capture and restoring or clearing one would unbind the context the next frame needs.
         threadContextMutex_.lock();
         try
         {
             auto& state = ThreadContextLeaseStates()[this];
             if (state.depth == 0)
             {
+#if !defined(__EMSCRIPTEN__)
                 state.previousBinding = platformContext_->GetCurrentBinding();
                 state.release = release;
+#else
+                (void)release;
+#endif
                 EnsureCallingThreadContext();
             }
             ++state.depth;
@@ -5408,12 +5422,10 @@ if (!ProfileIsEs2ApiGeneration())
             ReleaseCallingThreadContextLease();
             throw;
         }
-#endif
     }
 
     void EasyGLRenderer::ReleaseCallingThreadContextLease() noexcept
     {
-#if !defined(__EMSCRIPTEN__)
         auto& states = ThreadContextLeaseStates();
         const auto it = states.find(this);
         if (it == states.end() || it->second.depth == 0)
@@ -5427,6 +5439,7 @@ if (!ProfileIsEs2ApiGeneration())
         --it->second.depth;
         if (it->second.depth == 0)
         {
+#if !defined(__EMSCRIPTEN__)
             try
             {
                 platformContext_->RestoreBinding(
@@ -5438,10 +5451,10 @@ if (!ProfileIsEs2ApiGeneration())
                     std::string("Failed to release EasyGL context ownership: ") + error.what(),
                     CNA::LogCategory::RENDER);
             }
+#endif
             states.erase(it);
         }
         threadContextMutex_.unlock();
-#endif
     }
 
     std::unique_ptr<ITextureRenderer> EasyGLRenderer::CreateTexture(const ImageData& data)

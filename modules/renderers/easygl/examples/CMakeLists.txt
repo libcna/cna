@@ -915,6 +915,18 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # SAMPLE-067: the other half of that contract -- the lease must also EXCLUDE a background
+        # load from a frame. The Emscripten arm used to return null, so on the web a loader's
+        # proxied bind/upload pair could be split by the frame's own binds and a texture came out
+        # empty. The lease path is now shared by both platforms, so this native test covers the
+        # statements the browser depends on.
+        cna_easygl_test(cna_test_easygl_thread_context_lease_exclusion
+                        easygl_thread_context_lease_exclusion_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_ThreadContextLease_Exclusion
+            COMMAND cna_test_easygl_thread_context_lease_exclusion
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 927: Content.Load<Model>() via a real .model.json + binary vertex/index file
         # fixture -- exercises ModelTypeReader::Read() itself (the vertex-stride/vtable-size
         # corruption bug found while porting ../cna-samples), unlike Task 144's hand-built-in-C++
