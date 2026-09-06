@@ -70,6 +70,17 @@ set(CNA_PARITY_FIXTURES
     sprite_font
     # WEBGPU-186: sampler filters, mip filters, anisotropy and which sampler slot a stock draw reads.
     sampler_filters
+    # WEBGPU-190 (blend family): every blend factor, function, separate channel, BlendFactor and
+    # write mask, each against a computed equation rather than a golden image.
+    blend_states
+    # WEBGPU-190 (depth family): all eight depth CompareFunctions as an 8x3 signature matrix.
+    depth_states
+    # WEBGPU-190 (stencil family): every StencilOperation, verified by gating a second quad on the
+    # value the operation should have written.
+    stencil_states
+    # WEBGPU-190 (rasterizer/viewport family): cull modes with BOTH windings, the scissor, a
+    # viewport sub-region, a render-target round trip, cull-state leakage and depth bias.
+    rasterizer_viewport
     # WEBGPU-153: FillMode::WireFrame draws edges and leaves the interior empty.
     fill_mode_wireframe
     # WEBGPU-161: SamplerState.MaxMipLevel selects which mip level a sample comes from.
