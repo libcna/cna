@@ -266,6 +266,11 @@ namespace CNA::Internal::Renderers::Vulkan
         return mask & ((1u << samples) - 1u);
     }
 
+    /// plan_vulkan.md VULKAN-216: declared here because the render-target constructors below now
+    /// pick their OWN sample count, and the definition sits further down next to the device setup
+    /// that was its only caller before this row.
+    static VkSampleCountFlagBits PickSampleCount(VkPhysicalDevice pd, int requested);
+
     static int SampleCountToInt(VkSampleCountFlagBits s)
     {
         switch (s) {
@@ -277,6 +282,21 @@ namespace CNA::Internal::Renderers::Vulkan
             case VK_SAMPLE_COUNT_64_BIT: return 64;
             default:                     return 0;
         }
+    }
+
+    /// plan_vulkan.md VULKAN-216: how many samples a pipeline built for `s` actually rasterizes.
+    ///
+    /// NOT `SampleCountToInt`, and the difference is a trap this row walked into and `Vulkan_
+    /// PipelineCacheBound` caught. `SampleCountToInt(VK_SAMPLE_COUNT_1_BIT)` returns **0**, not 1 --
+    /// its `default:` arm -- because its callers use 0 as XNA's "MultiSampleCount == no MSAA".
+    /// `NarrowSampleMaskEXT` treats `samples <= 0` as "do not narrow", so feeding it that 0 turns
+    /// VULKAN-162's mask normalization off and every distinct MultiSampleMask gets its own
+    /// pipeline again. The old code avoided it with a literal `msaa ? SampleCountToInt(...) : 1`;
+    /// this names the rule instead of repeating the literal at fourteen call sites.
+    static int RasterSampleCountEXT(VkSampleCountFlagBits s) noexcept
+    {
+        const int n = SampleCountToInt(s);
+        return n > 0 ? n : 1;
     }
 
     // Task 911: maps a Microsoft::Xna::Framework::Graphics::DepthFormat to a real, distinct
@@ -717,16 +737,26 @@ namespace CNA::Internal::Renderers::Vulkan
         const uint32_t uh = static_cast<uint32_t>(h);
         levelCount_ = mipMap ? CalculateVulkanRTMipLevels(w, h) : 1;
 
-        // Task 878/879: this RT engages real MSAA only if it was asked for AND the renderer
-        // itself was constructed with backbuffer MSAA enabled (sampleCount_ > 1) -- see the
-        // "piggyback on the renderer's own sampleCount_" scope decision in plans/plan_graphics.md.
-        // Reusing the renderer's single already-lazily-created MSAA pipeline/render-pass
-        // infrastructure avoids threading an independent numeric sample count through every
-        // pipeline cache key. If the renderer has no MSAA infrastructure at all, a RT-only MSAA
-        // request honestly reports MultiSampleCount == 0 (via appliedMultiSampleCount_ staying
-        // 0 below) rather than silently no-oping.
-        const bool wantsMsaa = requestedMultiSampleCount > 0 &&
-                               owner_->sampleCount_ > VK_SAMPLE_COUNT_1_BIT;
+        // plan_vulkan.md VULKAN-216: this target's sample count is ITS OWN.
+        //
+        // Task 878/879 made it `requestedMultiSampleCount > 0 && owner_->sampleCount_ > 1` -- the
+        // "piggyback on the renderer's own sampleCount_" decision -- so a target asking for 4x on a
+        // device created without `preferMultiSampling` reported an applied count of 0 and rendered
+        // single-sampled. XNA's `RenderTarget2D` takes `preferredMultiSampleCount` per instance and
+        // FNA honours it per instance; the back buffer's own count is a separate thing (§5's
+        // authority order). The count the device can actually give is asked for here, exactly as
+        // the back buffer asks for its own, and what came back is what `GetMultiSampleCount()`
+        // reports (VULKAN-347's rule: report what you got, not what you were asked for).
+        //
+        // What that decision cost, and where it is paid: the renderer no longer has ONE MSAA
+        // sample count, so the MSAA render-pass caches are keyed by (depth format, sample count)
+        // and `PipelineKey` carries the count. See `GetOrCreateRTRenderPassMsaa` and
+        // `MsaaSamplesForPipelinesEXT`.
+        const VkSampleCountFlagBits rtSamples =
+            requestedMultiSampleCount > 0
+                ? PickSampleCount(owner_->physicalDevice_, requestedMultiSampleCount)
+                : VK_SAMPLE_COUNT_1_BIT;
+        const bool wantsMsaa = rtSamples > VK_SAMPLE_COUNT_1_BIT;
 
         // --- Color image (must use swapchainFormat_ for pipeline compatibility) ---
         VkImageCreateInfo colorInfo{};
@@ -790,7 +820,7 @@ namespace CNA::Internal::Renderers::Vulkan
             depthInfo.extent        = { uw, uh, 1 };
             depthInfo.mipLevels     = 1;
             depthInfo.arrayLayers   = 1;
-            depthInfo.samples       = wantsMsaa ? owner_->sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+            depthInfo.samples       = wantsMsaa ? rtSamples : VK_SAMPLE_COUNT_1_BIT;
             depthInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
             depthInfo.usage         = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
             depthInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
@@ -832,7 +862,7 @@ namespace CNA::Internal::Renderers::Vulkan
             msaaColorInfo.extent        = { uw, uh, 1 };
             msaaColorInfo.mipLevels     = 1;
             msaaColorInfo.arrayLayers   = 1;
-            msaaColorInfo.samples       = owner_->sampleCount_;
+            msaaColorInfo.samples       = rtSamples;
             msaaColorInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
             msaaColorInfo.usage         = VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
                                           VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
@@ -879,7 +909,8 @@ namespace CNA::Internal::Renderers::Vulkan
             VkFramebufferCreateInfo fbInfo{};
             fbInfo.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
             fbInfo.renderPass      = owner_->GetOrCreateRTRenderPassMsaa(depthVkFormat_,
-                                                                        /*discardContents=*/true);
+                                                                        /*discardContents=*/true,
+                                                                        rtSamples);
             fbInfo.attachmentCount = hasDepth ? 3u : 2u;
             fbInfo.pAttachments    = fbAtts;
             fbInfo.width           = uw;
@@ -887,7 +918,7 @@ namespace CNA::Internal::Renderers::Vulkan
             fbInfo.layers          = 1;
             if (vkCreateFramebuffer(dev, &fbInfo, nullptr, &msaaFramebuffer_) != VK_SUCCESS)
                 throw std::runtime_error("VulkanRenderTargetRenderer: vkCreateFramebuffer (MSAA) failed");
-            appliedMultiSampleCount_ = SampleCountToInt(owner_->sampleCount_);
+            appliedMultiSampleCount_ = SampleCountToInt(rtSamples);
         }
         else
         {
@@ -995,12 +1026,16 @@ namespace CNA::Internal::Renderers::Vulkan
         pass_ = std::make_shared<VulkanTargetPassEXT>();
         pass_->framebuffer   = (msaaFramebuffer_ != VK_NULL_HANDLE) ? msaaFramebuffer_ : framebuffer_;
         pass_->renderPass    = (msaaFramebuffer_ != VK_NULL_HANDLE)
-                               ? owner_->GetOrCreateRTRenderPassMsaa(depthVkFormat_,
-                                                                     /*discardContents=*/true)
+                               ? owner_->GetOrCreateRTRenderPassMsaa(
+                                     depthVkFormat_, /*discardContents=*/true,
+                                     GetColorSampleCountEXT())
                                : owner_->GetOrCreateRTRenderPass(depthVkFormat_, !preserveContents_);
         pass_->width         = width_;
         pass_->height        = height_;
         pass_->msaa          = (msaaFramebuffer_ != VK_NULL_HANDLE);
+        // VULKAN-216: the pass carries the count too, because that is what RecordCommandBuffer
+        // reads to decide what `msaa == true` means for every pipeline it builds in this segment.
+        pass_->samples       = GetColorSampleCountEXT();
         pass_->depthFormat   = depthVkFormat_;
         // REMED-GFX-129: a PreserveContents target's non-MSAA pass loads its colour, so a leading
         // Clear() cannot ride the load action there. The MSAA variant this target asks for is
@@ -1362,8 +1397,11 @@ namespace CNA::Internal::Renderers::Vulkan
             const bool wantsMsaa = activeRT_
                 ? activeRT_->WantsMsaa()
                 : renderer_->sampleCount_ > VK_SAMPLE_COUNT_1_BIT;
+            // VULKAN-216: the target's OWN count, not the device's. activeRT_ is a
+            // VulkanRTSource, so this is the same answer RecordCommandBuffer will use when it
+            // replays this batch into that target.
             const VkSampleCountFlagBits samples = wantsMsaa
-                ? renderer_->sampleCount_
+                ? (activeRT_ ? activeRT_->GetMsaaSampleCountEXT() : renderer_->sampleCount_)
                 : VK_SAMPLE_COUNT_1_BIT;
             const VkFormat depthFormat = activeRT_
                 ? activeRT_->GetDepthFormat()
@@ -3579,11 +3617,17 @@ namespace CNA::Internal::Renderers::Vulkan
     }
 
     VkRenderPass VulkanRenderer::GetOrCreateRTRenderPassMsaa(VkFormat depthFmt,
-                                                                    bool discardContents)
+                                                                    bool discardContents,
+                                                                    VkSampleCountFlagBits samples)
     {
         // REMED-GFX-141: two caches, exactly like GetOrCreateRTRenderPass's own clear/load pair.
+        // plan_vulkan.md VULKAN-216: keyed by (depth format, sample count) rather than by depth
+        // format alone. Render-pass compatibility requires attachments to agree on sample count as
+        // well as format, so a 4x target and a 2x target at the same depth format genuinely need
+        // two passes -- sharing one would make every pipeline built against it invalid in the other.
         auto& cache = discardContents ? rtRenderPassMsaaByDepthFmt_ : rtRenderPassMsaaLoadByDepthFmt_;
-        auto it = cache.find(depthFmt);
+        const MsaaRTPassKey cacheKey{depthFmt, static_cast<uint32_t>(samples)};
+        auto it = cache.find(cacheKey);
         if (it != cache.end()) return it->second;
 
         const bool hasDepth = (depthFmt != VK_FORMAT_UNDEFINED);
@@ -3618,7 +3662,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // impossible. No depth resolve was added to fake it.
         VkAttachmentDescription colorAtt{};
         colorAtt.format         = swapchainFormat_;
-        colorAtt.samples        = sampleCount_;
+        colorAtt.samples        = samples;
         colorAtt.loadOp         = discardContents ? VK_ATTACHMENT_LOAD_OP_CLEAR
                                                   : VK_ATTACHMENT_LOAD_OP_LOAD;
         colorAtt.storeOp        = discardContents ? VK_ATTACHMENT_STORE_OP_DONT_CARE
@@ -3642,7 +3686,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // REMED-GFX-142: identical rule to the single-sample variant's depth attachment.
         VkAttachmentDescription depthAtt{};
         depthAtt.format         = depthFmt;
-        depthAtt.samples        = sampleCount_;
+        depthAtt.samples        = samples;
         depthAtt.loadOp         = discardContents ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
         depthAtt.storeOp        = discardContents ? VK_ATTACHMENT_STORE_OP_DONT_CARE
                                                   : VK_ATTACHMENT_STORE_OP_STORE;
@@ -3713,7 +3757,7 @@ namespace CNA::Internal::Renderers::Vulkan
         VkRenderPass rp = VK_NULL_HANDLE;
         if (vkCreateRenderPass(device_, &ci, nullptr, &rp) != VK_SUCCESS)
             throw std::runtime_error("vkCreateRenderPass (RT MSAA) failed");
-        cache[depthFmt] = rp;
+        cache[cacheKey] = rp;
         return rp;
     }
 
@@ -3839,20 +3883,28 @@ namespace CNA::Internal::Renderers::Vulkan
     // sample count, and binding 0's real depth format. Single-target draws reuse the compatible
     // backbuffer pass or fall back to a depth-format-keyed RT pass.
     VkRenderPass VulkanRenderer::PickRTPipelineRenderPass(uint32_t colorAttachmentCount, bool msaa,
-                                                                  VkFormat targetDepthFmt)
+                                                                  VkFormat targetDepthFmt,
+                                                                  VkSampleCountFlagBits samplesOverride)
     {
+        // VULKAN-216: `msaa` no longer implies the device's own count -- see
+        // MsaaSamplesForPipelinesEXT. A pipeline is only render-pass-compatible with a pass whose
+        // attachments carry the SAME sample count, so every branch below has to ask for the count
+        // this segment is actually recording with.
+        const VkSampleCountFlagBits samples =
+            samplesOverride != 0 ? samplesOverride : MsaaSamplesForPipelinesEXT(msaa);
         if (colorAttachmentCount > 1)
-            return GetOrCreateMRTRenderPass(
-                colorAttachmentCount,
-                msaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT,
-                targetDepthFmt);
-        if (targetDepthFmt == depthFormat_)
+            return GetOrCreateMRTRenderPass(colorAttachmentCount, samples, targetDepthFmt);
+        // The backbuffer's own passes are the reference only when the count matches theirs: a
+        // render target that asked for 2x on a 4x device shares the depth format but not the
+        // shape, and reusing renderPassMsaa_ there would build a 4x pipeline for a 2x pass.
+        if (targetDepthFmt == depthFormat_
+            && samples == (msaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT))
             return (msaa && renderPassMsaa_) ? renderPassMsaa_ : renderPass_;
         // Pipelines only ever need a REFERENCE render pass, and REMED-GFX-141's load variant is
         // render-pass-compatible with the clear one (they differ only in loadOp/storeOp/
         // initialLayout, none of which participates in compatibility), so this keeps asking for the
         // clear variant on both legs -- no pipeline cache key changed.
-        return msaa ? GetOrCreateRTRenderPassMsaa(targetDepthFmt, true)
+        return msaa ? GetOrCreateRTRenderPassMsaa(targetDepthFmt, true, samples)
                     : GetOrCreateRTRenderPass(targetDepthFmt, true);
     }
 
@@ -4985,9 +5037,14 @@ namespace CNA::Internal::Renderers::Vulkan
         // bit is needed in the key).
         const uint64_t countBits =
             (static_cast<uint64_t>(std::max(1u, colorAttachmentCount) - 1u) << 1);
+        // VULKAN-216: `pipelines2DMsaaByDepthFmt_` is ONE cache for every MSAA target, so once a
+        // target can carry its own sample count the key has to say which -- otherwise the first
+        // MSAA target of a frame decides the sprite pipeline every later one gets.
+        const VkSampleCountFlagBits msaaSamples = pipelineSampleCount_;
         const PipelineKey key = {
                                   FoldDepthFormatIntoKey((blend ? 1ull : 0ull) | countBits, depthFmt),
-                                  PackBlendBits(blend, bp), PackColorWriteBits(bp), NarrowSampleMaskEXT(bp.sampleMask, SampleCountToInt(sampleCount_)) };
+                                  PackBlendBits(blend, bp), PackColorWriteBits(bp), NarrowSampleMaskEXT(bp.sampleMask, RasterSampleCountEXT(msaaSamples)), 0ull,
+                                  static_cast<uint32_t>(RasterSampleCountEXT(msaaSamples)) };
         auto cached = pipelines2DMsaaByDepthFmt_.find(key);
         if (cached != pipelines2DMsaaByDepthFmt_.end()) return cached->second;
 
@@ -5037,14 +5094,14 @@ namespace CNA::Internal::Renderers::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = sampleCount_;
+        ms.rasterizationSamples = msaaSamples;
         // REMED-GFX-077: BlendState.MultiSampleMask on the MSAA sprite pipeline. Only set for a
         // non-default mask; pointer valid until vkCreateGraphicsPipelines below.
         // VULKAN-162: narrowed to the samples this pipeline has, and compared in that same
         // space -- so a fully-set mask still leaves pSampleMask null, which is Vulkan's own
         // default, and what the KEY says can never drift from what the pipeline does.
-        const VkSampleMask cnaAllSamples_ = NarrowSampleMaskEXT(0xFFFFFFFFu, SampleCountToInt(sampleCount_));
-        const VkSampleMask cnaSampleMask_ = NarrowSampleMaskEXT(bp.sampleMask, SampleCountToInt(sampleCount_));
+        const VkSampleMask cnaAllSamples_ = NarrowSampleMaskEXT(0xFFFFFFFFu, RasterSampleCountEXT(msaaSamples));
+        const VkSampleMask cnaSampleMask_ = NarrowSampleMaskEXT(bp.sampleMask, RasterSampleCountEXT(msaaSamples));
         if (cnaSampleMask_ != cnaAllSamples_) ms.pSampleMask = &cnaSampleMask_;
 
         // REMED-GFX-071: BlendState-derived colour-attachment blend (see the non-MSAA variant).
@@ -5250,7 +5307,7 @@ namespace CNA::Internal::Renderers::Vulkan
             blend,
             PackBlendBits(blend, blendParams),
             PackColorWriteBits(blendParams),
-            NarrowSampleMaskEXT(blendParams.sampleMask, SampleCountToInt(sampleCount)),
+            NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(sampleCount)),
         };
         auto cached = pipelines_.find(key);
         if (cached != pipelines_.end()) return cached->second;
@@ -5308,7 +5365,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // VULKAN-162: narrowed to the samples this pipeline has, and compared in that same space,
         // so a fully-set mask still leaves pSampleMask null (Vulkan's own default) and what the KEY
         // says can never drift from what the pipeline does.
-        const int samples = SampleCountToInt(sampleCount);
+        const int samples = RasterSampleCountEXT(sampleCount);  // VULKAN-216: 1, never 0
         const VkSampleMask allSamples = NarrowSampleMaskEXT(0xFFFFFFFFu, samples);
         const VkSampleMask sampleMask = NarrowSampleMaskEXT(blendParams.sampleMask, samples);
         if (sampleMask != allSamples)
@@ -5354,7 +5411,7 @@ namespace CNA::Internal::Renderers::Vulkan
         createInfo.pDynamicState = &dynamic;
         createInfo.layout = pipelineLayout_;
         createInfo.renderPass = owner_->PickRTPipelineRenderPass(
-            colorAttachmentCount, sampleCount > VK_SAMPLE_COUNT_1_BIT, depthFormat);
+            colorAttachmentCount, sampleCount > VK_SAMPLE_COUNT_1_BIT, depthFormat, sampleCount);
         createInfo.subpass = 0;
 
         VkPipeline pipeline = VK_NULL_HANDLE;
@@ -5902,7 +5959,9 @@ namespace CNA::Internal::Renderers::Vulkan
                 throw std::runtime_error("vkCreatePipelineLayout (3D) failed");
         }
 
-        PipelineKey key = { FoldDepthFormatIntoKey(Make3DKey(topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), NarrowSampleMaskEXT(blendParams.sampleMask, msaa ? SampleCountToInt(sampleCount_) : 1) };
+        PipelineKey key = { FoldDepthFormatIntoKey(Make3DKey(topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa))) };
+        // VULKAN-216: the sample count is part of this pipeline's identity, not just of its render pass.
+        key.ms = static_cast<uint32_t>(RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
         auto it = pipelines3D_.find(key);
         if (it != pipelines3D_.end()) return it->second;
 
@@ -5956,15 +6015,15 @@ namespace CNA::Internal::Renderers::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = msaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        ms.rasterizationSamples = MsaaSamplesForPipelinesEXT(msaa);  // VULKAN-216
         // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
         // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
         // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
         // VULKAN-162: narrowed to the samples this pipeline has, and compared in that same
         // space -- so a fully-set mask still leaves pSampleMask null, which is Vulkan's own
         // default, and what the KEY says can never drift from what the pipeline does.
-        const VkSampleMask cnaAllSamples_ = NarrowSampleMaskEXT(0xFFFFFFFFu, msaa ? SampleCountToInt(sampleCount_) : 1);
-        const VkSampleMask cnaSampleMask_ = NarrowSampleMaskEXT(blendParams.sampleMask, msaa ? SampleCountToInt(sampleCount_) : 1);
+        const VkSampleMask cnaAllSamples_ = NarrowSampleMaskEXT(0xFFFFFFFFu, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
+        const VkSampleMask cnaSampleMask_ = NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
         if (cnaSampleMask_ != cnaAllSamples_) ms.pSampleMask = &cnaSampleMask_;
 
         VkPipelineDepthStencilStateCreateInfo ds{};
@@ -6402,7 +6461,9 @@ namespace CNA::Internal::Renderers::Vulkan
         // and 68, say -- bucketed and hashed the same and shared one pipeline, whose binding stride
         // belonged to whichever of them drew first.
         const uint32_t recordStride = static_cast<uint32_t>(stride);
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), NarrowSampleMaskEXT(blendParams.sampleMask, msaa ? SampleCountToInt(sampleCount_) : 1), vertexLayout.Hash() };
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa))), vertexLayout.Hash() };
+        // VULKAN-216: the sample count is part of this pipeline's identity, not just of its render pass.
+        key.ms = static_cast<uint32_t>(RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
         // VULKAN-158: and the record stride reaches the key, so two declarations that differ only in
         // stride cannot share a pipeline. Folded only when the layout is complete, which leaves
         // every stride-derived key exactly as it was.
@@ -6475,15 +6536,15 @@ namespace CNA::Internal::Renderers::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = msaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        ms.rasterizationSamples = MsaaSamplesForPipelinesEXT(msaa);  // VULKAN-216
         // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
         // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
         // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
         // VULKAN-162: narrowed to the samples this pipeline has, and compared in that same
         // space -- so a fully-set mask still leaves pSampleMask null, which is Vulkan's own
         // default, and what the KEY says can never drift from what the pipeline does.
-        const VkSampleMask cnaAllSamples_ = NarrowSampleMaskEXT(0xFFFFFFFFu, msaa ? SampleCountToInt(sampleCount_) : 1);
-        const VkSampleMask cnaSampleMask_ = NarrowSampleMaskEXT(blendParams.sampleMask, msaa ? SampleCountToInt(sampleCount_) : 1);
+        const VkSampleMask cnaAllSamples_ = NarrowSampleMaskEXT(0xFFFFFFFFu, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
+        const VkSampleMask cnaSampleMask_ = NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
         if (cnaSampleMask_ != cnaAllSamples_) ms.pSampleMask = &cnaSampleMask_;
 
         VkPipelineDepthStencilStateCreateInfo ds{};
@@ -6695,7 +6756,9 @@ namespace CNA::Internal::Renderers::Vulkan
         const uint32_t recordStride = vertexLayout.IsComplete()
                                           ? static_cast<uint32_t>(stride)
                                           : static_cast<uint32_t>(dualStride);
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(dualStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), NarrowSampleMaskEXT(blendParams.sampleMask, msaa ? SampleCountToInt(sampleCount_) : 1), vertexLayout.Hash() };
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(dualStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa))), vertexLayout.Hash() };
+        // VULKAN-216: the sample count is part of this pipeline's identity, not just of its render pass.
+        key.ms = static_cast<uint32_t>(RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
         // VULKAN-158: and the record stride reaches the key, so two declarations that differ only in
         // stride cannot share a pipeline. Folded only when the layout is complete, which leaves
         // every stride-derived key exactly as it was.
@@ -6772,15 +6835,15 @@ namespace CNA::Internal::Renderers::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = msaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        ms.rasterizationSamples = MsaaSamplesForPipelinesEXT(msaa);  // VULKAN-216
         // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
         // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
         // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
         // VULKAN-162: narrowed to the samples this pipeline has, and compared in that same
         // space -- so a fully-set mask still leaves pSampleMask null, which is Vulkan's own
         // default, and what the KEY says can never drift from what the pipeline does.
-        const VkSampleMask cnaAllSamples_ = NarrowSampleMaskEXT(0xFFFFFFFFu, msaa ? SampleCountToInt(sampleCount_) : 1);
-        const VkSampleMask cnaSampleMask_ = NarrowSampleMaskEXT(blendParams.sampleMask, msaa ? SampleCountToInt(sampleCount_) : 1);
+        const VkSampleMask cnaAllSamples_ = NarrowSampleMaskEXT(0xFFFFFFFFu, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
+        const VkSampleMask cnaSampleMask_ = NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
         if (cnaSampleMask_ != cnaAllSamples_) ms.pSampleMask = &cnaSampleMask_;
 
         VkPipelineDepthStencilStateCreateInfo ds{};
@@ -7070,7 +7133,9 @@ namespace CNA::Internal::Renderers::Vulkan
         const uint32_t recordStride = vertexLayout.IsComplete()
                                           ? static_cast<uint32_t>(stride)
                                           : static_cast<uint32_t>(kEnvStride);
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kEnvStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), NarrowSampleMaskEXT(blendParams.sampleMask, msaa ? SampleCountToInt(sampleCount_) : 1), vertexLayout.Hash() };
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kEnvStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa))), vertexLayout.Hash() };
+        // VULKAN-216: the sample count is part of this pipeline's identity, not just of its render pass.
+        key.ms = static_cast<uint32_t>(RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
         // VULKAN-158: and the record stride reaches the key, so two declarations that differ only in
         // stride cannot share a pipeline. Folded only when the layout is complete, which leaves
         // every stride-derived key exactly as it was.
@@ -7123,15 +7188,15 @@ namespace CNA::Internal::Renderers::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = msaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        ms.rasterizationSamples = MsaaSamplesForPipelinesEXT(msaa);  // VULKAN-216
         // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
         // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
         // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
         // VULKAN-162: narrowed to the samples this pipeline has, and compared in that same
         // space -- so a fully-set mask still leaves pSampleMask null, which is Vulkan's own
         // default, and what the KEY says can never drift from what the pipeline does.
-        const VkSampleMask cnaAllSamples_ = NarrowSampleMaskEXT(0xFFFFFFFFu, msaa ? SampleCountToInt(sampleCount_) : 1);
-        const VkSampleMask cnaSampleMask_ = NarrowSampleMaskEXT(blendParams.sampleMask, msaa ? SampleCountToInt(sampleCount_) : 1);
+        const VkSampleMask cnaAllSamples_ = NarrowSampleMaskEXT(0xFFFFFFFFu, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
+        const VkSampleMask cnaSampleMask_ = NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
         if (cnaSampleMask_ != cnaAllSamples_) ms.pSampleMask = &cnaSampleMask_;
 
         VkPipelineDepthStencilStateCreateInfo ds{};
@@ -7334,7 +7399,9 @@ namespace CNA::Internal::Renderers::Vulkan
         // A declaration only moves the offsets WITHIN that record. If the selection rule ever
         // widens, this constant becomes the same defect the sibling factories had.
         constexpr std::size_t kLitStride = 32;
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kLitStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), NarrowSampleMaskEXT(blendParams.sampleMask, msaa ? SampleCountToInt(sampleCount_) : 1), vertexLayout.Hash() };
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kLitStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa))), vertexLayout.Hash() };
+        // VULKAN-216: the sample count is part of this pipeline's identity, not just of its render pass.
+        key.ms = static_cast<uint32_t>(RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
         auto it = pipelinesLitTextured3D_.find(key);
         if (it != pipelinesLitTextured3D_.end()) return it->second;
 
@@ -7383,15 +7450,15 @@ namespace CNA::Internal::Renderers::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = msaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        ms.rasterizationSamples = MsaaSamplesForPipelinesEXT(msaa);  // VULKAN-216
         // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
         // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
         // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
         // VULKAN-162: narrowed to the samples this pipeline has, and compared in that same
         // space -- so a fully-set mask still leaves pSampleMask null, which is Vulkan's own
         // default, and what the KEY says can never drift from what the pipeline does.
-        const VkSampleMask cnaAllSamples_ = NarrowSampleMaskEXT(0xFFFFFFFFu, msaa ? SampleCountToInt(sampleCount_) : 1);
-        const VkSampleMask cnaSampleMask_ = NarrowSampleMaskEXT(blendParams.sampleMask, msaa ? SampleCountToInt(sampleCount_) : 1);
+        const VkSampleMask cnaAllSamples_ = NarrowSampleMaskEXT(0xFFFFFFFFu, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
+        const VkSampleMask cnaSampleMask_ = NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
         if (cnaSampleMask_ != cnaAllSamples_) ms.pSampleMask = &cnaSampleMask_;
 
         VkPipelineDepthStencilStateCreateInfo ds{};
@@ -7469,7 +7536,9 @@ namespace CNA::Internal::Renderers::Vulkan
         // A declaration only moves the offsets WITHIN that record. If the selection rule ever
         // widens, this constant becomes the same defect the sibling factories had.
         constexpr std::size_t kLitStride = 32;
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kLitStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), NarrowSampleMaskEXT(blendParams.sampleMask, msaa ? SampleCountToInt(sampleCount_) : 1), vertexLayout.Hash() };
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kLitStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa))), vertexLayout.Hash() };
+        // VULKAN-216: the sample count is part of this pipeline's identity, not just of its render pass.
+        key.ms = static_cast<uint32_t>(RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
         auto it = pipelinesLitTextured3DVertexLit_.find(key);
         if (it != pipelinesLitTextured3DVertexLit_.end()) return it->second;
 
@@ -7518,15 +7587,15 @@ namespace CNA::Internal::Renderers::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = msaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        ms.rasterizationSamples = MsaaSamplesForPipelinesEXT(msaa);  // VULKAN-216
         // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
         // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
         // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
         // VULKAN-162: narrowed to the samples this pipeline has, and compared in that same
         // space -- so a fully-set mask still leaves pSampleMask null, which is Vulkan's own
         // default, and what the KEY says can never drift from what the pipeline does.
-        const VkSampleMask cnaAllSamples_ = NarrowSampleMaskEXT(0xFFFFFFFFu, msaa ? SampleCountToInt(sampleCount_) : 1);
-        const VkSampleMask cnaSampleMask_ = NarrowSampleMaskEXT(blendParams.sampleMask, msaa ? SampleCountToInt(sampleCount_) : 1);
+        const VkSampleMask cnaAllSamples_ = NarrowSampleMaskEXT(0xFFFFFFFFu, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
+        const VkSampleMask cnaSampleMask_ = NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
         if (cnaSampleMask_ != cnaAllSamples_) ms.pSampleMask = &cnaSampleMask_;
 
         VkPipelineDepthStencilStateCreateInfo ds{};
@@ -8164,7 +8233,9 @@ namespace CNA::Internal::Renderers::Vulkan
         PipelineKey key = { stateKey ^ (compiled.pass.pipelineKey * 1099511628211ull) ^
                                 (static_cast<std::uint64_t>(draw.stride) * 0x9E3779B97F4A7C15ull),
                             PackBlendBits(draw.blend, draw.blendParams),
-                            PackColorWriteBits(draw.blendParams), draw.NarrowSampleMaskEXT(blendParams.sampleMask, msaa ? SampleCountToInt(sampleCount_) : 1) };
+                            PackColorWriteBits(draw.blendParams), draw.NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa))) };
+        // VULKAN-216: the sample count is part of this pipeline's identity, not just of its render pass.
+        key.ms = static_cast<uint32_t>(RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
         auto it = compiledEffectPipelines_.find(key);
         if (it != compiledEffectPipelines_.end()) return it->second;
 
@@ -8210,8 +8281,8 @@ namespace CNA::Internal::Renderers::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = msaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
-        const VkSampleMask sampleMask = draw.NarrowSampleMaskEXT(blendParams.sampleMask, msaa ? SampleCountToInt(sampleCount_) : 1);
+        ms.rasterizationSamples = MsaaSamplesForPipelinesEXT(msaa);  // VULKAN-216
+        const VkSampleMask sampleMask = draw.NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
         if (sampleMask != 0xFFFFFFFFu) ms.pSampleMask = &sampleMask;
 
         VkPipelineDepthStencilStateCreateInfo ds{};
@@ -8388,7 +8459,9 @@ namespace CNA::Internal::Renderers::Vulkan
         // VULKAN-146: the binding stride is the buffer's now, not a constant 16 -- a
         // Position+Colour declaration padded to 32 runs this program too -- so it has to be part
         // of the key. Make3DKey carries no stride term; bits 53..63 are free in this cache.
-        PipelineKey key = { FoldPerVertexStrideIntoKey(FoldDepthFormatIntoKey(Make3DKey(topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), stride), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), NarrowSampleMaskEXT(blendParams.sampleMask, msaa ? SampleCountToInt(sampleCount_) : 1), vertexLayout.Hash() };
+        PipelineKey key = { FoldPerVertexStrideIntoKey(FoldDepthFormatIntoKey(Make3DKey(topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), stride), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa))), vertexLayout.Hash() };
+        // VULKAN-216: the sample count is part of this pipeline's identity, not just of its render pass.
+        key.ms = static_cast<uint32_t>(RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
         // VULKAN-158: nothing to add here. This key ALREADY folds the raw stride, unconditionally,
         // and the fold is an XOR -- a second one would cancel the first and collapse two strides
         // onto one pipeline. Measured: adding it here turned four `VertexDeclarationLayoutTest`
@@ -8440,15 +8513,15 @@ namespace CNA::Internal::Renderers::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = msaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        ms.rasterizationSamples = MsaaSamplesForPipelinesEXT(msaa);  // VULKAN-216
         // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
         // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
         // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
         // VULKAN-162: narrowed to the samples this pipeline has, and compared in that same
         // space -- so a fully-set mask still leaves pSampleMask null, which is Vulkan's own
         // default, and what the KEY says can never drift from what the pipeline does.
-        const VkSampleMask cnaAllSamples_ = NarrowSampleMaskEXT(0xFFFFFFFFu, msaa ? SampleCountToInt(sampleCount_) : 1);
-        const VkSampleMask cnaSampleMask_ = NarrowSampleMaskEXT(blendParams.sampleMask, msaa ? SampleCountToInt(sampleCount_) : 1);
+        const VkSampleMask cnaAllSamples_ = NarrowSampleMaskEXT(0xFFFFFFFFu, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
+        const VkSampleMask cnaSampleMask_ = NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
         if (cnaSampleMask_ != cnaAllSamples_) ms.pSampleMask = &cnaSampleMask_;
 
         VkPipelineDepthStencilStateCreateInfo ds{};
@@ -8524,7 +8597,9 @@ namespace CNA::Internal::Renderers::Vulkan
         // and 68, say -- bucketed and hashed the same and shared one pipeline, whose binding stride
         // belonged to whichever of them drew first.
         const uint32_t recordStride = static_cast<uint32_t>(stride);
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), NarrowSampleMaskEXT(blendParams.sampleMask, msaa ? SampleCountToInt(sampleCount_) : 1), vertexLayout.Hash() };
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa))), vertexLayout.Hash() };
+        // VULKAN-216: the sample count is part of this pipeline's identity, not just of its render pass.
+        key.ms = static_cast<uint32_t>(RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
         // VULKAN-158: and the record stride reaches the key, so two declarations that differ only in
         // stride cannot share a pipeline. Folded only when the layout is complete, which leaves
         // every stride-derived key exactly as it was.
@@ -8597,15 +8672,15 @@ namespace CNA::Internal::Renderers::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = msaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        ms.rasterizationSamples = MsaaSamplesForPipelinesEXT(msaa);  // VULKAN-216
         // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
         // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
         // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
         // VULKAN-162: narrowed to the samples this pipeline has, and compared in that same
         // space -- so a fully-set mask still leaves pSampleMask null, which is Vulkan's own
         // default, and what the KEY says can never drift from what the pipeline does.
-        const VkSampleMask cnaAllSamples_ = NarrowSampleMaskEXT(0xFFFFFFFFu, msaa ? SampleCountToInt(sampleCount_) : 1);
-        const VkSampleMask cnaSampleMask_ = NarrowSampleMaskEXT(blendParams.sampleMask, msaa ? SampleCountToInt(sampleCount_) : 1);
+        const VkSampleMask cnaAllSamples_ = NarrowSampleMaskEXT(0xFFFFFFFFu, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
+        const VkSampleMask cnaSampleMask_ = NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
         if (cnaSampleMask_ != cnaAllSamples_) ms.pSampleMask = &cnaSampleMask_;
 
         VkPipelineDepthStencilStateCreateInfo ds{};
@@ -8852,7 +8927,9 @@ namespace CNA::Internal::Renderers::Vulkan
         const uint32_t recordStride = vertexLayout.IsComplete()
                                           ? static_cast<uint32_t>(stride)
                                           : static_cast<uint32_t>(skinnedStride);
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(skinnedStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), NarrowSampleMaskEXT(blendParams.sampleMask, msaa ? SampleCountToInt(sampleCount_) : 1), vertexLayout.Hash() };
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(skinnedStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa))), vertexLayout.Hash() };
+        // VULKAN-216: the sample count is part of this pipeline's identity, not just of its render pass.
+        key.ms = static_cast<uint32_t>(RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
         // VULKAN-158: and the record stride reaches the key, so two declarations that differ only in
         // stride cannot share a pipeline. Folded only when the layout is complete, which leaves
         // every stride-derived key exactly as it was.
@@ -8916,15 +8993,15 @@ namespace CNA::Internal::Renderers::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = msaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        ms.rasterizationSamples = MsaaSamplesForPipelinesEXT(msaa);  // VULKAN-216
         // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
         // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
         // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
         // VULKAN-162: narrowed to the samples this pipeline has, and compared in that same
         // space -- so a fully-set mask still leaves pSampleMask null, which is Vulkan's own
         // default, and what the KEY says can never drift from what the pipeline does.
-        const VkSampleMask cnaAllSamples_ = NarrowSampleMaskEXT(0xFFFFFFFFu, msaa ? SampleCountToInt(sampleCount_) : 1);
-        const VkSampleMask cnaSampleMask_ = NarrowSampleMaskEXT(blendParams.sampleMask, msaa ? SampleCountToInt(sampleCount_) : 1);
+        const VkSampleMask cnaAllSamples_ = NarrowSampleMaskEXT(0xFFFFFFFFu, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
+        const VkSampleMask cnaSampleMask_ = NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
         if (cnaSampleMask_ != cnaAllSamples_) ms.pSampleMask = &cnaSampleMask_;
 
         VkPipelineDepthStencilStateCreateInfo ds{};
@@ -9013,7 +9090,9 @@ namespace CNA::Internal::Renderers::Vulkan
         const uint32_t recordStride = vertexLayout.IsComplete()
                                           ? static_cast<uint32_t>(stride)
                                           : static_cast<uint32_t>(skinnedStride);
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(skinnedStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), NarrowSampleMaskEXT(blendParams.sampleMask, msaa ? SampleCountToInt(sampleCount_) : 1), vertexLayout.Hash() };
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(skinnedStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa))), vertexLayout.Hash() };
+        // VULKAN-216: the sample count is part of this pipeline's identity, not just of its render pass.
+        key.ms = static_cast<uint32_t>(RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
         // VULKAN-158: and the record stride reaches the key, so two declarations that differ only in
         // stride cannot share a pipeline. Folded only when the layout is complete, which leaves
         // every stride-derived key exactly as it was.
@@ -9077,15 +9156,15 @@ namespace CNA::Internal::Renderers::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = msaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        ms.rasterizationSamples = MsaaSamplesForPipelinesEXT(msaa);  // VULKAN-216
         // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
         // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
         // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
         // VULKAN-162: narrowed to the samples this pipeline has, and compared in that same
         // space -- so a fully-set mask still leaves pSampleMask null, which is Vulkan's own
         // default, and what the KEY says can never drift from what the pipeline does.
-        const VkSampleMask cnaAllSamples_ = NarrowSampleMaskEXT(0xFFFFFFFFu, msaa ? SampleCountToInt(sampleCount_) : 1);
-        const VkSampleMask cnaSampleMask_ = NarrowSampleMaskEXT(blendParams.sampleMask, msaa ? SampleCountToInt(sampleCount_) : 1);
+        const VkSampleMask cnaAllSamples_ = NarrowSampleMaskEXT(0xFFFFFFFFu, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
+        const VkSampleMask cnaSampleMask_ = NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
         if (cnaSampleMask_ != cnaAllSamples_) ms.pSampleMask = &cnaSampleMask_;
 
         VkPipelineDepthStencilStateCreateInfo ds{};
@@ -9318,7 +9397,9 @@ namespace CNA::Internal::Renderers::Vulkan
         // and 68, say -- bucketed and hashed the same and shared one pipeline, whose binding stride
         // belonged to whichever of them drew first.
         const uint32_t recordStride = static_cast<uint32_t>(stride);
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), NarrowSampleMaskEXT(blendParams.sampleMask, msaa ? SampleCountToInt(sampleCount_) : 1), vertexLayout.Hash() };
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa))), vertexLayout.Hash() };
+        // VULKAN-216: the sample count is part of this pipeline's identity, not just of its render pass.
+        key.ms = static_cast<uint32_t>(RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
         // VULKAN-158: and the record stride reaches the key, so two declarations that differ only in
         // stride cannot share a pipeline. Folded only when the layout is complete, which leaves
         // every stride-derived key exactly as it was.
@@ -9387,15 +9468,15 @@ namespace CNA::Internal::Renderers::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = msaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        ms.rasterizationSamples = MsaaSamplesForPipelinesEXT(msaa);  // VULKAN-216
         // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
         // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
         // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
         // VULKAN-162: narrowed to the samples this pipeline has, and compared in that same
         // space -- so a fully-set mask still leaves pSampleMask null, which is Vulkan's own
         // default, and what the KEY says can never drift from what the pipeline does.
-        const VkSampleMask cnaAllSamples_ = NarrowSampleMaskEXT(0xFFFFFFFFu, msaa ? SampleCountToInt(sampleCount_) : 1);
-        const VkSampleMask cnaSampleMask_ = NarrowSampleMaskEXT(blendParams.sampleMask, msaa ? SampleCountToInt(sampleCount_) : 1);
+        const VkSampleMask cnaAllSamples_ = NarrowSampleMaskEXT(0xFFFFFFFFu, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
+        const VkSampleMask cnaSampleMask_ = NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
         if (cnaSampleMask_ != cnaAllSamples_) ms.pSampleMask = &cnaSampleMask_;
 
         VkPipelineDepthStencilStateCreateInfo ds{};
@@ -9648,7 +9729,9 @@ namespace CNA::Internal::Renderers::Vulkan
         // and 68, say -- bucketed and hashed the same and shared one pipeline, whose binding stride
         // belonged to whichever of them drew first.
         const uint32_t recordStride = static_cast<uint32_t>(stride);
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), NarrowSampleMaskEXT(blendParams.sampleMask, msaa ? SampleCountToInt(sampleCount_) : 1), vertexLayout.Hash() };
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa))), vertexLayout.Hash() };
+        // VULKAN-216: the sample count is part of this pipeline's identity, not just of its render pass.
+        key.ms = static_cast<uint32_t>(RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
         // VULKAN-158: and the record stride reaches the key, so two declarations that differ only in
         // stride cannot share a pipeline. Folded only when the layout is complete, which leaves
         // every stride-derived key exactly as it was.
@@ -9717,15 +9800,15 @@ namespace CNA::Internal::Renderers::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = msaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        ms.rasterizationSamples = MsaaSamplesForPipelinesEXT(msaa);  // VULKAN-216
         // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
         // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
         // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
         // VULKAN-162: narrowed to the samples this pipeline has, and compared in that same
         // space -- so a fully-set mask still leaves pSampleMask null, which is Vulkan's own
         // default, and what the KEY says can never drift from what the pipeline does.
-        const VkSampleMask cnaAllSamples_ = NarrowSampleMaskEXT(0xFFFFFFFFu, msaa ? SampleCountToInt(sampleCount_) : 1);
-        const VkSampleMask cnaSampleMask_ = NarrowSampleMaskEXT(blendParams.sampleMask, msaa ? SampleCountToInt(sampleCount_) : 1);
+        const VkSampleMask cnaAllSamples_ = NarrowSampleMaskEXT(0xFFFFFFFFu, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
+        const VkSampleMask cnaSampleMask_ = NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
         if (cnaSampleMask_ != cnaAllSamples_) ms.pSampleMask = &cnaSampleMask_;
 
         VkPipelineDepthStencilStateCreateInfo ds{};
@@ -9801,7 +9884,9 @@ namespace CNA::Internal::Renderers::Vulkan
         // FoldPerVertexStrideIntoKey. VertexColorEnabled itself is deliberately NOT in the key:
         // it travels in the push constant (FillInstancedPushConst's pc[31]), exactly as it does
         // for the ordinary colored3d pipeline, so toggling it never creates a pipeline variant.
-        PipelineKey key = { FoldPerVertexStrideIntoKey(FoldDepthFormatIntoKey(MakeExt3DKey(pvStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), pvStride), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), NarrowSampleMaskEXT(blendParams.sampleMask, msaa ? SampleCountToInt(sampleCount_) : 1), vertexLayout.Hash() };
+        PipelineKey key = { FoldPerVertexStrideIntoKey(FoldDepthFormatIntoKey(MakeExt3DKey(pvStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), pvStride), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa))), vertexLayout.Hash() };
+        // VULKAN-216: the sample count is part of this pipeline's identity, not just of its render pass.
+        key.ms = static_cast<uint32_t>(RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
         auto it = pipelinesInstanced3D_.find(key);
         if (it != pipelinesInstanced3D_.end()) return it->second;
 
@@ -9881,15 +9966,15 @@ namespace CNA::Internal::Renderers::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = msaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        ms.rasterizationSamples = MsaaSamplesForPipelinesEXT(msaa);  // VULKAN-216
         // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
         // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
         // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
         // VULKAN-162: narrowed to the samples this pipeline has, and compared in that same
         // space -- so a fully-set mask still leaves pSampleMask null, which is Vulkan's own
         // default, and what the KEY says can never drift from what the pipeline does.
-        const VkSampleMask cnaAllSamples_ = NarrowSampleMaskEXT(0xFFFFFFFFu, msaa ? SampleCountToInt(sampleCount_) : 1);
-        const VkSampleMask cnaSampleMask_ = NarrowSampleMaskEXT(blendParams.sampleMask, msaa ? SampleCountToInt(sampleCount_) : 1);
+        const VkSampleMask cnaAllSamples_ = NarrowSampleMaskEXT(0xFFFFFFFFu, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
+        const VkSampleMask cnaSampleMask_ = NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
         if (cnaSampleMask_ != cnaAllSamples_) ms.pSampleMask = &cnaSampleMask_;
 
         VkPipelineDepthStencilStateCreateInfo dss{};
@@ -10332,13 +10417,19 @@ namespace CNA::Internal::Renderers::Vulkan
                 // SpriteBatch (every prior MSAA RT test used a 3D BasicEffect fill instead, whose
                 // own pipeline selection already checks rt->WantsMsaa() correctly). Fixed to check
                 // the actual bound target's WantsMsaa() when targeting an RT, same as the 3D path.
-                const bool targetWantsMsaa = (targetRT == nullptr) ? (sampleCount_ > VK_SAMPLE_COUNT_1_BIT)
-                                                                    : targetRT->WantsMsaa();
-                const bool useMsaaPipe = targetWantsMsaa && (sampleCount_ > VK_SAMPLE_COUNT_1_BIT);
+                // plan_vulkan.md VULKAN-216: the `&& sampleCount_ > 1` half is gone. It was the
+                // draw-time face of the same "piggyback on the renderer's own sampleCount_"
+                // decision the constructors carried: a target that engaged MSAA on its own was
+                // still handed a SINGLE-sampled pipeline whenever the DEVICE had none, which is
+                // exactly the render-pass incompatibility the comment above describes -- only
+                // reached from the other direction. What the target says about itself is now the
+                // whole answer.
+                const bool useMsaaPipe = (targetRT == nullptr)
+                                             ? (sampleCount_ > VK_SAMPLE_COUNT_1_BIT)
+                                             : targetRT->WantsMsaa();
                 if (targetRT && targetRT->GetColorAttachmentCount() > 1) {
                     lastMrtPipelineColorCountEXT_ = targetRT->GetColorAttachmentCount();
-                    lastMrtPipelineSampleCountEXT_ =
-                        useMsaaPipe ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+                    lastMrtPipelineSampleCountEXT_ = MsaaSamplesForPipelinesEXT(useMsaaPipe);
                 }
                 // Task 911: this target's own real depth VkFormat -- see draw3DFor's identical
                 // targetDepthFmt computation for the full rationale.
@@ -10647,16 +10738,18 @@ namespace CNA::Internal::Renderers::Vulkan
 
                 const uint32_t nColor = targetRT ? targetRT->GetColorAttachmentCount() : 1u;
                 // Task 878/879: MSAA-aware for RT passes too, not just the backbuffer -- an RT
-                // draw uses the MSAA pipeline variant when this specific RT actually engaged
-                // MSAA (VulkanRTSource::WantsMsaa(), true only when the renderer itself has MSAA
-                // infrastructure AND the RT requested it; see the "piggyback on sampleCount_"
-                // scope decision in plans/plan_graphics.md).
-                const bool drawMsaa = (sampleCount_ > VK_SAMPLE_COUNT_1_BIT) &&
-                                      (targetRT == nullptr || targetRT->WantsMsaa());
+                // draw uses the MSAA pipeline variant when this specific RT actually engaged MSAA
+                // (VulkanRTSource::WantsMsaa()). That used to additionally require the RENDERER to
+                // have MSAA infrastructure; VULKAN-216 removed the requirement, and the sentence
+                // describing it, because a target now engages MSAA on its own.
+                // plan_vulkan.md VULKAN-216: an RT answers for itself; only a backbuffer draw
+                // consults the device's own count. See the sprite path's twin above.
+                const bool drawMsaa = (targetRT == nullptr)
+                                          ? (sampleCount_ > VK_SAMPLE_COUNT_1_BIT)
+                                          : targetRT->WantsMsaa();
                 if (targetRT && targetRT->GetColorAttachmentCount() > 1) {
                     lastMrtPipelineColorCountEXT_ = targetRT->GetColorAttachmentCount();
-                    lastMrtPipelineSampleCountEXT_ =
-                        drawMsaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+                    lastMrtPipelineSampleCountEXT_ = MsaaSamplesForPipelinesEXT(drawMsaa);
                 }
                 // Task 911: this target's own real depth VkFormat -- the backbuffer's
                 // device-wide depthFormat_ when drawing into the swapchain (no VulkanRTSource),
@@ -11118,6 +11211,13 @@ namespace CNA::Internal::Renderers::Vulkan
         std::size_t backbufferSeen = 0;
 
         for (const auto& seg : segments) {
+            // plan_vulkan.md VULKAN-216: every pipeline built while recording this segment has to
+            // rasterize with the sample count THIS segment's attachments carry. Set once per
+            // segment rather than threaded through fourteen factory signatures, because it is a
+            // property of the pass and not of the draw -- see MsaaSamplesForPipelinesEXT.
+            pipelineSampleCount_ = seg.isBackbuffer
+                ? sampleCount_
+                : (seg.rt ? seg.rt->GetMsaaSampleCountEXT() : VK_SAMPLE_COUNT_1_BIT);
             if (seg.isBackbuffer) {
                 ++backbufferSeen;
                 const bool isFirstBackbuffer = (backbufferSeen == 1);
@@ -11894,14 +11994,18 @@ namespace CNA::Internal::Renderers::Vulkan
         // recreated against the new configuration.
         DestroySwapchainPassVariants();
         if (renderPassMsaa_ != VK_NULL_HANDLE) { vkDestroyRenderPass(device_, renderPassMsaa_, nullptr); renderPassMsaa_ = VK_NULL_HANDLE; }
-        for (auto& [fmt, rp] : rtRenderPassMsaaByDepthFmt_)
-            if (rp != VK_NULL_HANDLE) vkDestroyRenderPass(device_, rp, nullptr);
-        rtRenderPassMsaaByDepthFmt_.clear();
-        // REMED-GFX-141: the load variant bakes in sampleCount_ exactly as the clear variant does,
-        // so it is dropped and lazily recreated against the new configuration alongside it.
-        for (auto& [fmt, rp] : rtRenderPassMsaaLoadByDepthFmt_)
-            if (rp != VK_NULL_HANDLE) vkDestroyRenderPass(device_, rp, nullptr);
-        rtRenderPassMsaaLoadByDepthFmt_.clear();
+        // plan_vulkan.md VULKAN-216: the two render-target MSAA pass caches are NOT dropped here
+        // any more, and that is a correction rather than an omission.
+        //
+        // They used to bake `sampleCount_`, so a device-wide count change invalidated them; they
+        // are now keyed by (depth format, sample count) and built from the count the TARGET asked
+        // for, which this call does not change. Destroying them would leave every live
+        // multisampled RenderTarget2D/RenderTargetCube holding a framebuffer built against a
+        // freed VkRenderPass -- a use-after-free the old code could not reach only because an RT
+        // could not have MSAA unless the device did, and the device losing MSAA destroyed the
+        // targets' reason to exist at the same moment. Per-instance counts break that coupling,
+        // so the coupling in the teardown has to go too. The entries stay valid, and a target
+        // asking for a count with no entry yet still gets one lazily.
         clearPipelineCache(pipelines3D_);
         clearPipelineCache(pipelinesAlphaTest3D_);
         clearPipelineCache(pipelinesDualTex3D_);
@@ -11950,9 +12054,10 @@ namespace CNA::Internal::Renderers::Vulkan
     std::unique_ptr<IRenderTargetRenderer> VulkanRenderer::CreateRenderTarget2D(
         int w, int h, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
-        // multiSampleCount is honored on a "piggyback on the renderer's own sampleCount_" basis
-        // (Task 878/879) — see VulkanRenderTargetRenderer's constructor comment and
-        // plans/plan_graphics.md for the exact scope decision. mipMap (Task 878) is a real
+        // multiSampleCount is per-instance (plan_vulkan.md VULKAN-216) -- see
+        // VulkanRenderTargetRenderer's constructor comment. It used to piggyback on the renderer's
+        // own sampleCount_ (Task 878/879), so a target asking for 4x on a single-sampled device
+        // reported 0 and rendered one sample. mipMap (Task 878) is a real
         // vkCmdBlitImage cascade regenerated every frame this RT is rendered into — see
         // VulkanRenderTargetRenderer::MaybeGenerateMips. depthFormat (Task 877) now gets true
         // per-instance fidelity (Task 911) — see VulkanRenderTargetRenderer's constructor comment.
@@ -13859,10 +13964,10 @@ namespace CNA::Internal::Renderers::Vulkan
         // for the first time -- see VulkanRenderTargetCubeRenderer's own constructor comment.
         // mipMap (Task 907): real per-face vkCmdBlitImage cascade, mirroring Task 878's
         // RenderTarget2D fix -- see VulkanTargetPassEXT::MaybeGenerateMips.
-        // multiSampleCount (Task 903): now wired up -- mirrors VulkanRenderTargetRenderer's
-        // Task 878/879 "piggyback on the renderer's own sampleCount_" MSAA treatment, applied per
-        // cube face via a shared MSAA color image (see VulkanRenderTargetCubeRenderer's
-        // constructor). depthFormat (Task 877) now gets true per-instance fidelity (Task 911),
+        // multiSampleCount (Task 903): mirrors VulkanRenderTargetRenderer's per-instance
+        // treatment (VULKAN-216; it mirrored the earlier "piggyback on the renderer's own
+        // sampleCount_" one before that), applied per cube face via a shared MSAA color image
+        // (see VulkanRenderTargetCubeRenderer's constructor). depthFormat (Task 877) now gets true per-instance fidelity (Task 911),
         // mirroring VulkanRenderTargetRenderer's identical treatment.
         return std::make_unique<VulkanRenderTargetCubeRenderer>(this, size, depthFormat,
                                                                preserveContents, mipMap,
@@ -14717,10 +14822,15 @@ namespace CNA::Internal::Renderers::Vulkan
         if (hasDepth)
             depthVkFormat_ = PickDepthFormat(owner_->physicalDevice_, static_cast<DepthFormat>(depthFormat));
 
-        // Task 903: mirrors VulkanRenderTargetRenderer's identical "piggyback on the renderer's own
-        // sampleCount_" scope decision (Task 878/879) -- see plans/plan_graphics.md.
-        const bool wantsMsaa = requestedMultiSampleCount > 0 &&
-                               owner_->sampleCount_ > VK_SAMPLE_COUNT_1_BIT;
+        // plan_vulkan.md VULKAN-216: mirrors VulkanRenderTargetRenderer's per-instance count, for
+        // the same reason -- XNA's RenderTargetCube also takes preferredMultiSampleCount per
+        // instance. Task 903 mirrored the old "piggyback on the renderer's own sampleCount_"
+        // decision; it mirrors the replacement now.
+        const VkSampleCountFlagBits rtSamples =
+            requestedMultiSampleCount > 0
+                ? PickSampleCount(owner_->physicalDevice_, requestedMultiSampleCount)
+                : VK_SAMPLE_COUNT_1_BIT;
+        const bool wantsMsaa = rtSamples > VK_SAMPLE_COUNT_1_BIT;
 
         // --- Color image: 6-layer cube-compatible, color attachment + sampled ---
         VkImageCreateInfo colorInfo{};
@@ -14835,7 +14945,7 @@ namespace CNA::Internal::Renderers::Vulkan
             depthInfo.extent        = { us, us, 1 };
             depthInfo.mipLevels     = 1;
             depthInfo.arrayLayers   = 1;
-            depthInfo.samples       = wantsMsaa ? owner_->sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+            depthInfo.samples       = wantsMsaa ? rtSamples : VK_SAMPLE_COUNT_1_BIT;
             depthInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
             depthInfo.usage         = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
             depthInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
@@ -14919,7 +15029,7 @@ namespace CNA::Internal::Renderers::Vulkan
             msaaColorInfo.extent        = { us, us, 1 };
             msaaColorInfo.mipLevels     = 1;
             msaaColorInfo.arrayLayers   = 6;
-            msaaColorInfo.samples       = owner_->sampleCount_;
+            msaaColorInfo.samples       = rtSamples;
             msaaColorInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
             msaaColorInfo.usage         = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
                                           (preserveContents_ ? 0u
@@ -14977,7 +15087,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 owner_->EndOneTimeCommands(msaaInitCb);
             }
 
-            appliedMultiSampleCount_ = SampleCountToInt(owner_->sampleCount_);
+            appliedMultiSampleCount_ = SampleCountToInt(rtSamples);
         }
 
         // --- 6 framebuffers (one per face, sharing the depth view) -- MSAA variant (att0=MSAA
@@ -14995,8 +15105,8 @@ namespace CNA::Internal::Renderers::Vulkan
                 VkImageView atts[] = { msaaColorViews_[face], faceViews_[face], depthView_ };
                 VkFramebufferCreateInfo fbInfo{};
                 fbInfo.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-                fbInfo.renderPass      = owner_->GetOrCreateRTRenderPassMsaa(depthVkFormat_,
-                                                                             !preserveContents_);
+                fbInfo.renderPass      = owner_->GetOrCreateRTRenderPassMsaa(
+                    depthVkFormat_, !preserveContents_, rtSamples);
                 fbInfo.attachmentCount = hasDepth ? 3u : 2u;
                 fbInfo.pAttachments    = atts;
                 fbInfo.width           = us;
@@ -15007,8 +15117,9 @@ namespace CNA::Internal::Renderers::Vulkan
 
                 facePasses_[face]->framebuffer = msaaFramebuffers_[face];
                 facePasses_[face]->renderPass  = owner_->GetOrCreateRTRenderPassMsaa(
-                    depthVkFormat_, !preserveContents_);
+                    depthVkFormat_, !preserveContents_, rtSamples);
                 facePasses_[face]->msaa        = true;
+                facePasses_[face]->samples     = rtSamples;
             }
             else
             {

@@ -15,6 +15,7 @@
 #include <map>
 #include <tuple>
 #include <string>
+#include <utility>
 #include <unordered_map>
 #include <vector>
 #include <stdexcept>
@@ -45,6 +46,14 @@ namespace CNA::Internal::Renderers::Vulkan
         /// attachments plus single-sample resolves. Default false; overridden by the concrete
         /// single-target, cube-face, and MRT sources when MSAA is genuinely engaged.
         virtual bool          WantsMsaa()                   const { return false; }
+        /// plan_vulkan.md VULKAN-216: the sample count THIS source's attachments actually carry.
+        /// `WantsMsaa()` says whether the multisample/resolve shape is in use; this says with how
+        /// many samples, which is what render-pass compatibility and every pipeline's
+        /// `rasterizationSamples` have to agree on. Before this row the renderer had exactly one
+        /// count -- its own `sampleCount_` -- so the two questions collapsed into one; now a
+        /// `RenderTarget2D` carries the count IT asked for, per XNA's per-instance
+        /// `preferredMultiSampleCount`, and the two must be asked separately.
+        virtual VkSampleCountFlagBits GetMsaaSampleCountEXT() const { return VK_SAMPLE_COUNT_1_BIT; }
         /// Task 911: this RT's own real depth VkFormat (VK_FORMAT_UNDEFINED = no depth
         /// attachment at all, DepthFormat::None). Default VK_FORMAT_UNDEFINED; overridden by
         /// VulkanRenderTargetRenderer/VulkanRenderTargetCubeRenderer with their own instance's
@@ -114,6 +123,8 @@ namespace CNA::Internal::Renderers::Vulkan
         int           height        = 0;
         /** @brief True when `framebuffer` carries multisample colour plus single-sample resolves. */
         bool          msaa          = false;
+        /** @brief VULKAN-216: the sample count `framebuffer`'s colour attachments carry. */
+        VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
         /** @brief This target's own depth format, VK_FORMAT_UNDEFINED for no depth attachment. */
         VkFormat      depthFormat   = VK_FORMAT_UNDEFINED;
         /** @brief Whether `renderPass` begins its colour attachments with LOAD_OP_CLEAR. */
@@ -139,6 +150,8 @@ namespace CNA::Internal::Renderers::Vulkan
         uint32_t      GetColorAttachmentCount() const override { return 1; }
         /** @brief @copydoc VulkanRTSource::WantsMsaa */
         bool          WantsMsaa()               const override { return msaa; }
+        /** @brief @copydoc VulkanRTSource::GetMsaaSampleCountEXT */
+        VkSampleCountFlagBits GetMsaaSampleCountEXT() const override { return samples; }
         /** @brief @copydoc VulkanRTSource::GetDepthFormat */
         VkFormat      GetDepthFormat()          const override { return depthFormat; }
         /** @brief @copydoc VulkanRTSource::ColorLoadOpIsClearEXT */
@@ -315,8 +328,10 @@ namespace CNA::Internal::Renderers::Vulkan
         CNAEXT [[nodiscard]] const std::shared_ptr<VulkanTargetPassEXT>& PassEXT() const { return pass_; }
         // Task 878/879: true once this instance actually engaged MSAA (msaaFramebuffer_ created).
         bool            WantsMsaa()                const { return msaaFramebuffer_ != VK_NULL_HANDLE; }
-        // Real, renderer-clamped applied MultiSampleCount (0 if MSAA wasn't engaged — see the
-        // "piggyback on the renderer's own sampleCount_" scope decision in plans/plan_graphics.md).
+        // The applied MultiSampleCount this instance really got (0 if MSAA wasn't engaged),
+        // clamped to what the DEVICE offers rather than to what the back buffer happens to use
+        // (VULKAN-216 -- it was the latter until then, so a 4x target on a single-sampled device
+        // reported 0). VULKAN-347's rule: report what you got, not what you asked for.
         int             GetMultiSampleCount()      const override { return appliedMultiSampleCount_; }
         VkDescriptorSet GetDescriptorSet()         const { return descriptorSet_; }
         VkImageView     GetColorView()             const { return colorView_; }
@@ -376,7 +391,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // MSAA color image (attached, never sampled directly) resolved automatically into
         // colorImage_ at vkCmdEndRenderPass, plus a dedicated 3-attachment framebuffer against
         // the owner's shared rtRenderPassMsaa_. depthImage_/depthView_ above are reused in-place
-        // as the MSAA depth attachment (promoted to owner_->sampleCount_ samples) rather than
+        // as the MSAA depth attachment (promoted to this target's own sample count) rather than
         // duplicated, since depthView_ is never sampled externally by anything in this codebase.
         VkImage                 msaaColorImage_  = VK_NULL_HANDLE;
         VkDeviceMemory          msaaColorMemory_ = VK_NULL_HANDLE;
@@ -1183,6 +1198,13 @@ namespace CNA::Internal::Renderers::Vulkan
         {
             return colorSampleCount_ > VK_SAMPLE_COUNT_1_BIT;
         }
+        /// @brief @copydoc VulkanRTSource::GetMsaaSampleCountEXT
+        ///
+        /// VULKAN-216 needed nothing here: this proxy already took its count from the bound
+        /// targets and already refused a set whose members disagree ("Vulkan MRT targets must
+        /// have matching applied sample counts"). It was the single-target path that was tied
+        /// to the device's count.
+        VkSampleCountFlagBits GetMsaaSampleCountEXT() const override { return colorSampleCount_; }
         // XNA/FNA shares binding 0's depth attachment across the active MRT set.
         VkFormat      GetDepthFormat()           const override { return depthFormat_; }
         /** @brief Regenerates every mipmapped colour attachment finalized by this MRT pass. */
@@ -1311,6 +1333,17 @@ namespace CNA::Internal::Renderers::Vulkan
         /// (on the instanced route) a raw stride at bits 53..63, and a 64-bit hash has nowhere to
         /// hide in what is left.
         uint64_t vl = 0;
+        /// plan_vulkan.md VULKAN-216: `rasterizationSamples` as an integer (1/2/4/8/...).
+        ///
+        /// A field of its own, and the LAST one, so every existing aggregate initializer in this
+        /// file keeps compiling and keeps meaning what it meant: 1 is "single-sampled", which is
+        /// what every non-MSAA key already was. Before this row `msaa` was a single bit in `a`
+        /// and the count it implied was always the renderer's own `sampleCount_`, so the bit was
+        /// enough. It is not enough once a render target can carry a count of its own -- two
+        /// otherwise identical pipelines for a 2x and a 4x target would collide on the same key,
+        /// and the second target would be drawn with the first's `rasterizationSamples` into a
+        /// render pass that does not match it.
+        uint32_t ms = 1;
         bool operator==(const PipelineKey&) const noexcept = default;
     };
     struct PipelineKeyHash {
@@ -1321,6 +1354,7 @@ namespace CNA::Internal::Renderers::Vulkan
             h ^= (std::hash<uint32_t>{}(k.cw) + 0x165667B19E3779F9ull + (h << 6) + (h >> 2));
             h ^= (std::hash<uint32_t>{}(k.sm) + 0x27D4EB2F165667C5ull + (h << 6) + (h >> 2));
             h ^= (std::hash<uint64_t>{}(k.vl) + 0x9E3779B97F4A7C15ull + (h << 6) + (h >> 2));
+            h ^= (std::hash<uint32_t>{}(k.ms) + 0x85EBCA77C2B2AE63ull + (h << 6) + (h >> 2));
             return h;
         }
     };
@@ -2379,14 +2413,28 @@ namespace CNA::Internal::Renderers::Vulkan
         // share one pass + one pipeline, mirroring the pre-existing single-format reuse pattern).
         std::unordered_map<VkFormat, VkRenderPass> rtRenderPassByDepthFmt_;      // LOAD_OP_CLEAR, color → SHADER_READ_ONLY_OPTIMAL
         std::unordered_map<VkFormat, VkRenderPass> rtRenderPassLoadByDepthFmt_;  // LOAD_OP_LOAD,  color → SHADER_READ_ONLY_OPTIMAL
-        std::unordered_map<VkFormat, VkRenderPass> rtRenderPassMsaaByDepthFmt_;  // 3-attachment MSAA color/resolve/depth, LOAD_OP_CLEAR
+        /// plan_vulkan.md VULKAN-216: keyed by (depth format, sample count), not by depth format
+        /// alone. Two render passes are compatible only if their attachments agree on format AND
+        /// sample count, so a 4x target and a 2x target need different passes even at the same
+        /// depth format -- and a pipeline built against one is invalid in the other.
+        using MsaaRTPassKey = std::pair<VkFormat, uint32_t>;
+        struct MsaaRTPassKeyHash {
+            std::size_t operator()(const MsaaRTPassKey& k) const noexcept
+            {
+                return std::hash<uint32_t>{}(static_cast<uint32_t>(k.first)) * 0x9E3779B9u
+                     ^ std::hash<uint32_t>{}(k.second);
+            }
+        };
+        std::unordered_map<MsaaRTPassKey, VkRenderPass, MsaaRTPassKeyHash>
+            rtRenderPassMsaaByDepthFmt_;  // 3-attachment MSAA color/resolve/depth, LOAD_OP_CLEAR
         /// REMED-GFX-141: the MSAA render pass's missing LOAD variant. Its multisample colour
         /// attachment uses LOAD_OP_LOAD + STORE_OP_STORE and stays in COLOR_ATTACHMENT_OPTIMAL
         /// across passes, so a PreserveContents target's own multisample samples survive a bind
         /// cycle instead of being cleared and thrown away. Same depth-format keying, same
         /// per-format sharing, and render-pass-compatible with the clear variant (load/store ops
         /// and layouts take no part in compatibility), so no pipeline cache key changed.
-        std::unordered_map<VkFormat, VkRenderPass> rtRenderPassMsaaLoadByDepthFmt_;
+        std::unordered_map<MsaaRTPassKey, VkRenderPass, MsaaRTPassKeyHash>
+            rtRenderPassMsaaLoadByDepthFmt_;
         std::vector<VkFramebuffer> swapchainFramebuffers_;
 
         /**
@@ -3389,7 +3437,28 @@ namespace CNA::Internal::Renderers::Vulkan
         // passes (LOAD/STORE, COLOR_ATTACHMENT_OPTIMAL in and out) instead of clearing them and
         // discarding them at every pass end. The two variants are render-pass-compatible, so the
         // same pipelines serve both.
-        VkRenderPass GetOrCreateRTRenderPassMsaa(VkFormat depthFmt, bool discardContents);
+        VkRenderPass GetOrCreateRTRenderPassMsaa(VkFormat depthFmt, bool discardContents,
+                                                 VkSampleCountFlagBits samples);
+        /**
+         * @brief plan_vulkan.md VULKAN-216: the sample count `msaa == true` currently denotes.
+         *
+         * Every pipeline factory here takes a `bool msaa` and, before this row, resolved it
+         * against the renderer's one device-wide `sampleCount_`. A render target may now carry a
+         * count of its own, so the bit alone no longer says how many samples the pipeline must
+         * rasterize with. This member is that answer, set once per render-pass segment in
+         * `RecordCommandBuffer` -- to `sampleCount_` for a backbuffer segment and to the source's
+         * `GetMsaaSampleCountEXT()` for a render-target segment -- and read by every factory
+         * through `MsaaSamplesForPipelinesEXT()`.
+         *
+         * It is deliberately NOT a parameter on fourteen factory signatures: the value is a
+         * property of the pass being recorded, not of the draw, and every one of those factories
+         * is only ever called from inside a segment that has just set it.
+         */
+        [[nodiscard]] VkSampleCountFlagBits MsaaSamplesForPipelinesEXT(bool msaa) const
+        {
+            return msaa ? pipelineSampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        }
+        VkSampleCountFlagBits pipelineSampleCount_ = VK_SAMPLE_COUNT_1_BIT;
         void CreateSurface();
         void PickPhysicalDevice();
         void CreateLogicalDevice();
@@ -3611,8 +3680,16 @@ namespace CNA::Internal::Renderers::Vulkan
         // The render-pass-selection decision shared by every 2D/custom/3D pipeline. MRT uses a
         // pass keyed by color count, sample count, and binding 0's depth format; single-target
         // draws reuse compatible backbuffer passes or a depth-format-keyed RT pass.
+        /// @param samplesOverride VULKAN-216: the sample count to build against when the caller
+        ///        already knows it and is NOT inside a `RecordCommandBuffer` segment (the effect
+        ///        renderer builds its pipeline at `SpriteBatch::End()` time, before replay, so
+        ///        `pipelineSampleCount_` does not yet describe the target it is about to draw
+        ///        into). 0 means "use `MsaaSamplesForPipelinesEXT(msaa)`", which is every other
+        ///        caller.
         VkRenderPass PickRTPipelineRenderPass(uint32_t colorAttachmentCount, bool msaa,
-                                               VkFormat targetDepthFmt);
+                                               VkFormat targetDepthFmt,
+                                               VkSampleCountFlagBits samplesOverride =
+                                                   static_cast<VkSampleCountFlagBits>(0));
 
         // --- Per-slot SamplerState (Task 118) ---
         void ApplySamplerState(int slot, int filter,

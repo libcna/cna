@@ -165,11 +165,14 @@ namespace
     constexpr Contract kContract{"BGFX", true, Support::Exact, true, true,
                                  true, Support::Exact, true, true, false};
 #elif defined(CNA_RENDERER_VULKAN)
-    // `msaaCubeTargets` false: a cube target multisamples only when the BACKBUFFER was created
-    // multisampled (Task 903's deliberate piggyback on the renderer's own sampleCount_), which this
-    // test does not request.
+    // `msaaCubeTargets` true since plan_vulkan.md VULKAN-216: a cube target's sample count is its
+    // OWN, so it multisamples on the count IT asked for rather than only when the BACKBUFFER was
+    // created multisampled (Task 903's piggyback on the renderer's own sampleCount_), which this
+    // test does not request. `msaaPreserves` is consulted only now that the flag above is true,
+    // and it is REMED-GFX-141's LOAD variant of the MSAA render pass that makes it true: every
+    // face owns its multisample view, and the pass loads and stores it across a rebind cycle.
     constexpr Contract kContract{"VULKAN", true, Support::Exact, true, true,
-                                 false, Support::Exact, false, true, false};
+                                 true, Support::Exact, true, true, false};
 #elif defined(CNA_RENDERER_WEBGPU)
     // `mipMapCubeTargets` true: WEBGPU-114 builds a real mip chain for a mipMap=true RenderTargetCube
     // and regenerates each face from its resolved level 0. `msaaCubeTargets` false: like EASYGL, a

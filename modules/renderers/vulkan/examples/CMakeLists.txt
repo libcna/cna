@@ -2462,6 +2462,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-216: a RenderTarget2D's MultiSampleCount is its OWN, on a device
+        # created WITHOUT multisampling -- deliberately no RecreateRendererForMultiSampleCount().
+        cna_vulkan_test(cna_test_vulkan_rendertarget_own_msaa
+                        vulkan_rendertarget_own_msaa_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_RenderTargetOwnMsaa
+            COMMAND cna_test_vulkan_rendertarget_own_msaa
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-050: SpriteSortMode::Immediate and ::Texture, asserted through
         # behaviour that DIFFERS between the modes rather than through the mode being accepted.
         cna_vulkan_test(cna_test_vulkan_spritebatch_sort_mode_semantics
