@@ -833,6 +833,20 @@ namespace CNA::Internal::Renderers::Vulkan
         VulkanTexture3DRenderer(VulkanRenderer* owner, int w, int h, int depth, bool mipMap);
         ~VulkanTexture3DRenderer() override;
 
+        /**
+         * @brief Destroys this object's Vulkan resources now, while the device still exists.
+         *
+         * plan_vulkan.md VULKAN-407. Every other Vulkan-owning class here has this pair, and
+         * these three did not -- so an instance that outlived its `GraphicsDevice` reached its
+         * destructor after `vkDestroyDevice`, found `owner_->device_` null and returned without
+         * freeing anything, having first read a `VulkanRenderer` whose destructor had already
+         * finished.
+         */
+        void ReleaseVulkanResources();
+
+        /** @brief Forgets the renderer, so an instance outliving it never dereferences it. */
+        void DisconnectOwner() { owner_ = nullptr; }
+
         /// REMED-GFX-135: true only once the host-visible staging buffer has been filled and its
         /// copy submitted and waited on; false when this texture has no usable image, the staging
         /// buffer could not be mapped, or the level/box/source length is out of range. The staging
@@ -866,6 +880,20 @@ namespace CNA::Internal::Renderers::Vulkan
     public:
         VulkanTextureCubeRenderer(VulkanRenderer* owner, int size, bool mipMap);
         ~VulkanTextureCubeRenderer() override;
+
+        /**
+         * @brief Destroys this object's Vulkan resources now, while the device still exists.
+         *
+         * plan_vulkan.md VULKAN-407. Every other Vulkan-owning class here has this pair, and
+         * these three did not -- so an instance that outlived its `GraphicsDevice` reached its
+         * destructor after `vkDestroyDevice`, found `owner_->device_` null and returned without
+         * freeing anything, having first read a `VulkanRenderer` whose destructor had already
+         * finished.
+         */
+        void ReleaseVulkanResources();
+
+        /** @brief Forgets the renderer, so an instance outliving it never dereferences it. */
+        void DisconnectOwner() { owner_ = nullptr; }
 
         /// REMED-GFX-135: same explicit completion contract as VulkanTexture3DRenderer::SetData.
         [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
@@ -970,6 +998,16 @@ namespace CNA::Internal::Renderers::Vulkan
                                        bool preserveContents = false,
                                        bool mipMap = false, int requestedMultiSampleCount = 0);
         ~VulkanRenderTargetCubeRenderer() override;
+
+        /**
+         * @brief Destroys this cube target's Vulkan resources now, while the device still exists.
+         *
+         * plan_vulkan.md VULKAN-407. See the identical pair on `VulkanTexture3DRenderer`.
+         */
+        void ReleaseVulkanResources();
+
+        /** @brief Forgets the renderer, so an instance outliving it never dereferences it. */
+        void DisconnectOwner() { owner_ = nullptr; }
 
         [[nodiscard]] int GetSize() const override { return size_; }
         void BindAsRenderTargetFace(int face) override;
@@ -2684,6 +2722,12 @@ namespace CNA::Internal::Renderers::Vulkan
         std::vector<VulkanVertexBufferRenderer*>  liveVertexBuffers_;
         std::vector<VulkanIndexBufferRenderer*>   liveIndexBuffers_;
         std::vector<VulkanRenderTargetRenderer*>  liveRenderTargets_;
+        // VULKAN-407: the three classes that were in no list at all. Without them a Texture3D,
+        // TextureCube or RenderTargetCube outliving its GraphicsDevice leaked every Vulkan object
+        // it owned and read a destroyed VulkanRenderer on the way out.
+        std::vector<VulkanTexture3DRenderer*>      liveTexture3Ds_;
+        std::vector<VulkanTextureCubeRenderer*>    liveTextureCubes_;
+        std::vector<VulkanRenderTargetCubeRenderer*> liveRenderTargetCubes_;
 
         // --- MRT proxy (one active binding; old bindings retire through the frame fence) ---
         // REMED-GFX-166: shared, so a deferred entry queued against this proxy keeps it alive

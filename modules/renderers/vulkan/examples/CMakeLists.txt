@@ -2048,6 +2048,17 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_Swapchain_Sync COMMAND cna_test_vulkan_swapchain_sync
             TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-407: a Texture3D, TextureCube or RenderTargetCube renderer that
+        # outlives its GraphicsDevice must not leak its Vulkan objects, and must not read the
+        # destroyed VulkanRenderer on the way out. The discriminator is VULKAN-393's output gate,
+        # applied to this registration like every other -- the layer reports the leak DURING
+        # vkDestroyDevice, which no in-process assertion can observe.
+        cna_vulkan_test(cna_test_vulkan_resource_outlives_device
+                        vulkan_resource_outlives_device_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_ResourceOutlivesDevice
+            COMMAND cna_test_vulkan_resource_outlives_device
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-170: the renderer's SurfaceFormat verdict must predict what
         # Texture2D construction actually does, for every value of the enum -- with the
         # GraphicsProfile's own eleven Reach refusals kept separate from the renderer's verdict,

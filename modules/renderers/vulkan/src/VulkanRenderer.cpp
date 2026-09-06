@@ -2299,6 +2299,17 @@ namespace CNA::Internal::Renderers::Vulkan
         // Externally-owned textures.
         for (auto* tex : liveTextures_) { tex->ReleaseVulkanResources(); tex->DisconnectOwner(); }
         liveTextures_.clear();
+        // VULKAN-407: the three classes that used to be in no list at all. A Texture3D, TextureCube
+        // or RenderTargetCube can outlive its GraphicsDevice -- MetalResourceHealth's own
+        // base-move test exists to document exactly that -- and until this loop existed such an
+        // object reached its destructor after vkDestroyDevice, found device_ null and returned
+        // having freed nothing, after reading a VulkanRenderer whose destructor had finished.
+        for (auto* vol  : liveTexture3Ds_)        { vol->ReleaseVulkanResources();  vol->DisconnectOwner(); }
+        liveTexture3Ds_.clear();
+        for (auto* cube : liveTextureCubes_)      { cube->ReleaseVulkanResources(); cube->DisconnectOwner(); }
+        liveTextureCubes_.clear();
+        for (auto* rtc  : liveRenderTargetCubes_) { rtc->ReleaseVulkanResources();  rtc->DisconnectOwner(); }
+        liveRenderTargetCubes_.clear();
         // REMED-GFX-075: force-free every retirement bucket now (device already idle from Step 1) --
         // including the handles the live-resource ReleaseVulkanResources() calls above just retired,
         // and any retired MRT proxy -- BEFORE descriptorPool_ is destroyed below, since retired
@@ -13886,15 +13897,28 @@ namespace CNA::Internal::Renderers::Vulkan
         viewInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0,
                                        static_cast<uint32_t>(levelCount_), 0, 1 };
         vkCreateImageView(dev, &viewInfo, nullptr, &imageView_);
+
+        owner_->liveTexture3Ds_.push_back(this);   // VULKAN-407
+    }
+
+    // VULKAN-407: the release half, so the renderer's destructor can end these resources' lives
+    // while the device is still alive instead of hoping this object is destroyed first.
+    void VulkanTexture3DRenderer::ReleaseVulkanResources()
+    {
+        if (!owner_ || owner_->device_ == VK_NULL_HANDLE) return;
+        VkDevice dev = owner_->device_;
+        if (imageView_ != VK_NULL_HANDLE) { vkDestroyImageView(dev, imageView_, nullptr); imageView_ = VK_NULL_HANDLE; }
+        if (image_     != VK_NULL_HANDLE) { vkDestroyImage(dev, image_, nullptr);          image_     = VK_NULL_HANDLE; }
+        if (memory_    != VK_NULL_HANDLE) { vkFreeMemory(dev, memory_, nullptr);           memory_    = VK_NULL_HANDLE; }
     }
 
     VulkanTexture3DRenderer::~VulkanTexture3DRenderer()
     {
-        if (!owner_ || owner_->device_ == VK_NULL_HANDLE) return;
-        VkDevice dev = owner_->device_;
-        if (imageView_ != VK_NULL_HANDLE) vkDestroyImageView(dev, imageView_, nullptr);
-        if (image_     != VK_NULL_HANDLE) vkDestroyImage(dev, image_, nullptr);
-        if (memory_    != VK_NULL_HANDLE) vkFreeMemory(dev, memory_, nullptr);
+        if (owner_) {
+            auto& list = owner_->liveTexture3Ds_;
+            list.erase(std::remove(list.begin(), list.end(), this), list.end());
+        }
+        ReleaseVulkanResources();
     }
 
     // REMED-GFX-093: Texture3D copies address one mip level of one 3D image array layer.  Depth
@@ -14137,9 +14161,13 @@ namespace CNA::Internal::Renderers::Vulkan
         viewInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0,
                                        static_cast<uint32_t>(levelCount_), 0, 6 };
         vkCreateImageView(dev, &viewInfo, nullptr, &imageView_);
+
+        owner_->liveTextureCubes_.push_back(this);   // VULKAN-407
     }
 
-    VulkanTextureCubeRenderer::~VulkanTextureCubeRenderer()
+    // VULKAN-407: the release half. Unchanged in mechanism -- the handles still go through the
+    // frame-fence-gated retirement queue -- only in who may call it and when.
+    void VulkanTextureCubeRenderer::ReleaseVulkanResources()
     {
         if (!owner_ || owner_->device_ == VK_NULL_HANDLE) return;
         // REMED-GFX-075: a TextureCube sampled by a deferred draw (e.g. EnvironmentMapEffect) bakes
@@ -14154,6 +14182,15 @@ namespace CNA::Internal::Renderers::Vulkan
         if (image_     != VK_NULL_HANDLE) { r.images.push_back(image_);          image_     = VK_NULL_HANDLE; }
         if (memory_    != VK_NULL_HANDLE) { r.memories.push_back(memory_);        memory_    = VK_NULL_HANDLE; }
         owner_->RetireResources(std::move(r));
+    }
+
+    VulkanTextureCubeRenderer::~VulkanTextureCubeRenderer()
+    {
+        if (owner_) {
+            auto& list = owner_->liveTextureCubes_;
+            list.erase(std::remove(list.begin(), list.end(), this), list.end());
+        }
+        ReleaseVulkanResources();
     }
 
     bool VulkanTextureCubeRenderer::SetData(int face, int level, int x, int y, int w, int h,
@@ -14742,6 +14779,8 @@ namespace CNA::Internal::Renderers::Vulkan
             // depth/stencil group, keyed on the cube's own colour image exactly as before.
             facePasses_[face]->depthGroup  = static_cast<const void*>(image_);
         }
+
+        owner_->liveRenderTargetCubes_.push_back(this);   // VULKAN-407
     }
 
     VulkanRenderTargetCubeRenderer::~VulkanRenderTargetCubeRenderer()
@@ -14759,7 +14798,16 @@ namespace CNA::Internal::Renderers::Vulkan
             owner_->TraceTargetDisposalEXT("rtcube", this,
                                            facePasses_[0] ? facePasses_[0].get() : nullptr,
                                            image_, cubeView_, framebuffers_[0]);
+            auto& list = owner_->liveRenderTargetCubes_;   // VULKAN-407
+            list.erase(std::remove(list.begin(), list.end(), this), list.end());
         }
+        ReleaseVulkanResources();
+    }
+
+    // VULKAN-407: the release half. The mechanism is unchanged -- everything still goes through
+    // the frame-fence-gated retirement queue -- only who may call it, and when.
+    void VulkanRenderTargetCubeRenderer::ReleaseVulkanResources()
+    {
         if (!owner_ || owner_->device_ == VK_NULL_HANDLE) return;
         // REMED-GFX-075: a RenderTargetCube used as a sampled SOURCE (its cubeView_ baked into a
         // deferred draw's descriptor set) destroyed before Present must keep that view alive until
