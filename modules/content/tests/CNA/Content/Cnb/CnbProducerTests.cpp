@@ -776,7 +776,11 @@ TEST(CnbProducerTest, ThirtySixByteSmplFollowedByAnotherChunkDoesNotInventALoop)
         WavBuilder{}.Fmt(1u, 1u, 44100u, 16u).Smpl(36u, 0u).Data(pcm).Build();
     const auto sound = CNA::Content::Cnb::DecodeWavAsCnbSoundEffect(noLoops, "noloops.wav");
     EXPECT_EQ(sound.loopStart, 0u);
-    EXPECT_EQ(sound.loopLength, 0u);
+    // A source that declares no loop gets the whole sound as its region, which is what XNA's
+    // SoundEffectProcessor writes -- measured through the genuine BuildContent
+    // (tests/reference/xna40/differential audio_wav_soundeffect.xnb) after this used to be zero,
+    // which is a sound whose looped instance loops nothing (XNAPP-266).
+    EXPECT_EQ(sound.loopLength, 1000u);
     EXPECT_EQ(sound.frameCount, 1000u);
 }
 

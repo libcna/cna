@@ -78,7 +78,8 @@ namespace CNA::Content::Pipeline
     {
         const CNA::Content::Import::ImportedSound& imported =
             input.Get<CNA::Content::Import::ImportedSound>();
-        Cnb::CnbSoundEffectData sound = Cnb::ProcessImportedSoundEffect(imported);
+        Cnb::CnbSoundEffectData sound = Cnb::ProcessImportedSoundEffect(
+            imported, Cnb::SoundEffectLoopPolicy::WholeSoundWhenUnset);
         if (CNA::Content::Import::ImportedPcmNarrowsToPcm16(imported.encoding))
         {
             // Both containers store 16-bit PCM, so this loss is unavoidable rather than a

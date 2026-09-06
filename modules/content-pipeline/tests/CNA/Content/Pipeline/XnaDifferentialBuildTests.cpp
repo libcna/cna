@@ -308,6 +308,13 @@ TEST(XnaDifferentialBuildTest, CnaAcceptsAndRefusesTheSameSourcesXnaDoes)
     // disagreement about content.
     ScopedEnvironment environment;
     std::error_code error;
+    // Beside the build tree rather than in the repository: these are a comparison's inputs, not a
+    // measurement to commit -- XNA's half is what is committed, because only one machine can
+    // produce it.
+    const std::filesystem::path publishRoot =
+        Locate("tools/xna-pipeline-oracle").parent_path().parent_path() /
+        "build" / "xna-pipeline-oracle" / "differential" / "cna";
+    std::filesystem::remove_all(publishRoot, error);
     // Present-but-empty is not configured: a variable can be set to an empty string, and a build
     // told the compiler is "" fails instantly in a way that reads like a disagreement about content.
     const char* configured = std::getenv("CNA_FXC");
@@ -371,6 +378,24 @@ TEST(XnaDifferentialBuildTest, CnaAcceptsAndRefusesTheSameSourcesXnaDoes)
         catch (const std::exception&)
         {
             cnaBuilt = false;
+        }
+
+        // What CNA built is published under the name the oracle publishes XNA's under, so the
+        // semantic comparison (`tools/xna-pipeline-oracle/differential/compare.py`) has two
+        // directories to put side by side. Only this route can produce them: the corpus names XNA's
+        // importers and processors, and translating those is what `BuildContent` is for -- a script
+        // that wrote the names into a build configuration would need a second copy of that mapping.
+        if (cnaBuilt)
+        {
+            std::string published = one.name;
+            std::replace(published.begin(), published.end(), '/', '_');
+            const std::filesystem::path produced =
+                source.Output() / (std::filesystem::path(source.Name()).stem().string() + ".xnb");
+            std::error_code copyError;
+            std::filesystem::create_directories(publishRoot, copyError);
+            std::filesystem::copy_file(produced, publishRoot / (published + ".xnb"),
+                                       std::filesystem::copy_options::overwrite_existing,
+                                       copyError);
         }
         if (cnaBuilt != one.xna.built)
         {

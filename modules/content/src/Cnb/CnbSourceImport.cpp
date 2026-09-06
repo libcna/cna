@@ -518,7 +518,8 @@ namespace CNA::Content::Cnb
     }
 
     CnbSoundEffectData ProcessImportedSoundEffect(
-        const CNA::Content::Import::ImportedSound& imported)
+        const CNA::Content::Import::ImportedSound& imported,
+        const SoundEffectLoopPolicy loopPolicy)
     {
         if (imported.channels != 1u && imported.channels != 2u)
         {
@@ -537,6 +538,14 @@ namespace CNA::Content::Cnb
             throw ContentLoadException(
                 "CNB SoundEffect processing: imported loop region exceeds the frame count.");
         }
+        // See SoundEffectLoopPolicy: a build gives a loopless source the whole sound, as XNA does,
+        // and a runtime reader keeps what its file declared.
+        const std::uint32_t effectiveLoopLength =
+            loopPolicy == SoundEffectLoopPolicy::WholeSoundWhenUnset &&
+                    imported.loopStart == 0u && imported.loopLength == 0u
+                ? imported.frameCount
+                : imported.loopLength;
+
         const std::uint64_t sourceBytesPerSample =
             CNA::Content::Import::ImportedPcmSampleBytes(imported.encoding);
         if (sourceBytesPerSample == 0u)
@@ -562,7 +571,7 @@ namespace CNA::Content::Cnb
         sound.channels = imported.channels;
         sound.frameCount = imported.frameCount;
         sound.loopStart = imported.loopStart;
-        sound.loopLength = imported.loopLength;
+        sound.loopLength = effectiveLoopLength;
 
         using CNA::Content::Import::ImportedPcmEncoding;
         if (imported.encoding == ImportedPcmEncoding::Signed16LittleEndian)
@@ -655,7 +664,8 @@ namespace CNA::Content::Cnb
     CnbSoundEffectData DecodeWavAsCnbSoundEffect(std::span<const std::uint8_t> wavBytes,
                                                   const std::string& origin)
     {
-        return ProcessImportedSoundEffect(DecodeWavAsImportedSound(wavBytes, origin));
+        return ProcessImportedSoundEffect(DecodeWavAsImportedSound(wavBytes, origin),
+                                          SoundEffectLoopPolicy::WholeSoundWhenUnset);
     }
 
     CNA::Content::Import::ImportedSound ImportWavAsImportedSound(const std::string& wavPath)
@@ -677,6 +687,7 @@ namespace CNA::Content::Cnb
 
     CnbSoundEffectData ImportWavAsCnbSoundEffect(const std::filesystem::path& wavPath)
     {
-        return ProcessImportedSoundEffect(ImportWavAsImportedSound(wavPath));
+        return ProcessImportedSoundEffect(ImportWavAsImportedSound(wavPath),
+                                          SoundEffectLoopPolicy::WholeSoundWhenUnset);
     }
 }

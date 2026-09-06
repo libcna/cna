@@ -1,0 +1,39 @@
+{
+  "format": "CNA.XnaDifferential.Decisions",
+  "version": 1,
+  "comment": "plans/plan_xnapipeline_parity.md XNAPP-266 (§24): a difference between XNA's .xnb and CNA's is one of three things, and this file is the second of them. A case listed here differs for a reason that has been established and written down -- a deliberate divergence, or something this environment cannot settle. Everything not listed here and not identical is open, and fails the comparison. A decision whose case has since become identical also fails, so a reason cannot outlive what it explained.",
+  "accepted": [
+    {
+      "case": "texture_jpg_sprite",
+      "reason": "Two conformant JPEG decoders disagree within an IDCT's tolerance. XNA decodes through D3DX and CNA through stb_image; the pixels differ by a few units and neither is wrong. Already recorded for the per-extension differential, which compares JPEG pixels within a tolerance rather than exactly (XNAPP-167)."
+    },
+    {
+      "case": "texture_hdr_sprite",
+      "reason": "A Radiance picture reaches XNA's TextureImporter as a PixelBitmapContent<Vector4> and its SpriteTextureProcessor converts those floats to Color; the canonical route decodes .hdr through the shared image decoder, whose RGBE-to-LDR conversion applies its own gamma. The XNA facade's own route answers the floats (RadianceHdrDecoder, XNAPP-167); it is the canonical Rgba8 route this case exercises. Open as a *design* question rather than a defect, and recorded so the choice is visible."
+    },
+    {
+      "case": "texture_png4x4_texture_dxt",
+      "reason": "Block compression is lossy and every encoder chooses its endpoints differently. XNA compresses through D3DX; CNA through its own encoder. The dimensions, mip count, format and level sizes agree -- only the compressed bytes differ, which is what two DXT encoders always do."
+    },
+    {
+      "case": "texture_png_sprite_xbox360",
+      "reason": "The Xbox 360 stores a texture tiled, and XNA's pipeline tiles it for that target. CNA writes the untiled payload and refuses the platform by default for exactly this reason (--xnb-allow-unverified-xbox is needed to produce one at all). Lifting that refusal per type is XNAPP-252, and it needs hardware this machine does not have."
+    },
+    {
+      "case": "audio_wav_soundeffect_xbox360",
+      "reason": "XNA converts a sound effect to XMA for the Xbox 360 -- format tag 0x6601, a big-endian XMA2WAVEFORMATEX, a quarter of the data. XMA is Microsoft's own codec with no public specification and no licensable encoder, so CNA answers the Windows PCM payload instead. Measured and recorded at the processor level too (soundeffectprofile/*, XNAPP-021); .wav's xbox360 row reads UNSUPPORTED."
+    },
+    {
+      "case": "effect_fx_source",
+      "reason": "XNA compiles an effect from a memory buffer through d3dx9; CNA runs the fxc command line, which embeds source information the memory path does not. The container header is byte-identical (the 0xBCF00BCF wrapper, XNAPP-191); the blob behind it is 460 bytes to fxc's 476, first differing at offset 50. Closing it needs a native helper calling D3DXCreateEffectCompiler on a buffer."
+    },
+    {
+      "case": "effect_fx_source_reach",
+      "reason": "The same divergence as effect_fx_source. Note that XNA's two profiles produce different bytes for the same source while CNA's produce the same bytes: CNA does not rewrite a source's own `compile vs_2_0` statements, so Reach and HiDef differ only in what the container records. Recorded rather than resolved -- what XNA varies between the two profiles has not been measured yet."
+    },
+    {
+      "case": "xml_intermediate_passthrough",
+      "reason": "CNA has no canonical .xml route. Of the 1466 .xml assets in the public sample corpus, almost all declare game-defined types, which only a game's own pipeline assembly can build (XNAPP-260); a built-in route could cover the handful the framework itself defines and would be XNB-only. The decision to build that subset has not been taken."
+    }
+  ]
+}
