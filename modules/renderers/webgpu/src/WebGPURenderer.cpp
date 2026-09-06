@@ -2709,10 +2709,26 @@ namespace CNA::Internal::Renderers::WebGPU
                                                           int surfaceFormat)
         : owner_(&owner), width_(width), height_(height), preserveContents_(preserveContents)
     {
-        // WEBGPU-182: this kind cannot rebuild itself on a new device, so a simulated loss refuses while one is alive.
-        owner.CountUnrecoverableResourceEXT(1);
         if (width_ <= 0 || height_ <= 0)
             throw std::invalid_argument("CNA WebGPU: RenderTarget2D dimensions must be positive");
+        // WEBGPU-182: the four arguments the native objects are built from, kept so a device
+        // recreate can build them again. The creation itself is CreateNativeObjectsEXT below,
+        // shared by this constructor and the recreate so the two cannot drift apart.
+        requestedDepthFormat_ = depthFormat;
+        requestedMipMap_ = mipMap;
+        requestedMultiSampleCount_ = multiSampleCount;
+        requestedSurfaceFormat_ = surfaceFormat;
+        CreateNativeObjectsEXT();
+        owner.RegisterDeviceResourceEXT(this);   // WEBGPU-182
+    }
+
+    void WebGPURenderTargetRenderer::CreateNativeObjectsEXT()
+    {
+        const int depthFormat = requestedDepthFormat_;
+        const bool mipMap = requestedMipMap_;
+        const int multiSampleCount = requestedMultiSampleCount_;
+        const int surfaceFormat = requestedSurfaceFormat_;
+        (void)surfaceFormat;
 
         // WEBGPU-165: THIS target's own requested sample count, clamped by the same empirical
         // adapter probe the renderer-global path uses (`PickSampleCount`, which asks the device
@@ -2900,10 +2916,31 @@ namespace CNA::Internal::Renderers::WebGPU
         sampled_ = std::make_shared<const WebGPUSampledResourceEXT>(colorTexture_, colorView_);
     }
 
+    void WebGPURenderTargetRenderer::ReleaseDeviceObjectsEXT()
+    {
+        // WEBGPU-182. A render target's content is GPU-only and a device reset discards it --
+        // which is XNA's own rule for one, so nothing is saved here, only released.
+        sampled_.reset();
+        if (msaaColorView_ != nullptr) { wgpuTextureViewRelease(msaaColorView_); msaaColorView_ = nullptr; }
+        if (msaaColorTexture_ != nullptr) { wgpuTextureRelease(msaaColorTexture_); msaaColorTexture_ = nullptr; }
+        if (depthView_ != nullptr) { wgpuTextureViewRelease(depthView_); depthView_ = nullptr; }
+        if (depthTexture_ != nullptr) { wgpuTextureRelease(depthTexture_); depthTexture_ = nullptr; }
+        if (colorLevel0View_ != nullptr) { wgpuTextureViewRelease(colorLevel0View_); colorLevel0View_ = nullptr; }
+        if (colorView_ != nullptr) { wgpuTextureViewRelease(colorView_); colorView_ = nullptr; }
+        if (colorTexture_ != nullptr) { wgpuTextureRelease(colorTexture_); colorTexture_ = nullptr; }
+    }
+
+    void WebGPURenderTargetRenderer::RecreateAfterDeviceLossEXT()
+    {
+        if (owner_ == nullptr || colorTexture_ != nullptr) return;
+        // Recreated EMPTY, and that is correct rather than a shortcut: XNA discards a render
+        // target's contents across a device reset, which is what RenderTargetUsage names.
+        CreateNativeObjectsEXT();
+    }
+
     WebGPURenderTargetRenderer::~WebGPURenderTargetRenderer()
     {
-        // WEBGPU-182.
-        if (owner_ != nullptr) owner_->CountUnrecoverableResourceEXT(-1);
+        if (owner_ != nullptr) owner_->UnregisterDeviceResourceEXT(this);   // WEBGPU-182
         // RenderTarget2D::Dispose() (Task 717's own precedent) already refuses to dispose a
         // render target still bound on its GraphicsDevice, so this should never actually trigger
         // through the public API -- but a stack-allocated target's C++ destructor runs directly and

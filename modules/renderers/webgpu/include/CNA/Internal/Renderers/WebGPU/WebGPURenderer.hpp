@@ -270,7 +270,7 @@ namespace CNA::Internal::Renderers::WebGPU
     /// itself does not touch any already-live VulkanRenderTargetRenderer either. This is expected
     /// to be rare in practice (games normally finish GraphicsDeviceManager.ApplyChanges() before
     /// LoadContent() creates any RenderTarget2D instances).
-    class WebGPURenderTargetRenderer final : public IRenderTargetRenderer, public IWebGPUSamplable
+    class WebGPURenderTargetRenderer final : public IRenderTargetRenderer, public IWebGPUSamplable, public IWebGPUDeviceResourceEXT
     {
     public:
         WebGPURenderTargetRenderer(WebGPURenderer& owner, int width, int height,
@@ -328,6 +328,24 @@ namespace CNA::Internal::Renderers::WebGPU
         /// REMED-GFX-102: exact colour-attachment format captured by this target object. Sprite
         /// pipeline identity uses format compatibility, never this target object's identity.
         [[nodiscard]] WGPUTextureFormat ColorFormat() const { return colorFormat_; }
+
+        /** @brief `WEBGPU-182`: releases every native handle this target made from the device. */
+        void ReleaseDeviceObjectsEXT() override;
+        /** @brief `WEBGPU-182`: rebuilds them, EMPTY, which is XNA's own rule for a device reset. */
+        void RecreateAfterDeviceLossEXT() override;
+        /** @brief `WEBGPU-182`: forgets the renderer. */
+        void DetachOwnerEXT() override { owner_ = nullptr; }
+
+    private:
+        /** @brief `WEBGPU-182`: the native-object creation the constructor and a recreate share. */
+        void CreateNativeObjectsEXT();
+        /// The four constructor arguments, kept so a recreate can build the same objects again.
+        int requestedDepthFormat_ = 0;
+        bool requestedMipMap_ = false;
+        int requestedMultiSampleCount_ = 0;
+        int requestedSurfaceFormat_ = 0;
+
+    public:
         /// WEBGPU-39: this target's depth attachment WGPU format (Undefined for DepthFormat::None) and
         /// whether it carries a stencil aspect. Pipelines drawn into this target declare exactly this.
         [[nodiscard]] WGPUTextureFormat DepthFormat() const { return depthFormat_; }

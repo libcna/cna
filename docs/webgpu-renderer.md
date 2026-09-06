@@ -986,22 +986,33 @@ device is lost (`WEBGPU-181`), and on this pin that is a safety mechanism rather
 return a failure status but panics inside wgpu-native and aborts the process. See *Device loss: what
 the pin actually does* above.
 
-**The device can now be destroyed and recreated, but the game's resources cannot yet survive it**
-(`WEBGPU-182`, partial). `DebugSimulateContextLoss()` releases every device-owned object and
-destroys the `WGPUDevice`; `DebugRestoreContext()` requests a new one from the surviving adapter,
-re-configures the same surface and raises `DeviceResetting`/`DeviceReset`. Verified end to end:
-`CanBeginDrawEXT()` goes false and back, each event fires exactly once, and a texture created and
-drawn AFTER the recreate renders correctly with no validation error. A `Texture2D` uploaded before the loss still samples
-correctly afterwards, and a `VertexBuffer` created before it still draws — the first is rebuilt from
-`WEBGPU-181`'s shared CPU pixels (or the compressed block store), and the second needed no rebuild at
-all, because the deferred replay builds its own vertex buffer from the CPU shadow and nothing binds
-the renderer's native handle in a render pass.
+**The device can be destroyed and recreated, and the game's ordinary resources survive it**
+(`WEBGPU-182`). `DebugSimulateContextLoss()` releases every registered resource's handles and every
+device-owned object, unconfigures the surface and destroys the `WGPUDevice`;
+`DebugRestoreContext()` requests a new one from the surviving adapter, re-configures the same
+surface, rebuilds every registered resource and raises `DeviceResetting`/`DeviceReset`. Verified end
+to end: `CanBeginDrawEXT()` goes false and back, each event fires exactly once, and a texture created
+and drawn AFTER the recreate renders correctly with no validation error. A `Texture2D` uploaded
+before the loss still samples correctly afterwards, a `VertexBuffer` created before it still draws, a
+`RenderTarget2D` created before it still renders, and one that was BOUND when the device went is
+still the bound target after the restore — the clear and the sprite issued straight after the restore
+both land in it.
+
+Each of those four survives for a different reason, and the differences are the useful part. The
+texture is rebuilt from `WEBGPU-181`'s shared CPU pixels (or the compressed block store). The vertex
+buffer needed no rebuild at all, because the deferred replay builds its own vertex buffer from the
+CPU shadow and nothing binds the renderer's native handle in a render pass. The render target is
+rebuilt **empty**, which is XNA-correct rather than a shortcut: a device reset discards a render
+target's contents — the same thing `RenderTargetUsage` already names for a far cheaper event — so
+what survives is the object (size, format, sample count) and its binding, not its pixels.
 
 **What still cannot survive a loss is refused rather than broken.** A `TextureCube`,
 `RenderTargetCube`, `Texture3D`, occlusion query or custom `ShaderEffect` cannot yet rebuild itself,
-and `RenderTarget2D` is in that set too, so a live one is counted and `DebugSimulateContextLoss()`
-throws `System::NotSupportedException` naming them while any exists — a named refusal in place of a
-dead native handle.
+so a live one is counted and `DebugSimulateContextLoss()` throws `System::NotSupportedException`
+naming them while any exists — a named refusal in place of a dead native handle. That refusal is not
+cosmetic: with the render target's own registration removed as a negative control, so that it kept
+handles from the destroyed device, the first submit after the restore was a wgpu-native
+`Validation Error` that panics and aborts the process.
 
 **A stale `GraphicsDevice.Viewport` was scaling every sprite** (`WEBGPU-178`). `GetViewportSize()`
 answered from the last surface CONFIGURATION rather than the last surface the platform REPORTED, so

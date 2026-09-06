@@ -20,6 +20,10 @@
 //   (see `SetContextRecoveryEnabled`), so this checks the contract the interface actually states
 //   rather than a stronger one it does not.
 //
+// D, E and F -- `WEBGPU-182`: a real destroy and recreate, then the RenderTarget2D half of it:
+//   a target created before the loss still renders afterwards, and one that was BOUND when the
+//   device went is still the bound target after the restore.
+//
 // Exit code 0 = all checks PASS, 1 = any FAIL.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -32,6 +36,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
 
 #include <array>
@@ -234,6 +239,84 @@ public:
                   "device");
             check(errors() == baseline,
                   "and the whole loss/restore cycle raised no validation error");
+        }
+
+
+        // --- E and F -- WEBGPU-182: the RenderTarget2D half ------------------------------------
+        // A render target owns a colour texture, up to two views, an optional depth texture and an
+        // optional MSAA pair, all made from the device -- so it was the last resource kind that
+        // still forced a loss to be refused. It is recoverable now, and recreated EMPTY, which is
+        // not a shortcut but XNA's own rule: a device reset discards a render target's contents,
+        // which is exactly what RenderTargetUsage::DiscardContents already names for a far cheaper
+        // event. What must survive is the OBJECT -- its size, format, sample count and, in F, its
+        // binding -- so the game can keep drawing into the same RenderTarget2D it was holding.
+        const Color kMarker(30, 200, 120, 255);
+        auto survivingTarget = std::make_unique<RenderTarget2D>(
+            device, kSize, kSize, false, SurfaceFormat::Color, DepthFormat::None, 0,
+            RenderTargetUsage::DiscardContents);
+
+        // E -- created before the loss, drawn into after it.
+        renderer.DebugSimulateContextLoss();
+        check(!renderer.CanBeginDrawEXT(),
+              "a live RenderTarget2D no longer refuses the loss -- it is recoverable now, so the "
+              "unrecoverable-kind gate does not fire");
+        renderer.DebugRestoreContext();
+        check(survivingTarget->getWidthProperty() == kSize &&
+                  survivingTarget->getHeightProperty() == kSize,
+              "the surviving RenderTarget2D still reports the size it was created with");
+        {
+            device.SetRenderTarget(survivingTarget.get());
+            device.Clear(kMarker);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            device.Clear(kClearColor);
+            SpriteBatch batch(device);
+            batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &pointClamp, nullptr, nullptr);
+            batch.Draw(*survivingTarget, Rectangle(0, 0, kSize, kSize),
+                       Rectangle(0, 0, kSize, kSize), Color::White);
+            batch.End();
+            const Color centre = ReadCentre(device);
+            check(std::abs(centre.getGProperty() - kMarker.getGProperty()) <= 8,
+                  "a RenderTarget2D created BEFORE the loss still renders afterwards -- it was "
+                  "rebuilt on the new device and sampling it back shows what was drawn into it");
+        }
+
+        // F -- and one that was BOUND when the device went stays bound across the cycle. This is
+        // the discriminating case: if the loss silently dropped the binding, the clear below would
+        // land on the backbuffer instead and the target would sample back as the empty texture the
+        // recreate made, not as the marker.
+        {
+            device.SetRenderTarget(survivingTarget.get());
+            renderer.DebugSimulateContextLoss();
+            renderer.DebugRestoreContext();
+            device.Clear(kMarker);
+            SpriteBatch inside(device);
+            inside.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &pointClamp, nullptr,
+                         nullptr);
+            inside.Draw(*survivor, Rectangle(kSize / 4, kSize / 4, kSize / 2, kSize / 2),
+                        Color::White);
+            inside.End();
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            device.Clear(kClearColor);
+            SpriteBatch batch(device);
+            batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &pointClamp, nullptr, nullptr);
+            batch.Draw(*survivingTarget, Rectangle(0, 0, kSize, kSize),
+                       Rectangle(0, 0, kSize, kSize), Color::White);
+            batch.End();
+            const Color centre = ReadCentre(device);
+            const Color corner = [&] {
+                const Rectangle region(2, 2, 1, 1);
+                Color pixel(0, 0, 0, 0);
+                device.GetBackBufferData(&region, &pixel, 0, 1);
+                return pixel;
+            }();
+            check(std::abs(centre.getRProperty() - kSprite.getRProperty()) <= 8,
+                  "a render target BOUND when the device was lost is still the bound target after "
+                  "the restore -- the sprite drawn straight after the restore landed IN it");
+            check(std::abs(corner.getGProperty() - kMarker.getGProperty()) <= 8,
+                  "and the clear issued after the restore landed in that same target too, not on "
+                  "the backbuffer");
+            check(errors() == baseline,
+                  "the two extra render-target loss cycles raised no validation error either");
         }
 
         std::printf("=== %d/%d PASS ===\n", passCount_, checkCount_);
