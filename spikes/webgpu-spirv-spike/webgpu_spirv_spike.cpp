@@ -678,9 +678,8 @@ namespace
             const Decorations d = Scan(words, wordCount);
             for (const auto& [id, loc] : d.locations)
             {
-                if (loc != 0xDEADBEEFu) continue;
                 const auto it = d.names.find(id);
-                std::printf("    unpatched location on %%%u (%s)\n", id,
+                std::printf("    Location %-12u on %%%-4u (%s)\n", loc, id,
                             it != d.names.end() ? it->second.c_str() : "?");
             }
             return false;

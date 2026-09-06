@@ -103,14 +103,21 @@ TEST(WebGPUCompiledEffectTest, EveryCommittedStockEffectTranslatesAndSplits)
     }
 }
 
-TEST(WebGPUCompiledEffectTest, RealXna4GameEffectsWithShaderModel1PixelShadersTranslate)
+TEST(WebGPUCompiledEffectTest, RealXna4GameEffectsWithShaderModel1PixelShadersParseAndReflect)
 {
     GraphicsDevice device;
     if (RendererOf(device) == nullptr)
         GTEST_SKIP() << "this build did not select the WebGPU renderer";
-    // plans/plan_webgpu.md WEBGPU-166: these two failed to parse at all until CNA's
+    // plans/plan_webgpu.md WEBGPU-166: these two failed to PARSE at all until CNA's
     // mojoshader-6333f74-spirv-texcrd.patch, and then produced an illegal entry-point interface
     // until mojoshader-6333f74-spirv-ps1x-interface.patch. They are the regression guard for both.
+    //
+    // This test deliberately claims parse and reflection only, not that every pass DRAWS. Six of
+    // the eighteen passes across these two fixtures still produce a module naga rejects with
+    // "Multiple bindings at location 1" -- a shared MojoShader SPIR-V linker defect, not a WebGPU
+    // one, diagnosed in WEBGPU-166's row. A pass that hits it is refused by name at module
+    // creation (GetOrCreateCompiledEffectShaderModuleEXT throws with the validation text), which is
+    // the behaviour that matters here: it never silently draws nothing.
     for (const char* name : {"racing-shadow-map-xna4.fxb", "racing-normal-mapping-xna4.fxb"})
     {
         // These two are extracted game content, so they live with the fixtures rather than with

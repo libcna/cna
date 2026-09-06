@@ -166,32 +166,69 @@ split, and handed to `wgpuDeviceCreateShaderModule`:
 | `DualTextureEffect.fxb` | 1 | 0 |
 | `EnvironmentMapEffect.fxb` | 1 | 0 |
 | `SkinnedEffect.fxb` | 1 | 0 |
-| `racing-shadow-map-xna4.fxb` (real XNA 4.0 game content) | 4 | 0 |
-| `racing-normal-mapping-xna4.fxb` (real XNA 4.0 game content) | 14 | 0 |
+| `racing-shadow-map-xna4.fxb` (real XNA 4.0 game content) | 4 | 1 |
+| `racing-normal-mapping-xna4.fxb` (real XNA 4.0 game content) | 14 | 5 |
 
 The 14-fixture `crash-corpus/` was swept too: no crash, no hang, every malformed input refused by
 name at parse time or at module creation.
 
-**Getting the last two rows there needed three MojoShader fixes, all shipped as patches in
-`cmake/patches/` and all gaps in the SPIR-V profile that the GLSL profile does not have** — which
-matters, because the GLSL profile is what EasyGL runs, so these were parity gaps rather than WebGPU
-gaps:
+> **The two racing rows were first measured as 0 failures, and that number was wrong.** It was taken
+> against a `~/deps/FNA3D/MojoShader` checkout that was silently missing two of CNA's own patches
+> (`mojoshader.h`'s hunks from `effect-parser-robustness`, and the whole of
+> `legacy-texcoord-input`) — a partially-patched shared tree, not the state the repository declares.
+> With the full series applied, 21 of the 27 passes translate and 6 do not. The table above is the
+> corrected measurement. The lesson is worth more than the number: **verify that a shared dependency
+> checkout matches the patch set the repository declares before measuring anything through it.**
+> `git -C ~/deps/FNA3D/MojoShader apply --reverse --check` on every patch is the one-line check.
+
+**Getting the racing fixtures to parse at all needed two MojoShader fixes, both shipped as patches
+in `cmake/patches/` and both gaps in the SPIR-V profile that the GLSL profile does not have** —
+which matters, because the GLSL profile is what EasyGL runs, so these were parity gaps rather than
+WebGPU gaps:
 
 1. **`TEXCRD` was `EMIT_SPIRV_OPCODE_UNIMPLEMENTED_FUNC`.** Both racing fixtures failed to parse at
    all with `TEXCRD unimplemented in spirv profile`. CNA had already implemented it for GLSL
    (`mojoshader-6333f74-glsl-texcrd.patch`); `mojoshader-6333f74-spirv-texcrd.patch` is the same
    instruction for SPIR-V.
-2. **`ps_1_x` texture-register varyings kept MojoShader's `0xDEADBEEF` location placeholder.** A
-   `t#` register in `ps_1_1`–`ps_1_3` is an Input created by `emit_SPIRV_global()` rather than by a
-   `dcl`, so it never appears in `pixel->attributes` and neither loop in
-   `MOJOSHADER_spirv_link_attributes()` reaches it. naga reported it as
-   `Multiple bindings at location 3735928559 are present` — 3735928559 is 0xDEADBEEF.
-3. **`ps_1_x` colour output had no `Location` decoration.** `ps_1_x` has no `oC#` register: `r0`
+2. **`ps_1_x` colour output had no `Location` decoration.** `ps_1_x` has no `oC#` register: `r0`
    *is* the colour output, and nothing decorated it, so the entry-point interface was illegal —
-   `Entry point arguments and return values must all have bindings`.
+   `Entry point arguments and return values must all have bindings`. Shipped as
+   `mojoshader-6333f74-spirv-ps1x-interface.patch`.
 
-Fixes 2 and 3 ship together as `mojoshader-6333f74-spirv-ps1x-interface.patch`. All three are
-additive and profile-local; they change no behaviour for shaders that already worked.
+Both are additive and profile-local; they change no behaviour for shaders that already worked.
+
+**A third fix was written, measured, and then DELETED, which is worth recording.** On the
+partially-patched tree the `ps_1_x` texcoord varyings kept their `0xDEADBEEF` placeholder, because a
+`t#` register appeared in no `pixel->attributes` entry for `MOJOSHADER_spirv_link_attributes()` to
+find. A third loop in that linker fixed it. Once the tree was repaired it turned out CNA's own
+`legacy-texcoord-input.patch` **already** registers those pairs
+(`add_attribute_register(ctx, REG_TYPE_TEXTURE, regnum, MOJOSHADER_USAGE_TEXCOORD, regnum, …)`), so
+the placeholder never occurs with the full series and the extra loop was solving a problem the
+repository had already solved. It was removed rather than kept "just in case": a patch that cannot
+fire is a patch nobody can reason about.
+
+### What still does not translate, and why it is not a WebGPU defect
+
+Six of the eighteen racing passes produce a module naga rejects with
+`Multiple bindings at location 1 are present`. Dumping the finished module's decorations names the
+shape exactly:
+
+```
+Location 0  on %28  (ps_r0)     <- the ps_1_x colour OUTPUT
+Location 0  on %31  (ps_v0)     <- a COLOR varying INPUT (a different space; not the collision)
+Location 1  on %64  (ps_t0)
+Location 2  on %66  (ps_t1)
+```
+
+The collision is between `ps_t0` and the second TEXCOORD0 fragment input the profile creates for the
+`gl_PointCoord`-or-`TEXCOORD0` dual-purpose variable, which the linker addresses through
+`pTable->attrib_offsets[TEXCOORD][0]` — the same table slot `legacy-texcoord-input` now gives to the
+`ps_1_x` `t0` register. **This reproduces with the linker loop above removed**, so it is neither
+caused nor masked by anything in this spike, and it lives in MojoShader's shared SPIR-V linker —
+which means the **Vulkan and SDL_GPU** compiled-effect backends have it too. It is recorded as a
+shared limitation rather than patched speculatively here: the fix belongs to whoever can measure it
+against all three backends. A pass that hits it is refused BY NAME at module creation, never drawn
+as nothing.
 
 **These are shared fixes, not WebGPU-local ones.** The Vulkan (`FX-065`) and SDL_GPU (`FX-061`)
 backends consume the same SPIR-V profile and the same linker, so both gain `ps_1_x` support from
