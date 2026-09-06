@@ -323,7 +323,9 @@ if(CNA_BUILD_TESTS)
     set(CNA_TEST_GROUP_DEPENDENCY_graphics_ext cna_graphics_ext)
     set(CNA_TEST_GROUP_DEPENDENCY_input cna_input)
     set(CNA_TEST_GROUP_DEPENDENCY_integration CNA)
-    set(CNA_TEST_GROUP_DEPENDENCY_math cna_math)
+    # SAMPLE-066: XmlSerializationEXT.hpp opts the math value types into
+    # System::Xml::Serialization, so the group that tests it links that component too.
+    set(CNA_TEST_GROUP_DEPENDENCY_math cna_math SharpRuntime::Xml.Serialization)
     set(CNA_TEST_GROUP_DEPENDENCY_media cna_media)
     set(CNA_TEST_GROUP_DEPENDENCY_net CNA_Net)
     set(CNA_TEST_GROUP_DEPENDENCY_platform cna_platform)

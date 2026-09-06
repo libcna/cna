@@ -29,6 +29,11 @@ set(CNA_SHARP_RUNTIME_DEFAULT_COMPONENTS
     Globalization
     Storage
     Security.Cryptography
+    # SAMPLE-066: modules/math's XmlSerializationEXT.hpp includes
+    # System/Xml/Serialization/detail/XmlMember.hpp, so the component has to be among the
+    # selected ones for its target to exist at all. Header-only (INTERFACE), so selecting it
+    # costs a consumer nothing until it includes that header.
+    Xml.Serialization
 )
 
 function(cna_detect_sharp_runtime_shape)
