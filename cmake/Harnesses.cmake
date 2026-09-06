@@ -325,6 +325,31 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     endif()
 endif()
 
+# --- plans/plan_xnapipeline_parity.md XNAPP-310: the .x and FBX reader fuzz harness ---
+# The same two shapes as the intermediate-XML harness below: standalone replay/mutation by
+# default, the libFuzzer entry point on request. Not a ctest test; the deterministic mutation pass
+# that runs on every build is XnaModelReaderHardeningTests in the content-pipeline suite. The
+# sanitizer run these readers were actually cleared under is a standalone ASAN+UBSAN build of the
+# two translation units, recorded in the plan -- a full sanitizer configuration of the whole
+# project would be several hundred megabytes to prove the same thing about the same two files.
+if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
+    option(CNA_XNA_MODEL_FUZZER_ENTRY_POINT
+           "Build the .x/FBX fuzz harness for libFuzzer/AFL++ instead of standalone replay" OFF)
+    add_executable(cna_xna_model_fuzzer tools/content/xna_model_fuzzer.cpp)
+    target_link_libraries(cna_xna_model_fuzzer PRIVATE cna_content_pipeline)
+    cna_link_sharp_runtime(cna_xna_model_fuzzer PRIVATE Core.Base)
+    if(CNA_XNA_MODEL_FUZZER_ENTRY_POINT)
+        target_compile_definitions(cna_xna_model_fuzzer PRIVATE CNA_XNA_MODEL_FUZZER_ENTRY_POINT)
+        if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+            target_link_options(cna_xna_model_fuzzer PRIVATE -fsanitize=fuzzer)
+        else()
+            message(WARNING
+                "CNA: CNA_XNA_MODEL_FUZZER_ENTRY_POINT=ON without clang -- the fuzz driver must be "
+                "supplied by the toolchain (for example AFL++) or the link will fail.")
+        endif()
+    endif()
+endif()
+
 # --- plans/plan_xnapipeline_parity.md XNAPP-075: XNA intermediate-XML fuzz harness ---
 # Same two shapes as the compiled-effect harness: standalone replay/mutation by default, the
 # libFuzzer entry point on request. Not a ctest test; the deterministic mutation pass that does
