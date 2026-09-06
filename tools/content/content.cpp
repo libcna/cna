@@ -2150,6 +2150,10 @@ namespace
         std::shared_ptr<Pipeline::ContentPipelineRegistry> mutableRegistry;
         try
         {
+            // The container options reach the factory too, so a caller registering writers of
+            // its own binds them to the same platform, version, profile and compression the
+            // built-in writers below are bound to (XNAPP-260).
+            command.services.xnbContainer = command.xnbOptions;
             mutableRegistry = createRegistry(command.services);
         }
         catch (const std::exception& error)
@@ -2620,12 +2624,17 @@ namespace
                     for (const Pipeline::ContentLogMessage& message : outcome.messages)
                     {
                         if (message.level == Pipeline::ContentLogLevel::Info) { continue; }
+                        const char* label = "warning";
+                        if (message.level == Pipeline::ContentLogLevel::Error) { label = "error"; }
+                        // An important message is the author's own, asked to be shown; calling it a
+                        // warning would put words in their mouth (XNAPP-260).
+                        else if (message.level == Pipeline::ContentLogLevel::Important)
+                        {
+                            label = "message";
+                        }
                         events.push_back(
-                            {false,
-                             std::string("  ") +
-                                 (message.level == Pipeline::ContentLogLevel::Error ? "error"
-                                                                                    : "warning") +
-                                 " (" + message.component + "): " + message.text});
+                            {false, std::string("  ") + label + " (" + message.component + "): " +
+                                        message.text});
                     }
                     if (outcome.skipped) { ++skipped; }
                     else { ++built; }

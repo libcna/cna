@@ -276,8 +276,10 @@ namespace CNA::Content::Pipeline
 
     void XnaBridgeLogger::LogImportantMessage(const std::string& message)
     {
-        if (importer_ != nullptr) { importer_->LogInfo(message); }
-        else { processor_->LogInfo(message); }
+        // Not the same level as LogMessage: XNA documents this one as reaching the user even at
+        // low verbosity, which is the only reason the method exists (XNAPP-260).
+        if (importer_ != nullptr) { importer_->LogImportant(message); }
+        else { processor_->LogImportant(message); }
     }
 
     void XnaBridgeLogger::LogMessage(const std::string& message)

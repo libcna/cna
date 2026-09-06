@@ -264,8 +264,22 @@ namespace CNA::Content::Pipeline
     /** @brief Severity of one build log message. */
     enum class ContentLogLevel
     {
+        /** @brief Detail a build tool shows only when asked for it. */
         Info,
+        /**
+         * @brief Something the author asked to be told, shown at ordinary verbosity.
+         *
+         * XNA's `ContentBuildLogger` has two message levels and the distinction is the whole point
+         * of the second: `LogImportantMessage` is documented as reaching the user even at low
+         * verbosity, and a component uses it for what the author needs to see. Without a level
+         * between `Info` and `Warning`, a user's important message either vanishes with the
+         * chatter or is dressed up as a warning it is not
+         * (plans/plan_xnapipeline_parity.md `XNAPP-260`).
+         */
+        Important,
+        /** @brief Something the author lost, or is about to. */
         Warning,
+        /** @brief Something that stopped the build. */
         Error,
     };
 
@@ -629,6 +643,13 @@ namespace CNA::Content::Pipeline
         void LogInfo(std::string text) const;
 
         /**
+         * @brief Records a message the author asked to be told, at ordinary verbosity.
+         *
+         * @param text The message.
+         */
+        void LogImportant(std::string text) const;
+
+        /**
          * @brief Emits an importer warning.
          *
          * @param text Message text.
@@ -789,6 +810,13 @@ namespace CNA::Content::Pipeline
          * @param text Message text.
          */
         void LogInfo(std::string text) const;
+
+        /**
+         * @brief Records a message the author asked to be told, at ordinary verbosity.
+         *
+         * @param text The message.
+         */
+        void LogImportant(std::string text) const;
 
         /**
          * @brief Emits a processor warning.

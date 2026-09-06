@@ -709,6 +709,12 @@ namespace CNA::Content::Pipeline
                 ContentPipelineStage::Import, component_, std::move(text));
     }
 
+    void ContentImporterContext::LogImportant(std::string text) const
+    {
+        EmitLog(*logger_, ContentLogLevel::Important, source_, logicalName_,
+                ContentPipelineStage::Import, component_, std::move(text));
+    }
+
     void ContentImporterContext::LogWarning(std::string text) const
     {
         EmitLog(*logger_, ContentLogLevel::Warning, source_, logicalName_,
@@ -915,6 +921,12 @@ namespace CNA::Content::Pipeline
     void ContentProcessorContext::LogInfo(std::string text) const
     {
         EmitLog(*logger_, ContentLogLevel::Info, source_, logicalName_,
+                ContentPipelineStage::Process, component_, std::move(text));
+    }
+
+    void ContentProcessorContext::LogImportant(std::string text) const
+    {
+        EmitLog(*logger_, ContentLogLevel::Important, source_, logicalName_,
                 ContentPipelineStage::Process, component_, std::move(text));
     }
 

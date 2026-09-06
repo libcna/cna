@@ -37,6 +37,18 @@ if(CNA_BUILD_EXAMPLES OR CNA_BUILD_TESTS)
     if(MINGW)
         target_link_options(cna_custom_content_compiler_example PRIVATE -municode)
     endif()
+
+    # plans/plan_xnapipeline_parity.md XNAPP-260: the same idea one layer up -- a user-owned
+    # compiler whose route is written against the XNA façade rather than the canonical API, so the
+    # documented way to extend an XNA content pipeline is exercised by something outside CNA.
+    add_executable(cna_xna_custom_pipeline_example
+        modules/content-pipeline/examples/xna-custom-pipeline.cpp
+    )
+    target_link_libraries(cna_xna_custom_pipeline_example PRIVATE cna_content_compiler)
+    cna_link_sharp_runtime(cna_xna_custom_pipeline_example PRIVATE)
+    if(MINGW)
+        target_link_options(cna_xna_custom_pipeline_example PRIVATE -municode)
+    endif()
 endif()
 
 # Adds a build target that delegates content compilation to the same cna-content executable users

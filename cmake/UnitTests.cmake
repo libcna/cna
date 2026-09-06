@@ -850,6 +850,16 @@ if(CNA_BUILD_TESTS)
         endif()
     endif()
 
+    if(TARGET cna_xna_custom_pipeline_example)
+        # XNAPP-260: the same, one layer up -- a user-owned compiler whose route is written against
+        # the XNA façade, run from the acceptance test the way a user would run it.
+        add_dependencies(${CNA_TEST_OBJECT_TARGET_content_pipeline}
+            cna_xna_custom_pipeline_example)
+        target_compile_definitions(${CNA_TEST_OBJECT_TARGET_content_pipeline} PRIVATE
+            CNA_XNA_CUSTOM_PIPELINE_PATH="$<TARGET_FILE:cna_xna_custom_pipeline_example>"
+        )
+    endif()
+
     if(TARGET cna_custom_content_compiler_example)
         # CP-022: exercise a separately linked user-owned compiler with both a custom route and
         # CNA built-ins through the same command coordinator as stock cna-content.

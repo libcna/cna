@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
+#include "CNA/Internal/Xnb/XnbFileOptions.hpp"
 
 namespace CNA::Content::Pipeline
 {
@@ -43,8 +44,32 @@ namespace CNA::Content::Pipeline
          */
         std::filesystem::path effectCompilerLauncher;
 
-        /** @brief Compares both fields. */
-        bool operator==(const ContentCompilerOptions& other) const = default;
+        /**
+         * @brief The container options this invocation selected.
+         *
+         * Informational, and the reason it exists is a third party's writers. A caller's registry
+         * factory can register writers of its own -- `RegisterXnaXnbOutput` does exactly that for
+         * an XNA-shaped route -- and those writers have to be bound to the same platform, version,
+         * profile and compression the built-in ones are, or a `--xnb-platform windowsphone` build
+         * silently produces a project where the game's own types went to a Windows container and
+         * everything else did not. The coordinator fills this in before calling the factory
+         * (plans/plan_xnapipeline_parity.md `XNAPP-260`).
+         */
+        CNA::Internal::Xnb::XnbFileOptions xnbContainer{};
+
+        /**
+         * @brief Compares the two build-time *services* a factory has to construct.
+         *
+         * Deliberately not the container options: those are something the coordinator applies to
+         * its own writers whatever the factory did, so a registry that was built before this
+         * command line existed is still usable with them. What such a registry cannot apply is an
+         * effect compiler, and that is what the inequality is asked about.
+         */
+        bool operator==(const ContentCompilerOptions& other) const
+        {
+            return effectCompilerExecutable == other.effectCompilerExecutable &&
+                   effectCompilerLauncher == other.effectCompilerLauncher;
+        }
     };
 
     /**
