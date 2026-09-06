@@ -19,9 +19,12 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <vector>
+
+#include "CNA/Internal/Graphics/DibBitmap.hpp"
 
 namespace CNA::Internal::Graphics
 {
@@ -222,6 +225,22 @@ namespace CNA::Internal::Graphics
         int sourceChannels = 0;
         stbi_uc* decoded = stbi_load_from_memory(
             data, static_cast<int>(size), &width, &height, &sourceChannels, STBI_rgb_alpha);
+        if (decoded == nullptr)
+        {
+            // A `.dib` is a bitmap that lost its file header, so no decoder recognises it by its
+            // first bytes -- putting the header back is the whole of reading one. Tried only after
+            // the decoder has already refused, which is what keeps this from claiming a file some
+            // other format owns; a DIB is added to the shared decoder rather than to the content
+            // pipeline so the runtime and a content build still answer the same pixels for the
+            // same bytes (plans/plan_xnapipeline_parity.md XNAPP-021).
+            const std::span<const std::uint8_t> bytes(data, size);
+            if (IsDeviceIndependentBitmap(bytes))
+            {
+                const std::vector<std::uint8_t> whole = WithBitmapFileHeader(bytes);
+                decoded = stbi_load_from_memory(whole.data(), static_cast<int>(whole.size()),
+                                                &width, &height, &sourceChannels, STBI_rgb_alpha);
+            }
+        }
         return CopyDecoded(decoded, width, height, "Failed to load image from memory");
     }
 

@@ -31,22 +31,6 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             return std::vector<std::uint8_t>(bytes.begin(), bytes.end());
         }
 
-        /** @brief Tells whether the bytes are a device-independent bitmap without its file header. */
-        [[nodiscard]] bool IsDeviceIndependentBitmap(const std::vector<std::uint8_t>& bytes)
-        {
-            if (bytes.size() < 40u || (bytes[0] == 'B' && bytes[1] == 'M'))
-            {
-                return false;
-            }
-            // A DIB begins with its own header size: 40 for BITMAPINFOHEADER, 108 or 124 for the
-            // versions that follow it.
-            const std::uint32_t headerSize = static_cast<std::uint32_t>(bytes[0]) |
-                                             (static_cast<std::uint32_t>(bytes[1]) << 8) |
-                                             (static_cast<std::uint32_t>(bytes[2]) << 16) |
-                                             (static_cast<std::uint32_t>(bytes[3]) << 24);
-            return headerSize == 40u || headerSize == 108u || headerSize == 124u;
-        }
-
         /**
          * @brief XNA's own refusal for a source its texture reader cannot read.
          *
@@ -65,30 +49,6 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                                "Error code: ") + (empty ? "D3DERR_INVALIDCALL" : "D3DXERR_INVALIDDATA") + ".";
         }
 
-        /** @brief The same bitmap with the fourteen-byte file header a `.bmp` carries. */
-        [[nodiscard]] std::vector<std::uint8_t> WithBitmapFileHeader(const std::vector<std::uint8_t>& body)
-        {
-            std::vector<std::uint8_t> bytes;
-            bytes.reserve(body.size() + 14u);
-            const auto word32 = [&bytes](std::uint32_t value)
-            {
-                for (int shift = 0; shift < 32; shift += 8)
-                {
-                    bytes.push_back(static_cast<std::uint8_t>((value >> shift) & 0xFFu));
-                }
-            };
-            bytes.push_back('B');
-            bytes.push_back('M');
-            word32(static_cast<std::uint32_t>(body.size() + 14u));
-            word32(0u);
-            const std::uint32_t headerSize = static_cast<std::uint32_t>(body[0]) |
-                                             (static_cast<std::uint32_t>(body[1]) << 8) |
-                                             (static_cast<std::uint32_t>(body[2]) << 16) |
-                                             (static_cast<std::uint32_t>(body[3]) << 24);
-            word32(14u + headerSize);
-            bytes.insert(bytes.end(), body.begin(), body.end());
-            return bytes;
-        }
     }
 
     std::shared_ptr<Graphics::TextureContent> TextureImporter::Import(const std::string& filename,
@@ -235,27 +195,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         CNA::Content::Cnb::CnbTextureData decoded;
         try
         {
-            if (IsDeviceIndependentBitmap(bytes))
-            {
-                // A `.dib` is a bitmap without its file header; putting one back is what lets the
-                // shared decoder read it (measured, textureimporter/formats accepts one).
-                const std::vector<std::uint8_t> whole = WithBitmapFileHeader(bytes);
-                const std::filesystem::path temporary =
-                    std::filesystem::temp_directory_path() /
-                    ("cna_dib_" + std::to_string(reinterpret_cast<std::uintptr_t>(bytes.data())) + ".bmp");
-                {
-                    std::ofstream out(temporary, std::ios::binary);
-                    out.write(reinterpret_cast<const char*>(whole.data()),
-                              static_cast<std::streamsize>(whole.size()));
-                }
-                decoded = CNA::Content::Cnb::ImportImageAsCnbTexture2D(temporary);
-                std::error_code removal;
-                std::filesystem::remove(temporary, removal);
-            }
-            else
-            {
-                decoded = CNA::Content::Cnb::ImportImageAsCnbTexture2D(filename);
-            }
+            // A `.dib` reaches this the same way a `.bmp` does: the shared decoder puts the
+            // missing file header back itself, so there is no second decoder and no temporary
+            // file here (measured, textureimporter/formats accepts one).
+            decoded = CNA::Content::Cnb::ImportImageAsCnbTexture2D(filename);
         }
         catch (const std::exception&)
         {

@@ -263,8 +263,11 @@ def build_report(inventory, pmap, inputs):
     w("| processor properties | %s | %d | %d |" % (pct(property_impl, len(property_rows)), sum(1 for r in property_rows if r[4] == "EXTERNAL_BLOCKED"), sum(1 for r in property_rows if r[4] == "MISSING")))
     if inputs is not None:
         ext = inputs.get("extensions", OrderedDict())
-        done = sum(1 for e in ext.values() if e.get("status") == "IMPLEMENTED+TESTED")
-        blocked = sum(1 for e in ext.values() if e.get("status") == "EXTERNAL_BLOCKED")
+        # The status is on the `cna` half of each row, which is the half a human edits; reading it
+        # from the row itself made this line report 0/18 no matter what the matrix said.
+        statuses = [e.get("cna", {}).get("status") for e in ext.values()]
+        done = sum(1 for s in statuses if s == "IMPLEMENTED+TESTED")
+        blocked = sum(1 for s in statuses if s == "EXTERNAL_BLOCKED")
         w("| source extensions IMPLEMENTED+TESTED | %s | %d | %d |" % (pct(done, len(ext)), blocked, len(ext) - done - blocked))
     w("")
     w("Status vocabulary: EXACT_EQUIVALENT, SEMANTIC_EQUIVALENT (spelling differs, capability identical; note says how),")

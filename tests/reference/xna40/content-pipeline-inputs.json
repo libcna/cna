@@ -24,8 +24,8 @@
     "tests": {
      "importer": "XnaTextureExtension.EveryDeclaredExtensionAnswersWhatXnaAnswers",
      "processor": "XnaTextureExtension.TheThreeTextureProcessorsAnswerWhatXnaAnswers, XnaTextureExtension.EveryTextureProcessorPropertyAnswersWhatXnaAnswers",
-     "sourceToXnb": "",
-     "sourceToCnb": "",
+     "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
+     "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
      "malformed": "XnaTextureExtension.EveryMalformedSourceIsRefusedAsXnaRefusesIt",
      "target": "XnaTextureExtension.EveryTargetAndProfileAnswersWhatXnaAnswers"
     },
@@ -33,7 +33,7 @@
     "windows": "SUPPORTED",
     "windowsPhone": "SUPPORTED",
     "xbox360": "SUPPORTED",
-    "status": "IMPLEMENTED",
+    "status": "IMPLEMENTED+TESTED",
     "note": "Importer, the three processors, every TextureProcessor property and every target/profile leg are compared against the genuine importer over this committed fixture. What is not named yet is the source-to-XNB and source-to-CNB legs."
    }
   },
@@ -54,8 +54,8 @@
     "tests": {
      "importer": "XnaTextureExtension.EveryDeclaredExtensionAnswersWhatXnaAnswers, XnaTextureImporter.EveryDdsShapeIsReadAsXnaReadsIt",
      "processor": "XnaTextureExtension.TheThreeTextureProcessorsAnswerWhatXnaAnswers, XnaTextureExtension.EveryTextureProcessorPropertyAnswersWhatXnaAnswers",
-     "sourceToXnb": "",
-     "sourceToCnb": "",
+     "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
+     "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
      "malformed": "XnaTextureExtension.EveryMalformedSourceIsRefusedAsXnaRefusesIt, XnaTextureImporter.ADx10HeaderIsRefusedAsXnaRefusesIt",
      "target": "XnaTextureExtension.EveryTargetAndProfileAnswersWhatXnaAnswers"
     },
@@ -63,7 +63,7 @@
     "windows": "SUPPORTED",
     "windowsPhone": "SUPPORTED",
     "xbox360": "SUPPORTED",
-    "status": "IMPLEMENTED",
+    "status": "IMPLEMENTED+TESTED",
     "note": "Importer, the three processors, every TextureProcessor property and every target/profile leg are compared against the genuine importer over this committed fixture. What is not named yet is the source-to-XNB and source-to-CNB legs."
    }
   },
@@ -84,8 +84,8 @@
     "tests": {
      "importer": "XnaTextureExtension.EveryDeclaredExtensionAnswersWhatXnaAnswers",
      "processor": "XnaTextureExtension.TheThreeTextureProcessorsAnswerWhatXnaAnswers, XnaTextureExtension.EveryTextureProcessorPropertyAnswersWhatXnaAnswers",
-     "sourceToXnb": "",
-     "sourceToCnb": "",
+     "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
+     "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
      "malformed": "XnaTextureExtension.EveryMalformedSourceIsRefusedAsXnaRefusesIt",
      "target": "XnaTextureExtension.EveryTargetAndProfileAnswersWhatXnaAnswers"
     },
@@ -93,7 +93,7 @@
     "windows": "SUPPORTED",
     "windowsPhone": "SUPPORTED",
     "xbox360": "SUPPORTED",
-    "status": "IMPLEMENTED",
+    "status": "IMPLEMENTED+TESTED",
     "note": "Importer, the three processors, every TextureProcessor property and every target/profile leg are compared against the genuine importer over this committed fixture. What is not named yet is the source-to-XNB and source-to-CNB legs."
    }
   },
@@ -174,8 +174,8 @@
     "tests": {
      "importer": "XnaTextureExtension.TheTwoFloatSourcesAnswerVector4AsXnaDoes, XnaTextureExtension.ARadiancePictureAnswersTheFloatsXnaAnswers",
      "processor": "XnaTextureExtension.TheThreeTextureProcessorsAnswerWhatXnaAnswers, XnaTextureExtension.EveryTextureProcessorPropertyAnswersWhatXnaAnswers",
-     "sourceToXnb": "",
-     "sourceToCnb": "",
+     "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
+     "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
      "malformed": "XnaTextureExtension.EveryMalformedSourceIsRefusedAsXnaRefusesIt",
      "target": "XnaTextureExtension.EveryTargetAndProfileAnswersWhatXnaAnswers"
     },
@@ -183,7 +183,7 @@
     "windows": "SUPPORTED",
     "windowsPhone": "SUPPORTED",
     "xbox360": "SUPPORTED",
-    "status": "IMPLEMENTED",
+    "status": "IMPLEMENTED+TESTED",
     "note": "The one texture extension with no measurement before this task, and the one that changed the importer: XNA answers a Vector4 bitmap for a Radiance picture, with the RGBE (mantissa + 0.5) / 256 * 2^(e - 128) convention. D3DX cannot read a flat scanline, which is a recorded divergence: CNA reads one. Source-to-XNB and source-to-CNB are not named yet."
    }
   },
@@ -204,8 +204,8 @@
     "tests": {
      "importer": "XnaTextureExtension.AJpegMatchesXnasShapeAndItsPixelsWithinDecoderTolerance",
      "processor": "XnaTextureExtension.TheThreeTextureProcessorsAnswerWhatXnaAnswers, XnaTextureExtension.EveryTextureProcessorPropertyAnswersWhatXnaAnswers",
-     "sourceToXnb": "",
-     "sourceToCnb": "",
+     "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
+     "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
      "malformed": "XnaTextureExtension.EveryMalformedSourceIsRefusedAsXnaRefusesIt",
      "target": "XnaTextureExtension.EveryTargetAndProfileAnswersWhatXnaAnswers"
     },
@@ -213,7 +213,7 @@
     "windows": "SUPPORTED",
     "windowsPhone": "SUPPORTED",
     "xbox360": "SUPPORTED",
-    "status": "IMPLEMENTED",
+    "status": "IMPLEMENTED+TESTED",
     "note": "The one source two conformant decoders may legitimately disagree about: the shape is compared exactly and the pixels within an IDCT's tolerance. Source-to-XNB and source-to-CNB are not named yet."
    }
   },
@@ -234,8 +234,8 @@
     "tests": {
      "importer": "XnaMp3Importer.EveryMp3AnswersTheFormatAndDurationXnaAnswers",
      "processor": "",
-     "sourceToXnb": "",
-     "sourceToCnb": "",
+     "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
+     "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
      "malformed": "XnaMp3Importer.RefusalsMatchXna",
      "target": ""
     },
@@ -264,8 +264,8 @@
     "tests": {
      "importer": "XnaTextureExtension.EveryDeclaredExtensionAnswersWhatXnaAnswers, XnaTextureExtension.TheTwoFloatSourcesAnswerVector4AsXnaDoes, XnaTextureImporter.APortableFloatMapAnswersItsOwnFloats",
      "processor": "XnaTextureExtension.TheThreeTextureProcessorsAnswerWhatXnaAnswers, XnaTextureExtension.EveryTextureProcessorPropertyAnswersWhatXnaAnswers",
-     "sourceToXnb": "",
-     "sourceToCnb": "",
+     "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
+     "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
      "malformed": "XnaTextureExtension.EveryMalformedSourceIsRefusedAsXnaRefusesIt",
      "target": "XnaTextureExtension.EveryTargetAndProfileAnswersWhatXnaAnswers"
     },
@@ -273,7 +273,7 @@
     "windows": "SUPPORTED",
     "windowsPhone": "SUPPORTED",
     "xbox360": "SUPPORTED",
-    "status": "IMPLEMENTED",
+    "status": "IMPLEMENTED+TESTED",
     "note": "Importer, the three processors, every TextureProcessor property and every target/profile leg are compared against the genuine importer over this committed fixture. What is not named yet is the source-to-XNB and source-to-CNB legs."
    }
   },
@@ -294,8 +294,8 @@
     "tests": {
      "importer": "XnaTextureExtension.EveryDeclaredExtensionAnswersWhatXnaAnswers",
      "processor": "XnaTextureExtension.TheThreeTextureProcessorsAnswerWhatXnaAnswers, XnaTextureExtension.EveryTextureProcessorPropertyAnswersWhatXnaAnswers",
-     "sourceToXnb": "",
-     "sourceToCnb": "",
+     "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
+     "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
      "malformed": "XnaTextureExtension.EveryMalformedSourceIsRefusedAsXnaRefusesIt",
      "target": "XnaTextureExtension.EveryTargetAndProfileAnswersWhatXnaAnswers"
     },
@@ -303,7 +303,7 @@
     "windows": "SUPPORTED",
     "windowsPhone": "SUPPORTED",
     "xbox360": "SUPPORTED",
-    "status": "IMPLEMENTED",
+    "status": "IMPLEMENTED+TESTED",
     "note": "Importer, the three processors, every TextureProcessor property and every target/profile leg are compared against the genuine importer over this committed fixture. What is not named yet is the source-to-XNB and source-to-CNB legs."
    }
   },
@@ -324,8 +324,8 @@
     "tests": {
      "importer": "XnaTextureExtension.EveryDeclaredExtensionAnswersWhatXnaAnswers",
      "processor": "XnaTextureExtension.TheThreeTextureProcessorsAnswerWhatXnaAnswers, XnaTextureExtension.EveryTextureProcessorPropertyAnswersWhatXnaAnswers",
-     "sourceToXnb": "",
-     "sourceToCnb": "",
+     "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
+     "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
      "malformed": "XnaTextureExtension.EveryMalformedSourceIsRefusedAsXnaRefusesIt",
      "target": "XnaTextureExtension.EveryTargetAndProfileAnswersWhatXnaAnswers"
     },
@@ -333,7 +333,7 @@
     "windows": "SUPPORTED",
     "windowsPhone": "SUPPORTED",
     "xbox360": "SUPPORTED",
-    "status": "IMPLEMENTED",
+    "status": "IMPLEMENTED+TESTED",
     "note": "Importer, the three processors, every TextureProcessor property and every target/profile leg are compared against the genuine importer over this committed fixture. What is not named yet is the source-to-XNB and source-to-CNB legs."
    }
   },
@@ -350,12 +350,12 @@
    "cna": {
     "importer": "Microsoft::Xna::Framework::Content::Pipeline::FontDescriptionImporter",
     "processor": "FontDescriptionProcessor",
-    "fixture": "tests/assets/xna40/source/probe.spritefont",
+    "fixture": "tests/assets/xna40/source/probe.spritefont, tests/assets/xna40/source/buildable.spritefont",
     "tests": {
      "importer": "XnaSourceCorpus.TheCommittedSpriteFontReadsEveryElementItNames, XnaFontDescriptionImporter.ReadsASpriteFontAsXnaDoes, XnaFontDescriptionImporter.WhichElementsAreRequiredMatchesXna",
      "processor": "",
-     "sourceToXnb": "",
-     "sourceToCnb": "",
+     "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
+     "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
      "malformed": "XnaFontDescriptionImporter.RefusalsMatchXna",
      "target": ""
     },
@@ -384,8 +384,8 @@
     "tests": {
      "importer": "XnaTextureExtension.EveryDeclaredExtensionAnswersWhatXnaAnswers",
      "processor": "XnaTextureExtension.TheThreeTextureProcessorsAnswerWhatXnaAnswers, XnaTextureExtension.EveryTextureProcessorPropertyAnswersWhatXnaAnswers",
-     "sourceToXnb": "",
-     "sourceToCnb": "",
+     "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
+     "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
      "malformed": "XnaTextureExtension.EveryMalformedSourceIsRefusedAsXnaRefusesIt",
      "target": "XnaTextureExtension.EveryTargetAndProfileAnswersWhatXnaAnswers"
     },
@@ -393,7 +393,7 @@
     "windows": "SUPPORTED",
     "windowsPhone": "SUPPORTED",
     "xbox360": "SUPPORTED",
-    "status": "IMPLEMENTED",
+    "status": "IMPLEMENTED+TESTED",
     "note": "Importer, the three processors, every TextureProcessor property and every target/profile leg are compared against the genuine importer over this committed fixture. What is not named yet is the source-to-XNB and source-to-CNB legs."
    }
   },
@@ -414,8 +414,8 @@
     "tests": {
      "importer": "XnaSourceCorpus.TheCommittedWavReadsAsTheToneItCarries, XnaWavImporter.EveryVariantXnaAcceptsIsAccepted, XnaWavImporter.ImportAndItsRefusalsMatchXna",
      "processor": "XnaAudioProcessors.TheSoundEffectProcessorConvertsAsXnaDoes",
-     "sourceToXnb": "",
-     "sourceToCnb": "",
+     "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
+     "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
      "malformed": "XnaWavImporter.ImportAndItsRefusalsMatchXna",
      "target": ""
     },
@@ -444,8 +444,8 @@
     "tests": {
      "importer": "XnaWmaImporter.EveryWmaReadsAsTheDecodedPcmTheSongPathNeeds",
      "processor": "",
-     "sourceToXnb": "",
-     "sourceToCnb": "",
+     "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
+     "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
      "malformed": "XnaWmaImporter.RefusalsMatchXna",
      "target": ""
     },

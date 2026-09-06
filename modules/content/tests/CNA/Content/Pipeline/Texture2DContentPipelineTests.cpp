@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -105,6 +107,66 @@ namespace
         auto registry = std::make_shared<Pipeline::ContentPipelineRegistry>();
         Pipeline::RegisterTexture2DContentPipeline(*registry);
         return registry;
+    }
+
+    /** @brief Builds one named source, for the routes whose fixture is not a `.png`. */
+    Pipeline::ContentBuildResult BuildNamed(const std::filesystem::path& root,
+                                            const std::string& source)
+    {
+        const Pipeline::ContentPipeline pipeline(MakeRegistry());
+        Pipeline::ContentBuildRequest request;
+        request.sourceRoot = root;
+        request.source = source;
+        request.logicalName = "Textures/wall";
+        return pipeline.Build(request);
+    }
+
+    /** @brief Little-endian dword, appended. */
+    void Word32(std::vector<std::uint8_t>& bytes, std::uint32_t value)
+    {
+        for (int shift = 0; shift < 32; shift += 8)
+        {
+            bytes.push_back(static_cast<std::uint8_t>((value >> shift) & 0xFFu));
+        }
+    }
+
+    /**
+     * @brief A 2x2 uncompressed A8R8G8B8 DDS holding red, green, blue and half-transparent grey.
+     *
+     * @param cube When true, declares a cube map and writes the six faces one such file carries.
+     */
+    std::vector<std::uint8_t> MakeUncompressedDds(const bool cube = false)
+    {
+        std::vector<std::uint8_t> bytes{'D', 'D', 'S', ' '};
+        Word32(bytes, 124u);      // dwSize
+        Word32(bytes, 0x100Fu);   // caps | height | width | pitch | pixelformat
+        Word32(bytes, 2u);        // height
+        Word32(bytes, 2u);        // width
+        Word32(bytes, 8u);        // pitch
+        Word32(bytes, 0u);        // depth
+        Word32(bytes, 1u);        // mip count
+        for (int reserved = 0; reserved < 11; ++reserved) { Word32(bytes, 0u); }
+        Word32(bytes, 32u);       // ddspf.dwSize
+        Word32(bytes, 0x41u);     // DDPF_RGB | DDPF_ALPHAPIXELS
+        Word32(bytes, 0u);        // fourCC
+        Word32(bytes, 32u);       // bits per pixel
+        Word32(bytes, 0x00FF0000u);
+        Word32(bytes, 0x0000FF00u);
+        Word32(bytes, 0x000000FFu);
+        Word32(bytes, 0xFF000000u);
+        Word32(bytes, cube ? 0x1008u : 0x1000u);  // DDSCAPS_TEXTURE, plus COMPLEX for a cube
+        Word32(bytes, cube ? 0xFE00u : 0u);       // DDSCAPS2_CUBEMAP and its six face bits
+        Word32(bytes, 0u);
+        Word32(bytes, 0u);
+        Word32(bytes, 0u);
+        // BGRA texels, top-down, as a DDS stores them.
+        const std::array<std::uint8_t, 16> texels{0x00, 0x00, 0xFF, 0xFF, 0x00, 0xFF, 0x00, 0xFF,
+                                                  0xFF, 0x00, 0x00, 0xFF, 0x80, 0x80, 0x80, 0x80};
+        for (int face = 0; face < (cube ? 6 : 1); ++face)
+        {
+            bytes.insert(bytes.end(), texels.begin(), texels.end());
+        }
+        return bytes;
     }
 
     Pipeline::ContentBuildResult BuildTexture(
@@ -666,5 +728,109 @@ TEST(Texture2DContentPipelineTest, CompressionWithoutAnEncoderSaysWhichBuildProv
     {
         const std::string message = error.what();
         EXPECT_NE(message.find("cna_content_pipeline"), std::string::npos) << message;
+    }
+}
+
+// plans/plan_xnapipeline_parity.md XNAPP-021: the four sources XNA's TextureImporter accepts and a
+// plain stb decode does not. Before this the canonical graph had no route for them at all, so a
+// `.dds`, `.dib`, `.pfm` or `.ppm` the XNA façade imported perfectly never reached any container.
+TEST(Texture2DContentPipelineTest, RoutesEveryTextureSourceXnaItselfAccepts)
+{
+    const std::vector<std::string> routed = Pipeline::ImageImporter().SourceExtensions();
+    for (const char* extension :
+         {".bmp", ".dds", ".dib", ".hdr", ".jpg", ".pfm", ".png", ".ppm", ".tga"})
+    {
+        EXPECT_NE(std::find(routed.begin(), routed.end(), extension), routed.end())
+            << "XNA's TextureImporter accepts " << extension;
+    }
+}
+
+TEST(Texture2DContentPipelineTest, DecodesAnUncompressedDdsSurface)
+{
+    ScratchDirectory scratch("dds");
+    WriteBytes(scratch.Path() / "wall.dds", MakeUncompressedDds());
+
+    const Pipeline::ContentBuildResult result = BuildNamed(scratch.Path(), "wall.dds");
+    const Cnb::CnbTextureData decoded = Cnb::DecodeTexture2DFromCnb(
+        Cnb::CnbDocument::Parse(result.output.bytes, "pipeline wall.cnb"));
+
+    EXPECT_EQ(decoded.width, 2u);
+    EXPECT_EQ(decoded.height, 2u);
+    ASSERT_EQ(decoded.representations.size(), 1u);
+    ASSERT_EQ(decoded.representations[0].levels.size(), 1u);
+    // RGBA, and the half-transparent grey premultiplied by its own alpha, which is this
+    // processor's documented default.
+    EXPECT_EQ(decoded.representations[0].levels[0],
+              (std::vector<std::uint8_t>{0xFF, 0x00, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF,
+                                         0x00, 0x00, 0xFF, 0xFF, 0x40, 0x40, 0x40, 0x80}));
+}
+
+TEST(Texture2DContentPipelineTest, DecodesAPortableFloatMapWithTheColorPackingRule)
+{
+    ScratchDirectory scratch("pfm");
+    // "PF" is colour, and a negative scale means little-endian floats stored bottom-up.
+    std::vector<std::uint8_t> pfm{'P', 'F', '\n', '2', ' ', '1', '\n', '-', '1', '.', '0', '\n'};
+    for (const float channel : {0.0f, 0.5f, 1.0f, 2.0f, -1.0f, 0.25f})
+    {
+        std::array<std::uint8_t, 4> raw{};
+        std::memcpy(raw.data(), &channel, sizeof(channel));
+        pfm.insert(pfm.end(), raw.begin(), raw.end());
+    }
+    WriteBytes(scratch.Path() / "wall.pfm", pfm);
+
+    const Pipeline::ContentBuildResult result = BuildNamed(scratch.Path(), "wall.pfm");
+    const Cnb::CnbTextureData decoded = Cnb::DecodeTexture2DFromCnb(
+        Cnb::CnbDocument::Parse(result.output.bytes, "pipeline wall.cnb"));
+
+    EXPECT_EQ(decoded.width, 2u);
+    EXPECT_EQ(decoded.height, 1u);
+    // Out-of-range floats clamp rather than wrap, and alpha is opaque: a float map carries none.
+    EXPECT_EQ(decoded.representations[0].levels[0],
+              (std::vector<std::uint8_t>{0x00, 0x80, 0xFF, 0xFF, 0xFF, 0x00, 0x40, 0xFF}));
+}
+
+TEST(Texture2DContentPipelineTest, DecodesAPortablePixmapAndAHeaderlessBitmap)
+{
+    ScratchDirectory scratch("ppm_dib");
+    const std::vector<std::uint8_t> ppm{'P', '6', '\n', '2', ' ', '1', '\n', '2', '5', '5', '\n',
+                                        0xFF, 0x00, 0x00, 0x00, 0xFF, 0x00};
+    WriteBytes(scratch.Path() / "wall.ppm", ppm);
+
+    std::vector<std::uint8_t> dib(40u, 0u);
+    dib[0] = 40u;   // BITMAPINFOHEADER
+    dib[4] = 2u;    // width
+    dib[8] = 1u;    // height
+    dib[12] = 1u;   // planes
+    dib[14] = 32u;  // bits per pixel
+    const std::array<std::uint8_t, 8> bgra{0x00, 0x00, 0xFF, 0xFF, 0x00, 0xFF, 0x00, 0xFF};
+    dib.insert(dib.end(), bgra.begin(), bgra.end());
+    WriteBytes(scratch.Path() / "wall.dib", dib);
+
+    for (const char* source : {"wall.ppm", "wall.dib"})
+    {
+        const Pipeline::ContentBuildResult result = BuildNamed(scratch.Path(), source);
+        const Cnb::CnbTextureData decoded = Cnb::DecodeTexture2DFromCnb(
+            Cnb::CnbDocument::Parse(result.output.bytes, "pipeline wall.cnb"));
+        EXPECT_EQ(decoded.width, 2u) << source;
+        EXPECT_EQ(decoded.height, 1u) << source;
+        EXPECT_EQ(decoded.representations[0].levels[0],
+                  (std::vector<std::uint8_t>{0xFF, 0x00, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF}))
+            << source;
+    }
+}
+
+TEST(Texture2DContentPipelineTest, ADdsCubeOrVolumeSaysWhichRouteBuildsIt)
+{
+    ScratchDirectory scratch("dds_cube");
+    WriteBytes(scratch.Path() / "wall.dds", MakeUncompressedDds(true));
+
+    try
+    {
+        (void)BuildNamed(scratch.Path(), "wall.dds");
+        FAIL() << "a cube map is not a Texture2D";
+    }
+    catch (const std::exception& error)
+    {
+        EXPECT_NE(std::string(error.what()).find("cube map"), std::string::npos) << error.what();
     }
 }

@@ -169,7 +169,12 @@ namespace CNA::Content::Pipeline
 
     std::vector<std::string> VideoImporter::SourceExtensions() const
     {
-        return {".mp4", ".ogv", ".webm", ".mkv", ".avi", ".mov"};
+        // `.wmv` is the one XNA itself accepts, and it was the one missing: the XNA façade's
+        // WmvImporter maps onto this importer, so a `.wmv` that the façade accepted had no
+        // canonical route and never reached an `.xnb`. This importer does not decode -- it records
+        // a reference to media that stays external -- so the container makes no difference to it
+        // (plans/plan_xnapipeline_parity.md XNAPP-021).
+        return {".wmv", ".mp4", ".ogv", ".webm", ".mkv", ".avi", ".mov"};
     }
 
     std::vector<std::string> VideoImporter::OutputTypes() const

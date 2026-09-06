@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    plans/plan_xnapipeline_parity.md XNAPP-021: the .spritefont source that actually builds.
+
+    probe.spritefont beside this one names a font family, which is what a real XNA description does
+    and what the importer differential measures. A family name is not buildable here on purpose:
+    CNA resolves a font file so that a content build produces the same bytes on every machine,
+    while XNA resolves a family through Windows. This description therefore names the font file
+    committed under tests/assets/fonts, which the source-to-output test copies beside it -- so the
+    source-to-XNB and source-to-CNB legs measure the whole route rather than the host's font list.
+-->
+<XnaContent xmlns:Graphics="Microsoft.Xna.Framework.Content.Pipeline.Graphics">
+  <Asset Type="Graphics:FontDescription">
+    <FontName>LiberationMono-Regular</FontName>
+    <Size>14</Size>
+    <Spacing>2</Spacing>
+    <UseKerning>true</UseKerning>
+    <Style>Regular</Style>
+    <DefaultCharacter>*</DefaultCharacter>
+    <CharacterRegions>
+      <CharacterRegion>
+        <Start>&#32;</Start>
+        <End>&#126;</End>
+      </CharacterRegion>
+    </CharacterRegions>
+  </Asset>
+</XnaContent>

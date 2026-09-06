@@ -15,7 +15,11 @@
 
 #include "CNA/Content/Cnb/CnbFormat.hpp"
 #include "CNA/Content/Cnb/CnbTextureCodec.hpp"
+#include "CNA/Internal/Graphics/DdsSurfaceReader.hpp"
+#include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
+#include "CNA/Internal/Graphics/PfmDecoder.hpp"
+#include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 
 namespace CNA::Content::Pipeline
@@ -277,6 +281,98 @@ namespace CNA::Content::Pipeline
             return result;
         }
 
+
+        /**
+         * @brief The level-0 surface of a DDS, as RGBA8.
+         *
+         * A DDS is the one source here whose payload can already be compressed, and this route's
+         * output is `Rgba8`, so the blocks are decompressed on the way through. That is not a
+         * shortcut: CNB texture schema 1 stores `Rgba8`, and the XNA façade -- which does keep DXT
+         * blocks, because an `.xnb` can carry them -- reads the same file through the same reader.
+         */
+        [[nodiscard]] CNA::Internal::Graphics::ImageData DecodeDdsLevelZero(
+            const std::vector<std::uint8_t>& bytes, const std::string& origin)
+        {
+            const CNA::Internal::Graphics::DdsSurfaces surfaces =
+                CNA::Internal::Graphics::ReadDdsSurfaces(bytes, origin);
+            if (surfaces.isCube || surfaces.isVolume)
+            {
+                throw ContentLoadException(
+                    std::string("DDS source is a ") + (surfaces.isCube ? "cube map" : "volume") +
+                    "; this route builds a Texture2D. Build it through the TextureCube or "
+                    "Texture3D route instead.");
+            }
+            if (surfaces.surfaces.empty() || surfaces.surfaces.front().empty())
+            {
+                throw ContentLoadException("DDS source carries no surface.");
+            }
+            const std::vector<std::uint8_t>& payload = surfaces.surfaces.front().front();
+            const int width = static_cast<int>(surfaces.width);
+            const int height = static_cast<int>(surfaces.height);
+            CNA::Internal::Graphics::ImageData image;
+            image.width = width;
+            image.height = height;
+            switch (surfaces.format)
+            {
+                case CNA::Internal::Graphics::DdsSurfaceFormat::Color:
+                    image.pixels = payload;
+                    break;
+                case CNA::Internal::Graphics::DdsSurfaceFormat::Dxt1:
+                    image.pixels = CNA::Internal::Graphics::DxtUtil::DecompressDxt1(
+                        payload.data(), payload.size(), width, height);
+                    break;
+                case CNA::Internal::Graphics::DdsSurfaceFormat::Dxt3:
+                    image.pixels = CNA::Internal::Graphics::DxtUtil::DecompressDxt3(
+                        payload.data(), payload.size(), width, height);
+                    break;
+                case CNA::Internal::Graphics::DdsSurfaceFormat::Dxt5:
+                    image.pixels = CNA::Internal::Graphics::DxtUtil::DecompressDxt5(
+                        payload.data(), payload.size(), width, height);
+                    break;
+            }
+            return image;
+        }
+
+        /**
+         * @brief A portable float map, as RGBA8.
+         *
+         * The floats are packed with the same rule `Color(Vector4)` uses, so a PFM compiled here
+         * holds the bytes the XNA façade's `Vector4` bitmap would have produced once its processor
+         * asked for `Color` -- one conversion rule, not two.
+         */
+        [[nodiscard]] CNA::Internal::Graphics::ImageData DecodePfmAsRgba8(
+            const std::vector<std::uint8_t>& bytes, const std::string& origin)
+        {
+            const CNA::Internal::Graphics::DecodedPfm decoded =
+                CNA::Internal::Graphics::DecodePfm(bytes, origin);
+            CNA::Internal::Graphics::ImageData image;
+            image.width = static_cast<int>(decoded.width);
+            image.height = static_cast<int>(decoded.height);
+            image.pixels.resize(decoded.pixels.size());
+            for (std::size_t at = 0; at + 3u < decoded.pixels.size(); at += 4u)
+            {
+                const Microsoft::Xna::Framework::Color color(Microsoft::Xna::Framework::Vector4(
+                    decoded.pixels[at], decoded.pixels[at + 1u], decoded.pixels[at + 2u],
+                    decoded.pixels[at + 3u]));
+                image.pixels[at] = color.getRProperty();
+                image.pixels[at + 1u] = color.getGProperty();
+                image.pixels[at + 2u] = color.getBProperty();
+                image.pixels[at + 3u] = color.getAProperty();
+            }
+            return image;
+        }
+
+        /** @brief Every source this route reads, decoded to the RGBA8 the rest of it expects. */
+        [[nodiscard]] CNA::Internal::Graphics::ImageData DecodeToRgba8(
+            const std::vector<std::uint8_t>& bytes, const std::filesystem::path& source)
+        {
+            const std::string origin = source.filename().string();
+            if (CNA::Internal::Graphics::IsDds(bytes)) { return DecodeDdsLevelZero(bytes, origin); }
+            if (CNA::Internal::Graphics::IsPfm(bytes)) { return DecodePfmAsRgba8(bytes, origin); }
+            // Everything else -- a `.dib` among them, which the shared decoder re-heads itself.
+            return CNA::Internal::Graphics::ImageLoader::LoadFromMemory(bytes.data(), bytes.size());
+        }
+
         std::optional<std::array<std::uint8_t, 3>> ReadColorKey(
             const ContentProcessorParameters& parameters)
         {
@@ -300,8 +396,14 @@ namespace CNA::Content::Pipeline
 
     std::vector<std::string> ImageImporter::SourceExtensions() const
     {
+        // The last four are the ones XNA's own TextureImporter accepts and a plain stb decode does
+        // not: a DDS surface, a headerless DIB, a portable float map and the `.ppm` spelling of the
+        // portable anymap `.pnm` already covers. They are listed here rather than only on the XNA
+        // façade because the façade is a façade -- a source the XNA importer accepts and the
+        // canonical graph cannot route is a source that imports and never reaches an `.xnb`
+        // (plans/plan_xnapipeline_parity.md XNAPP-021).
         return {".png", ".jpg", ".jpeg", ".bmp", ".tga", ".gif", ".psd", ".hdr",
-                ".pic", ".pnm"};
+                ".pic", ".pnm", ".dds", ".dib", ".pfm", ".ppm"};
     }
 
     std::vector<std::string> ImageImporter::OutputTypes() const
@@ -326,8 +428,7 @@ namespace CNA::Content::Pipeline
         }
         const std::vector<std::uint8_t> bytes{std::istreambuf_iterator<char>(stream),
                                               std::istreambuf_iterator<char>()};
-        CNA::Internal::Graphics::ImageData image =
-            CNA::Internal::Graphics::ImageLoader::LoadFromMemory(bytes.data(), bytes.size());
+        CNA::Internal::Graphics::ImageData image = DecodeToRgba8(bytes, source);
         if (image.width <= 0 || image.height <= 0)
         {
             throw ContentLoadException(
