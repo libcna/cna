@@ -2202,6 +2202,23 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_alpha_test_effect
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-261: the SkinnedEffect evidence gaps.
+        cna_vulkan_test(cna_test_vulkan_skinned_effect_bones
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_skinned_effect_bones_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SkinnedBones
+            COMMAND cna_test_vulkan_skinned_effect_bones
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_skinnedeffect_vector4_bone_indices
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_skinnedeffect_vector4_bone_indices_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SkinnedEffectVector4BoneIndices
+            COMMAND cna_test_vulkan_skinnedeffect_vector4_bone_indices
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_skinned_effect_integration
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/skinned_effect_integration_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SkinnedEffect_BoneDeformation
+            COMMAND cna_test_vulkan_skinned_effect_integration
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-339: the release path that also runs vkDeviceWaitIdle and the
         # retirement lists. HasRenderer() must be false after the first Dispose and no second
         # release may be attempted.
