@@ -21,8 +21,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
    AND CNA_GRAPHICS_RENDERER STREQUAL "VULKAN")
 
         # --- helper macro: build a headless Vulkan test exe ----------------------
+        # plan_vulkan.md VULKAN-013: every example built by this macro also links the
+        # terminate handler that turns "no usable Vulkan device" into a CTest SKIP instead of a
+        # core dump. Linked here rather than written into 131 hand-rolled main()s, so no example's
+        # own evidence changes; see vulkan_unavailable_device_skip.cpp for why the match is narrow.
+        set(CNA_VULKAN_EXAMPLE_SKIP_GUARD
+            ${CMAKE_CURRENT_SOURCE_DIR}/vulkan_unavailable_device_skip.cpp)
+
         macro(cna_vulkan_test target src)
-            add_executable(${target} ${src})
+            add_executable(${target} ${src} ${CNA_VULKAN_EXAMPLE_SKIP_GUARD})
             # SDL3::SDL3 is linked explicitly like every other renderer's test macro already
             # does: several of these example TUs include <SDL3/SDL.h> directly, and nothing on
             # the CNA surface propagates SDL's include directories (SDL has always been a
