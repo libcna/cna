@@ -111,6 +111,19 @@ artifact, not a skinning bug: per-render probing confirmed the WeightsPerVertex=
 correctly.) The one remaining web-specific refusal is the `--webgpu-2d-validation` scene's
 `MinimizeEXT()` (a native-only `GameWindow` operation, not a renderer limit).
 
+**The five behaviours whose browser answer is not implied by the native one (`WEBGPU-196`).**
+`cna_webgpu_coverage_page` answers them in headless Chrome, one check per frame, reading pixels back
+rather than trusting an absence of errors -- **9/9**. `FillMode::WireFrame` draws edges for a 3D quad
+AND a `SpriteBatch` quad (1036 lit pixels against a solid 96000), which is only possible because the
+wireframe is an index expansion rather than a polygon mode and browser WebGPU has no polygon mode at
+all. A declaration whose elements are listed in the other order gives a byte-identical picture
+(`WEBGPU-155`). Position from stream 0 and colour from stream 1 both reach one draw (`WEBGPU-172`). A
+custom-WGSL `ShaderEffect` compiles under the browser's **Tint** -- a different compiler from
+native's Naga, which is why this needed a run at all -- and draws. And a device loss recovers, after
+the adapter fix described above, which this page is what found. Compiled (bytecode) Effects need no
+browser run: they are out of scope on every target and the refusal is in shared code with no
+Emscripten seam.
+
 **Cross-backend pixel parity (`WEBGPU-123`).** `cna_diag_webgpu` builds the shared, renderer-agnostic
 `cross_renderer_diagnostic_scene` (one unlit vertex-colour triangle -> 64x64 RGBA8) for WEBGPU,
 native and Emscripten, exactly as `cna_diag_easygl`/`cna_diag_software` do.
@@ -979,6 +992,15 @@ format, so accepting them would mean a texture reporting one format while the GP
 **`SupportsCapability(MultiSampleAntiAliasing)` answers from the device probe** rather than the
 shared permissive default (`WEBGPU-195`), so it and `PickSampleCount()` are one answer instead of
 two.
+
+**A device loss recovers differently in a browser than natively, and the difference is in the
+specification** (`WEBGPU-196`). Natively, `DebugRestoreContext()` requests a second device from the
+adapter it already holds -- `WEBGPU-180` measured that this works on wgpu-native v29. In a browser it
+cannot: a `GPUAdapter` is **consumed** by `requestDevice()` per the WebGPU specification, so a second
+request is rejected with `adapter is "consumed": it has already been used to create a device`. The
+web target therefore releases the spent adapter and requests a fresh one, re-reading the optional
+features from it, since a replacement adapter is not obliged to offer the same feature set. Measured
+in headless Chrome, not inferred.
 
 **A real window resize reconfigures the surface, and only one check can tell** (`WEBGPU-192`).
 When the platform window changes size without anyone calling `GraphicsDevice::Reset()` -- the game

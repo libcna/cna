@@ -3610,9 +3610,30 @@ namespace CNA::Internal::Renderers::WebGPU
     {
         if (!deviceLost_) return;
         if (deviceEventCallback_) deviceEventCallback_(RendererDeviceEvent::Resetting);
-        // The adapter, instance and surface were never released: WEBGPU-180 measured that a second
-        // device from the SAME adapter re-configures the SAME surface and acquires from it.
+        // The instance and surface are never released. Whether the ADAPTER survives is where the
+        // two targets part company, and `WEBGPU-196` measured it in a real browser rather than
+        // assuming the native answer carried over.
+        //
+        // Native (wgpu-native v29): `WEBGPU-180` measured that a second device from the SAME adapter
+        // re-configures the SAME surface and acquires from it. Nothing else is rebuilt.
+        //
+        // Browser: a `GPUAdapter` is CONSUMED by `requestDevice()` -- that is the WebGPU
+        // specification, not a Dawn quirk -- so the second request is rejected outright with
+        // `adapter is "consumed": it has already been used to create a device`, which aborted the
+        // Emscripten main loop before this branch existed. A fresh adapter must be requested first.
+        // `RequestAdapterAndDevice()` does exactly that and re-reads the optional features from the
+        // new adapter, which is also the correct thing to do: a replacement adapter is not obliged
+        // to offer the same feature set as the one it replaces.
+#if defined(__EMSCRIPTEN__)
+        if (adapter_ != nullptr)
+        {
+            wgpuAdapterRelease(adapter_);
+            adapter_ = nullptr;
+        }
+        RequestAdapterAndDevice();
+#else
         RequestDeviceOnlyEXT();
+#endif
         // force=true because physicalWidth_/physicalHeight_ still hold the old size and the early
         // "already configured at this size" return would otherwise skip the reconfigure the new
         // device needs. This also recreates the depth and MSAA attachments and every stock shader

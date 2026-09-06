@@ -1075,6 +1075,13 @@ if(EMSCRIPTEN AND CNA_BUILD_EXAMPLES AND CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU"
     # and EASYGL build it, so the WebGPU output can be pixel-compared against another backend's dump
     # with cna_diag_compare. Under Emscripten it writes into MEMFS; scripts/run-webgpu-parity-test.sh
     # extracts the dump and runs the comparison.
+    # plans/plan_webgpu.md WEBGPU-196: the five behaviours whose browser answer is not implied by
+    # their native one -- wireframe (153/154), semantic vertex layouts (155), multi-stream input
+    # (172), the custom-WGSL ShaderEffect route compiled by Tint rather than Naga, and device loss
+    # (182). One page, one check per frame; see the file's header for why each is here.
+    cna_webgpu_effect_page(cna_webgpu_coverage_page webgpu_browser_coverage_test.cpp)
+    target_link_libraries(cna_webgpu_coverage_page PRIVATE WebGPU::WebGPU)
+
     cna_webgpu_effect_page(cna_diag_webgpu ${CNA_GRAPHICS_EXAMPLES_DIR}/cross_renderer_diagnostic_scene.cpp)
     # The scene writes its dump into MEMFS; export FS so the driver page (run-webgpu-parity-test.sh)
     # can read the bytes back out of the browser without modifying the renderer-agnostic scene.
