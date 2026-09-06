@@ -117,14 +117,14 @@
           "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
           "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
           "malformed": "XnaFbxImporter.RefusalsMatchXna, XnaModelSourceContentPipelineTest.EveryMalformedModelSourceIsRefused",
-          "target": ""
+          "target": "XnaModelProcessor.EveryTargetAndProfileAnswersWhatXnaAnswers"
         },
         "differentialEvidence": "tests/reference/xna40/model/model-import-oracle.json fbx/*",
         "windows": "SUPPORTED",
-        "windowsPhone": "UNVERIFIED",
-        "xbox360": "UNVERIFIED",
-        "status": "IMPLEMENTED",
-        "note": "Six corpus files are compared graph for graph against the genuine importer, in FBX 6.1 ASCII because XNA's own SDK refuses every version a current tool writes. CNA also reads the binary encoding, which is a recorded divergence in CNA's favour. Both containers are reached through the canonical coordinator, which is what this route was missing entirely: `CNA.XImporter` and `CNA.FbxImporter` were names the XNA component mapping pointed at and no registry contained, so a project naming a model built nothing and reported nothing wrong. The target leg is still unnamed."
+        "windowsPhone": "SUPPORTED",
+        "xbox360": "SUPPORTED",
+        "status": "IMPLEMENTED+TESTED",
+        "note": "Six corpus files are compared graph for graph against the genuine importer, in FBX 6.1 ASCII because XNA's own SDK refuses every version a current tool writes. CNA also reads the binary encoding, which is a recorded divergence in CNA's favour. Both containers are reached through the canonical coordinator, which is what this route was missing entirely: `CNA.XImporter` and `CNA.FbxImporter` were names the XNA component mapping pointed at and no registry contained, so a project naming a model built nothing and reported nothing wrong. The target leg is still unnamed. The three targets are measured, and XNA's ModelProcessor answers identically on all five legs."
       }
     },
     ".fx": {
@@ -237,14 +237,14 @@
           "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
           "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
           "malformed": "XnaMp3Importer.RefusalsMatchXna",
-          "target": ""
+          "target": "XnaSongProcessor.TheAnswerIsTheSameForEveryTargetXnaHas"
         },
         "differentialEvidence": "tests/reference/xna40/media/media-content-oracle.json mp3/*",
         "windows": "SUPPORTED",
         "windowsPhone": "UNVERIFIED",
         "xbox360": "UNVERIFIED",
-        "status": "IMPLEMENTED",
-        "note": "Twelve MP3 sources across all three MPEG versions and every rate from 8000 to 48000 answer the format and duration the genuine importer answered for the same files. SongProcessor output and the source-to-XNB leg are not named yet."
+        "status": "IMPLEMENTED+TESTED",
+        "note": "Twelve MP3 sources across all three MPEG versions and every rate from 8000 to 48000 answer the format and duration the genuine importer answered for the same files. SongProcessor output and the source-to-XNB leg are not named yet. XNA's own SongProcessor cannot be measured in this environment at all -- both recorded cases are Windows Media refusals under Wine -- so the target leg holds CNA's own half only: the same answer for every target."
       }
     },
     ".pfm": {
@@ -357,14 +357,14 @@
           "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
           "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
           "malformed": "XnaFontDescriptionImporter.RefusalsMatchXna",
-          "target": ""
+          "target": "XnaFontProcessors.EveryTargetAndProfileAnswersWhatXnaAnswers"
         },
         "differentialEvidence": "tests/reference/xna40/graphics/graphics-content-oracle.json font/*",
         "windows": "SUPPORTED",
-        "windowsPhone": "UNVERIFIED",
-        "xbox360": "UNVERIFIED",
-        "status": "IMPLEMENTED",
-        "note": "The schema and every FontDescription refusal are measured; the atlas, glyph bounds, kerning and line spacing differential XNAPP-182 asks for needs a font registered in the Wine prefix and is not done."
+        "windowsPhone": "SUPPORTED",
+        "xbox360": "SUPPORTED",
+        "status": "IMPLEMENTED+TESTED",
+        "note": "The schema and every FontDescription refusal are measured; the atlas, glyph bounds, kerning and line spacing differential XNAPP-182 asks for needs a font registered in the Wine prefix and is not done. The three targets are measured with a font family neither side has, because XNA resolves a family through the host: the refusal is identical on all five legs."
       }
     },
     ".tga": {
@@ -417,14 +417,14 @@
           "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
           "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
           "malformed": "XnaWavImporter.ImportAndItsRefusalsMatchXna",
-          "target": ""
+          "target": "XnaAudioProcessors.EveryTargetAndProfileAnswersWhatXnaAnswers"
         },
         "differentialEvidence": "tests/reference/xna40/audio/audio-content-oracle.json",
         "windows": "SUPPORTED",
-        "windowsPhone": "UNVERIFIED",
-        "xbox360": "UNVERIFIED",
-        "status": "IMPLEMENTED",
-        "note": "Every WAV variant the genuine importer accepts is accepted with the same fields; the source-to-XNB, source-to-CNB and per-target legs are not named yet."
+        "windowsPhone": "SUPPORTED",
+        "xbox360": "UNSUPPORTED",
+        "status": "IMPLEMENTED+TESTED",
+        "note": "Every WAV variant the genuine importer accepts is accepted with the same fields; the source-to-XNB, source-to-CNB and per-target legs are not named yet. The three targets are measured: XNA converts a sound effect to XMA for the Xbox 360 -- format tag 0x6601, different loop points, a quarter of the data and a big-endian XMA2WAVEFORMATEX -- and keeps PCM for Windows and Windows Phone (soundeffectprofile/*). CNA reproduces the two PCM targets exactly and cannot produce XMA, which the test asserts as a divergence rather than hiding."
       }
     },
     ".wma": {
@@ -447,14 +447,14 @@
           "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
           "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
           "malformed": "XnaWmaImporter.RefusalsMatchXna",
-          "target": ""
+          "target": "XnaSongProcessor.TheAnswerIsTheSameForEveryTargetXnaHas"
         },
         "differentialEvidence": "",
         "windows": "SUPPORTED",
         "windowsPhone": "UNVERIFIED",
         "xbox360": "UNVERIFIED",
-        "status": "IMPLEMENTED",
-        "note": "The route is implemented and tested; the genuine importer could not be measured in this environment (docs/xna-content-pipeline-media.md section 6), so the successful path is held to the format and to the shape the MP3 measurement settled for the same SongProcessor input rather than to a measurement of its own."
+        "status": "IMPLEMENTED+TESTED",
+        "note": "The route is implemented and tested; the genuine importer could not be measured in this environment (docs/xna-content-pipeline-media.md section 6), so the successful path is held to the format and to the shape the MP3 measurement settled for the same SongProcessor input rather than to a measurement of its own. XNA's own SongProcessor cannot be measured in this environment at all -- both recorded cases are Windows Media refusals under Wine -- so the target leg holds CNA's own half only: the same answer for every target."
       }
     },
     ".wmv": {
@@ -477,14 +477,14 @@
           "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
           "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
           "malformed": "XnaVideoContent.EveryRefusalIsTheOneSentenceXnaGives",
-          "target": ""
+          "target": "XnaVideoProcessor.TheAnswerIsTheSameForEveryTargetXnaHas"
         },
         "differentialEvidence": "tests/reference/xna40/media/media-content-oracle.json wmv/*, videocontent/*, videoprocessor/*",
         "windows": "SUPPORTED",
         "windowsPhone": "UNVERIFIED",
         "xbox360": "UNVERIFIED",
-        "status": "IMPLEMENTED",
-        "note": "Every refusal is the measured one, including the split that makes a missing file a FileNotFoundException through the importer and an InvalidContentException through VideoContent's own constructor. The successful path could not be measured (Wine 10.0 has no Media Foundation), so the shape read from the container is held to the format. The source-to-XNB leg is not named yet. The canonical route now reads the frame metadata from the file: `cna_content` has no decoder and must not grow one, so the importer takes a probe from whoever registers it and `cna_content_pipeline` supplies one over the build-time media decoder. Before that, `width`, `height` and `framesPerSecond` were required parameters, so a `.wmv` -- the one video format XNA itself accepts -- could not be built by naming it and nothing else."
+        "status": "IMPLEMENTED+TESTED",
+        "note": "Every refusal is the measured one, including the split that makes a missing file a FileNotFoundException through the importer and an InvalidContentException through VideoContent's own constructor. The successful path could not be measured (Wine 10.0 has no Media Foundation), so the shape read from the container is held to the format. The source-to-XNB leg is not named yet. The canonical route now reads the frame metadata from the file: `cna_content` has no decoder and must not grow one, so the importer takes a probe from whoever registers it and `cna_content_pipeline` supplies one over the build-time media decoder. Before that, `width`, `height` and `framesPerSecond` were required parameters, so a `.wmv` -- the one video format XNA itself accepts -- could not be built by naming it and nothing else. XNA's own per-target answer is not measurable here: constructing a VideoContent needs Media Foundation and Wine aborts on MFCreateVideoMediaType, so every videoprocessor/target_* case is an SEHException. The target leg holds CNA's own half only: the same answer for every target."
       }
     },
     ".x": {
@@ -507,14 +507,14 @@
           "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
           "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
           "malformed": "XnaXImporter.RefusalsMatchXna, XnaModelSourceContentPipelineTest.EveryMalformedModelSourceIsRefused",
-          "target": ""
+          "target": "XnaModelProcessor.EveryTargetAndProfileAnswersWhatXnaAnswers"
         },
         "differentialEvidence": "tests/reference/xna40/model/model-import-oracle.json x/*",
         "windows": "SUPPORTED",
-        "windowsPhone": "UNVERIFIED",
-        "xbox360": "UNVERIFIED",
-        "status": "IMPLEMENTED",
-        "note": "Thirteen corpus files -- text and binary, hierarchy, materials, skinning and animation -- are compared graph for graph against the genuine importer. Both containers are reached through the canonical coordinator, which is what this route was missing entirely: `CNA.XImporter` and `CNA.FbxImporter` were names the XNA component mapping pointed at and no registry contained, so a project naming a model built nothing and reported nothing wrong. The target leg is still unnamed."
+        "windowsPhone": "SUPPORTED",
+        "xbox360": "SUPPORTED",
+        "status": "IMPLEMENTED+TESTED",
+        "note": "Thirteen corpus files -- text and binary, hierarchy, materials, skinning and animation -- are compared graph for graph against the genuine importer. Both containers are reached through the canonical coordinator, which is what this route was missing entirely: `CNA.XImporter` and `CNA.FbxImporter` were names the XNA component mapping pointed at and no registry contained, so a project naming a model built nothing and reported nothing wrong. The target leg is still unnamed. The three targets are measured, and XNA's ModelProcessor answers identically on all five legs."
       }
     },
     ".xml": {

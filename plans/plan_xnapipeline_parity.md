@@ -784,6 +784,33 @@ existed:
 name another component reaches it by, which must not join default resolution. Without it the
 XNA-named `TextureProcessor` competed with `CNA.TextureProcessor` for every `.png` in the tree.
 
+### Target-platform parity for the source families (`XNAPP-021`, Phase 13)
+
+The texture route's five legs were the only ones measured; seven extensions carried a blank
+`target`. All seven are now measured or recorded, and the measurement is not uniform:
+
+- **`ModelProcessor` and `FontDescriptionProcessor` answer identically on all five legs**
+  (`modelprofile/*`, `fontprofile/*`). The target is a no-op for these two -- measured, not
+  assumed. The font legs use a family neither side has, because XNA resolves a family through the
+  host and this prefix's font list is not the one CNA sees; a refusal is still an answer, and it is
+  the same answer on every leg.
+- **`SoundEffectProcessor` is the one that diverges, and completely.** On Xbox 360 XNA converts the
+  audio to XMA -- format tag `0x6601`, a different duration, different loop points, a quarter of the
+  data, and a big-endian `XMA2WAVEFORMATEX` where the other targets carry a `WAVEFORMATEX` -- while
+  Windows and Windows Phone keep the source's PCM (`soundeffectprofile/*`). CNA reproduces the two
+  PCM targets exactly and answers PCM on Xbox as well. **This is not a "no decoder in this build"
+  case**: XMA is Microsoft's own codec, it has no public specification, and there is no licensable
+  third-party encoder for it, so this is a real capability gap rather than unwritten code. The test
+  asserts the divergence rather than hiding it, and names what would have to change for the leg to
+  become an equality. `.wav`'s `xbox360` row therefore reads `UNSUPPORTED`, with the reason.
+- **`SongProcessor` and `VideoProcessor` cannot be measured here at all.** Every
+  `videoprocessor/target_*` case is `SEHException` because constructing a `VideoContent` needs Media
+  Foundation and Wine aborts on `MFCreateVideoMediaType`; XNA's Windows Media encoder, which
+  `SongProcessor` needs, never returns under the same prefix. Both legs therefore hold CNA's own
+  half only -- the same answer for every target -- and say in the test that they are the weaker
+  claim, with the recorded XNA refusals asserted so the leg turns into a differential the moment
+  the environment can answer.
+
 | `XNAPP-216` | `FbxImporter`: hierarchy, transforms, meshes, channels, normals/tangents/UVs/colours, skin weights, animations, materials/textures, coordinate-system and unit conversion as `BuildContent` observably does them. | [x] Measured first, and almost every rule differs from the `.x` route's for no reason a reader would predict. **FBX is already right-handed, so nothing is converted** -- positions and normals pass through as written where `.x` negates Z -- and yet **the winding IS reversed**, a polygon `0, 1, 2` answering indices `2, 1, 0`. **A texture coordinate's V is flipped** (`0.2` answers `0.8`), where `.x`'s is not. The channel order is normals, texture coordinates, then colours; `.x`'s is normals, colours, then texture coordinates. A vertex colour is **not** quantized through eight bits; `.x`'s is. A material reaches a batch **only through a `LayerElementMaterial`** -- a `Connect` alone leaves the batch material-less -- and it keeps the name the file gave it, where a `.x` material's name is dropped; and `Opacity` and `Shininess` are **not read at all**, every material answering the SDK's own alpha of 1 and specular power of 20. The three refusals are told apart by content and not by size: a file with no FBX header is the loader's initialization failure at 31 bytes and at 1024 alike, a DirectX `.x` file is `Could not detect file format`, and a document that parses no further is `encountered when importing the scene`. |
 | `XNAPP-218` | Read the FBX versions XNA cannot: its FBX SDK 2011.3.1 refuses every document of version 7400 and above. | [x] **A deliberate divergence, recorded rather than assumed away.** Every current exporter writes 7400 or 7500, and the genuine importer refuses all of them (measured, `fbx/fbx_binary_modern.fbx`); matching a bundled SDK's age would serve nobody. CNA's reader takes the text encoding (which is what a 6.1 document is, and what XNA reads) and the binary record stream alike, with zlib for the deflated arrays and a named refusal without it. |
 | `XNAPP-217` | FBX black-box corpus (CNA-authored/generated, plus permissively licensed) compared per §24. | [x] Six documents in `tests/assets/xna40/model`, written by `make_fbx_fixtures.py` in **FBX 6.1 ASCII** for a measured reason: XNA carries FBX SDK 2011.3.1, and an FBX written by a current tool is version 7400 or 7500, which that SDK refuses. Nothing is third-party: the content is authored here and the container is written here. `XnaFbxImporter` compares each graph for graph against `model-import-oracle.json`, with two documented normalizations -- a triangle is compared as a cycle, because the SDK picks its own starting corner when it triangulates a quad, and every number to a tolerance, because both sides' matrices come out of float trigonometry. |
@@ -920,7 +947,9 @@ texture formats had) and the canonical route now reads the frame metadata from t
 `BuildTimeMedia::ProbeVideo`. A parameter still overrides what the probe read, a build with no
 decoder behaves exactly as before, and a file the decoder cannot open is refused with a sentence
 that says so rather than one naming a missing parameter.
-Next: the intermediate-XML route, the `processor` and `target` legs the matrix still names,
+Sixteen of the eighteen extensions are `IMPLEMENTED+TESTED`; the two that are not are `.fx`, whose
+route needs an effect compiler, and `.xml`, which has no canonical importer at all. Next: the
+intermediate-XML route, then `.fx`,
 then `XNAPP-182` (the font atlas differential, which needs a font registered in the Wine prefix),
 `XNAPP-191`/`192` (the effect compiler comparison), and `XNAPP-201`/`202` and Phase 14, each of
 which waits on a decoder this build does not have -- measure XNA's answer first and record

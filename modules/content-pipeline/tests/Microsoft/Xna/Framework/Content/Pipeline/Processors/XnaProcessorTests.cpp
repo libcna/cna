@@ -321,12 +321,20 @@ namespace
         [[nodiscard]] Microsoft::Xna::Framework::Content::Pipeline::TargetPlatform getTargetPlatformProperty()
             const override
         {
-            return Microsoft::Xna::Framework::Content::Pipeline::TargetPlatform::Windows;
+            return platform_;
         }
         [[nodiscard]] Microsoft::Xna::Framework::Graphics::GraphicsProfile getTargetProfileProperty() const override
         {
-            return Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef;
+            return profile_;
         }
+
+        /** @brief The target this context builds for; Windows/HiDef unless a test says otherwise. */
+        Microsoft::Xna::Framework::Content::Pipeline::TargetPlatform platform_ =
+            Microsoft::Xna::Framework::Content::Pipeline::TargetPlatform::Windows;
+
+        /** @brief The graphics profile this context builds for. */
+        Microsoft::Xna::Framework::Graphics::GraphicsProfile profile_ =
+            Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef;
         void AddDependency(const std::string& filename) override { (void)filename; }
         void AddOutputFile(const std::string& filename) override { (void)filename; }
 
@@ -2084,5 +2092,77 @@ TEST(XnaEffectProcessor, DebugModeAutoFollowsTheBuildConfiguration)
         (void)processor.Process(effect, context);
         EXPECT_EQ(compiler->request.debugInformation, probe.debugInformation)
             << probe.configuration << " with mode " << static_cast<int>(probe.mode);
+    }
+}
+
+// plans/plan_xnapipeline_parity.md XNAPP-021, Phase 13: what a model and a font answer for each
+// of XNA's three targets.
+//
+// The texture route's five legs were measured first, because a texture is the one asset whose
+// format visibly depends on the target. These are the other two families a project can aim at a
+// target, and the measurement says something worth writing down: **XNA's ModelProcessor and
+// FontDescriptionProcessor answer identically on all five legs.** The target is not a no-op
+// because nobody looked -- it is a no-op, measured, for these two processors. A CNA processor that
+// started varying by target would fail here, which is the point of holding it.
+TEST(XnaModelProcessor, EveryTargetAndProfileAnswersWhatXnaAnswers)
+{
+    namespace G = Microsoft::Xna::Framework::Graphics;
+    const std::vector<std::tuple<std::string, Xna::TargetPlatform, G::GraphicsProfile>> legs = {
+        {"Windows_Reach", Xna::TargetPlatform::Windows, G::GraphicsProfile::Reach},
+        {"Windows_HiDef", Xna::TargetPlatform::Windows, G::GraphicsProfile::HiDef},
+        {"Xbox360_Reach", Xna::TargetPlatform::Xbox360, G::GraphicsProfile::Reach},
+        {"Xbox360_HiDef", Xna::TargetPlatform::Xbox360, G::GraphicsProfile::HiDef},
+        {"WindowsPhone_Reach", Xna::TargetPlatform::WindowsPhone, G::GraphicsProfile::Reach},
+    };
+    for (const auto& [label, platform, profile] : legs)
+    {
+        Processors::ModelProcessor processor;
+        RecordingContext context;
+        context.platform_ = platform;
+        context.profile_ = profile;
+        const std::shared_ptr<Processors::ModelContent> model =
+            processor.Process(TriangleScene(), context);
+        EXPECT_EQ(DescribeModel(model) + " built=" + context.Built(),
+                  Expected("modelprofile/" + label))
+            << label;
+    }
+}
+
+TEST(XnaFontProcessors, EveryTargetAndProfileAnswersWhatXnaAnswers)
+{
+    namespace G = Microsoft::Xna::Framework::Graphics;
+    const std::vector<std::tuple<std::string, Xna::TargetPlatform, G::GraphicsProfile>> legs = {
+        {"Windows_Reach", Xna::TargetPlatform::Windows, G::GraphicsProfile::Reach},
+        {"Windows_HiDef", Xna::TargetPlatform::Windows, G::GraphicsProfile::HiDef},
+        {"Xbox360_Reach", Xna::TargetPlatform::Xbox360, G::GraphicsProfile::Reach},
+        {"Xbox360_HiDef", Xna::TargetPlatform::Xbox360, G::GraphicsProfile::HiDef},
+        {"WindowsPhone_Reach", Xna::TargetPlatform::WindowsPhone, G::GraphicsProfile::Reach},
+    };
+    for (const auto& [label, platform, profile] : legs)
+    {
+        EXPECT_EQ(Result([platform = platform, profile = profile]
+                         {
+                             Processors::FontDescriptionProcessor processor;
+                             RecordingContext context;
+                             context.platform_ = platform;
+                             context.profile_ = profile;
+                             // A font family neither side has, deliberately: what a target leg
+                             // asks is whether the target changes the answer, and a refusal is an
+                             // answer. A successful rasterization is not comparable here, because
+                             // XNA resolves a family through the host and the oracle's Wine prefix
+                             // has a font list this one does not.
+                             auto description = std::make_shared<Graphics::FontDescription>(
+                                 "No Such Font At All", 12.0f, 0.0f);
+                             description->getCharactersProperty().insert(u'A');
+                             description->getCharactersProperty().insert(u'B');
+                             description->setIdentityProperty(Xna::ContentIdentity("font.spritefont"));
+                             const auto font = processor.Process(description, context);
+                             // The oracle prints the runtime type and the type's own declared
+                             // properties, of which SpriteFontContent has none.
+                             return "type=" + std::string(font == nullptr ? "null" : "SpriteFontContent") +
+                                    " properties=";
+                         }),
+                  Expected("fontprofile/" + label))
+            << label;
     }
 }

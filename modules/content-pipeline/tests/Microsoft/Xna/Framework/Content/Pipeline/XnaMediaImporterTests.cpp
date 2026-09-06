@@ -176,8 +176,11 @@ namespace
         }
         [[nodiscard]] Xna::TargetPlatform getTargetPlatformProperty() const override
         {
-            return Xna::TargetPlatform::Windows;
+            return platform_;
         }
+
+        /** @brief The target this context builds for; Windows unless a test says otherwise. */
+        Xna::TargetPlatform platform_ = Xna::TargetPlatform::Windows;
         [[nodiscard]] Microsoft::Xna::Framework::Graphics::GraphicsProfile
         getTargetProfileProperty() const override
         {
@@ -685,4 +688,116 @@ TEST(XnaSongProcessor, TheQualityChoosesTheBitRate)
         previous = size;
     }
     std::filesystem::remove_all(scratch);
+}
+
+// plans/plan_xnapipeline_parity.md XNAPP-021, Phase 13: the video and song target legs.
+//
+// XNA's own answer for these two is not measurable in this environment and the recorded corpus
+// says so rather than leaving it blank: every `videoprocessor/target_*` case is
+// `SEHException: External component has thrown an exception`, because constructing a VideoContent
+// needs Media Foundation and Wine 10.0 aborts on `mfplat.dll.MFCreateVideoMediaType`
+// (docs/xna-content-pipeline-media.md). XNA's Windows Media *encoder*, which SongProcessor needs,
+// never returns under the same prefix.
+//
+// What can be held here is CNA's own half: both processors answer the same thing for every target,
+// so a change that made either of them target-dependent would have to be a deliberate one, taken
+// against a measurement that does not exist yet. That is a weaker claim than the texture, model,
+// font and sound-effect legs make, and it is deliberately written as the weaker claim.
+TEST(XnaVideoProcessor, TheAnswerIsTheSameForEveryTargetXnaHas)
+{
+    if (!MediaAvailable())
+    {
+        GTEST_SKIP() << "this build has no media decoder";
+    }
+    for (const char* recorded :
+         {"videoprocessor/target_windows", "videoprocessor/target_xbox360",
+          "videoprocessor/target_windowsphone"})
+    {
+        EXPECT_NE(Expected(recorded).find("SEHException"), std::string::npos)
+            << recorded << ": if XNA's answer became measurable here, this leg should become a "
+                           "differential rather than a same-answer check";
+    }
+
+    std::vector<std::string> answers;
+    for (const Xna::TargetPlatform platform :
+         {Xna::TargetPlatform::Windows, Xna::TargetPlatform::Xbox360,
+          Xna::TargetPlatform::WindowsPhone})
+    {
+        ImporterContext importing;
+        ProcessorContext context;
+        context.platform_ = platform;
+        Xna::WmvImporter importer;
+        const auto input =
+            importer.Import(Fixture("wmv_64x48_15fps_silent.wmv").string(), importing);
+        Processors::VideoProcessor processor;
+        const auto output = processor.Process(input, context);
+        ASSERT_NE(output, nullptr);
+        answers.push_back(std::to_string(output->getWidthProperty()) + "x" +
+                          std::to_string(output->getHeightProperty()) + " " +
+                          std::to_string(output->getFramesPerSecondProperty()) + " soundtrack=" +
+                          std::to_string(static_cast<int>(output->getVideoSoundtrackTypeProperty())) +
+                          " dependencies=" + std::to_string(context.dependencies.size()) +
+                          " outputs=" + std::to_string(context.outputFiles.size()));
+    }
+    ASSERT_EQ(answers.size(), 3u);
+    EXPECT_EQ(answers[0], answers[1]);
+    EXPECT_EQ(answers[0], answers[2]);
+}
+
+// The song route's target leg, on the same footing as the video one and for the same reason:
+// XNA's SongProcessor cannot be measured here at all. Both recorded cases are refusals from the
+// Windows Media layer under Wine (`songprocessor/mp3` and `songprocessor/wma`), so there is no
+// per-target answer to compare against and one cannot be invented. What is held is that CNA's own
+// processor answers the same thing for every target XNA has.
+TEST(XnaSongProcessor, TheAnswerIsTheSameForEveryTargetXnaHas)
+{
+    if (!MediaAvailable())
+    {
+        GTEST_SKIP() << "this build has no media decoder";
+    }
+    for (const char* recorded : {"songprocessor/mp3", "songprocessor/wma"})
+    {
+        EXPECT_NE(Expected(recorded).find("throws"), std::string::npos)
+            << recorded << ": if XNA's answer became measurable here, this leg should become a "
+                           "differential rather than a same-answer check";
+    }
+
+    const std::filesystem::path scratch =
+        std::filesystem::temp_directory_path() / "cna_xnapp021_song_targets";
+    std::filesystem::remove_all(scratch);
+    std::filesystem::create_directories(scratch);
+
+    class OutputContext final : public ProcessorContext
+    {
+    public:
+        explicit OutputContext(std::string filename) : filename_(std::move(filename)) {}
+        [[nodiscard]] std::string getOutputFilenameProperty() const override { return filename_; }
+
+    private:
+        std::string filename_;
+    };
+
+    std::vector<std::string> answers;
+    int index = 0;
+    for (const Xna::TargetPlatform platform :
+         {Xna::TargetPlatform::Windows, Xna::TargetPlatform::Xbox360,
+          Xna::TargetPlatform::WindowsPhone})
+    {
+        ImporterContext importing;
+        Xna::Mp3Importer importer;
+        const auto audio =
+            importer.Import(Fixture("mp3_mono_44100_128k.mp3").string(), importing);
+        OutputContext context((scratch / ("Theme" + std::to_string(index++) + ".xnb")).string());
+        context.platform_ = platform;
+        Processors::SongProcessor processor;
+        const auto song = processor.Process(audio, context);
+        ASSERT_NE(song, nullptr);
+        answers.push_back(std::to_string(song->Duration().getTicksProperty()) +
+                          " outputs=" + std::to_string(context.outputFiles.size()));
+    }
+    ASSERT_EQ(answers.size(), 3u);
+    EXPECT_EQ(answers[0], answers[1]);
+    EXPECT_EQ(answers[0], answers[2]);
+    std::error_code error;
+    std::filesystem::remove_all(scratch, error);
 }

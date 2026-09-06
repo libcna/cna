@@ -220,8 +220,15 @@ namespace Cna.Xna40.AudioOracle
             public override string OutputDirectory { get { return "bin"; } }
             public override string OutputFilename { get { return "asset.xnb"; } }
             public override OpaqueDataDictionary Parameters { get { return parameters; } }
-            public override TargetPlatform TargetPlatform { get { return TargetPlatform.Windows; } }
-            public override GraphicsProfile TargetProfile { get { return GraphicsProfile.HiDef; } }
+            private readonly TargetPlatform platform = TargetPlatform.Windows;
+            private readonly GraphicsProfile profile = GraphicsProfile.HiDef;
+            public ProbeContext() { }
+            // XNAPP-021: the same probe context aimed at one of XNA's three targets, so a
+            // processor that answers differently per platform or profile can be measured doing it.
+            public ProbeContext(TargetPlatform targetPlatform, GraphicsProfile targetProfile)
+            { platform = targetPlatform; profile = targetProfile; }
+            public override TargetPlatform TargetPlatform { get { return platform; } }
+            public override GraphicsProfile TargetProfile { get { return profile; } }
             public override void AddDependency(string filename) { }
             public override void AddOutputFile(string filename) { }
             public override TOutput BuildAndLoadAsset<TInput, TOutput>(ExternalReference<TInput> sourceAsset, string processorName, OpaqueDataDictionary processorParameters, string importerName)
@@ -492,6 +499,27 @@ namespace Cna.Xna40.AudioOracle
                     return "output=" + (content == null ? "null" : content.GetType().Name) + " input=" + Describe(audio);
                 }
             });
+            // XNAPP-021, Phase 13: what a sound effect answers for each of XNA's targets.
+            foreach (string leg in new string[] { "Windows/Reach", "Windows/HiDef", "Xbox360/Reach",
+                                                 "Xbox360/HiDef", "WindowsPhone/Reach" })
+            {
+                string captured = leg;
+                string[] parts = captured.Split('/');
+                TargetPlatform legPlatform = (TargetPlatform)Enum.Parse(typeof(TargetPlatform), parts[0]);
+                GraphicsProfile legProfile = (GraphicsProfile)Enum.Parse(typeof(GraphicsProfile), parts[1]);
+                Record("soundeffectprofile/" + captured.Replace('/', '_'), () =>
+                {
+                    using (var audio = new AudioContent(stereo, AudioFileType.Wav))
+                    {
+                        var processor = new SoundEffectProcessor();
+                        SoundEffectContent content = processor.Process(
+                            audio, new ProbeContext(legPlatform, legProfile));
+                        return "output=" + (content == null ? "null" : content.GetType().Name) +
+                               " input=" + Describe(audio);
+                    }
+                });
+            }
+
             Record("soundeffectprocessor/null_input", () =>
             {
                 var processor = new SoundEffectProcessor();

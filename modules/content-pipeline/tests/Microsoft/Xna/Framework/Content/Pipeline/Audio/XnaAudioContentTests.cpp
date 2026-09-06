@@ -647,8 +647,12 @@ namespace
         [[nodiscard]] Microsoft::Xna::Framework::Content::Pipeline::TargetPlatform getTargetPlatformProperty()
             const override
         {
-            return Microsoft::Xna::Framework::Content::Pipeline::TargetPlatform::Windows;
+            return platform_;
         }
+
+        /** @brief The target this context builds for; Windows unless a test says otherwise. */
+        Microsoft::Xna::Framework::Content::Pipeline::TargetPlatform platform_ =
+            Microsoft::Xna::Framework::Content::Pipeline::TargetPlatform::Windows;
         [[nodiscard]] Microsoft::Xna::Framework::Graphics::GraphicsProfile getTargetProfileProperty()
             const override
         {
@@ -1009,4 +1013,62 @@ TEST(XnaWavImporter, ImportAndItsRefusalsMatchXna)
         out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
     }
     EXPECT_THROW((void)importer.Import(garbage, context), InvalidContentException);
+}
+
+// plans/plan_xnapipeline_parity.md XNAPP-021, Phase 13: what a sound effect answers for each of
+// XNA's three targets.
+//
+// This is the one target leg measured so far where the target changes the answer, and it changes
+// it completely: on Xbox 360 XNA converts the audio to XMA -- format tag 0x6601, a different
+// duration, different loop points, a quarter of the data and a big-endian `XMA2WAVEFORMATEX` in
+// place of the `WAVEFORMATEX` -- while Windows and Windows Phone keep the PCM the source carried
+// (measured, `soundeffectprofile/*`). CNA has no XMA encoder and cannot have one from a public
+// specification, so the two Xbox legs are asserted as the recorded XNA measurement they diverge
+// from rather than as something CNA reproduces; what this test holds is that the three legs CNA
+// *does* implement answer exactly what XNA answers, and that the Xbox divergence stays visible.
+TEST(XnaAudioProcessors, EveryTargetAndProfileAnswersWhatXnaAnswers)
+{
+    ScratchDirectory scratch("effect_targets");
+    const std::string stereo = WriteWav(scratch.Path(), "stereo44k.wav", 44100, 2, 16, 4410);
+    namespace Xna = Microsoft::Xna::Framework::Content::Pipeline;
+
+    for (const auto& [label, platform] :
+         std::vector<std::pair<std::string, Xna::TargetPlatform>>{
+             {"Windows_Reach", Xna::TargetPlatform::Windows},
+             {"Windows_HiDef", Xna::TargetPlatform::Windows},
+             {"WindowsPhone_Reach", Xna::TargetPlatform::WindowsPhone}})
+    {
+        const auto audio = std::make_shared<AudioContent>(stereo, AudioFileType::Wav);
+        ProbeContext context;
+        context.platform_ = platform;
+        Processors::SoundEffectProcessor processor;
+        const std::shared_ptr<Processors::SoundEffectContent> content =
+            processor.Process(audio, context);
+        ASSERT_NE(content, nullptr) << label;
+        EXPECT_EQ("output=SoundEffectContent input=" + Describe(*audio),
+                  Expected("soundeffectprofile/" + label))
+            << label;
+    }
+
+    // The Xbox legs, recorded rather than reproduced. Asserting the shape of what XNA answered
+    // keeps the divergence in the suite: if a future CNA gained an XMA encoder, this is the
+    // measurement it would be held to, and until then the test says out loud what is missing.
+    for (const char* label : {"Xbox360_Reach", "Xbox360_HiDef"})
+    {
+        const std::string xna = Expected(std::string("soundeffectprofile/") + label);
+        EXPECT_NE(xna.find("format=26113"), std::string::npos)
+            << label << ": XNA converts a sound effect to XMA for the Xbox 360";
+        const auto audio = std::make_shared<AudioContent>(stereo, AudioFileType::Wav);
+        ProbeContext context;
+        context.platform_ = Xna::TargetPlatform::Xbox360;
+        Processors::SoundEffectProcessor processor;
+        const std::shared_ptr<Processors::SoundEffectContent> content =
+            processor.Process(audio, context);
+        ASSERT_NE(content, nullptr) << label;
+        const std::string cna = "output=SoundEffectContent input=" + Describe(*audio);
+        EXPECT_NE(cna, xna) << label << ": if this now matches, CNA gained an XMA encoder and this "
+                               "test should assert equality instead";
+        // What CNA does answer is the Windows leg: the source's own PCM, unconverted.
+        EXPECT_EQ(cna, Expected("soundeffectprofile/Windows_Reach")) << label;
+    }
 }

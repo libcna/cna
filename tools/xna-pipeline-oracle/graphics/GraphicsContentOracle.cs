@@ -2842,6 +2842,46 @@ namespace Cna.Xna40.GraphicsOracle
                 });
             }
 
+
+            // XNAPP-021: what the model and font routes answer for each of XNA's targets.
+            //
+            // The texture route's five legs were measured first (textureprofile/*) because a
+            // texture is the one asset whose format visibly depends on the target. These are the
+            // other two source families whose processors a project can aim at a target, measured
+            // the same way and for the same reason: a claim that CNA builds for Windows Phone or
+            // Xbox 360 has to rest on what XNA answers there, not on what it answers for Windows.
+            foreach (string leg in new string[] { "Windows/Reach", "Windows/HiDef", "Xbox360/Reach",
+                                                 "Xbox360/HiDef", "WindowsPhone/Reach" })
+            {
+                string captured = leg;
+                string[] parts = captured.Split('/');
+                TargetPlatform legPlatform = (TargetPlatform)Enum.Parse(typeof(TargetPlatform), parts[0]);
+                GraphicsProfile legProfile = (GraphicsProfile)Enum.Parse(typeof(GraphicsProfile), parts[1]);
+                Record("modelprofile/" + captured.Replace('/', '_'), () =>
+                {
+                    var processor = new ModelProcessor();
+                    var context = new RecordingProcessorContext(legPlatform, legProfile);
+                    ModelContent model = processor.Process(TriangleScene(), context);
+                    return DescribeModel(model) + " built=" + context.Built;
+                });
+                // A font family neither side has, deliberately. What the target leg asks is
+                // whether the target changes the answer, and a refusal is an answer -- while a
+                // successful rasterization is not comparable here, because XNA resolves a family
+                // through the host and this prefix's font list is not the one CNA sees
+                // (`fontprocessor/description_arial` is recorded and unused for the same reason).
+                Record("fontprofile/" + captured.Replace('/', '_'), () =>
+                {
+                    var processor = new FontDescriptionProcessor();
+                    var description = new FontDescription("No Such Font At All", 12.0f, 0.0f);
+                    description.Characters.Add('A');
+                    description.Characters.Add('B');
+                    description.Identity = new ContentIdentity("font.spritefont");
+                    SpriteFontContent font = processor.Process(
+                        description, new RecordingProcessorContext(legPlatform, legProfile));
+                    return "type=" + font.GetType().Name + " properties=" + Properties(font);
+                });
+            }
+
             Record("textureimporter/pfm_pixels", () =>
             {
                 string directory = Path.Combine(outputDirectory, "work");
@@ -3153,8 +3193,14 @@ namespace Cna.Xna40.GraphicsOracle
             private readonly ContentBuildLogger logger = new ProbeLogger();
             private readonly StringBuilder built = new StringBuilder();
             private readonly string configuration;
+            private readonly TargetPlatform platform = TargetPlatform.Windows;
+            private readonly GraphicsProfile profile = GraphicsProfile.HiDef;
             public RecordingProcessorContext() { configuration = "Debug"; }
             public RecordingProcessorContext(string buildConfiguration) { configuration = buildConfiguration; }
+            // XNAPP-021: the same recording context aimed at one of XNA's three targets, so a
+            // processor that answers differently per platform or profile can be measured doing it.
+            public RecordingProcessorContext(TargetPlatform targetPlatform, GraphicsProfile targetProfile)
+            { configuration = "Debug"; platform = targetPlatform; profile = targetProfile; }
             public string Built { get { return "[" + built + "]"; } }
             public override string BuildConfiguration { get { return configuration; } }
             public override string IntermediateDirectory { get { return "obj"; } }
@@ -3162,8 +3208,8 @@ namespace Cna.Xna40.GraphicsOracle
             public override string OutputDirectory { get { return "bin"; } }
             public override string OutputFilename { get { return "asset.xnb"; } }
             public override OpaqueDataDictionary Parameters { get { return parameters; } }
-            public override TargetPlatform TargetPlatform { get { return TargetPlatform.Windows; } }
-            public override GraphicsProfile TargetProfile { get { return GraphicsProfile.HiDef; } }
+            public override TargetPlatform TargetPlatform { get { return platform; } }
+            public override GraphicsProfile TargetProfile { get { return profile; } }
             public override void AddDependency(string filename) { }
             public override void AddOutputFile(string filename) { }
             public override TOutput BuildAndLoadAsset<TInput, TOutput>(ExternalReference<TInput> sourceAsset, string processorName, OpaqueDataDictionary processorParameters, string importerName)
