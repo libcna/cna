@@ -1474,7 +1474,36 @@ namespace CNA::Internal::Renderers::Vulkan
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
 
         void SetVirtualResolution(int width, int height) override;
-        void SetPresentationMode(int)       override {}
+        /**
+         * @brief Selects how the virtual resolution is mapped onto the swapchain image.
+         *
+         * plans/plan_vulkan.md `VULKAN-330` (finding F-03). This body used to be `{}` — the only
+         * empty override in either renderer — so a game asking for `Letterbox` silently got
+         * Vulkan's uniform height-derived scale instead.
+         *
+         * @param mode A `CnaPresentationMode` ordinal.
+         */
+        void SetPresentationMode(int mode) override
+        {
+            presentationMode_ = static_cast<CNA::Internal::Renderers::CnaPresentationMode>(mode);
+        }
+        /**
+         * @brief The rectangle of the swapchain image the virtual resolution is presented into.
+         *
+         * plans/plan_vulkan.md `VULKAN-330`. Same algorithm as `EasyGLSurfaceState`'s, which the
+         * comment there calls the established reference for these semantics: `Letterbox` scales
+         * uniformly to fit and centres (bars), `Overscan` scales uniformly to cover and centres
+         * (crop), and `Stretch`/`NativeBackBuffer`/`FixedHeightDynamicWidth` take the whole
+         * drawable. Duplicated rather than shared because this row's non-goal forbids touching the
+         * shared contract or another renderer; `VULKAN-331` is where that duplication should be
+         * revisited.
+         *
+         * @param x Receives the rectangle's left edge in swapchain pixels.
+         * @param y Receives its top edge.
+         * @param width Receives its width.
+         * @param height Receives its height.
+         */
+        CNAEXT void GetPresentedRectEXT(int& x, int& y, int& width, int& height) const;
 
         /**
          * @brief Applies a runtime swap-interval change by rebuilding the swapchain.
@@ -2984,6 +3013,15 @@ namespace CNA::Internal::Renderers::Vulkan
 
         // --- Virtual (game) resolution for 2D NDC mapping ---
         int virtualWidth_  = 0;
+        /// plan_vulkan.md VULKAN-330: how the virtual resolution maps onto the swapchain image.
+        ///
+        /// FixedHeightDynamicWidth, matching EasyGL's own default and -- more importantly -- the
+        /// behaviour this renderer already had before the mode was implemented: a uniform
+        /// height-derived scale over the whole drawable. GraphicsDevice forwards a mode only when
+        /// a game asks for one, so this default is load-bearing rather than cosmetic; Letterbox
+        /// here would have silently letterboxed every game that never calls SetPresentationMode.
+        CNA::Internal::Renderers::CnaPresentationMode presentationMode_ =
+            CNA::Internal::Renderers::CnaPresentationMode::FixedHeightDynamicWidth;
         int virtualHeight_ = 0;
 
         // --- Frame state ---

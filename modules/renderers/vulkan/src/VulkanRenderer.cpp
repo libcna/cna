@@ -10065,6 +10065,19 @@ namespace CNA::Internal::Renderers::Vulkan
                                                      snapshot->viewportW, snapshot->viewportH,
                                                      snapshot->viewportMinDepth,
                                                      snapshot->viewportMaxDepth, fbW, fbH);
+                    // plan_vulkan.md VULKAN-330: the SpriteBatch twin of the 3D replay's own
+                    // adjustment -- a backbuffer batch with no viewport of its own presents into
+                    // the presented rectangle. Both sites need it; changing only one would
+                    // letterbox 3D draws while sprites kept the whole image.
+                    if (!targetRT &&
+                        !(snapshot->viewportSet && snapshot->viewportW > 0 && snapshot->viewportH > 0))
+                    {
+                        int px = 0, py = 0, pw = 0, ph = 0;
+                        GetPresentedRectEXT(px, py, pw, ph);
+                        bvp.x = static_cast<float>(px); bvp.y = static_cast<float>(py);
+                        bvp.width  = static_cast<float>(pw);
+                        bvp.height = static_cast<float>(ph);
+                    }
                     vkCmdSetViewport(cb, 0, 1, &bvp);
                     // REMED-GFX-070/GFX-091: replay the batch's captured RGBA value only when the
                     // selected pipeline's static blend equation consumes it. Custom Effect
@@ -10233,6 +10246,20 @@ namespace CNA::Internal::Renderers::Vulkan
                                                      draw.viewportW, draw.viewportH,
                                                      draw.viewportMinDepth, draw.viewportMaxDepth,
                                                      fbW, fbH);
+                    // plan_vulkan.md VULKAN-330: for a BACKBUFFER draw that set no viewport of its
+                    // own, "full target" is the presented rectangle rather than the whole swapchain
+                    // image. Render targets keep their full extent -- a presentation mode describes
+                    // how the virtual resolution reaches the WINDOW, not how a game's own targets
+                    // are laid out. Under the three non-scaling modes the helper returns the full
+                    // extent, so this leaves those byte-identical.
+                    if (!targetRT && !(draw.viewportSet && draw.viewportW > 0 && draw.viewportH > 0))
+                    {
+                        int px = 0, py = 0, pw = 0, ph = 0;
+                        GetPresentedRectEXT(px, py, pw, ph);
+                        dvp.x = static_cast<float>(px); dvp.y = static_cast<float>(py);
+                        dvp.width  = static_cast<float>(pw);
+                        dvp.height = static_cast<float>(ph);
+                    }
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
                     // plans/plan_fx.md FX-065: Vulkan's clip space has Y pointing down where D3D9's and
                     // OpenGL's point up, and every stock shader here compensates with an explicit
@@ -10821,9 +10848,15 @@ namespace CNA::Internal::Renderers::Vulkan
                     vp.minDepth = viewportMinDepth_;
                     vp.maxDepth = viewportMaxDepth_;
                 } else {
-                    vp.x = 0; vp.y = 0;
-                    vp.width  = static_cast<float>(swapchainExtent_.width);
-                    vp.height = static_cast<float>(swapchainExtent_.height);
+                    // plan_vulkan.md VULKAN-330: "full target" for the BACKBUFFER means the
+                    // presented rectangle, not the whole swapchain image. Under Letterbox or
+                    // Overscan those differ; under the other three modes the helper returns the
+                    // full extent, so this is byte-identical to what it replaced for them.
+                    int px = 0, py = 0, pw = 0, ph = 0;
+                    GetPresentedRectEXT(px, py, pw, ph);
+                    vp.x = static_cast<float>(px); vp.y = static_cast<float>(py);
+                    vp.width  = static_cast<float>(pw);
+                    vp.height = static_cast<float>(ph);
                     vp.minDepth = 0.f; vp.maxDepth = 1.f;
                 }
                 vkCmdSetViewport(cb, 0, 1, &vp);
@@ -11302,6 +11335,43 @@ namespace CNA::Internal::Renderers::Vulkan
         windowX = logX * inverseScale / surfaceInfo_.displayScale;
         windowY = logY * inverseScale / surfaceInfo_.displayScale;
         return true;
+    }
+
+    void VulkanRenderer::GetPresentedRectEXT(int& x, int& y, int& width, int& height) const
+    {
+        // plan_vulkan.md VULKAN-330. Deliberately the same algorithm as EasyGLSurfaceState's
+        // GetDefaultViewportRect, whose own comment names it the established reference for
+        // Letterbox/Overscan/Stretch in this codebase -- reproducing it keeps the modes meaning
+        // the same thing on both renderers, which is the entire point of implementing them here.
+        const int physWidth  = static_cast<int>(swapchainExtent_.width);
+        const int physHeight = static_cast<int>(swapchainExtent_.height);
+
+        x = 0;
+        y = 0;
+        width  = std::max(0, physWidth);
+        height = std::max(0, physHeight);
+        if (physWidth <= 0 || physHeight <= 0) return;
+
+        // Full drawable, nothing to centre; a degenerate virtual resolution has no aspect to keep.
+        if (presentationMode_ == CNA::Internal::Renderers::CnaPresentationMode::NativeBackBuffer ||
+            presentationMode_ == CNA::Internal::Renderers::CnaPresentationMode::FixedHeightDynamicWidth ||
+            presentationMode_ == CNA::Internal::Renderers::CnaPresentationMode::Stretch ||
+            virtualWidth_ <= 0 || virtualHeight_ <= 0)
+            return;
+
+        const double logicalWidth  = static_cast<double>(virtualWidth_);
+        const double logicalHeight = static_cast<double>(virtualHeight_);
+        const double scaleX = static_cast<double>(physWidth)  / logicalWidth;
+        const double scaleY = static_cast<double>(physHeight) / logicalHeight;
+        const double scale =
+            (presentationMode_ == CNA::Internal::Renderers::CnaPresentationMode::Overscan)
+                ? std::max(scaleX, scaleY)
+                : std::min(scaleX, scaleY);
+
+        width  = static_cast<int>(std::lround(logicalWidth  * scale));
+        height = static_cast<int>(std::lround(logicalHeight * scale));
+        x = static_cast<int>(std::lround((static_cast<double>(physWidth)  - logicalWidth  * scale) * 0.5));
+        y = static_cast<int>(std::lround((static_cast<double>(physHeight) - logicalHeight * scale) * 0.5));
     }
 
     void VulkanRenderer::SetVirtualResolution(int width, int height)

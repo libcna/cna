@@ -98,6 +98,12 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_DrawInstanced_3Instances COMMAND cna_test_vulkan_instanced
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-330 (F-03): SetPresentationMode must change the presented rectangle
+        cna_vulkan_test(cna_test_vulkan_presentation_mode
+                        vulkan_presentation_mode_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_PresentationMode COMMAND cna_test_vulkan_presentation_mode
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-133: the dynamic-buffer stress proof, 12 frames cycling
         # None/Discard/NoOverwrite with per-frame pixel readback. Renderer-agnostic source; the
         # expected values are EasyGL's unchanged, because VULKAN-132 measured that each draw
