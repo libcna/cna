@@ -683,6 +683,22 @@ namespace CNA::Internal::Renderers
         [[nodiscard]] virtual unsigned int GetGLHandle() const { return 0; }
         /// See IRenderTargetRenderer::GetMultiSampleCount.
         [[nodiscard]] virtual int GetMultiSampleCount() const { return 0; }
+        /**
+         * @brief Cube equivalent of IRenderTargetRenderer::GetAppliedDepthStencilFormatEXT.
+         *
+         * plans/plan_vulkan.md `VULKAN-215`. Its 2D twin has had this since renderers began
+         * substituting depth formats; the cube did not, so `RenderTargetCube.DepthStencilFormat`
+         * could only ever echo the request. The identity default keeps every renderer that does
+         * not substitute exactly as it was.
+         *
+         * @param requestedDepthStencilFormat Requested DepthFormat ordinal.
+         * @return Applied DepthFormat ordinal.
+         */
+        [[nodiscard]] virtual int GetAppliedDepthStencilFormatEXT(
+            int requestedDepthStencilFormat) const
+        {
+            return requestedDepthStencilFormat;
+        }
         /// Cube equivalent of IRenderTargetRenderer::HasRealDepthBuffer.
         [[nodiscard]] virtual bool HasRealDepthBuffer(bool depthFormatWasRequested) const
         {

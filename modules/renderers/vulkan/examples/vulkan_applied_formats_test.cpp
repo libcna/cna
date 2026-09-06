@@ -33,6 +33,8 @@
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
 
@@ -107,6 +109,42 @@ protected:
                           "about the stencil plane (stored says ") +
                   (storedSaysStencil ? "yes" : "no") + ", capability says " +
                   (capabilitySaysStencil ? "yes" : "no") + ")");
+
+        // ---- legs D and E: the render targets ---------------------------------
+        // plan_vulkan.md VULKAN-215. RenderTarget2D has asked the renderer for its applied depth
+        // format for a long time; RenderTargetCube stored the constructor argument and asked
+        // nobody. D is the control that proves the 2D path really substitutes in this environment,
+        // so an E-only failure names the cube exactly rather than "render targets are broken".
+        //
+        // Depth24 is the discriminating request, and the first draft got this wrong: it asked for
+        // Depth16, which PickDepthFormat honours verbatim wherever D16_UNORM is supported, so
+        // nothing was substituted, the control failed, and leg E passed by comparing two echoes of
+        // the same request. Depth24 asks for X8_D24_UNORM_PACK32 -- real 24-bit depth with no
+        // stencil -- and falls back to a combined format where that is unavailable, which is a
+        // substitution the report must show.
+        {
+            // Force the substitution: see SetDepthFormatPreferredUnsupportedForTestEXT. Without it
+            // this device honours Depth24 verbatim and both legs below compare a request with
+            // itself -- measured, not assumed, by watching the control fail twice first.
+            VulkanRenderer::SetDepthFormatPreferredUnsupportedForTestEXT(true);
+            struct Restore { ~Restore() {
+                VulkanRenderer::SetDepthFormatPreferredUnsupportedForTestEXT(false);
+            } } restore;
+
+            RenderTarget2D flat(dev, 64, 64, false, SurfaceFormat::Color, DepthFormat::Depth24);
+            check(flat.getDepthStencilFormatProperty() != DepthFormat::Depth24,
+                  "D control: RenderTarget2D reports the applied depth format, not the requested "
+                  "Depth24 (reports " +
+                      std::to_string(static_cast<int>(flat.getDepthStencilFormatProperty())) + ")");
+
+            RenderTargetCube cube(dev, 64, false, SurfaceFormat::Color, DepthFormat::Depth24);
+            check(cube.getDepthStencilFormatProperty() ==
+                      flat.getDepthStencilFormatProperty(),
+                  "E RenderTargetCube reports the same applied depth format its 2D twin does "
+                  "(cube " + std::to_string(static_cast<int>(cube.getDepthStencilFormatProperty())) +
+                      ", flat " +
+                      std::to_string(static_cast<int>(flat.getDepthStencilFormatProperty())) + ")");
+        }
 
         Exit();
     }

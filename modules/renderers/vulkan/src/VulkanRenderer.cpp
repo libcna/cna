@@ -285,9 +285,19 @@ namespace CNA::Internal::Renderers::Vulkan
     // one of these formats is actually supported for DEPTH_STENCIL_ATTACHMENT usage on every
     // device). DepthFormat::None is handled by the caller (no VkFormat / no attachment at all --
     // this function is only called when a real depth buffer was actually requested).
+    /// plan_vulkan.md VULKAN-215: when true, PickDepthFormat pretends each request's PREFERRED
+    /// format is unsupported and takes its fallback. Every device measured here honours Depth16
+    /// and Depth24 verbatim, so without this there is no reachable case in which a render target's
+    /// applied depth format differs from the requested one -- and a test for "the report shows the
+    /// substitution" would be comparing a request with itself.
+    static bool sDepthFormatPreferredUnsupportedForTest = false;
+
     static VkFormat PickDepthFormat(VkPhysicalDevice pd, DepthFormat requested)
     {
         auto supports = [pd](VkFormat fmt) {
+            if (sDepthFormatPreferredUnsupportedForTest &&
+                (fmt == VK_FORMAT_D16_UNORM || fmt == VK_FORMAT_X8_D24_UNORM_PACK32))
+                return false;
             VkFormatProperties props;
             vkGetPhysicalDeviceFormatProperties(pd, fmt, &props);
             return (props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0;
@@ -3714,6 +3724,11 @@ namespace CNA::Internal::Renderers::Vulkan
     void VulkanRenderer::SetSwapchainOutOfDateForTestEXT(std::uint32_t count) noexcept
     {
         sSwapchainOutOfDateToInject = count;
+    }
+
+    void VulkanRenderer::SetDepthFormatPreferredUnsupportedForTestEXT(bool unsupported) noexcept
+    {
+        sDepthFormatPreferredUnsupportedForTest = unsupported;
     }
 
     void VulkanRenderer::CreateDescriptorPool()
@@ -14527,6 +14542,13 @@ namespace CNA::Internal::Renderers::Vulkan
     int VulkanRenderTargetRenderer::GetAppliedDepthStencilFormatEXT(int requested) const
     {
         // plan_vulkan.md VULKAN-348: what this target really has, not what was asked for.
+        (void)requested;
+        return XnaDepthFormatFromVkFormatEXT(depthVkFormat_);
+    }
+
+    int VulkanRenderTargetCubeRenderer::GetAppliedDepthStencilFormatEXT(int requested) const
+    {
+        // plan_vulkan.md VULKAN-215: what this cube really has, not what was asked for.
         (void)requested;
         return XnaDepthFormatFromVkFormatEXT(depthVkFormat_);
     }

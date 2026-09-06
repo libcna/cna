@@ -946,6 +946,18 @@ namespace CNA::Internal::Renderers::Vulkan
 
         [[nodiscard]] int GetSize() const override { return size_; }
         void BindAsRenderTargetFace(int face) override;
+        /**
+         * @brief Reports this cube's depth/stencil format in XNA's vocabulary.
+         *
+         * plans/plan_vulkan.md `VULKAN-215`. Task 911 gave each cube its own real `VkFormat`, so
+         * this reads that rather than the back buffer's. `VK_FORMAT_UNDEFINED` means no depth
+         * attachment at all and maps to `DepthFormat::None` with no special case.
+         *
+         * @param requestedDepthStencilFormat Ignored; the applied format is what is reported.
+         * @return The applied `DepthFormat` ordinal.
+         */
+        [[nodiscard]] int GetAppliedDepthStencilFormatEXT(
+            int requestedDepthStencilFormat) const override;
         void UnbindAsRenderTarget() override;
         /// Task 903: real applied MSAA sample count (0 if MSAA wasn't engaged), mirroring
         /// VulkanRenderTargetRenderer::GetMultiSampleCount()'s identical Task 878/879 pattern.
@@ -1776,6 +1788,22 @@ namespace CNA::Internal::Renderers::Vulkan
          * @param count How many acquires to report out of date; 0 disables injection.
          */
         CNAEXT static void SetSwapchainOutOfDateForTestEXT(std::uint32_t count) noexcept;
+
+        /**
+         * @brief Test-only: make `PickDepthFormat` take each request's fallback.
+         *
+         * plans/plan_vulkan.md `VULKAN-215`. Every device measured here honours `Depth16` and
+         * `Depth24` verbatim, so a render target's applied depth format never differs from the
+         * requested one and a test asserting that the report shows a substitution would be
+         * comparing a request with itself. This forces the substitution to happen, exactly as
+         * `SetSwapchainOutOfDateForTestEXT` forces a state the window manager otherwise owns.
+         *
+         * Affects render targets only — the back buffer uses `FindDepthFormat()`, which never
+         * offers those two formats in the first place.
+         *
+         * @param unsupported true to pretend the preferred depth formats are unavailable.
+         */
+        CNAEXT static void SetDepthFormatPreferredUnsupportedForTestEXT(bool unsupported) noexcept;
 
         /**
          * @brief Reports whether the Khronos validation layer is actually active.
