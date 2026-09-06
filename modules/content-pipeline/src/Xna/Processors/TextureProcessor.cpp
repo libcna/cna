@@ -58,6 +58,24 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
         }
     }
 
+    void TextureProcessor::DescribeParameters(ProcessorParameterBindings<TextureProcessor>& bindings)
+    {
+        bindings.Add<Color>("ColorKeyColor", &TextureProcessor::getColorKeyColorProperty,
+                            &TextureProcessor::setColorKeyColorProperty);
+        bindings.Add<bool>("ColorKeyEnabled", &TextureProcessor::getColorKeyEnabledProperty,
+                           &TextureProcessor::setColorKeyEnabledProperty);
+        bindings.Add<bool>("GenerateMipmaps", &TextureProcessor::getGenerateMipmapsProperty,
+                           &TextureProcessor::setGenerateMipmapsProperty);
+        bindings.Add<bool>("PremultiplyAlpha", &TextureProcessor::getPremultiplyAlphaProperty,
+                           &TextureProcessor::setPremultiplyAlphaProperty);
+        bindings.Add<bool>("ResizeToPowerOfTwo", &TextureProcessor::getResizeToPowerOfTwoProperty,
+                           &TextureProcessor::setResizeToPowerOfTwoProperty);
+        bindings.AddEnum<TextureProcessorOutputFormat>(
+            "TextureFormat", &TextureProcessor::getTextureFormatProperty,
+            &TextureProcessor::setTextureFormatProperty,
+            DeclaredEnumSpellings<TextureProcessorOutputFormat>());
+    }
+
     Color TextureProcessor::getColorKeyColorProperty() const noexcept { return colorKeyColor_; }
 
     void TextureProcessor::setColorKeyColorProperty(Color value) noexcept { colorKeyColor_ = value; }

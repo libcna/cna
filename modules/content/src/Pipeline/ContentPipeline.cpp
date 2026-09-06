@@ -781,12 +781,32 @@ namespace CNA::Content::Pipeline
             throw std::invalid_argument("AddNestedOutput(): nested output '" + output.logicalName +
                                         "' has no bytes.");
         }
+        output.fromNestedBuild = true;
         nestedOutputs_.push_back(std::move(output));
     }
 
     const std::vector<ContentAdditionalWriteOutput>& ContentProcessorContext::NestedOutputs() const noexcept
     {
         return nestedOutputs_;
+    }
+
+    void ContentProcessorContext::AddNestedWriterSchemas(
+        const std::vector<ContentWriterSchemaIdentity>& schemas)
+    {
+        for (const ContentWriterSchemaIdentity& schema : schemas)
+        {
+            if (std::find(nestedWriterSchemas_.begin(), nestedWriterSchemas_.end(), schema) ==
+                nestedWriterSchemas_.end())
+            {
+                nestedWriterSchemas_.push_back(schema);
+            }
+        }
+    }
+
+    const std::vector<ContentWriterSchemaIdentity>&
+    ContentProcessorContext::NestedWriterSchemas() const noexcept
+    {
+        return nestedWriterSchemas_;
     }
 
     const ContentProcessorParameters& ContentProcessorContext::Parameters() const noexcept
@@ -1040,8 +1060,30 @@ namespace CNA::Content::Pipeline
         const std::string& inputType, const std::string& explicitName) const
     {
         const std::shared_lock lock(configurationMutex_);
+        std::string selected = explicitName;
+        if (selected.empty())
+        {
+            // Processors that are only ever asked for by name do not take part in choosing the
+            // route for an imported type. Only a single survivor is used here; anything else falls
+            // through to the ordinary resolution so its diagnostic still names every candidate.
+            const auto route = processorsByInputType_.find(inputType);
+            if (route != processorsByInputType_.end() && route->second.size() > 1u)
+            {
+                std::vector<std::string> candidates;
+                for (const std::string& name : route->second)
+                {
+                    const auto component = processors_.find(name);
+                    if (component != processors_.end() &&
+                        !component->second->SelectedByNameOnly())
+                    {
+                        candidates.push_back(name);
+                    }
+                }
+                if (candidates.size() == 1u) { selected = candidates.front(); }
+            }
+        }
         return ResolveByRoute(processors_, processorsByInputType_, inputType, inputType,
-                              explicitName, "processor", "imported type");
+                              selected, "processor", "imported type");
     }
 
     std::shared_ptr<const ContentTypeWriter> ContentPipelineRegistry::ResolveWriter(
@@ -1224,6 +1266,7 @@ namespace CNA::Content::Pipeline
         ContentValue imported;
         ContentValue processed;
         std::vector<ContentAdditionalWriteOutput> nestedOutputs;
+        std::vector<ContentWriterSchemaIdentity> nestedWriterSchemas;
     };
 
     ContentPipeline::StagedBuild ContentPipeline::RunImportAndProcess(
@@ -1336,6 +1379,7 @@ namespace CNA::Content::Pipeline
                                        stage.processed.StableType() + "'.");
             }
             stage.nestedOutputs = std::move(context.nestedOutputs_);
+            stage.nestedWriterSchemas = std::move(context.nestedWriterSchemas_);
         }
         catch (...)
         {
@@ -1474,6 +1518,17 @@ namespace CNA::Content::Pipeline
                                            "' collides with another output of this node.");
                 }
                 output.additionalOutputs.push_back(std::move(nested));
+            }
+            // The schemas those nested writers declared belong to this node too: it publishes
+            // their outputs, so its manifest entry has to be able to describe them and its
+            // incremental check has to notice when one of them changes.
+            for (const ContentWriterSchemaIdentity& schema : stage.nestedWriterSchemas)
+            {
+                if (std::find(writerSchemas.begin(), writerSchemas.end(), schema) ==
+                    writerSchemas.end())
+                {
+                    writerSchemas.push_back(schema);
+                }
             }
         }
         catch (...)

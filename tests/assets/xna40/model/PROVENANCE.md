@@ -28,3 +28,13 @@ tokenizer. Nothing here was downloaded and nothing is third-party content.
 | `two_bones_animated.x` | 1589 |
 | `two_materials.x` | 713 |
 | `with_templates.x` | 581 |
+
+## The texture a fixture names
+
+`quad_textured.x` names `surface.png`, and `surface.png` beside it is that file: the same 2x2
+probe the texture corpus uses (`tests/assets/xna40/texture/probe.png`, byte for byte). It is here
+so the model is a complete asset -- the source-to-output legs build it through the real
+coordinator, which imports, processes and publishes the texture as its own output before the model
+can refer to it, exactly as XNA's `MaterialProcessor` does. `two_materials.x` names `blue.dds`,
+which is deliberately *not* committed: that fixture measures the importer, and a model whose
+texture is missing is one of the things a build has to report rather than skip.

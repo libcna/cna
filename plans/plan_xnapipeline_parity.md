@@ -739,6 +739,51 @@ module) with `src/Xna/`; `ContentSerializer*` descriptors in `modules/content/in
 | ID | Task | State |
 |---|---|---|
 | `XNAPP-215` | Dependency audit and choice for a native FBX parser (§26). | [x] **No third-party parser was taken.** The audit's outcome: an FBX document is a node tree in two encodings, and both are readable in about six hundred lines (`CNA::Content::Pipeline::ReadFbxFile`), where a library would have brought its own scene normalization -- triangulation, node merging, unit conversion -- to fight with XNA's, which is the failure mode §26 warns about. The one external thing the binary encoding needs is **zlib**, for the deflated arrays a current exporter writes; it is optional (`find_package(ZLIB QUIET)`), and a compressed array without it is refused by name rather than mis-read. Assimp is used to *write* one fixture, never to read one. |
+
+### The canonical model route (`XNAPP-021`, Phases 15 and 16)
+
+Both readers, XNA's `ModelProcessor`, `MaterialProcessor` and `TextureProcessor`, and the
+`ModelContent` -> canonical-model bridge were all implemented and measured before anything could
+reach them: `XnaComponentNames` mapped `XImporter` and `FbxImporter` onto `CNA.XImporter` and
+`CNA.FbxImporter`, and **no registry contained either name**, so a `.contentproj` naming a model
+built nothing and reported nothing wrong. `RegisterXnaModelSourceContentPipeline` is the wiring:
+the two importers, `CNA.XnaModelProcessor` (XNA's processor, with its output turned into the one
+processed-model value both writers already take -- schema 1 when every semantic fits it exactly,
+schema 2 otherwise, the same choice the `.xnb` import route makes), and, under XNA's own names
+because XNA's own components reach them by name, `MaterialProcessor` and a `TextureProcessor` for
+the nested build a material starts. Every one of the eighteen well-formed model fixtures builds to
+both containers; every one of the nine malformed ones is refused.
+
+Four defects had to be fixed for that to be true, and all four were reachable before this route
+existed:
+
+- **A nested build's outputs were compiled and then dropped.** `ConvertCore` created a context for
+  the converted processor and discarded it, and `MaterialProcessor` -- the only way XNA reaches a
+  model's textures -- is reached only through `Convert`. The model referred to a texture no build
+  ever wrote. `XNAPP-044` claimed this worked; it worked for `BuildAsset` called directly from a
+  top-level processor and for nothing else.
+- **A nested build's writer schemas never joined the node's own.** The manifest describes every
+  output it publishes by looking the schema up in the node's writer's list, and a nested output was
+  written by a different writer, so publishing one failed the manifest. Carrying the schemas up
+  fixes the manifest *and* the incremental check, which could not otherwise notice a change to the
+  codec that wrote a nested output.
+- **A nested copy and a listed item fought over one asset name.** A project that lists the texture
+  its model names -- which is what a real XNA project does -- had two nodes claiming
+  `Textures/surface`. The item keeps it and the model's nested copy is dropped, because the item is
+  what the project asked for with the processor it chose. Only nested copies yield; a writer's own
+  additional output colliding is still a conflict, which is what `ContentPipelineCliTest`
+  `AdditionalOutputCannotClaimAnotherBuildNodesIdentity` measures.
+- **`ToProcessorParameters` refused a `Color` and refused an enum.** XNA's processors forward both
+  to one another, so every model that reached a material failed halfway through processing with a
+  message telling the user to spell the value as a string. They are now spelled as strings on the
+  way through, which is what every parameter binding parses and what a `.contentproj` writes;
+  nothing about how the XNA processors box their forwarded values changed, so the measured
+  forwarding is still what the oracle recorded.
+
+`ContentProcessor::SelectedByNameOnly()` is the one new contract: a processor registered under a
+name another component reaches it by, which must not join default resolution. Without it the
+XNA-named `TextureProcessor` competed with `CNA.TextureProcessor` for every `.png` in the tree.
+
 | `XNAPP-216` | `FbxImporter`: hierarchy, transforms, meshes, channels, normals/tangents/UVs/colours, skin weights, animations, materials/textures, coordinate-system and unit conversion as `BuildContent` observably does them. | [x] Measured first, and almost every rule differs from the `.x` route's for no reason a reader would predict. **FBX is already right-handed, so nothing is converted** -- positions and normals pass through as written where `.x` negates Z -- and yet **the winding IS reversed**, a polygon `0, 1, 2` answering indices `2, 1, 0`. **A texture coordinate's V is flipped** (`0.2` answers `0.8`), where `.x`'s is not. The channel order is normals, texture coordinates, then colours; `.x`'s is normals, colours, then texture coordinates. A vertex colour is **not** quantized through eight bits; `.x`'s is. A material reaches a batch **only through a `LayerElementMaterial`** -- a `Connect` alone leaves the batch material-less -- and it keeps the name the file gave it, where a `.x` material's name is dropped; and `Opacity` and `Shininess` are **not read at all**, every material answering the SDK's own alpha of 1 and specular power of 20. The three refusals are told apart by content and not by size: a file with no FBX header is the loader's initialization failure at 31 bytes and at 1024 alike, a DirectX `.x` file is `Could not detect file format`, and a document that parses no further is `encountered when importing the scene`. |
 | `XNAPP-218` | Read the FBX versions XNA cannot: its FBX SDK 2011.3.1 refuses every document of version 7400 and above. | [x] **A deliberate divergence, recorded rather than assumed away.** Every current exporter writes 7400 or 7500, and the genuine importer refuses all of them (measured, `fbx/fbx_binary_modern.fbx`); matching a bundled SDK's age would serve nobody. CNA's reader takes the text encoding (which is what a 6.1 document is, and what XNA reads) and the binary record stream alike, with zlib for the deflated arrays and a named refusal without it. |
 | `XNAPP-217` | FBX black-box corpus (CNA-authored/generated, plus permissively licensed) compared per §24. | [x] Six documents in `tests/assets/xna40/model`, written by `make_fbx_fixtures.py` in **FBX 6.1 ASCII** for a measured reason: XNA carries FBX SDK 2011.3.1, and an FBX written by a current tool is version 7400 or 7500, which that SDK refuses. Nothing is third-party: the content is authored here and the container is written here. `XnaFbxImporter` compares each graph for graph against `model-import-oracle.json`, with two documented normalizations -- a triangle is compared as a cycle, because the SDK picks its own starting corner when it triangulates a quad, and every number to a tolerance, because both sides' matrices come out of float trigonometry. |
@@ -865,16 +910,14 @@ verified byte for byte against `tests/reference/xna40/intermediate/`; extend the
 (`tools/xna-pipeline-oracle/intermediate/run-intermediate-oracle.sh`) before asserting anything
 about the format that the corpus does not show. sharp-runtime (`next`, sibling checkout
 `sharp-runtimenext`) carries the XML fixes this phase needed; another session works in that
-checkout concurrently, so stage only your own hunks there. The nine texture extensions are `IMPLEMENTED+TESTED`; the nine that are not each want one of
-`processor`, `target`, `sourceToXnb` or `sourceToCnb`, and three of them (`.x`, `.fbx`, `.xml`)
-have **no canonical importer registered at all** -- `XnaComponentNames` maps them to
-`CNA.XImporter`, `CNA.FbxImporter` and the serializer, and none of those names is in any registry,
-so a `.contentproj` naming a model builds nothing. `.wmv` now resolves to `CNA.VideoImporter`
-(it was missing from that importer's extension list, which is the same defect the four texture
-formats had) but its processor requires explicit `width`/`height`/`duration` parameters, because
-nothing in `cna_content` can probe a video -- the façade's `VideoProcessor` can, through
-`BuildTimeMediaDecoder`, and the two are not joined up yet. Next: registering the model and
-intermediate-XML routes canonically,
+checkout concurrently, so stage only your own hunks there. The nine texture extensions are `IMPLEMENTED+TESTED`. `.x` and `.fbx` are now registered
+canonically (`modules/content-pipeline/src/XnaModelSourceContentPipeline.cpp`) and want only the
+target leg; `.xml` is the one source extension still with no canonical importer at all. `.wmv`
+resolves to `CNA.VideoImporter` (it was missing from that importer's extension list, the same
+defect the four texture formats had) but its processor requires explicit
+`width`/`height`/`duration` parameters, because nothing in `cna_content` can probe a video -- the
+façade's `VideoProcessor` can, through `BuildTimeMediaDecoder`, and the two are not joined up yet.
+Next: the intermediate-XML route, the `processor` and `target` legs the matrix still names,
 then `XNAPP-182` (the font atlas differential, which needs a font registered in the Wine prefix),
 `XNAPP-191`/`192` (the effect compiler comparison), and `XNAPP-201`/`202` and Phase 14, each of
 which waits on a decoder this build does not have -- measure XNA's answer first and record

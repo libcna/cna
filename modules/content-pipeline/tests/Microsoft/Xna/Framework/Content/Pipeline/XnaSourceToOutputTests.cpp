@@ -144,6 +144,7 @@ namespace
         const std::filesystem::path source = Locate("tests/assets/xna40/source");
         const std::filesystem::path media = Locate("tests/assets/xna40/media");
         const std::filesystem::path font = Locate("tests/assets/fonts/LiberationMono-Regular.ttf");
+        const std::filesystem::path model = Locate("tests/assets/xna40/model");
         return {
             {".bmp", texture / "probe.bmp", {}},
             {".dds", texture / "probe.dds", {}},
@@ -158,6 +159,11 @@ namespace
             {".wav", media / "tone_mono_44100.wav", {}},
             {".mp3", media / "mp3_mono_44100_128k.mp3", {}},
             {".wma", media / "wma_mono_44100.wma", {}},
+            // A textured model, so the leg covers the nested build a material starts as well as
+            // the model itself: `quad_textured.x` names `surface.png`, which the coordinator has
+            // to import, process and publish before the model can refer to it.
+            {".x", model / "quad_textured.x", {model / "surface.png"}},
+            {".fbx", model / "fbx_quad_textured.fbx", {}},
         };
     }
 }

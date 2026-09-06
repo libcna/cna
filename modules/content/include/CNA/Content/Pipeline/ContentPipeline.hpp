@@ -820,6 +820,29 @@ namespace CNA::Content::Pipeline
          */
         [[nodiscard]] const std::vector<ContentAdditionalWriteOutput>& NestedOutputs() const noexcept;
 
+        /**
+         * @brief Records the writer schemas a nested build's own writer declared.
+         *
+         * A nested output was written by a different writer than this node's, so its schema is not
+         * one this node's writer declares. Both the manifest and the incremental check read the
+         * node's schema list -- the first to recognise every output it publishes, the second to
+         * invalidate the node when a schema it depends on changes -- so a nested build's schemas
+         * have to join that list or the node publishes an output it cannot describe and survives a
+         * change to the codec that wrote it (plans/plan_xnapipeline_parity.md `XNAPP-021`).
+         *
+         * Duplicates are ignored, so repeating a schema across nested builds is harmless.
+         *
+         * @param schemas The nested build's declared writer schemas.
+         */
+        void AddNestedWriterSchemas(const std::vector<ContentWriterSchemaIdentity>& schemas);
+
+        /**
+         * @brief Returns the nested writer schemas added so far, in the order they were added.
+         *
+         * @return The schemas; the coordinator merges them into the node's own list.
+         */
+        [[nodiscard]] const std::vector<ContentWriterSchemaIdentity>& NestedWriterSchemas() const noexcept;
+
     private:
         friend class ContentPipeline;
         std::filesystem::path sourceRoot_;
@@ -834,6 +857,7 @@ namespace CNA::Content::Pipeline
         ContentBuildEnvironment environment_;
         const ContentPipeline* pipeline_ = nullptr;
         std::vector<ContentAdditionalWriteOutput> nestedOutputs_;
+        std::vector<ContentWriterSchemaIdentity> nestedWriterSchemas_;
     };
 
     /**
@@ -925,6 +949,23 @@ namespace CNA::Content::Pipeline
          */
         [[nodiscard]] virtual ContentValue Process(const ContentValue& input,
                                                    ContentProcessorContext& context) const = 0;
+
+        /**
+         * @brief Whether this processor is chosen only when a build names it.
+         *
+         * A processor that answers true is left out of default resolution: it still runs when a
+         * build, or a component starting a nested build, asks for it by name, and it never becomes
+         * the answer to "which processor handles this imported type" on its own.
+         *
+         * This exists for a processor registered under a name some other component reaches it by
+         * rather than as a route of its own -- the XNA-named `TextureProcessor` that `XNA`'s
+         * `MaterialProcessor` builds a model's textures through, which accepts imported images and
+         * must not therefore start competing with the built-in texture route for every `.png` in
+         * the tree (plans/plan_xnapipeline_parity.md `XNAPP-021`).
+         *
+         * @return false for every ordinary processor.
+         */
+        [[nodiscard]] virtual bool SelectedByNameOnly() const { return false; }
     };
 
     /** @brief Maximum number of primary and additional CNB outputs from one build node. */
@@ -959,6 +1000,18 @@ namespace CNA::Content::Pipeline
          * (plans/plan_xnapipeline.md `XNAP-99`). A CNB writer leaves this empty.
          */
         std::string rootReaderName;
+
+        /**
+         * @brief Whether a nested build produced this output rather than this node's own writer.
+         *
+         * The two are published the same way and differ in one respect that matters: a writer's
+         * additional output is this node's product and its name is this node's to claim, while a
+         * nested build's output is a copy of an asset another node may already own -- a model's
+         * materials build the textures they name, and a project usually lists those textures as
+         * items of its own. In-memory only; the manifest records what was published, not who asked
+         * for it (plans/plan_xnapipeline_parity.md `XNAPP-021`).
+         */
+        bool fromNestedBuild = false;
     };
 
     /** @brief Primary CNB output and any bounded, explicitly named additional outputs. */

@@ -2,9 +2,14 @@
 #include "CNA/Content/Pipeline/XnaPipelineBridge.hpp"
 
 #include <cmath>
+#include <locale>
+#include <optional>
+#include <sstream>
 #include <stdexcept>
+#include <string>
 
 #include "CNA/Content/Pipeline/XnbOutputContentPipeline.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Processors/ProcessorEnums.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/PipelineException.hpp"
 #include "System/NotSupportedException.hpp"
@@ -104,6 +109,104 @@ namespace CNA::Content::Pipeline
         }
     }
 
+    namespace
+    {
+
+        /**
+         * @brief The declared spelling of a boxed enumeration, for the enumerations XNA's own
+         *        processors forward between one another.
+         *
+         * Every enumeration here declares its spellings once, with `CNA_XNA_CONTENT_ENUM`; this
+         * only says which of them can appear in a forwarded parameter. An enumeration missing from
+         * the list is reported by name rather than guessed at.
+         */
+        template<typename... TEnums>
+        [[nodiscard]] std::optional<std::string> EnumSpellingOf(const Xna::ContentObject& boxed)
+        {
+            std::optional<std::string> spelling;
+            const auto tryOne = [&]<typename TEnum>()
+            {
+                if (spelling.has_value() || !Xna::Holds<TEnum>(boxed)) { return; }
+                const TEnum value = Xna::Unbox<TEnum>(boxed);
+                for (const auto& entry :
+                     Xna::Serialization::Intermediate::ContentEnumNames<TEnum>::Names)
+                {
+                    if (entry.first == value) { spelling = std::string(entry.second); return; }
+                }
+            };
+            (tryOne.template operator()<TEnums>(), ...);
+            return spelling;
+        }
+
+        /** @brief The spelling of any enumeration an XNA processor forwards. */
+        [[nodiscard]] std::optional<std::string> EnumSpelling(const Xna::ContentObject& boxed)
+        {
+            return EnumSpellingOf<Microsoft::Xna::Framework::Content::Pipeline::Processors::MaterialProcessorDefaultEffect,
+                                  Microsoft::Xna::Framework::Content::Pipeline::Processors::TextureProcessorOutputFormat,
+                                  Microsoft::Xna::Framework::Content::Pipeline::Processors::EffectProcessorDebugMode>(boxed);
+        }
+
+        /**
+         * @brief The text spelling of a boxed value the canonical parameter set cannot carry.
+         *
+         * The canonical parameter set carries five primitives; XNA's own processors forward more
+         * than that -- `ModelProcessor` hands `MaterialProcessor` a `Color` and two enumerations,
+         * and `MaterialProcessor` hands the texture processor the same. Refusing them made every
+         * model that reaches a material fail halfway through processing.
+         *
+         * Text is the right carrier rather than a widened variant: every parameter binding already
+         * accepts its property's text spelling (`ParseProcessorParameterText`), a `.contentproj`
+         * writes these values as text, and the spelling this produces is the one that parser
+         * reads. Nothing about how the XNA processors *box* their forwarded values changes, so
+         * what the measured oracle recorded is still what they forward.
+         *
+         * @param boxed The value.
+         * @return Its text, or an empty optional when no spelling is defined for its type.
+         */
+        [[nodiscard]] std::optional<std::string> ParameterText(const Xna::ContentObject& boxed)
+        {
+            using Microsoft::Xna::Framework::Color;
+            using Microsoft::Xna::Framework::Vector2;
+            using Microsoft::Xna::Framework::Vector3;
+            using Microsoft::Xna::Framework::Vector4;
+            const auto number = [](const float value)
+            {
+                std::ostringstream text;
+                text.imbue(std::locale::classic());
+                text << value;
+                return text.str();
+            };
+            if (Xna::Holds<Color>(boxed))
+            {
+                const Color color = Xna::Unbox<Color>(boxed);
+                return std::to_string(static_cast<int>(color.getRProperty())) + "," +
+                       std::to_string(static_cast<int>(color.getGProperty())) + "," +
+                       std::to_string(static_cast<int>(color.getBProperty())) + "," +
+                       std::to_string(static_cast<int>(color.getAProperty()));
+            }
+            if (Xna::Holds<Vector2>(boxed))
+            {
+                const Vector2 v = Xna::Unbox<Vector2>(boxed);
+                return number(v.X) + "," + number(v.Y);
+            }
+            if (Xna::Holds<Vector3>(boxed))
+            {
+                const Vector3 v = Xna::Unbox<Vector3>(boxed);
+                return number(v.X) + "," + number(v.Y) + "," + number(v.Z);
+            }
+            if (Xna::Holds<Vector4>(boxed))
+            {
+                const Vector4 v = Xna::Unbox<Vector4>(boxed);
+                return number(v.X) + "," + number(v.Y) + "," + number(v.Z) + "," + number(v.W);
+            }
+            if (const std::optional<std::string> name = EnumSpelling(boxed); name.has_value())
+            {
+                return name;
+            }
+            return std::nullopt;
+        }
+    }
+
     Xna::TargetPlatform ToXnaTargetPlatform(const ContentTargetPlatform platform) noexcept
     {
         switch (platform)
@@ -154,6 +257,10 @@ namespace CNA::Content::Pipeline
             else if (Xna::Holds<double>(boxed)) { parameters.Set(name, Xna::Unbox<double>(boxed)); }
             else if (Xna::Holds<float>(boxed)) { parameters.Set(name, static_cast<double>(Xna::Unbox<float>(boxed))); }
             else if (Xna::Holds<std::string>(boxed)) { parameters.Set(name, Xna::Unbox<std::string>(boxed)); }
+            else if (const std::optional<std::string> text = ParameterText(boxed); text.has_value())
+            {
+                parameters.Set(name, *text);
+            }
             else
             {
                 throw std::invalid_argument("processor parameter '" + name + "' of type '" +
@@ -497,6 +604,7 @@ namespace CNA::Content::Pipeline
         {
             context_->AddNestedOutput(std::move(additional));
         }
+        context_->AddNestedWriterSchemas(nested.writerSchemas);
         nestedAssets_.emplace(logicalName, key);
         return filename;
     }
@@ -539,6 +647,17 @@ namespace CNA::Content::Pipeline
             throw Xna::PipelineException("Convert: processor '{0}' produced '{1}' where '{2}' was expected.",
                                          processorName, result.StableType(), outputTypeName);
         }
+        // A converted processor may itself have started nested builds -- XNA's `MaterialProcessor`
+        // builds every texture its material names, and it is reached only through `Convert`. Those
+        // outputs are recorded on the context the conversion ran under, which ends here, so they
+        // have to be carried up or the assets are compiled and then silently dropped: the model
+        // referred to a texture that no build ever wrote. Dependencies and runtime references
+        // survive on their own because both contexts share one collector.
+        for (const ContentAdditionalWriteOutput& produced : nested.NestedOutputs())
+        {
+            context_->AddNestedOutput(produced);
+        }
+        context_->AddNestedWriterSchemas(nested.NestedWriterSchemas());
         return result;
     }
 }

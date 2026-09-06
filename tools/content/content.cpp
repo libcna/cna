@@ -30,6 +30,7 @@
 #include "CNA/Content/Pipeline/SongContentPipeline.hpp"
 #include "CNA/Content/Pipeline/SoundEffectContentPipeline.hpp"
 #include "CNA/Content/Pipeline/SpriteFontContentPipeline.hpp"
+#include "CNA/Content/Pipeline/XnaModelSourceContentPipeline.hpp"
 #include "CNA/Content/Pipeline/TextureCompressionPipeline.hpp"
 #include "CNA/Content/Pipeline/Texture2DContentPipeline.hpp"
 #include "CNA/Content/Pipeline/VideoContentPipeline.hpp"
@@ -1879,6 +1880,45 @@ namespace
         return status.str();
     }
 
+    /**
+     * @brief Drops a nested build's copy of an asset another node in this build already owns.
+     *
+     * XNA's `MaterialProcessor` builds every texture a model's materials name as its own asset,
+     * and a project usually lists those textures as items of its own as well. Both produce the
+     * asset called `Textures/surface`, and only one of them can write it. XNA resolves that by
+     * asset name and so does this: the node that owns the name as an item keeps it, and the
+     * model's nested copy is dropped. The model still refers to the name, which the other node
+     * publishes.
+     *
+     * Dropping the model's copy rather than the item's is deliberate: the item is what the project
+     * asked for, with the processor and the parameters the project chose, while the nested copy is
+     * a default the model implied. Only nested copies are dropped -- a writer's own additional
+     * output is that node's product, and a collision between two of those is still a conflict.
+     *
+     * @param entry The node's manifest entry, edited in place.
+     * @param result The build result the entry describes.
+     * @param plannedNodes Logical names of every node in this build.
+     */
+    void DropNestedOutputsOwnedElsewhere(Pipeline::ContentBuildManifestEntry& entry,
+                                         const Pipeline::ContentBuildResult& result,
+                                         const std::set<std::string>& plannedNodes)
+    {
+        std::set<std::string> nested;
+        for (const Pipeline::ContentAdditionalWriteOutput& output :
+             result.output.additionalOutputs)
+        {
+            if (output.fromNestedBuild) { nested.insert(output.logicalName); }
+        }
+        if (nested.empty()) { return; }
+        std::erase_if(entry.outputs,
+                      [&](const Pipeline::ContentBuildManifestOutput& output)
+                      {
+                          return output.logicalName != result.logicalName &&
+                                 nested.contains(output.logicalName) &&
+                                 plannedNodes.contains(output.logicalName);
+                      });
+    }
+
     BuildNodePlan PrepareBuildNode(
         const BuildItem& item, std::size_t index, const Pipeline::ContentPipeline& pipeline,
         const Pipeline::ContentPipelineRegistry& registry,
@@ -1886,7 +1926,7 @@ namespace
         ManifestLoadState manifestState,
         const std::filesystem::path& sourceRoot, const std::filesystem::path& outputRoot,
         const Pipeline::ContentSourceRootCapabilities& externalSourceRoots,
-        const std::filesystem::path& stagingRoot)
+        const std::filesystem::path& stagingRoot, const std::set<std::string>& plannedNodes)
     {
         BuildNodePlan plan;
         plan.item = &item;
@@ -1920,6 +1960,7 @@ namespace
 
             plan.manifest = Pipeline::MakeContentBuildManifestEntry(
                 result, sourceRoot, outputRoot, item.output, externalSourceRoots);
+            DropNestedOutputsOwnedElsewhere(plan.manifest, result, plannedNodes);
             Pipeline::RefreshContentBuildDirectFingerprint(
                 plan.manifest, sourceRoot, externalSourceRoots);
             plan.decision =
@@ -1980,7 +2021,8 @@ namespace
         const BuildNodePlan& plan, const Pipeline::ContentPipeline& pipeline,
         const std::filesystem::path& sourceRoot, const std::filesystem::path& outputRoot,
         const Pipeline::ContentSourceRootCapabilities& externalSourceRoots,
-        const std::map<std::string, std::string>& effectiveFingerprints)
+        const std::map<std::string, std::string>& effectiveFingerprints,
+        const std::set<std::string>& plannedNodes)
     {
         BuildNodeOutcome outcome;
         const BuildItem& item = *plan.item;
@@ -2040,6 +2082,7 @@ namespace
             Pipeline::ContentBuildResult result = pipeline.Build(request);
             outcome.manifest = Pipeline::MakeContentBuildManifestEntry(
                 result, sourceRoot, outputRoot, item.output, externalSourceRoots);
+            DropNestedOutputsOwnedElsewhere(outcome.manifest, result, plannedNodes);
             Pipeline::RefreshContentBuildDirectFingerprint(
                 outcome.manifest, sourceRoot, externalSourceRoots);
             if (outcome.manifest.directFingerprint != plan.manifest.directFingerprint ||
@@ -2228,6 +2271,10 @@ namespace
         }
 
         std::vector<BuildNodePlan> plans(builds.size());
+        // Known before any node runs, so which node keeps a contested asset name does not depend
+        // on the order the nodes happen to finish in.
+        std::set<std::string> plannedNodes;
+        for (const BuildItem& build : builds) { plannedNodes.insert(build.logicalName); }
         try
         {
             for (std::size_t offset = 0u; offset < builds.size(); offset += command.workers)
@@ -2238,7 +2285,7 @@ namespace
                     plans[offset] = PrepareBuildNode(
                         builds[offset], offset, pipeline, *registry, previousManifest,
                         loadedManifest.state, sourceRoot, outputRoot, externalSourceRoots,
-                        staging->Path());
+                        staging->Path(), plannedNodes);
                     continue;
                 }
 
@@ -2253,7 +2300,7 @@ namespace
                             return PrepareBuildNode(
                                 builds[index], index, pipeline, *registry, previousManifest,
                                 loadedManifest.state, sourceRoot, outputRoot,
-                                externalSourceRoots, staging->Path());
+                                externalSourceRoots, staging->Path(), plannedNodes);
                         }));
                 }
                 for (std::size_t index = offset; index < end; ++index)
@@ -2503,7 +2550,7 @@ namespace
             {
                 outcomes.push_back(ExecuteBuildNode(
                     plans[ready.front()], pipeline, sourceRoot, outputRoot,
-                    externalSourceRoots, effectiveFingerprints));
+                    externalSourceRoots, effectiveFingerprints, plannedNodes));
             }
             else
             {
@@ -2519,7 +2566,7 @@ namespace
                             {
                                 return ExecuteBuildNode(
                                     plans[index], pipeline, sourceRoot, outputRoot,
-                                    externalSourceRoots, effectiveFingerprints);
+                                    externalSourceRoots, effectiveFingerprints, plannedNodes);
                             }));
                     }
                     for (std::future<BuildNodeOutcome>& future : futures)
@@ -2663,6 +2710,7 @@ namespace CNA::Content::Pipeline
         RegisterCnjContentPipeline(registry);
         RegisterXnbContentPipeline(registry);
         RegisterSpriteFontSourceContentPipeline(registry);
+        RegisterXnaModelSourceContentPipeline(registry);
         RegisterCompiledEffectContentPipeline(registry);
 
         ExternalEffectCompilerOptions compiler;

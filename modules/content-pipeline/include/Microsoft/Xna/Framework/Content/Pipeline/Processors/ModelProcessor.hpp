@@ -8,6 +8,7 @@
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentProcessor.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/ProcessorParameter.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/NodeContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/ModelContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/ProcessorEnums.hpp"
@@ -208,6 +209,19 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
          * @return The .NET full name of this processor.
          */
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const;
+
+        /**
+         * @brief Declares the properties a build may set by name.
+         *
+         * The names are XNA's own property spellings, which is what a `.contentproj` writes in a
+         * `<ProcessorParameters_Name>` element and what `MaterialProcessor` forwards to the
+         * texture processor. Without this a build could construct the processor and never
+         * configure it (plans/plan_xnapipeline_parity.md `XNAPP-021`).
+         *
+         * @param bindings The bindings to add to.
+         */
+        CNAEXT static void DescribeParameters(ProcessorParameterBindings<ModelProcessor>& bindings);
+
 
     protected:
         /**

@@ -14,6 +14,7 @@
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentObject.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentTypeName.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/ContentTypeDescription.hpp"
 #include "System/Collections/ObjectModel/ReadOnlyCollection.hpp"
 
 namespace Microsoft::Xna::Framework::Content::Pipeline
@@ -354,6 +355,27 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
 
         std::vector<ProcessorParameterBinding<TProcessor>> bindings_;
     };
+
+    /**
+     * @brief The spellings an enumeration already declares, in the shape `AddEnum` takes.
+     *
+     * The names come from the enumeration's own `ContentEnumNames` declaration -- the one the
+     * intermediate serializer reads -- rather than from a second list written beside each
+     * processor, which is a list that can silently disagree with the first.
+     *
+     * @tparam TEnum An enumeration declared with `CNA_XNA_CONTENT_ENUM`.
+     * @return Name/value pairs in the declaration's own order.
+     */
+    template<typename TEnum>
+    [[nodiscard]] CNAEXT std::vector<std::pair<std::string, TEnum>> DeclaredEnumSpellings()
+    {
+        std::vector<std::pair<std::string, TEnum>> spellings;
+        for (const auto& entry : Serialization::Intermediate::ContentEnumNames<TEnum>::Names)
+        {
+            spellings.emplace_back(std::string(entry.second), entry.first);
+        }
+        return spellings;
+    }
 
     /**
      * @brief Detects whether a processor class declares `DescribeParameters`.

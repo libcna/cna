@@ -53,7 +53,11 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
                   {{"generateMipmaps", "true"}, {"textureFormat", "DxtCompressed"}},
                   ""}},
                 {"FontDescriptionProcessor", {"CNA.FontDescriptionProcessor", {}, ""}},
-                {"ModelProcessor", {"CNA.ModelProcessor", {}, ""}},
+                // The XNA model processor, not the glTF one: an XNA project's models are
+                // `.x` and `.fbx` files, and those import to XNA's own scene graph. The
+                // canonical `CNA.ModelProcessor` takes an imported glTF document, which no
+                // XNA source produces.
+                {"ModelProcessor", {"CNA.XnaModelProcessor", {}, ""}},
                 {"SoundEffectProcessor", {"CNA.SoundEffectProcessor", {}, ""}},
                 {"SongProcessor", {"CNA.SongProcessor", {}, ""}},
                 {"VideoProcessor", {"CNA.VideoProcessor", {}, ""}},

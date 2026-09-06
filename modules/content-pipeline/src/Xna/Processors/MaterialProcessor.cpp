@@ -9,6 +9,28 @@
 
 namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
 {
+    void MaterialProcessor::DescribeParameters(ProcessorParameterBindings<MaterialProcessor>& bindings)
+    {
+        bindings.Add<Color>("ColorKeyColor", &MaterialProcessor::getColorKeyColorProperty,
+                            &MaterialProcessor::setColorKeyColorProperty);
+        bindings.Add<bool>("ColorKeyEnabled", &MaterialProcessor::getColorKeyEnabledProperty,
+                           &MaterialProcessor::setColorKeyEnabledProperty);
+        bindings.AddEnum<MaterialProcessorDefaultEffect>(
+            "DefaultEffect", &MaterialProcessor::getDefaultEffectProperty,
+            &MaterialProcessor::setDefaultEffectProperty,
+            DeclaredEnumSpellings<MaterialProcessorDefaultEffect>());
+        bindings.Add<bool>("GenerateMipmaps", &MaterialProcessor::getGenerateMipmapsProperty,
+                           &MaterialProcessor::setGenerateMipmapsProperty);
+        bindings.Add<bool>("PremultiplyTextureAlpha", &MaterialProcessor::getPremultiplyTextureAlphaProperty,
+                           &MaterialProcessor::setPremultiplyTextureAlphaProperty);
+        bindings.Add<bool>("ResizeTexturesToPowerOfTwo", &MaterialProcessor::getResizeTexturesToPowerOfTwoProperty,
+                           &MaterialProcessor::setResizeTexturesToPowerOfTwoProperty);
+        bindings.AddEnum<TextureProcessorOutputFormat>(
+            "TextureFormat", &MaterialProcessor::getTextureFormatProperty,
+            &MaterialProcessor::setTextureFormatProperty,
+            DeclaredEnumSpellings<TextureProcessorOutputFormat>());
+    }
+
     Color MaterialProcessor::getColorKeyColorProperty() const noexcept { return colorKeyColor_; }
 
     void MaterialProcessor::setColorKeyColorProperty(Color value) noexcept { colorKeyColor_ = value; }

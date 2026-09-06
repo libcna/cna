@@ -64,6 +64,42 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
         }
     }
 
+    void ModelProcessor::DescribeParameters(ProcessorParameterBindings<ModelProcessor>& bindings)
+    {
+        bindings.Add<Color>("ColorKeyColor", &ModelProcessor::getColorKeyColorProperty,
+                            &ModelProcessor::setColorKeyColorProperty);
+        bindings.Add<bool>("ColorKeyEnabled", &ModelProcessor::getColorKeyEnabledProperty,
+                           &ModelProcessor::setColorKeyEnabledProperty);
+        bindings.AddEnum<MaterialProcessorDefaultEffect>("DefaultEffect",
+                                                         &ModelProcessor::getDefaultEffectProperty,
+                                                         &ModelProcessor::setDefaultEffectProperty,
+                                                         DeclaredEnumSpellings<MaterialProcessorDefaultEffect>());
+        bindings.Add<bool>("GenerateMipmaps", &ModelProcessor::getGenerateMipmapsProperty,
+                           &ModelProcessor::setGenerateMipmapsProperty);
+        bindings.Add<bool>("GenerateTangentFrames", &ModelProcessor::getGenerateTangentFramesProperty,
+                           &ModelProcessor::setGenerateTangentFramesProperty);
+        bindings.Add<bool>("PremultiplyTextureAlpha", &ModelProcessor::getPremultiplyTextureAlphaProperty,
+                           &ModelProcessor::setPremultiplyTextureAlphaProperty);
+        bindings.Add<bool>("PremultiplyVertexColors", &ModelProcessor::getPremultiplyVertexColorsProperty,
+                           &ModelProcessor::setPremultiplyVertexColorsProperty);
+        bindings.Add<bool>("ResizeTexturesToPowerOfTwo", &ModelProcessor::getResizeTexturesToPowerOfTwoProperty,
+                           &ModelProcessor::setResizeTexturesToPowerOfTwoProperty);
+        bindings.Add<SharpRuntime::Single>("RotationX", &ModelProcessor::getRotationXProperty,
+                                           &ModelProcessor::setRotationXProperty);
+        bindings.Add<SharpRuntime::Single>("RotationY", &ModelProcessor::getRotationYProperty,
+                                           &ModelProcessor::setRotationYProperty);
+        bindings.Add<SharpRuntime::Single>("RotationZ", &ModelProcessor::getRotationZProperty,
+                                           &ModelProcessor::setRotationZProperty);
+        bindings.Add<SharpRuntime::Single>("Scale", &ModelProcessor::getScaleProperty,
+                                           &ModelProcessor::setScaleProperty);
+        bindings.Add<bool>("SwapWindingOrder", &ModelProcessor::getSwapWindingOrderProperty,
+                           &ModelProcessor::setSwapWindingOrderProperty);
+        bindings.AddEnum<TextureProcessorOutputFormat>("TextureFormat",
+                                                       &ModelProcessor::getTextureFormatProperty,
+                                                       &ModelProcessor::setTextureFormatProperty,
+                                                       DeclaredEnumSpellings<TextureProcessorOutputFormat>());
+    }
+
     Color ModelProcessor::getColorKeyColorProperty() const noexcept { return colorKeyColor_; }
     void ModelProcessor::setColorKeyColorProperty(Color value) noexcept { colorKeyColor_ = value; }
     bool ModelProcessor::getColorKeyEnabledProperty() const noexcept { return colorKeyEnabled_; }
