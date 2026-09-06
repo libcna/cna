@@ -2115,6 +2115,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_move_semantics
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-342: destroying the device BEFORE its resources is the case
+        # ~VulkanRenderer's release-and-disconnect machinery exists for -- and VULKAN-407 found
+        # three classes it did not cover.
+        cna_vulkan_test(cna_test_vulkan_device_dispose_order
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_device_dispose_order_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DeviceDisposeOrder
+            COMMAND cna_test_vulkan_device_dispose_order
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-095: MultiSampleCount changed on a LIVE device. Vulkan-owned rather
         # than a registration of easygl_msaa_change_test.cpp, because that source asserts EasyGL's
         # own limit -- that the count cannot change post-construction -- which is false here.
