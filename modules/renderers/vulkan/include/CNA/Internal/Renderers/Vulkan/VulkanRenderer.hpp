@@ -1557,6 +1557,21 @@ namespace CNA::Internal::Renderers::Vulkan
         [[nodiscard]] bool IsCompressedTransferFormatEXT(int surfaceFormat) const override;
 
         /**
+         * @brief Whether a `RenderTarget2D` may be created with the given surface format.
+         *
+         * plan_vulkan.md VULKAN-171. Renderability is a strictly narrower question than
+         * storability and is answered separately: `Supported` for `Color` when the device's own
+         * `VkFormatProperties` back the swapchain format as a colour attachment, `Defer` for every
+         * other format -- because both render-target classes create their colour image in
+         * `swapchainFormat_` and the requested format reaches neither.
+         *
+         * @param surfaceFormat The `SurfaceFormat` ordinal.
+         * @return This renderer's verdict.
+         */
+        [[nodiscard]] CNA::Internal::Renderers::RendererFormatVerdict ClassifyRenderTargetFormatEXT(
+            int surfaceFormat) const override;
+
+        /**
          * @brief CNAEXT. XNA's Direct3D 9 pixel-centre correction, as a clip-space translation.
          *
          * plan_vulkan.md VULKAN-097. XNA 4.0 addresses pixel CENTRES with integer coordinates;

@@ -2320,6 +2320,41 @@ namespace CNA::Internal::Renderers::Vulkan
         return RendererFormatVerdict::Defer;
     }
 
+    RendererFormatVerdict VulkanRenderer::ClassifyRenderTargetFormatEXT(int surfaceFormat) const
+    {
+        // plan_vulkan.md VULKAN-171. Renderability is a strictly narrower question than
+        // storability, and this renderer's answer is narrower still than the device's -- which is
+        // the point of not reusing VULKAN-170's verdict here.
+        //
+        // `VulkanRenderTargetRenderer` and `VulkanRenderTargetCubeRenderer` create their colour
+        // image in `owner_->swapchainFormat_`, unconditionally: the requested SurfaceFormat reaches
+        // neither constructor. So the ONLY format this renderer genuinely renders into is `Color`,
+        // and it is answered from the device's real `VkFormatProperties` for that swapchain format
+        // rather than asserted -- `COLOR_ATTACHMENT_BIT` plus `SAMPLED_IMAGE_BIT`, because every
+        // render target here is also created `USAGE_SAMPLED_BIT` so it can be read back and used
+        // as a texture.
+        //
+        // Everything else is `Defer`, and that is deliberate rather than lazy. The nine formats
+        // VULKAN-170's table now claims as TEXTURE storage -- the packed 16-bit trio, the
+        // signed-normalized pair, the three block-compressed ones -- must NOT leak into this
+        // answer: nothing renders into a BCn surface at all, and the other five would be silently
+        // substituted for the swapchain format, which is exactly the "asked for one format, got
+        // another" MOD-115 forbids. `Vulkan_SurfaceFormatClassification`'s render-target sweep is
+        // what stops that leak happening by accident later.
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        if (static_cast<SurfaceFormat>(surfaceFormat) != SurfaceFormat::Color)
+            return RendererFormatVerdict::Defer;
+        if (physicalDevice_ == VK_NULL_HANDLE || swapchainFormat_ == VK_FORMAT_UNDEFINED)
+            return RendererFormatVerdict::Defer;
+        VkFormatProperties props{};
+        vkGetPhysicalDeviceFormatProperties(physicalDevice_, swapchainFormat_, &props);
+        constexpr VkFormatFeatureFlags required =
+            VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
+        return (props.optimalTilingFeatures & required) == required
+            ? RendererFormatVerdict::Supported
+            : RendererFormatVerdict::Unsupported;
+    }
+
     bool VulkanRenderer::IsCompressedTransferFormatEXT(int surfaceFormat) const
     {
         // plan_vulkan.md VULKAN-172: true for exactly what the storage table claims as blocks on

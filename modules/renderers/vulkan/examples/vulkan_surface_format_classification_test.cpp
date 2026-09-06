@@ -25,6 +25,9 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
@@ -258,6 +261,93 @@ protected:
 
         std::printf("[INFO] verdicts: %d Supported, %d Unsupported, %d Defer\n",
                     supported, unsupported, deferred);
+
+        // ---------------------------------------------------------------------------------
+        // plan_vulkan.md VULKAN-171 -- the RENDER-TARGET verdict, which is a different question
+        // from the texture one and is asked separately here for that reason.
+        //
+        // The leak this sweep exists to stop: nine formats are now claimed as texture storage --
+        // the packed 16-bit trio, the signed-normalized pair, the three block-compressed ones --
+        // and none of them is renderable here, because both render-target classes create their
+        // colour image in swapchainFormat_ and never see the requested format. A future change
+        // that reuses ClassifySurfaceFormatEXT's answer for renderability would substitute
+        // silently, and that is what MOD-115 forbids. It is caught here as a wrong construction
+        // outcome, per format, rather than by reading the code.
+        // ---------------------------------------------------------------------------------
+        {
+            int rtSupported = 0, rtUnsupported = 0, rtDeferred = 0;
+            for (const auto& nf : kAllFormats)
+            {
+                const int ordinal = static_cast<int>(nf.format);
+                const RendererFormatVerdict verdict = renderer.ClassifyRenderTargetFormatEXT(ordinal);
+                switch (verdict)
+                {
+                    case RendererFormatVerdict::Supported:   ++rtSupported;   break;
+                    case RendererFormatVerdict::Unsupported: ++rtUnsupported; break;
+                    case RendererFormatVerdict::Defer:       ++rtDeferred;    break;
+                }
+
+                bool constructed = false, profileRefused = false;
+                std::string message;
+                try
+                {
+                    RenderTarget2D rt(dev, 4, 4, false, nf.format, DepthFormat::None, 0,
+                                      RenderTargetUsage::DiscardContents);
+                    constructed = true;
+                }
+                catch (const System::NotSupportedException& e) { profileRefused = true; message = e.what(); }
+                catch (const std::exception& e) { message = e.what(); }
+
+                const std::string where =
+                    std::string("RT ") + nf.name + " (verdict " + VerdictName(verdict) + ")";
+
+                // The public query must agree with the constructor, always -- that is
+                // GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT's whole promise.
+                const bool publicSaysYes = dev.SupportsSurfaceFormatAsRenderTargetEXT(nf.format);
+                check(publicSaysYes == (verdict == RendererFormatVerdict::Supported ||
+                                        (verdict == RendererFormatVerdict::Defer &&
+                                         nf.format == SurfaceFormat::Color)),
+                      "J " + where + ": SupportsSurfaceFormatAsRenderTargetEXT matches the verdict");
+
+                if (!Texture::IsRenderTargetFormatAllowedByProfileEXT(profile, nf.format))
+                {
+                    check(!constructed,
+                          "K " + where + ": the profile refuses it as a render target [" +
+                              message + "]");
+                    continue;
+                }
+                switch (verdict)
+                {
+                    case RendererFormatVerdict::Supported:
+                        check(constructed, "L " + where + ": Supported must construct [" + message + "]");
+                        break;
+                    case RendererFormatVerdict::Unsupported:
+                        check(!constructed && profileRefused == false,
+                              "M " + where + ": Unsupported must refuse [" + message + "]");
+                        break;
+                    case RendererFormatVerdict::Defer:
+                        check(constructed == (nf.format == SurfaceFormat::Color),
+                              "N " + where + ": Defer follows the framework rule (Color only) [" +
+                                  message + "]");
+                        break;
+                }
+            }
+            std::printf("[INFO] render-target verdicts: %d Supported, %d Unsupported, %d Defer\n",
+                        rtSupported, rtUnsupported, rtDeferred);
+
+            // The renderability answer must be STRICTLY NARROWER than the storability one, and on
+            // this renderer strictly narrower by eight: Color is the only format it renders into,
+            // while it stores nine. A future change that widened renderability to match storage
+            // would be caught here even if every construction outcome above happened to agree.
+            int storable = 0;
+            for (const auto& nf : kAllFormats)
+                if (renderer.ClassifySurfaceFormatEXT(static_cast<int>(nf.format)) ==
+                    RendererFormatVerdict::Supported)
+                    ++storable;
+            check(rtSupported == 1 && storable > rtSupported,
+                  "O renderability (" + std::to_string(rtSupported) +
+                      ") is strictly narrower than storability (" + std::to_string(storable) + ")");
+        }
 
         // I. The Unsupported arm, forced -- and it is forced because it is otherwise unreachable.
         // Every driver this renderer runs on reports SAMPLED_IMAGE|TRANSFER_DST for the one format
