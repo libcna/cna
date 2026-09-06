@@ -47,6 +47,37 @@ What was already verified, without XNA, and still is:
 What the run does **not** show: only these six roots were exercised, and only the values XNA 4.0's
 public API exposes. The `(not asserted)` lines are honest gaps, not passes.
 
+### The LZX corpus does not load, and that is a real defect
+
+The same six assets, written with CNA's own LZX encoder
+(`tests/assets/xnb/cna/windows/lzx/`), are **all six refused** by the same runtime, in the same
+run, with the same harness:
+
+```text
+ERROR   texture2d_color_mips
+         InvalidOperationException: Error decompressing content data.
+...
+fixtures: 6   failed: 6
+```
+
+This is exactly the outcome this file says is the most valuable one the harness can produce, and
+it is worth being precise about what it does and does not implicate:
+
+* The **container is not the problem.** The header is well formed -- `XNB w 5`, flags `0x80`, a
+  file-size field that matches the bytes on disk, and a decompressed-size field -- and the first
+  chunk's framing is correct (`FF`, big-endian frame size, big-endian block size, and the block
+  length agrees with the remaining bytes).
+* **CNA's own decoder reads these files, and so does the independent Python parser**
+  (`tools/xnb/xnb_conformance.py` reports `OK ... lzx` for all six). Two implementations that
+  share no code agree the stream is valid LZX; Microsoft's does not.
+* So the defect is inside the LZX bitstream, in something both CNA decoders are lenient about.
+  Even the 220-byte, almost entirely literal `list_of_strings` fails, which points away from
+  match encoding and towards the block header or the pretree/tree-length encoding.
+
+Until it is fixed, **CNA must not claim that its LZX output loads in XNA 4.0.** The uncompressed
+corpus does; the compressed one does not. `cna-content`'s own `--xnb-compress lzx` help text and
+`plans/plan_xnapipeline.md` `XNAP-81` both need that correction.
+
 ## What you need
 
 * Windows (XNA 4.0 is 32-bit Windows only).
