@@ -1184,6 +1184,24 @@ WGSL `ShaderEffect` route and the instanced route. `WebGpuWireFrameContract.Ever
 asserts it per route, because "some routes wireframe and the rest quietly fill" is exactly the defect
 worth catching and a whole-suite total would hide it.
 
+**`SpriteBatch` wireframes too, and that is a deliberate divergence from the reference renderer**
+(`WEBGPU-154`, 2026-09-06). A sprite is two triangles, XNA's `FillMode` is a `RasterizerState` field
+that applies to every primitive the device rasterizes, and `SpriteBatch.Begin` assigns the device's
+`RasterizerState` -- so a batch begun with a `WireFrame` state must draw outlines. EasyGL fills
+instead (measured 576/576 pixels, four ways, recorded as `plans/plan_graphics.md` row 1115), and this
+renderer does not copy that: where FNA and XNA disagree, XNA wins, and this row's acceptance is that
+no route accepts a wireframe request and draws a filled polygon.
+
+Mechanically it costs nothing per sprite. One shared 12-entry `uint16` line list is created on the
+first wireframe sprite and reused forever, because each sprite's six vertices sit at
+`spriteIndex * 6` in the shared vertex buffer and are reached through `baseVertex`; the fill mode
+joins the sprite pipeline cache key, since a line-list pipeline is a different pipeline object rather
+than a different draw call. The custom-WGSL `ShaderEffect` sprite route takes the same two changes.
+Measured on a 192x192 sprite: `Solid` lights 36864 pixels, `WireFrame` 957. Note one consequence a
+caller can see -- `SpriteBatch::Begin(...)` with a **null** `rasterizerState` resolves to
+`CullCounterClockwise`, which is `Solid`, so a device set to `WireFrame` still fills unless the state
+is passed to `Begin`. That is XNA's own behaviour, not a renderer choice.
+
 **Why not `polygonMode`.** The pinned wgpu-native *does* expose one:
 `WGPUPrimitiveStateExtras::polygonMode` with `WGPUPolygonMode_Line`, behind
 `WGPUNativeFeature_PolygonModeLine` (listed for DX12/Vulkan/Metal). It is deliberately unused,

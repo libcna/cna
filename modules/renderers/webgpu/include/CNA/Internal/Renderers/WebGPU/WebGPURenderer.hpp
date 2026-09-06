@@ -1130,6 +1130,11 @@ namespace CNA::Internal::Renderers::WebGPU
             int addressV = 1;
             int addressW = 1;  ///< WEBGPU-160: the third addressing axis.
             int maxMipLevel = 0;  ///< WEBGPU-161: SamplerState.MaxMipLevel.
+            /// WEBGPU-154: `RasterizerState.FillMode == WireFrame` at this sprite's own public
+            /// Draw call, captured by value like every other per-sprite state. A wireframe sprite
+            /// is drawn as a 12-index line list over its own six vertices rather than as two
+            /// filled triangles; see `EnsureSpriteWireIndexBufferEXT`.
+            bool wireframe = false;
             // REMED-GFX-102: complete per-Begin BlendState + BlendFactor capture by value. No
             // BlendState pointer, live renderer state, texture identity, sprite identity, or target
             // object identity participates in replay or pipeline selection.
@@ -1172,6 +1177,9 @@ namespace CNA::Internal::Renderers::WebGPU
             /// WEBGPU-39: the active pass's depth attachment format (Undefined for DepthFormat::None).
             /// A sprite pipeline must declare the same depth format as the pass it draws into.
             WGPUTextureFormat depthFormat = WGPUTextureFormat_Depth24PlusStencil8;
+            /// WEBGPU-154: a wireframe sprite needs a LINE-LIST pipeline, which is a different
+            /// pipeline object rather than a different draw call, so it belongs in the key.
+            bool wireframe = false;
 
             [[nodiscard]] bool operator==(const SpritePipelineKey& other) const noexcept
             {
@@ -1183,7 +1191,8 @@ namespace CNA::Internal::Renderers::WebGPU
                     multiSampleMask == other.multiSampleMask &&
                     targetFormat == other.targetFormat && sampleCount == other.sampleCount &&
                     colorAttachmentCount == other.colorAttachmentCount &&
-                    depthFormat == other.depthFormat;
+                    depthFormat == other.depthFormat &&
+                    wireframe == other.wireframe;
             }
         };
 
@@ -1210,6 +1219,7 @@ namespace CNA::Internal::Renderers::WebGPU
                 mix(static_cast<std::size_t>(key.sampleCount));
                 mix(static_cast<std::size_t>(key.colorAttachmentCount));
                 mix(static_cast<std::size_t>(key.depthFormat));
+                mix(key.wireframe ? 1u : 0u);
                 return hash;
             }
         };
@@ -1801,7 +1811,14 @@ namespace CNA::Internal::Renderers::WebGPU
         void DestroySpriteResources();
         [[nodiscard]] WebGPUSpriteBlendSnapshot CaptureSpriteBlendSnapshot() const;
         [[nodiscard]] WGPURenderPipeline GetOrCreateSpritePipeline(
-            const WebGPUSpriteBlendSnapshot& snapshot);
+            const WebGPUSpriteBlendSnapshot& snapshot, bool wireframe);
+        /// WEBGPU-154: the shared 12-entry line-index buffer a wireframe sprite draws through.
+        /// Six vertices per sprite form two triangles (0,1,2) and (3,4,5); the six edges are the
+        /// quad's outline plus its shared diagonal, drawn twice exactly as
+        /// `ExpandTriangleEdgesForWireframeEXT` draws a shared interior edge twice, so a wireframe
+        /// sprite matches a wireframe quad. Created once, indexed with `baseVertex = sprite * 6`,
+        /// so a wireframe batch allocates nothing per sprite.
+        [[nodiscard]] WGPUBuffer EnsureSpriteWireIndexBufferEXT();
         void CreateColoredResources();
         void DestroyColoredResources();
         void RecreateDepthTexture();
@@ -2881,6 +2898,8 @@ namespace CNA::Internal::Renderers::WebGPU
         std::array<std::uint64_t, kSpriteVertexRing> spriteVertexRingCapacity_{};
         std::size_t spriteVertexRingIndex_ = 0;
         WGPUBuffer spriteVertexBuffer_ = nullptr;        ///< Non-owning alias of the active ring slot.
+        /// WEBGPU-154: the shared 12-index line list every wireframe sprite draws through.
+        WGPUBuffer spriteWireIndexBuffer_ = nullptr;
         /// WEBGPU-155: the shared 16-byte (0,0,0,1) neutral vertex record, bound at array stride 0
         /// for any stock shader input the draw's declaration does not name. Created on first use.
         WGPUBuffer neutralVertexBuffer_ = nullptr;

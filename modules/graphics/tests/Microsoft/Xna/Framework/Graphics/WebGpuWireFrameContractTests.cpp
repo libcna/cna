@@ -69,6 +69,9 @@
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBufferBinding.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
@@ -494,6 +497,9 @@ namespace
     using Microsoft::Xna::Framework::Graphics::Texture2D;
     using Microsoft::Xna::Framework::Graphics::VertexBufferBinding;
     using Microsoft::Xna::Framework::Graphics::VertexPositionColorTexture;
+    using Microsoft::Xna::Framework::Graphics::SamplerState;      // WEBGPU-154
+    using Microsoft::Xna::Framework::Graphics::SpriteBatch;       // WEBGPU-154
+    using Microsoft::Xna::Framework::Graphics::SpriteSortMode;    // WEBGPU-154
 
     /// One public draw route. `Setup` runs before the counter window opens, so nothing it creates
     /// or binds can be mistaken for work the measured draw did; `Draw` is the single public call
@@ -513,6 +519,11 @@ namespace
         {
             return b.GetColoredPipelineCacheSizeEXT();
         }
+        /// The box that must be EMPTY under WireFrame and FULL under Solid. Every route but one
+        /// draws the oracle's shared triangle, so the default is its centroid probe; `SpriteBatch`
+        /// draws a quad instead and states its own, because asserting a triangle's interior about
+        /// a quad would measure the quad's diagonal rather than its fill.
+        [[nodiscard]] virtual Box InteriorProbe() const { return kInterior; }
     };
 
     /// The shared triangle, optionally preceded by @p pad decoy vertices so a nonzero vertexStart /
@@ -797,6 +808,50 @@ namespace
         }
     };
 
+    /// WEBGPU-154: the SpriteBatch route. Added when the row's remaining half was settled: a
+    /// sprite is two triangles like any other quad, and XNA's FillMode is a RasterizerState field
+    /// that applies to every primitive the device rasterizes, so a WireFrame sprite must be an
+    /// outline. The reference renderer fills instead (measured 576/576 pixels, four ways) --
+    /// recorded in plans/plan_graphics.md rather than copied here, because "where FNA and XNA
+    /// disagree, XNA wins" and this row's own acceptance is that no route accepts a wireframe
+    /// request and draws a filled polygon.
+    ///
+    /// The RasterizerState is passed to Begin() explicitly, and that is XNA's semantic rather than
+    /// a convenience: SpriteBatch.Begin ASSIGNS the device's RasterizerState -- resolving null to
+    /// CullCounterClockwise, which is Solid -- so a batch begun with null would legitimately fill
+    /// even while the device was set to WireFrame. Passing the fixture's own state through is what
+    /// asks the question this route means to ask.
+    struct SpriteBatchRoute : Route
+    {
+        std::unique_ptr<Texture2D> texture;
+        [[nodiscard]] const char* Name() const override { return "SpriteBatch"; }
+        [[nodiscard]] std::size_t PipelineCacheSize(const WebGPURenderer& b) const override
+        {
+            return b.GetSpritePipelineCacheSizeEXT();
+        }
+        /// Inside the sprite's own quad (32,32)-(224,224) and clear of both the border and the
+        /// shared diagonal. The quad's two triangles are (TL,TR,BL) and (BL,TR,BR), so the shared
+        /// edge is the ANTI-diagonal x + y == 256; every pixel of this box has x + y >= 280, and
+        /// the nearest border is 24 px away. A solid sprite fills it; an outline cannot reach it.
+        [[nodiscard]] Box InteriorProbe() const override { return Box{140, 140, 200, 200}; }
+        void Setup(GraphicsDevice& device) override
+        {
+            texture = std::make_unique<Texture2D>(device, 1, 1);
+            const Color white(255, 255, 255, 255);
+            texture->SetData(&white, 1);
+        }
+        void Draw(GraphicsDevice& device) override
+        {
+            const RasterizerState rasterizer = device.getRasterizerStateProperty();
+            const SamplerState sampler = SamplerState::PointClamp;
+            SpriteBatch batch(device);
+            batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &sampler,
+                        &DepthStencilState::None, &rasterizer);
+            batch.Draw(*texture, Rectangle(32, 32, 192, 192), Color::White);
+            batch.End();
+        }
+    };
+
     /// Runs @p route once under @p fill, bracketing exactly the public draw call.
     RouteRun RunRoute(GraphicsDevice& device, FillMode fill, Route& route)
     {
@@ -862,6 +917,7 @@ TEST(WebGpuWireFrameContract, EveryPublicDrawRouteWireframesAndAcceptsSolid)
     routes.emplace_back(std::make_unique<UserRawIndexed>());
     routes.emplace_back(std::make_unique<TexturedFamily>());
     routes.emplace_back(std::make_unique<InstancedRoute>());
+    routes.emplace_back(std::make_unique<SpriteBatchRoute>());   // WEBGPU-154
 
     // The route list is the point of this test, not a detail of it: the expansion is applied per
     // draw FAMILY, so a family that was missed would silently fill while its neighbours wireframe.
@@ -882,6 +938,12 @@ TEST(WebGpuWireFrameContract, EveryPublicDrawRouteWireframesAndAcceptsSolid)
         EXPECT_GT(solid.frame.LitTotal(), 0)
             << route->Name() << " rendered nothing under Solid, so its WireFrame leg would prove "
                                 "nothing -- " << solid.frame.Describe();
+        // The probe the WireFrame leg asserts EMPTY has to be FULL here, or "empty" would be
+        // satisfied by a probe that lands outside the geometry entirely.
+        EXPECT_EQ(route->InteriorProbe().Area(), solid.frame.LitIn(route->InteriorProbe()))
+            << route->Name() << " did not fill its own interior probe under Solid, so the "
+                                "WireFrame leg's emptiness would prove nothing -- "
+            << solid.frame.Describe();
 
         // Then WireFrame, on a fresh device so no state from the Solid leg can carry over.
         GraphicsDevice wireDevice;
@@ -902,8 +964,8 @@ TEST(WebGpuWireFrameContract, EveryPublicDrawRouteWireframesAndAcceptsSolid)
         // The interior is empty and the frame is smaller than Solid's. Stated per route, because
         // "some routes wireframe and the rest quietly fill" is the defect this test exists to
         // catch and a whole-suite total would hide it.
-        EXPECT_EQ(0, wire.frame.LitIn(kInterior))
-            << route->Name() << " filled the triangle interior under FillMode::WireFrame -- "
+        EXPECT_EQ(0, wire.frame.LitIn(route->InteriorProbe()))
+            << route->Name() << " filled its interior under FillMode::WireFrame -- "
             << wire.frame.Describe();
         EXPECT_GT(wire.frame.LitTotal(), 0)
             << route->Name() << " rendered nothing under FillMode::WireFrame -- "

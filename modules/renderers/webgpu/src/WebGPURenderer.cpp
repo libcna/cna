@@ -4052,6 +4052,9 @@ namespace CNA::Internal::Renderers::WebGPU
             spriteVertexRingCapacity_[s] = 0;
         }
         spriteVertexRingIndex_ = 0;
+        // WEBGPU-154: the shared wireframe line-index buffer, created on first wireframe sprite.
+        if (spriteWireIndexBuffer_ != nullptr) wgpuBufferRelease(spriteWireIndexBuffer_);
+        spriteWireIndexBuffer_ = nullptr;
         for (auto& [key, pipeline] : spritePipelines_)
         {
             (void) key;
@@ -4159,8 +4162,38 @@ namespace CNA::Internal::Renderers::WebGPU
         return snapshot;
     }
 
+    WGPUBuffer WebGPURenderer::EnsureSpriteWireIndexBufferEXT()
+    {
+        // WEBGPU-154. One buffer for every wireframe sprite ever drawn: each sprite's own six
+        // vertices sit at `spriteIndex * 6` in the shared vertex buffer, so the SAME twelve indices
+        // address any of them through `baseVertex`. A wireframe batch therefore allocates nothing
+        // per sprite, which is what keeps this off the sprite hot path.
+        //
+        // The queue write below is a queue-timeline operation like UploadSpriteVertices' own, and
+        // this is reached from inside a render pass -- ordered against the submit rather than
+        // against the draws being recorded, and issued at most once per device.
+        if (spriteWireIndexBuffer_ != nullptr) return spriteWireIndexBuffer_;
+        if (device_ == nullptr || queue_ == nullptr) return nullptr;
+        // Sprite vertex 0..2 is the first triangle and 3..5 the second (QueueSprite emits the
+        // points in the order 0,1,2,2,1,3). Their six edges are the quad's outline plus the shared
+        // diagonal, which appears in both triangles and is therefore drawn twice -- the same thing
+        // ExpandTriangleEdgesForWireframeEXT does for a shared interior edge, so a wireframe sprite
+        // and a wireframe quad produce the same picture rather than merely a similar one.
+        static constexpr std::uint16_t kEdges[12] = {0, 1, 1, 2, 2, 0,
+                                                     3, 4, 4, 5, 5, 3};
+        WGPUBufferDescriptor descriptor{};
+        descriptor.label = StringView("CNA WebGPU SpriteBatch Wireframe Index Buffer");
+        descriptor.usage = WGPUBufferUsage_Index | WGPUBufferUsage_CopyDst;
+        descriptor.size = sizeof(kEdges);
+        spriteWireIndexBuffer_ = wgpuDeviceCreateBuffer(device_, &descriptor);
+        if (spriteWireIndexBuffer_ == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create the SpriteBatch wireframe index buffer");
+        wgpuQueueWriteBuffer(queue_, spriteWireIndexBuffer_, 0, kEdges, sizeof(kEdges));
+        return spriteWireIndexBuffer_;
+    }
+
     WGPURenderPipeline WebGPURenderer::GetOrCreateSpritePipeline(
-        const WebGPUSpriteBlendSnapshot& snapshot)
+        const WebGPUSpriteBlendSnapshot& snapshot, bool wireframe)
     {
         SpritePipelineKey key;
         key.blendEnabled = snapshot.blendEnabled;
@@ -4176,6 +4209,7 @@ namespace CNA::Internal::Renderers::WebGPU
         key.sampleCount = snapshot.sampleCount;
         key.colorAttachmentCount = replayColorAttachmentCount_;  // WEBGPU-86 MRT (see ExpandStockColorTargetsEXT)
         key.depthFormat = replayDepthFormat_;  // WEBGPU-39: match the active pass's depth format
+        key.wireframe = wireframe;  // WEBGPU-154: a line-list pipeline is a different pipeline
 
         if (const auto found = spritePipelines_.find(key); found != spritePipelines_.end())
             return found->second;
@@ -4224,7 +4258,10 @@ namespace CNA::Internal::Renderers::WebGPU
         pipeline.vertex.entryPoint = StringView("vs_main");
         pipeline.vertex.bufferCount = 1;
         pipeline.vertex.buffers = &vertexBufferLayout;
-        pipeline.primitive.topology = WGPUPrimitiveTopology_TriangleList;
+        // WEBGPU-154: FillMode::WireFrame on a sprite is a LINE LIST over the sprite's own six
+        // vertices. WebGPU has no polygon mode, so this is the same route the 3D families take.
+        pipeline.primitive.topology = wireframe ? WGPUPrimitiveTopology_LineList
+                                                : WGPUPrimitiveTopology_TriangleList;
         pipeline.primitive.frontFace = WGPUFrontFace_CCW;
         pipeline.primitive.cullMode = WGPUCullMode_None;
         pipeline.multisample.count = snapshot.sampleCount;
@@ -6738,6 +6775,10 @@ namespace CNA::Internal::Renderers::WebGPU
         command.addressU = addressU;
         command.addressV = addressV;
         command.blend = blendSnapshot;
+        // WEBGPU-154: this sprite's OWN fill mode, captured for the same reason its viewport and
+        // scissor are -- a RasterizerState set after the batch but before the flush must not
+        // reclassify an already-queued draw.
+        command.wireframe = fillModeWireframe_;
         command.viewportCustom = customViewport;
         // REMED-GFX-116: capture the Viewport for EVERY sprite, not only a sub-region one.
         // GFX-072 captured only the custom case, so a target-relative sprite still inherited
@@ -6875,6 +6916,9 @@ namespace CNA::Internal::Renderers::WebGPU
                        (static_cast<std::uint64_t>(command.blend.colorFunc) << 32) |
                        (static_cast<std::uint64_t>(command.blend.alphaFunc) << 40));
         key = mix(key, static_cast<std::uint64_t>(command.blend.colorWriteMask & 0xF));
+        // WEBGPU-154: a wireframe sprite needs a LINE-LIST pipeline here too, so the fill mode is
+        // part of this cache key exactly as it is part of the stock sprite one.
+        key = mix(key, command.wireframe ? 1u : 0u);
 
         WGPURenderPipeline pipe = nullptr;
         if (auto it = effect->pipelineCache_.find(key); it != effect->pipelineCache_.end())
@@ -6925,7 +6969,9 @@ namespace CNA::Internal::Renderers::WebGPU
             pipeline.vertex.entryPoint = StringView("vs_main");
             pipeline.vertex.bufferCount = 1;
             pipeline.vertex.buffers = &vertexBufferLayout;
-            pipeline.primitive.topology = WGPUPrimitiveTopology_TriangleList;
+            // WEBGPU-154: see the stock sprite pipeline's identical choice.
+            pipeline.primitive.topology = command.wireframe ? WGPUPrimitiveTopology_LineList
+                                                            : WGPUPrimitiveTopology_TriangleList;
             pipeline.primitive.frontFace = WGPUFrontFace_CCW;
             pipeline.primitive.cullMode = WGPUCullMode_None;
             pipeline.multisample.count = targetSampleCount;
@@ -6985,7 +7031,21 @@ namespace CNA::Internal::Renderers::WebGPU
         bindDescriptor.entries = bindEntries.data();
         WGPUBindGroup bindGroup = wgpuDeviceCreateBindGroup(device_, &bindDescriptor);
         wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup, 0, nullptr);
-        wgpuRenderPassEncoderDraw(pass, 6, 1, spriteIndex * 6u, 0);
+        // WEBGPU-154: the same twelve-index line list the stock sprite route uses.
+        if (command.wireframe)
+        {
+            if (WGPUBuffer wireIndices = EnsureSpriteWireIndexBufferEXT(); wireIndices != nullptr)
+            {
+                wgpuRenderPassEncoderSetIndexBuffer(pass, wireIndices, WGPUIndexFormat_Uint16, 0,
+                                                    WGPU_WHOLE_SIZE);
+                wgpuRenderPassEncoderDrawIndexed(pass, 12, 1, 0,
+                                                 static_cast<std::int32_t>(spriteIndex * 6u), 0);
+            }
+        }
+        else
+        {
+            wgpuRenderPassEncoderDraw(pass, 6, 1, spriteIndex * 6u, 0);
+        }
 
         pendingBindGroupReleases_.push_back(bindGroup);
         pendingBufferReleases_.push_back(uniformBuffer);
@@ -7028,7 +7088,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // intentionally absent from GetOrCreateSpritePipeline's key.
         // REMED-GFX-159: the redundant-bind skip is tracked across ALL families now, so it cannot
         // skip a rebind after a 3D draw bound a pipeline of its own.
-        const WGPURenderPipeline pipeline = GetOrCreateSpritePipeline(command.blend);
+        const WGPURenderPipeline pipeline = GetOrCreateSpritePipeline(command.blend, command.wireframe);
         if (pipeline != state.boundPipeline)
         {
             wgpuRenderPassEncoderSetPipeline(pass, pipeline);
@@ -7072,7 +7132,22 @@ namespace CNA::Internal::Renderers::WebGPU
         descriptor.entries = entries.data();
         WGPUBindGroup bindGroup = wgpuDeviceCreateBindGroup(device_, &descriptor);
         wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup, 0, nullptr);
-        wgpuRenderPassEncoderDraw(pass, 6, 1, spriteIndex * 6u, 0);
+        // WEBGPU-154: a wireframe sprite draws its own six vertices as a twelve-index line list,
+        // reaching them through baseVertex so the index buffer is shared by every sprite.
+        if (command.wireframe)
+        {
+            if (WGPUBuffer wireIndices = EnsureSpriteWireIndexBufferEXT(); wireIndices != nullptr)
+            {
+                wgpuRenderPassEncoderSetIndexBuffer(pass, wireIndices, WGPUIndexFormat_Uint16, 0,
+                                                    WGPU_WHOLE_SIZE);
+                wgpuRenderPassEncoderDrawIndexed(pass, 12, 1, 0,
+                                                 static_cast<std::int32_t>(spriteIndex * 6u), 0);
+            }
+        }
+        else
+        {
+            wgpuRenderPassEncoderDraw(pass, 6, 1, spriteIndex * 6u, 0);
+        }
         wgpuBindGroupRelease(bindGroup);
     }
 
