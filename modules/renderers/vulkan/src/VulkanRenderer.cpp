@@ -2159,6 +2159,29 @@ namespace CNA::Internal::Renderers::Vulkan
 
         // Step 1b: destroy every MRT framebuffer before releasing the render-target views it
         // borrows. The device is idle, so both current and frame-retired proxies are safe now.
+        //
+        // VULKAN-405: resetting the renderer's own two handles was not enough, and the object
+        // tracker said so -- `VkFramebuffer … has not been destroyed` at vkDestroyDevice. A proxy
+        // is reference-counted, and `currentRT_` holds a share for as long as the MRT is bound,
+        // as do Pending3DDraw::rt / PendingBatch::rt / PendingClear::rt for every record the
+        // frame never replayed. A process that binds an MRT and exits without presenting leaves
+        // one of those holding the last share; it is destroyed with the renderer's members, which
+        // happens AFTER vkDestroyDevice below, and ~VulkanMRTProxy then finds device_ already
+        // null and returns without freeing anything. Worse, it reads `owner_->device_` out of a
+        // VulkanRenderer whose destructor has already finished.
+        //
+        // Both halves are settled the way every other owned resource here settles them, and
+        // without having to enumerate who holds a share: release the framebuffer explicitly while
+        // the device is alive, then disconnect the owner so a surviving proxy never dereferences
+        // it. `mrtProxy_` and `retiredMrtProxies_` together are every proxy that exists -- a proxy
+        // reaches the second list precisely when it leaves the first.
+        auto releaseProxy = [](VulkanMRTProxy* proxy) {
+            if (proxy == nullptr) return;
+            proxy->ReleaseVulkanResources();
+            proxy->DisconnectOwner();
+        };
+        releaseProxy(mrtProxy_.get());
+        for (auto& retired : retiredMrtProxies_) releaseProxy(retired.second.get());
         mrtProxy_.reset();
         retiredMrtProxies_.clear();
 
@@ -13663,8 +13686,21 @@ namespace CNA::Internal::Renderers::Vulkan
             throw std::runtime_error("VulkanMRTProxy: vkCreateFramebuffer failed");
     }
 
+    // VULKAN-405: the release half, so the renderer's destructor can end this framebuffer's life
+    // while the device is still alive rather than hoping the last share is dropped in time.
+    void VulkanMRTProxy::ReleaseVulkanResources()
+    {
+        if (!owner_ || owner_->device_ == VK_NULL_HANDLE) return;
+        if (framebuffer_ != VK_NULL_HANDLE)
+        {
+            vkDestroyFramebuffer(owner_->device_, framebuffer_, nullptr);
+            framebuffer_ = VK_NULL_HANDLE;
+        }
+    }
+
     VulkanMRTProxy::~VulkanMRTProxy()
     {
+        // Unchanged for the ordinary case, and a no-op after ReleaseVulkanResources() has run.
         if (!owner_ || owner_->device_ == VK_NULL_HANDLE) return;
         VkDevice dev = owner_->device_;
         if (framebuffer_ != VK_NULL_HANDLE) vkDestroyFramebuffer(dev, framebuffer_, nullptr);

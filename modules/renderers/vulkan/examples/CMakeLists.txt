@@ -1031,6 +1031,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                         ${CMAKE_SOURCE_DIR}/modules/renderers/bgfx/examples/bgfx_mrt_mixed_formats_test.cpp)
         cna_register_renderer_test(NAME Vulkan_MRT_MixedFormats COMMAND cna_test_vulkan_mrt_mixed_formats
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        # plan_vulkan.md VULKAN-405: this test's MRT proxy leaked its VkFramebuffer past
+        # vkDestroyDevice, and the object tracker reported it DURING teardown -- after the last
+        # line of the test body, so no in-process GetValidationMessagesEXT() assertion can see it.
+        # The output gate is the instrument that can, and it is deliberately the whole
+        # "[Vulkan Validation]" prefix rather than the "VUID-|Validation Error|..." pattern the
+        # neighbouring registrations use: an Object Tracking report carries none of those words.
+        set_tests_properties(Vulkan_MRT_MixedFormats PROPERTIES
+            FAIL_REGULAR_EXPRESSION "\\[Vulkan Validation\\]")
 
         # Task 842 (verbatim reuse): Task 176's own SurfaceFormat-validation contract, confirmed
         # renderer-agnostic -- reused unmodified from EasyGL to directly confirm the same

@@ -1091,6 +1091,22 @@ namespace CNA::Internal::Renderers::Vulkan
                        uint32_t count);
         ~VulkanMRTProxy() override;
 
+        /**
+         * @brief Destroys this proxy's VkFramebuffer now, while the device still exists.
+         *
+         * plan_vulkan.md VULKAN-405. A proxy is reference-counted and shared with `currentRT_`
+         * and with every deferred draw/batch/clear record, so the renderer's destructor cannot
+         * assume that dropping its own handle destroys it. The same explicit
+         * release-then-disconnect pair every other owned Vulkan resource uses applies here, and
+         * it settles both halves regardless of who else still holds a share.
+         */
+        void ReleaseVulkanResources();
+
+        /**
+         * @brief Forgets the renderer, so a proxy outliving it never dereferences a dead owner.
+         */
+        void DisconnectOwner() { owner_ = nullptr; }
+
         VkFramebuffer GetFramebuffer()          const override { return framebuffer_; }
         VkRenderPass  GetRenderPass()            const override { return renderPass_; }
         int           GetWidth()                const override { return width_; }
