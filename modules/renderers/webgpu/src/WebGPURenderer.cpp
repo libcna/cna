@@ -55,6 +55,10 @@
 #include "CNA/Internal/Graphics/Bc7Util.hpp"
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "System/NotSupportedException.hpp"
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+// plans/plan_webgpu.md WEBGPU-203: the browser half of the compiled-effect route.
+#include "CNA/Internal/Renderers/MojoShader/SpirvToWgsl.hpp"
+#endif
 
 // plans/plan_webgpu.md WEBGPU-201: `WGPUNativeFeature_TextureFormat16bitNorm`, which is what makes
 // `WGPUTextureFormat_RGBA16Unorm` -- CNA's `SurfaceFormat::Rgba64` -- usable at all, lives in
@@ -8306,10 +8310,54 @@ namespace CNA::Internal::Renderers::WebGPU
         return mojoShaderContext_.get();
     }
 
+    WebGPURenderer::CompiledEffectShaderLanguageEXT
+    WebGPURenderer::GetCompiledEffectShaderLanguageEXT() const
+    {
+        return compiledEffectShaderLanguage_;
+    }
+
+    void WebGPURenderer::SetCompiledEffectShaderLanguageEXT(
+        CompiledEffectShaderLanguageEXT language)
+    {
+#if defined(__EMSCRIPTEN__)
+        if (language != CompiledEffectShaderLanguageEXT::Wgsl)
+        {
+            throw System::NotSupportedException(
+                "CNA WebGPU: browser WebGPU ingests WGSL and nothing else -- SPIR-V is not a "
+                "WebGPU shader source, so the compiled-effect route cannot be switched away from "
+                "WGSL in an Emscripten build.");
+        }
+#endif
+        if (language == compiledEffectShaderLanguage_) return;
+        compiledEffectShaderLanguage_ = language;
+        // Cached modules were built from the OTHER representation. They stay valid objects, but a
+        // test that switches routes wants the switch to take effect, so drop everything derived
+        // from them as well.
+        ReleaseCompiledEffectCachesEXT();
+    }
+
+    std::string WebGPURenderer::TranslateCompiledEffectSpirvToWgslEXT(const std::uint32_t* words,
+                                                                     std::size_t wordCount)
+    {
+        const MojoShaderEffect::SpirvToWgslResult translated =
+            MojoShaderEffect::TranslateSpirvToWgsl(words, wordCount);
+        if (!translated.error.empty())
+        {
+            throw std::runtime_error(
+                "CNA WebGPU: a compiled effect's SPIR-V has no WGSL equivalent: " +
+                translated.error);
+        }
+        return translated.wgsl;
+    }
+
     WGPUShaderModule WebGPURenderer::GetOrCreateCompiledEffectShaderModuleEXT(
         const std::uint32_t* words, std::size_t wordCount, std::uint64_t hash)
     {
-        if (const auto it = compiledEffectShaderModules_.find(hash);
+        // WEBGPU-203: the same body is a different module through each route, so the language is
+        // part of the identity rather than an assumption about it.
+        const bool wgsl = compiledEffectShaderLanguage_ == CompiledEffectShaderLanguageEXT::Wgsl;
+        const std::uint64_t key = wgsl ? (hash ^ 0x9E3779B97F4A7C15ull) : hash;
+        if (const auto it = compiledEffectShaderModules_.find(key);
             it != compiledEffectShaderModules_.end())
         {
             return it->second;
@@ -8317,12 +8365,25 @@ namespace CNA::Internal::Renderers::WebGPU
         if (words == nullptr || wordCount == 0)
             throw std::runtime_error("CNA WebGPU: a compiled effect shader produced no SPIR-V.");
 
+        // Kept alive until the module is created: WGPUShaderSourceWGSL borrows the string.
+        std::string wgslSource;
+        WGPUShaderSourceWGSL wgslChain{};
         WGPUShaderSourceSPIRV source{};
-        source.chain.sType = WGPUSType_ShaderSourceSPIRV;
-        source.codeSize = static_cast<std::uint32_t>(wordCount);
-        source.code = words;
         WGPUShaderModuleDescriptor descriptor{};
-        descriptor.nextInChain = &source.chain;
+        if (wgsl)
+        {
+            wgslSource = TranslateCompiledEffectSpirvToWgslEXT(words, wordCount);
+            wgslChain.chain.sType = WGPUSType_ShaderSourceWGSL;
+            wgslChain.code = StringView(wgslSource.c_str());
+            descriptor.nextInChain = &wgslChain.chain;
+        }
+        else
+        {
+            source.chain.sType = WGPUSType_ShaderSourceSPIRV;
+            source.codeSize = static_cast<std::uint32_t>(wordCount);
+            source.code = words;
+            descriptor.nextInChain = &source.chain;
+        }
         descriptor.label = StringView("CNA WebGPU compiled Effect shader");
         // An error scope is the only way to learn that naga rejected the module: WebGPU always
         // hands back a non-null object and reports the failure asynchronously, so without this a
@@ -8351,9 +8412,10 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             if (module != nullptr) wgpuShaderModuleRelease(module);
             throw std::runtime_error(
-                "CNA WebGPU: a compiled effect's translated SPIR-V was rejected: " + scope.message);
+                std::string("CNA WebGPU: a compiled effect's translated ") +
+                (wgsl ? "WGSL" : "SPIR-V") + " was rejected: " + scope.message);
         }
-        compiledEffectShaderModules_[hash] = module;
+        compiledEffectShaderModules_[key] = module;
         return module;
     }
 

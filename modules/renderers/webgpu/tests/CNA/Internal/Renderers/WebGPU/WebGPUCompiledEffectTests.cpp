@@ -18,6 +18,7 @@
 #include "CNA/Internal/Renderers/WebGPU/WebGPUCompiledEffect.hpp"
 #include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
 #include "CNA/Internal/Renderers/MojoShader/SpirvCombinedSamplerSplit.hpp"
+#include "CNA/Internal/Renderers/MojoShader/SpirvToWgsl.hpp"
 #include "CNA/TestSupport/TestPaths.hpp"
 #include "CNA/TestSupport/CompiledEffectConformance.hpp"
 #include "CNA/TestSupport/CompiledEffectFixtures.hpp"
@@ -575,5 +576,256 @@ TEST(WebGPUCompiledEffectDrawTest, SpriteBatchAlternatesCompiledAndStockAcrossBa
         << "a compiled batch after a stock one must run the Effect again, with its own Tint";
     EXPECT_NEAR(last.getRProperty(), 0, 3);
 }
+
+// -----------------------------------------------------------------------------------------------
+// plans/plan_webgpu.md WEBGPU-203 -- THE BROWSER'S ROUTE, EXECUTED NATIVELY.
+//
+// Browser WebGPU ingests WGSL and nothing else, so a compiled Effect reaches it as WGSL translated
+// from the same MojoShader SPIR-V the native route feeds directly. wgpu-native accepts WGSL too,
+// which makes this build a real oracle for that route rather than a proxy for it: the SAME effect,
+// the SAME draw and the SAME expected pixels, with only the shader-module representation swapped.
+//
+// These are therefore not "browser smoke tests". Each one is a shared cross-renderer contract that
+// already passes through SPIR-V, re-run with the representation the browser will use. A divergence
+// here is a translator defect, and the assertion that catches it is the contract's own.
+// -----------------------------------------------------------------------------------------------
+namespace
+{
+    /// Switches the renderer to the browser's shader representation for the life of one test, and
+    /// puts it back afterwards -- a device outlives no test here, but the restore keeps the
+    /// intent readable and survives a future shared device.
+    class WgslRouteScope
+    {
+    public:
+        explicit WgslRouteScope(GraphicsDevice& device) : renderer_(RendererOf(device))
+        {
+            if (renderer_ == nullptr) return;
+            previous_ = renderer_->GetCompiledEffectShaderLanguageEXT();
+            renderer_->SetCompiledEffectShaderLanguageEXT(
+                WebGPURenderer::CompiledEffectShaderLanguageEXT::Wgsl);
+        }
+
+        ~WgslRouteScope()
+        {
+            if (renderer_ != nullptr) renderer_->SetCompiledEffectShaderLanguageEXT(previous_);
+        }
+
+        WgslRouteScope(const WgslRouteScope&) = delete;
+        WgslRouteScope& operator=(const WgslRouteScope&) = delete;
+
+        [[nodiscard]] bool Active() const { return renderer_ != nullptr; }
+
+    private:
+        WebGPURenderer* renderer_ = nullptr;
+        WebGPURenderer::CompiledEffectShaderLanguageEXT previous_ =
+            WebGPURenderer::CompiledEffectShaderLanguageEXT::Spirv;
+    };
+}
+
+TEST(WebGPUCompiledEffectWgslTest, EveryCommittedPassTranslatesToWgslAndCreatesAModule)
+{
+    // Rung 0 of the acceptance ladder: the whole committed corpus survives the translator and
+    // WebGPU accepts every module it produces. 27 technique/pass pairs, 54 shader modules.
+    GraphicsDevice device;
+    WebGPURenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the WebGPU renderer";
+    WgslRouteScope wgsl(device);
+
+    int linked = 0;
+    const auto sweep = [&](const std::filesystem::path& path) {
+        std::ifstream input(path, std::ios::binary);
+        ASSERT_TRUE(input.good()) << path;
+        const std::vector<std::uint8_t> bytes{std::istreambuf_iterator<char>(input),
+                                              std::istreambuf_iterator<char>()};
+        std::unique_ptr<ICompiledEffectRuntime> runtime = CreateRuntime(device, bytes);
+        ASSERT_NE(runtime, nullptr) << path;
+        auto* compiled = dynamic_cast<WebGPUCompiledEffect*>(runtime.get());
+        ASSERT_NE(compiled, nullptr) << path;
+
+        const auto& description = runtime->GetDescription();
+        for (std::size_t t = 0; t < description.techniques.size(); ++t)
+        {
+            runtime->SetTechnique(static_cast<std::uint32_t>(t));
+            for (std::size_t p = 0; p < description.techniques[t].passes.size(); ++p)
+            {
+                CompiledEffectDeviceState state{};
+                CompiledEffectPassStateChanges changes{};
+                ASSERT_NO_THROW(compiled->ApplyPass(static_cast<std::uint32_t>(p), state, changes))
+                    << path << " technique " << t << " pass " << p;
+                WebGPUCompiledShaderEXT* vertexShader = nullptr;
+                WebGPUCompiledShaderEXT* pixelShader = nullptr;
+                compiled->GetBoundShadersEXT(vertexShader, pixelShader);
+                ASSERT_NE(vertexShader, nullptr);
+                ASSERT_NE(pixelShader, nullptr);
+
+                std::vector<VertexElement> elements;
+                const MOJOSHADER_parseData* vertexData = vertexShader->parseData;
+                for (int a = 0; a < vertexData->attribute_count; ++a)
+                {
+                    elements.emplace_back(static_cast<int>(elements.size()) * 16,
+                                          VertexElementFormat::Vector4,
+                                          FromMojoShaderUsage(vertexData->attributes[a].usage),
+                                          vertexData->attributes[a].index);
+                }
+                WebGPUCompiledEffect::CompiledVertexStreamEXT stream{};
+                stream.elements = &elements;
+                stream.stride = static_cast<std::uint32_t>(elements.size() * 16);
+
+                WebGPUCompiledEffect::LinkedPassEXT link;
+                ASSERT_NO_THROW(link = compiled->LinkAndGetShadersEXT({stream}))
+                    << path << " technique " << t << " pass " << p;
+                EXPECT_NE(link.vertexModule, nullptr);
+                EXPECT_NE(link.pixelModule, nullptr);
+                ++linked;
+            }
+        }
+    };
+
+    for (const char* name : {"CnaConformanceEffect.fxb", "SpriteEffect.fxb", "BasicEffect.fxb",
+                             "AlphaTestEffect.fxb", "DualTextureEffect.fxb",
+                             "EnvironmentMapEffect.fxb", "SkinnedEffect.fxb"})
+    {
+        sweep(CNA::TestSupport::CompiledEffectDirectory() / name);
+        if (::testing::Test::HasFatalFailure()) return;
+    }
+    for (const char* name : {"racing-shadow-map-xna4.fxb", "racing-normal-mapping-xna4.fxb"})
+    {
+        sweep(CNA::TestSupport::CompiledEffectFixtureDirectory() / name);
+        if (::testing::Test::HasFatalFailure()) return;
+    }
+    EXPECT_EQ(linked, 27);
+}
+
+TEST(WebGPUCompiledEffectWgslTest, TheTranslatorRefusesAConstructWgslCannotExpress)
+{
+    // The refusal path is part of the contract: an untranslatable module must be named, never
+    // approximated. A combined image sampler is the one construct WGSL has no type for, and it is
+    // exactly what reaches the translator if SplitCombinedImageSamplers() is skipped.
+    using CNA::Internal::Renderers::MojoShaderEffect::TranslateSpirvToWgsl;
+    const std::vector<std::uint32_t> notSpirv{1u, 2u, 3u, 4u, 5u};
+    const auto refused = TranslateSpirvToWgsl(notSpirv.data(), notSpirv.size());
+    EXPECT_TRUE(refused.wgsl.empty());
+    EXPECT_NE(refused.error.find("magic number"), std::string::npos) << refused.error;
+}
+
+TEST(WebGPUCompiledEffectWgslTest, TranslationIsDeterministicAndNamesItsEntryPoint)
+{
+    // Regression-testing a generated language needs the generator to be a function of its input:
+    // the same finished SPIR-V must produce byte-identical WGSL every time.
+    GraphicsDevice device;
+    WebGPURenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the WebGPU renderer";
+
+    const std::vector<std::uint8_t> bytes = LoadEffect("CnaConformanceEffect.fxb");
+    ASSERT_FALSE(bytes.empty());
+    std::unique_ptr<ICompiledEffectRuntime> runtime = CreateRuntime(device, bytes);
+    ASSERT_NE(runtime, nullptr);
+    auto* compiled = dynamic_cast<WebGPUCompiledEffect*>(runtime.get());
+    ASSERT_NE(compiled, nullptr);
+
+    runtime->SetTechnique(0);
+    CompiledEffectDeviceState state{};
+    CompiledEffectPassStateChanges changes{};
+    compiled->ApplyPass(0, state, changes);
+    WebGPUCompiledShaderEXT* vertexShader = nullptr;
+    WebGPUCompiledShaderEXT* pixelShader = nullptr;
+    compiled->GetBoundShadersEXT(vertexShader, pixelShader);
+    ASSERT_NE(vertexShader, nullptr);
+    ASSERT_NE(pixelShader, nullptr);
+
+    // Linking is what turns MojoShader's output into a finished module, and it returns the size of
+    // the trailing patch table that must come off before the SPIR-V is read.
+    std::vector<MOJOSHADER_vertexAttribute> attributes;
+    for (int a = 0; a < vertexShader->parseData->attribute_count; ++a)
+    {
+        MOJOSHADER_vertexAttribute attribute{};
+        attribute.usage = vertexShader->parseData->attributes[a].usage;
+        attribute.usageIndex = vertexShader->parseData->attributes[a].index;
+        attribute.vertexElementFormat = MOJOSHADER_VERTEXELEMENTFORMAT_VECTOR4;
+        attributes.push_back(attribute);
+    }
+    const int patchTableSize = MOJOSHADER_linkSPIRVShaders(
+        vertexShader->parseData, pixelShader->parseData, attributes.data(),
+        static_cast<int>(attributes.size()));
+    ASSERT_GT(patchTableSize, 0);
+
+    const MOJOSHADER_parseData* data = pixelShader->parseData;
+    const std::size_t words =
+        (static_cast<std::size_t>(data->output_len) - static_cast<std::size_t>(patchTableSize)) /
+        sizeof(std::uint32_t);
+    const auto split = CNA::Internal::Renderers::MojoShaderEffect::SplitCombinedImageSamplers(
+        reinterpret_cast<const std::uint32_t*>(data->output), words);
+    ASSERT_TRUE(split.error.empty()) << split.error;
+
+    const std::string first = WebGPURenderer::TranslateCompiledEffectSpirvToWgslEXT(
+        split.words.data(), split.words.size());
+    const std::string second = WebGPURenderer::TranslateCompiledEffectSpirvToWgslEXT(
+        split.words.data(), split.words.size());
+    EXPECT_FALSE(first.empty());
+    EXPECT_EQ(first, second);
+    // The entry point KEEPS its SPIR-V name, because that is the string the pipeline already
+    // names; a translator that renamed it to "main" would break every draw.
+    const std::string entryPoint =
+        data->mainfn != nullptr ? std::string(data->mainfn) : std::string();
+    ASSERT_FALSE(entryPoint.empty());
+    EXPECT_NE(first.find("@fragment fn " + entryPoint + "("), std::string::npos) << first;
+}
+
+// --- the acceptance ladder, each rung a shared contract re-run through WGSL ----------------------
+
+#define CNA_WEBGPU_WGSL_ROUTE_TEST(name, call)                                                   \
+    TEST(WebGPUCompiledEffectWgslDrawTest, name)                                                 \
+    {                                                                                            \
+        GraphicsDevice device;                                                                   \
+        if (!CNA::TestSupport::SupportsCompiledEffects(device))                                  \
+            GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";  \
+        WgslRouteScope wgsl(device);                                                             \
+        if (!wgsl.Active()) GTEST_SKIP() << "this build did not select the WebGPU renderer";     \
+        call;                                                                                    \
+    }
+
+// Rungs 1-4: a compiled vertex+pixel pair, uniform scalars/vectors/matrices, a Texture2D sampler
+// and ordinary transformed geometry.
+CNA_WEBGPU_WGSL_ROUTE_TEST(SharedDrawMatrixContract,
+                           CNA::TestSupport::RunCompiledEffectDrawContract(device))
+CNA_WEBGPU_WGSL_ROUTE_TEST(SharedBackendConformanceContract,
+                           CNA::TestSupport::RunCompiledEffectContract(device))
+// Rung 5: SpriteBatch with a custom compiled Effect.
+CNA_WEBGPU_WGSL_ROUTE_TEST(SharedSpriteBatchContract,
+                           CNA::TestSupport::RunCompiledEffectSpriteBatchContract(device))
+// Rung 6: multi-pass.
+CNA_WEBGPU_WGSL_ROUTE_TEST(SharedSpriteBatchMultiPassContract,
+                           CNA::TestSupport::RunCompiledEffectSpriteBatchMultiPassContract(device))
+CNA_WEBGPU_WGSL_ROUTE_TEST(SharedPassSelectionContract,
+                           CNA::TestSupport::RunCompiledEffectPassSelectionContract(device))
+// Rungs 7-8: cube and volume samplers, and the AddressW modes a volume sampler makes observable.
+CNA_WEBGPU_WGSL_ROUTE_TEST(SharedCubeAndVolumeSamplerContract,
+                           CNA::TestSupport::RunCompiledEffectCubeAndVolumeSamplerContract(device))
+// Rung 9: a render target as the sampled source.
+CNA_WEBGPU_WGSL_ROUTE_TEST(SharedRenderTargetSourceContract,
+                           CNA::TestSupport::RunCompiledEffectRenderTargetSourceContract(device))
+CNA_WEBGPU_WGSL_ROUTE_TEST(
+    SharedSpriteBatchRenderTargetSourceContract,
+    CNA::TestSupport::RunCompiledEffectSpriteBatchRenderTargetSourceContract(device))
+// Rung 10: the rest of the shared corpus -- multi-stream, instancing, orientation, effect
+// switching, sampler pixels, isolation from stock draws, texture slots, many draws, truncation.
+CNA_WEBGPU_WGSL_ROUTE_TEST(SharedMultiStreamDrawContract,
+                           CNA::TestSupport::RunCompiledEffectMultiStreamDrawContract(device))
+CNA_WEBGPU_WGSL_ROUTE_TEST(SharedInstancingDrawContract,
+                           CNA::TestSupport::RunCompiledEffectInstancingDrawContract(device))
+CNA_WEBGPU_WGSL_ROUTE_TEST(SharedOrientationContract,
+                           CNA::TestSupport::RunCompiledEffectOrientationContract(device))
+CNA_WEBGPU_WGSL_ROUTE_TEST(SharedEffectSwitchingContract,
+                           CNA::TestSupport::RunCompiledEffectSwitchingContract(device))
+CNA_WEBGPU_WGSL_ROUTE_TEST(SharedStockDrawIsolationContract,
+                           CNA::TestSupport::RunCompiledEffectStockDrawIsolationContract(device))
+CNA_WEBGPU_WGSL_ROUTE_TEST(SharedSpriteBatchTextureSlotContract,
+                           CNA::TestSupport::RunCompiledEffectSpriteBatchTextureSlotContract(device))
+CNA_WEBGPU_WGSL_ROUTE_TEST(SharedManyDrawsContract,
+                           CNA::TestSupport::RunCompiledEffectManyDrawsContract(device))
+CNA_WEBGPU_WGSL_ROUTE_TEST(SharedTruncationContract,
+                           CNA::TestSupport::RunCompiledEffectTruncationContract(device))
+
+#undef CNA_WEBGPU_WGSL_ROUTE_TEST
 
 #endif  // CNA_WEBGPU_COMPILED_EFFECTS

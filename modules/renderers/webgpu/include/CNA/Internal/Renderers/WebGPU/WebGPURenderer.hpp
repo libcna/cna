@@ -1755,11 +1755,54 @@ namespace CNA::Internal::Renderers::WebGPU
         CNAEXT [[nodiscard]] WebGPUMojoShaderContextEXT* GetMojoShaderContextEXT();
 
         /**
+         * @brief CNAEXT. How a compiled effect's finished SPIR-V is handed to WebGPU.
+         *
+         * plans/plan_webgpu.md WEBGPU-203. This is the ONE place the native and browser
+         * compiled-effect routes differ; everything above it -- Effect parsing, MojoShader,
+         * reflection, constants, samplers, techniques, vertex declarations, parameter snapshots,
+         * SpriteBatch, multi-pass -- is the same code.
+         */
+        enum class CompiledEffectShaderLanguageEXT
+        {
+            /**
+             * @brief Chained `WGPUShaderSourceSPIRV`. Native only; browser WebGPU has no such
+             *        shader source, because SPIR-V is not part of the WebGPU specification.
+             */
+            Spirv,
+            /** @brief WGSL translated from the same SPIR-V. The only route a browser can take. */
+            Wgsl,
+        };
+
+        /**
+         * @brief CNAEXT. The shader-module representation compiled effects currently use.
+         * @return `Wgsl` under Emscripten, where it is the only possibility; otherwise whatever
+         *         SetCompiledEffectShaderLanguageEXT() last selected, `Spirv` by default.
+         */
+        CNAEXT [[nodiscard]] CompiledEffectShaderLanguageEXT
+        GetCompiledEffectShaderLanguageEXT() const;
+
+        /**
+         * @brief CNAEXT. Selects the shader-module representation for compiled effects.
+         *
+         * Exists so a NATIVE build can execute the browser's route against the same fixtures,
+         * the same draws and the same expected pixels -- wgpu-native accepts WGSL, so the SPIR-V
+         * route is a usable oracle for the WGSL one. Under Emscripten the selection is fixed at
+         * `Wgsl` and this refuses anything else rather than silently ignoring it.
+         *
+         * @param language Representation to use for modules created after this call.
+         * @throws System::NotSupportedException if @p language cannot be executed by this build.
+         */
+        CNAEXT void SetCompiledEffectShaderLanguageEXT(CompiledEffectShaderLanguageEXT language);
+
+        /**
          * @brief CNAEXT. Returns a shader module over @p words, creating it once per distinct body.
          *
          * Linking patches MojoShader's SPIR-V in place and the combined-sampler split rewrites it
          * again, so the finished bytes -- not the shader object -- identify a module. A module
          * copies its source, so one made here stays correct for a draw replayed at `Present()`.
+         *
+         * The words are SPIR-V in both routes: WGSL translation, when selected, happens here, so
+         * the caller never learns which language the module was built from.
          *
          * @param words Finished SPIR-V words.
          * @param wordCount Number of words at @p words.
@@ -1769,6 +1812,17 @@ namespace CNA::Internal::Renderers::WebGPU
          */
         CNAEXT [[nodiscard]] WGPUShaderModule GetOrCreateCompiledEffectShaderModuleEXT(
             const std::uint32_t* words, std::size_t wordCount, std::uint64_t hash);
+
+        /**
+         * @brief CNAEXT. The WGSL a compiled effect's SPIR-V translates to, for tests and tooling.
+         *
+         * @param words Finished SPIR-V words.
+         * @param wordCount Number of words at @p words.
+         * @return The WGSL source.
+         * @throws std::runtime_error naming the construct that could not be translated.
+         */
+        CNAEXT [[nodiscard]] static std::string TranslateCompiledEffectSpirvToWgslEXT(
+            const std::uint32_t* words, std::size_t wordCount);
 
         /**
          * @brief CNAEXT. Whether this renderer created @p texture and can sample it.
@@ -4510,8 +4564,17 @@ namespace CNA::Internal::Renderers::WebGPU
             const CompiledEffectDrawCommand& command);
         /// The shared MojoShader effect backend, created on first compiled-effect construction.
         std::unique_ptr<WebGPUMojoShaderContextEXT> mojoShaderContext_;
-        /// One WGPUShaderModule per distinct finished SPIR-V body.
+        /// One WGPUShaderModule per distinct finished SPIR-V body. The key folds in the shader
+        /// language, because the same body yields a different module through each route and a
+        /// native test may exercise both in one process.
         std::unordered_map<std::uint64_t, WGPUShaderModule> compiledEffectShaderModules_;
+        /// WEBGPU-203: SPIR-V natively by default, WGSL always under Emscripten.
+        CompiledEffectShaderLanguageEXT compiledEffectShaderLanguage_ =
+#if defined(__EMSCRIPTEN__)
+            CompiledEffectShaderLanguageEXT::Wgsl;
+#else
+            CompiledEffectShaderLanguageEXT::Spirv;
+#endif
         /// One layout set per distinct pass shape (which sampler bindings, which uniform blocks).
         std::unordered_map<std::uint64_t, CompiledEffectLayoutsEXT> compiledEffectLayouts_;
         /// One pipeline per (linked pass, vertex layout, render-pass state).

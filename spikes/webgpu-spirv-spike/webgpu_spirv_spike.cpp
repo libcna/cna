@@ -22,6 +22,10 @@
 
 #include "spirv_split_combined_samplers.hpp"
 
+// WEBGPU-203: the real CNA translator, compiled straight into this spike so the loop that
+// iterates on it is the same code the renderer ships.
+#include "CNA/Internal/Renderers/MojoShader/SpirvToWgsl.hpp"
+
 #include <webgpu/webgpu.h>
 #include <webgpu/wgpu.h>
 
@@ -666,10 +670,97 @@ namespace
     }
 
 
+    /// Q6 -- the opcode repertoire MojoShader's SPIR-V profile actually emits, accumulated over
+    /// every swept module. This is the measurement that sizes a SPIR-V -> WGSL translator for
+    /// the browser (plans/plan_webgpu.md WEBGPU-203): the question is not "can arbitrary SPIR-V
+    /// be translated" but "how large is the subset this pipeline can produce".
+    std::map<uint32_t, int> g_opcodeHistogram;
+    std::map<uint32_t, int> g_glslExtHistogram;
+
+    std::map<uint32_t, int> g_decorationHistogram;
+    std::map<uint32_t, int> g_builtinHistogram;
+    std::map<uint32_t, int> g_storageClassHistogram;
+
+    void CountOpcodes(const uint32_t* words, std::size_t wordCount)
+    {
+        if (wordCount < 5) return;
+        std::size_t i = 5;
+        while (i < wordCount)
+        {
+            const uint32_t opcode = words[i] & 0xFFFFu;
+            const uint32_t len = words[i] >> 16;
+            if (len == 0 || i + len > wordCount) break;
+            g_opcodeHistogram[opcode] += 1;
+            // OpExtInst: result type, result id, set id, instruction literal
+            if (opcode == 12u && len >= 5) g_glslExtHistogram[words[i + 4]] += 1;
+            // OpDecorate: target id, decoration [, literals]
+            if (opcode == 71u && len >= 3)
+            {
+                g_decorationHistogram[words[i + 2]] += 1;
+                if (words[i + 2] == 11u && len >= 4) g_builtinHistogram[words[i + 3]] += 1;
+            }
+            // OpMemberDecorate: struct id, member, decoration
+            if (opcode == 72u && len >= 4) g_decorationHistogram[words[i + 3]] += 1;
+            // OpVariable: result type, result id, storage class
+            if (opcode == 59u && len >= 4) g_storageClassHistogram[words[i + 3]] += 1;
+            // OpTypePointer: result id, storage class, type
+            if (opcode == 32u && len >= 4) g_storageClassHistogram[words[i + 2]] += 1;
+            i += len;
+        }
+    }
+
+    /// WEBGPU-203: translate the same split SPIR-V to WGSL and create a module from THAT, which
+    /// is the route the browser must take. wgpu-native accepts WGSL, so the native build is a
+    /// usable oracle for the browser route.
+    bool QuietWgslModule(WGPUInstance instance, WGPUDevice device, const char* label,
+                         const uint32_t* words, std::size_t wordCount)
+    {
+        const auto translated =
+            CNA::Internal::Renderers::MojoShaderEffect::TranslateSpirvToWgsl(words, wordCount);
+        if (!translated.error.empty())
+        {
+            std::printf("  WGSL-FAIL %s: %s\n", label, translated.error.c_str());
+            return false;
+        }
+        if (std::getenv("SPIKE_WGSL_DUMP") != nullptr)
+            std::printf("----- %s -----\n%s\n", label, translated.wgsl.c_str());
+
+        struct State { bool done = false; std::string message; WGPUErrorType type{}; } state;
+        wgpuDevicePushErrorScope(device, WGPUErrorFilter_Validation);
+        WGPUShaderSourceWGSL src{};
+        src.chain.sType = WGPUSType_ShaderSourceWGSL;
+        src.code = SV(translated.wgsl.c_str());
+        WGPUShaderModuleDescriptor desc{};
+        desc.nextInChain = &src.chain;
+        desc.label = SV(label);
+        WGPUShaderModule module = wgpuDeviceCreateShaderModule(device, &desc);
+        WGPUPopErrorScopeCallbackInfo cb{};
+        cb.mode = WGPUCallbackMode_AllowProcessEvents;
+        cb.callback = [](WGPUPopErrorScopeStatus, WGPUErrorType type, WGPUStringView msg, void* u1,
+                         void*) {
+            auto& s = *static_cast<State*>(u1);
+            s.type = type;
+            s.message = ToString(msg);
+            s.done = true;
+        };
+        cb.userdata1 = &state;
+        wgpuDevicePopErrorScope(device, cb);
+        Pump(instance, state.done);
+        if (module != nullptr) wgpuShaderModuleRelease(module);
+        if (state.type != WGPUErrorType_NoError)
+        {
+            std::printf("  WGSL-FAIL %s: %s\n", label, state.message.c_str());
+            std::printf("----- generated WGSL -----\n%s\n", translated.wgsl.c_str());
+            return false;
+        }
+        return true;
+    }
+
     /// Creates a module and reports only failures, for the sweep.
     bool QuietModule(WGPUInstance instance, WGPUDevice device, const char* label,
                      const uint32_t* words, std::size_t wordCount)
     {
+        CountOpcodes(words, wordCount);
         {
             // Two module-level invariants that a naga "accepted" verdict does NOT check, and that
             // the ps_1_x path was violating silently: a well-formed header, and an OpEntryPoint
@@ -708,6 +799,10 @@ namespace
         wgpuDevicePopErrorScope(device, cb);
         Pump(instance, state.done);
         if (module != nullptr) wgpuShaderModuleRelease(module);
+        if (state.type == WGPUErrorType_NoError && std::getenv("SPIKE_WGSL") != nullptr)
+        {
+            if (!QuietWgslModule(instance, device, label, words, wordCount)) return false;
+        }
         if (state.type != WGPUErrorType_NoError)
         {
             std::printf("  FAIL %s: %s\n", label, state.message.c_str());
@@ -1111,6 +1206,23 @@ int main(int argc, char** argv)
     int sweepFailures = 0;
     for (int a = 1; a < argc; ++a) sweepFailures += SweepFile(instance, device, argv[a]);
     std::printf("Q5: total failures = %d\n", sweepFailures);
+
+    std::printf("Q6: distinct SPIR-V opcodes emitted across the swept corpus = %zu\n",
+                g_opcodeHistogram.size());
+    for (const auto& [opcode, count] : g_opcodeHistogram)
+        std::printf("  op %-5u x%d\n", opcode, count);
+    std::printf("Q6: distinct GLSL.std.450 instructions = %zu\n", g_glslExtHistogram.size());
+    for (const auto& [instruction, count] : g_glslExtHistogram)
+        std::printf("  glsl450 %-4u x%d\n", instruction, count);
+    std::printf("Q6: decorations used\n");
+    for (const auto& [decoration, count] : g_decorationHistogram)
+        std::printf("  decoration %-4u x%d\n", decoration, count);
+    std::printf("Q6: builtins used\n");
+    for (const auto& [builtin, count] : g_builtinHistogram)
+        std::printf("  builtin %-4u x%d\n", builtin, count);
+    std::printf("Q6: storage classes used\n");
+    for (const auto& [storage, count] : g_storageClassHistogram)
+        std::printf("  storage %-4u x%d\n", storage, count);
 
     wgpuQueueRelease(queue);
     wgpuDeviceRelease(device);
