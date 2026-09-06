@@ -120,6 +120,15 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Audio
         void RequireNotDisposed(const std::string& member) const;
 
         /**
+         * @brief Reads an MP3 or a WMA through the build-time media decoder.
+         *
+         * @param audioFileName Path to the source file.
+         * @throws InvalidContentException when the build has no decoder, or the file cannot be
+         *         read as audio of that type.
+         */
+        void ReadThroughMediaDecoder(const std::string& audioFileName);
+
+        /**
          * @brief The rate a quality asks for, as a fraction of the source's own.
          *
          * @param sourceRate The source sample rate.

@@ -9,6 +9,7 @@
 #include <iterator>
 #include <span>
 
+#include "CNA/Content/Pipeline/BuildTimeMediaDecoder.hpp"
 #include "CNA/Internal/Audio/MsAdpcmEncoder.hpp"
 #include "CNA/Internal/Audio/WavFormatReader.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
@@ -17,19 +18,23 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Audio
 {
     namespace
     {
-        /** @brief The message XNA gives for a file it cannot read as audio. */
-        [[nodiscard]] std::string OpenFailure(const std::string& fileName)
+        /** @brief The bare file name XNA's messages carry, or the whole path when it has none. */
+        [[nodiscard]] std::string FileNameOnly(const std::string& fileName)
         {
-            std::string name;
             try
             {
-                name = std::filesystem::path(fileName).filename().string();
+                return std::filesystem::path(fileName).filename().string();
             }
             catch (const std::exception&)
             {
-                name = fileName;
+                return fileName;
             }
-            return "Failed to open file " + name +
+        }
+
+        /** @brief The message XNA gives for a file it cannot read as audio. */
+        [[nodiscard]] std::string OpenFailure(const std::string& fileName)
+        {
+            return "Failed to open file " + FileNameOnly(fileName) +
                    ". Ensure the file is a valid audio file and is not DRM protected.";
         }
     }
@@ -37,6 +42,11 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Audio
     AudioContent::AudioContent(const std::string& audioFileName, const AudioFileType audioFileType)
         : fileName_(audioFileName), fileType_(audioFileType)
     {
+        if (audioFileType == AudioFileType::Mp3 || audioFileType == AudioFileType::Wma)
+        {
+            ReadThroughMediaDecoder(audioFileName);
+            return;
+        }
         CNA::Internal::Audio::WavFormatAndData source;
         try
         {
@@ -102,6 +112,52 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Audio
     SharpRuntime::intcs AudioContent::getLoopLengthProperty() const noexcept { return loopLength_; }
 
     SharpRuntime::intcs AudioContent::getLoopStartProperty() const noexcept { return loopStart_; }
+
+    void AudioContent::ReadThroughMediaDecoder(const std::string& audioFileName)
+    {
+        namespace Media = CNA::Content::Pipeline::BuildTimeMedia;
+        if (!Media::IsAvailable())
+        {
+            // Not the unreadable-file sentence: this is a build that cannot read the format at
+            // all, and telling a user their file is corrupt when the decoder is simply absent
+            // sends them to fix the wrong thing.
+            throw InvalidContentException("Failed to open file " + FileNameOnly(audioFileName) + ". " +
+                                          Media::UnavailableReason());
+        }
+        Media::DecodedAudio decoded;
+        try
+        {
+            if (audioFileName.empty())
+            {
+                throw std::runtime_error("empty name");
+            }
+            // 44100 whatever the source carries: that is what the genuine importer reports for
+            // every MPEG version and every source rate from 8000 to 48000, with only the channel
+            // count surviving (measured, tests/reference/xna40/media cases mp3/*;
+            // docs/xna-content-pipeline-media.md section 2). WMA takes the same rate: it reaches
+            // the same SongProcessor, and the genuine importer could not be asked here.
+            decoded = Media::DecodeAudio(audioFileName, 44100,
+                                         fileType_ == AudioFileType::Mp3
+                                             ? Media::AudioSourceFormat::Mpeg
+                                             : Media::AudioSourceFormat::WindowsMedia);
+        }
+        catch (const std::exception&)
+        {
+            throw InvalidContentException(OpenFailure(audioFileName));
+        }
+        format_ = std::make_shared<AudioFormat>(
+            1, static_cast<SharpRuntime::intcs>(decoded.channels),
+            static_cast<SharpRuntime::intcs>(decoded.sampleRate),
+            static_cast<SharpRuntime::intcs>(decoded.sampleRate * decoded.channels * 2),
+            static_cast<SharpRuntime::intcs>(decoded.channels * 2),
+            static_cast<SharpRuntime::intcs>(decoded.bitsPerSample));
+        data_ = std::vector<SharpRuntime::bytecs>(decoded.pcm.begin(), decoded.pcm.end());
+        // Both are zero, where a WAV that names no loop answers 0 and its whole length
+        // (measured, mp3/* answer loopStart=0 loopLength=0).
+        loopStart_ = 0;
+        loopLength_ = 0;
+        RecomputeDuration();
+    }
 
     void AudioContent::ConvertFormat(const ConversionFormat formatType, const ConversionQuality quality,
                                      const std::string& targetFileName)

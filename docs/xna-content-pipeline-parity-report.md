@@ -10,18 +10,18 @@
 
 | Quantity | Implemented (EXACT + SEMANTIC + HOST_SUBSTITUTION) | EXTERNAL_BLOCKED | MISSING |
 |---|---|---:|---:|
-| public/protected types | 117/128 (91.4%) | 0 | 11 |
-| public/protected members | 630/705 (89.4%) | 1 | 74 |
+| public/protected types | 122/128 (95.3%) | 0 | 6 |
+| public/protected members | 648/705 (91.9%) | 1 | 56 |
 | enum values | 27/27 (100.0%) | 0 | 0 |
-| built-in importers | 5/10 (50.0%) | 0 | 5 |
-| built-in processors | 11/12 (91.7%) | 0 | 1 |
-| processor properties | 46/47 (97.9%) | 0 | 1 |
+| built-in importers | 8/10 (80.0%) | 0 | 2 |
+| built-in processors | 12/12 (100.0%) | 0 | 0 |
+| processor properties | 47/47 (100.0%) | 0 | 0 |
 | source extensions IMPLEMENTED+TESTED | 0/18 (0.0%) | 0 | 18 |
 
 Status vocabulary: EXACT_EQUIVALENT, SEMANTIC_EQUIVALENT (spelling differs, capability identical; note says how),
 HOST_SUBSTITUTION (Microsoft-host mechanism replaced; note says how), EXTERNAL_BLOCKED (note names the
-unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 45, SEMANTIC_EQUIVALENT 71, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 11.
-Member status by value: EXACT_EQUIVALENT 405, SEMANTIC_EQUIVALENT 219, HOST_SUBSTITUTION 6, EXTERNAL_BLOCKED 1, MISSING 74.
+unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 45, SEMANTIC_EQUIVALENT 76, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 6.
+Member status by value: EXACT_EQUIVALENT 416, SEMANTIC_EQUIVALENT 226, HOST_SUBSTITUTION 6, EXTERNAL_BLOCKED 1, MISSING 56.
 
 Rules applied mechanically: 3 delegate plumbing members are listed in section 7 and not counted; 3 exception
 serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serialization has no C++ counterpart).
@@ -31,9 +31,9 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | Namespace | Types | Implemented | Blocked | Missing |
 |---|---:|---:|---:|---:|
 | `Microsoft.Xna.Framework.Content.Pipeline.Audio` | 5 | 5 | 0 | 0 |
-| `Microsoft.Xna.Framework.Content.Pipeline` | 32 | 26 | 0 | 6 |
+| `Microsoft.Xna.Framework.Content.Pipeline` | 32 | 30 | 0 | 2 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Graphics` | 47 | 47 | 0 | 0 |
-| `Microsoft.Xna.Framework.Content.Pipeline.Processors` | 28 | 27 | 0 | 1 |
+| `Microsoft.Xna.Framework.Content.Pipeline.Processors` | 28 | 28 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler` | 5 | 5 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate` | 7 | 7 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Tasks` | 4 | 0 | 0 | 4 |
@@ -111,7 +111,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `…` | `IContentImporter` | interface | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::IContentImporter` | The explicit interface implementation object IContentImporter.Import(...) is a non-virtual Import returning ContentObject, reachable only through the interface; the typed ContentImporter<T>::Import hides it exactly as C# does. |
 | `…` | `IContentProcessor` | interface | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::IContentProcessor` | The explicit interface implementation object IContentProcessor.Process(object, ...) is a non-virtual Process over ContentObject, reachable only through the interface. |
 | `…` | `InvalidContentException` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::InvalidContentException` |  |
-| `…` | `Mp3Importer` | class | MISSING |  |  |
+| `…` | `Mp3Importer` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Mp3Importer` | the audio is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). Everything the genuine importer answers for the corpus is reproduced: the format is the decoder's own -- 16-bit PCM at 44100 whatever the source rate, with only the channel count surviving -- the duration is the whole decoded stream truncated to whole milliseconds, encoder delay and padding included, and both loop fields are 0. |
 | `…` | `NamedValueDictionary<T>` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::NamedValueDictionary<T>` |  |
 | `…` | `OpaqueDataDictionary` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::OpaqueDataDictionary` |  |
 | `…` | `PipelineComponentScanner` | class | HOST_SUBSTITUTION | `Microsoft::Xna::Framework::Content::Pipeline::PipelineComponentScanner` | Assembly scanning has no C++ counterpart; the scanner enumerates the XNA-shaped components registered in a ContentPipelineRegistry, grouped by catalog name. |
@@ -145,7 +145,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `….Processors` | `TextureProcessorOutputFormat` | enum | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::TextureProcessorOutputFormat` |  |
 | `….Processors` | `VertexBufferContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::VertexBufferContent` | the vertex data is a std::vector<bytecs> rather than a Byte[], and the untyped Write takes a vector of boxed values rather than an IEnumerable. |
 | `….Processors` | `VertexDeclarationContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::VertexDeclarationContent` | the nullable stride is a std::optional, which is what a Nullable<Int32> is here. |
-| `….Processors` | `VideoProcessor` | class | MISSING |  |  |
+| `….Processors` | `VideoProcessor` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::VideoProcessor` | the video is a shared pointer, which is the lifetime a .NET reference gives it. The default is the measured VideoSoundtrackType.Music, and Process answers its own input rather than a copy. |
 | `….Serialization.Compiler` | `ContentCompiler` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler::ContentCompiler` |  |
 | `….Serialization.Compiler` | `ContentTypeWriter` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler::ContentTypeWriterBase` | C++ cannot give a class and a class template the same name, so the non-generic base is ContentTypeWriterBase -- the spelling CNA's runtime already uses for ContentTypeReaderBase beside ContentTypeReader<T>. |
 | `….Serialization.Compiler` | `ContentTypeWriterAttribute` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler::ContentTypeWriterAttribute` | C++ has no CLR attributes: the same-named descriptor is passed to ContentCompiler::AddTypeWriter<TWriter>(). |
@@ -164,10 +164,10 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `….Tasks` | `CleanContent` | class | MISSING |  |  |
 | `….Tasks` | `GetLastOutputs` | class | MISSING |  |  |
 | `…` | `TextureImporter` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::TextureImporter` | the texture is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). |
-| `…` | `VideoContent` | class | MISSING |  |  |
+| `…` | `VideoContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::VideoContent` | The constructor is eager, as the genuine one is: it probes inside the constructor, so a file that is not there, is not a video, or is named by an empty string is refused there with the one sentence XNA gives, and a null name reaches the message as an empty name rather than being refused as null. Carries one CNAEXT member the inventory does not list, HasSoundtrackEXT(), because a processor deciding what a soundtrack type means for a silent source has no other way to ask. The VideoSoundtrackType setter XNA declares internal stays public and is marked CNAEXT, because C++ has no assembly boundary. |
 | `…` | `WavImporter` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::WavImporter` | the audio is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). |
-| `…` | `WmaImporter` | class | MISSING |  |  |
-| `…` | `WmvImporter` | class | MISSING |  |  |
+| `…` | `WmaImporter` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::WmaImporter` | the audio is answered by shared pointer. The genuine importer could not be measured here -- Wine carries no Windows Media Format runtime, so every WMA is refused before it is opened (docs/xna-content-pipeline-media.md section 6) -- so this reads the format itself and answers the shape the MP3 measurement settled for the same SongProcessor input. |
+| `…` | `WmvImporter` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::WmvImporter` | the video is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). The refusals are the measured ones, including the split that makes a missing file a FileNotFoundException here and an InvalidContentException through VideoContent's own constructor. |
 | `…` | `XImporter` | class | MISSING |  |  |
 | `…` | `XmlImporter` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::XmlImporter` | the imported object is a ContentObject rather than a System.Object reference, which is what a boxed value of any type is here; the descriptor XNA declares through an attribute is answered by a static Attribute(). |
 
@@ -178,11 +178,11 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `EffectImporter` | .fx | `EffectProcessor` | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::EffectImporter` | the effect is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). |
 | `FbxImporter` | .fbx | `ModelProcessor` | MISSING |  |  |
 | `FontDescriptionImporter` | .spritefont | `FontDescriptionProcessor` | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::FontDescriptionImporter` | the description is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). |
-| `Mp3Importer` | .mp3 | `SongProcessor` | MISSING |  |  |
+| `Mp3Importer` | .mp3 | `SongProcessor` | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Mp3Importer` | the audio is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). Everything the genuine importer answers for the corpus is reproduced: the format is the decoder's own -- 16-bit PCM at 44100 whatever the source rate, with only the channel count surviving -- the duration is the whole decoded stream truncated to whole milliseconds, encoder delay and padding included, and both loop fields are 0. |
 | `TextureImporter` | .bmp, .dds, .dib, .hdr, .jpg, .pfm, .png, .ppm, .tga | `SpriteTextureProcessor` | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::TextureImporter` | the texture is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). |
 | `WavImporter` | .wav | `SoundEffectProcessor` | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::WavImporter` | the audio is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). |
-| `WmaImporter` | .wma | `SongProcessor` | MISSING |  |  |
-| `WmvImporter` | .wmv | `VideoProcessor` | MISSING |  |  |
+| `WmaImporter` | .wma | `SongProcessor` | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::WmaImporter` | the audio is answered by shared pointer. The genuine importer could not be measured here -- Wine carries no Windows Media Format runtime, so every WMA is refused before it is opened (docs/xna-content-pipeline-media.md section 6) -- so this reads the format itself and answers the shape the MP3 measurement settled for the same SongProcessor input. |
+| `WmvImporter` | .wmv | `VideoProcessor` | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::WmvImporter` | the video is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). The refusals are the measured ones, including the split that makes a missing file a FileNotFoundException here and an InvalidContentException through VideoContent's own constructor. |
 | `XImporter` | .x | `ModelProcessor` | MISSING |  |  |
 | `XmlImporter` | .xml | `-` | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::XmlImporter` | the imported object is a ContentObject rather than a System.Object reference, which is what a boxed value of any type is here; the descriptor XNA declares through an attribute is answered by a static Attribute(). |
 
@@ -201,7 +201,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `SoundEffectProcessor` | `AudioContent` | `SoundEffectContent` | 1 | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::SoundEffectProcessor` |
 | `SpriteTextureProcessor` | `TextureContent` | `TextureContent` | 6 | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::SpriteTextureProcessor` |
 | `TextureProcessor` | `TextureContent` | `TextureContent` | 6 | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::TextureProcessor` |
-| `VideoProcessor` | `VideoContent` | `VideoContent` | 1 | MISSING |  |
+| `VideoProcessor` | `VideoContent` | `VideoContent` | 1 | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::VideoProcessor` |
 
 | Processor | Property | Type | XNA default (black-box) | Status | CNA |
 |---|---|---|---|---|---|
@@ -251,7 +251,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `TextureProcessor` | `PremultiplyAlpha` | `Boolean` | `True` | EXACT_EQUIVALENT | `getPremultiplyAlphaProperty() / setPremultiplyAlphaProperty()` |
 | `TextureProcessor` | `ResizeToPowerOfTwo` | `Boolean` | `False` | EXACT_EQUIVALENT | `getResizeToPowerOfTwoProperty() / setResizeToPowerOfTwoProperty()` |
 | `TextureProcessor` | `TextureFormat` | `TextureProcessorOutputFormat` | `TextureProcessorOutputFormat.Color` | EXACT_EQUIVALENT | `getTextureFormatProperty() / setTextureFormatProperty()` |
-| `VideoProcessor` | `VideoSoundtrackType` | `VideoSoundtrackType` | `VideoSoundtrackType.Music` | MISSING |  |
+| `VideoProcessor` | `VideoSoundtrackType` | `VideoSoundtrackType` | `VideoSoundtrackType.Music` | EXACT_EQUIVALENT | `getVideoSoundtrackTypeProperty() / setVideoSoundtrackTypeProperty()` |
 
 ## 6. Source extensions
 
@@ -689,8 +689,8 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `InvalidContentException` | constructor | `.ctor(System.String, System.Exception)` | EXACT_EQUIVALENT | `InvalidContentException(System.String, System.Exception)` |  |
 | `InvalidContentException` | property | `ContentIdentity` | EXACT_EQUIVALENT | `getContentIdentityProperty() / setContentIdentityProperty()` |  |
 | `InvalidContentException` | method | `GetObjectData(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)` | HOST_SUBSTITUTION |  | .NET binary serialization of exceptions has no C++ counterpart; the exception's developer-visible contract (message, ContentIdentity, inner exception) is provided in full. |
-| `Mp3Importer` | constructor | `.ctor()` | MISSING |  |  |
-| `Mp3Importer` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | MISSING |  |  |
+| `Mp3Importer` | constructor | `.ctor()` | EXACT_EQUIVALENT | `Mp3Importer()` |  |
+| `Mp3Importer` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | SEMANTIC_EQUIVALENT | `Import(const std::string&, ContentImporterContext&) -> std::shared_ptr<AudioContent>` | the audio is answered by shared pointer. A missing file carries XNA's own unformatted "{0}", and a source whose bytes are not MPEG audio is refused even when its extension says otherwise, as XNA's is. |
 | `NamedValueDictionary<T>` | constructor | `.ctor()` | EXACT_EQUIVALENT | `NamedValueDictionary()` |  |
 | `NamedValueDictionary<T>` | property | `Count` | EXACT_EQUIVALENT | `getCountProperty()` |  |
 | `NamedValueDictionary<T>` | property | `DefaultSerializerType` | SEMANTIC_EQUIVALENT | `getDefaultSerializerTypeProperty()` | protected internal getter becomes a protected virtual returning System::Type. |
@@ -857,9 +857,9 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `VertexDeclarationContent` | constructor | `.ctor()` | EXACT_EQUIVALENT | `VertexDeclarationContent()` |  |
 | `VertexDeclarationContent` | property | `VertexElements` | EXACT_EQUIVALENT | `getVertexElementsProperty()` |  |
 | `VertexDeclarationContent` | property | `VertexStride` | SEMANTIC_EQUIVALENT | `getVertexStrideProperty() / setVertexStrideProperty(std::optional<intcs>)` | a std::optional stands for Nullable<Int32>; an empty one is what a fresh declaration answers, as XNA's null does. |
-| `VideoProcessor` | constructor | `.ctor()` | MISSING |  |  |
-| `VideoProcessor` | property | `VideoSoundtrackType` | MISSING |  |  |
-| `VideoProcessor` | method | `Process(Microsoft.Xna.Framework.Content.Pipeline.VideoContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | MISSING |  |  |
+| `VideoProcessor` | constructor | `.ctor()` | EXACT_EQUIVALENT | `VideoProcessor()` |  |
+| `VideoProcessor` | property | `VideoSoundtrackType` | EXACT_EQUIVALENT | `getVideoSoundtrackTypeProperty() / setVideoSoundtrackTypeProperty()` |  |
+| `VideoProcessor` | method | `Process(Microsoft.Xna.Framework.Content.Pipeline.VideoContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | SEMANTIC_EQUIVALENT | `Process(const std::shared_ptr<VideoContent>&, ContentProcessorContext&) -> std::shared_ptr<VideoContent>` | the video is a shared pointer, and the same object comes back with its soundtrack type set. A null input is refused with ArgumentNullException naming input, as XNA's is; the source is added both as a dependency and as an output file, because the built asset streams from it. |
 | `ContentCompiler` | method | `GetTypeWriter(System.Type)` | EXACT_EQUIVALENT | `GetTypeWriter(System.Type)` |  |
 | `ContentTypeWriter` | constructor | `.ctor(System.Type)` | EXACT_EQUIVALENT | `ContentTypeWriter(System.Type)` |  |
 | `ContentTypeWriter` | property | `CanDeserializeIntoExistingObject` | EXACT_EQUIVALENT | `getCanDeserializeIntoExistingObjectProperty()` |  |
@@ -991,21 +991,21 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `GetLastOutputs` | method | `Execute()` | MISSING |  |  |
 | `TextureImporter` | constructor | `.ctor()` | EXACT_EQUIVALENT | `TextureImporter()` |  |
 | `TextureImporter` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | SEMANTIC_EQUIVALENT | `Import(const std::string&, ContentImporterContext&) -> std::shared_ptr<TextureContent>` | the texture is answered by shared pointer; every source XNA reads is read the same way and answers the same content -- a DDS included, whose compressed blocks stay compressed, whose cube becomes a TextureCubeContent and whose volume a Texture3DContent, and whose DX10 extension is refused as XNA refuses it. |
-| `VideoContent` | constructor | `.ctor(System.String)` | MISSING |  |  |
-| `VideoContent` | property | `BitsPerSecond` | MISSING |  |  |
-| `VideoContent` | property | `Duration` | MISSING |  |  |
-| `VideoContent` | property | `Filename` | MISSING |  |  |
-| `VideoContent` | property | `FramesPerSecond` | MISSING |  |  |
-| `VideoContent` | property | `Height` | MISSING |  |  |
-| `VideoContent` | property | `VideoSoundtrackType` | MISSING |  |  |
-| `VideoContent` | property | `Width` | MISSING |  |  |
-| `VideoContent` | method | `Dispose()` | MISSING |  |  |
+| `VideoContent` | constructor | `.ctor(System.String)` | EXACT_EQUIVALENT | `VideoContent(const std::string&)` |  |
+| `VideoContent` | property | `BitsPerSecond` | EXACT_EQUIVALENT | `getBitsPerSecondProperty()` |  |
+| `VideoContent` | property | `Duration` | SEMANTIC_EQUIVALENT | `getDurationProperty()` | a System::TimeSpan, truncated to whole milliseconds as every other duration in this pipeline is. |
+| `VideoContent` | property | `Filename` | EXACT_EQUIVALENT | `getFilenameProperty()` |  |
+| `VideoContent` | property | `FramesPerSecond` | EXACT_EQUIVALENT | `getFramesPerSecondProperty()` |  |
+| `VideoContent` | property | `Height` | EXACT_EQUIVALENT | `getHeightProperty()` |  |
+| `VideoContent` | property | `VideoSoundtrackType` | SEMANTIC_EQUIVALENT | `getVideoSoundtrackTypeProperty()/setVideoSoundtrackTypeProperty(...)` | the setter is internal in XNA and public and CNAEXT-marked here; VideoProcessor is still the only thing that calls it. |
+| `VideoContent` | property | `Width` | EXACT_EQUIVALENT | `getWidthProperty()` |  |
+| `VideoContent` | method | `Dispose()` | SEMANTIC_EQUIVALENT | `Dispose()` | nothing is held open past the constructor's probe, so every property keeps answering afterwards and a second call is accepted -- which is what the genuine one does with its own handle. |
 | `WavImporter` | constructor | `.ctor()` | EXACT_EQUIVALENT | `WavImporter()` |  |
 | `WavImporter` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | SEMANTIC_EQUIVALENT | `Import(const std::string&, ContentImporterContext&) -> std::shared_ptr<AudioContent>` | the audio is answered by shared pointer; every WAV variant XNA accepts is accepted with the same fields, including the unformatted "{0}" its missing-file message carries. |
-| `WmaImporter` | constructor | `.ctor()` | MISSING |  |  |
-| `WmaImporter` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | MISSING |  |  |
-| `WmvImporter` | constructor | `.ctor()` | MISSING |  |  |
-| `WmvImporter` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | MISSING |  |  |
+| `WmaImporter` | constructor | `.ctor()` | EXACT_EQUIVALENT | `WmaImporter()` |  |
+| `WmaImporter` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | SEMANTIC_EQUIVALENT | `Import(const std::string&, ContentImporterContext&) -> std::shared_ptr<AudioContent>` | the audio is answered by shared pointer, and a source whose bytes are not Windows Media audio is refused whatever its extension says. The successful path is not measured against the genuine importer, which this environment cannot run. |
+| `WmvImporter` | constructor | `.ctor()` | EXACT_EQUIVALENT | `WmvImporter()` |  |
+| `WmvImporter` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | SEMANTIC_EQUIVALENT | `Import(const std::string&, ContentImporterContext&) -> std::shared_ptr<VideoContent>` | the video is answered by shared pointer; the missing-file message carries XNA's own unformatted "{0}". |
 | `XImporter` | constructor | `.ctor()` | MISSING |  |  |
 | `XImporter` | method | `Dispose()` | MISSING |  |  |
 | `XImporter` | method | `Dispose(System.Boolean)` | MISSING |  |  |

@@ -2590,20 +2590,20 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Mp3Importer": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Mp3Importer",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Mp3Importer.hpp",
+   "note": "the audio is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). Everything the genuine importer answers for the corpus is reproduced: the format is the decoder's own -- 16-bit PCM at 44100 whatever the source rate, with only the channel count surviving -- the duration is the whole decoded stream truncated to whole milliseconds, encoder delay and padding included, and both loop fields are 0.",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Mp3Importer()",
      "note": ""
     },
     "method:Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Import(const std::string&, ContentImporterContext&) -> std::shared_ptr<AudioContent>",
+     "note": "the audio is answered by shared pointer. A missing file carries XNA's own unformatted \"{0}\", and a source whose bytes are not MPEG audio is refused even when its extension says otherwise, as XNA's is."
     }
    }
   },
@@ -3687,25 +3687,25 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Processors.VideoProcessor": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::VideoProcessor",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/VideoProcessor.hpp",
+   "note": "the video is a shared pointer, which is the lifetime a .NET reference gives it. The default is the measured VideoSoundtrackType.Music, and Process answers its own input rather than a copy.",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "VideoProcessor()",
      "note": ""
     },
     "property:VideoSoundtrackType": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getVideoSoundtrackTypeProperty() / setVideoSoundtrackTypeProperty()",
      "note": ""
     },
     "method:Process(Microsoft.Xna.Framework.Content.Pipeline.VideoContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Process(const std::shared_ptr<VideoContent>&, ContentProcessorContext&) -> std::shared_ptr<VideoContent>",
+     "note": "the video is a shared pointer, and the same object comes back with its soundtrack type set. A null input is refused with ArgumentNullException naming input, as XNA's is; the source is added both as a dependency and as an output file, because the built asset streams from it."
     }
    }
   },
@@ -4507,55 +4507,55 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.VideoContent": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::VideoContent",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/VideoContent.hpp",
+   "note": "The constructor is eager, as the genuine one is: it probes inside the constructor, so a file that is not there, is not a video, or is named by an empty string is refused there with the one sentence XNA gives, and a null name reaches the message as an empty name rather than being refused as null. Carries one CNAEXT member the inventory does not list, HasSoundtrackEXT(), because a processor deciding what a soundtrack type means for a silent source has no other way to ask. The VideoSoundtrackType setter XNA declares internal stays public and is marked CNAEXT, because C++ has no assembly boundary.",
    "members": {
     "constructor:.ctor(System.String)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "VideoContent(const std::string&)",
      "note": ""
     },
     "property:BitsPerSecond": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getBitsPerSecondProperty()",
      "note": ""
     },
     "property:Duration": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getDurationProperty()",
+     "note": "a System::TimeSpan, truncated to whole milliseconds as every other duration in this pipeline is."
     },
     "property:Filename": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getFilenameProperty()",
      "note": ""
     },
     "property:FramesPerSecond": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getFramesPerSecondProperty()",
      "note": ""
     },
     "property:Height": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getHeightProperty()",
      "note": ""
     },
     "property:VideoSoundtrackType": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getVideoSoundtrackTypeProperty()/setVideoSoundtrackTypeProperty(...)",
+     "note": "the setter is internal in XNA and public and CNAEXT-marked here; VideoProcessor is still the only thing that calls it."
     },
     "property:Width": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getWidthProperty()",
      "note": ""
     },
     "method:Dispose()": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Dispose()",
+     "note": "nothing is held open past the constructor's probe, so every property keeps answering afterwards and a second call is accepted -- which is what the genuine one does with its own handle."
     }
    }
   },
@@ -4578,38 +4578,38 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.WmaImporter": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::WmaImporter",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/WmaImporter.hpp",
+   "note": "the audio is answered by shared pointer. The genuine importer could not be measured here -- Wine carries no Windows Media Format runtime, so every WMA is refused before it is opened (docs/xna-content-pipeline-media.md section 6) -- so this reads the format itself and answers the shape the MP3 measurement settled for the same SongProcessor input.",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "WmaImporter()",
      "note": ""
     },
     "method:Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Import(const std::string&, ContentImporterContext&) -> std::shared_ptr<AudioContent>",
+     "note": "the audio is answered by shared pointer, and a source whose bytes are not Windows Media audio is refused whatever its extension says. The successful path is not measured against the genuine importer, which this environment cannot run."
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.WmvImporter": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::WmvImporter",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/VideoImporter.hpp",
+   "note": "the video is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). The refusals are the measured ones, including the split that makes a missing file a FileNotFoundException here and an InvalidContentException through VideoContent's own constructor.",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "WmvImporter()",
      "note": ""
     },
     "method:Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Import(const std::string&, ContentImporterContext&) -> std::shared_ptr<VideoContent>",
+     "note": "the video is answered by shared pointer; the missing-file message carries XNA's own unformatted \"{0}\"."
     }
    }
   },

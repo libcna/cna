@@ -44,6 +44,44 @@ else()
 endif()
 set(CNA_FREETYPE_AVAILABLE ${CNA_FREETYPE_AVAILABLE} PARENT_SCOPE)
 
+# plans/plan_xnapipeline_parity.md XNAPP-201/202/220: the build-time media decoder.
+#
+# The same three-state shape CNA_ENABLE_FONT_PIPELINE has, and for the same reason: an MP3, a WMA
+# or a WMV source needs a demuxer and a decoder while content is being built, and a game that
+# loads the .xnb needs neither. Only cna_content_compiler links this module, so the dependency
+# graph is what keeps FFmpeg out of a runtime game's link closure -- the runtime's own optional
+# FFmpeg backend (modules/video-ffmpeg) is a separate thing and is not what these importers use.
+#
+#   OFF  -- do not probe or link it; an .mp3/.wma/.wmv build fails with a message saying so.
+#   AUTO -- use it when the host provides it (CNA_FFMPEG_AVAILABLE, probed in modules/).
+#   ON   -- require it, and fail configuration when it is absent.
+set(CNA_ENABLE_MEDIA_PIPELINE "AUTO" CACHE STRING
+    "Build-time MP3/WMA/WMV support for the XNA media importers: OFF, AUTO or ON")
+set_property(CACHE CNA_ENABLE_MEDIA_PIPELINE PROPERTY STRINGS OFF AUTO ON)
+
+set(CNA_BUILD_MEDIA_AVAILABLE OFF)
+if(NOT CNA_ENABLE_MEDIA_PIPELINE STREQUAL "OFF")
+    if(CNA_FFMPEG_AVAILABLE)
+        set(CNA_BUILD_MEDIA_AVAILABLE ON)
+    elseif(CNA_ENABLE_MEDIA_PIPELINE STREQUAL "ON")
+        message(FATAL_ERROR
+            "CNA: CNA_ENABLE_MEDIA_PIPELINE=ON but libavcodec/libavformat/libavutil/libswresample "
+            "were not found. Install them or set CNA_ENABLE_MEDIA_PIPELINE=OFF.")
+    endif()
+endif()
+
+if(CNA_BUILD_MEDIA_AVAILABLE)
+    target_compile_definitions(cna_content_pipeline PRIVATE CNA_HAVE_BUILD_MEDIA=1)
+    target_link_libraries(cna_content_pipeline PRIVATE
+        PkgConfig::LIBAVCODEC PkgConfig::LIBAVFORMAT PkgConfig::LIBAVUTIL PkgConfig::LIBSWRESAMPLE)
+    message(STATUS "CNA: MP3/WMA/WMV source pipeline enabled (${CNA_ENABLE_MEDIA_PIPELINE})")
+else()
+    message(STATUS
+        "CNA: MP3/WMA/WMV source pipeline disabled (${CNA_ENABLE_MEDIA_PIPELINE}); those sources "
+        "report that this configuration has no media decoder")
+endif()
+set(CNA_BUILD_MEDIA_AVAILABLE ${CNA_BUILD_MEDIA_AVAILABLE} PARENT_SCOPE)
+
 # plans/plan_xnapipeline.md XNAP-A5: the effect compiler's configure-time tier.
 #
 # EffectCompilerService reads CNA_FXC_EXECUTABLE / CNA_FXC_LAUNCHER as compile definitions, and

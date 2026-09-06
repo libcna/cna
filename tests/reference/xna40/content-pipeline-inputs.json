@@ -228,23 +228,23 @@
     "outputType": "Microsoft.Xna.Framework.Content.Pipeline.Audio.AudioContent"
    },
    "cna": {
-    "importer": "",
-    "processor": "",
-    "fixture": "",
+    "importer": "Microsoft::Xna::Framework::Content::Pipeline::Mp3Importer",
+    "processor": "SongProcessor",
+    "fixture": "tests/assets/xna40/media/mp3_mono_44100_128k.mp3",
     "tests": {
-     "importer": "",
+     "importer": "XnaMp3Importer.EveryMp3AnswersTheFormatAndDurationXnaAnswers",
      "processor": "",
      "sourceToXnb": "",
      "sourceToCnb": "",
-     "malformed": "",
+     "malformed": "XnaMp3Importer.RefusalsMatchXna",
      "target": ""
     },
-    "differentialEvidence": "",
-    "windows": "UNVERIFIED",
+    "differentialEvidence": "tests/reference/xna40/media/media-content-oracle.json mp3/*",
+    "windows": "SUPPORTED",
     "windowsPhone": "UNVERIFIED",
     "xbox360": "UNVERIFIED",
-    "status": "MISSING",
-    "note": "Mp3Importer: XNAPP-201. What the genuine importer answers is measured in tests/reference/xna40/media (docs/xna-content-pipeline-media.md); the C++ importer is not written."
+    "status": "IMPLEMENTED",
+    "note": "Twelve MP3 sources across all three MPEG versions and every rate from 8000 to 48000 answer the format and duration the genuine importer answered for the same files. SongProcessor output and the source-to-XNB leg are not named yet."
    }
   },
   ".pfm": {
@@ -438,23 +438,23 @@
     "outputType": "Microsoft.Xna.Framework.Content.Pipeline.Audio.AudioContent"
    },
    "cna": {
-    "importer": "",
-    "processor": "",
-    "fixture": "",
+    "importer": "Microsoft::Xna::Framework::Content::Pipeline::WmaImporter",
+    "processor": "SongProcessor",
+    "fixture": "tests/assets/xna40/media/wma_mono_44100.wma",
     "tests": {
-     "importer": "",
+     "importer": "XnaWmaImporter.EveryWmaReadsAsTheDecodedPcmTheSongPathNeeds",
      "processor": "",
      "sourceToXnb": "",
      "sourceToCnb": "",
-     "malformed": "",
+     "malformed": "XnaWmaImporter.RefusalsMatchXna",
      "target": ""
     },
     "differentialEvidence": "",
-    "windows": "UNVERIFIED",
+    "windows": "SUPPORTED",
     "windowsPhone": "UNVERIFIED",
     "xbox360": "UNVERIFIED",
-    "status": "MISSING",
-    "note": "WmaImporter: XNAPP-202. The genuine importer could not be measured in this environment (docs/xna-content-pipeline-media.md section 6); the C++ importer is not written."
+    "status": "IMPLEMENTED",
+    "note": "The route is implemented and tested; the genuine importer could not be measured in this environment (docs/xna-content-pipeline-media.md section 6), so the successful path is held to the format and to the shape the MP3 measurement settled for the same SongProcessor input rather than to a measurement of its own."
    }
   },
   ".wmv": {
@@ -468,23 +468,23 @@
     "outputType": "Microsoft.Xna.Framework.Content.Pipeline.VideoContent"
    },
    "cna": {
-    "importer": "",
-    "processor": "",
-    "fixture": "",
+    "importer": "Microsoft::Xna::Framework::Content::Pipeline::WmvImporter",
+    "processor": "VideoProcessor",
+    "fixture": "tests/assets/xna40/media/wmv_64x48_15fps_silent.wmv",
     "tests": {
-     "importer": "",
-     "processor": "",
+     "importer": "XnaWmvImporter.ImportAndItsRefusalsMatchXna, XnaVideoContent.AReadableVideoAnswersItsOwnShape",
+     "processor": "XnaVideoProcessor.DefaultsAndProcessMatchXna",
      "sourceToXnb": "",
      "sourceToCnb": "",
-     "malformed": "",
+     "malformed": "XnaVideoContent.EveryRefusalIsTheOneSentenceXnaGives",
      "target": ""
     },
-    "differentialEvidence": "",
-    "windows": "UNVERIFIED",
+    "differentialEvidence": "tests/reference/xna40/media/media-content-oracle.json wmv/*, videocontent/*, videoprocessor/*",
+    "windows": "SUPPORTED",
     "windowsPhone": "UNVERIFIED",
     "xbox360": "UNVERIFIED",
-    "status": "MISSING",
-    "note": "WmvImporter: Phase 14. VideoContent and its refusals are measured; the C++ importer is not written."
+    "status": "IMPLEMENTED",
+    "note": "Every refusal is the measured one, including the split that makes a missing file a FileNotFoundException through the importer and an InvalidContentException through VideoContent's own constructor. The successful path could not be measured (Wine 10.0 has no Media Foundation), so the shape read from the container is held to the format. The source-to-XNB leg is not named yet."
    }
   },
   ".x": {
