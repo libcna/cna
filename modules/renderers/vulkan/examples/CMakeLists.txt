@@ -2090,6 +2090,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_texture_address_mode_mirror
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-053: SpriteBatch's RENDER-TARGET-derived projection: the ortho divisor must follow the bound target, not the backbuffer.
+        cna_vulkan_test(cna_test_vulkan_spritebatch_rendertarget_size
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritebatch_rendertarget_size_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SpriteBatch_RenderTargetSize
+            COMMAND cna_test_vulkan_spritebatch_rendertarget_size
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-339: the release path that also runs vkDeviceWaitIdle and the
         # retirement lists. HasRenderer() must be false after the first Dispose and no second
         # release may be attempted.
