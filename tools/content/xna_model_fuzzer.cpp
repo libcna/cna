@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-310: fuzz harness for the two modelling readers.
+// plans/plan_xnapipeline_parity.md XNAPP-290: fuzz harness for the two modelling readers.
 //
 // A `.x` file and an FBX document both arrive from outside the build. One entry point hands
 // untrusted bytes to whichever reader their first bytes claim, and lets the process die on

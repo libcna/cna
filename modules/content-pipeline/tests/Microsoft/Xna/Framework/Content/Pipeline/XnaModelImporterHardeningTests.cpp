@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-310: the two modelling readers under hostile input.
+// plans/plan_xnapipeline_parity.md XNAPP-290: the two modelling readers under hostile input.
 //
 // A `.x` file and an FBX document both arrive from outside the build, and both readers are new.
 // A malformed one has exactly two permitted outcomes -- a graph, or an InvalidContentException --

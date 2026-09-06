@@ -325,7 +325,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     endif()
 endif()
 
-# --- plans/plan_xnapipeline_parity.md XNAPP-310: the .x and FBX reader fuzz harness ---
+# --- plans/plan_xnapipeline_parity.md XNAPP-290: the .x and FBX reader fuzz harness ---
 # The same two shapes as the intermediate-XML harness below: standalone replay/mutation by
 # default, the libFuzzer entry point on request. Not a ctest test; the deterministic mutation pass
 # that runs on every build is XnaModelReaderHardeningTests in the content-pipeline suite. The
