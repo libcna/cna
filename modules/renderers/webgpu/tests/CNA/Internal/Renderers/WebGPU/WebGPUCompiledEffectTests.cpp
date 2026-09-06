@@ -25,6 +25,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 
 #include "System/NotSupportedException.hpp"
 
@@ -44,6 +45,8 @@ namespace
     using CNA::Internal::Renderers::CompiledEffectDeviceState;
     using CNA::Internal::Renderers::CompiledEffectPassStateChanges;
     using CNA::Internal::Renderers::ICompiledEffectRuntime;
+    using CNA::Internal::Renderers::WebGPU::WebGPUCompiledEffect;
+    using CNA::Internal::Renderers::WebGPU::WebGPUCompiledShaderEXT;
     using CNA::Internal::Renderers::WebGPU::WebGPURenderer;
 
     /// Reads a committed fixture. They live with the FNA3D renderer, which owns their provenance.
@@ -66,6 +69,31 @@ namespace
         WebGPURenderer* renderer = RendererOf(device);
         if (renderer == nullptr || bytes.empty()) return nullptr;
         return renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+    }
+
+    /// The inverse of the renderer's own usage mapping, so a test can build a declaration that
+    /// satisfies whatever inputs a fixture's vertex shader happens to declare.
+    VertexElementUsage FromMojoShaderUsage(MOJOSHADER_usage usage)
+    {
+        switch (usage)
+        {
+            case MOJOSHADER_USAGE_POSITION:     return VertexElementUsage::Position;
+            case MOJOSHADER_USAGE_COLOR:        return VertexElementUsage::Color;
+            case MOJOSHADER_USAGE_TEXCOORD:     return VertexElementUsage::TextureCoordinate;
+            case MOJOSHADER_USAGE_NORMAL:       return VertexElementUsage::Normal;
+            case MOJOSHADER_USAGE_BINORMAL:     return VertexElementUsage::Binormal;
+            case MOJOSHADER_USAGE_TANGENT:      return VertexElementUsage::Tangent;
+            case MOJOSHADER_USAGE_BLENDINDICES: return VertexElementUsage::BlendIndices;
+            case MOJOSHADER_USAGE_BLENDWEIGHT:  return VertexElementUsage::BlendWeight;
+            case MOJOSHADER_USAGE_DEPTH:        return VertexElementUsage::Depth;
+            case MOJOSHADER_USAGE_FOG:          return VertexElementUsage::Fog;
+            case MOJOSHADER_USAGE_POINTSIZE:    return VertexElementUsage::PointSize;
+            case MOJOSHADER_USAGE_SAMPLE:       return VertexElementUsage::Sample;
+            case MOJOSHADER_USAGE_TESSFACTOR:   return VertexElementUsage::TessellateFactor;
+            default: break;
+        }
+        ADD_FAILURE() << "unmapped MOJOSHADER_usage " << static_cast<int>(usage);
+        return VertexElementUsage::Position;
     }
 }
 
@@ -111,13 +139,6 @@ TEST(WebGPUCompiledEffectTest, RealXna4GameEffectsWithShaderModel1PixelShadersPa
     // plans/plan_webgpu.md WEBGPU-166: these two failed to PARSE at all until CNA's
     // mojoshader-6333f74-spirv-texcrd.patch, and then produced an illegal entry-point interface
     // until mojoshader-6333f74-spirv-ps1x-interface.patch. They are the regression guard for both.
-    //
-    // This test deliberately claims parse and reflection only, not that every pass DRAWS. Six of
-    // the eighteen passes across these two fixtures still produce a module naga rejects with
-    // "Multiple bindings at location 1" -- a shared MojoShader SPIR-V linker defect, not a WebGPU
-    // one, diagnosed in WEBGPU-166's row. A pass that hits it is refused by name at module
-    // creation (GetOrCreateCompiledEffectShaderModuleEXT throws with the validation text), which is
-    // the behaviour that matters here: it never silently draws nothing.
     for (const char* name : {"racing-shadow-map-xna4.fxb", "racing-normal-mapping-xna4.fxb"})
     {
         // These two are extracted game content, so they live with the fixtures rather than with
@@ -134,6 +155,83 @@ TEST(WebGPUCompiledEffectTest, RealXna4GameEffectsWithShaderModel1PixelShadersPa
         ASSERT_NE(runtime, nullptr) << name;
         EXPECT_FALSE(runtime->GetDescription().techniques.empty()) << name;
     }
+}
+
+TEST(WebGPUCompiledEffectTest, EveryPassOfTheRealXna4GameEffectsCreatesBothShaderModules)
+{
+    GraphicsDevice device;
+    if (RendererOf(device) == nullptr)
+        GTEST_SKIP() << "this build did not select the WebGPU renderer";
+    // plans/plan_fx.md FX-110. Until the two ps_1_x linker patches landed, six of the eighteen
+    // passes across these two fixtures produced a fragment module wgpu refused with
+    // "Multiple bindings at location 1 are present" -- so this suite could claim parse and
+    // reflection only. It can now claim the thing that matters: EVERY pass links and creates both
+    // modules. Reflection alone would still pass with those six broken, which is exactly why the
+    // weaker assertion was not enough.
+    //
+    // The declaration handed to each pass is derived from the pass's own vertex-shader inputs, so
+    // this exercises the real link path (input-type patching, output-to-input linking, the
+    // combined-sampler split) without needing per-fixture mesh knowledge.
+    int linked = 0;
+    for (const char* name : {"racing-shadow-map-xna4.fxb", "racing-normal-mapping-xna4.fxb"})
+    {
+        const std::filesystem::path path =
+            CNA::TestSupport::CompiledEffectFixtureDirectory() / name;
+        std::ifstream input(path, std::ios::binary);
+        ASSERT_TRUE(input.good()) << path;
+        const std::vector<std::uint8_t> bytes{std::istreambuf_iterator<char>(input),
+                                              std::istreambuf_iterator<char>()};
+        std::unique_ptr<ICompiledEffectRuntime> runtime = CreateRuntime(device, bytes);
+        ASSERT_NE(runtime, nullptr) << name;
+        auto* compiled = dynamic_cast<CNA::Internal::Renderers::WebGPU::WebGPUCompiledEffect*>(
+            runtime.get());
+        ASSERT_NE(compiled, nullptr) << name;
+
+        const auto& description = runtime->GetDescription();
+        for (std::size_t t = 0; t < description.techniques.size(); ++t)
+        {
+            runtime->SetTechnique(static_cast<std::uint32_t>(t));
+            for (std::size_t p = 0; p < description.techniques[t].passes.size(); ++p)
+            {
+                CompiledEffectDeviceState state{};
+                CompiledEffectPassStateChanges changes{};
+                ASSERT_NO_THROW(compiled->ApplyPass(static_cast<std::uint32_t>(p), state, changes))
+                    << name << " technique " << t << " pass " << p;
+
+                WebGPUCompiledShaderEXT* vertexShader = nullptr;
+                WebGPUCompiledShaderEXT* pixelShader = nullptr;
+                compiled->GetBoundShadersEXT(vertexShader, pixelShader);
+                ASSERT_NE(vertexShader, nullptr) << name << " technique " << t << " pass " << p;
+                ASSERT_NE(pixelShader, nullptr) << name << " technique " << t << " pass " << p;
+
+                // One Vector4 element per declared vertex-shader input, at successive offsets.
+                std::vector<VertexElement> elements;
+                const MOJOSHADER_parseData* vertexData = vertexShader->parseData;
+                for (int a = 0; a < vertexData->attribute_count; ++a)
+                {
+                    const VertexElementUsage usage =
+                        FromMojoShaderUsage(vertexData->attributes[a].usage);
+                    elements.emplace_back(static_cast<int>(elements.size()) * 16,
+                                          VertexElementFormat::Vector4, usage,
+                                          vertexData->attributes[a].index);
+                }
+                WebGPUCompiledEffect::CompiledVertexStreamEXT stream{};
+                stream.elements = &elements;
+                stream.stride = static_cast<std::uint32_t>(elements.size() * 16);
+
+                WebGPUCompiledEffect::LinkedPassEXT link;
+                ASSERT_NO_THROW(link = compiled->LinkAndGetShadersEXT({stream}))
+                    << name << " technique " << t << " pass " << p;
+                EXPECT_NE(link.vertexModule, nullptr)
+                    << name << " technique " << t << " pass " << p;
+                EXPECT_NE(link.pixelModule, nullptr)
+                    << name << " technique " << t << " pass " << p;
+                ++linked;
+            }
+        }
+    }
+    // Eighteen passes across the two fixtures; six of them are the Shader Model 1.x ones.
+    EXPECT_EQ(linked, 18);
 }
 
 TEST(WebGPUCompiledEffectTest, TheSpirvSplitLeavesAModuleWithoutSamplersAlone)

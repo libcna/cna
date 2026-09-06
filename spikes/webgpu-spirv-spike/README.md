@@ -166,18 +166,22 @@ split, and handed to `wgpuDeviceCreateShaderModule`:
 | `DualTextureEffect.fxb` | 1 | 0 |
 | `EnvironmentMapEffect.fxb` | 1 | 0 |
 | `SkinnedEffect.fxb` | 1 | 0 |
-| `racing-shadow-map-xna4.fxb` (real XNA 4.0 game content) | 4 | 1 |
-| `racing-normal-mapping-xna4.fxb` (real XNA 4.0 game content) | 14 | 5 |
+| `racing-shadow-map-xna4.fxb` (real XNA 4.0 game content) | 4 | 0 |
+| `racing-normal-mapping-xna4.fxb` (real XNA 4.0 game content) | 14 | 0 |
+
+> The two racing rows read `1` and `5` failures until 2026-09-06; both are 0 since the two ps_1_x
+> linker patches below. **27 of 27 passes translate and create a module.**
 
 The 14-fixture `crash-corpus/` was swept too: no crash, no hang, every malformed input refused by
 name at parse time or at module creation.
 
-> **The two racing rows were first measured as 0 failures, and that number was wrong.** It was taken
+> **The two racing rows were once measured as 0 failures for the WRONG REASON, and that is worth
+> keeping.** That first measurement was taken
 > against a `~/deps/FNA3D/MojoShader` checkout that was silently missing two of CNA's own patches
 > (`mojoshader.h`'s hunks from `effect-parser-robustness`, and the whole of
 > `legacy-texcoord-input`) — a partially-patched shared tree, not the state the repository declares.
-> With the full series applied, 21 of the 27 passes translate and 6 do not. The table above is the
-> corrected measurement. The lesson is worth more than the number: **verify that a shared dependency
+> With the full series applied, 21 of the 27 passes translated and 6 did not — the state the next
+> two sections diagnose and repair. The lesson is worth more than either number: **verify that a shared dependency
 > checkout matches the patch set the repository declares before measuring anything through it.**
 > `git -C ~/deps/FNA3D/MojoShader apply --reverse --check` on every patch is the one-line check.
 
@@ -207,28 +211,67 @@ the placeholder never occurs with the full series and the extra loop was solving
 repository had already solved. It was removed rather than kept "just in case": a patch that cannot
 fire is a patch nobody can reason about.
 
-### What still does not translate, and why it is not a WebGPU defect
+### The six that did not translate — diagnosed on 2026-09-06, and FIXED
 
-Six of the eighteen racing passes produce a module naga rejects with
-`Multiple bindings at location 1 are present`. Dumping the finished module's decorations names the
-shape exactly:
+**Superseded measurement.** This section previously ended "6 of 27 passes do not translate,
+recorded as a shared limitation". They all translate now: **27 of 27**, and the two patches that
+did it are `mojoshader-6333f74-spirv-entry-interface-unique.patch` and
+`mojoshader-6333f74-spirv-pointcoord-existence.patch`. The diagnosis this section used to carry was
+also **half wrong**, and the half that was wrong is the more interesting half, so both are kept.
+
+The symptom: six of the eighteen racing passes produced a fragment module naga rejects with
+`Multiple bindings at location N are present`. The old diagnosis read the Location decorations,
+saw `ps_t0` at the location naga named, and concluded that `ps_t0` collided with a *second*
+TEXCOORD0 input created for the `gl_PointCoord`-or-`TEXCOORD0` dual-purpose variable. **The
+decorations cannot show that, and it is not what happens** — that variable is never created for a
+`ps_1_x` shader at all (`emit_SPIRV_attribute` skips the whole branch below `ps_1_4`). What the
+decoration dump could not show is an id that appears **twice in the entry point's interface list**,
+because naga indexes its complaint into that list, not into the decorations. Dumping the list is
+what settles it (`webgpu_spirv_spike.cpp` now prints it on every failure):
 
 ```
-Location 0  on %28  (ps_r0)     <- the ps_1_x colour OUTPUT
-Location 0  on %31  (ps_v0)     <- a COLOR varying INPUT (a different space; not the collision)
-Location 1  on %64  (ps_t0)
-Location 2  on %66  (ps_t1)
+    Location 0            on %28   (ps_r0)
+    Location 0            on %31   (ps_v0)
+    Location 1            on %64   (ps_t0)
+    Location 2            on %66   (ps_t1)
+    header version 0x00000000, OpEntryPoint interface (6 ids):
+      arg 0  %31   ps_v0                    location 0
+      arg 1  %64   ps_t0                    location 1
+      arg 2  %66   ps_t1                    location 2
+      arg 3  %64   ps_t0                    location 1       <-- DUPLICATE ENTRY
+      arg 4  %66   ps_t1                    location 2       <-- DUPLICATE ENTRY
+      arg 5  %28   ps_r0                    location 0
 ```
 
-The collision is between `ps_t0` and the second TEXCOORD0 fragment input the profile creates for the
-`gl_PointCoord`-or-`TEXCOORD0` dual-purpose variable, which the linker addresses through
-`pTable->attrib_offsets[TEXCOORD][0]` — the same table slot `legacy-texcoord-input` now gives to the
-`ps_1_x` `t0` register. **This reproduces with the linker loop above removed**, so it is neither
-caused nor masked by anything in this spike, and it lives in MojoShader's shared SPIR-V linker —
-which means the **Vulkan and SDL_GPU** compiled-effect backends have it too. It is recorded as a
-shared limitation rather than patched speculatively here: the fix belongs to whoever can measure it
-against all three backends. A pass that hits it is refused BY NAME at module creation, never drawn
-as nothing.
+Two independent defects, both visible in that one dump, and both in **shared** code:
+
+1. **`OpEntryPoint` lists each `ps_1_x` texture register twice.** `emit_SPIRV_finalize` walks
+   `ctx->attributes` and then *separately* walks `ctx->spirv.id_implicit_input[]`. Upstream those
+   are disjoint for `ps_1_x` — a `t#` register is in no attribute list — but CNA's own
+   `legacy-texcoord-input.patch` registers exactly those pairs, so the two lists overlap and the
+   interface was counted from one and emitted from both. A repeated `<id>` is two arguments at one
+   Location to a consumer. The repair gathers the ids first, drops repeats, and emits from the list
+   it counted, so the count and the contents cannot disagree again.
+
+2. **The module header's version word was being overwritten with 0.** This one is the collision the
+   old text was reaching for, and it is real — just with a different consequence.
+   `MOJOSHADER_spirv_link_attributes()` finishes the dual-purpose variable by writing through
+   `pointcoord_var_offset` and `pointcoord_load_offset`, but it *guards* on
+   `attrib_offsets[TEXCOORD][0]` being non-zero. Those are two different questions. A `ps_1_x` `t0`
+   register fills that slot (upstream code, not CNA's patch) without creating the dual-purpose
+   variable, so the two offsets stay 0 and both writes land on `binary[0 + 1]` — word 1 of the
+   module, the SPIR-V version field. The repair asks for the variable (`pointcoord_var_offset`)
+   rather than for the slot. **Every one of the six carried a zeroed version word**, and naga loads
+   such a module anyway, so nothing had ever reported it.
+
+**These are shared fixes, not WebGPU-local ones**, and neither is speculative: the defective bytes
+come out of `MOJOSHADER_parse("spirv")` + `MOJOSHADER_spirv_link_attributes`, which know nothing
+about the caller. CNA's Vulkan backend (`VulkanCompiledEffect.cpp:678`) and MojoShader's own
+SDL_GPU adapter (`mojoshader_sdlgpu.c:670`) call the identical `MOJOSHADER_linkSPIRVShaders` on the
+identical bytes, so both were carrying both defects. That is why the regression guard is
+`modules/renderers/common/mojoshader/tests/.../SpirvEntryPointInterfaceTests.cpp` — in the shared
+half, device-free, reading the two words back out of the finished module — rather than a WebGPU
+test asserting that wgpu happened to accept something.
 
 **These are shared fixes, not WebGPU-local ones.** The Vulkan (`FX-065`) and SDL_GPU (`FX-061`)
 backends consume the same SPIR-V profile and the same linker, so both gain `ps_1_x` support from

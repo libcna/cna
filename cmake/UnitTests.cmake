@@ -39,6 +39,10 @@ if(CNA_BUILD_TESTS)
     file(GLOB_RECURSE CNA_TEST_SOURCES CONFIGURE_DEPENDS
             "modules/*/tests/*.cpp"
             "modules/renderers/*/tests/*.cpp"
+            # The shared renderer halves (modules/renderers/common/<name>) sit one directory
+            # deeper than a renderer family, and `*` does not cross a separator, so their tests
+            # need their own entry. plans/plan_fx.md FX-110 put the first suite there.
+            "modules/renderers/common/*/tests/*.cpp"
             "tests/*.cpp"
     )
 

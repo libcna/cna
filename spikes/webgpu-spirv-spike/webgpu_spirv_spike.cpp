@@ -247,17 +247,25 @@ namespace
     constexpr uint32_t kDecorationBinding = 33;
     constexpr uint32_t kDecorationDescriptorSet = 34;
 
+    constexpr uint32_t kOpEntryPoint = 15;
+
     struct Decorations
     {
         std::map<uint32_t, std::string> names;
         std::map<uint32_t, uint32_t> locations;
         std::map<uint32_t, std::pair<uint32_t, uint32_t>> setAndBinding;
+        /// The OpEntryPoint interface list, in module order. naga reports its findings by index
+        /// into this list ("Argument 5 varying error"), so a diagnosis needs the list itself --
+        /// the Location decorations alone cannot show an id that appears in it TWICE.
+        std::vector<uint32_t> entryInterface;
+        uint32_t version = 0;
     };
 
     Decorations Scan(const uint32_t* words, std::size_t wordCount)
     {
         Decorations d;
         if (wordCount < 5) return d;
+        d.version = words[1];
         std::size_t i = 5;
         while (i < wordCount)
         {
@@ -269,6 +277,19 @@ namespace
             {
                 d.names[words[i + 1]] =
                     std::string(reinterpret_cast<const char*>(&words[i + 2]));
+            }
+            else if (opcode == kOpEntryPoint && len >= 4)
+            {
+                // words: opcode | execution model | entry id | name... | interface ids
+                std::size_t j = i + 3;
+                while (j < i + len && words[j] != 0)
+                {
+                    const char* text = reinterpret_cast<const char*>(&words[j]);
+                    const std::size_t bytes = std::strlen(text) + 1;
+                    j += (bytes + 3) / 4;
+                    break;
+                }
+                for (; j < i + len; ++j) d.entryInterface.push_back(words[j]);
             }
             else if (opcode == kOpDecorate && len >= 4)
             {
@@ -649,6 +670,21 @@ namespace
     bool QuietModule(WGPUInstance instance, WGPUDevice device, const char* label,
                      const uint32_t* words, std::size_t wordCount)
     {
+        {
+            // Two module-level invariants that a naga "accepted" verdict does NOT check, and that
+            // the ps_1_x path was violating silently: a well-formed header, and an OpEntryPoint
+            // interface that lists each variable once.
+            const Decorations pre = Scan(words, wordCount);
+            if (pre.version != 0x00010000u)
+                std::printf("  WARN %s: header version 0x%08x (expected 0x00010000)\n", label,
+                            pre.version);
+            std::map<uint32_t, int> count;
+            for (const uint32_t id : pre.entryInterface)
+            {
+                if (++count[id] == 2)
+                    std::printf("  WARN %s: OpEntryPoint lists %%%u twice\n", label, id);
+            }
+        }
         struct State { bool done = false; std::string message; WGPUErrorType type{}; } state;
         wgpuDevicePushErrorScope(device, WGPUErrorFilter_Validation);
         WGPUShaderSourceSPIRV src{};
@@ -681,6 +717,21 @@ namespace
                 const auto it = d.names.find(id);
                 std::printf("    Location %-12u on %%%-4u (%s)\n", loc, id,
                             it != d.names.end() ? it->second.c_str() : "?");
+            }
+            std::printf("    header version 0x%08x, OpEntryPoint interface (%zu ids):\n",
+                        d.version, d.entryInterface.size());
+            std::map<uint32_t, int> seen;
+            for (std::size_t k = 0; k < d.entryInterface.size(); ++k)
+            {
+                const uint32_t id = d.entryInterface[k];
+                const auto nit = d.names.find(id);
+                const auto lit = d.locations.find(id);
+                char loctext[32] = "-";
+                if (lit != d.locations.end())
+                    std::snprintf(loctext, sizeof(loctext), "%u", lit->second);
+                std::printf("      arg %-2zu %%%-4u %-24s location %-6s%s\n", k, id,
+                            nit != d.names.end() ? nit->second.c_str() : "?", loctext,
+                            ++seen[id] > 1 ? "  <-- DUPLICATE ENTRY" : "");
             }
             return false;
         }

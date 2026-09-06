@@ -50,7 +50,9 @@ function(cna_configure_mojoshader)
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-texcrd.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-legacy-texcoord-input.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-spirv-texcrd.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-spirv-ps1x-interface.patch")
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-spirv-ps1x-interface.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-spirv-entry-interface-unique.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-spirv-pointcoord-existence.patch")
     set(_cna_fna3d_mojoshader_patch_script
         "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-mojoshader-patch.cmake")
 

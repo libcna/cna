@@ -1,0 +1,24 @@
+diff --git a/mojoshader_common.c b/mojoshader_common.c
+index 1b7b303..9c87d72 100644
+--- a/mojoshader_common.c
++++ b/mojoshader_common.c
+@@ -1149,8 +1149,17 @@ void MOJOSHADER_spirv_link_attributes(const MOJOSHADER_parseData *vertex,
+         } // if
+     } // for
+ 
+-    // gl_PointCoord support
+-    if (texcoord0Loc)
++    /* gl_PointCoord support.
++     *
++     * A non-zero texcoord0Loc says only WHERE TEXCOORD0's Location decoration sits; it does not
++     * say that the dual-purpose gl_PointCoord-or-TEXCOORD0 input exists. The pixel profile
++     * creates that variable only for a shader that DECLARES TEXCOORD0 (ps_1_4 and up), and
++     * records it in pointcoord_var_offset/pointcoord_load_offset. A Shader Model 1.x `t#`
++     * register claims the very same attrib_offsets slot -- it is a mutable register seeded from
++     * the interpolated texcoord, not a promotable input -- and for it these two offsets are 0,
++     * so the retyping below would write word 1 of the module, the SPIR-V version field, instead.
++     * Ask for the variable rather than for the slot. -CNA */
++    if (texcoord0Loc && pTable->pointcoord_var_offset && pTable->pointcoord_load_offset)
+     {
+         if (vTable->attrib_offsets[MOJOSHADER_USAGE_POINTSIZE][0] > 0)
+         {
