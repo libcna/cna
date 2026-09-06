@@ -2097,6 +2097,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_double_dispose
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-340: 80 resources over 20 iterations. VULKAN-393's output gate is
+        # the Vulkan-side half the row asked for -- the object tracker names every Vk* handle still
+        # alive at vkDestroyDevice, which is a stronger statement than a CNA-side count of zero.
+        cna_vulkan_test(cna_test_vulkan_resource_leak
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_resource_leak_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_ResourceLeak
+            COMMAND cna_test_vulkan_resource_leak
+            TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-095: MultiSampleCount changed on a LIVE device. Vulkan-owned rather
         # than a registration of easygl_msaa_change_test.cpp, because that source asserts EasyGL's
         # own limit -- that the count cannot change post-construction -- which is false here.
