@@ -3418,6 +3418,14 @@ namespace CNA::Internal::Renderers::Vulkan
                               VkBuffer& buf, VkDeviceMemory& mem, void** mapped = nullptr);
         VkCommandBuffer BeginOneTimeCommands();
         void            EndOneTimeCommands(VkCommandBuffer cb);
+        /// plan_vulkan.md VULKAN-401: record a layout transition into a caller's command buffer,
+        /// so a multi-step operation on one image costs one queue wait instead of one per step.
+        void RecordImageLayoutTransition(VkCommandBuffer cb, VkImage img,
+                                         VkImageLayout from, VkImageLayout to,
+                                         uint32_t baseMipLevel = 0);
+        /// VULKAN-401: the copy's recording half, for the same reason.
+        void RecordBufferToImageCopy(VkCommandBuffer cb, VkBuffer buf, VkImage img,
+                                     uint32_t w, uint32_t h);
         void TransitionImageLayout(VkImage img, VkImageLayout from, VkImageLayout to,
                                    uint32_t baseMipLevel = 0);
         void CopyBufferToImage(VkBuffer buf, VkImage img, uint32_t w, uint32_t h);

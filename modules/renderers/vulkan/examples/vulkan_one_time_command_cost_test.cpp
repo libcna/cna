@@ -100,9 +100,12 @@ protected:
         const std::uint64_t nanos = vk->GetOneTimeCommandWaitNanosEXT()  - nanosBefore;
 
         // ---- structural, asserted on any device ---------------------------------
-        check(cmds >= static_cast<std::uint64_t>(kTextures),
+        // plan_vulkan.md VULKAN-401 tightened this from "at least one each" to EXACTLY one each.
+        // Before that row a texture cost three -- barrier, copy, barrier, each its own submission
+        // and its own queue wait -- and this leg failed at 144 for 48 uploads.
+        check(cmds == static_cast<std::uint64_t>(kTextures),
               "A " + std::to_string(kTextures) + " texture uploads cost " +
-                  std::to_string(cmds) + " one-time commands, so at least one each");
+                  std::to_string(cmds) + " one-time commands, exactly one each");
         check(nanos > 0,
               "B the queue waits are real time, not a no-op (" + std::to_string(nanos) + " ns)");
 

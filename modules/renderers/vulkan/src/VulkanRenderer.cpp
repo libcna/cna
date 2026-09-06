@@ -403,13 +403,24 @@ namespace CNA::Internal::Renderers::Vulkan
         vkBindImageMemory(dev, image_, memory_, 0);
 
         // Transition UNDEFINED → TRANSFER_DST_OPTIMAL, copy, → SHADER_READ_ONLY (level 0 only --
-        // the shared TransitionImageLayout helper hardcodes a single-level range).
-        owner_->TransitionImageLayout(image_,
-            VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-        owner_->CopyBufferToImage(stagingBuf, image_,
-            static_cast<uint32_t>(data.width), static_cast<uint32_t>(data.height));
-        owner_->TransitionImageLayout(image_,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        // the shared transition helper hardcodes a single-level range).
+        //
+        // plan_vulkan.md VULKAN-401: all three in ONE command buffer. They used to be three
+        // separate one-time submissions, so creating a texture cost three full vkQueueWaitIdle
+        // calls where the Vulkan idiom pays one -- VULKAN-396 measured 48 creations at 144
+        // one-time commands and 40.5% of the workload's wall clock spent in those waits.
+        // Ordering inside the buffer is exactly what the barriers express, so batching them
+        // changes the number of waits and nothing else.
+        {
+            VkCommandBuffer cb = owner_->BeginOneTimeCommands();
+            owner_->RecordImageLayoutTransition(cb, image_,
+                VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+            owner_->RecordBufferToImageCopy(cb, stagingBuf, image_,
+                static_cast<uint32_t>(data.width), static_cast<uint32_t>(data.height));
+            owner_->RecordImageLayoutTransition(cb, image_,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            owner_->EndOneTimeCommands(cb);
+        }
 
         // Clean up staging
         vkDestroyBuffer(dev, stagingBuf, nullptr);
@@ -521,12 +532,21 @@ namespace CNA::Internal::Renderers::Vulkan
         }
         vkUnmapMemory(dev, stagingMem);
 
-        owner_->TransitionImageLayout(image_,
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-        owner_->CopyBufferToImage(stagingBuf, image_,
-            static_cast<uint32_t>(width_), static_cast<uint32_t>(height_));
-        owner_->TransitionImageLayout(image_,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        // plan_vulkan.md VULKAN-401: barrier, copy, barrier in ONE command buffer. These three
+        // used to be three separate one-time submissions, so an upload cost three full
+        // vkQueueWaitIdle calls where the Vulkan idiom pays one -- measured by VULKAN-396 at
+        // 40.5% of an upload workload's wall clock. Ordering within the buffer is what the
+        // barriers are for, so batching them changes nothing but the number of waits.
+        {
+            VkCommandBuffer cb = owner_->BeginOneTimeCommands();
+            owner_->RecordImageLayoutTransition(cb, image_,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+            owner_->RecordBufferToImageCopy(cb, stagingBuf, image_,
+                static_cast<uint32_t>(width_), static_cast<uint32_t>(height_));
+            owner_->RecordImageLayoutTransition(cb, image_,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            owner_->EndOneTimeCommands(cb);
+        }
 
         vkDestroyBuffer(dev, stagingBuf, nullptr);
         vkFreeMemory(dev, stagingMem, nullptr);
@@ -9609,11 +9629,12 @@ namespace CNA::Internal::Renderers::Vulkan
         vkFreeCommandBuffers(device_, commandPool_, 1, &cb);
     }
 
-    void VulkanRenderer::TransitionImageLayout(VkImage img,
-                                                       VkImageLayout from, VkImageLayout to,
-                                                       uint32_t baseMipLevel)
+    // plan_vulkan.md VULKAN-401: the RECORDING half, so a caller performing several steps on one
+    // image can put them in one command buffer and pay one queue wait instead of one per step.
+    void VulkanRenderer::RecordImageLayoutTransition(VkCommandBuffer cb, VkImage img,
+                                                     VkImageLayout from, VkImageLayout to,
+                                                     uint32_t baseMipLevel)
     {
-        VkCommandBuffer cb = BeginOneTimeCommands();
         VkImageMemoryBarrier barrier{};
         barrier.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
         barrier.oldLayout           = from;
@@ -9674,13 +9695,22 @@ namespace CNA::Internal::Renderers::Vulkan
             throw std::runtime_error("Vulkan: unsupported image layout transition");
         }
         vkCmdPipelineBarrier(cb, srcStage, dstStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+    }
+
+    // The standalone form every other caller still uses: one transition, one submit, one wait.
+    void VulkanRenderer::TransitionImageLayout(VkImage img,
+                                                       VkImageLayout from, VkImageLayout to,
+                                                       uint32_t baseMipLevel)
+    {
+        VkCommandBuffer cb = BeginOneTimeCommands();
+        RecordImageLayoutTransition(cb, img, from, to, baseMipLevel);
         EndOneTimeCommands(cb);
     }
 
-    void VulkanRenderer::CopyBufferToImage(VkBuffer buf, VkImage img,
-                                                   uint32_t w, uint32_t h)
+    // VULKAN-401: the recording half of the copy, for the same reason.
+    void VulkanRenderer::RecordBufferToImageCopy(VkCommandBuffer cb, VkBuffer buf, VkImage img,
+                                                 uint32_t w, uint32_t h)
     {
-        VkCommandBuffer cb = BeginOneTimeCommands();
         VkBufferImageCopy region{};
         region.bufferOffset = 0;
         region.bufferRowLength = 0;
@@ -9689,6 +9719,13 @@ namespace CNA::Internal::Renderers::Vulkan
         region.imageOffset = { 0, 0, 0 };
         region.imageExtent = { w, h, 1 };
         vkCmdCopyBufferToImage(cb, buf, img, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+    }
+
+    void VulkanRenderer::CopyBufferToImage(VkBuffer buf, VkImage img,
+                                                   uint32_t w, uint32_t h)
+    {
+        VkCommandBuffer cb = BeginOneTimeCommands();
+        RecordBufferToImageCopy(cb, buf, img, w, h);
         EndOneTimeCommands(cb);
     }
 
