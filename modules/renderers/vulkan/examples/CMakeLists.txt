@@ -2097,6 +2097,18 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_spritebatch_rendertarget_size
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-054: DrawString rotation, scale and SpriteEffects -- the glyph-quad transform, which no Vulkan test covered.
+        cna_vulkan_test(cna_test_vulkan_spritefont_effects_flip
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritefont_effects_flip_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SpriteFont_EffectsFlip
+            COMMAND cna_test_vulkan_spritefont_effects_flip
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_spritefont_effects_rotation_scale
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritefont_effects_rotation_scale_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SpriteFont_EffectsRotationScale
+            COMMAND cna_test_vulkan_spritefont_effects_rotation_scale
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-339: the release path that also runs vkDeviceWaitIdle and the
         # retirement lists. HasRenderer() must be false after the first Dispose and no second
         # release may be attempted.
