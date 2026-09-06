@@ -210,6 +210,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_ContextRecovery COMMAND cna_test_webgpu_context_recovery
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plans/plan_webgpu.md WEBGPU-191: resource lifetime against the deferred replay -- a resource
+    # disposed between its queued draw and the flush. Reads the renderer's own uncaptured-error
+    # count as the oracle, so it links WebGPU::WebGPU.
+    cna_webgpu_test(cna_test_webgpu_resource_lifetime_stress webgpu_resource_lifetime_stress_test.cpp)
+    target_link_libraries(cna_test_webgpu_resource_lifetime_stress PRIVATE WebGPU::WebGPU)
+    cna_register_renderer_test(NAME WebGPU_ResourceLifetimeStress
+        COMMAND cna_test_webgpu_resource_lifetime_stress
+        TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 1105 (plans/plan_graphics.md Phase 80): GetOrCreatePipelineLitTextured3DVertexLit /
     # BasicEffect.PreferPerPixelLighting real dispatch.
     cna_webgpu_test(cna_test_webgpu_basiceffect_preferperpixellighting webgpu_basiceffect_preferperpixellighting_test.cpp)
