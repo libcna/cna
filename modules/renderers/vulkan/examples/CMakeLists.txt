@@ -2245,6 +2245,20 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_model_draw
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-301: glTF tangent handedness and mirrored tangents.
+        cna_vulkan_test(cna_test_vulkan_gltf_tangent_handedness
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_gltf_tangent_handedness_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Gltf_TangentHandedness
+            COMMAND cna_test_vulkan_gltf_tangent_handedness
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_gltf_mirrored_tangent
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_gltf_mirrored_tangent_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Gltf_MirroredTangent
+            COMMAND cna_test_vulkan_gltf_mirrored_tangent
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-339: the release path that also runs vkDeviceWaitIdle and the
         # retirement lists. HasRenderer() must be false after the first Dispose and no second
         # release may be attempted.
