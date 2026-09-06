@@ -254,6 +254,8 @@ namespace CNA::Internal::Renderers::Vulkan
         /// VULKAN-170: the native storage this renderer chose for that format, from the one table.
         VkFormat            vkFormat_      = VK_FORMAT_R8G8B8A8_UNORM;
         int                 bytesPerTexel_ = 4;
+        /// VULKAN-172: 4 when the storage is block-compressed, so every size is block-counted.
+        int                 blockExtent_   = 1;
         VkImage             image_         = VK_NULL_HANDLE;
         VkDeviceMemory      memory_        = VK_NULL_HANDLE;
         VkImageView         imageView_     = VK_NULL_HANDLE;
@@ -1465,8 +1467,37 @@ namespace CNA::Internal::Renderers::Vulkan
         struct VulkanSurfaceFormatStorageEXT
         {
             VkFormat format        = VK_FORMAT_UNDEFINED;  ///< The native storage format.
-            int      bytesPerTexel = 0;                    ///< Bytes one texel occupies in it.
+            /// Bytes one *addressable unit* occupies: one texel when @ref blockExtent is 1, one
+            /// 4x4 block when it is 4. plan_vulkan.md VULKAN-172 -- a block-compressed level is
+            /// `ceil(w/4) * ceil(h/4)` of these, never `w * h`.
+            int      bytesPerTexel = 0;
+            /// 1 for an ordinary format, 4 for a block-compressed one. Named rather than inferred
+            /// from the VkFormat so every size calculation asks one question instead of carrying a
+            /// list of compressed enumerators.
+            int      blockExtent   = 1;
         };
+
+        /**
+         * @brief Bytes one mip level of @p storage occupies at @p w x @p h.
+         *
+         * plan_vulkan.md VULKAN-172. The one place that knows a block-compressed level is counted
+         * in padded 4x4 blocks; every staging allocation and every copy goes through it, so the
+         * uncompressed and compressed paths cannot drift apart.
+         *
+         * @param storage The native storage description.
+         * @param w Level width in texels.
+         * @param h Level height in texels.
+         * @return The byte count.
+         */
+        [[nodiscard]] static VkDeviceSize LevelByteCountEXT(
+            const VulkanSurfaceFormatStorageEXT& storage, int w, int h)
+        {
+            if (storage.blockExtent <= 1)
+                return static_cast<VkDeviceSize>(w) * h * storage.bytesPerTexel;
+            const int cols = (w + storage.blockExtent - 1) / storage.blockExtent;
+            const int rows = (h + storage.blockExtent - 1) / storage.blockExtent;
+            return static_cast<VkDeviceSize>(cols) * rows * storage.bytesPerTexel;
+        }
 
         /**
          * @brief The one table saying which `SurfaceFormat` values have native storage here.
@@ -1512,6 +1543,18 @@ namespace CNA::Internal::Renderers::Vulkan
          */
         [[nodiscard]] CNA::Internal::Renderers::RendererFormatVerdict ClassifyColorTransferFormatEXT(
             int surfaceFormat) const override;
+
+        /**
+         * @brief Whether a format transfers as 4x4 blocks rather than as pixels.
+         *
+         * plan_vulkan.md VULKAN-172. True for exactly the block-compressed formats this renderer's
+         * storage table claims on the opened device, so the transfer route and the storage can
+         * never disagree.
+         *
+         * @param surfaceFormat The `SurfaceFormat` ordinal.
+         * @return True when `SetData` hands this renderer raw blocks.
+         */
+        [[nodiscard]] bool IsCompressedTransferFormatEXT(int surfaceFormat) const override;
 
         /**
          * @brief CNAEXT. XNA's Direct3D 9 pixel-centre correction, as a clip-space translation.
@@ -3265,6 +3308,9 @@ namespace CNA::Internal::Renderers::Vulkan
         // VK_FORMAT_A4R4G4B4_UNORM_PACK16 (SurfaceFormat::Bgra4444) may be named. Optional on
         // purpose -- the format has no core-1.1 spelling, so this is a device fact, not a build one.
         bool     formatA4R4G4B4Supported_ = false;
+        // VULKAN-172: VkPhysicalDeviceFeatures.textureCompressionBC, queried AND enabled at device
+        // creation. Without it no BCn format may be used at all, whatever VkFormatProperties says.
+        bool     textureCompressionBCSupported_ = false;
         float    depthBias_                 = 0.0f;  // XNA RasterizerState.DepthBias
         float    slopeScaleDepthBias_       = 0.0f;  // XNA RasterizerState.SlopeScaleDepthBias
         int32_t  scissorX_ = 0, scissorY_ = 0;

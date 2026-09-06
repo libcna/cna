@@ -394,13 +394,16 @@ namespace CNA::Internal::Renderers::Vulkan
         // on before it gets here -- and is the old behaviour rather than a throw so that an
         // internal caller constructing an ImageData with a format ordinal nobody classified keeps
         // working exactly as it did.
-        VulkanRenderer::VulkanSurfaceFormatStorageEXT storage{ VK_FORMAT_R8G8B8A8_UNORM, 4 };
+        VulkanRenderer::VulkanSurfaceFormatStorageEXT storage{ VK_FORMAT_R8G8B8A8_UNORM, 4, 1 };
         owner_->MapSurfaceFormatToStorageEXT(data.surfaceFormat, storage);
         vkFormat_      = storage.format;
         bytesPerTexel_ = storage.bytesPerTexel;
+        blockExtent_   = storage.blockExtent;   // VULKAN-172
 
         // --- Staging buffer ---
-        VkDeviceSize size = static_cast<VkDeviceSize>(data.width) * data.height * bytesPerTexel_;
+        // VULKAN-172: block-counted for a compressed format, texel-counted otherwise, through the
+        // one helper both paths share.
+        VkDeviceSize size = VulkanRenderer::LevelByteCountEXT(storage, data.width, data.height);
         VkBuffer stagingBuf = VK_NULL_HANDLE;
         VkDeviceMemory stagingMem = VK_NULL_HANDLE;
         owner_->CreateBuffer(size,
@@ -550,7 +553,8 @@ namespace CNA::Internal::Renderers::Vulkan
         // VULKAN-170: sized by the texture's own texel size, not by an assumed 4. The shared layer
         // hands SetData the format's real bytes-per-texel as the stride (Texture2D.cpp's
         // `levelW * bytesPerTexel`), so both ends now agree for any format in the table.
-        VkDeviceSize size = static_cast<VkDeviceSize>(width_) * height_ * bytesPerTexel_;
+        VulkanRenderer::VulkanSurfaceFormatStorageEXT storage{ vkFormat_, bytesPerTexel_, blockExtent_ };
+        VkDeviceSize size = VulkanRenderer::LevelByteCountEXT(storage, width_, height_);
 
         VkBuffer stagingBuf = VK_NULL_HANDLE;
         VkDeviceMemory stagingMem = VK_NULL_HANDLE;
@@ -561,7 +565,12 @@ namespace CNA::Internal::Renderers::Vulkan
 
         void* mapped = nullptr;
         vkMapMemory(dev, stagingMem, 0, size, 0, &mapped);
-        const int rowBytes = width_ * bytesPerTexel_;
+        // VULKAN-172: a compressed upload is always whole-level (the shared layer assembles the
+        // level's blocks before calling), so its "row" is the whole payload and the stride branch
+        // below collapses to the straight memcpy.
+        const int rowBytes = blockExtent_ > 1
+            ? static_cast<int>(size)
+            : width_ * bytesPerTexel_;
         if (stride == rowBytes)
         {
             std::memcpy(mapped, rgba, static_cast<std::size_t>(size));
@@ -634,7 +643,9 @@ namespace CNA::Internal::Renderers::Vulkan
     {
         if (!owner_ || !owner_->device_ || !rgba || level < 0 || level >= levelCount_) return;
         VkDevice dev = owner_->device_;
-        VkDeviceSize size = static_cast<VkDeviceSize>(levelW) * levelH * bytesPerTexel_;   // VULKAN-170
+        VulkanRenderer::VulkanSurfaceFormatStorageEXT levelStorage{ vkFormat_, bytesPerTexel_,
+                                                                     blockExtent_ };
+        VkDeviceSize size = VulkanRenderer::LevelByteCountEXT(levelStorage, levelW, levelH);
 
         VkBuffer stagingBuf = VK_NULL_HANDLE;
         VkDeviceMemory stagingMem = VK_NULL_HANDLE;
@@ -2222,6 +2233,29 @@ namespace CNA::Internal::Renderers::Vulkan
                 if (!formatA4R4G4B4Supported_) return false;
                 out = { VK_FORMAT_A4R4G4B4_UNORM_PACK16, 2 };
                 return true;
+            // plan_vulkan.md VULKAN-172. The three block-compressed formats Reach permits. XNA's
+            // DXT1/3/5 are S3TC, which Vulkan spells BC1/BC2/BC3, and the mapping is exact:
+            // DXT1 -> BC1_RGBA (8 bytes per 4x4 block), DXT3 -> BC2 (16, explicit 4-bit alpha),
+            // DXT5 -> BC3 (16, interpolated alpha). Conditional on
+            // VkPhysicalDeviceFeatures.textureCompressionBC, which must be ENABLED at device
+            // creation and not merely reported -- ClassifySurfaceFormatEXT's second gate then
+            // still asks VkFormatProperties per format, because the feature promises the family
+            // and the properties promise this member of it.
+            //
+            // The BC1 choice is BC1_RGBA rather than BC1_RGB: XNA's Dxt1 carries the 1-bit
+            // punch-through alpha the block encoding itself defines, and BC1_RGB would discard it.
+            case SurfaceFormat::Dxt1:
+                if (!textureCompressionBCSupported_) return false;
+                out = { VK_FORMAT_BC1_RGBA_UNORM_BLOCK, 8, 4 };
+                return true;
+            case SurfaceFormat::Dxt3:
+                if (!textureCompressionBCSupported_) return false;
+                out = { VK_FORMAT_BC2_UNORM_BLOCK, 16, 4 };
+                return true;
+            case SurfaceFormat::Dxt5:
+                if (!textureCompressionBCSupported_) return false;
+                out = { VK_FORMAT_BC3_UNORM_BLOCK, 16, 4 };
+                return true;
             default:
                 return false;
         }
@@ -2271,7 +2305,30 @@ namespace CNA::Internal::Renderers::Vulkan
         const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat);
         if (format == SurfaceFormat::NormalizedByte2 || format == SurfaceFormat::NormalizedByte4)
             return RendererFormatVerdict::Unsupported;
+        // plan_vulkan.md VULKAN-172: and the same refusal for the block-compressed formats, for a
+        // sharper version of the same reason. The framework's width rule reads Dxt1's texel size
+        // as 8 and Dxt3/Dxt5's as 16 -- all multiples of four -- and would admit a `Color`-shaped
+        // transfer over them. Those bytes are BLOCKS, not texels: a `Color*` upload would write
+        // w*h*4 bytes into an image that holds ceil(w/4)*ceil(h/4)*8. Refuse rather than let a
+        // width coincidence decide. **This diverges from EasyGL**, which defers here; the
+        // divergence is deliberate and is recorded in plan_vulkan.md VULKAN-172, because EasyGL
+        // stores these formats through a decode path where a Color transfer has a meaning and this
+        // renderer stores the blocks themselves, where it has none.
+        if (format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+            format == SurfaceFormat::Dxt5)
+            return RendererFormatVerdict::Unsupported;
         return RendererFormatVerdict::Defer;
+    }
+
+    bool VulkanRenderer::IsCompressedTransferFormatEXT(int surfaceFormat) const
+    {
+        // plan_vulkan.md VULKAN-172: true for exactly what the storage table claims as blocks on
+        // THIS device, so the transfer route a caller takes and the storage it lands in are one
+        // answer rather than two that could drift. A device without textureCompressionBC claims
+        // nothing here, and Texture2D then refuses the format at construction rather than
+        // accepting blocks it has nowhere to put.
+        VulkanSurfaceFormatStorageEXT storage{};
+        return MapSurfaceFormatToStorageEXT(surfaceFormat, storage) && storage.blockExtent > 1;
     }
 
     bool VulkanRenderer::SupportsRenderTargetSurfaceFormatEXT(int surfaceFormatOrdinal) const
@@ -2897,6 +2954,13 @@ namespace CNA::Internal::Renderers::Vulkan
         if (supported.occlusionQueryPrecise) {
             feat.occlusionQueryPrecise = VK_TRUE;
             occlusionQueryPreciseSupported_ = true;
+        }
+        // plan_vulkan.md VULKAN-172: BCn formats may not be used at all unless this feature is
+        // ENABLED, not merely reported -- an image created in VK_FORMAT_BC1_RGBA_UNORM_BLOCK on a
+        // device where it was left false is invalid however encouraging VkFormatProperties looks.
+        if (supported.textureCompressionBC) {
+            feat.textureCompressionBC = VK_TRUE;
+            textureCompressionBCSupported_ = true;
         }
         // plan_vulkan.md VULKAN-179: SurfaceFormat::Bgra4444 is D3DFMT_A4R4G4B4, whose exact
         // Vulkan spelling VK_FORMAT_A4R4G4B4_UNORM_PACK16 came with VK_EXT_4444_formats and is core

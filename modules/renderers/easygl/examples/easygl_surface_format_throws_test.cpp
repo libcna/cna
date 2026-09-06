@@ -239,31 +239,23 @@ protected:
         // needs nothing, and GraphicsProfile.Reach promises the game these formats work -- so the
         // driver decides how they are stored, never whether they are refused.
         //
-        // Guarded rather than asserted because this file is shared with the Vulkan and Bgfx
-        // registrations, which carry no GL profile macro and store no block-compressed content.
-#if defined(CNA_GL_PROFILE_OPENGLES2) || defined(CNA_GL_PROFILE_OPENGLES3) \
- || defined(CNA_GL_PROFILE_OPENGL33)  || defined(CNA_GL_PROFILE_WEBGL1)    \
- || defined(CNA_GL_PROFILE_WEBGL2)
-        expectNoThrow("Texture2D Dxt1", [&]{
+        // It used to say here that this file is shared with the Vulkan and Bgfx registrations,
+        // "which carry no GL profile macro and store no block-compressed content" -- true of Bgfx,
+        // and no longer true of Vulkan.
+        // plan_vulkan.md VULKAN-172: claim-driven, replacing a five-profile GL macro list. EasyGL
+        // accepts these on every profile because its fallback decodes; CNA's Vulkan renderer
+        // stores them natively as BC1/BC2/BC3 and claims them only where the device's
+        // textureCompressionBC feature and the per-format VkFormatProperties both say so. One
+        // question, asked of the renderer, answers for both.
+        expectPerRendererClaim(dev, "Texture2D Dxt1", SurfaceFormat::Dxt1, [&]{
             Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt1);
         });
-        expectNoThrow("Texture2D Dxt3", [&]{
+        expectPerRendererClaim(dev, "Texture2D Dxt3", SurfaceFormat::Dxt3, [&]{
             Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt3);
         });
-        expectNoThrow("Texture2D Dxt5", [&]{
+        expectPerRendererClaim(dev, "Texture2D Dxt5", SurfaceFormat::Dxt5, [&]{
             Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt5);
         });
-#else
-        expectThrows("Texture2D Dxt1", [&]{
-            Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt1);
-        });
-        expectThrows("Texture2D Dxt3", [&]{
-            Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt3);
-        });
-        expectThrows("Texture2D Dxt5", [&]{
-            Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt5);
-        });
-#endif
 #endif
 #if 1
         // REMED-GFX-244, same guard as Bgra5551 above. Bgra4444 had no non-Skia leg at all before

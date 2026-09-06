@@ -196,6 +196,36 @@ protected:
                           "C " + where + ": Supported must construct [" + a.message + "]");
                     if (a.constructed)
                     {
+                        // plan_vulkan.md VULKAN-172: the renderer's storage description must
+                        // agree with the FRAMEWORK'S OWN arithmetic for the same format. This is
+                        // not bookkeeping -- the shared layer sizes every upload with
+                        // Texture::GetFormatSizeEXT and GetBlockSizeSquaredEXT, while this
+                        // renderer sizes its staging buffer and its memcpy from its own table, so
+                        // a disagreement is a buffer OVER-READ rather than a wrong picture. That
+                        // is why it is asserted here and cannot be left to the pixel tests:
+                        // measured, doubling Dxt1's block size to 16 leaves
+                        // Vulkan_DxtFormat at 3/3, because the GPU walks BC1 blocks by the
+                        // VkFormat and only the byte count moves.
+                        {
+                            CNA::Internal::Renderers::Vulkan::VulkanRenderer
+                                ::VulkanSurfaceFormatStorageEXT storage{};
+                            auto* vk = dynamic_cast<
+                                CNA::Internal::Renderers::Vulkan::VulkanRenderer*>(&renderer);
+                            const bool mapped =
+                                vk != nullptr &&
+                                vk->MapSurfaceFormatToStorageEXT(ordinal, storage);
+                            const int frameworkUnitBytes = Texture::GetFormatSizeEXT(nf.format);
+                            const int frameworkBlockSq = Texture::GetBlockSizeSquaredEXT(nf.format);
+                            check(mapped &&
+                                      storage.bytesPerTexel == frameworkUnitBytes &&
+                                      storage.blockExtent * storage.blockExtent == frameworkBlockSq,
+                                  "D2 " + where + ": the storage description agrees with the "
+                                  "framework's own sizing (" +
+                                      std::to_string(storage.bytesPerTexel) + "B x " +
+                                      std::to_string(storage.blockExtent) + "^2 vs " +
+                                      std::to_string(frameworkUnitBytes) + "B x " +
+                                      std::to_string(frameworkBlockSq) + ")");
+                        }
                         // F-11: the texture reports the format it was created with.
                         check(a.reportedFormat == ordinal,
                               "D " + where + ": the texture reports its own format (" +

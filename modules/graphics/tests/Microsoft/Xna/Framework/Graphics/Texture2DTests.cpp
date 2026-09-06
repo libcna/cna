@@ -725,9 +725,18 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
             // REMED-GFX-244: block-compressed content is accepted on every EasyGL profile, since
             // the decode fallback needs no extension -- unlike the packed formats one line up,
             // whose sized storage is ES 3.
+            // plan_vulkan.md VULKAN-172: and on Vulkan, natively as BC1/BC2/BC3 rather than
+            // through a decode -- conditional on VkPhysicalDeviceFeatures.textureCompressionBC,
+            // so derived from the renderer for the same reason Bgra4444 is. Verified by a real
+            // sampled draw of two blocks side by side (Vulkan_DxtFormat).
             || (CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2)
                 && (format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3
                     || format == SurfaceFormat::Dxt5))
+            || (CNA_RENDERER_IS(Vulkan)
+                && (format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3
+                    || format == SurfaceFormat::Dxt5)
+                && gd.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(format)) ==
+                       CNA::Internal::Renderers::RendererFormatVerdict::Supported)
             || (igl && (format == SurfaceFormat::Rg32 || format == SurfaceFormat::Single))
             || (skia && (false
             || format == SurfaceFormat::Bgr565

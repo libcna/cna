@@ -2048,6 +2048,26 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_Swapchain_Sync COMMAND cna_test_vulkan_swapchain_sync
             TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-172: the three block-compressed formats, uploaded as raw 4x4
+        # blocks and sampled in a real draw. Two blocks side by side, so a mis-sized block (8 bytes
+        # for DXT1, 16 for the other two) or a mis-walked block stream shows as a wrong half rather
+        # than as a plausible picture.
+        cna_vulkan_test(cna_test_vulkan_dxt_format
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_dxt_format_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DxtFormat
+            COMMAND cna_test_vulkan_dxt_format
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-172: the DXT1 DDS route through Texture2D::FromStream. It exercises
+        # the loaders' DEFAULT policy, which force-decodes block content to Color -- so it is the
+        # control that the native path above did not change the decode route, not a second test of
+        # the same thing.
+        cna_vulkan_test(cna_test_vulkan_dxt1_texture
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/dxt1_texture_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Dxt1FromStream
+            COMMAND cna_test_vulkan_dxt1_texture
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-174: the two signed-normalized byte formats, sampled in a real
         # draw -- including a NEGATIVE texel, which is what distinguishes SNORM storage from UNORM
         # storage of the same bytes -- plus the Color-shaped-transfer refusal the four-byte-wide
