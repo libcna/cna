@@ -980,6 +980,23 @@ format, so accepting them would mean a texture reporting one format while the GP
 shared permissive default (`WEBGPU-195`), so it and `PickSampleCount()` are one answer instead of
 two.
 
+**A real window resize reconfigures the surface, and only one check can tell** (`WEBGPU-192`).
+When the platform window changes size without anyone calling `GraphicsDevice::Reset()` -- the game
+never touches `PresentationParameters` -- the viewport width follows the window while its height
+stays pinned to `PreferredBackBufferHeight` under the default `FixedHeightDynamicWidth`, and
+`BackBufferWidth`/`BackBufferHeight` deliberately do NOT follow (CNA's confirmed divergence from
+FNA, which would otherwise corrupt the virtual-resolution scaling). `webgpu_real_window_resize_test`
+drives it through `GameWindow::BeginScreenDeviceChange` / `EndScreenDeviceChange` -- public XNA API,
+no windowing-library header, the same call `GraphicsDeviceManager::ApplyChanges()` makes.
+
+The part worth knowing: CNA refreshes the viewport from the reported drawable on **every**
+`Present()`, so every viewport-shaped check passes even on a renderer whose swap chain is still the
+old size. Measured, by making `ConfigureSurface` skip a size change: four of the six checks stayed
+green, including the one for validation errors -- wgpu-native tolerates presenting through a
+stale-size surface rather than reporting it. The check that failed was clearing the resized
+backbuffer and reading the pixel back. On this renderer, "no errors" is not a substitute for looking
+at a pixel.
+
 **A device-loss gate exists and is load-bearing.** `CanBeginDrawEXT()` reports `false` while the
 device is lost (`WEBGPU-181`), and on this pin that is a safety mechanism rather than a convenience:
 `WEBGPU-180` measured that `wgpuSurfaceGetCurrentTexture` on a surface whose device is lost does not
