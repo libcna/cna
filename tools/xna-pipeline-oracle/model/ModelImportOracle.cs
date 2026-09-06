@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-231, XNAPP-240: black-box behaviour oracle for the two
+// plans/plan_xnapipeline_parity.md XNAPP-216, XNAPP-220: black-box behaviour oracle for the two
 // modelling importers, XImporter and FbxImporter, over the corpus in tests/assets/xna40/model.
 //
 // It runs the genuine assemblies and records what they DO. The NodeContent graph each answers is

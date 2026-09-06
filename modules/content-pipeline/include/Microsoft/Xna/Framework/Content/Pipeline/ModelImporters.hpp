@@ -84,4 +84,62 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
     private:
         bool disposed_ = false;
     };
+
+    /**
+     * @brief Reads an Autodesk FBX file into the `NodeContent` graph a `ModelProcessor` consumes.
+     *
+     * Measured against the genuine importer over a corpus written for this repository
+     * (`tests/reference/xna40/model/model-import-oracle.json`, cases `fbx/*`). What it settled,
+     * and what makes FBX and `.x` different in ways nothing would predict:
+     *
+     * * FBX is already right-handed, so **no coordinate is converted** -- positions and normals
+     *   pass through as written, where the `.x` route negates Z.
+     * * **Triangle winding is reversed**: a polygon `0, 1, 2` answers indices `2, 1, 0`.
+     * * **A texture coordinate's V is flipped**: `0.2` answers `0.8`.
+     * * The channel order is normals, then texture coordinates, then colours -- the `.x` route's
+     *   order is normals, colours, then texture coordinates.
+     * * Vertex colours are **not** quantized through eight bits, where the `.x` route's are.
+     * * A material reaches a batch only through a `LayerElementMaterial`, and it keeps the name
+     *   the file gave it, where a `.x` material's name is dropped.
+     *
+     * One recorded divergence, deliberately in CNA's favour: XNA's importer carries FBX SDK
+     * 2011.3.1 and refuses any document of version 7400 or above, which is every FBX a current
+     * tool writes. CNA reads those too. Matching a bundled SDK's age would serve nobody, and the
+     * refusal is measured and recorded rather than assumed away.
+     */
+    class FbxImporter final : public ContentImporter<Graphics::NodeContent>
+    {
+    public:
+        /** @brief .NET full name of this type. */
+        CNAEXT static constexpr std::string_view XnaTypeName =
+            "Microsoft.Xna.Framework.Content.Pipeline.FbxImporter";
+
+        /** @brief Initializes a new importer. */
+        FbxImporter() = default;
+
+        /**
+         * @brief Reads the file.
+         *
+         * @param filename Path to the `.fbx` source.
+         * @param context The importer context; nothing is added to it, as XNA's adds nothing.
+         * @return The node graph, whose root is the file's own model where it has exactly one.
+         * @throws System::IO::FileNotFoundException when the file does not exist, with XNA's own
+         *         sentence naming the path.
+         * @throws InvalidContentException when the file is not a readable FBX, with the sentence
+         *         XNA gives for that kind of failure.
+         */
+        [[nodiscard]] std::shared_ptr<Graphics::NodeContent> Import(
+            const std::string& filename, ContentImporterContext& context) override;
+
+        /**
+         * @brief The descriptor XNA declares on this importer: `.fbx`, processed by
+         *        `ModelProcessor`, with its imported data cached.
+         *
+         * @return The attribute.
+         */
+        CNAEXT [[nodiscard]] static ContentImporterAttribute Attribute();
+
+        /** @brief Returns the type's stable name. */
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const;
+    };
 }

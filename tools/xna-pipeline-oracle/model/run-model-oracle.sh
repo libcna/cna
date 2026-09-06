@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MS-PL
 #
-# plans/plan_xnapipeline_parity.md XNAPP-231, XNAPP-240: run the genuine XNA 4.0 modelling
+# plans/plan_xnapipeline_parity.md XNAPP-216, XNAPP-220: run the genuine XNA 4.0 modelling
 # importers over the synthetic corpus and record the NodeContent graph each answers.
 #
 # XImporter and FBXImporter are mixed-mode assemblies with native loaders inside (D3DX's `.x`

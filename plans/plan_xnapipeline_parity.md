@@ -19,12 +19,15 @@
 > **Task IDs.** `XNAPP-###`, three digits, allocated in phase ranges (§32). Never reuse an ID;
 > never renumber; append new tasks at the tail of their phase or in a new phase.
 >
-> **Status (2026-09-05, session 1).** Phase 0 and Phase 1 are complete: the authoritative
-> inventory exists, is deterministic, and is committed. Every parity percentage below is
-> **0 % until `tools/xna-pipeline-oracle/parity_report.py` says otherwise**; this file quotes
-> that report and never a hand-counted number. Nothing in this plan is verified against a genuine
-> XNA runtime yet; §25 says how that will change, and it *can* change here, because — unlike the
-> container `plan_xnapipeline.md` was written in — this machine has XNA Game Studio 4.0 (§3.2).
+> **Status (2026-09-06, session 2).** The API denominator is closed: **128/128 types, 705/705
+> members, 27/27 enum values, 10/10 importers, 12/12 processors, 47/47 processor properties, and
+> all 18 declared source extensions routed** — `MISSING` 0 and `EXTERNAL_BLOCKED` 0, with
+> `parity_report.py --gate` exiting zero. Every percentage in this file is read off
+> `tools/xna-pipeline-oracle/parity_report.py` and never hand-counted, and two ctests now make
+> that mechanical: the report must be byte for byte a regeneration, and the eighteen-extension
+> matrix must still name every extension the genuine importer attributes declare. What remains is
+> not API but behaviour: §31 says which legs of the input matrix are still unnamed, and §19's
+> targets stand at 1 of 3.
 
 ---
 
@@ -540,16 +543,24 @@ Filled by `parity_report.py` into `docs/xna-content-pipeline-parity-report.md` a
 each phase close. The member denominator the report counts is 705: the inventory's 708 minus the
 3 delegate-plumbing members the report lists separately (§5).
 
-**Current (2026-09-06, after Phases 5–9, `XNAPP-230`, and the five importers a façade can reach):
-types 117/128, members 630/705, enum values 27/27 (closed), importers 5/10, extensions 0/18,
-processors 11/12, properties 46/47, intermediate-serializer features §13 complete against the
-265-case corpus, targets verified 0/3, black-box-verified families 4 (intermediate XML byte for
-byte, including the genuine `XmlImporter`; the graphics content object model against 553
-measurements; the framework's float packing against 68; the audio content model against 35).** The previous plan's routes
-exist and work, but by this plan's definition only XNA-namespaced types with tested behaviour
-count; the input/processor counts stay at zero until a row passes the `IMPLEMENTED+TESTED` bar,
-which requires a fixture, an importer test, a processor test, both output tests and a
-malformed-input test *for that extension*.
+**Current (2026-09-06, session 2): types 128/128, members 705/705, enum values 27/27,
+importers 10/10, processors 12/12, processor properties 47/47, source extensions 18/18 present
+and routed, `MISSING` 0 and `EXTERNAL_BLOCKED` 0.** `parity_report.py --gate`, which fails on any
+`MISSING`, on an unknown map entry and on a status without its required annotation, exits zero.
+
+What that number does and does not say. It says every public type and member of the seven
+assemblies has a named, tested C++ counterpart, that every extension the genuine importer
+attributes declare is read by an importer of CNA's own, and that no row is hiding behind
+`EXTERNAL_BLOCKED`. It does **not** say the input matrix is finished: the eighteen extensions
+stand at `IMPLEMENTED`, not `IMPLEMENTED+TESTED`, because that bar additionally requires a
+source-to-XNB and a source-to-CNB test *for that extension*, and those legs are named in the
+matrix as the work they are. Targets verified stay at 1 of 3 (Windows), and the black-box-verified
+families are now seven: the intermediate XML byte for byte including the genuine `XmlImporter`;
+the graphics content object model against 553 measurements; the framework's float packing against
+68; the audio content model against 35; the texture importer, its three processors, every
+`TextureProcessor` property and every target/profile leg over a committed per-extension corpus;
+the MP3 route's format and duration over twelve files; and both modelling importers, graph for
+graph, over twenty documents.
 
 ---
 
@@ -727,16 +738,17 @@ module) with `src/Xna/`; `ContentSerializer*` descriptors in `modules/content/in
 
 | ID | Task | State |
 |---|---|---|
-| `XNAPP-215` | Dependency audit and choice for a native FBX parser (§26). | [ ] |
-| `XNAPP-216` | `FbxImporter`: hierarchy, transforms, meshes, channels, normals/tangents/UVs/colours, skin weights, animations, materials/textures, coordinate-system and unit conversion as `BuildContent` observably does them. | [ ] |
-| `XNAPP-217` | FBX black-box corpus (CNA-authored/generated, plus permissively licensed) compared per §24. | [ ] |
+| `XNAPP-215` | Dependency audit and choice for a native FBX parser (§26). | [x] **No third-party parser was taken.** The audit's outcome: an FBX document is a node tree in two encodings, and both are readable in about six hundred lines (`CNA::Content::Pipeline::ReadFbxFile`), where a library would have brought its own scene normalization -- triangulation, node merging, unit conversion -- to fight with XNA's, which is the failure mode §26 warns about. The one external thing the binary encoding needs is **zlib**, for the deflated arrays a current exporter writes; it is optional (`find_package(ZLIB QUIET)`), and a compressed array without it is refused by name rather than mis-read. Assimp is used to *write* one fixture, never to read one. |
+| `XNAPP-216` | `FbxImporter`: hierarchy, transforms, meshes, channels, normals/tangents/UVs/colours, skin weights, animations, materials/textures, coordinate-system and unit conversion as `BuildContent` observably does them. | [x] Measured first, and almost every rule differs from the `.x` route's for no reason a reader would predict. **FBX is already right-handed, so nothing is converted** -- positions and normals pass through as written where `.x` negates Z -- and yet **the winding IS reversed**, a polygon `0, 1, 2` answering indices `2, 1, 0`. **A texture coordinate's V is flipped** (`0.2` answers `0.8`), where `.x`'s is not. The channel order is normals, texture coordinates, then colours; `.x`'s is normals, colours, then texture coordinates. A vertex colour is **not** quantized through eight bits; `.x`'s is. A material reaches a batch **only through a `LayerElementMaterial`** -- a `Connect` alone leaves the batch material-less -- and it keeps the name the file gave it, where a `.x` material's name is dropped; and `Opacity` and `Shininess` are **not read at all**, every material answering the SDK's own alpha of 1 and specular power of 20. The three refusals are told apart by content and not by size: a file with no FBX header is the loader's initialization failure at 31 bytes and at 1024 alike, a DirectX `.x` file is `Could not detect file format`, and a document that parses no further is `encountered when importing the scene`. |
+| `XNAPP-218` | Read the FBX versions XNA cannot: its FBX SDK 2011.3.1 refuses every document of version 7400 and above. | [x] **A deliberate divergence, recorded rather than assumed away.** Every current exporter writes 7400 or 7500, and the genuine importer refuses all of them (measured, `fbx/fbx_binary_modern.fbx`); matching a bundled SDK's age would serve nobody. CNA's reader takes the text encoding (which is what a 6.1 document is, and what XNA reads) and the binary record stream alike, with zlib for the deflated arrays and a named refusal without it. |
+| `XNAPP-217` | FBX black-box corpus (CNA-authored/generated, plus permissively licensed) compared per §24. | [x] Six documents in `tests/assets/xna40/model`, written by `make_fbx_fixtures.py` in **FBX 6.1 ASCII** for a measured reason: XNA carries FBX SDK 2011.3.1, and an FBX written by a current tool is version 7400 or 7500, which that SDK refuses. Nothing is third-party: the content is authored here and the container is written here. `XnaFbxImporter` compares each graph for graph against `model-import-oracle.json`, with two documented normalizations -- a triangle is compared as a cycle, because the SDK picks its own starting corner when it triangulates a quad, and every number to a tolerance, because both sides' matrices come out of float trigonometry. |
 
 ### Phase 16 — DirectX `.x` importer
 
 | ID | Task | State |
 |---|---|---|
-| `XNAPP-220` | `.x` text and binary (incl. compressed) parser: templates, `Frame`, `FrameTransformMatrix`, `Mesh`, `MeshNormals`, `MeshTextureCoords`, `MeshVertexColors`, `MeshMaterialList`, `Material`, `TextureFilename`, `SkinWeights`, `XSkinMeshHeader`, `AnimationSet`/`Animation`/`AnimationKey`, `VertexDuplicationIndices`, `DeclData`. | [ ] |
-| `XNAPP-221` | `XImporter` façade (4 members); black-box corpus and comparison. | [ ] |
+| `XNAPP-220` | `.x` text and binary (incl. compressed) parser: templates, `Frame`, `FrameTransformMatrix`, `Mesh`, `MeshNormals`, `MeshTextureCoords`, `MeshVertexColors`, `MeshMaterialList`, `Material`, `TextureFilename`, `SkinWeights`, `XSkinMeshHeader`, `AnimationSet`/`Animation`/`AnimationKey`, `VertexDuplicationIndices`, `DeclData`. | [x] `CNA::Content::Pipeline::ReadDirectXFile`, reading both uncompressed encodings -- the text one and the binary token stream -- into one object tree. `template` blocks are skipped rather than interpreted, because every template this pipeline needs is one of the standard ones whose layout is fixed. **The two compressed encodings, `tzip` and `bzip`, are refused by name** rather than silently mis-read; they are MSZIP, and nothing in the corpus or the samples uses them. `VertexDuplicationIndices` and `DeclData` are read as data and ignored, as the genuine importer's answer shows it ignores them. |
+| `XNAPP-221` | `XImporter` façade (4 members); black-box corpus and comparison. | [x] Fourteen authored documents compared graph for graph against the genuine importer (`model-import-oracle.json`, cases `x/*`). Ten rules came out of the measurement, none of them derivable from the format: **Z is negated** on positions, on normals and on a frame's matrix as the basis change `S M S` -- which needed a fixture written to catch it, because every earlier one had `z = 0` everywhere; a file whose single top-level object is a `Frame` answers **that frame as the root**; each material answers **its own `GeometryContent`** sharing the mesh's positions, with the material's `OpaqueData` written diffuse, specular, emissive, alpha, power, an order that is observable; **a mesh child is ordered before a frame child**, whatever order the file wrote them in; **`SkinWeights` are read only where an `XSkinMeshHeader` declares a skeleton**, and a zero weight is dropped; **vertex colours round-trip through eight bits**, which is why 0.5 comes back as 0.501961; separate rotation, scale and position key lists merge into one matrix track **by interpolation** at the union of their times, not by holding; a tick is **1/4800 of a second** unless `AnimTicksPerSecond` says otherwise, and `Duration` is the last key **truncated to whole milliseconds** while the keys keep full precision; and every animation in a set lands on the **skeleton's root bone** where there is a skeleton and on its own target where there is not. Each refusal carries the D3DX code its kind of failure gets, `E_FAIL` included, for a face naming a vertex the mesh does not have. |
 
 ### Phase 17 — XML importer / intermediate integration
 
@@ -749,7 +761,7 @@ module) with `src/Xna/`; `ContentSerializer*` descriptors in `modules/content/in
 | ID | Task | State |
 |---|---|---|
 | `XNAPP-240` | `.contentproj` parser → canonical build graph (§18 schema); `cna-content build Foo.contentproj`; unknown metadata refused, not guessed. | [ ] |
-| `XNAPP-241` | The four `Tasks` types as `HOST_SUBSTITUTION` rows with the exact mapping of each input/output property. | [ ] |
+| `XNAPP-241` | The four `Tasks` types as `HOST_SUBSTITUTION` rows with the exact mapping of each input/output property. | [x] `BuildContent`, `BuildXact`, `CleanContent` and `GetLastOutputs`, as tasks a caller can drive. Every input property, every output property, the `bool Execute()` contract and XNA's own `CancelEventNameFormat` are reproduced; what is replaced is MSBuild's engine, and the caller takes its role. An `ITaskItem[]` is a `std::vector<TaskItem>`, `TaskItem` being that interface's whole developer-visible contract -- an `ItemSpec` and a case-insensitive metadata table. `BuildContent` builds nothing itself: it translates the item model (`Name`, `Importer`, `Processor`, `Link`, `ProcessorParameters`, in both spellings a `.contentproj` writes) into the canonical coordinator's own build configuration and runs `RunContentCompiler`, which keeps one engine rather than two and forced the piece `XNAPP-240` needs anyway -- a shared table mapping XNA component names to canonical ones, carrying the parameters that make one canonical texture processor behave as `TextureProcessor`, `SpriteTextureProcessor` or `ModelTextureProcessor`. Two refusals matter more than the successes: a project naming a `PipelineAssemblies` item is **refused rather than silently built without its own importers**, and `BuildXact` **validates every `.xap` before** reporting that Microsoft's `XactBld3.exe` is absent. |
 | `XNAPP-242` | Build the public XNA samples' `.contentproj` files (108 available locally) through the parser and record which items route, which need a custom processor, and which fail and why. | [ ] |
 
 ### Phase 19 — target platform and profile parity

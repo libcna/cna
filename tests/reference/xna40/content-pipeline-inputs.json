@@ -108,23 +108,23 @@
     "outputType": "Microsoft.Xna.Framework.Content.Pipeline.Graphics.NodeContent"
    },
    "cna": {
-    "importer": "",
-    "processor": "",
-    "fixture": "",
+    "importer": "Microsoft::Xna::Framework::Content::Pipeline::FbxImporter",
+    "processor": "ModelProcessor",
+    "fixture": "tests/assets/xna40/model/fbx_quad_textured.fbx",
     "tests": {
-     "importer": "",
+     "importer": "XnaFbxImporter.EveryFileAnswersTheGraphXnaAnswers, XnaFbxImporter.AModernBinaryFbxIsReadWhereXnasSdkRefusesIt",
      "processor": "",
      "sourceToXnb": "",
      "sourceToCnb": "",
-     "malformed": "",
+     "malformed": "XnaFbxImporter.RefusalsMatchXna",
      "target": ""
     },
-    "differentialEvidence": "",
-    "windows": "UNVERIFIED",
+    "differentialEvidence": "tests/reference/xna40/model/model-import-oracle.json fbx/*",
+    "windows": "SUPPORTED",
     "windowsPhone": "UNVERIFIED",
     "xbox360": "UNVERIFIED",
-    "status": "MISSING",
-    "note": "FbxImporter: Phase 15. Not written, and not measured."
+    "status": "IMPLEMENTED",
+    "note": "Six corpus files are compared graph for graph against the genuine importer, in FBX 6.1 ASCII because XNA's own SDK refuses every version a current tool writes. CNA also reads the binary encoding, which is a recorded divergence in CNA's favour. The source-to-XNB and source-to-CNB legs are not named yet."
    }
   },
   ".fx": {

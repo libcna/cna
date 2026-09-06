@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xnapipeline_parity.md XNAPP-231, XNAPP-240: the synthetic modelling corpus.
+"""plans/plan_xnapipeline_parity.md XNAPP-216, XNAPP-220: the synthetic modelling corpus.
 
 Text `.x` files written here by hand, so every construct the importer must read appears in a file
 whose exact content is known: a frame hierarchy with transforms, a mesh with normals, texture

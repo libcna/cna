@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-240, XNAPP-241: the DirectX `.x` importer, against the
+// plans/plan_xnapipeline_parity.md XNAPP-220, XNAPP-221: the DirectX `.x` importer, against the
 // graph the genuine one answers for the same committed files.
 //
 // The expectations are tests/reference/xna40/model/model-import-oracle.json, cases `x/*`. The
@@ -11,6 +11,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -495,4 +496,167 @@ TEST(XnaXImporter, DisposeIsIdempotentAndAMissingFileIsTheRuntimesOwnRefusal)
     XImporter another;
     EXPECT_THROW((void)another.Import(Fixture("no_such_model.x").string(), context),
                  System::IO::FileNotFoundException);
+}
+
+// ---- XNAPP-216: the FBX importer -------------------------------------------------------------
+//
+// The same corpus discipline as the .x side, and the same oracle file. What FBX and .x differ on
+// is measured, not inferred: FBX is right-handed so nothing is converted, the winding IS reversed,
+// a texture coordinate's V is flipped, the channel order differs, and a colour is not quantized.
+
+namespace
+{
+    /** @brief The whole graph an FBX import answers, in the oracle's own words. */
+    std::string ImportFbx(const std::string& fixture, ImporterContext& context)
+    {
+        Xna::FbxImporter importer;
+        const std::shared_ptr<Graphics::NodeContent> root =
+            importer.Import(Fixture(fixture).string(), context);
+        std::string text;
+        Describe(text, root, "");
+        std::string dependencies;
+        for (const std::string& one : context.dependencies)
+        {
+            dependencies += (dependencies.empty() ? "" : ",") +
+                            std::filesystem::path(one).filename().string();
+        }
+        return text + "dependencies=[" + dependencies + "] log=[]";
+    }
+
+    /**
+     * @brief The same text with each triangle rotated to start at its lowest corner.
+     *
+     * A triangle is a cycle: (2,1,0), (1,0,2) and (0,2,1) are the same face wound the same way,
+     * and XNA's FBX SDK picks its own starting corner when it triangulates a polygon -- a quad
+     * answers (2,1,0) then (0,3,2) where the fan would give (3,2,0). Rotating both sides is what
+     * makes the comparison about the winding and the vertices rather than about a triangulator's
+     * bookkeeping.
+     */
+    std::string NormalizeTriangles(const std::string& text)
+    {
+        std::vector<std::string> lines;
+        std::istringstream stream(text);
+        std::string line;
+        while (std::getline(stream, line)) { lines.push_back(line); }
+        std::string out;
+        for (std::string& one : lines)
+        {
+            const std::string prefix = "    indices ";
+            if (one.rfind(prefix, 0) != 0)
+            {
+                out += one + "\n";
+                continue;
+            }
+            std::vector<int> indices;
+            std::istringstream values(one.substr(prefix.size()));
+            std::string value;
+            while (std::getline(values, value, ',')) { indices.push_back(std::stoi(value)); }
+            std::string rebuilt;
+            for (std::size_t i = 0; i + 2 < indices.size() + 1 && i + 3 <= indices.size(); i += 3)
+            {
+                std::array<int, 3> triangle{indices[i], indices[i + 1], indices[i + 2]};
+                const std::size_t lowest = static_cast<std::size_t>(
+                    std::min_element(triangle.begin(), triangle.end()) - triangle.begin());
+                for (std::size_t c = 0; c < 3; ++c)
+                {
+                    rebuilt += (rebuilt.empty() ? "" : ",") +
+                               std::to_string(triangle[(lowest + c) % 3]);
+                }
+            }
+            out += prefix + rebuilt + "\n";
+        }
+        return out;
+    }
+}
+
+TEST(XnaFbxImporter, TheAttributeMatchesXna)
+{
+    EXPECT_EQ(Expected("attribute/fbx"),
+              "extensions=[.fbx] displayName=Autodesk FBX - XNA Framework "
+              "defaultProcessor=ModelProcessor cacheImportedData=True");
+    EXPECT_EQ(Xna::FbxImporter::Attribute().getFileExtensionsProperty(),
+              std::vector<std::string>{".fbx"});
+    EXPECT_EQ(Xna::FbxImporter::Attribute().getDisplayNameProperty(), "Autodesk FBX - XNA Framework");
+    EXPECT_EQ(Xna::FbxImporter::Attribute().getDefaultProcessorProperty(), "ModelProcessor");
+    EXPECT_TRUE(Xna::FbxImporter::Attribute().getCacheImportedDataProperty());
+}
+
+TEST(XnaFbxImporter, EveryFileAnswersTheGraphXnaAnswers)
+{
+    for (const std::string& fixture :
+         {"fbx_bare_mesh.fbx", "fbx_hierarchy.fbx", "fbx_oblique.fbx", "fbx_quad_polygon.fbx",
+          "fbx_quad_textured.fbx", "fbx_two_materials.fbx"})
+    {
+        ImporterContext context;
+        ExpectSame(NormalizeTriangles(SortAnimations(ImportFbx(fixture, context))),
+                   NormalizeTriangles(SortAnimations(Expected("fbx/" + fixture))), fixture);
+    }
+}
+
+TEST(XnaFbxImporter, RefusalsMatchXna)
+{
+    for (const std::string& fixture : {"fbx_empty.fbx", "fbx_not_fbx.fbx", "fbx_not_fbx_large.fbx"})
+    {
+        ImporterContext context;
+        const std::string record = Expected("fbx/" + fixture);
+        ASSERT_EQ(record.rfind("throws InvalidContentException: ", 0), 0u) << fixture;
+        const std::string message = record.substr(std::string("throws InvalidContentException: ").size());
+        Xna::FbxImporter importer;
+        try
+        {
+            (void)importer.Import(Fixture(fixture).string(), context);
+            ADD_FAILURE() << fixture << " was accepted";
+        }
+        catch (const InvalidContentException& error)
+        {
+            EXPECT_EQ(error.getMessageProperty(), message) << fixture;
+        }
+    }
+    // A `.x` handed to the FBX importer is refused for what it is, with its own sentence.
+    {
+        ImporterContext context;
+        Xna::FbxImporter importer;
+        try
+        {
+            (void)importer.Import(Fixture("bare_mesh.x").string(), context);
+            ADD_FAILURE() << "a .x file was accepted as FBX";
+        }
+        catch (const InvalidContentException& error)
+        {
+            EXPECT_EQ("throws InvalidContentException: " + error.getMessageProperty(),
+                      Expected("fbx/an_x_file"));
+        }
+    }
+    // A missing file is the runtime's own refusal, and XNA's sentence names the path.
+    {
+        ImporterContext context;
+        Xna::FbxImporter importer;
+        EXPECT_NE(Expected("fbx/missing.fbx").find("Cannot import the specified mesh."),
+                  std::string::npos);
+        EXPECT_THROW((void)importer.Import(Fixture("no_such_model.fbx").string(), context),
+                     System::IO::FileNotFoundException);
+    }
+}
+
+// XNA's own SDK refuses a modern FBX; CNA reads one. The divergence is deliberate and measured.
+TEST(XnaFbxImporter, AModernBinaryFbxIsReadWhereXnasSdkRefusesIt)
+{
+    // The genuine importer's answer for this exact file is recorded, and it is a refusal: its FBX
+    // SDK 2011.3.1 does not read version 7500, which is what every current exporter writes.
+    EXPECT_NE(Expected("fbx/fbx_binary_modern.fbx").find("encountered when importing the scene"),
+              std::string::npos)
+        << "the recorded divergence assumes XNA refuses this file";
+
+    ImporterContext context;
+    Xna::FbxImporter importer;
+    const std::shared_ptr<Graphics::NodeContent> root =
+        importer.Import(Fixture("fbx_binary_modern.fbx").string(), context);
+    ASSERT_NE(root, nullptr);
+    // The document is the two-material quad, written binary with deflated arrays, so reading it
+    // exercises the record stream, the property types and the decompression at once.
+    std::string text;
+    Describe(text, root, "");
+    EXPECT_NE(text.find("MeshContent"), std::string::npos) << text;
+    EXPECT_NE(text.find("position 0 "), std::string::npos) << text;
+    EXPECT_NE(text.find("channel Normal0"), std::string::npos) << text;
 }

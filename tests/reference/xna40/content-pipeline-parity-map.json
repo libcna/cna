@@ -601,20 +601,20 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.FbxImporter": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::FbxImporter",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/ModelImporters.hpp",
+   "note": "the node graph is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). Measured against the genuine importer over a corpus written for this repository (tests/reference/xna40/model, cases fbx/*). One recorded divergence, deliberately in CNA's favour: XNA carries FBX SDK 2011.3.1 and refuses every document of version 7400 or above -- which is every FBX a current tool writes -- and CNA reads those too.",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "FbxImporter()",
      "note": ""
     },
     "method:Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Import(const std::string&, ContentImporterContext&) -> std::shared_ptr<NodeContent>",
+     "note": "the graph is answered by shared pointer. Every measured behaviour is reproduced, including the ones that differ from the .x route for no reason a reader would predict: FBX is right-handed so no coordinate is converted; triangle winding IS reversed; a texture coordinate's V is flipped; the channel order is normals, texture coordinates, then colours; a vertex colour is not quantized through eight bits; a material reaches a batch only through a LayerElementMaterial and keeps its own name; and Opacity and Shininess are not read at all, a material answering the SDK's defaults of alpha 1 and specular power 20. The three refusals are told apart as XNA tells them apart: a file with no FBX header at all is the loader's initialization failure at 31 bytes and at 1024 alike, a DirectX .x file is \"Could not detect file format\", and a document that parses no further is \"encountered when importing the scene\"."
     }
    }
   },

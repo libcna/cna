@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-261: the four MSBuild tasks, as tasks a caller can drive.
+// plans/plan_xnapipeline_parity.md XNAPP-241: the four MSBuild tasks, as tasks a caller can drive.
 //
 // These are HOST_SUBSTITUTION rows, and the substitution is worth stating precisely: every input
 // property, every output property and the `bool Execute()` contract are reproduced, and what is
@@ -62,7 +62,7 @@ namespace
     {
     public:
         explicit Project(const std::string& name)
-            : root_(std::filesystem::temp_directory_path() / ("cna_xnapp261_" + name))
+            : root_(std::filesystem::temp_directory_path() / ("cna_xnapp241_" + name))
         {
             std::filesystem::remove_all(root_);
             std::filesystem::create_directories(Source());

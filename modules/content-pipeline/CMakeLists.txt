@@ -82,6 +82,23 @@ else()
 endif()
 set(CNA_BUILD_MEDIA_AVAILABLE ${CNA_BUILD_MEDIA_AVAILABLE} PARENT_SCOPE)
 
+# plans/plan_xnapipeline_parity.md XNAPP-216: zlib, for the FBX binary encoding.
+#
+# A binary FBX stores its long arrays deflated, so a reader without zlib can read the record
+# stream and not the vertices. Optional rather than required: without it a compressed array is
+# refused with a sentence saying so, and a text FBX -- which is what XNA's own SDK reads -- needs
+# nothing. Build-time only, like everything else this module links.
+find_package(ZLIB QUIET)
+if(ZLIB_FOUND)
+    target_compile_definitions(cna_content_pipeline PRIVATE CNA_HAVE_ZLIB=1)
+    target_link_libraries(cna_content_pipeline PRIVATE ZLIB::ZLIB)
+    message(STATUS "CNA: FBX binary arrays enabled (zlib ${ZLIB_VERSION_STRING})")
+else()
+    message(STATUS
+        "CNA: FBX binary arrays disabled (no zlib); a compressed FBX array reports that this "
+        "configuration cannot decompress it")
+endif()
+
 # plans/plan_xnapipeline.md XNAP-A5: the effect compiler's configure-time tier.
 #
 # EffectCompilerService reads CNA_FXC_EXECUTABLE / CNA_FXC_LAUNCHER as compile definitions, and
