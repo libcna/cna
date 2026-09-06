@@ -2471,6 +2471,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-024: the six shared limit/profile defaults against what this
+        # physical device actually reports -- a default that promises more than the device
+        # can do fails a leg, with both numbers printed.
+        cna_vulkan_test(cna_test_vulkan_profile_limits_audit
+                        vulkan_profile_limits_audit_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_ProfileLimitsAudit
+            COMMAND cna_test_vulkan_profile_limits_audit
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-213: the three render-target lifetime shapes the existing four
         # lifetime tests do not reach -- disposal with work still queued, in three arrangements.
         cna_vulkan_test(cna_test_vulkan_rendertarget_lifetime_shapes

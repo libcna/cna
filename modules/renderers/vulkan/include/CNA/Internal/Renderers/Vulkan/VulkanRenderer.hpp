@@ -2263,6 +2263,20 @@ namespace CNA::Internal::Renderers::Vulkan
         {
             return surfaceInfo_;
         }
+        /**
+         * @brief plan_vulkan.md VULKAN-024: this physical device's reported limits, read-only.
+         *
+         * The shared `IGraphicsRenderer` defaults for the profile ceilings and for
+         * `GetMaxTextureDimension()` are constants chosen to match what real hardware
+         * reports. Whether they match THIS device is a question only the device can
+         * answer, and answering it by reading is not the same as answering it by asking.
+         *
+         * @return The `VkPhysicalDeviceLimits` captured at device selection.
+         */
+        CNAEXT [[nodiscard]] const VkPhysicalDeviceLimits& GetDeviceLimitsEXT() const noexcept
+        {
+            return deviceLimits_;
+        }
         /** @brief Count of distinct swapchain image indices an acquire has returned. */
         CNAEXT [[nodiscard]] int GetDistinctAcquiredImageCountEXT() const noexcept;
         /** @brief Count of distinct frame slots a submit has used. */
