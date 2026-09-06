@@ -241,6 +241,18 @@ namespace CNA::Internal::Renderers::Vulkan
     class VulkanRenderTargetRenderer : public IRenderTargetRenderer, public IVulkanSamplable
     {
     public:
+        /**
+         * @brief Reports this target's depth/stencil format in XNA's vocabulary.
+         *
+         * plans/plan_vulkan.md `VULKAN-348`. Unlike the back buffer, a render target honours a
+         * `DepthFormat::None` request -- its `depthVkFormat_` stays `VK_FORMAT_UNDEFINED` -- so
+         * the mapping reports `None` for it without a special case.
+         *
+         * @param requestedDepthStencilFormat Ignored; the applied format is what is reported.
+         * @return The applied `DepthFormat` ordinal.
+         */
+        [[nodiscard]] int GetAppliedDepthStencilFormatEXT(
+            int requestedDepthStencilFormat) const override;
         // Task 911: `depthFormat` (raw Microsoft::Xna::Framework::Graphics::DepthFormat ordinal)
         // gives this instance true per-RT DepthStencilFormat fidelity -- a real, distinct
         // VkFormat picked via PickDepthFormat() (or no depth attachment at all for
@@ -1545,6 +1557,27 @@ namespace CNA::Internal::Renderers::Vulkan
             (void)requestedMultiSampleCount;
             return GetMultiSampleCount();
         }
+        /**
+         * @brief Reports the back-buffer format actually in effect, ignoring the request.
+         *
+         * plans/plan_vulkan.md `VULKAN-348`. The swapchain takes what the surface offers, never
+         * the requested `SurfaceFormat`, and this renderer accepts `Color` and nothing else.
+         *
+         * @param requestedFormat Ignored.
+         * @return `SurfaceFormat::Color`'s ordinal.
+         */
+        [[nodiscard]] int GetAppliedBackBufferFormatEXT(int requestedFormat) const override;
+        /**
+         * @brief Reports the back-buffer depth/stencil format actually in effect.
+         *
+         * plans/plan_vulkan.md `VULKAN-348`. Answered from the format `CreateDepthResources`
+         * chose, not from the request — the same way `SupportsCapability(StencilBuffer)` already
+         * answers, and the same way `VULKAN-347` settled the sample count.
+         *
+         * @param requestedDepthStencilFormat Ignored.
+         * @return The applied `DepthFormat` ordinal.
+         */
+        [[nodiscard]] int GetAppliedDepthStencilFormatEXT(int requestedDepthStencilFormat) const override;
         // REMED-GFX-091 test diagnostic: total graphics-pipeline cache entries. BlendFactor's
         // RGBA value is dynamic and must never increase this count; only static state does.
         [[nodiscard]] std::size_t GetGraphicsPipelineCacheEntryCountEXT() const noexcept

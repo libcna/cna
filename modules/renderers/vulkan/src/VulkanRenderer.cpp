@@ -4391,6 +4391,28 @@ namespace CNA::Internal::Renderers::Vulkan
     // Depth buffer resources
     // =========================================================================
 
+    // plan_vulkan.md VULKAN-348: the reverse of the two depth pickers, in XNA's vocabulary.
+    //
+    // XNA has four DepthFormat values and Vulkan offers more shapes than that, so two rows below
+    // are lossy on purpose and say which way they round: a 32-bit depth format reports as the
+    // nearest XNA name that agrees about the STENCIL plane, because that is the property a caller
+    // can act on -- DepthStencilState.StencilEnable either works or it does not. Precision has no
+    // XNA enumerator to be precise with.
+    static int XnaDepthFormatFromVkFormatEXT(VkFormat fmt) noexcept
+    {
+        using Microsoft::Xna::Framework::Graphics::DepthFormat;
+        switch (fmt) {
+            case VK_FORMAT_UNDEFINED:              return static_cast<int>(DepthFormat::None);
+            case VK_FORMAT_D16_UNORM:              return static_cast<int>(DepthFormat::Depth16);
+            case VK_FORMAT_X8_D24_UNORM_PACK32:    return static_cast<int>(DepthFormat::Depth24);
+            case VK_FORMAT_D32_SFLOAT:             return static_cast<int>(DepthFormat::Depth24);
+            case VK_FORMAT_D16_UNORM_S8_UINT:      return static_cast<int>(DepthFormat::Depth24Stencil8);
+            case VK_FORMAT_D24_UNORM_S8_UINT:      return static_cast<int>(DepthFormat::Depth24Stencil8);
+            case VK_FORMAT_D32_SFLOAT_S8_UINT:     return static_cast<int>(DepthFormat::Depth24Stencil8);
+            default:                               return static_cast<int>(DepthFormat::None);
+        }
+    }
+
     VkFormat VulkanRenderer::FindDepthFormat() const
     {
         // Task 870: stencil-capable formats must be preferred FIRST. Every backbuffer/RT depth
@@ -11286,6 +11308,34 @@ namespace CNA::Internal::Renderers::Vulkan
         vkDeviceWaitIdle(device_);
     }
 
+    int VulkanRenderer::GetAppliedBackBufferFormatEXT(int requestedFormat) const
+    {
+        // plan_vulkan.md VULKAN-348. The argument is deliberately unused, exactly as in
+        // GetAppliedMultiSampleCountEXT and for the same reason: both call sites use the answer as
+        // a write-back of what is really in effect. The swapchain takes what the surface offers
+        // (CreateSwapchain prefers B8G8R8A8_UNORM), never the requested SurfaceFormat, and this
+        // renderer accepts SurfaceFormat::Color and nothing else -- so Color is not a fallback
+        // here, it is the only answer the swapchain can produce.
+        (void)requestedFormat;
+        return static_cast<int>(Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color);
+    }
+
+    int VulkanRenderer::GetAppliedDepthStencilFormatEXT(int requestedDepthStencilFormat) const
+    {
+        // VULKAN-348. Answered from depthFormat_ -- the format CreateDepthResources really chose
+        // -- and not from the request, following the two precedents already in this renderer:
+        // SupportsCapability(StencilBuffer) reads the same member for the same reason, and
+        // VULKAN-347 settled the identical question for the sample count.
+        //
+        // Consequence worth knowing rather than discovering: CreateDepthResources calls
+        // FindDepthFormat() unconditionally, so the backbuffer always HAS a depth buffer. A game
+        // that asked for DepthFormat::None is therefore told the format it actually got, because
+        // reporting None would describe a buffer that exists as absent -- and the capability
+        // query already reports true for it.
+        (void)requestedDepthStencilFormat;
+        return XnaDepthFormatFromVkFormatEXT(depthFormat_);
+    }
+
     int VulkanRenderer::GetMultiSampleCount() const
     {
         return SampleCountToInt(sampleCount_);
@@ -14472,6 +14522,13 @@ namespace CNA::Internal::Renderers::Vulkan
         if (image_       != VK_NULL_HANDLE) { r.images.push_back(image_);          image_       = VK_NULL_HANDLE; }
         if (memory_      != VK_NULL_HANDLE) { r.memories.push_back(memory_);        memory_      = VK_NULL_HANDLE; }
         owner_->RetireResources(std::move(r));
+    }
+
+    int VulkanRenderTargetRenderer::GetAppliedDepthStencilFormatEXT(int requested) const
+    {
+        // plan_vulkan.md VULKAN-348: what this target really has, not what was asked for.
+        (void)requested;
+        return XnaDepthFormatFromVkFormatEXT(depthVkFormat_);
     }
 
     void VulkanRenderTargetCubeRenderer::BindAsRenderTargetFace(int face)

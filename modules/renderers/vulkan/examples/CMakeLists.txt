@@ -98,6 +98,12 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_DrawInstanced_3Instances COMMAND cna_test_vulkan_instanced
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-348: the stored back-buffer and depth formats must be the applied ones
+        cna_vulkan_test(cna_test_vulkan_applied_formats
+                        vulkan_applied_formats_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_AppliedFormats COMMAND cna_test_vulkan_applied_formats
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-396: what the per-one-time-command vkQueueWaitIdle costs, measured
         cna_vulkan_test(cna_test_vulkan_one_time_command_cost
                         vulkan_one_time_command_cost_test.cpp)
