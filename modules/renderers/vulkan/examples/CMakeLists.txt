@@ -2048,6 +2048,16 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_Swapchain_Sync COMMAND cna_test_vulkan_swapchain_sync
             TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-175: the Texture3D partial-box WRITE. Vulkan already proves the
+        # readback half (Vulkan_Texture3D_PartialBox_Readback, the sibling source registered above);
+        # the write half -- vkCmdCopyBufferToImage with a sub-imageOffset/imageExtent -- was checked
+        # by code inspection only, per docs/texture3d-texturecube-support.md:56.
+        cna_vulkan_test(cna_test_vulkan_texture3d_partial_box
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_texture3d_partial_box_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Texture3D_PartialBox
+            COMMAND cna_test_vulkan_texture3d_partial_box
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-172: the three block-compressed formats, uploaded as raw 4x4
         # blocks and sampled in a real draw. Two blocks side by side, so a mis-sized block (8 bytes
         # for DXT1, 16 for the other two) or a mis-walked block stream shows as a wrong half rather
