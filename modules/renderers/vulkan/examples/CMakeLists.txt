@@ -2083,6 +2083,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_bound_resource_dispose
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-095: MultiSampleCount changed on a LIVE device. Vulkan-owned rather
+        # than a registration of easygl_msaa_change_test.cpp, because that source asserts EasyGL's
+        # own limit -- that the count cannot change post-construction -- which is false here.
+        cna_vulkan_test(cna_test_vulkan_msaa_runtime_change vulkan_msaa_runtime_change_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_MsaaRuntimeChange
+            COMMAND cna_test_vulkan_msaa_runtime_change
+            TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         cna_vulkan_test(cna_test_vulkan_disposed_texture_eviction
                         vulkan_disposed_texture_eviction_test.cpp)
         cna_register_renderer_test(NAME Vulkan_DisposedTextureEviction
