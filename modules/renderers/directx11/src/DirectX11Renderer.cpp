@@ -700,8 +700,50 @@ namespace CNA::Internal::Renderers::DirectX11
 
     void DirectX11Renderer::ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy)
     {
-        if (slot < 0 || slot >= D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT) return;
-        auto sampler = samplerCache_.GetOrCreate(device_.Get(), filter, addressU, addressV, maxAnisotropy);
+        if (slot < 0 || slot >= kMaxSamplerSlotsEXT) return;
+        samplerFilter_[slot] = filter;
+        samplerAddressU_[slot] = addressU;
+        samplerAddressV_[slot] = addressV;
+        samplerMaxAnisotropy_[slot] = maxAnisotropy;
+        // plans/plan_dx.md DX-216: XNA applies SamplerState as one object, so ApplySamplerState is also the
+        // point at which the W axis and the mip controls revert to their defaults unless the caller
+        // sets them again -- GraphicsDevice calls ApplySamplerAddressW/ApplySamplerMipState right
+        // after this for a state that carries non-default values. Resetting them here is what makes
+        // a slot's sampler state a state rather than an accumulation of every value ever set on it.
+        samplerAddressW_[slot] = addressV;
+        samplerMaxMipLevel_[slot] = 0;
+        samplerLodBias_[slot] = 0.0f;
+        RebindSamplerEXT(slot);
+    }
+
+    void DirectX11Renderer::ApplySamplerMipState(int slot, int maxMipLevel, float lodBias)
+    {
+        // DX-216: SamplerState.MaxMipLevel and MipMapLevelOfDetailBias. Tracked per slot exactly as
+        // the fields above, and applied by rebuilding this slot's sampler -- D3D11 bakes all of it
+        // into one immutable ID3D11SamplerState, so there is nothing finer-grained to set.
+        if (slot < 0 || slot >= kMaxSamplerSlotsEXT) return;
+        samplerMaxMipLevel_[slot] = maxMipLevel;
+        samplerLodBias_[slot] = lodBias;
+        RebindSamplerEXT(slot);
+    }
+
+    void DirectX11Renderer::ApplySamplerAddressW(int slot, int addressW)
+    {
+        // DX-216: the third addressing axis, which decides how a Texture3D sampled by a
+        // ShaderEffect wraps on W. Until this override existed the cache mirrored AddressV, which
+        // the interface documentation explicitly calls out as the thing a renderer must not do.
+        if (slot < 0 || slot >= kMaxSamplerSlotsEXT) return;
+        samplerAddressW_[slot] = addressW;
+        RebindSamplerEXT(slot);
+    }
+
+    void DirectX11Renderer::RebindSamplerEXT(int slot)
+    {
+        if (slot < 0 || slot >= kMaxSamplerSlotsEXT || !device_ || !context_) return;
+        auto sampler = samplerCache_.GetOrCreate(
+            device_.Get(), samplerFilter_[slot], samplerAddressU_[slot], samplerAddressV_[slot],
+            samplerMaxAnisotropy_[slot], samplerAddressW_[slot], samplerMaxMipLevel_[slot],
+            samplerLodBias_[slot]);
         ID3D11SamplerState* raw = sampler.Get();
         context_->PSSetSamplers(static_cast<UINT>(slot), 1, &raw);
     }

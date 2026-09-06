@@ -166,6 +166,9 @@ namespace CNA::Internal::Renderers::DirectX12
             currentSamplerAddressU_[i] = 0;
             currentSamplerAddressV_[i] = 0;
             currentSamplerMaxAnisotropy_[i] = 4;
+            currentSamplerAddressW_[i] = 0;      // plans/plan_dx.md DX-216
+            currentSamplerMaxMipLevel_[i] = 0;
+            currentSamplerLodBias_[i] = 0.0f;
         }
 
         CreateDeviceResources();
@@ -626,6 +629,9 @@ namespace CNA::Internal::Renderers::DirectX12
         const std::uint32_t index = samplerCache_.GetOrCreateIndex(
             currentSamplerFilter_[slot], currentSamplerAddressU_[slot],
             currentSamplerAddressV_[slot], currentSamplerMaxAnisotropy_[slot],
+            // plans/plan_dx.md DX-216: the three fields the cache used to drop.
+            currentSamplerAddressW_[slot], currentSamplerMaxMipLevel_[slot],
+            currentSamplerLodBias_[slot],
             [this](const D3D12_SAMPLER_DESC& desc)
             {
                 const std::uint32_t idx = heaps_->sampler.Allocate();
@@ -644,6 +650,32 @@ namespace CNA::Internal::Renderers::DirectX12
         currentSamplerAddressU_[slot] = addressU;
         currentSamplerAddressV_[slot] = addressV;
         currentSamplerMaxAnisotropy_[slot] = maxAnisotropy;
+        // plans/plan_dx.md DX-216: XNA applies SamplerState as one object, so this is also where the W axis
+        // and the mip controls revert to their defaults unless the caller sets them again --
+        // GraphicsDevice calls ApplySamplerAddressW/ApplySamplerMipState straight after this for a
+        // state that carries non-default values. Without the reset a slot would accumulate every
+        // value ever set on it rather than holding a state.
+        currentSamplerAddressW_[slot] = addressV;
+        currentSamplerMaxMipLevel_[slot] = 0;
+        currentSamplerLodBias_[slot] = 0.0f;
+    }
+
+    void DirectX12Renderer::ApplySamplerMipState(int slot, int maxMipLevel, float lodBias)
+    {
+        // DX-216: SamplerState.MaxMipLevel and MipMapLevelOfDetailBias, tracked per slot exactly
+        // like the fields above. The sampler descriptor itself is rebuilt lazily by
+        // GetSamplerGpuHandleEXT() on the next draw, so nothing is created here.
+        if (slot < 0 || slot >= kMaxSamplerSlots) return;
+        currentSamplerMaxMipLevel_[slot] = maxMipLevel;
+        currentSamplerLodBias_[slot] = lodBias;
+    }
+
+    void DirectX12Renderer::ApplySamplerAddressW(int slot, int addressW)
+    {
+        // DX-216: the third addressing axis, which decides how a Texture3D sampled by a
+        // ShaderEffect wraps on W.
+        if (slot < 0 || slot >= kMaxSamplerSlots) return;
+        currentSamplerAddressW_[slot] = addressW;
     }
 
     void DirectX12Renderer::ExecuteCommandListAndWaitEXT(ID3D12CommandList* commandList)

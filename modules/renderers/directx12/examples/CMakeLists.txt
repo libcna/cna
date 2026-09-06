@@ -296,6 +296,11 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12")
     cna_directx12_register(DirectX12_PrimitiveTypeValidation
                            cna_test_directx12_primitivetype_validation 300)
 
+    # plans/plan_dx.md DX-216: the same renderer-neutral sampler-state conformance fixture D3D11 runs.
+    cna_directx12_test(cna_test_directx12_sampler_conformance
+                       ${CMAKE_SOURCE_DIR}/modules/renderers/fna3d/examples/fna3d_sampler_test.cpp)
+    cna_directx12_register(DirectX12_SamplerConformance cna_test_directx12_sampler_conformance 300)
+
     # plans/plan_dx.md DX-207: a real DRAW into a multisampled RenderTarget2D, which is the thing a
     # hardcoded SampleDesc.Count = 1 in every pipeline state made illegal. The fixture is
     # differential -- the same triangle into a non-MSAA and an MSAA target -- so it cannot pass by

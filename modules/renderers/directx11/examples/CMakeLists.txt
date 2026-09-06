@@ -512,6 +512,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
     cna_register_renderer_test(NAME DirectX11_PrimitiveTypeValidation COMMAND ${_directx11_prim_valid_cmd}
         TIMEOUT 60 LABELS "DIRECTX11")
 
+    # plans/plan_dx.md DX-216: the renderer-neutral sampler-state conformance fixture (filter, per-axis
+    # addressing including W, anisotropy, and the LOD controls). Registered on both D3D renderers so
+    # the shared sampler-cache change is judged against one oracle.
+    cna_directx11_test(cna_test_directx11_sampler_conformance
+                       ${CMAKE_SOURCE_DIR}/modules/renderers/fna3d/examples/fna3d_sampler_test.cpp)
+    cna_directx11_ctest_command(_directx11_sampler_conf_cmd cna_test_directx11_sampler_conformance)
+    cna_register_renderer_test(NAME DirectX11_SamplerConformance COMMAND ${_directx11_sampler_conf_cmd}
+        TIMEOUT 60 LABELS "DIRECTX11")
+
     # plans/plan_dx.md DX-207: the D3D11 control for the MSAA-draw oracle. D3D11 has no PSO/sample-count
     # coupling, so this is expected to pass here and its result is what the D3D12 leg is judged
     # against.

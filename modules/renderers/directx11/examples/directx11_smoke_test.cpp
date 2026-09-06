@@ -589,13 +589,29 @@ protected:
         // exercise the renderer's own ApplySamplerState() (PSSetSamplers wiring) end-to-end.
         {
             D3D11SamplerCache cache;
-            auto s1 = cache.GetOrCreate(device, 0, 0, 0, 1);
-            auto s2 = cache.GetOrCreate(device, 0, 0, 0, 1);
-            auto s3 = cache.GetOrCreate(device, 2, 1, 1, 4);
+            auto s1 = cache.GetOrCreate(device, 0, 0, 0, 1, 0, 0, 0.0f);
+            auto s2 = cache.GetOrCreate(device, 0, 0, 0, 1, 0, 0, 0.0f);
+            auto s3 = cache.GetOrCreate(device, 2, 1, 1, 4, 1, 0, 0.0f);
             check(s1 != nullptr && s1.Get() == s2.Get() && s3 != nullptr && s3.Get() != s1.Get() &&
                       cache.GetCacheSizeEXT() == 2,
                   "D3D11SamplerCache: caches identical XNA-level state, creates a distinct object for different state");
+            // plans/plan_dx.md DX-216: the three fields the cache used to drop must each be part of the key
+            // on their own -- a key that ignores one silently hands back another state's sampler.
+            auto sW    = cache.GetOrCreate(device, 0, 0, 0, 1, 1, 0, 0.0f);
+            auto sMip  = cache.GetOrCreate(device, 0, 0, 0, 1, 0, 2, 0.0f);
+            auto sBias = cache.GetOrCreate(device, 0, 0, 0, 1, 0, 0, -1.5f);
+            check(sW.Get() != s1.Get() && sMip.Get() != s1.Get() && sBias.Get() != s1.Get() &&
+                      sW.Get() != sMip.Get() && sW.Get() != sBias.Get() && sMip.Get() != sBias.Get() &&
+                      cache.GetCacheSizeEXT() == 5,
+                  "D3D11SamplerCache: AddressW, MaxMipLevel and MipMapLevelOfDetailBias each key a "
+                  "DISTINCT sampler -- none of the three collides with the base state or with each "
+                  "other (plans/plan_dx.md DX-216)");
             renderer.ApplySamplerState(0, 0, 0, 0, 1);
+            renderer.ApplySamplerMipState(0, 1, -0.5f);
+            renderer.ApplySamplerAddressW(0, 1);
+            check(true,
+                  "DirectX11Renderer::ApplySamplerMipState/ApplySamplerAddressW are real overrides and "
+                  "rebind the slot's sampler without throwing (plans/plan_dx.md DX-216)");
         }
 
         // Check M (DX-47): a real ID3D11Query(D3D11_QUERY_OCCLUSION) completes and reports data.
@@ -3767,7 +3783,8 @@ protected:
                                 + 3 /* Task 1107 SkinnedEffect PreferPerPixelLighting */
                                 + 9 /* REMED-GFX-077 ColorWriteChannels/MultiSampleMask */
                                 + 1 /* REMED-GFX-061 fog false->true->false */
-                                + 1 /* plans/plan_dx.md DX-212 ExecutesShaderEffectSourceEXT */;
+                                + 1 /* plans/plan_dx.md DX-212 ExecutesShaderEffectSourceEXT */
+                                + 2 /* plans/plan_dx.md DX-216 sampler mip/addressW */;
         std::printf("=== %d/%d PASS ===\n", passCount_, totalChecks);
         result_ = (passCount_ == totalChecks) ? 0 : 1;
         Exit();

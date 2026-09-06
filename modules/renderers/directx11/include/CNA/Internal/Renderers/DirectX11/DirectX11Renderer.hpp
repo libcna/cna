@@ -121,6 +121,13 @@ namespace CNA::Internal::Renderers::DirectX11
         /// therefore finalized (MSAA resolve + mip regeneration) when the binding changes.
         void SetRenderTargetCubeFace(IRenderTargetCubeRenderer* rt, int face) override;
         void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
+        /// plans/plan_dx.md DX-216: SamplerState.MaxMipLevel (XNA's MOST DETAILED level index, i.e. D3D's
+        /// MinLOD) and MipMapLevelOfDetailBias (MipLODBias). Tracked per slot and applied by
+        /// rebuilding that slot's ID3D11SamplerState, which is the only granularity D3D11 offers.
+        void ApplySamplerMipState(int slot, int maxMipLevel, float lodBias) override;
+        /// DX-216: SamplerState.AddressW. The cache used to mirror AddressV, which the interface
+        /// documentation names as the one thing a renderer that has not implemented W must not do.
+        void ApplySamplerAddressW(int slot, int addressW) override;
         std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() override;
 
         // ---- IGraphicsRenderer: real (Phase DIRECTX8, DX-58 -- custom ShaderEffect) ----
@@ -288,6 +295,21 @@ namespace CNA::Internal::Renderers::DirectX11
 
         // Phase DIRECTX6 (DX-44): sampler-state cache shared by ApplySamplerState().
         D3D11SamplerCache samplerCache_;
+        /// DX-216: the XNA-level SamplerState this renderer last applied per slot. D3D11 bakes the
+        /// whole state into one immutable sampler object, so a change to any single field means
+        /// rebuilding that slot's sampler from all of them -- which needs all of them remembered.
+        /// Defaults match SamplerState::LinearWrap plus XNA's own MaxMipLevel = 0 / bias = 0.
+        static constexpr int kMaxSamplerSlotsEXT = 16;
+        int samplerFilter_[kMaxSamplerSlotsEXT] = {};
+        int samplerAddressU_[kMaxSamplerSlotsEXT] = {};
+        int samplerAddressV_[kMaxSamplerSlotsEXT] = {};
+        int samplerAddressW_[kMaxSamplerSlotsEXT] = {};
+        int samplerMaxAnisotropy_[kMaxSamplerSlotsEXT] = {4, 4, 4, 4, 4, 4, 4, 4,
+                                                         4, 4, 4, 4, 4, 4, 4, 4};
+        int samplerMaxMipLevel_[kMaxSamplerSlotsEXT] = {};
+        float samplerLodBias_[kMaxSamplerSlotsEXT] = {};
+        /// Rebuilds and binds slot @p slot's sampler from the tracked fields above.
+        void RebindSamplerEXT(int slot);
 
         // Phase DIRECTX7 (DX-50/DX-51/DX-52): blend/depth-stencil/rasterizer state caches, plus the
         // currently-bound state objects and the two standalone-settable values (blend factor,

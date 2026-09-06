@@ -216,6 +216,13 @@ namespace CNA::Internal::Renderers::DirectX12
         /// (harmless, no-op) but never consumed by any draw.
         void ApplySamplerState(int slot, int filter, int addressU, int addressV,
                                int maxAnisotropy) override;
+        /// plans/plan_dx.md DX-216: SamplerState.MaxMipLevel (XNA's MOST DETAILED level index, i.e. D3D's
+        /// MinLOD) and MipMapLevelOfDetailBias (MipLODBias), tracked per slot; the sampler
+        /// descriptor is rebuilt lazily by GetSamplerGpuHandleEXT() on the next draw.
+        void ApplySamplerMipState(int slot, int maxMipLevel, float lodBias) override;
+        /// DX-216: SamplerState.AddressW -- previously mirrored from AddressV, which the interface
+        /// documentation names as the one thing a renderer without W support must not do.
+        void ApplySamplerAddressW(int slot, int addressW) override;
         /// REMED-GFX-064: real, runtime-settable GraphicsDevice.Viewport. Stores the sub-region
         /// viewport rect + depth range; every draw path re-records its own command list fresh
         /// (immediate-per-draw model), so each RSSetViewports site simply reads the stored value
@@ -712,6 +719,12 @@ namespace CNA::Internal::Renderers::DirectX12
         int currentSamplerAddressU_[kMaxSamplerSlots];
         int currentSamplerAddressV_[kMaxSamplerSlots];
         int currentSamplerMaxAnisotropy_[kMaxSamplerSlots];
+        // plans/plan_dx.md DX-216: the three SamplerState fields the cache used to drop. Defaults match
+        // XNA's own -- MaxMipLevel 0 is the most detailed level and bias 0 is no shift; AddressW
+        // starts at Wrap, the same value AddressU/AddressV start at.
+        int currentSamplerAddressW_[kMaxSamplerSlots];
+        int currentSamplerMaxMipLevel_[kMaxSamplerSlots];
+        float currentSamplerLodBias_[kMaxSamplerSlots];
 
         // DX-104: per-frame command allocators + one reused direct command list.
         ComPtr<ID3D12CommandAllocator> commandAllocators_[kFramesInFlight];
