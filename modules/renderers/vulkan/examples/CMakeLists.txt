@@ -2431,6 +2431,29 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-303: glTF alpha blending, transmission ordering and
+        # base-colour factor x texture. Transmission ordering is a DRAW-ORDER property, and this
+        # renderer's command model is deferred -- every batch and 3D draw is recorded and replayed
+        # at Present -- so it is the one of the three that a shared-code argument could not settle.
+        cna_vulkan_test(cna_test_vulkan_gltf_alpha_blend
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_gltf_alpha_blend_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Gltf_AlphaBlend
+            COMMAND cna_test_vulkan_gltf_alpha_blend
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_gltf_transmission_ordering
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_gltf_transmission_ordering_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Gltf_TransmissionOrdering
+            COMMAND cna_test_vulkan_gltf_transmission_ordering
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_gltf_basecolor_factor_texture
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_gltf_basecolor_factor_texture_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Gltf_BaseColorFactorTexture
+            COMMAND cna_test_vulkan_gltf_basecolor_factor_texture
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-339: the release path that also runs vkDeviceWaitIdle and the
         # retirement lists. HasRenderer() must be false after the first Dispose and no second
         # release may be attempted.
