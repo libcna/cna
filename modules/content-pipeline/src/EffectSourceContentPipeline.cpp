@@ -447,6 +447,16 @@ namespace CNA::Content::Pipeline
         const ImportedEffectSource& source = input.Get<ImportedEffectSource>();
         const ContentProcessorParameters& parameters = context.Parameters();
 
+        // Windows Phone 7 has a fixed-function graphics stack: no game may ship a shader of its
+        // own, and XNA refuses the asset at build time in exactly these words rather than letting
+        // a project discover it on a device (measured, `phone/fx_minimal` and `phone/fx_sampler`
+        // in the differential corpus, plans/plan_xnapipeline_parity.md XNAPP-251).
+        if (context.Environment().targetPlatform == ContentTargetPlatform::WindowsPhone)
+        {
+            throw ContentLoadException(
+                "The Windows Phone platform does not support custom shaders.");
+        }
+
         if (!compiler_->Available())
         {
             throw ContentLoadException("'" + source.source.filename().string() + "': " +

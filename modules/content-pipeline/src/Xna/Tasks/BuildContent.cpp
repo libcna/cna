@@ -440,6 +440,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
             // translation lives in one place so this task and the .contentproj reader cannot
             // disagree about what a name means.
             std::vector<std::pair<std::string, std::string>> parameters;
+            std::vector<std::pair<std::string, std::string>> parameterNames;
             const std::string importerName = asset.GetMetadata("Importer");
             if (!importerName.empty())
             {
@@ -492,6 +493,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
                     // The defaults that make the canonical processor behave as the named XNA one;
                     // the project's own ProcessorParameters are appended after and win.
                     parameters = mapping.defaults;
+                    parameterNames = mapping.parameterNames;
                 }
             }
             // Both spellings a content project uses: one packed metadata value, and one metadata
@@ -530,6 +532,56 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
                         { return TaskDetail::EqualsIgnoringCase(entry.first, name); });
                     if (found == effectiveOrder.end()) { effectiveOrder.emplace_back(name, value); }
                     else { found->second = value; }
+                }
+                // XNA's own spelling for a parameter the canonical processor names differently
+                // becomes the canonical one. Done after the merge so a project's value is the one
+                // that survives, and before the write so the processor sees a name it knows: an
+                // unrecognised parameter is only a warning, which means a `PremultiplyAlpha` left
+                // untranslated would be dropped and silently replaced by the default.
+                for (const auto& [xnaName, canonicalName] : parameterNames)
+                {
+                    const auto found = std::find_if(
+                        effectiveOrder.begin(), effectiveOrder.end(),
+                        [&xnaName](const std::pair<std::string, std::string>& entry)
+                        { return TaskDetail::EqualsIgnoringCase(entry.first, xnaName); });
+                    if (found == effectiveOrder.end()) { continue; }
+                    const std::string value = found->second;
+                    effectiveOrder.erase(found);
+                    const auto existing = std::find_if(
+                        effectiveOrder.begin(), effectiveOrder.end(),
+                        [&canonicalName](const std::pair<std::string, std::string>& entry)
+                        { return TaskDetail::EqualsIgnoringCase(entry.first, canonicalName); });
+                    if (existing == effectiveOrder.end())
+                    {
+                        effectiveOrder.emplace_back(canonicalName, value);
+                    }
+                    else
+                    {
+                        existing->second = value;
+                    }
+                }
+                // `ColorKeyEnabled` is the half of XNA's colour-key pair the canonical processor
+                // does not have: there, a colour key is on exactly when one is named. So the
+                // project's boolean decides whether the colour survives at all, and the name
+                // itself never reaches a processor (plans/plan_xnapipeline_parity.md XNAPP-251).
+                const auto colorKeyEnabled = std::find_if(
+                    effectiveOrder.begin(), effectiveOrder.end(),
+                    [](const std::pair<std::string, std::string>& entry)
+                    { return TaskDetail::EqualsIgnoringCase(entry.first, "ColorKeyEnabled"); });
+                if (colorKeyEnabled != effectiveOrder.end())
+                {
+                    const bool keyed = TaskDetail::EqualsIgnoringCase(colorKeyEnabled->second,
+                                                                      "true");
+                    effectiveOrder.erase(colorKeyEnabled);
+                    if (!keyed)
+                    {
+                        std::erase_if(effectiveOrder,
+                                      [](const std::pair<std::string, std::string>& entry)
+                                      {
+                                          return TaskDetail::EqualsIgnoringCase(entry.first,
+                                                                                "colorKey");
+                                      });
+                    }
                 }
                 std::map<std::string, std::string> effective;
                 for (const auto& [name, value] : effectiveOrder) { effective[name] = value; }

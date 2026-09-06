@@ -235,6 +235,36 @@
       "paths": [
         "root/digest"
       ]
+    },
+    {
+      "case": "phone_font_description",
+      "reason": "Two rasterizers disagree about a glyph's ink by a pixel. XNA draws through GDI+ and CNA through FreeType, and over the 95 glyphs of this font 40 boxes are identical, 50 are one pixel wider, four are two wider and one is a pixel wider and taller -- never narrower. Everything derived from a glyph's box follows it: its rectangle in the sheet, the cropping rectangle's width, and the compressed pixels. The metrics that decide where text lands do not: the ABC widths are identical for all 95 characters, the cropping origin for 94 of them, and the line spacing exactly (plans/plan_xnapipeline_parity.md XNAPP-182). The cropping rectangle's height is XNA's own and is between one and five pixels more than its line spacing, by an amount no metric in the face predicts: Courier New and Liberation Mono are metrically identical and answer 41 at size 24, where Arial -- whose line height is larger -- answers 40. Eleven builds over four faces were measured and no rule fits them, so CNA writes the line spacing itself. SpriteFont.MeasureString() reports the taller of that and the tallest glyph, so a measured string is up to five pixels shorter here. The space's cropping rectangle is XNA's degenerate one: it has no ink, and XNA's cropper answers a cell at an offset past the bottom of the line (6, 35 in a 24-pixel cell) where CNA answers the origin. Nothing draws it either way.",
+      "paths": [
+        "root/glyphs",
+        "root/cropping",
+        "root/atlas/levelDigests"
+      ]
+    },
+    {
+      "case": "phone_jpg_sprite",
+      "reason": "Two conformant JPEG decoders disagree within an IDCT's tolerance. XNA decodes through D3DX and CNA through stb_image; the pixels differ by a few units and neither is wrong. Already recorded for the per-extension differential, which compares JPEG pixels within a tolerance rather than exactly (XNAPP-167).",
+      "paths": [
+        "root/levelDigests"
+      ]
+    },
+    {
+      "case": "phone_png_texture_dxt",
+      "reason": "Block compression is lossy and every encoder chooses its endpoints differently. XNA compresses through D3DX; CNA through its own encoder. The dimensions, mip count, format and level sizes agree -- only the compressed bytes differ, which is what two DXT encoders always do.",
+      "paths": [
+        "root/levelDigests"
+      ]
+    },
+    {
+      "case": "phone_png_texture_mipmaps",
+      "reason": "Every level below the first differs, and only those: the two builds agree texel for texel on level 0 and on the whole of a 2x2 source's chain, so the source, the colour key and the premultiplication all agree and what is left is the filter that halves an image. XNA reduces a 4x4 to 2x2 as (80, 71, 17, 211) where an area average of the four texels underneath is (72, 72, 8, 207), which is what CNA writes -- so XNA's kernel reaches beyond the block it is producing, and one 4x4 image is far too little to say what it is. Identifying it needs a fixture built for the purpose (plans/plan_xnapipeline_parity.md XNAPP-254).",
+      "paths": [
+        "root/levelDigests"
+      ]
     }
   ]
 }

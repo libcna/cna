@@ -56,6 +56,25 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
         std::string obsoleteMessage;
 
         /**
+         * @brief XNA's parameter names and the canonical component's names for the same thing.
+         *
+         * Only needed where an XNA component maps onto a canonical one that spells its parameters
+         * differently, which today is the three texture processors: XNA writes `PremultiplyAlpha`
+         * and `ColorKeyColor` where the canonical processor reads `premultiplyAlpha` and
+         * `colorKey`. Without the translation a project's own value reaches a processor that has
+         * never heard of it, and -- since XNA warns rather than fails for an unknown parameter --
+         * is dropped with a warning and silently replaced by a default
+         * (plans/plan_xnapipeline_parity.md XNAPP-251).
+         *
+         * Matched without regard to case, as MSBuild matches metadata. A name whose two spellings
+         * differ only in case needs no entry; the merge already keeps the canonical one.
+         *
+         * Placed after @ref obsoleteMessage so that the tables' plain positional entries, which
+         * name only the first three fields, keep meaning what they did.
+         */
+        std::vector<std::pair<std::string, std::string>> parameterNames;
+
+        /**
          * @brief Whether XNA itself defines a component of this name.
          *
          * Not the same question as whether @ref canonicalName is empty, and the difference is a

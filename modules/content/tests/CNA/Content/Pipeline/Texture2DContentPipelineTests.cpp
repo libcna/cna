@@ -302,35 +302,49 @@ TEST(Texture2DContentPipelineTest, ColorKeyPolicyMatchesTheUnchangedProducerExac
 
     // premultiplyAlpha is pinned off here on purpose: this contract is about the colour-key
     // policy converging with the unchanged producer, and the unchanged producer has no
-    // premultiplication step at all (XNAP-96). The default's own effect on a keyed texel --
-    // transparent black, which is what XNA 4.0 produces -- is asserted separately below.
+    // premultiplication step at all (XNAP-96).
+    //
+    // It converges on *which* texels are keyed and no longer on what is left in them. XNA writes
+    // transparent black -- the colour goes with the alpha -- and the pre-pipeline producer keeps
+    // the colour, which is invisible while premultiplication is on and shows the moment it is
+    // turned off. Measured on the genuine build (`texture/png4x4_no_premultiply` in the
+    // differential corpus, plans/plan_xnapipeline_parity.md XNAPP-251), and the pipeline follows
+    // XNA. So the byte-for-byte comparison below is against a producer told not to key at all,
+    // and the keyed texel is asserted directly.
     Pipeline::ContentProcessorParameters parameters;
     parameters.Set(Pipeline::TextureColorKeyParameter, std::string("200,100,50"));
     parameters.Set(Pipeline::TexturePremultiplyAlphaParameter, false);
     const Pipeline::ContentBuildResult result = BuildTexture(scratch.Path(), parameters);
 
-    Cnb::CnbImageImportOptions oldOptions;
-    oldOptions.colorKey = std::array<std::uint8_t, 3>{200u, 100u, 50u};
-    const std::vector<std::uint8_t> oldLibraryBytes = Cnb::EncodeTexture2DToCnb(
-        Cnb::ImportImageAsCnbTexture2D(source.string(), oldOptions), "Textures/wall");
-    EXPECT_EQ(result.output.bytes, oldLibraryBytes);
-
     const Cnb::CnbTextureData decoded = Cnb::DecodeTexture2DFromCnb(
         Cnb::CnbDocument::Parse(result.output.bytes, "keyed pipeline wall.cnb"));
     ASSERT_FALSE(decoded.representations.empty());
     ASSERT_FALSE(decoded.representations[0].levels.empty());
-    EXPECT_EQ(decoded.representations[0].levels[0][0], 200u);
-    EXPECT_EQ(decoded.representations[0].levels[0][1], 100u);
-    EXPECT_EQ(decoded.representations[0].levels[0][2], 50u);
+    EXPECT_EQ(decoded.representations[0].levels[0][0], 0u);
+    EXPECT_EQ(decoded.representations[0].levels[0][1], 0u);
+    EXPECT_EQ(decoded.representations[0].levels[0][2], 0u);
     EXPECT_EQ(decoded.representations[0].levels[0][3], 0u);
 
-#if !defined(_WIN32)
-    const std::filesystem::path oldToolOutput = scratch.Path() / "old-tool-keyed.cnb";
-    ASSERT_EQ(RunSourceTool({source.string(), oldToolOutput.string(), "--name", "Textures/wall",
-                             "--color-key", "200,100,50"}),
-              0);
-    EXPECT_EQ(result.output.bytes, ReadBytes(oldToolOutput));
-#endif
+    // Every other texel is the unchanged producer's, byte for byte: the divergence is the keyed
+    // texel and nothing else. Compared against a producer told not to key, since the two disagree
+    // about exactly the texels a key names.
+    Pipeline::ContentProcessorParameters unkeyed;
+    unkeyed.Set(Pipeline::TexturePremultiplyAlphaParameter, false);
+    const Pipeline::ContentBuildResult plain = BuildTexture(scratch.Path(), unkeyed);
+    const std::vector<std::uint8_t> oldLibraryBytes = Cnb::EncodeTexture2DToCnb(
+        Cnb::ImportImageAsCnbTexture2D(source.string(), Cnb::CnbImageImportOptions{}),
+        "Textures/wall");
+    EXPECT_EQ(plain.output.bytes, oldLibraryBytes);
+
+    const Cnb::CnbTextureData plainDecoded = Cnb::DecodeTexture2DFromCnb(
+        Cnb::CnbDocument::Parse(plain.output.bytes, "unkeyed pipeline wall.cnb"));
+    ASSERT_FALSE(plainDecoded.representations.empty());
+    for (std::size_t texel = 4u; texel < plainDecoded.representations[0].levels[0].size(); ++texel)
+    {
+        EXPECT_EQ(plainDecoded.representations[0].levels[0][texel],
+                  decoded.representations[0].levels[0][texel])
+            << "texel byte " << texel << " changed, and only the keyed texel should have";
+    }
 }
 
 TEST(Texture2DContentPipelineTest, ResultLoadsThroughTheExistingContentManagerRuntimePath)
@@ -370,7 +384,7 @@ TEST(Texture2DContentPipelineTest, RejectsUnknownMistypedAndMalformedProcessorPa
              {Pipeline::TextureColorKeyParameter, std::uint64_t{1u}},
              {Pipeline::TextureColorKeyParameter, std::string("1,2")},
              {Pipeline::TextureColorKeyParameter, std::string("1,2,256")},
-             {Pipeline::TextureColorKeyParameter, std::string("1,2,3,4")}})
+             {Pipeline::TextureColorKeyParameter, std::string("1,2,3,4,5")}})
     {
         Pipeline::ContentProcessorParameters parameters;
         parameters.Set(name, value);

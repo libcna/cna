@@ -39,25 +39,44 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
         {
             // The three texture processors are one canonical processor with three sets of
             // defaults; the values are the measured ones (parity report, processor-default table).
+            // `colorKey` is XNA's `ColorKeyEnabled`/`ColorKeyColor` pair, whose measured defaults
+            // are True and magenta for all three (`processor/TextureProcessor` and its two
+            // siblings in the graphics oracle). The canonical processor expresses the pair as one
+            // optional parameter -- present means keyed -- so the mapping supplies the colour and
+            // the absence of it is what "disabled" means. Without this an XNA-named build left
+            // every magenta texel opaque where XNA turns it transparent
+            // (plans/plan_xnapipeline_parity.md XNAPP-251).
             static const std::map<std::string, XnaComponentMapping> map = {
                 {"TextureProcessor",
-                 {"CNA.TextureProcessor",
-                  {{"generateMipmaps", "false"}, {"textureFormat", "Color"}},
-                  ""}},
+                 {.canonicalName = "CNA.TextureProcessor",
+                  .defaults = {{"generateMipmaps", "false"}, {"textureFormat", "Color"},
+                               {"colorKey", "255,0,255"}},
+                  .parameterNames = {{"ColorKeyColor", "colorKey"},
+                                     {"PremultiplyAlpha", "premultiplyAlpha"},
+                                     {"ResizeToPowerOfTwo", "resizeToPowerOfTwo"}},
+                  }},
                 {"SpriteTextureProcessor",
                  {.canonicalName = "CNA.TextureProcessor",
-                  .defaults = {{"generateMipmaps", "false"}, {"textureFormat", "Color"}},
+                  .defaults = {{"generateMipmaps", "false"}, {"textureFormat", "Color"},
+                               {"colorKey", "255,0,255"}},
                   .obsoleteMessage =
                       "SpriteTextureProcessor is obsolete, and may be removed in a future "
                       "version. TextureProcessor (Texture - XNA Framework) should be used "
-                      "instead."}},
+                      "instead.",
+                  .parameterNames = {{"ColorKeyColor", "colorKey"},
+                                     {"PremultiplyAlpha", "premultiplyAlpha"},
+                                     {"ResizeToPowerOfTwo", "resizeToPowerOfTwo"}}}},
                 {"ModelTextureProcessor",
                  {.canonicalName = "CNA.TextureProcessor",
-                  .defaults = {{"generateMipmaps", "true"}, {"textureFormat", "DxtCompressed"}},
+                  .defaults = {{"generateMipmaps", "true"}, {"textureFormat", "DxtCompressed"},
+                               {"colorKey", "255,0,255"}},
                   .obsoleteMessage =
                       "ModelTextureProcessor is obsolete, and may be removed in a future "
                       "version. TextureProcessor (Texture - XNA Framework) should be used "
-                      "instead."}},
+                      "instead.",
+                  .parameterNames = {{"ColorKeyColor", "colorKey"},
+                                     {"PremultiplyAlpha", "premultiplyAlpha"},
+                                     {"ResizeToPowerOfTwo", "resizeToPowerOfTwo"}}}},
                 {"FontDescriptionProcessor", {"CNA.FontDescriptionProcessor", {}, ""}},
                 // The XNA model processor, not the glTF one: an XNA project's models are
                 // `.x` and `.fbx` files, and those import to XNA's own scene graph. The

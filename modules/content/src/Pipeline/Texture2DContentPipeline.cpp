@@ -263,23 +263,33 @@ namespace CNA::Content::Pipeline
             return static_cast<std::uint8_t>(value);
         }
 
-        std::array<std::uint8_t, 3> ParseColorKey(const std::string& text)
+        std::array<std::uint8_t, 4> ParseColorKey(const std::string& text)
         {
-            std::array<std::uint8_t, 3> result{};
+            // Three components or four. XNA's own `ColorKeyColor` is a Color and a `.contentproj`
+            // writes all four of them, so a build that only accepted `R,G,B` refused every project
+            // that named a key at all (plans/plan_xnapipeline_parity.md XNAPP-251). Written with
+            // three, the alpha is 255, which is the only value an opaque source has.
+            std::vector<std::string_view> components;
             std::size_t start = 0u;
-            for (std::size_t component = 0u; component < result.size(); ++component)
+            while (true)
             {
                 const std::size_t comma = text.find(',', start);
-                if ((component + 1u == result.size()) != (comma == std::string::npos))
-                {
-                    throw std::invalid_argument(
-                        "TextureProcessor parameter 'colorKey' must contain exactly three "
-                        "components in R,G,B form.");
-                }
                 const std::size_t end = comma == std::string::npos ? text.size() : comma;
-                result[component] =
-                    ParseColorComponent(std::string_view(text).substr(start, end - start));
+                components.push_back(std::string_view(text).substr(start, end - start));
+                if (comma == std::string::npos) { break; }
                 start = end + 1u;
+            }
+            if (components.size() != 3u && components.size() != 4u)
+            {
+                throw ContentParameterError(
+                    ContentParameterFault::UnconvertibleValue, TextureColorKeyParameter,
+                    "TextureProcessor parameter 'colorKey' must contain three or four components "
+                    "in R,G,B or R,G,B,A form.");
+            }
+            std::array<std::uint8_t, 4> result{0u, 0u, 0u, 255u};
+            for (std::size_t component = 0u; component < components.size(); ++component)
+            {
+                result[component] = ParseColorComponent(components[component]);
             }
             return result;
         }
@@ -376,7 +386,7 @@ namespace CNA::Content::Pipeline
             return CNA::Internal::Graphics::ImageLoader::LoadFromMemory(bytes.data(), bytes.size());
         }
 
-        std::optional<std::array<std::uint8_t, 3>> ReadColorKey(
+        std::optional<std::array<std::uint8_t, 4>> ReadColorKey(
             const ContentProcessorParameters& parameters)
         {
             const ContentProcessorParameterValue* value =
@@ -536,8 +546,12 @@ namespace CNA::Content::Pipeline
             if (alpha == 255u) { continue; }
             for (std::size_t channel = 0; channel < 3u; ++channel)
             {
+                // Truncated, not rounded. XNA's own pipeline answers 23 for a channel of 30 at
+                // alpha 200 where rounding answers 24, and the difference reaches every texel of
+                // every partially transparent texture (measured: `phone/png_texture` in the
+                // differential corpus, plans/plan_xnapipeline_parity.md XNAPP-251).
                 rgba[texel + channel] = static_cast<std::uint8_t>(
-                    (static_cast<std::uint32_t>(rgba[texel + channel]) * alpha + 127u) / 255u);
+                    (static_cast<std::uint32_t>(rgba[texel + channel]) * alpha) / 255u);
             }
         }
     }
@@ -661,18 +675,41 @@ namespace CNA::Content::Pipeline
         // Premultiplication precedes mip generation because averaging colours that have not been
         // multiplied by their own alpha mixes the colour of invisible texels into visible ones,
         // which is what produces dark or bright halos around cut-out edges in a distant mip.
-        std::optional<std::array<std::uint8_t, 3>> colorKey = ReadColorKey(parameters);
-        if (!colorKey.has_value()) { colorKey = image.authoredColorKey; }
+        // A key the *build* asked for is XNA's and clears the colour with the alpha; a key a
+        // `.cnj` authored is CNA's own and keeps it. The two really do differ, and the difference
+        // is invisible until premultiplication is turned off. XNA's rule is measured
+        // (`texture/png4x4_no_premultiply`, plans/plan_xnapipeline_parity.md XNAPP-251); the
+        // authored one is what every existing `.cnj` already compiles to, and changing that would
+        // change what a committed document means (plans/plan_xnapipeline.md XNAP-96).
+        std::optional<std::array<std::uint8_t, 4>> colorKey = ReadColorKey(parameters);
+        bool clearKeyedColor = colorKey.has_value();
+        if (!colorKey.has_value() && image.authoredColorKey.has_value())
+        {
+            const std::array<std::uint8_t, 3>& authored = *image.authoredColorKey;
+            colorKey = std::array<std::uint8_t, 4>{authored[0], authored[1], authored[2], 255u};
+            clearKeyedColor = false;
+        }
         if (colorKey.has_value())
         {
             const auto applyColorKey = [&](std::vector<std::uint8_t>& pixels)
             {
                 for (std::size_t index = 0u; index + 3u < pixels.size(); index += 4u)
                 {
+                    // Three channels, not four. XNA's `ColorKeyColor` is a Color and a project
+                    // writes its alpha, but nothing measured here says whether that alpha takes
+                    // part in the match: every case the corpus has is an opaque key against an
+                    // opaque texel. Comparing it would be a guess, and a guess that stops keying
+                    // texels a build used to key.
                     if (pixels[index] == (*colorKey)[0] &&
                         pixels[index + 1u] == (*colorKey)[1] &&
                         pixels[index + 2u] == (*colorKey)[2])
                     {
+                        if (clearKeyedColor)
+                        {
+                            pixels[index] = 0u;
+                            pixels[index + 1u] = 0u;
+                            pixels[index + 2u] = 0u;
+                        }
                         pixels[index + 3u] = 0u;
                     }
                 }

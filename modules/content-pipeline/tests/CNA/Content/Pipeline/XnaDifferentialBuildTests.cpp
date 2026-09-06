@@ -127,6 +127,8 @@ TEST(XnaDifferentialBuildTest, CnaAcceptsAndRefusesTheSameSourcesXnaDoes)
         {"audio/mp3_song", "XNA's Windows Media encoder never returns under this Wine prefix"},
         {"audio/wma_song", "XNA's Windows Media layer cannot open a WMA under this Wine prefix"},
         {"video/wmv_video", "constructing a VideoContent needs Media Foundation, which Wine lacks"},
+        {"phone/mp3_song", "XNA's Windows Media encoder never returns under this Wine prefix"},
+        {"phone/wmv_video", "constructing a VideoContent needs Media Foundation, which Wine lacks"},
         {"xml/intermediate_passthrough",
          "the .xml route has no canonical importer; the built-in subset is XNAPP-260 work"},
     };
