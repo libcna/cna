@@ -2471,6 +2471,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-058: a SpriteBatch must honour the DepthStencilState its
+        # Begin() installs -- the 2D pipeline used to hardcode it off entirely.
+        cna_vulkan_test(cna_test_vulkan_spritebatch_depthstencil_state
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_depthstencil_state_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SpriteBatch_DepthStencilState
+            COMMAND cna_test_vulkan_spritebatch_depthstencil_state
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-137: a zero-element VertexBuffer/IndexBuffer. Vulkan pads the
         # allocation to max(1, size) because vkCreateBuffer rejects 0; the padding must be invisible
         # from the public API, and the validation half is the VULKAN-408 output gate's.

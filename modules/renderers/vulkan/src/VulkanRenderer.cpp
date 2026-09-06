@@ -1408,7 +1408,11 @@ namespace CNA::Internal::Renderers::Vulkan
                 : renderer_->depthFormat_;
             preparedCustomPipeline = customEffectRenderer_->GetOrCreatePipeline(
                 colorAttachmentCount, samples, depthFormat,
-                renderer_->blendEnabled_, renderer_->blendParams_);
+                renderer_->blendEnabled_, renderer_->blendParams_,
+                // VULKAN-058: the same DepthStencilState the snapshot below captures, so a custom
+                // effect's sprites are masked exactly as the built-in ones are.
+                renderer_->dsParams_, renderer_->depthTestEnabled_,
+                renderer_->depthWriteEnabled_);
         }
 
         // Task 664 fix: move this cycle's geometry into its own independent, frame-lifetime
@@ -1458,6 +1462,16 @@ namespace CNA::Internal::Renderers::Vulkan
             // this renderer's Begin(), so renderer_->blendEnabled_/blendParams_ are this batch's.
             snapshot->blendEnabled = renderer_->blendEnabled_;
             snapshot->blendParams  = renderer_->blendParams_;
+            // plan_vulkan.md VULKAN-058: the batch's DepthStencilState, by value, for the same
+            // reason as the BlendState above. SpriteBatch::Begin applies one on every call (a null
+            // argument resolves to DepthStencilState::None), so this is always the state the
+            // caller asked for and never a leftover from someone else's 3D rendering.
+            snapshot->depthTestEnabled  = renderer_->depthTestEnabled_;
+            snapshot->depthWriteEnabled = renderer_->depthWriteEnabled_;
+            snapshot->dsParams          = renderer_->dsParams_;
+            snapshot->stencilReadMask   = static_cast<uint32_t>(renderer_->stencilReadMask_);
+            snapshot->stencilWriteMask  = static_cast<uint32_t>(renderer_->stencilWriteMask_);
+            snapshot->referenceStencil  = static_cast<uint32_t>(renderer_->referenceStencil_);
             // REMED-GFX-129: `order` is taken HERE, at End(), which is where the batch enters the
             // frame's command stream -- an ordered Clear() issued between Begin() and End() would
             // belong before it, and SpriteBatch has no way to interleave with one anyway.
@@ -4639,18 +4653,32 @@ namespace CNA::Internal::Renderers::Vulkan
     static void FillBlendAttachmentState(VkPipelineColorBlendAttachmentState& cba, bool blend,
                                          const BlendKeyParams& bp, int attachmentIndex = 0); // REMED-GFX-077
     static uint64_t FoldDepthFormatIntoKey(uint64_t key, VkFormat depthFmt);
+    // plan_vulkan.md VULKAN-058: the 2D sprite pipelines now build the same depth/stencil state
+    // the 3D ones do, from the same two helpers, so there is exactly one XNA->Vulkan mapping.
+    static uint64_t PackDepthStencilBits(const DepthStencilKeyParams& ds);
+    static void FillDepthStencilState(VkPipelineDepthStencilStateCreateInfo& ds,
+                                      const DepthStencilKeyParams& p);
 
     VkPipeline VulkanRenderer::GetOrCreatePipeline2D(
         VkFormat depthFmt, uint32_t colorAttachmentCount, bool blend,
-        const BlendKeyParams& bp)
+        const BlendKeyParams& bp, const DepthStencilKeyParams& dsParams,
+        bool depthTest, bool depthWrite)
     {
         // REMED-GFX-071: key by (depth format folded + blend-enable bit, packed blend factor/func
         // enums) -- the same PipelineKey shape the 3D caches use. The BlendFactor *value* is dynamic
         // state (GFX-070) and deliberately absent from the key, so it never fragments the cache.
         const uint64_t countBits =
             (static_cast<uint64_t>(std::max(1u, colorAttachmentCount) - 1u) << 1);
+        // plan_vulkan.md VULKAN-058: the batch's DepthStencilState is baked into this pipeline, so
+        // it has to be in the key too. Bit layout mirrors Make3DKey's: bit 0 blend, bits 1-3
+        // attachment count, bit 4 depth test, bit 5 depth write, bits 12-40 the depth/stencil
+        // state. FoldDepthFormatIntoKey uses bits 45+, so nothing collides.
+        const uint64_t stateBits = (blend ? 1ull : 0ull) | countBits
+                                 | (depthTest  ? (1ull << 4) : 0ull)
+                                 | (depthWrite ? (1ull << 5) : 0ull)
+                                 | (PackDepthStencilBits(dsParams) << 12);
         const PipelineKey key = {
-                                  FoldDepthFormatIntoKey((blend ? 1ull : 0ull) | countBits, depthFmt),
+                                  FoldDepthFormatIntoKey(stateBits, depthFmt),
                                   PackBlendBits(blend, bp), PackColorWriteBits(bp), NarrowSampleMaskEXT(bp.sampleMask, 1) };
         auto cached = pipelines2DByDepthFmt_.find(key);
         if (cached != pipelines2DByDepthFmt_.end()) return cached->second;
@@ -4732,12 +4760,18 @@ namespace CNA::Internal::Renderers::Vulkan
 
         // Blend factors/functions are static pipeline state. Only the RGBA constant value is
         // dynamic, and only when this pipeline's normalized equation actually consumes it.
-        VkDynamicState dynStates[3] = {
+        // VULKAN-058: the three stencil values are dynamic here for the same reason they are on
+        // every 3D pipeline -- one pipeline serves every mask and reference, and RecordCommandBuffer
+        // sets all three before each sprite draw regardless of whether the test is on.
+        VkDynamicState dynStates[6] = {
             VK_DYNAMIC_STATE_VIEWPORT,
             VK_DYNAMIC_STATE_SCISSOR,
+            VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
+            VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
+            VK_DYNAMIC_STATE_STENCIL_REFERENCE,
         };
         const uint32_t dynStateCount =
-            AppendBlendConstantsDynamicState(dynStates, 2, blend, bp);
+            AppendBlendConstantsDynamicState(dynStates, 5, blend, bp);
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
         dyn.dynamicStateCount = dynStateCount; dyn.pDynamicStates = dynStates;
@@ -4756,11 +4790,22 @@ namespace CNA::Internal::Renderers::Vulkan
                 throw std::runtime_error("vkCreatePipelineLayout (2D) failed");
         }
 
-        // Depth stencil: disabled for sprites, but required because render pass has depth attachment
+        // plan_vulkan.md VULKAN-058: the batch's real DepthStencilState, through the same
+        // FillDepthStencilState the 3D route uses. This used to be hardcoded off, which made
+        // `SpriteBatch::Begin(..., DepthStencilState, ...)` a no-op on this renderer -- a
+        // stencil-masked sprite covered the whole target here and only the masked part on EasyGL.
+        //
+        // A target with no depth attachment at all (DepthFormat::None) keeps the old answer: there
+        // is nothing to test against, and enabling the test would be a render-pass mismatch rather
+        // than a masked sprite.
         VkPipelineDepthStencilStateCreateInfo ds2d{};
         ds2d.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-        ds2d.depthTestEnable  = VK_FALSE;
-        ds2d.depthWriteEnable = VK_FALSE;
+        const bool hasDepthAttachment2D = (depthFmt != VK_FORMAT_UNDEFINED);
+        ds2d.depthTestEnable  = (hasDepthAttachment2D && depthTest)  ? VK_TRUE : VK_FALSE;
+        ds2d.depthWriteEnable = (hasDepthAttachment2D && depthWrite) ? VK_TRUE : VK_FALSE;
+        if (hasDepthAttachment2D) {
+            FillDepthStencilState(ds2d, dsParams);
+        }
 
         VkGraphicsPipelineCreateInfo pci{};
         pci.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -5031,7 +5076,8 @@ namespace CNA::Internal::Renderers::Vulkan
 
     VkPipeline VulkanRenderer::GetOrCreatePipeline2DMsaa(
         VkFormat depthFmt, uint32_t colorAttachmentCount, bool blend,
-        const BlendKeyParams& bp)
+        const BlendKeyParams& bp, const DepthStencilKeyParams& dsParams,
+        bool depthTest, bool depthWrite)
     {
         // REMED-GFX-071: BlendState-keyed, same as the non-MSAA variant (separate map, so no MSAA
         // bit is needed in the key).
@@ -5041,8 +5087,13 @@ namespace CNA::Internal::Renderers::Vulkan
         // target can carry its own sample count the key has to say which -- otherwise the first
         // MSAA target of a frame decides the sprite pipeline every later one gets.
         const VkSampleCountFlagBits msaaSamples = pipelineSampleCount_;
+        // VULKAN-058: the batch's DepthStencilState, keyed exactly as in the non-MSAA twin.
+        const uint64_t stateBits = (blend ? 1ull : 0ull) | countBits
+                                 | (depthTest  ? (1ull << 4) : 0ull)
+                                 | (depthWrite ? (1ull << 5) : 0ull)
+                                 | (PackDepthStencilBits(dsParams) << 12);
         const PipelineKey key = {
-                                  FoldDepthFormatIntoKey((blend ? 1ull : 0ull) | countBits, depthFmt),
+                                  FoldDepthFormatIntoKey(stateBits, depthFmt),
                                   PackBlendBits(blend, bp), PackColorWriteBits(bp), NarrowSampleMaskEXT(bp.sampleMask, RasterSampleCountEXT(msaaSamples)), 0ull,
                                   static_cast<uint32_t>(RasterSampleCountEXT(msaaSamples)) };
         auto cached = pipelines2DMsaaByDepthFmt_.find(key);
@@ -5115,11 +5166,16 @@ namespace CNA::Internal::Renderers::Vulkan
         cbs.attachmentCount = static_cast<uint32_t>(colorBlendAttachments.size());
         cbs.pAttachments = colorBlendAttachments.data();
 
-        VkDynamicState dynStates[3] = {
+        // VULKAN-058: see the non-MSAA twin -- the three stencil values are dynamic and set
+        // before every sprite draw.
+        VkDynamicState dynStates[6] = {
             VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
+            VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
+            VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
+            VK_DYNAMIC_STATE_STENCIL_REFERENCE,
         };
         const uint32_t dynStateCount =
-            AppendBlendConstantsDynamicState(dynStates, 2, blend, bp);
+            AppendBlendConstantsDynamicState(dynStates, 5, blend, bp);
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
         dyn.dynamicStateCount = dynStateCount; dyn.pDynamicStates = dynStates;
@@ -5136,10 +5192,15 @@ namespace CNA::Internal::Renderers::Vulkan
                 throw std::runtime_error("vkCreatePipelineLayout (2D) failed");
         }
 
+        // VULKAN-058: the batch's real DepthStencilState, see the non-MSAA twin.
         VkPipelineDepthStencilStateCreateInfo ds2d{};
         ds2d.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-        ds2d.depthTestEnable  = VK_FALSE;
-        ds2d.depthWriteEnable = VK_FALSE;
+        const bool hasDepthAttachment2D = (depthFmt != VK_FORMAT_UNDEFINED);
+        ds2d.depthTestEnable  = (hasDepthAttachment2D && depthTest)  ? VK_TRUE : VK_FALSE;
+        ds2d.depthWriteEnable = (hasDepthAttachment2D && depthWrite) ? VK_TRUE : VK_FALSE;
+        if (hasDepthAttachment2D) {
+            FillDepthStencilState(ds2d, dsParams);
+        }
 
         VkGraphicsPipelineCreateInfo pci{};
         pci.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -5297,7 +5358,8 @@ namespace CNA::Internal::Renderers::Vulkan
 
     VkPipeline VulkanEffectRenderer::GetOrCreatePipeline(
         uint32_t colorAttachmentCount, VkSampleCountFlagBits sampleCount,
-        VkFormat depthFormat, bool blend, const BlendKeyParams& blendParams)
+        VkFormat depthFormat, bool blend, const BlendKeyParams& blendParams,
+        const DepthStencilKeyParams& dsParams, bool depthTest, bool depthWrite)
     {
         colorAttachmentCount = std::max(1u, colorAttachmentCount);
         const PipelineVariantKey key{
@@ -5308,6 +5370,9 @@ namespace CNA::Internal::Renderers::Vulkan
             PackBlendBits(blend, blendParams),
             PackColorWriteBits(blendParams),
             NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(sampleCount)),
+            PackDepthStencilBits(dsParams),
+            depthTest,
+            depthWrite,
         };
         auto cached = pipelines_.find(key);
         if (cached != pipelines_.end()) return cached->second;
@@ -5381,21 +5446,34 @@ namespace CNA::Internal::Renderers::Vulkan
         colorBlend.attachmentCount = colorAttachmentCount;
         colorBlend.pAttachments = blendAttachments.data();
 
-        VkDynamicState dynamicStates[3] = {
+        // VULKAN-058: the three stencil dynamic states, for the same reason the built-in 2D
+        // pipelines declare them -- RecordCommandBuffer sets all three before every sprite draw,
+        // and a pipeline bound in that command buffer without declaring them is a validation error
+        // in its own right (VUID: "the related dynamic state commands have been called").
+        VkDynamicState dynamicStates[6] = {
             VK_DYNAMIC_STATE_VIEWPORT,
             VK_DYNAMIC_STATE_SCISSOR,
+            VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
+            VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
+            VK_DYNAMIC_STATE_STENCIL_REFERENCE,
         };
         const uint32_t dynamicStateCount = AppendBlendConstantsDynamicState(
-            dynamicStates, 2, blend, blendParams);
+            dynamicStates, 5, blend, blendParams);
         VkPipelineDynamicStateCreateInfo dynamic{};
         dynamic.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
         dynamic.dynamicStateCount = dynamicStateCount;
         dynamic.pDynamicStates = dynamicStates;
 
+        // VULKAN-058: the batch's real DepthStencilState, same rule as the built-in 2D pipelines.
+        // A target with no depth attachment keeps the old answer -- nothing to test against.
         VkPipelineDepthStencilStateCreateInfo depthStencil{};
         depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-        depthStencil.depthTestEnable = VK_FALSE;
-        depthStencil.depthWriteEnable = VK_FALSE;
+        const bool hasDepthAttachment = (depthFormat != VK_FORMAT_UNDEFINED);
+        depthStencil.depthTestEnable  = (hasDepthAttachment && depthTest)  ? VK_TRUE : VK_FALSE;
+        depthStencil.depthWriteEnable = (hasDepthAttachment && depthWrite) ? VK_TRUE : VK_FALSE;
+        if (hasDepthAttachment) {
+            FillDepthStencilState(depthStencil, dsParams);
+        }
 
         VkGraphicsPipelineCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -10439,13 +10517,19 @@ namespace CNA::Internal::Renderers::Vulkan
                 // predates any BlendState, but SpriteBatch.Begin always applies one).
                 const uint32_t colorAttachmentCount =
                     targetRT ? targetRT->GetColorAttachmentCount() : 1u;
+                // VULKAN-058: the batch's DepthStencilState travels with it, exactly as its
+                // BlendState does, so a stencil-masked or depth-tested SpriteBatch works here.
                 VkPipeline       activePipe   = useMsaaPipe
                     ? GetOrCreatePipeline2DMsaa(
                         targetDepthFmt, colorAttachmentCount,
-                        snapshot->blendEnabled, snapshot->blendParams)
+                        snapshot->blendEnabled, snapshot->blendParams,
+                        snapshot->dsParams, snapshot->depthTestEnabled,
+                        snapshot->depthWriteEnabled)
                     : GetOrCreatePipeline2D(
                         targetDepthFmt, colorAttachmentCount,
-                        snapshot->blendEnabled, snapshot->blendParams);
+                        snapshot->blendEnabled, snapshot->blendParams,
+                        snapshot->dsParams, snapshot->depthTestEnabled,
+                        snapshot->depthWriteEnabled);
                 VkPipelineLayout activeLayout = pipelineLayout2D_;
                 const float*     customPC     = nullptr;
                 // REMED-GFX-075: read the effect's pipeline/layout/push-constants from the batch
@@ -10461,6 +10545,15 @@ namespace CNA::Internal::Renderers::Vulkan
                     vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, activePipe);
                     lastBoundPipeline = activePipe;
                 }
+                // VULKAN-058: both 2D pipelines declare the three stencil dynamic states now, so
+                // all three must be set before the draw whether or not the test is enabled --
+                // the same always-set convention the 3D route follows.
+                vkCmdSetStencilCompareMask(cb, VK_STENCIL_FACE_FRONT_AND_BACK,
+                                           snapshot->stencilReadMask);
+                vkCmdSetStencilWriteMask(cb, VK_STENCIL_FACE_FRONT_AND_BACK,
+                                         snapshot->stencilWriteMask);
+                vkCmdSetStencilReference(cb, VK_STENCIL_FACE_FRONT_AND_BACK,
+                                         snapshot->referenceStencil);
                 VkDeviceSize vbBindOff = vbOff;
                 vkCmdBindVertexBuffers(cb, 0, 1, &spriteVB_[currentFrame_], &vbBindOff);
                 vkCmdBindIndexBuffer(cb, spriteIB_[currentFrame_], ibOff, VK_INDEX_TYPE_UINT16);

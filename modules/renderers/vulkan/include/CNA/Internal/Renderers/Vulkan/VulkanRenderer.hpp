@@ -410,6 +410,27 @@ namespace CNA::Internal::Renderers::Vulkan
     // VulkanEffectRenderer (Task 119 — SPIR-V custom Effect for Vulkan)
     // -------------------------------------------------------------------------
 
+    // plan_vulkan.md VULKAN-058 moved this up from below `PipelineKey`. Two declarations
+    // below now need the COMPLETE type rather than a forward declaration:
+    // `VulkanEffectRenderer::GetOrCreatePipeline` takes one with a `= {}` default, and
+    // `BatchSnapshot` carries one by value. Its contents are unchanged.
+    // plan_vulkan.md VULKAN-058 moved this up from below `PipelineKey`: `BatchSnapshot`
+    // now carries a DepthStencilKeyParams by value, and a SpriteBatch snapshot is declared
+    // long before the pipeline caches are. Its contents are unchanged.
+    struct DepthStencilKeyParams {
+        int  depthFunc            = 3;      // CompareFunction::LessEqual (XNA DepthStencilState.Default)
+        bool stencilEnable        = false;
+        int  stencilFunc          = 0;      // CompareFunction::Always
+        int  stencilFail          = 0;      // StencilOperation::Keep
+        int  stencilDepthFail     = 0;
+        int  stencilPass          = 0;
+        bool twoSidedStencilMode  = false;
+        int  ccwStencilFunc       = 0;
+        int  ccwStencilFail       = 0;
+        int  ccwStencilDepthFail  = 0;
+        int  ccwStencilPass       = 0;
+    };
+
     struct BlendKeyParams;
 
     class VulkanEffectRenderer : public IEffectRenderer
@@ -484,11 +505,19 @@ namespace CNA::Internal::Renderers::Vulkan
         void BindTexture3D(int unit,
                            CNA::Internal::Renderers::ITexture3DRenderer* texture) override;
 
+        /// @param dsParams   plan_vulkan.md VULKAN-058: the batch's DepthStencilState. A custom
+        ///                   effect's sprite pipeline honours it exactly as the built-in one does;
+        ///                   it must, because both are bound in the same command buffer and the
+        ///                   three stencil dynamic states are set before every sprite draw.
+        /// @param depthTest  DepthStencilState.DepthBufferEnable for this batch.
+        /// @param depthWrite DepthStencilState.DepthBufferWriteEnable for this batch.
         VkPipeline GetOrCreatePipeline(uint32_t colorAttachmentCount,
                                        VkSampleCountFlagBits sampleCount,
                                        VkFormat depthFormat,
                                        bool blend,
-                                       const BlendKeyParams& blendParams);
+                                       const BlendKeyParams& blendParams,
+                                       const DepthStencilKeyParams& dsParams = {},
+                                       bool depthTest = false, bool depthWrite = false);
         VkPipelineLayout GetPipelineLayout() const { return pipelineLayout_; }
         // Returns pointer to 128-byte push-constant staging area (floats 2..31 = user uniforms).
         const float*     GetPushConst()      const { return pushConst_;      }
@@ -507,6 +536,12 @@ namespace CNA::Internal::Renderers::Vulkan
             uint32_t blendBits = 0;
             uint32_t colorWriteBits = 0;
             uint32_t sampleMask = 0xFFFFFFFFu;
+            /// VULKAN-058: the batch's DepthStencilState, packed by PackDepthStencilBits, plus the
+            /// two depth enables. Two batches that differ only in their stencil comparison must not
+            /// share one VkPipeline -- it bakes the compare and the ops.
+            uint64_t depthStencilBits = 0;
+            bool depthTestEnable = false;
+            bool depthWriteEnable = false;
             bool operator==(const PipelineVariantKey&) const noexcept = default;
         };
         struct PipelineVariantKeyHash
@@ -670,6 +705,20 @@ namespace CNA::Internal::Renderers::Vulkan
             // overwrites these from the device state SpriteBatch.Begin() always (re-)applies.
             bool                        blendEnabled = false;
             BlendKeyParams              blendParams;
+            // plan_vulkan.md VULKAN-058: the batch's full DepthStencilState, captured at End() by
+            // value for the same reason the BlendState above is -- a state object changed or
+            // destroyed after End() but before the deferred Present record must not be read then.
+            //
+            // Before this row the 2D pipeline hardcoded depthTestEnable = VK_FALSE and no stencil
+            // at all, so `SpriteBatch::Begin(..., DepthStencilState, ...)` was accepted and
+            // discarded: a stencil-masked sprite -- an ordinary XNA idiom -- covered the whole
+            // target here and only the masked part on EasyGL. Measured on both, side by side.
+            bool                        depthTestEnabled  = false;
+            bool                        depthWriteEnabled = false;
+            DepthStencilKeyParams       dsParams;
+            uint32_t                    stencilReadMask   = 0xFFFFFFFFu;
+            uint32_t                    stencilWriteMask  = 0xFFFFFFFFu;
+            uint32_t                    referenceStencil  = 0;
         };
 
     private:
@@ -1359,19 +1408,6 @@ namespace CNA::Internal::Renderers::Vulkan
         }
     };
 
-    struct DepthStencilKeyParams {
-        int  depthFunc            = 3;      // CompareFunction::LessEqual (XNA DepthStencilState.Default)
-        bool stencilEnable        = false;
-        int  stencilFunc          = 0;      // CompareFunction::Always
-        int  stencilFail          = 0;      // StencilOperation::Keep
-        int  stencilDepthFail     = 0;
-        int  stencilPass          = 0;
-        bool twoSidedStencilMode  = false;
-        int  ccwStencilFunc       = 0;
-        int  ccwStencilFail       = 0;
-        int  ccwStencilDepthFail  = 0;
-        int  ccwStencilPass       = 0;
-    };
 
     // -------------------------------------------------------------------------
     // VulkanRenderer
@@ -3479,8 +3515,15 @@ namespace CNA::Internal::Renderers::Vulkan
         // REMED-GFX-071: also parameterized by the batch's BlendState (blend enable + per-channel
         // factors/functions) so SpriteBatch.Begin()'s BlendState drives the colour-attachment blend
         // equation via FillBlendAttachmentState, instead of a hardcoded alpha-blend.
+        /// @param ds        VULKAN-058: the batch's DepthStencilState. Baked into the pipeline
+        ///                  (the compare/write/op fields) and into its key; the three mask/reference
+        ///                  values are dynamic, exactly as on the 3D route.
+        /// @param depthTest  VULKAN-058: DepthStencilState.DepthBufferEnable for this batch.
+        /// @param depthWrite VULKAN-058: DepthStencilState.DepthBufferWriteEnable for this batch.
         VkPipeline GetOrCreatePipeline2D(VkFormat depthFmt, uint32_t colorAttachmentCount,
-                                         bool blend, const BlendKeyParams& bp);
+                                         bool blend, const BlendKeyParams& bp,
+                                         const DepthStencilKeyParams& ds = {},
+                                         bool depthTest = false, bool depthWrite = false);
         VkFormat   FindDepthFormat() const;
         void       CreateDepthResources();
         void       CleanupDepthResources();
@@ -3669,7 +3712,9 @@ namespace CNA::Internal::Renderers::Vulkan
         // Task 911: MSAA counterpart to GetOrCreatePipeline2D(), same depth-format-keyed caching.
         // REMED-GFX-071: also BlendState-parameterized, see GetOrCreatePipeline2D().
         VkPipeline GetOrCreatePipeline2DMsaa(VkFormat depthFmt, uint32_t colorAttachmentCount,
-                                             bool blend, const BlendKeyParams& bp);
+                                             bool blend, const BlendKeyParams& bp,
+                                             const DepthStencilKeyParams& ds = {},
+                                             bool depthTest = false, bool depthWrite = false);
 
         void CreateSpriteBuffers();
         void CreateFrame3DBuffers();
