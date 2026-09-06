@@ -2316,6 +2316,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_environmentmapeffect_fresnel_gradient
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-335: the PresentationParameters round-trip.
+        cna_vulkan_test(cna_test_vulkan_presentation_parameters
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_presentation_parameters_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_PresentationParameters
+            COMMAND cna_test_vulkan_presentation_parameters
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-339: the release path that also runs vkDeviceWaitIdle and the
         # retirement lists. HasRenderer() must be false after the first Dispose and no second
         # release may be attempted.

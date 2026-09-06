@@ -14,6 +14,7 @@
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
@@ -52,8 +53,26 @@ protected:
               "BackBufferWidth matches requested value");
         check(pp.getBackBufferHeightProperty() == kH,
               "BackBufferHeight matches requested value");
-        check(pp.getDepthStencilFormatProperty() == DepthFormat::Depth24,
-              "DepthStencilFormat matches requested value");
+        // plan_vulkan.md VULKAN-335. The contract is that PresentationParameters stores what the
+        // device APPLIED, which on a renderer that never substitutes is the same thing as what was
+        // requested -- and on one that does substitute is not. CNA's Vulkan renderer always creates
+        // a stencil-capable back-buffer depth image (FindDepthFormat prefers D24_UNORM_S8_UINT,
+        // Task 870, so DepthStencilState.StencilEnable can work at all), so a request for Depth24
+        // is honestly answered Depth24Stencil8 -- the principle VULKAN-348 settled deliberately.
+        // Asserting the request would therefore be asserting the absence of substitution rather
+        // than the round-trip, and would make this test renderer-specific in the other direction.
+        //
+        // Two legs, so neither can be satisfied alone: the stored value must equal the renderer's
+        // own applied answer, AND that answer must describe a depth buffer that exists.
+        {
+            const int appliedOrdinal = getGraphicsDeviceProperty().GetRenderer()
+                .GetAppliedDepthStencilFormatEXT(static_cast<int>(DepthFormat::Depth24));
+            const DepthFormat applied = static_cast<DepthFormat>(appliedOrdinal);
+            check(pp.getDepthStencilFormatProperty() == applied,
+                  "DepthStencilFormat matches the format the device applied");
+            check(applied != DepthFormat::None,
+                  "and the applied depth format describes a depth buffer that exists");
+        }
         check(pp.getPresentationIntervalProperty() == PresentInterval::Immediate,
               "PresentInterval is Immediate (synchronizeWithVerticalRetrace=false)");
         check(pp.getMultiSampleCountProperty() == 0,
