@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 #include <string_view>
 
 #include "CNA/CNAHelper.hpp"
@@ -260,6 +261,27 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
                                           SharpRuntime::intcs vertexChannelIndex, ContentProcessorContext& context);
 
     private:
+        /**
+         * @brief Replaces a `Weights` channel with the `BlendIndices` and `BlendWeight` a vertex
+         *        buffer can carry.
+         *
+         * A vertex names its bones; a vertex buffer indexes them. Without this the channel is left
+         * as a `BoneWeightCollection`, which no vertex element format can hold, so the buffer
+         * builder drops it and a skinned model reaches the runtime with no skinning data at all
+         * (plans/plan_xnapipeline_parity.md `XNAPP-266`).
+         *
+         * @param geometry The batch whose channel is converted.
+         * @param vertexChannelIndex The channel's index; the two replacements take its place.
+         */
+        void ConvertWeightsChannel(const std::shared_ptr<Graphics::GeometryContent>& geometry,
+                                   SharpRuntime::intcs vertexChannelIndex);
+
+        /** @brief How many bones may influence one vertex; XNA's own ceiling. */
+        static constexpr SharpRuntime::intcs kMaxBoneInfluences = 4;
+
+        /** @brief The flattened skeleton's bone names, in the order their indices follow. */
+        std::vector<std::string> skeleton_;
+
         Color colorKeyColor_{255, 0, 255, 255};
         bool colorKeyEnabled_ = true;
         MaterialProcessorDefaultEffect defaultEffect_ = MaterialProcessorDefaultEffect::BasicEffect;

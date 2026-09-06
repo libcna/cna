@@ -4,11 +4,15 @@
 #include <algorithm>
 #include <limits>
 #include <vector>
+#include <map>
 
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentProcessorContext.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/MeshHelper.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/StockMaterials.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/VertexChannelNames.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Byte4.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/VertexCollections.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
 #include "System/ArgumentNullException.hpp"
@@ -166,6 +170,19 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
                                   Matrix::CreateRotationY(MathHelper::ToRadians(rotationY_)) *
                                   Matrix::CreateScale(scale_);
         Graphics::MeshHelper::TransformScene(input, adjustment);
+
+        // The skeleton is found once, before any geometry is processed, because the blend indices
+        // every skinned batch writes are positions in this one list.
+        skeleton_.clear();
+        if (const std::shared_ptr<Graphics::BoneContent> root = Graphics::MeshHelper::FindSkeleton(input))
+        {
+            for (const std::shared_ptr<Graphics::BoneContent>& bone :
+                 Graphics::MeshHelper::FlattenSkeleton(root))
+            {
+                skeleton_.push_back(bone == nullptr ? std::string() : bone->getNameProperty());
+            }
+        }
+
         ModelBoneContentCollection bones;
         ModelMeshContentCollection meshes;
         // Every node becomes a bone, in the order a depth-first walk reaches them (measured,
@@ -305,8 +322,88 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
             {
                 ProcessVertexChannel(geometry, i, context);
             }
+            // A batch that carries vertex colours is drawn with them: XNA turns the stock effect's
+            // VertexColorEnabled on for such a batch and leaves it off otherwise (measured through
+            // the genuine BuildContent -- the textured corpus model has a colour channel and answers
+            // True, while the bare and skinned ones answer False;
+            // tests/reference/xna40/differential/model_x_textured.xnb).
+            if (const auto basic = std::dynamic_pointer_cast<Graphics::BasicMaterialContent>(converted);
+                basic != nullptr &&
+                geometry->getVerticesProperty().getChannelsProperty().Contains(
+                    Graphics::VertexChannelNames::Color(0)))
+            {
+                basic->setVertexColorEnabledProperty(true);
+            }
             geometry->setMaterialProperty(converted);
         }
+    }
+
+    void ModelProcessor::ConvertWeightsChannel(
+        const std::shared_ptr<Graphics::GeometryContent>& geometry,
+        const SharpRuntime::intcs vertexChannelIndex)
+    {
+        auto& channels = geometry->getVerticesProperty().getChannelsProperty();
+        const std::shared_ptr<Graphics::VertexChannelBase>& channel = channels[vertexChannelIndex];
+        const auto weights =
+            std::dynamic_pointer_cast<Graphics::VertexChannel<Graphics::BoneWeightCollection>>(channel);
+        if (weights == nullptr)
+        {
+            return;
+        }
+        const SharpRuntime::intcs usageIndex =
+            Graphics::VertexChannelNames::DecodeUsageIndex(channel->getNameProperty());
+
+        // A vertex names its bones by name; a vertex buffer indexes them. The index is the bone's
+        // position in the flattened skeleton -- not in the model's bone list, which also holds the
+        // mesh nodes and the scene root (measured: the skinned corpus model's blend indices are 0
+        // and 1 for Bone0 and Bone1, while those bones are 2 and 3 in the model's own list;
+        // tests/reference/xna40/differential/model_x_skinned.xnb).
+        std::map<std::string, SharpRuntime::intcs> boneIndices;
+        for (std::size_t at = 0; at < skeleton_.size(); ++at)
+        {
+            boneIndices.emplace(skeleton_[at], static_cast<SharpRuntime::intcs>(at));
+        }
+
+        std::vector<Microsoft::Xna::Framework::Graphics::PackedVector::Byte4> indices;
+        std::vector<Vector4> amounts;
+        indices.reserve(static_cast<std::size_t>(weights->getCountProperty()));
+        amounts.reserve(static_cast<std::size_t>(weights->getCountProperty()));
+        for (SharpRuntime::intcs vertex = 0; vertex < weights->getCountProperty(); ++vertex)
+        {
+            Graphics::BoneWeightCollection influences = weights->At(vertex);
+            // Four at most, heaviest first, renormalized to sum to one: XNA's own rule, and the
+            // one BoneWeightCollection::NormalizeWeights already implements.
+            influences.NormalizeWeights(kMaxBoneInfluences);
+            float packed[kMaxBoneInfluences] = {0.0f, 0.0f, 0.0f, 0.0f};
+            float amount[kMaxBoneInfluences] = {0.0f, 0.0f, 0.0f, 0.0f};
+            for (SharpRuntime::intcs at = 0;
+                 at < influences.getCountProperty() && at < kMaxBoneInfluences; ++at)
+            {
+                const Graphics::BoneWeight& influence = influences[at];
+                const auto found = boneIndices.find(influence.getBoneNameProperty());
+                if (found == boneIndices.end())
+                {
+                    throw InvalidContentException(
+                        "The skinned mesh names bone \"" + influence.getBoneNameProperty() +
+                        "\", which is not in the skeleton.");
+                }
+                packed[at] = static_cast<float>(found->second);
+                amount[at] = influence.getWeightProperty();
+            }
+            indices.emplace_back(packed[0], packed[1], packed[2], packed[3]);
+            amounts.emplace_back(amount[0], amount[1], amount[2], amount[3]);
+        }
+
+        // In place of the weights channel, so the buffer's element order is XNA's: whatever came
+        // before the weights, then BlendIndices, then BlendWeight, then whatever came after.
+        const std::string indicesName = Graphics::VertexChannelNames::EncodeName(
+            Microsoft::Xna::Framework::Graphics::VertexElementUsage::BlendIndices, usageIndex);
+        const std::string weightsName = Graphics::VertexChannelNames::EncodeName(
+            Microsoft::Xna::Framework::Graphics::VertexElementUsage::BlendWeight, usageIndex);
+        channels.RemoveAt(vertexChannelIndex);
+        channels.Insert<Microsoft::Xna::Framework::Graphics::PackedVector::Byte4>(
+            vertexChannelIndex, indicesName, std::move(indices));
+        channels.Insert<Vector4>(vertexChannelIndex + 1, weightsName, std::move(amounts));
     }
 
     void ModelProcessor::ProcessVertexChannel(const std::shared_ptr<Graphics::GeometryContent>& geometry,
@@ -314,7 +411,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
                                               ContentProcessorContext& context)
     {
         (void)context;
-        if (geometry == nullptr || !premultiplyVertexColors_)
+        if (geometry == nullptr)
         {
             return;
         }
@@ -324,12 +421,34 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
             return;
         }
         const std::shared_ptr<Graphics::VertexChannelBase>& channel = channels[vertexChannelIndex];
-        if (Graphics::VertexChannelNames::DecodeBaseName(channel->getNameProperty()) != "Color")
+        const std::string baseName = Graphics::VertexChannelNames::DecodeBaseName(channel->getNameProperty());
+        if (baseName == "Weights")
+        {
+            ConvertWeightsChannel(geometry, vertexChannelIndex);
+            return;
+        }
+        if (baseName != "Color")
         {
             return;
         }
-        auto typed = std::dynamic_pointer_cast<Graphics::VertexChannel<Color>>(channel);
+        // A colour channel becomes packed `Color` before it reaches the vertex buffer: XNA's own
+        // XImporter answers `Vector4` for a `.x` file's MeshVertexColors (measured,
+        // tests/reference/xna40/model x/quad_textured.x) and XNA's buffer carries `Color@32` at
+        // stride 36 (measured, modelprocessor/vertex_colors, and again through the genuine
+        // BuildContent in tests/reference/xna40/differential/model_x_textured.xnb). Leaving it as
+        // Vector4 costs twelve bytes a vertex and is a different element format from the one the
+        // runtime's stock effects expect (plans/plan_xnapipeline_parity.md XNAPP-266).
+        //
+        // Before the premultiply below, not after: the measured rounding is byte arithmetic
+        // (modelprocessor/vertex_colors_rounding -- 129 at alpha 3 answers 1, where rounding the
+        // float would answer 2).
+        std::shared_ptr<Graphics::VertexChannel<Color>> typed =
+            std::dynamic_pointer_cast<Graphics::VertexChannel<Color>>(channel);
         if (typed == nullptr)
+        {
+            typed = channels.ConvertChannelContent<Color>(vertexChannelIndex);
+        }
+        if (typed == nullptr || !premultiplyVertexColors_)
         {
             return;
         }

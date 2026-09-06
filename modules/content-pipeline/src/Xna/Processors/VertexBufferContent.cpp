@@ -36,6 +36,32 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
                 add.template operator()<Vector3>();
                 add.template operator()<Vector4>();
                 add.template operator()<Color>();
+                // Every packed vector type, at the size its own traits give: XNA accepts all of
+                // them and answers exactly that (measured, modelprocessor/vertex_buffer_sizeof_packed
+                // -- Byte4=4, Short2=4, HalfSingle=2, Alpha8=1, Rgba64=8 and the rest). Byte4 is
+                // the one that matters most: a model's BlendIndices are Byte4, so without it a
+                // skinned vertex buffer cannot be built at all
+                // (plans/plan_xnapipeline_parity.md XNAPP-266).
+                {
+                    using namespace Microsoft::Xna::Framework::Graphics::PackedVector;
+                    add.template operator()<Alpha8>();
+                    add.template operator()<Bgr565>();
+                    add.template operator()<Bgra4444>();
+                    add.template operator()<Bgra5551>();
+                    add.template operator()<Byte4>();
+                    add.template operator()<HalfSingle>();
+                    add.template operator()<HalfVector2>();
+                    add.template operator()<HalfVector4>();
+                    add.template operator()<NormalizedByte2>();
+                    add.template operator()<NormalizedByte4>();
+                    add.template operator()<NormalizedShort2>();
+                    add.template operator()<NormalizedShort4>();
+                    add.template operator()<Rg32>();
+                    add.template operator()<Rgba1010102>();
+                    add.template operator()<Rgba64>();
+                    add.template operator()<Short2>();
+                    add.template operator()<Short4>();
+                }
                 // The rest are what XNA answers for the primitives and the larger value types
                 // (measured, modelprocessor/vertex_buffer_sizeof_refusals). Two of them are the
                 // sizes .NET marshals a value to rather than the size C++ gives it: a `Boolean`

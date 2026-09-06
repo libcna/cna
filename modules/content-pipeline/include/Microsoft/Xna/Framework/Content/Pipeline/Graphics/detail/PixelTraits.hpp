@@ -1,14 +1,17 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <type_traits>
 
 #include "CNA/CNAHelper.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/ContentTypeName.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Alpha8.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgr565.hpp"
@@ -206,4 +209,28 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics::detail
     /** @brief True when @p T is one of the 22 element types XNA's PixelBitmapContent accepts. */
     template<typename T>
     concept ValidPixelType = requires { PixelTraits<T>::Bytes; };
+}
+
+namespace Microsoft::Xna::Framework::Content::Pipeline
+{
+    /**
+     * @brief The .NET name of a packed vector type, taken from the traits that already hold it.
+     *
+     * A vertex channel is named by its element type, and a packed vector can be one: a model's
+     * `BlendIndices` are `Byte4`. These types are structs without the `XnaTypeName` member the
+     * generic `ContentTypeName` looks for, and their names are already spelled once in
+     * `PixelTraits` -- so they are taken from there rather than written a second time
+     * (plans/plan_xnapipeline_parity.md `XNAPP-266`).
+     */
+    template<typename T>
+        requires(!requires { { T::XnaTypeName } -> std::convertible_to<std::string_view>; } &&
+                 requires { Graphics::detail::PixelTraits<T>::DotNetName; })
+    struct CNAEXT ContentTypeName<T>
+    {
+        /** @brief Returns the type's .NET full name. */
+        [[nodiscard]] static std::string Name()
+        {
+            return std::string(Graphics::detail::PixelTraits<T>::DotNetName);
+        }
+    };
 }

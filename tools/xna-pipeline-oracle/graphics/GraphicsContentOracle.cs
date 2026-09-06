@@ -2100,6 +2100,34 @@ namespace Cna.Xna40.GraphicsOracle
                 }
                 return builder.ToString();
             });
+            // XNAPP-266: the packed vector types, which the refusal case above never covered. A
+            // model's BlendIndices are Byte4, so what SizeOf answers for one decides whether a
+            // skinned vertex buffer can be built at all.
+            Record("modelprocessor/vertex_buffer_sizeof_packed", () =>
+            {
+                var builder = new StringBuilder();
+                foreach (Type probe in new Type[]
+                {
+                    typeof(Microsoft.Xna.Framework.Graphics.PackedVector.Byte4),
+                    typeof(Microsoft.Xna.Framework.Graphics.PackedVector.Short2),
+                    typeof(Microsoft.Xna.Framework.Graphics.PackedVector.Short4),
+                    typeof(Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort2),
+                    typeof(Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedShort4),
+                    typeof(Microsoft.Xna.Framework.Graphics.PackedVector.HalfSingle),
+                    typeof(Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector2),
+                    typeof(Microsoft.Xna.Framework.Graphics.PackedVector.HalfVector4),
+                    typeof(Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte2),
+                    typeof(Microsoft.Xna.Framework.Graphics.PackedVector.NormalizedByte4),
+                    typeof(Microsoft.Xna.Framework.Graphics.PackedVector.Alpha8),
+                    typeof(Microsoft.Xna.Framework.Graphics.PackedVector.Rgba64),
+                })
+                {
+                    if (builder.Length > 0) builder.Append(' ');
+                    try { builder.Append(probe.Name + "=" + VertexBufferContent.SizeOf(probe)); }
+                    catch (Exception error) { builder.Append(probe.Name + "=" + error.GetType().Name); }
+                }
+                return builder.ToString();
+            });
             Record("modelprocessor/vertex_buffer_defaults", () =>
             {
                 var buffer = new VertexBufferContent();

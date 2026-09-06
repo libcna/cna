@@ -258,10 +258,16 @@ namespace Microsoft::Xna::Framework
             float sqDist = diff.LengthSquared();
             if (sqDist > sqRadius)
             {
-                float distance = std::sqrt(sqDist);
-                Vector3 direction = diff / distance;
-                Vector3 g = center - radius * direction;
-                center = (g + pt) / 2.0f;
+                const float distance = std::sqrt(sqDist);
+                const Vector3 direction = diff / distance;
+                // The centre moves along the direction by half the overshoot. Algebraically the
+                // same as taking the midpoint of the far side and the point, and not the same in
+                // floating point: the midpoint form mixes the point's coordinates into components
+                // the direction does not touch, so a centre component that should stay exactly
+                // zero drifts by an ulp. XNA's answer for a symmetric quad is exactly zero
+                // (measured, tests/reference/xna40/differential/model_x_textured.xnb, whose mesh
+                // sphere is (0,0,0); plans/plan_xnapipeline_parity.md XNAPP-266).
+                center = center + direction * ((distance - radius) * 0.5f);
                 radius = Vector3::Distance(pt, center);
                 sqRadius = radius * radius;
             }
