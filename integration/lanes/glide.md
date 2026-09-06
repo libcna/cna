@@ -249,7 +249,7 @@ Batch 5 membership remains `glide`, `gdi`, `html-dom`; the latter two remain pen
 checkpoint/tag was created. No seventeenth lane began. Original/archive refs and four stash object
 IDs remain unchanged; `audit/` is unchanged; touched worktrees are clean; nothing was pushed.
 
-Builds used persistent Ninja/ccache trees on `/media/robertvokac/claude`. Every controlled build
+Builds used persistent Ninja/ccache trees on `/media/robertvokac/claude` (external disk, no longer mounted; build trees now live in-repo under `build-probe/` and the shared ccache at `~/.cache/ccache`). Every controlled build
 after the baseline helper ran persistent power-saver, `-j4`, and exact process-group monitoring;
 `-j6`/`-j8` were never requested. No process was signaled, and no `pkill`/`killall`/name matching was
 used. The one retained deviation is the historical helper's unbounded `--parallel`, which prevents
@@ -260,7 +260,7 @@ a claim that eight was never exceeded. The start profile was restored after all 
 The recorded outer command was:
 
 ```text
-CCACHE_DIR=/media/robertvokac/claude/tmp/cna/ccache cmake -S /rv/data/development/github.com/openeggbert/cnaglide -B /media/robertvokac/claude/tmp/cna/cmake-build-glide-pre -G Ninja -DCMAKE_TOOLCHAIN_FILE=/rv/data/development/github.com/openeggbert/cnaglide/cmake/toolchains/mingw-w64-i686.cmake -DCNA_GRAPHICS_BACKEND=GLIDE -DCNA_BUILD_TESTS=ON -DCNA_USE_CCACHE=ON -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+CCACHE_DIR=~/.cache/ccache cmake -S /rv/data/development/github.com/openeggbert/cnaglide -B build-probe/cmake-build-glide-pre -G Ninja -DCMAKE_TOOLCHAIN_FILE=/rv/data/development/github.com/openeggbert/cnaglide/cmake/toolchains/mingw-w64-i686.cmake -DCNA_GRAPHICS_BACKEND=GLIDE -DCNA_BUILD_TESTS=ON -DCNA_USE_CCACHE=ON -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 ```
 
 During configure, `_cna_build_sdl_dep` expanded its helper command once for each missing pinned

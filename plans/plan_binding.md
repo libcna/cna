@@ -2450,7 +2450,7 @@ neither does the branch they were built from. The reasoning in what follows is s
 — it is why the arms are configured the way they are — but the paths are history.
 
 Historical, from when those four trees existed: they shared the project-wide
-`CCACHE_DIR=/rv/cnaccache` rather than a private cache. A private one
+`CCACHE_DIR=~/.cache/ccache` rather than a private cache. A private one
 had reached a **0.69% hit rate over 6,932 compilations** because it started cold and never saw the
 CNA and sharp-runtime objects the shared cache already holds. Do not give a binding tree a cache of
 its own. The sanitizer tree ran with `ASAN_OPTIONS=detect_leaks=1
@@ -2600,7 +2600,7 @@ four single-purpose trees that no longer exist.
 Historical, settled on 2026-08-15 after an audit of those four trees; the reasoning outlives the
 paths:
 
-- **One shared ccache, not one per campaign.** `CCACHE_DIR=/rv/cnaccache`
+- **One shared ccache, not one per campaign.** `CCACHE_DIR=~/.cache/ccache`
   (20 GB ceiling, ~31% hit rate across 21 build configurations). The binding trees briefly had their
   own `tmp/ccache`; it reached a **0.69% hit rate over 6,932 compilations** because it started cold
   and never saw the CNA and sharp-runtime objects the shared cache already holds. It was deleted.

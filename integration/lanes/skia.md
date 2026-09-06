@@ -98,7 +98,7 @@ carried document's forty headings would be a large unrelated edit to the lane's 
 ### 2.1 `range-diff` — 130 of 141 byte-identical, 0 dropped
 
 `git range-diff archive/preintegration/skia-20260804...adapt/skia`, 853 lines, on the lane card's
-own evidence path (`/media/robertvokac/claude/tmp/cna/skia-rangediff.txt`).
+own evidence path (`build-probe/skia-rangediff.txt`).
 
 | Class | Count |
 |---|---|

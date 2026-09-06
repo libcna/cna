@@ -3399,7 +3399,7 @@ evidence is in `integration/FINAL_RECONCILIATION.md`.
 > and **`MAGNUM` is missing from `README.md`'s `CNA_GRAPHICS_BACKEND` list**, a gap in the eleventh
 > lane's own registration union noticed while adding the SOKOL entry beside it.
 >
-> **Build trees (owner-designated partition `/media/robertvokac/claude/tmp/cna/`):** created
+> **Build trees (owner-designated partition `build-probe/`):** created
 > `cmake-build-sokol-pre` (711 M, the pre-adaptation baseline), `cmake-build-sokol` (2.9 G),
 > `cmake-build-sokol-asan` (6.4 G) and `cmake-build-sokol-easygl` (control); reused the shared
 > `ccache/` and `~/deps` (sokol cloned once at its pin, 11 M). Max parallelism **`-j6`**; the 8-job
@@ -3420,9 +3420,9 @@ evidence is in `integration/FINAL_RECONCILIATION.md`.
 > signatures Good, four stashes untouched, deps pins exact). **Deviation: no CNA build tree
 > survived the migration** — both preserved reproducer directories included; the probes were
 > rebuilt from their documented specs. Fresh trees live on the owner-designated build partition
-> **`/media/robertvokac/claude/tmp/cna/`** (`cmake-build-wicked` + `wicked-repro/` evidence,
+> **`build-probe/`** (`cmake-build-wicked` + `wicked-repro/` evidence,
 > `cmake-build-wicked-asan`, `cmake-build-magnum`, `cmake-build-noxna`, shared `ccache/` — export
-> `CCACHE_DIR=/media/robertvokac/claude/tmp/cna/ccache` or everything recompiles cold). The
+> `CCACHE_DIR=~/.cache/ccache` or everything recompiles cold). The
 > in-repo `.sdl-prebuilt-Linux-x86_64` survived and is reused.
 >
 > **Ownership settled by the prescribed raw control: classification B — pinned upstream Wicked

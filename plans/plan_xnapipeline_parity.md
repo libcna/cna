@@ -875,7 +875,8 @@ be avoided: build the one target a change needs (`ninja -C cmake-build-debug -j3
 CnaContentPipelineTests`) rather than the whole configuration, and never reconfigure or clean.
 The build directory is `cmake-build-debug/`, reused rather than reconfigured; the oracles
 regenerate with the `run-*-oracle.sh` script beside each driver. **The owner's build rules
-changed on 2026-09-06**: there is exactly one ccache, `/rv/cnaccache`, with
+changed on 2026-09-06**: there is exactly one physical ccache, `~/.cache/ccache` (the
+`/rv/cnaccache` symlink points at it and is deliberately not used as the path), with
 `CCACHE_BASEDIR=/rv`, and this tree's compiler launcher now carries both -- it had been
 setting a basedir but no cache directory, so every build was landing in the split
 `~/.cache/ccache` at a 75 % miss rate. Build parallelism is not capped; memory is the
