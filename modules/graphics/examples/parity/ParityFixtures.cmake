@@ -68,6 +68,8 @@ set(CNA_PARITY_FIXTURES
     sprite_state
     # WEBGPU-179: a SpriteFont string, a newline and a default-character substitution reach pixels.
     sprite_font
+    # WEBGPU-186: sampler filters, mip filters, anisotropy and which sampler slot a stock draw reads.
+    sampler_filters
     # WEBGPU-153: FillMode::WireFrame draws edges and leaves the interior empty.
     fill_mode_wireframe
     # WEBGPU-161: SamplerState.MaxMipLevel selects which mip level a sample comes from.
