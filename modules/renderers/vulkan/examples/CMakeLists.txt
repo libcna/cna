@@ -48,6 +48,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # pass/fail): it writes a 64x64 RGBA8 dump for cna_diag_compare.
         cna_vulkan_test(cna_diag_vulkan ${CNA_GRAPHICS_EXAMPLES_DIR}/cross_renderer_diagnostic_scene.cpp)
 
+        # plan_vulkan.md VULKAN-431: the 2D half of the same dump, from the same renderer-agnostic
+        # source EasyGL and Direct2D already build. Deliberately a plain executable and NOT a
+        # CTest, exactly as cna_diag_vulkan above and cna_corpus2d_easygl are: it asserts nothing
+        # on its own, it produces one renderer's dump for cna_diag_compare to judge against
+        # another's -- and the two dumps come from two different build directories, which is why
+        # VULKAN-430's gate is a script rather than a test.
+        cna_vulkan_test(cna_corpus2d_vulkan ${CNA_GRAPHICS_EXAMPLES_DIR}/cross_renderer_2d_corpus.cpp)
+
         # Task 88: 3-frame smoke test for the Vulkan renderer
         cna_register_renderer_test(NAME Vulkan_Demo2D_SmokeTest COMMAND cna_demo_2d --smoke 3
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}" LABELS "GraphicsSmoke")
