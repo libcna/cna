@@ -873,6 +873,11 @@ which waits on a decoder this build does not have -- measure XNA's answer first 
 continuous commits and pushes (2026-09-05), and on the same day asked that unnecessary disk writes
 be avoided: build the one target a change needs (`ninja -C cmake-build-debug -j3
 CnaContentPipelineTests`) rather than the whole configuration, and never reconfigure or clean.
-The build directory is `cmake-build-debug/`; **this session builds with `-j3` at the owner's
-request** (a per-session cap, not a repository rule); the oracle regenerates with
-`tools/xna-pipeline-oracle/run-oracle.sh`.
+The build directory is `cmake-build-debug/`, reused rather than reconfigured; the oracles
+regenerate with the `run-*-oracle.sh` script beside each driver. **The owner's build rules
+changed on 2026-09-06**: there is exactly one ccache, `/rv/cnaccache`, with
+`CCACHE_BASEDIR=/rv`, and this tree's compiler launcher now carries both -- it had been
+setting a basedir but no cache directory, so every build was landing in the split
+`~/.cache/ccache` at a 75 % miss rate. Build parallelism is not capped; memory is the
+constraint. Nothing is built under `/tmp` or the session scratchpad, and no build directory
+outside the closed list was created.
