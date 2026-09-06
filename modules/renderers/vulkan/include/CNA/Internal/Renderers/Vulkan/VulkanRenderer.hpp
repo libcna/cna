@@ -1862,6 +1862,19 @@ namespace CNA::Internal::Renderers::Vulkan
         {
             return samplerCache_.size();
         }
+        /// plan_vulkan.md `VULKAN-177` diagnostic: live entries in the (view, sampler) descriptor
+        /// set cache.
+        ///
+        /// `EvictSampledViewFromCaches` exists because a texture destroyed while one of these
+        /// entries still names its `VkImageView` would leave a cached set pointing at a freed
+        /// handle -- and Vulkan reuses handle VALUES, so the next texture can inherit it. Without
+        /// this accessor a test can only assert that the picture came out right afterwards, which
+        /// a renderer that never cached anything would also satisfy. This is what lets a test say
+        /// the entry existed BEFORE the disposal and was gone after.
+        CNAEXT [[nodiscard]] std::size_t GetSampledDescriptorSetCacheSizeEXT() const noexcept
+        {
+            return texSamplerDescSets_.size();
+        }
         /// plan_vulkan.md `VULKAN-160` diagnostic: the bound `TrimSamplerCacheEXT` enforces.
         CNAEXT [[nodiscard]] static constexpr std::size_t GetSamplerCacheBoundEXT() noexcept
         {

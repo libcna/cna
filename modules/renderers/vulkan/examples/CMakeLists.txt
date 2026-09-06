@@ -2068,6 +2068,27 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_texturecube_faces
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-177: the public disposal contract. On Vulkan a texture destroyed
+        # while its VkImageView is still referenced by a cached descriptor set is the exact case
+        # EvictSampledViewFromCaches exists for, so these two must reach a SAMPLED-then-disposed
+        # texture rather than an unused one -- see the row for what was measured.
+        cna_vulkan_test(cna_test_vulkan_disposed_resource
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_disposed_resource_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DisposedResource
+            COMMAND cna_test_vulkan_disposed_resource
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_bound_resource_dispose
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_bound_resource_dispose_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_BoundResourceDispose
+            COMMAND cna_test_vulkan_bound_resource_dispose
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_disposed_texture_eviction
+                        vulkan_disposed_texture_eviction_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DisposedTextureEviction
+            COMMAND cna_test_vulkan_disposed_texture_eviction
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-172: the three block-compressed formats, uploaded as raw 4x4
         # blocks and sampled in a real draw. Two blocks side by side, so a mis-sized block (8 bytes
         # for DXT1, 16 for the other two) or a mis-walked block stream shows as a wrong half rather
