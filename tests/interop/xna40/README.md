@@ -4,9 +4,10 @@
 
 ## Status, stated plainly
 
-**Executed against a genuine Microsoft XNA 4.0 runtime on 2026-09-06, and every fixture passed.**
-Six of six loaded through the real `ContentManager` and every value each expectation manifest
-declares matched:
+**Executed against a genuine Microsoft XNA 4.0 runtime on 2026-09-06.** Six of six uncompressed
+fixtures loaded through the real `ContentManager` and every value each expectation manifest
+declares matched; the LZX-compressed corpus failed six of six, was diagnosed, fixed, and now
+passes six of six too (see below).
 
 ```text
 graphics device: AMD Radeon 780M (RADV PHOENIX) (Reach)
@@ -47,36 +48,31 @@ What was already verified, without XNA, and still is:
 What the run does **not** show: only these six roots were exercised, and only the values XNA 4.0's
 public API exposes. The `(not asserted)` lines are honest gaps, not passes.
 
-### The LZX corpus does not load, and that is a real defect
+### The LZX corpus: refused, diagnosed, fixed, and passing
 
-The same six assets, written with CNA's own LZX encoder
-(`tests/assets/xnb/cna/windows/lzx/`), are **all six refused** by the same runtime, in the same
-run, with the same harness:
+The same six assets written with CNA's own LZX encoder were **all six refused** by the same
+runtime in the same session, with `InvalidOperationException: Error decompressing content data.`
+They now all pass. What the failure was is worth recording, because nothing inside CNA could have
+found it:
 
-```text
-ERROR   texture2d_color_mips
-         InvalidOperationException: Error decompressing content data.
-...
-fixtures: 6   failed: 6
-```
+* The container was never the problem, and neither was the Huffman coding. A hand-built LZX
+  *uncompressed* block -- no Huffman tree in it at all -- was refused too, which moved the search
+  out of the compressor entirely.
+* A Microsoft-loadable file from another writer was compared against CNA's: it ends with **five
+  zero bytes after its final block**, and CNA's ended exactly at the block.
+* Handing the real runtime the same asset with 0, 1, 2, 3, 4, 5 and 6 trailing bytes settled it:
+  everything through four failed, five loaded. Two of the five are the next chunk's size field,
+  which the reader consumes before it notices the stream has ended and which must read as zero to
+  stop it; the other three are slack for an LZX bit buffer that fills a sixteen-bit word at a time
+  and so reads past the last byte it actually consumes.
 
-This is exactly the outcome this file says is the most valuable one the harness can produce, and
-it is worth being precise about what it does and does not implicate:
+**CNA's own decoder and the independent Python parser both accepted every one of those files.**
+Neither reads ahead, and both stop once they have the declared number of decompressed bytes, so
+neither could see what was missing. Two implementations agreeing is not the same as the one that
+matters agreeing -- which is the whole argument for this harness existing.
 
-* The **container is not the problem.** The header is well formed -- `XNB w 5`, flags `0x80`, a
-  file-size field that matches the bytes on disk, and a decompressed-size field -- and the first
-  chunk's framing is correct (`FF`, big-endian frame size, big-endian block size, and the block
-  length agrees with the remaining bytes).
-* **CNA's own decoder reads these files, and so does the independent Python parser**
-  (`tools/xnb/xnb_conformance.py` reports `OK ... lzx` for all six). Two implementations that
-  share no code agree the stream is valid LZX; Microsoft's does not.
-* So the defect is inside the LZX bitstream, in something both CNA decoders are lenient about.
-  Even the 220-byte, almost entirely literal `list_of_strings` fails, which points away from
-  match encoding and towards the block header or the pretree/tree-length encoding.
-
-Until it is fixed, **CNA must not claim that its LZX output loads in XNA 4.0.** The uncompressed
-corpus does; the compressed one does not. `cna-content`'s own `--xnb-compress lzx` help text and
-`plans/plan_xnapipeline.md` `XNAP-81` both need that correction.
+The encoder now emits the trailer, `LzxEncoderTest.EveryCompressedPayloadEndsWithTheTrailerXnaRequires`
+holds it there, and the LZX corpus passes six of six against the genuine runtime.
 
 ## What you need
 

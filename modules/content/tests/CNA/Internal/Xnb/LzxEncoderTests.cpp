@@ -72,18 +72,37 @@ namespace
         bool explicitFrameSize = false;
     };
 
+    /**
+     * @brief The five zero bytes every compressed payload ends with.
+     *
+     * Not padding for tidiness: a genuine Microsoft XNA 4.0 runtime refuses a compressed `.xnb`
+     * without them (`Error decompressing content data.`). Measured over 0 to 6 trailing bytes
+     * against the real runtime -- four failed, five loaded -- and a Microsoft-loadable file from
+     * another writer ends the same way. Two of the five are the chunk-size field the reader
+     * consumes before it notices the stream ended, and three are slack for a bit buffer that
+     * fills a 16-bit word at a time.
+     */
+    constexpr std::size_t kTrailerBytes = 5u;
+
     /** @brief Parses the container's own block framing out of a compressed payload. */
     [[nodiscard]] std::vector<FramedBlock> ParseFraming(
         const std::vector<std::uint8_t>& compressed)
     {
         std::vector<FramedBlock> blocks;
+        // The trailer is not framing and must not be walked as if it were.
+        EXPECT_GE(compressed.size(), kTrailerBytes) << "no room for the trailer XNA requires";
+        const std::size_t framed = compressed.size() - kTrailerBytes;
+        for (std::size_t i = framed; i < compressed.size(); ++i)
+        {
+            EXPECT_EQ(compressed[i], 0u) << "the trailer must be zero bytes";
+        }
         std::size_t cursor = 0u;
-        while (cursor + 2u <= compressed.size())
+        while (cursor + 2u <= framed)
         {
             FramedBlock block;
             if (compressed[cursor] == 0xFFu)
             {
-                if (cursor + 5u > compressed.size()) { break; }
+                if (cursor + 5u > framed) { break; }
                 block.explicitFrameSize = true;
                 block.frameSize = static_cast<std::uint32_t>(
                     (compressed[cursor + 1u] << 8) | compressed[cursor + 2u]);
@@ -101,7 +120,7 @@ namespace
             blocks.push_back(block);
             cursor += block.blockSize;
         }
-        EXPECT_EQ(cursor, compressed.size()) << "the framing does not tile the payload exactly";
+        EXPECT_EQ(cursor, framed) << "the framing does not tile the payload exactly";
         return blocks;
     }
 }
@@ -467,4 +486,51 @@ TEST(LzxEncoderTest, LzxIsAcceptedOnAnXna40TargetWhereLz4IsNot)
     options.version = XnbContainerVersion::Legacy4;
     options.compression = XnbOutputCompression::Lzx;
     EXPECT_THROW(ValidateXnbFileOptions(options), XnbWriteException);
+}
+
+// -- what a genuine XNA 4.0 runtime requires ----------------------------------------------------
+
+// plans/plan_xnapipeline_parity.md XNAPP-281. Every compressed payload ends with five zero bytes,
+// and this test exists because nothing in CNA could have noticed they were missing.
+//
+// CNA's own decoder stops once it has the declared number of decompressed bytes and never reads
+// ahead; the independent Python conformance parser does the same. Both accepted a stream that
+// ended exactly at its final block, and both were wrong about what matters: a genuine Microsoft
+// XNA 4.0 runtime refused every such file with `InvalidOperationException: Error decompressing
+// content data.` The same asset was then handed to the real runtime with 0, 1, 2, 3, 4, 5 and 6
+// trailing bytes -- everything through four failed and five loaded -- and a Microsoft-loadable
+// file written by another implementation ends with exactly five zero bytes too.
+//
+// Two of the five are the next chunk's size field, which the reader consumes before it notices
+// the stream has ended and which must read as zero to stop it; the other three are slack for an
+// LZX bit buffer that fills itself a sixteen-bit word at a time and so reads past the last byte
+// it actually consumes.
+TEST(LzxEncoderTest, EveryCompressedPayloadEndsWithTheTrailerXnaRequires)
+{
+    // An empty payload compresses to nothing at all and so carries no trailer; every payload that
+    // produces a block carries one.
+    EXPECT_TRUE(CompressXnbLzxPayload({}, {}).empty());
+
+    const std::vector<std::vector<std::uint8_t>> payloads = {
+        {0x00},
+        std::vector<std::uint8_t>(3u, 1u),
+        std::vector<std::uint8_t>(0x8000u, 64u),
+        std::vector<std::uint8_t>(0x8000u + 1u, 200u),
+        Noise(40000u, 9001u),
+    };
+    for (const std::vector<std::uint8_t>& payload : payloads)
+    {
+        const std::vector<std::uint8_t> compressed = CompressXnbLzxPayload(payload, {});
+        ASSERT_GE(compressed.size(), kTrailerBytes) << "payload of " << payload.size() << " bytes";
+        for (std::size_t i = compressed.size() - kTrailerBytes; i < compressed.size(); ++i)
+        {
+            EXPECT_EQ(compressed[i], 0u)
+                << "payload of " << payload.size() << " bytes: trailer byte " << i << " is not zero";
+        }
+        // The trailer is in addition to the framing and not carved out of it: the blocks still
+        // tile everything before it, which ParseFraming asserts for us.
+        (void)ParseFraming(compressed);
+        // And it costs a reader nothing: the payload still round-trips.
+        EXPECT_EQ(RoundTrip(payload), payload) << "payload of " << payload.size() << " bytes";
+    }
 }
