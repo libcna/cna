@@ -98,6 +98,16 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_DrawInstanced_3Instances COMMAND cna_test_vulkan_instanced
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-133: the dynamic-buffer stress proof, 12 frames cycling
+        # None/Discard/NoOverwrite with per-frame pixel readback. Renderer-agnostic source; the
+        # expected values are EasyGL's unchanged, because VULKAN-132 measured that each draw
+        # snapshots its buffer's bytes at its own call, which makes the three options
+        # indistinguishable here.
+        cna_vulkan_test(cna_test_vulkan_dynamic_buffer_stress
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_dynamic_buffer_stress_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DynamicBufferStress COMMAND cna_test_vulkan_dynamic_buffer_stress
+            TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-132 (F-12): does the deferred draw model make a dynamic-buffer
         # update between two draws in one frame observable?
         cna_vulkan_test(cna_test_vulkan_dynamic_buffer_update
