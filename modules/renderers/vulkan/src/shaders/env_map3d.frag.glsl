@@ -4,6 +4,7 @@ layout(location = 0) in vec3 vWorldNormal;
 layout(location = 1) in vec3 vEyeDir;
 layout(location = 2) in vec2 vUV;
 layout(location = 3) in float vFogFactor;
+layout(location = 4) in float vFresnel;   // VULKAN-260
 
 layout(location = 0) out vec4 outColor;
 
@@ -46,10 +47,12 @@ void main() {
     vec4 envSample = texture(uEnvMap, reflDir);
     vec3 baseColor = litRGB * texColor.rgb;
     float combinedAlpha = ep.diffuseColor.a * texColor.a;
-    float viewAngle = dot(E, N);
-    float blendFactor = (ep.light0Diff_fresnelEn.w > 0.5)
-        ? pow(max(1.0 - abs(viewAngle), 0.0), ep.envMapSpec_fresnelF.w) * ep.emissive_em.w
-        : ep.emissive_em.w;
+    // plan_vulkan.md VULKAN-260: the Gouraud-interpolated PER-VERTEX scalar, not a per-fragment
+    // recomputation. This used to read `dot(E, N)` from the interpolated-and-renormalized normal
+    // and eye vector, which is a different function of position and, on a triangle whose vertices
+    // carry different normals, a wrong one -- see env_map3d.vert.glsl for the derivation and for
+    // the geometry on which the old form collapsed to a constant 1.
+    float blendFactor = vFresnel;
     // Task 891: FNA's real PSEnvMap/PSEnvMapSpecular scale the whole `envmap` sample (both
     // the base lerp target and the specular term, the latter already fixed by Task 395) by
     // combinedAlpha before use -- the base lerp's envSample.rgb was still unscaled here.
