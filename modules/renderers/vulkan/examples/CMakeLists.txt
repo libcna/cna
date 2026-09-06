@@ -2185,6 +2185,23 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_basiceffect_combinations
             TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-258: the AlphaTestEffect evidence gaps.
+        cna_vulkan_test(cna_test_vulkan_alphatest_modes
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_alphatest_modes_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_AlphaTestModes
+            COMMAND cna_test_vulkan_alphatest_modes
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_alpha_test_integration
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/alpha_test_integration_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_AlphaTestEffect_AlphaCutout
+            COMMAND cna_test_vulkan_alpha_test_integration
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_alpha_test_effect
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/alpha_test_effect_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_AlphaTestEffect_Properties
+            COMMAND cna_test_vulkan_alpha_test_effect
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-339: the release path that also runs vkDeviceWaitIdle and the
         # retirement lists. HasRenderer() must be false after the first Dispose and no second
         # release may be attempted.
