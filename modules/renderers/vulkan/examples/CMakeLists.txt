@@ -2109,6 +2109,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_spritefont_effects_rotation_scale
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-092: the PUBLIC Viewport contract -- round-trip and survival -- as opposed to the four Vulkan tests that only observe its effect.
+        cna_vulkan_test(cna_test_vulkan_viewport_state
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_viewport_state_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_ViewportState
+            COMMAND cna_test_vulkan_viewport_state
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-339: the release path that also runs vkDeviceWaitIdle and the
         # retirement lists. HasRenderer() must be false after the first Dispose and no second
         # release may be attempted.
