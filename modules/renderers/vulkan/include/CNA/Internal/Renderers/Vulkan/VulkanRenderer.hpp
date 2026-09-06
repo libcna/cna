@@ -2247,6 +2247,22 @@ namespace CNA::Internal::Renderers::Vulkan
         CNAEXT [[nodiscard]] uint64_t GetFrameFenceWaitCountEXT() const noexcept { return frameFenceWaitCountEXT_; }
         /** @brief Number of completed swapchain recreations. */
         CNAEXT [[nodiscard]] uint64_t GetSwapchainRecreateCountEXT() const noexcept { return swapchainRecreateCountEXT_; }
+        /**
+         * @brief plan_vulkan.md VULKAN-338: the surface description this renderer is currently
+         *        working from, read-only.
+         *
+         * A test that has to reach the zero-extent (minimized) branch of `RecreateSwapchain`
+         * cannot fabricate a `RendererSurfaceInfo` from nothing -- `OnSurfaceChanged` refuses
+         * one whose `windowId` does not match, and rightly so. This hands back the real one so
+         * a test can change only the drawable size and hand it straight back, which is exactly
+         * what the platform does when a window is minimized and restored.
+         *
+         * @return The current surface info; never modified through this accessor.
+         */
+        CNAEXT [[nodiscard]] const RendererSurfaceInfo& GetSurfaceInfoEXT() const noexcept
+        {
+            return surfaceInfo_;
+        }
         /** @brief Count of distinct swapchain image indices an acquire has returned. */
         CNAEXT [[nodiscard]] int GetDistinctAcquiredImageCountEXT() const noexcept;
         /** @brief Count of distinct frame slots a submit has used. */

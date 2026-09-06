@@ -2471,6 +2471,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-338: twenty-two back-to-back swapchain recreations, a minimized
+        # (0x0) drawable with a frame presented in that state, and a restore -- with live
+        # resources across all of it.
+        cna_vulkan_test(cna_test_vulkan_swapchain_churn
+                        vulkan_swapchain_churn_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SwapchainChurn
+            COMMAND cna_test_vulkan_swapchain_churn
+            TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-214: a PreserveContents target across a real window resize,
         # which on this renderer is a swapchain recreation.
         cna_vulkan_test(cna_test_vulkan_rendertarget_preserve_across_resize
