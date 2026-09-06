@@ -74,6 +74,12 @@ matters agreeing -- which is the whole argument for this harness existing.
 The encoder now emits the trailer, `LzxEncoderTest.EveryCompressedPayloadEndsWithTheTrailerXnaRequires`
 holds it there, and the LZX corpus passes six of six against the genuine runtime.
 
+Every fixture in that corpus is a single LZX frame, so the multi-frame case was checked separately
+and end to end: a 256x256 texture built from a `.png` by `cna-content build ... --format xnb
+--xnb-compress lzx` -- 262 321 decompressed bytes across **nine frames** -- loads as a `Texture2D`
+in the same runtime. That path is source through CNA's importer, processor, XNB writer and LZX
+encoder into Microsoft's `ContentManager`, which is the whole pipeline rather than a fixture.
+
 ## What you need
 
 * Windows (XNA 4.0 is 32-bit Windows only).
