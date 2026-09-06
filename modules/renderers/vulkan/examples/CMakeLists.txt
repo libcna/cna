@@ -2149,6 +2149,28 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_disposed_buffer
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-143: draw-argument validation: ranges, primitive types, and drawing with no bound buffer.
+        cna_vulkan_test(cna_test_vulkan_draw_range_validation
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_draw_range_validation_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DrawRangeValidation
+            COMMAND cna_test_vulkan_draw_range_validation
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_primitivetype_validation
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_primitivetype_validation_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_PrimitiveTypeValidation
+            COMMAND cna_test_vulkan_primitivetype_validation
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_draw_novertexbuffer
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_draw_novertexbuffer_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DrawNoVertexBuffer
+            COMMAND cna_test_vulkan_draw_novertexbuffer
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_draw_noindexbuffer
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_draw_noindexbuffer_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DrawNoIndexBuffer
+            COMMAND cna_test_vulkan_draw_noindexbuffer
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-339: the release path that also runs vkDeviceWaitIdle and the
         # retirement lists. HasRenderer() must be false after the first Dispose and no second
         # release may be attempted.
