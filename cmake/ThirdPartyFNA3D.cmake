@@ -49,7 +49,8 @@ function(cna_configure_mojoshader)
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-vertex-color-clamp.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-texcrd.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-legacy-texcoord-input.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-unmatched-fragment-input.patch")
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-unmatched-fragment-input.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-ilp32-float-literal.patch")
     set(_cna_fna3d_mojoshader_patch_script
         "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-mojoshader-patch.cmake")
 
@@ -67,6 +68,11 @@ function(cna_configure_mojoshader)
         GIT_PROGRESS   TRUE
         GIT_SUBMODULES_RECURSE TRUE
         EXCLUDE_FROM_ALL
+        # Without this the update step re-checks out the pinned ref on EVERY configure, which
+        # reverts the patch series below and makes the patch step rewrite -- and MojoShader
+        # recompile -- every single time. The ref is pinned, so there is nothing to update to; the
+        # explicit re-apply after MakeAvailable is what keeps the sources correct regardless.
+        UPDATE_DISCONNECTED TRUE
         PATCH_COMMAND  "${CMAKE_COMMAND}"
                        "-DCNA_FNA3D_MOJOSHADER_PATCH_FILE=${_cna_fna3d_mojoshader_patch}"
                        -P "${_cna_fna3d_mojoshader_patch_script}"

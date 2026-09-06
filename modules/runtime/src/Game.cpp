@@ -550,22 +550,45 @@ namespace Microsoft::Xna::Framework
 
     void Game::Run()
     {
-        AssertNotDisposed();
-
-        if (!hasInitialized_)
+        // EmscriptenMainLoopCallback catches what a FRAME throws, but everything before the loop --
+        // Initialize, LoadContent, the first device and content work -- had no reporting at all. On
+        // the web that is the difference between a diagnosis and a blank canvas: an exception that
+        // escapes Run() reaches the browser as a rejected promise carrying a bare `{excPtr}`, with
+        // no type, no what() and nothing in the console, and Emscripten exposes no helper to read
+        // it back. Log it where the message still exists and let it keep unwinding, so this changes
+        // what a developer is told and nothing else. A native build reaches std::terminate, which
+        // prints what() itself, so this only ever adds a line there.
+        try
         {
-            DoInitialize();
-            hasInitialized_ = true;
+            AssertNotDisposed();
+
+            if (!hasInitialized_)
+            {
+                DoInitialize();
+                hasInitialized_ = true;
+            }
+
+            BeginRun();
+            BeforeLoop();
+
+            previousPerformanceCounter_ = platform_->GetPerformanceCounter();
+            RunLoop();
+
+            EndRun();
+            AfterLoop();
         }
-
-        BeginRun();
-        BeforeLoop();
-
-        previousPerformanceCounter_ = platform_->GetPerformanceCounter();
-        RunLoop();
-
-        EndRun();
-        AfterLoop();
+        catch (const std::exception& exception)
+        {
+            CNA::Logger::Error(
+                std::string("CNA: fatal exception escaped Game::Run(): ") + exception.what());
+            throw;
+        }
+        catch (...)
+        {
+            CNA::Logger::Error("CNA: a fatal exception that is not a std::exception escaped "
+                               "Game::Run().");
+            throw;
+        }
     }
 
     void Game::Tick()
