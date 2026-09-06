@@ -2171,6 +2171,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_draw_noindexbuffer
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-211: RenderTargetCube depth-format fidelity -- the cube half of what VULKAN-215 fixed for the 2D twin.
+        cna_vulkan_test(cna_test_vulkan_rendertargetcube_depthformat
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_rendertargetcube_depthformat_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_RenderTargetCube_DepthFormat
+            COMMAND cna_test_vulkan_rendertargetcube_depthformat
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-339: the release path that also runs vkDeviceWaitIdle and the
         # retirement lists. HasRenderer() must be false after the first Dispose and no second
         # release may be attempted.
