@@ -2391,6 +2391,32 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-435: the 2D goldens and the two golden-harness smoke tests.
+        cna_vulkan_test(cna_test_vulkan_spritebatch_rotation_golden
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritebatch_rotation_golden_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SpriteBatch_Rotation_Golden
+            COMMAND cna_test_vulkan_spritebatch_rotation_golden
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_texture_filter_linear_golden
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_texture_filter_linear_golden_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_TextureFilter_Linear_Golden
+            COMMAND cna_test_vulkan_texture_filter_linear_golden
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_goldenimage_smoke
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_goldenimage_smoke_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_GoldenImage_Smoke
+            COMMAND cna_test_vulkan_goldenimage_smoke
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_pixeltestgame_smoke
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pixeltestgame_smoke_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_PixelTestGame_Smoke
+            COMMAND cna_test_vulkan_pixeltestgame_smoke
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-339: the release path that also runs vkDeviceWaitIdle and the
         # retirement lists. HasRenderer() must be false after the first Dispose and no second
         # release may be attempted.
