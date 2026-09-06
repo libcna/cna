@@ -26,12 +26,19 @@
 // contradicted by hardware. They are printed for the record and asserted only to be self-consistent
 // (Reach must not permit more than HiDef).
 //
-// Legs G and H come from VULKAN-180, which this file's own probe opened: a resource the device
-// cannot actually back must REPORT itself. They ask for the largest volume and the largest cube the
-// device's own limits describe -- sizes whose memory (274 GB and 25 GB here) no heap can satisfy --
-// and require an exception naming the size. Before VULKAN-180 both constructors returned a
-// perfectly ordinary-looking object: `vkAllocateMemory` succeeded, `vkBindImageMemory` failed with
-// its result ignored, and the unbound image went on to a pipeline barrier and an image view.
+// Legs G and H come from VULKAN-180, which this file's own probe opened. They ask for the largest
+// volume and the largest cube the device's own limits describe, and assert the INVARIANT rather
+// than a refusal: the construction either succeeds -- and the object is then usable, proved by a
+// one-texel readback -- or it throws a message naming the size. What it may never do is the third
+// thing, which is what VULKAN-180 found: return a perfectly ordinary-looking object whose
+// `vkAllocateMemory` succeeded, whose `vkBindImageMemory` failed with its result ignored, and whose
+// unbound image then went on to a pipeline barrier and an image view.
+//
+// The invariant is the assertion, not the refusal, because which of the two arms is taken is a
+// property of the DEVICE. On llvmpipe both sizes exceed every heap and both throw; on RADV
+// (measured on an Xwayland display, `VULKAN-012`) `maxImageDimensionCube` is 16384 and a cube that
+// size is genuinely allocatable, so it succeeds -- and asserting "is refused" would have failed a
+// correct renderer on real hardware. The first draft did exactly that.
 //
 // Exit code 0 = all PASS, 1 = any FAIL.
 
@@ -41,6 +48,9 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
+#include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 
 #include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
@@ -49,6 +59,7 @@
 #include <exception>
 #include <limits>
 #include <memory>
+#include <vector>
 #include <string>
 
 using namespace Microsoft::Xna::Framework;
@@ -155,40 +166,45 @@ protected:
         // the switch into a way to hide a real message.
         {
             const int e = static_cast<int>(lim.maxImageDimension3D);
-            const std::size_t before = r.GetValidationMessagesEXT().size();
             bool threw = false;
+            bool usable = false;
             std::string what;
             r.SetValidationEchoEnabledEXT(false);
             try {
                 Texture3D huge(dev, e, e, e, false, SurfaceFormat::Color);
-                (void)huge;
+                // Succeeded: then it must be usable. One voxel is enough to tell an object with
+                // memory bound from one without.
+                std::vector<Color> one(1, Color(0, 0, 0, 0));
+                huge.GetData(0, /*left=*/0, /*top=*/0, /*right=*/1, /*bottom=*/1,
+                             /*front=*/0, /*back=*/1, one.data(), 0, 1);
+                usable = true;
             } catch (const std::exception& ex) { threw = true; what = ex.what(); }
             r.SetValidationEchoEnabledEXT(true);
-            const bool layerObjected = r.GetValidationMessagesEXT().size() > before ||
-                                       !VulkanRenderer::IsValidationActiveEXT();
-            check(threw && what.find(std::to_string(e)) != std::string::npos && layerObjected,
+            check((threw && what.find(std::to_string(e)) != std::string::npos) || usable,
                   "G a Texture3D at the device's own maxImageDimension3D cubed (" +
-                      std::to_string(e) + "^3) is refused with a message naming the size: threw=" +
-                      (threw ? what : std::string("NO -- the caller got an object the device "
-                                                 "cannot back")));
+                      std::to_string(e) + "^3) either works or says why: threw=" +
+                      (threw ? what : std::string("no")) + " usable=" +
+                      (usable ? "yes" : "NO -- the caller got an object the device cannot back"));
         }
         {
             const int e = static_cast<int>(lim.maxImageDimensionCube);
-            const std::size_t before = r.GetValidationMessagesEXT().size();
             bool threw = false;
+            bool usable = false;
             std::string what;
             r.SetValidationEchoEnabledEXT(false);
             try {
                 TextureCube huge(dev, e, false, SurfaceFormat::Color);
-                (void)huge;
+                std::vector<Color> one(1, Color(0, 0, 0, 0));
+                const Rectangle texel(0, 0, 1, 1);
+                huge.GetData(CubeMapFace::PositiveX, 0, &texel, one.data(), 0, 1);
+                usable = true;
             } catch (const std::exception& ex) { threw = true; what = ex.what(); }
             r.SetValidationEchoEnabledEXT(true);
-            const bool layerObjected = r.GetValidationMessagesEXT().size() > before ||
-                                       !VulkanRenderer::IsValidationActiveEXT();
-            check(threw && what.find(std::to_string(e)) != std::string::npos && layerObjected,
+            check((threw && what.find(std::to_string(e)) != std::string::npos) || usable,
                   "H a TextureCube at the device's own maxImageDimensionCube (" +
-                      std::to_string(e) + ") is refused with a message naming the size: threw=" +
-                      (threw ? what : std::string("NO")));
+                      std::to_string(e) + ") either works or says why: threw=" +
+                      (threw ? what : std::string("no")) + " usable=" +
+                      (usable ? "yes" : "NO"));
         }
 
         // The device's own numbers, printed unconditionally so a run on different hardware carries
