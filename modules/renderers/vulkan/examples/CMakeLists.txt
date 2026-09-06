@@ -2128,6 +2128,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_texture2d_anisotropic_singlelevel
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-135: the VertexBuffer::SetData overload matrix.
+        cna_vulkan_test(cna_test_vulkan_vertexbuffer_setdata
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_vertexbuffer_setdata_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_VbSetData
+            COMMAND cna_test_vulkan_vertexbuffer_setdata
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-339: the release path that also runs vkDeviceWaitIdle and the
         # retirement lists. HasRenderer() must be false after the first Dispose and no second
         # release may be attempted.
