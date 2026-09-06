@@ -2743,7 +2743,12 @@ namespace CNA::Internal::Renderers::Vulkan
             VkPhysicalDeviceProperties devProps{};
             vkGetPhysicalDeviceProperties(physicalDevice_, &devProps);
             const int maxMsaa = SampleCountToInt(PickSampleCount(physicalDevice_, 64));
-            std::cout << "CNA: Vulkan capabilities -- device=" << devProps.deviceName
+            // plan_vulkan.md VULKAN-402: std::clog, not std::cout. A startup diagnostic on stdout
+            // is what GraphicsDeviceRendererTest.StartupDiagnosticNeverWritesToStdout exists to
+            // forbid -- stdout belongs to the program's output, and a host that pipes it gets this
+            // line mixed into its data. This was the only std::cout in the renderer; every other
+            // diagnostic here already used std::clog.
+            std::clog << "CNA: Vulkan capabilities -- device=" << devProps.deviceName
                       << "; MSAA up to " << maxMsaa
                       << "x; MRT up to 4 targets (FNA MAX_RENDERTARGET_BINDINGS); "
                          "anisotropic filtering: "
