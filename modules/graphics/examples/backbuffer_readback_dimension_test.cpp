@@ -40,6 +40,15 @@
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "System/NotSupportedException.hpp"
 
+#if defined(CNA_RENDERER_VULKAN)
+// plan_vulkan.md VULKAN-404: this fixture is the only place that reads the backbuffer back across a
+// runtime resize, and that is the exact shape in which the Vulkan renderer mapped the NEW swapchain
+// extent's byte count out of the OLD extent's staging allocation. Every leg's pixel checks passed
+// while it did so, on this driver -- only the Khronos layer noticed. Judging the layer here is what
+// turns those passing pixel checks into a defence.
+#include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
+#endif
+
 #include <cstdint>
 #include <cstdio>
 #include <memory>
@@ -563,8 +572,32 @@ class BackbufferReadbackDimensionTest : public Game
         Finish();
     }
 
+    /**
+     * @brief VULKAN-404 -- the Khronos layer's verdict on everything this leg just did.
+     *
+     * Asserted per leg rather than per suite, because the defect this guards is reachable from one
+     * leg only (G1, the growing resize) and a suite-wide count would not say which. The layer's own
+     * liveness is asserted first: an empty message list from a layer that never loaded is not
+     * evidence.
+     */
+    void CheckValidationClean()
+    {
+#if defined(CNA_RENDERER_VULKAN)
+        using CNA::Internal::Renderers::Vulkan::VulkanRenderer;
+        check(VulkanRenderer::IsValidationActiveEXT(),
+              "V1 VK_LAYER_KHRONOS_validation is loaded, so the count below means something");
+        auto* vk = dynamic_cast<VulkanRenderer*>(&getGraphicsDeviceProperty().GetRenderer());
+        if (!vk) { check(false, "V2 Vulkan renderer not reachable"); return; }
+        const auto& msgs = vk->GetValidationMessagesEXT();
+        check(msgs.empty(),
+              "V2 no Vulkan validation message" +
+                  (msgs.empty() ? std::string{} : std::string(" -- first: ") + msgs.front()));
+#endif
+    }
+
     void Finish()
     {
+        CheckValidationClean();
         std::printf("[INFO] %s: %d/%d checks passed\n", kRendererName, passCount_, totalCount_);
         std::fflush(stdout);
         result_ = (passCount_ == totalCount_ && (totalCount_ > 0 || boundaryDeclared_)) ? 0 : 1;

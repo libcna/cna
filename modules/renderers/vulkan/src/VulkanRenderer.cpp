@@ -3629,6 +3629,11 @@ namespace CNA::Internal::Renderers::Vulkan
         // frame slot, never by image, so their count is fixed for the renderer's lifetime.
         ++swapchainRecreateCountEXT_;
         acquiredImageMaskEXT_ = 0;
+        // VULKAN-404: the cached backbuffer readback describes the swapchain that has just been
+        // destroyed -- its content is the old frame and its staging buffer is sized for the old
+        // extent. Leaving the cache marked valid let ReadBackbuffer take the no-submit path and
+        // map the NEW extent's byte count out of the OLD extent's allocation.
+        readbackStagingValid_ = false;
     }
 
     // =========================================================================
@@ -11245,7 +11250,14 @@ namespace CNA::Internal::Renderers::Vulkan
         // without re-presenting — re-presenting an empty queue would re-render a cleared
         // frame and destroy the content of all but the first read.
         const bool hasNewWork = !pending3D_.empty() || !activeBatches_.empty();
-        if (hasNewWork || !readbackStagingValid_) {
+        // VULKAN-404: and the cache is only usable when its allocation actually covers the frame
+        // about to be mapped. RecreateSwapchain now invalidates it, but this keeps the map size
+        // bounded by the allocation locally, so no future caller can reintroduce the overstep by
+        // forgetting to invalidate -- the two dimensions being >= is exactly the test the
+        // reallocation below uses.
+        const bool stagingCoversFrame = readbackStagingBuf_ != VK_NULL_HANDLE &&
+                                        readbackAllocW_ >= fullW && readbackAllocH_ >= fullH;
+        if (hasNewWork || !readbackStagingValid_ || !stagingCoversFrame) {
             // Deferred copy: RecordCommandBuffer copies the whole swapchain image into
             // readbackStagingBuf_ before vkQueuePresentKHR. SubmitFrame(true) renders and
             // waits for the GPU but HOLDS the present, so we read the staging buffer below
