@@ -49,9 +49,14 @@ mcs -sdk:4 -platform:x86 -target:exe -nologo -out:"$build/GraphicsContentOracle.
 
 win_out="$(env WINEPREFIX="$prefix" WINEDEBUG=-all wine winepath -w "$build/out" 2>/dev/null)"
 rm -rf "$build/out"; mkdir -p "$build/out"
+# XNAPP-167: the committed per-extension corpus, so the genuine importer reads the same bytes CNA's
+# tests read. Copied into the build directory because a Wine path is easier to hand over there.
+rm -rf "$build/fixtures"; mkdir -p "$build/fixtures"
+cp -a "$repo/tests/assets/xna40/texture/." "$build/fixtures/"
+win_fix="$(env WINEPREFIX="$prefix" WINEDEBUG=-all wine winepath -w "$build/fixtures" 2>/dev/null)"
 # The pipeline's texture paths (resampling, DXT, mipmaps) create a Direct3D device, which under
 # Wine needs an X display: a virtual one is fine (Xvfb :99 by default).
-env -u WAYLAND_DISPLAY DISPLAY="${CNA_XNA40_DISPLAY:-:99}" WINEPREFIX="$prefix" WINEDEBUG=-all wine "$build/GraphicsContentOracle.exe" "$win_out"
+env -u WAYLAND_DISPLAY DISPLAY="${CNA_XNA40_DISPLAY:-:99}" WINEPREFIX="$prefix" WINEDEBUG=-all wine "$build/GraphicsContentOracle.exe" "$win_out" "$win_fix"
 
 # Publish: strip CRLF so the fixtures are byte-stable across hosts, keep everything else verbatim.
 find "$out" -maxdepth 1 -type f \( -name '*.json' -o -name '*.bin' \) -delete

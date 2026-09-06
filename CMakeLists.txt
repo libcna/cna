@@ -294,6 +294,7 @@ add_subdirectory(modules)
 include(cmake/Tests/WickedTests.cmake)
 
 include(cmake/Harnesses.cmake)
+include(cmake/XnaPipelineParityGates.cmake)
 
 include(cmake/ToolGltfToCnj.cmake)
 

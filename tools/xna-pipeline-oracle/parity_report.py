@@ -26,6 +26,11 @@ Usage:
   parity_report.py --inventory A.json --map M.json [--inputs I.json] --output report.md [--gate] [--init]
     --init  adds every inventory type/member missing from the map as MISSING (never overwrites)
     --gate  exit 1 on any MISSING, unknown map entry, or status without its required annotation
+    --check verify the committed report is exactly what this run writes and that the map has no
+            gate problem, without writing anything and without failing on MISSING -- MISSING is
+            what the report exists to publish. This is the ctest: it makes the report a
+            regenerated artefact rather than a document somebody edits, so a status that changes
+            without the report changing cannot happen.
 """
 import argparse
 import json
@@ -358,6 +363,7 @@ def main(argv):
     ap.add_argument("--inputs")
     ap.add_argument("--output", required=True)
     ap.add_argument("--gate", action="store_true")
+    ap.add_argument("--check", action="store_true")
     ap.add_argument("--init", action="store_true")
     ap.add_argument("--summary-json", help="also write the summary counts as JSON")
     args = ap.parse_args(argv[1:])
@@ -375,6 +381,20 @@ def main(argv):
         print("init: added %d types and %d members/values as MISSING" % (added_types, added_members))
 
     report, problems, summary = build_report(inventory, pmap, inputs)
+    if args.check:
+        try:
+            with open(args.output, encoding="utf-8") as f:
+                committed = f.read()
+        except OSError as error:
+            print("cannot read %s: %s" % (args.output, error))
+            return 1
+        for key, value in summary.items():
+            print("%s: %s" % (key, "%d/%d" % value if isinstance(value, tuple) else value))
+        for problem in problems:
+            print("  problem: " + problem)
+        if committed != report:
+            print("  problem: %s is not what this run writes; regenerate it" % args.output)
+        return 1 if problems or committed != report else 0
     with open(args.output, "w", encoding="utf-8") as f:
         f.write(report)
     if args.summary_json:

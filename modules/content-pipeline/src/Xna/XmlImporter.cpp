@@ -60,7 +60,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         // No default processor: XNA's own descriptor names none, so what the document builds is
         // passed on unprocessed unless the project says otherwise (measured through the inventory).
         ContentImporterAttribute attribute(".xml");
-        attribute.setDisplayNameProperty("XML Content");
+        attribute.setDisplayNameProperty("XML Content - XNA Framework");
         return attribute;
     }
 

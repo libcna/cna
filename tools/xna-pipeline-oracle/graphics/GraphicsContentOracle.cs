@@ -212,10 +212,15 @@ namespace Cna.Xna40.GraphicsOracle
             });
         }
 
+        /// The committed corpus of tests/assets/xna40/texture, so the genuine importer and CNA's
+        /// read the same bytes rather than two encoders' idea of the same image.
+        private static string fixtureDirectory = ".";
+
         private static void Main(string[] args)
         {
             Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
             outputDirectory = args.Length > 0 ? args[0] : ".";
+            fixtureDirectory = args.Length > 1 ? args[1] : ".";
             Directory.CreateDirectory(outputDirectory);
 
             // ---- pixel layout and accessors ------------------------------------------------------
@@ -2705,6 +2710,138 @@ namespace Cna.Xna40.GraphicsOracle
                 probe("dx10", WriteDdsCompressed(directory, "dx10.dds", "DX10", 4, 4, 1, false, false));
                 return builder.ToString();
             });
+            // ---- TextureImporter: one committed fixture per declared extension -------------------
+            // XNAPP-167. The nine extensions the attribute names, each read from the file CNA
+            // committed, so a difference in the answer is a difference in the importer and never a
+            // difference in what the two sides encoded.
+            foreach (string fixture in new string[] {
+                "probe.bmp", "probe.dds", "probe.dib", "probe.hdr", "probe.jpg",
+                "probe.pfm", "probe.png", "probe.ppm", "probe.tga", "probe.xyz", "probe_3x2.png",
+                "probe_flat.hdr",
+                "empty.png", "truncated.png", "garbage.tga", "truncated.dds" })
+            {
+                string captured = fixture;
+                Record("textureext/" + captured, () =>
+                {
+                    var context = new ProbeImporterContext();
+                    TextureContent texture = new TextureImporter().Import(
+                        Path.Combine(fixtureDirectory, captured), context);
+                    return DescribeTexture(texture) + " dependencies=" + context.Dependencies.Count +
+                           " identity=" + (texture.Identity == null ? "null" : (texture.Identity.SourceTool ?? "null"));
+                });
+            }
+            // The same fixtures through the processor XNA names as the default for this importer,
+            // and through the three the pipeline also offers, so the source-to-processor leg is
+            // measured and not assumed.
+            foreach (string fixture in new string[] { "probe.png", "probe.ppm", "probe.pfm", "probe.dds", "probe.jpg" })
+            {
+                string captured = fixture;
+                Record("textureext/" + captured + "/spritetexture", () =>
+                {
+                    TextureContent texture = new TextureImporter().Import(
+                        Path.Combine(fixtureDirectory, captured), new ProbeImporterContext());
+                    TextureContent output = new SpriteTextureProcessor().Process(texture, new ProbeProcessorContext());
+                    return DescribeTexture(output);
+                });
+                Record("textureext/" + captured + "/texture", () =>
+                {
+                    TextureContent texture = new TextureImporter().Import(
+                        Path.Combine(fixtureDirectory, captured), new ProbeImporterContext());
+                    TextureContent output = new TextureProcessor().Process(texture, new ProbeProcessorContext());
+                    return DescribeTexture(output);
+                });
+                Record("textureext/" + captured + "/modeltexture", () =>
+                {
+                    TextureContent texture = new TextureImporter().Import(
+                        Path.Combine(fixtureDirectory, captured), new ProbeImporterContext());
+                    TextureContent output = new ModelTextureProcessor().Process(texture, new ProbeProcessorContext());
+                    return DescribeTexture(output);
+                });
+            }
+
+            // The two float sources' actual values, which DescribeTexture does not print.
+            foreach (string fixture in new string[] { "probe.hdr", "probe_flat.hdr", "probe.pfm" })
+            {
+                string captured = fixture;
+                Record("textureext/" + captured + "/floats", () =>
+                {
+                    TextureContent texture = new TextureImporter().Import(
+                        Path.Combine(fixtureDirectory, captured), new ProbeImporterContext());
+                    var bitmap = (PixelBitmapContent<Vector4>)texture.Faces[0][0];
+                    var builder = new StringBuilder();
+                    for (int y = 0; y < bitmap.Height; y++)
+                        for (int x = 0; x < bitmap.Width; x++)
+                        {
+                            Vector4 pixel = bitmap.GetPixel(x, y);
+                            if (builder.Length > 0) builder.Append(' ');
+                            builder.Append("(" + pixel.X.ToString("R", CultureInfo.InvariantCulture) + "," +
+                                           pixel.Y.ToString("R", CultureInfo.InvariantCulture) + "," +
+                                           pixel.Z.ToString("R", CultureInfo.InvariantCulture) + "," +
+                                           pixel.W.ToString("R", CultureInfo.InvariantCulture) + ")");
+                        }
+                    return builder.ToString();
+                });
+            }
+
+            // ---- TextureProcessor: every property, over the committed corpus ----------------------
+            // XNAPP-167 asks for colour key, premultiply, resize to a power of two, mipmap
+            // generation, TextureFormat and the profile restrictions to be measured rather than
+            // assumed. Each case names the one property it moves off its default.
+            Action<string, string, Action<TextureProcessor>> textureCase =
+                delegate(string label, string fixture, Action<TextureProcessor> configure)
+            {
+                Record("textureprop/" + label, () =>
+                {
+                    TextureContent texture = new TextureImporter().Import(
+                        Path.Combine(fixtureDirectory, fixture), new ProbeImporterContext());
+                    var processor = new TextureProcessor();
+                    configure(processor);
+                    return DescribeTexture(processor.Process(texture, new ProbeProcessorContext()));
+                });
+            };
+            textureCase("defaults", "probe.png", delegate(TextureProcessor p) { });
+            textureCase("no_premultiply", "probe.png", delegate(TextureProcessor p) { p.PremultiplyAlpha = false; });
+            textureCase("colorkey_red_enabled", "probe.png", delegate(TextureProcessor p) {
+                p.ColorKeyEnabled = true; p.ColorKeyColor = new Color(255, 0, 0, 255); });
+            textureCase("colorkey_red_disabled", "probe.png", delegate(TextureProcessor p) {
+                p.ColorKeyEnabled = false; p.ColorKeyColor = new Color(255, 0, 0, 255); });
+            textureCase("colorkey_magenta_default", "probe.png", delegate(TextureProcessor p) {
+                p.ColorKeyEnabled = true; });
+            textureCase("generate_mipmaps", "probe.png", delegate(TextureProcessor p) { p.GenerateMipmaps = true; });
+            textureCase("resize_to_power_of_two", "probe_3x2.png", delegate(TextureProcessor p) { p.ResizeToPowerOfTwo = true; });
+            textureCase("no_resize_3x2", "probe_3x2.png", delegate(TextureProcessor p) { });
+            textureCase("resize_and_mipmaps", "probe_3x2.png", delegate(TextureProcessor p) {
+                p.ResizeToPowerOfTwo = true; p.GenerateMipmaps = true; });
+            textureCase("mipmaps_without_resize_3x2", "probe_3x2.png", delegate(TextureProcessor p) { p.GenerateMipmaps = true; });
+            textureCase("dxt_from_3x2", "probe_3x2.png", delegate(TextureProcessor p) { p.TextureFormat = TextureProcessorOutputFormat.DxtCompressed; });
+            textureCase("format_color", "probe.png", delegate(TextureProcessor p) { p.TextureFormat = TextureProcessorOutputFormat.Color; });
+            textureCase("format_dxt", "probe.png", delegate(TextureProcessor p) { p.TextureFormat = TextureProcessorOutputFormat.DxtCompressed; });
+            textureCase("format_nochange", "probe.png", delegate(TextureProcessor p) { p.TextureFormat = TextureProcessorOutputFormat.NoChange; });
+            textureCase("format_dxt_from_ppm", "probe.ppm", delegate(TextureProcessor p) { p.TextureFormat = TextureProcessorOutputFormat.DxtCompressed; });
+            textureCase("format_nochange_from_pfm", "probe.pfm", delegate(TextureProcessor p) { p.TextureFormat = TextureProcessorOutputFormat.NoChange; });
+            textureCase("format_nochange_from_dds", "probe.dds", delegate(TextureProcessor p) { p.TextureFormat = TextureProcessorOutputFormat.NoChange; });
+            textureCase("mipmaps_and_dxt", "probe.png", delegate(TextureProcessor p) {
+                p.GenerateMipmaps = true; p.TextureFormat = TextureProcessorOutputFormat.DxtCompressed; });
+
+            // The same processor under each target and profile: what Reach refuses that HiDef allows.
+            foreach (string leg in new string[] { "Windows/Reach", "Windows/HiDef", "Xbox360/Reach",
+                                                 "Xbox360/HiDef", "WindowsPhone/Reach" })
+            {
+                string captured = leg;
+                string[] parts = captured.Split('/');
+                Record("textureprofile/" + captured.Replace('/', '_'), () =>
+                {
+                    TextureContent texture = new TextureImporter().Import(
+                        Path.Combine(fixtureDirectory, "probe.png"), new ProbeImporterContext());
+                    var context = new TargetedProcessorContext(
+                        (TargetPlatform)Enum.Parse(typeof(TargetPlatform), parts[0]),
+                        (GraphicsProfile)Enum.Parse(typeof(GraphicsProfile), parts[1]));
+                    var processor = new TextureProcessor();
+                    processor.TextureFormat = TextureProcessorOutputFormat.DxtCompressed;
+                    return DescribeTexture(processor.Process(texture, context));
+                });
+            }
+
             Record("textureimporter/pfm_pixels", () =>
             {
                 string directory = Path.Combine(outputDirectory, "work");
@@ -3078,6 +3215,33 @@ namespace Cna.Xna40.GraphicsOracle
             public override OpaqueDataDictionary Parameters { get { return parameters; } }
             public override TargetPlatform TargetPlatform { get { return TargetPlatform.Windows; } }
             public override GraphicsProfile TargetProfile { get { return GraphicsProfile.HiDef; } }
+            public override void AddDependency(string filename) { }
+            public override void AddOutputFile(string filename) { }
+            public override TOutput BuildAndLoadAsset<TInput, TOutput>(ExternalReference<TInput> sourceAsset, string processorName, OpaqueDataDictionary processorParameters, string importerName)
+            { throw new NotSupportedException("BuildAndLoadAsset"); }
+            public override ExternalReference<TOutput> BuildAsset<TInput, TOutput>(ExternalReference<TInput> sourceAsset, string processorName, OpaqueDataDictionary processorParameters, string importerName, string assetName)
+            { throw new NotSupportedException("BuildAsset"); }
+            public override TOutput Convert<TInput, TOutput>(TInput input, string processorName, OpaqueDataDictionary processorParameters)
+            { throw new NotSupportedException("Convert"); }
+        }
+
+        /// The same probe, with the target and profile chosen, for the Reach/HiDef rows.
+        private sealed class TargetedProcessorContext : ContentProcessorContext
+        {
+            private readonly OpaqueDataDictionary parameters = new OpaqueDataDictionary();
+            private readonly ContentBuildLogger logger = new ProbeLogger();
+            private readonly TargetPlatform platform;
+            private readonly GraphicsProfile profile;
+            public TargetedProcessorContext(TargetPlatform targetPlatform, GraphicsProfile targetProfile)
+            { platform = targetPlatform; profile = targetProfile; }
+            public override string BuildConfiguration { get { return "Debug"; } }
+            public override string IntermediateDirectory { get { return "obj"; } }
+            public override ContentBuildLogger Logger { get { return logger; } }
+            public override string OutputDirectory { get { return "bin"; } }
+            public override string OutputFilename { get { return "asset.xnb"; } }
+            public override OpaqueDataDictionary Parameters { get { return parameters; } }
+            public override TargetPlatform TargetPlatform { get { return platform; } }
+            public override GraphicsProfile TargetProfile { get { return profile; } }
             public override void AddDependency(string filename) { }
             public override void AddOutputFile(string filename) { }
             public override TOutput BuildAndLoadAsset<TInput, TOutput>(ExternalReference<TInput> sourceAsset, string processorName, OpaqueDataDictionary processorParameters, string importerName)

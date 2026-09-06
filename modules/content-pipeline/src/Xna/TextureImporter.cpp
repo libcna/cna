@@ -11,6 +11,7 @@
 #include "CNA/Content/Cnb/CnbSourceImport.hpp"
 #include "CNA/Internal/Graphics/DdsSurfaceReader.hpp"
 #include "CNA/Internal/Graphics/PfmDecoder.hpp"
+#include "CNA/Internal/Graphics/RadianceHdrDecoder.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentIdentity.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/DxtBitmapContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/PixelBitmapContent.hpp"
@@ -44,6 +45,24 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                                              (static_cast<std::uint32_t>(bytes[2]) << 16) |
                                              (static_cast<std::uint32_t>(bytes[3]) << 24);
             return headerSize == 40u || headerSize == 108u || headerSize == 124u;
+        }
+
+        /**
+         * @brief XNA's own refusal for a source its texture reader cannot read.
+         *
+         * The genuine importer appends the D3DX code its reader answered: a file with no bytes at
+         * all is `D3DERR_INVALIDCALL`, and one whose bytes are not a picture it knows is
+         * `D3DXERR_INVALIDDATA` (measured, tests/reference/xna40/graphics cases
+         * textureext/empty.png, textureext/truncated.png, textureext/garbage.tga,
+         * textureext/truncated.dds and textureimporter/refusals).
+         *
+         * @param empty Whether the source held no bytes.
+         * @return The complete sentence, error code included.
+         */
+        [[nodiscard]] std::string UnreadableTextureMessage(bool empty)
+        {
+            return std::string("Can not read the texture file. The file is corrupted or invalid. "
+                               "Error code: ") + (empty ? "D3DERR_INVALIDCALL" : "D3DXERR_INVALIDDATA") + ".";
         }
 
         /** @brief The same bitmap with the fourteen-byte file header a `.bmp` carries. */
@@ -86,6 +105,35 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         const std::vector<std::uint8_t> bytes = ReadAll(filename);
         auto texture = std::make_shared<Graphics::Texture2DContent>();
         texture->setIdentityProperty(ContentIdentity(filename, tool.substr(tool.rfind('.') + 1)));
+        if (CNA::Internal::Graphics::IsRadianceHdr(bytes))
+        {
+            // A Radiance picture answers floats, as a portable float map does (measured,
+            // textureext/probe.hdr: its bitmap is Vector4, and probe.hdr/floats gives the values).
+            CNA::Internal::Graphics::DecodedRadianceHdr decoded;
+            try
+            {
+                decoded = CNA::Internal::Graphics::DecodeRadianceHdr(bytes, filename);
+            }
+            catch (const std::exception&)
+            {
+                throw InvalidContentException(UnreadableTextureMessage(bytes.empty()));
+            }
+            auto bitmap = std::make_shared<Graphics::PixelBitmapContent<Vector4>>(
+                static_cast<SharpRuntime::intcs>(decoded.width),
+                static_cast<SharpRuntime::intcs>(decoded.height));
+            for (std::uint32_t y = 0u; y < decoded.height; ++y)
+            {
+                for (std::uint32_t x = 0u; x < decoded.width; ++x)
+                {
+                    const std::size_t at = (static_cast<std::size_t>(y) * decoded.width + x) * 4u;
+                    bitmap->SetPixel(static_cast<SharpRuntime::intcs>(x), static_cast<SharpRuntime::intcs>(y),
+                                     Vector4(decoded.pixels[at], decoded.pixels[at + 1u],
+                                             decoded.pixels[at + 2u], decoded.pixels[at + 3u]));
+                }
+            }
+            texture->getMipmapsProperty().Add(std::move(bitmap));
+            return texture;
+        }
         if (CNA::Internal::Graphics::IsPfm(bytes))
         {
             // A portable float map is the one source that answers floats rather than bytes
@@ -97,8 +145,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             }
             catch (const std::exception&)
             {
-                throw InvalidContentException(
-                    "Can not read the texture file. The file is corrupted or invalid.");
+                throw InvalidContentException(UnreadableTextureMessage(bytes.empty()));
             }
             auto bitmap = std::make_shared<Graphics::PixelBitmapContent<Vector4>>(
                 static_cast<SharpRuntime::intcs>(decoded.width),
@@ -128,8 +175,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             }
             catch (const std::exception&)
             {
-                throw InvalidContentException(
-                    "Can not read the texture file. The file is corrupted or invalid.");
+                throw InvalidContentException(UnreadableTextureMessage(bytes.empty()));
             }
             std::shared_ptr<Graphics::TextureContent> content;
             if (surfaces.isCube)
@@ -213,11 +259,11 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         }
         catch (const std::exception&)
         {
-            throw InvalidContentException("Can not read the texture file. The file is corrupted or invalid.");
+            throw InvalidContentException(UnreadableTextureMessage(bytes.empty()));
         }
         if (decoded.representations.empty() || decoded.representations[0].levels.empty())
         {
-            throw InvalidContentException("Can not read the texture file. The file is corrupted or invalid.");
+            throw InvalidContentException(UnreadableTextureMessage(bytes.empty()));
         }
         auto bitmap = std::make_shared<Graphics::PixelBitmapContent<Color>>(
             static_cast<SharpRuntime::intcs>(decoded.width), static_cast<SharpRuntime::intcs>(decoded.height));
@@ -232,7 +278,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         ContentImporterAttribute attribute(
             {".bmp", ".dds", ".dib", ".hdr", ".jpg", ".pfm", ".png", ".ppm", ".tga"});
         attribute.setDefaultProcessorProperty("SpriteTextureProcessor");
-        attribute.setDisplayNameProperty("Texture Importer");
+        attribute.setDisplayNameProperty("Texture - XNA Framework");
         return attribute;
     }
 

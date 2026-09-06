@@ -38,7 +38,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
     {
         ContentImporterAttribute attribute(".fx");
         attribute.setDefaultProcessorProperty("EffectProcessor");
-        attribute.setDisplayNameProperty("Effect Importer");
+        attribute.setDisplayNameProperty("Effect - XNA Framework");
         return attribute;
     }
 

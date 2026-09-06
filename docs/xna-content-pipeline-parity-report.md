@@ -16,6 +16,7 @@
 | built-in importers | 5/10 (50.0%) | 0 | 5 |
 | built-in processors | 11/12 (91.7%) | 0 | 1 |
 | processor properties | 46/47 (97.9%) | 0 | 1 |
+| source extensions IMPLEMENTED+TESTED | 0/18 (0.0%) | 0 | 18 |
 
 Status vocabulary: EXACT_EQUIVALENT, SEMANTIC_EQUIVALENT (spelling differs, capability identical; note says how),
 HOST_SUBSTITUTION (Microsoft-host mechanism replaced; note says how), EXTERNAL_BLOCKED (note names the
@@ -251,6 +252,29 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `TextureProcessor` | `ResizeToPowerOfTwo` | `Boolean` | `False` | EXACT_EQUIVALENT | `getResizeToPowerOfTwoProperty() / setResizeToPowerOfTwoProperty()` |
 | `TextureProcessor` | `TextureFormat` | `TextureProcessorOutputFormat` | `TextureProcessorOutputFormat.Color` | EXACT_EQUIVALENT | `getTextureFormatProperty() / setTextureFormatProperty()` |
 | `VideoProcessor` | `VideoSoundtrackType` | `VideoSoundtrackType` | `VideoSoundtrackType.Music` | MISSING |  |
+
+## 6. Source extensions
+
+| Extension | XNA importer | CNA importer | Processor | Windows | Phone | Xbox | Tests | Status | Note |
+|---|---|---|---|---|---|---|---|---|---|
+| `.bmp` | `` |  | `` |  |  |  | 0/0 | MISSING |  |
+| `.dds` | `` |  | `` |  |  |  | 0/0 | MISSING |  |
+| `.dib` | `` |  | `` |  |  |  | 0/0 | MISSING |  |
+| `.fbx` | `` |  | `` |  |  |  | 0/0 | MISSING |  |
+| `.fx` | `` |  | `` |  |  |  | 0/0 | MISSING |  |
+| `.hdr` | `` |  | `` |  |  |  | 0/0 | MISSING |  |
+| `.jpg` | `` |  | `` |  |  |  | 0/0 | MISSING |  |
+| `.mp3` | `` |  | `` |  |  |  | 0/0 | MISSING |  |
+| `.pfm` | `` |  | `` |  |  |  | 0/0 | MISSING |  |
+| `.png` | `` |  | `` |  |  |  | 0/0 | MISSING |  |
+| `.ppm` | `` |  | `` |  |  |  | 0/0 | MISSING |  |
+| `.spritefont` | `` |  | `` |  |  |  | 0/0 | MISSING |  |
+| `.tga` | `` |  | `` |  |  |  | 0/0 | MISSING |  |
+| `.wav` | `` |  | `` |  |  |  | 0/0 | MISSING |  |
+| `.wma` | `` |  | `` |  |  |  | 0/0 | MISSING |  |
+| `.wmv` | `` |  | `` |  |  |  | 0/0 | MISSING |  |
+| `.x` | `` |  | `` |  |  |  | 0/0 | MISSING |  |
+| `.xml` | `` |  | `` |  |  |  | 0/0 | MISSING |  |
 
 ## 7. Members
 

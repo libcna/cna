@@ -54,7 +54,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
     {
         ContentImporterAttribute attribute(".spritefont");
         attribute.setDefaultProcessorProperty("FontDescriptionProcessor");
-        attribute.setDisplayNameProperty("Sprite Font Description");
+        attribute.setDisplayNameProperty("Sprite Font Description - XNA Framework");
         return attribute;
     }
 

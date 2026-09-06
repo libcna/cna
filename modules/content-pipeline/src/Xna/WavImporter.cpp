@@ -25,7 +25,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
     {
         ContentImporterAttribute attribute(".wav");
         attribute.setDefaultProcessorProperty("SoundEffectProcessor");
-        attribute.setDisplayNameProperty("Wav Importer");
+        attribute.setDisplayNameProperty("WAV Audio File - XNA Framework");
         return attribute;
     }
 

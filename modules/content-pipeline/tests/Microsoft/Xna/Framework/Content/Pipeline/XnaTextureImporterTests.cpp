@@ -601,9 +601,10 @@ TEST(XnaTextureImporter, RefusalsMatchXna)
     EXPECT_NE(expected.find("missing=FileNotFoundException: Can not read the texture"), std::string::npos);
     EXPECT_THROW((void)importer.Import((scratch.Path() / "no_such.png").string(), context),
                  System::IO::FileNotFoundException);
-    // XNA's corrupt-file message ends with the D3DX error code its own reader answered; CNA's
-    // reader has no such code, so the sentence before it is what is held to.
-    const std::string sentence = "Can not read the texture file. The file is corrupted or invalid.";
+    // XNA's corrupt-file message ends with the D3DX code its own reader answered, and the two
+    // codes are told apart by whether the source held any bytes at all (measured, textureext/*).
+    const std::string sentence = "Can not read the texture file. The file is corrupted or invalid. "
+                                 "Error code: D3DXERR_INVALIDDATA.";
     EXPECT_NE(expected.find("garbage=InvalidContentException: " + sentence), std::string::npos);
     const std::string garbage = scratch.Write("garbage.png", {1, 2, 3, 4, 5});
     try
