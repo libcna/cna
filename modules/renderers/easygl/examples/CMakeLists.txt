@@ -64,6 +64,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # plans/plan_software.md SOFTWARE-61/84: this renderer's half of the cross-renderer diagnostic
         # dump -- not registered as a ctest, just a plain executable a developer/script runs by
         # hand alongside SOFTWARE's own cna_diag_software and cna_diag_compare.
+        # plan_vulkan.md VULKAN-137: the control for Vulkan's zero-length buffer run. Vulkan pads
+        # the allocation and EasyGL does not, so agreement between the two is the whole claim.
+        cna_easygl_test(cna_test_easygl_zero_length_buffers
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/zero_length_buffer_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_ZeroLengthBuffers
+            COMMAND cna_test_easygl_zero_length_buffers
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-050: registered here as the CONTROL for the Vulkan run -- the
         # whole question is whether two renderers with different submission models agree about
         # SpriteSortMode::Immediate, and a one-renderer measurement cannot answer it.

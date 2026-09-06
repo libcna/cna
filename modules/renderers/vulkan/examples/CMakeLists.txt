@@ -2471,6 +2471,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-137: a zero-element VertexBuffer/IndexBuffer. Vulkan pads the
+        # allocation to max(1, size) because vkCreateBuffer rejects 0; the padding must be invisible
+        # from the public API, and the validation half is the VULKAN-408 output gate's.
+        cna_vulkan_test(cna_test_vulkan_zero_length_buffers
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/zero_length_buffer_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_ZeroLengthBuffers
+            COMMAND cna_test_vulkan_zero_length_buffers
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-216: a RenderTarget2D's MultiSampleCount is its OWN, on a device
         # created WITHOUT multisampling -- deliberately no RecreateRendererForMultiSampleCount().
         cna_vulkan_test(cna_test_vulkan_rendertarget_own_msaa
