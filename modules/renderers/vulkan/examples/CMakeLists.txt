@@ -420,8 +420,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # apart instead of asserting one pixel.
         cna_vulkan_test(cna_test_vulkan_graphicsdevice_clearoptions
                         ${CMAKE_SOURCE_DIR}/modules/renderers/bgfx/examples/bgfx_graphicsdevice_clearoptions_test.cpp)
+        # plan_vulkan.md VULKAN-183: 90 -> 300, with the measurement rather than on suspicion.
+        # Standalone, this test takes 1.9 s on llvmpipe (:99, the configured display) and 121.5 s on
+        # RADV through a compositor-less Xwayland, where each presented frame costs about a second.
+        # Its two siblings solved the same problem by turning vertical retrace off, which is the
+        # better fix and is not available here: the source belongs to the bgfx examples and this
+        # renderer only registers it, so the timeout is the renderer-local half of the answer.
         cna_register_renderer_test(NAME Vulkan_GraphicsDevice_ClearOptions COMMAND cna_test_vulkan_graphicsdevice_clearoptions
-            TIMEOUT 90 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+            TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # REMED-GFX-129: Clear() is an ORDERED command at its exact public call position, not a
         # hint for the next render-pass load action. Every check queues its whole public sequence

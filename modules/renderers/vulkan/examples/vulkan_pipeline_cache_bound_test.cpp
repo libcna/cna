@@ -273,6 +273,21 @@ public:
     VulkanPipelineCacheBoundTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        // plan_vulkan.md VULKAN-183: this test does not present anything a human looks at, and
+        // vertical retrace is what made it a timeout on real hardware.
+        //
+        // Measured, both devices, standalone: with vsync on, 0.7 s on llvmpipe and **146.7 s** on
+        // RADV through a compositor-less Xwayland -- a 210x gap that is NOT the device being slow.
+        // GPU work is only ~1.7x slower there (`Vulkan_DescriptorCapacityContract`: 45.1 s vs
+        // 77.1 s). The cost is ~1.1 s per PRESENTED FRAME, because an Xwayland display with no
+        // Wayland compositor attached has nothing consuming its surface, so FIFO presentation
+        // waits on a "vblank" that arrives about once a second. With vsync off the same run takes
+        // **2.4 s** and still passes 7/7.
+        //
+        // Turning it off is not a workaround for that display: this test's subject is how many
+        // VkPipelines a cache builds, presentation timing has nothing to do with it, and the
+        // llvmpipe run gets faster too. A test that DID measure presentation must not do this.
+        gdm_->setSynchronizeWithVerticalRetraceProperty(false);
         gdm_->setPreferredBackBufferWidthProperty(kSize);
         gdm_->setPreferredBackBufferHeightProperty(kSize);
     }
