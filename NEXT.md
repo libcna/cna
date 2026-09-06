@@ -12,6 +12,33 @@ The current C ABI backlog is measured at **663 planned rows** under open `CBIND-
 `CBIND-121`, and `CBIND-122`; the latter owns five untyped XNB loading seams exposed by this fresh
 regeneration. See `plans/plan_binding.md` for the authoritative current status.
 
+## Vulkan renderer baseline, measured (`plans/plan_vulkan.md` `VULKAN-482`, 2026-09-06)
+
+The authoritative running record is `plans/plan_vulkan.md` §7.5, one row per completed task with
+both suite numbers. This entry exists so a reader of `NEXT.md` is not left with the older figure
+further down the file.
+
+- **`ctest -R '^Vulkan_'` → 254/254**, no skips at all. The dedicated suite grew from 218 at the
+  start of that plan's implementation phase.
+- **Full `ctest` → 9095/9111**, 16 failures. Every one of the sixteen is *named* in `VULKAN-475`
+  and **reproduces identically under EasyGL**, so none is caused by this renderer. That attribution
+  found three that were: a startup diagnostic on stdout (`VULKAN-402`) and two `.cnj` effect tests
+  gating on `CustomEffects` where the question is `ExecutesShaderEffectSourceEXT()` (`VULKAN-403`).
+
+**The device, because a suite number without one says less than it looks.** These ran on
+**`llvmpipe (LLVM 19.1.7)`** under Xvfb `:99`, not on the machine's `AMD Radeon 780M (RADV
+PHOENIX)`. That is not a choice: under Xvfb, RADV reports `No DRI3 support detected - required for
+presentation`, so the renderer's own present-capable-queue check rejects it. A hardware run needs
+the real display and the owner's go-ahead; `VULKAN-008`'s capability snapshot is built for it,
+classifying its 93 entries `Fixed` or `Device` so a different adapter *compares* rather than fails.
+
+**What this supersedes:** the earlier line in this file reading `VULKAN 211 = 210 pass + the
+accepted Vulkan_DepthBias llvmpipe residual`. It is left where it is — history is not rewritten
+here — but two things about it are now known: the suite is much larger, and `Vulkan_DepthBias` was
+never a renderer defect. §7.4 of the plan measured it as a **test** written against OpenGL's depth
+range; the renderer drives real dynamic `vkCmdSetDepthBias` from ten pipeline sites.
+
+
 ## Historical handoff — the sixth merge reopened the matrix by 506 rows (`CBIND-102`, 2026-08-28)
 
 `origin/next` merged into `feature/bindings` on 2026-08-28: 150 commits carrying the CNB content
