@@ -273,6 +273,44 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12")
     # REMED-GFX-135: the WRITE half of the same finding. `TextureCube::SetData`/`Texture3D::SetData`
     # kept the pre-REMED-GFX-127 shape -- a `void` renderer method behind `if (renderer_)` -- so an
     # upload that stored nothing, or only part of the requested region, still returned normally.
+    # plans/plan_dx.md DX-208: all five PrimitiveType values must reach the GPU without throwing, and an
+    # out-of-enum integer must still be rejected. Three of the five used to throw here by name.
+    cna_directx12_test(cna_test_directx12_primitivetype_validation
+                       ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_primitivetype_validation_test.cpp)
+    cna_directx12_register(DirectX12_PrimitiveTypeValidation
+                           cna_test_directx12_primitivetype_validation 300)
+
+    # plans/plan_dx.md DX-207: a real DRAW into a multisampled RenderTarget2D, which is the thing a
+    # hardcoded SampleDesc.Count = 1 in every pipeline state made illegal. The fixture is
+    # differential -- the same triangle into a non-MSAA and an MSAA target -- so it cannot pass by
+    # a resolve merely preserving solid colours.
+    cna_directx12_test(cna_test_directx12_rendertarget2d_msaa
+                       ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_rendertarget2d_msaa_test.cpp)
+    cna_directx12_register(DirectX12_RenderTarget2D_Msaa cna_test_directx12_rendertarget2d_msaa 300)
+
+    # plans/plan_dx.md DX-206: the same renderer-neutral depth-bias fixture DirectX11_DepthBias runs, so
+    # the two D3D renderers are judged against one oracle.
+    cna_directx12_test(cna_test_directx12_depth_bias
+                       ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_depth_bias_test.cpp)
+    cna_directx12_register(DirectX12_DepthBias cna_test_directx12_depth_bias 300)
+
+    # plans/plan_dx.md DX-201: the scissor corpus. deferred_scissor_capture_test is the renderer-neutral
+    # oracle D3D11 already runs (DirectX11_Deferred_Scissor); the SpriteBatch one covers
+    # SpriteBatch::Begin(..., RasterizerState) with ScissorTestEnable, which is the ordinary XNA way
+    # a game clips a HUD; the render-target one pins what a bind does to the scissor.
+    cna_directx12_test(cna_test_directx12_deferred_scissor
+                       ${CNA_GRAPHICS_EXAMPLES_DIR}/deferred_scissor_capture_test.cpp)
+    cna_directx12_register(DirectX12_Deferred_Scissor cna_test_directx12_deferred_scissor 300)
+
+    cna_directx12_test(cna_test_directx12_spritebatch_scissor
+                       ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_begin_rasterizerstate_scissor_test.cpp)
+    cna_directx12_register(DirectX12_SpriteBatch_Scissor cna_test_directx12_spritebatch_scissor 300)
+
+    cna_directx12_test(cna_test_directx12_rt_viewport_scissor_reset
+                       ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_viewport_scissor_reset_test.cpp)
+    cna_directx12_register(DirectX12_RenderTarget_ViewportScissorReset
+                           cna_test_directx12_rt_viewport_scissor_reset 300)
+
     cna_directx12_test(cna_test_directx12_cube_volume_setdata_contract
                    ${CNA_GRAPHICS_EXAMPLES_DIR}/texturecube_texture3d_setdata_contract_test.cpp)
     cna_directx12_register(DirectX12_CubeVolume_SetDataContract cna_test_directx12_cube_volume_setdata_contract 300)

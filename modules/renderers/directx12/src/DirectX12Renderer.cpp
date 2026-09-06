@@ -14,6 +14,7 @@
 #include "CNA/Internal/Renderers/D3DCommon/D3DConstantBuffers.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
@@ -63,6 +64,8 @@ namespace CNA::Internal::Renderers::DirectX12
             case PrimitiveType::TriangleStrip: return primitiveCount + 2;
             case PrimitiveType::LineList:      return primitiveCount * 2;
             case PrimitiveType::LineStrip:     return primitiveCount + 1;
+            // plans/plan_dx.md DX-208: one vertex per point, matching every other CNA renderer's own table.
+            case PrimitiveType::PointListEXT:  return primitiveCount;
             }
             return 0;
         }
@@ -98,18 +101,31 @@ namespace CNA::Internal::Renderers::DirectX12
             {
                 case PrimitiveType::TriangleList:  return D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
                 case PrimitiveType::TriangleStrip: return D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
+                // plans/plan_dx.md DX-208: these three used to throw, because a pipeline state's
+                // PrimitiveTopologyType was hardcoded to TRIANGLE and D3D12 requires it to agree
+                // with the topology the command list sets. It is part of the PSO key now, so the
+                // refusal has nothing left to protect.
+                case PrimitiveType::LineList:      return D3D_PRIMITIVE_TOPOLOGY_LINELIST;
+                case PrimitiveType::LineStrip:     return D3D_PRIMITIVE_TOPOLOGY_LINESTRIP;
+                case PrimitiveType::PointListEXT:  return D3D_PRIMITIVE_TOPOLOGY_POINTLIST;
+            }
+            throw std::runtime_error(
+                "DirectX12 renderer does not support the requested PrimitiveType value");
+        }
+
+        /// plans/plan_dx.md DX-208: the pipeline-state-level topology CLASS, which is a coarser thing than
+        /// the command-list topology above -- D3D12 bakes only the class into the pipeline state and
+        /// takes the exact topology at record time, which is why a strip and a list share one
+        /// pipeline state but a line and a triangle cannot.
+        D3D12_PRIMITIVE_TOPOLOGY_TYPE ToD3D12TopologyType(PrimitiveType pt)
+        {
+            switch (pt)
+            {
+                case PrimitiveType::TriangleList:
+                case PrimitiveType::TriangleStrip: return D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
                 case PrimitiveType::LineList:
-                    throw std::runtime_error(
-                        "DirectX12 renderer does not support PrimitiveType::LineList: its "
-                        "pipeline-state cache is currently fixed to triangle topology");
-                case PrimitiveType::LineStrip:
-                    throw std::runtime_error(
-                        "DirectX12 renderer does not support PrimitiveType::LineStrip: its "
-                        "pipeline-state cache is currently fixed to triangle topology");
-                case PrimitiveType::PointListEXT:
-                    throw std::runtime_error(
-                        "DirectX12 renderer does not support PrimitiveType::PointListEXT: its "
-                    "pipeline-state cache is currently fixed to triangle topology");
+                case PrimitiveType::LineStrip:     return D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
+                case PrimitiveType::PointListEXT:  return D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT;
             }
             throw std::runtime_error(
                 "DirectX12 renderer does not support the requested PrimitiveType value");
@@ -1758,18 +1774,88 @@ namespace CNA::Internal::Renderers::DirectX12
         psoDesc.ccwStencilDepthFail = currentCcwStencilDepthFail_;
         psoDesc.cullMode = currentCullMode_;
         psoDesc.fillMode = currentFillMode_;
+        // DX-206: rounded, not truncated -- XNA's DepthBias is a float in units of "r" and
+        // D3D12_RASTERIZER_DESC::DepthBias is the same quantity as an INT, the same conversion
+        // D3D11RasterizerStateCache performs.
+        psoDesc.depthBias = static_cast<int>(std::lround(currentDepthBias_));
+        psoDesc.slopeScaleDepthBias = currentSlopeScaleDepthBias_;
+        // plans/plan_dx.md DX-207: a pipeline state's sample count must MATCH the render target it is used
+        // with -- D3D12 has no equivalent of D3D11's uncoupled model -- so it comes from the bound
+        // target rather than from a constant.
+        psoDesc.sampleCount = GetBoundColorSampleCountEXT();
     }
 
     void DirectX12Renderer::ApplyRasterizerState(int cullMode, int fillMode,
-                                                      bool /*scissorTestEnable*/,
-                                                      float /*depthBias*/,
-                                                      float /*slopeScaleDepthBias*/)
+                                                      bool scissorTestEnable,
+                                                      float depthBias,
+                                                      float slopeScaleDepthBias)
     {
-        // DX-118: scissorTestEnable/depthBias/slopeScaleDepthBias deliberately not threaded into
-        // the PSO yet -- same documented first-implementation-subset scope as the stencil fields
-        // above.
+        // plans/plan_dx.md DX-201/DX-206: all five fields are carried now. They land in two different
+        // places, and the split is a real property of D3D12 rather than a convenience: depth bias is
+        // baked into D3D12_RASTERIZER_DESC and therefore into the pipeline state, while the scissor
+        // test has no rasterizer field at all on this API (it is always on) -- so a disabled test
+        // means "the rectangle covers the whole target", which is command-list state.
         currentCullMode_ = cullMode;
         currentFillMode_ = fillMode;
+        currentScissorTestEnable_ = scissorTestEnable;
+        currentDepthBias_ = depthBias;
+        currentSlopeScaleDepthBias_ = slopeScaleDepthBias;
+    }
+
+    void DirectX12Renderer::SetScissorRect(int x, int y, int w, int h)
+    {
+        // DX-201: store only -- consumed per draw via GetEffectiveScissorEXT(), for the same reason
+        // SetViewport() stores rather than applies (this renderer re-records every command list).
+        scissorSet_ = true;
+        scissorX_ = x;
+        scissorY_ = y;
+        scissorW_ = w;
+        scissorH_ = h;
+    }
+
+    unsigned int DirectX12Renderer::GetBoundColorSampleCountEXT() const
+    {
+        // plans/plan_dx.md DX-207: read from the resource, not from a tracked copy. A tracked copy is one
+        // more thing that can disagree with the resource, and every bind site would have to remember
+        // to set it -- which is exactly the failure mode DX-255 was.
+        if (!boundColorResource_) return 1u;
+        const UINT count = boundColorResource_->GetDesc().SampleDesc.Count;
+        return count == 0 ? 1u : static_cast<unsigned int>(count);
+    }
+
+    D3D12_RECT DirectX12Renderer::GetEffectiveScissorEXT() const
+    {
+        const D3D12_RECT fullTarget{0, 0, static_cast<LONG>(boundColorWidth_),
+                                    static_cast<LONG>(boundColorHeight_)};
+        if (!currentScissorTestEnable_ || !scissorSet_)
+            return fullTarget;
+        if (scissorW_ <= 0 || scissorH_ <= 0)
+        {
+            // A degenerate rectangle rasterizes nothing -- the same answer D3D11 gives with
+            // ScissorEnable = TRUE and an empty rect, and the answer deferred_scissor_capture_test
+            // records for DIRECTX11. Vulkan/EasyGL/bgfx return the full target instead; that
+            // divergence is recorded in that fixture per renderer, and D3D12 follows its own family.
+            return D3D12_RECT{0, 0, 0, 0};
+        }
+
+        // Clamp to the bound target: D3D12 rejects a scissor rectangle that leaves the render
+        // target, where XNA simply clips. Clamping is the behaviour a game expects and is what
+        // D3D11 gets for free from ScissorEnable.
+        D3D12_RECT rect{static_cast<LONG>(scissorX_), static_cast<LONG>(scissorY_),
+                        static_cast<LONG>(scissorX_) + static_cast<LONG>(scissorW_),
+                        static_cast<LONG>(scissorY_) + static_cast<LONG>(scissorH_)};
+        rect.left = std::max<LONG>(rect.left, 0);
+        rect.top = std::max<LONG>(rect.top, 0);
+        rect.right = std::min<LONG>(rect.right, fullTarget.right);
+        rect.bottom = std::min<LONG>(rect.bottom, fullTarget.bottom);
+        if (rect.right <= rect.left || rect.bottom <= rect.top)
+        {
+            // A rectangle entirely outside the target clips everything away. Expressing that as an
+            // empty rect is exactly what the scissor test means; D3D12 accepts left==right.
+            rect.right = rect.left;
+            rect.bottom = rect.top;
+        }
+        return rect;
     }
 
     std::unique_ptr<IVertexBufferRenderer> DirectX12Renderer::CreateVertexBuffer(int vertex_capacity)
@@ -1819,6 +1905,7 @@ namespace CNA::Internal::Renderers::DirectX12
         D3D12PipelineStateDesc psoDesc;
         psoDesc.variant = D3DShaderVariant::Colored3d;
         psoDesc.strideInBytes = 16;
+        psoDesc.topologyType = static_cast<int>(ToD3D12TopologyType(primitive)); // plans/plan_dx.md DX-208
         // DX-118: depth/cull/blend state is now real and runtime-settable via
         // ApplyDepthStencilState/ApplyRasterizerState/ApplyBlendState (tracked in this renderer's
         // current*_ fields), fed into the PSO key here instead of hardcoded literals. Defaults
@@ -1863,7 +1950,7 @@ namespace CNA::Internal::Renderers::DirectX12
         cmdList->OMSetRenderTargets(1, &boundColorRtv_, FALSE, boundDsv_.ptr != 0 ? &boundDsv_ : nullptr);
 
         D3D12_VIEWPORT viewport = GetEffectiveViewportEXT();  // REMED-GFX-064: honor custom Viewport
-        D3D12_RECT scissor{0, 0, boundColorWidth_, boundColorHeight_};
+        D3D12_RECT scissor = GetEffectiveScissorEXT(); // DX-201
         cmdList->RSSetViewports(1, &viewport);
         cmdList->RSSetScissorRects(1, &scissor);
 
@@ -1921,6 +2008,7 @@ namespace CNA::Internal::Renderers::DirectX12
         D3D12PipelineStateDesc psoDesc;
         psoDesc.variant = D3DShaderVariant::Colored3d;
         psoDesc.strideInBytes = 16;
+        psoDesc.topologyType = static_cast<int>(ToD3D12TopologyType(primitive)); // plans/plan_dx.md DX-208
         // DX-118: depth/cull/blend state is now real and runtime-settable -- see
         // DrawColoredPrimitives's own equivalent block for the full rationale/history.
         FillPsoStateFromCurrentEXT(psoDesc);
@@ -1955,7 +2043,7 @@ namespace CNA::Internal::Renderers::DirectX12
         cmdList->OMSetRenderTargets(1, &boundColorRtv_, FALSE, boundDsv_.ptr != 0 ? &boundDsv_ : nullptr);
 
         D3D12_VIEWPORT viewport = GetEffectiveViewportEXT();  // REMED-GFX-064: honor custom Viewport
-        D3D12_RECT scissor{0, 0, boundColorWidth_, boundColorHeight_};
+        D3D12_RECT scissor = GetEffectiveScissorEXT(); // DX-201
         cmdList->RSSetViewports(1, &viewport);
         cmdList->RSSetScissorRects(1, &scissor);
 
@@ -2184,6 +2272,7 @@ namespace CNA::Internal::Renderers::DirectX12
         D3D12PipelineStateDesc psoDesc;
         psoDesc.variant = variant;
         psoDesc.strideInBytes = stride;
+        psoDesc.topologyType = static_cast<int>(ToD3D12TopologyType(primitive)); // plans/plan_dx.md DX-208
         // DX-118: depth/cull/blend state is now real and runtime-settable -- see
         // DrawColoredPrimitives's own equivalent block for the full rationale/history.
         FillPsoStateFromCurrentEXT(psoDesc);
@@ -2695,7 +2784,7 @@ namespace CNA::Internal::Renderers::DirectX12
         cmdList->OMSetRenderTargets(1, &boundColorRtv_, FALSE, boundDsv_.ptr != 0 ? &boundDsv_ : nullptr);
 
         D3D12_VIEWPORT viewport = GetEffectiveViewportEXT();  // REMED-GFX-064: honor custom Viewport
-        D3D12_RECT scissor{0, 0, boundColorWidth_, boundColorHeight_};
+        D3D12_RECT scissor = GetEffectiveScissorEXT(); // DX-201
         cmdList->RSSetViewports(1, &viewport);
         cmdList->RSSetScissorRects(1, &scissor);
 
@@ -2783,7 +2872,15 @@ namespace CNA::Internal::Renderers::DirectX12
     ID3D12PipelineState* DirectX12Renderer::GetOrCreateInstancedPsoEXT(
         ID3D12RootSignature* rootSig, UINT instanceStepRate)
     {
-        auto cached = instancedPsos_.find(instanceStepRate);
+        // plans/plan_dx.md DX-239 / DX-207: the key is everything this pipeline state bakes in -- the step
+        // rate, the render-target format, the depth-stencil format and the sample count. Keyed on
+        // the step rate alone, a second target with a different format or sample count silently got
+        // the first target's pipeline state, because a cache hit looks like a cache hit.
+        const InstancedPsoKey key{instanceStepRate,
+                                  static_cast<unsigned int>(boundColorFormat_),
+                                  static_cast<unsigned int>(boundDsvFormat_),
+                                  GetBoundColorSampleCountEXT()};
+        auto cached = instancedPsos_.find(key);
         if (cached != instancedPsos_.end())
             return cached->second.Get();
 
@@ -2819,7 +2916,7 @@ namespace CNA::Internal::Renderers::DirectX12
         // cache — a documented gap for the instanced fast path, consistent with its existing opaque
         // hardcode, not a silent drop.
         desc.SampleMask = UINT_MAX;
-        desc.SampleDesc.Count = 1;
+        desc.SampleDesc.Count = GetBoundColorSampleCountEXT(); // plans/plan_dx.md DX-207
         desc.NodeMask = 0;
 
         // Same honest hardcoded-defaults simplification every other D3D12 draw uses today (no
@@ -2844,13 +2941,16 @@ namespace CNA::Internal::Renderers::DirectX12
 
         desc.NumRenderTargets = 1;
         desc.RTVFormats[0] = boundColorFormat_;
-        desc.DSVFormat = DXGI_FORMAT_UNKNOWN;
+        // DX-239: the depth-stencil format is part of the key above, so it can be honoured here
+        // instead of hardcoded away -- an instanced draw into a target with a depth buffer used to
+        // silently get a pipeline state built for no depth buffer at all.
+        desc.DSVFormat = boundDsvFormat_;
 
         ComPtr<ID3D12PipelineState> pso;
         HRESULT hr = device_->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(pso.ReleaseAndGetAddressOf()));
         if (FAILED(hr))
             throw std::runtime_error("DirectX12Renderer: instanced3d CreateGraphicsPipelineState failed, hr=" + FormatHr(hr));
-        auto inserted = instancedPsos_.emplace(instanceStepRate, std::move(pso));
+        auto inserted = instancedPsos_.emplace(key, std::move(pso));
         return inserted.first->second.Get();
     }
 
@@ -2925,7 +3025,7 @@ namespace CNA::Internal::Renderers::DirectX12
         cmdList->OMSetRenderTargets(1, &boundColorRtv_, FALSE, nullptr);
 
         D3D12_VIEWPORT viewport = GetEffectiveViewportEXT();  // REMED-GFX-064: honor custom Viewport
-        D3D12_RECT scissor{0, 0, boundColorWidth_, boundColorHeight_};
+        D3D12_RECT scissor = GetEffectiveScissorEXT(); // DX-201
         cmdList->RSSetViewports(1, &viewport);
         cmdList->RSSetScissorRects(1, &scissor);
 

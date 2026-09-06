@@ -99,6 +99,18 @@ namespace CNA::Internal::Renderers::DirectX12
         // Rasterizer (D3DStateMapping::CullModeToD3D11 / FillModeToD3D11 ordinals).
         int cullMode = 2;  // CullMode::CullCounterClockwiseFace (XNA's own RasterizerState.CullCounterClockwise default)
         int fillMode = 0;  // FillMode::Solid
+        // plans/plan_dx.md DX-206: RasterizerState.DepthBias / SlopeScaleDepthBias. XNA's DepthBias is
+        // already in units of "r" (the depth format's minimum resolvable difference), which is the
+        // same convention D3D12_RASTERIZER_DESC::DepthBias uses -- but as an INT rather than a
+        // float, so it is rounded, not truncated, exactly as D3D11RasterizerStateCache does. The
+        // integer form is what participates in the cache key, so two requests that round to the
+        // same bias share one pipeline state instead of thrashing it on float noise.
+        int depthBias = 0;
+        float slopeScaleDepthBias = 0.0f;
+        // RasterizerState.ScissorTestEnable is deliberately NOT here: D3D12_RASTERIZER_DESC has no
+        // ScissorEnable field (the scissor test is always on), so on this API a disabled test means
+        // "the rectangle covers the whole target" -- command-list state, not pipeline state. See
+        // DirectX12Renderer::GetEffectiveScissorEXT (DX-201).
 
         // REMED-GFX-077: BlendState output-merger write state. Both are STATIC parts of the D3D12
         // PSO (RenderTarget[0].RenderTargetWriteMask and D3D12_GRAPHICS_PIPELINE_STATE_DESC::
@@ -107,6 +119,17 @@ namespace CNA::Internal::Renderers::DirectX12
         // ColorWriteChannels (R=1,G=2,B=4,A=8) is bit-identical to D3D12_COLOR_WRITE_ENABLE_*.
         int colorWriteMask = 15;             // ColorWriteChannels.All
         unsigned int sampleMask = 0xFFFFFFFFu; // MultiSampleMask == -1 (all samples)
+        // plans/plan_dx.md DX-207: the bound render target's real sample count. D3D12 requires a pipeline
+        // state's SampleDesc.Count to MATCH the render target it is used with -- unlike D3D11, which
+        // has no such coupling -- so a hardcoded 1 makes every draw into a multisampled
+        // RenderTarget2D/RenderTargetCube illegal, however correctly that target was created. 1 is
+        // the non-MSAA case and keeps every existing single-sample PSO byte-identical.
+        unsigned int sampleCount = 1;
+        // plans/plan_dx.md DX-208: the pipeline state's primitive topology CLASS. D3D12 bakes this in and
+        // requires it to agree with the topology the command list sets, which is the whole reason
+        // LineList/LineStrip/PointListEXT used to throw here. TRIANGLE keeps every existing
+        // pipeline state byte-identical.
+        int topologyType = static_cast<int>(D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE);
 
         /// DX-202: every field of this struct, by value, as the cache key. Adding a field to the
         /// struct and forgetting it here is the one mistake that would make two different pipeline
@@ -117,8 +140,8 @@ namespace CNA::Internal::Renderers::DirectX12
                                  bool, bool, int,
                                  bool, int, int, int, int, int, int,
                                  bool, int, int, int, int,
-                                 int, int,
-                                 int, unsigned> AsCacheKeyEXT() const
+                                 int, int, int, float,
+                                 int, unsigned, unsigned, int> AsCacheKeyEXT() const
         {
             return std::make_tuple(static_cast<int>(variant), strideInBytes,
                                    colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend,
@@ -128,8 +151,8 @@ namespace CNA::Internal::Renderers::DirectX12
                                    stencilDepthFail, stencilMask, stencilWriteMask,
                                    twoSidedStencilMode, ccwStencilFunc, ccwStencilPass,
                                    ccwStencilFail, ccwStencilDepthFail,
-                                   cullMode, fillMode,
-                                   colorWriteMask, sampleMask);
+                                   cullMode, fillMode, depthBias, slopeScaleDepthBias,
+                                   colorWriteMask, sampleMask, sampleCount, topologyType);
         }
     };
 

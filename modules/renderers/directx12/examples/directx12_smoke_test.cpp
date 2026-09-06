@@ -4151,6 +4151,78 @@ int main()
               "drawn second overwrites NEAR/red) -- confirms Y2/Y3's outcome really came from the "
               "depth test, not draw order or some other effect");
 
+        // ---- plans/plan_dx.md DX-208: LineList / LineStrip / PointListEXT. All three used to throw by name
+        // ---- out of ToD3D12Topology(), because a pipeline state's PrimitiveTopologyType was
+        // ---- hardcoded to TRIANGLE. The topology class is part of the PSO key now. This is a pixel
+        // ---- proof rather than a no-throw proof: a line must paint a THIN band, not a filled
+        // ---- surface and not nothing, which is exactly what distinguishes real line rasterization
+        // ---- from a triangle pipeline state that happens to accept the call.
+        {
+            renderer.ApplyDepthStencilState(false, false, 3, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
+
+            struct VPCL { float x, y, z; uint32_t color; };
+            // A horizontal line across the middle of the target, and two isolated points.
+            static const VPCL kLine[2] = {
+                {-1.0f, 0.0f, 0.5f, 0xFF00FFFFu}, // A=255,B=0,G=255,R=255 -> yellow
+                { 1.0f, 0.0f, 0.5f, 0xFF00FFFFu},
+            };
+            static const VPCL kPoints[2] = {
+                {-0.5f,  0.5f, 0.5f, 0xFF0000FFu}, // red
+                { 0.5f, -0.5f, 0.5f, 0xFF0000FFu},
+            };
+
+            auto countNonBlack = [&](const std::vector<uint8_t>& buf)
+            {
+                int n = 0;
+                for (std::size_t i = 0; i + 3 < buf.size(); i += 4)
+                    if (buf[i] != 0 || buf[i + 1] != 0 || buf[i + 2] != 0) ++n;
+                return n;
+            };
+
+            D3D12VertexBufferRenderer vbLine(&renderer, 2);
+            vbLine.SetData(kLine, 2, sizeof(VPCL));
+            renderer.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+            bool lineThrew = false;
+            try
+            {
+                renderer.DrawColoredPrimitives(vbLine, Matrix::getIdentityProperty(),
+                                               Matrix::getIdentityProperty(),
+                                               Matrix::getIdentityProperty(),
+                                               PrimitiveType::LineList, 1);
+            }
+            catch (const std::exception&) { lineThrew = true; }
+            Check(!lineThrew, "LP1: PrimitiveType::LineList no longer throws on D3D12 (plans/plan_dx.md DX-208)");
+            const auto linePixels = ReadBackRenderTargetFull(renderer, rt.Get(), kRtWidth, kRtHeight);
+            const int lineCovered = countNonBlack(linePixels);
+            Check(lineCovered > 0 && lineCovered <= kRtWidth * 3,
+                  "LP2: a LineList draw paints a THIN band -- more than nothing and at most three "
+                  "rows' worth of the 64x64 target, so it is real line rasterization rather than a "
+                  "filled surface or a silently dropped draw (plans/plan_dx.md DX-208)");
+            std::printf("    LineList covered %d of %d pixels\n", lineCovered, kRtWidth * kRtHeight);
+
+            D3D12VertexBufferRenderer vbPoints(&renderer, 2);
+            vbPoints.SetData(kPoints, 2, sizeof(VPCL));
+            renderer.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+            bool pointThrew = false;
+            try
+            {
+                renderer.DrawColoredPrimitives(vbPoints, Matrix::getIdentityProperty(),
+                                               Matrix::getIdentityProperty(),
+                                               Matrix::getIdentityProperty(),
+                                               PrimitiveType::PointListEXT, 2);
+            }
+            catch (const std::exception&) { pointThrew = true; }
+            Check(!pointThrew,
+                  "LP3: PrimitiveType::PointListEXT no longer throws on D3D12 (plans/plan_dx.md DX-208)");
+            const auto pointPixels = ReadBackRenderTargetFull(renderer, rt.Get(), kRtWidth, kRtHeight);
+            const int pointCovered = countNonBlack(pointPixels);
+            Check(pointCovered > 0 && pointCovered < lineCovered,
+                  "LP4: two points cover FEWER pixels than a full-width line and more than none -- "
+                  "the topology genuinely selects what is rasterized, it is not one shape for every "
+                  "PrimitiveType (plans/plan_dx.md DX-208)");
+            std::printf("    PointListEXT covered %d of %d pixels\n", pointCovered, kRtWidth * kRtHeight);
+        }
+
         renderer.UnbindOffscreenColorTargetEXT();
     }
 
@@ -4458,6 +4530,11 @@ int main()
         Check(effect && effect->IsValid(),
               "BB1: DirectX12Renderer::CreateEffectRenderer() -- real runtime D3DCompile() of "
               "arbitrary HLSL source builds a real PSO+constant-buffer end to end (plans/plan_dx.md DX-121)");
+        // plans/plan_dx.md DX-212: asserted beside the D3DCompile() proof it is a claim about, not in
+        // isolation -- the pixel checks below are what make the answer true.
+        Check(renderer.ExecutesShaderEffectSourceEXT(),
+              "DX-212: DirectX12Renderer::ExecutesShaderEffectSourceEXT() reports true, and the "
+              "checks below prove it: the caller's own HLSL decides the pixels");
 
         bool effIsExact = false;
         if (effect && effect->IsValid())

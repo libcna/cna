@@ -60,6 +60,14 @@ namespace CNA::Internal::Renderers::DirectX11
 
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
 
+        /// plans/plan_dx.md DX-212: TRUE, because the source handed to CreateEffectRenderer() genuinely
+        /// determines the pixels here. The default is FALSE, which means "this renderer ACCEPTS an
+        /// effect and keeps rendering with its own fixed path" -- the SOFTWARE/HEADLESS answer, and
+        /// the reason a caller is told to ask this IN ADDITION to GraphicsCapability::CustomEffects.
+        /// D3D11EffectRenderer::CompileProgram() runs a real D3DCompile() on the caller's HLSL and binds the resulting shader
+        /// objects, so a post-process pass that believes its shader ran is right.
+        [[nodiscard]] bool ExecutesShaderEffectSourceEXT() const override { return true; }
+
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;
         void ClearStencil(int stencil) override;

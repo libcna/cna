@@ -57,10 +57,11 @@ namespace CNA::Internal::Renderers::DirectX12
         psoDesc.PS = {psBytes, psSize};
         psoDesc.InputLayout = {inputElements, inputElementCount};
         psoDesc.IBStripCutValue = D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
-        psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        psoDesc.PrimitiveTopologyType = // plans/plan_dx.md DX-208
+            static_cast<D3D12_PRIMITIVE_TOPOLOGY_TYPE>(desc.topologyType);
         // REMED-GFX-077: BlendState.MultiSampleMask (static PSO state → keyed above).
         psoDesc.SampleMask = desc.sampleMask;
-        psoDesc.SampleDesc.Count = 1;
+        psoDesc.SampleDesc.Count = desc.sampleCount; // plans/plan_dx.md DX-207
         psoDesc.NodeMask = 0;
 
         // Rasterizer -- D3DStateMapping returns D3D11-prefixed enums; static_cast to the D3D12
@@ -72,7 +73,17 @@ namespace CNA::Internal::Renderers::DirectX12
         rs.CullMode = static_cast<D3D12_CULL_MODE>(CullModeToD3D11(desc.cullMode));
         rs.FrontCounterClockwise = FALSE; // Matches D3DStateMapping::CullModeToD3D11's own documented D3D11 default.
         rs.DepthClipEnable = TRUE;
+        // plans/plan_dx.md DX-207: deliberately left FALSE, matching D3D11RasterizerStateCache exactly.
+        // Setting it from the sample count was tried while chasing the missing anti-aliasing and
+        // MEASURED to make no difference -- easygl_rendertarget2d_msaa_test passes either way once
+        // SampleDesc.Count is right -- so the change was reverted rather than kept on a plausible
+        // story. It only selects the line/point AA algorithm; triangle coverage comes from the
+        // target's sample count.
         rs.MultisampleEnable = FALSE;
+        // plans/plan_dx.md DX-206: same three fields D3D11RasterizerStateCache fills, same meanings.
+        rs.DepthBias = desc.depthBias;
+        rs.DepthBiasClamp = 0.0f;
+        rs.SlopeScaledDepthBias = desc.slopeScaleDepthBias;
 
         // Blend -- single render target, same DeriveBlendEnable heuristic D3D11BlendStateCache uses.
         D3D12_BLEND_DESC& bs = psoDesc.BlendState;

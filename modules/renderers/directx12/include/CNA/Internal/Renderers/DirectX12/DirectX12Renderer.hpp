@@ -26,6 +26,8 @@
 #include <functional>
 #include <vector>
 #include <memory>
+#include <map>
+#include <tuple>
 #include <unordered_map>
 
 namespace CNA::Internal::Renderers::DirectX12
@@ -79,6 +81,11 @@ namespace CNA::Internal::Renderers::DirectX12
         /// all -- it is OMSetStencilRef() on the command list -- so setting it only records the
         /// value here and every subsequent draw applies it, with no PSO rebuild and no cache entry.
         void SetReferenceStencil(int referenceStencil) override;
+        /// plans/plan_dx.md DX-201: GraphicsDevice.ScissorRectangle. Stored only -- consumed at each
+        /// RSSetScissorRects site through GetEffectiveScissorEXT(), for the same reason SetViewport()
+        /// stores rather than applies: this renderer re-records every draw's command list from
+        /// scratch, so there is no persistent context to set it on.
+        void SetScissorRect(int x, int y, int w, int h) override;
         /// plans/plan_dx.md DX-205: real GPU->CPU readback of this device's back buffer, the same
         /// contract D3D11's own DX-28 override implements. The source is the swap chain's current
         /// back buffer when there is a swap chain, and DX-241's implicit off-screen back buffer
@@ -88,6 +95,14 @@ namespace CNA::Internal::Renderers::DirectX12
         /// validated the rectangle against PresentationParameters, and rows/columns that still fall
         /// outside the real resource are zero-filled exactly as D3D11 zero-fills them.
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
+
+        /// plans/plan_dx.md DX-212: TRUE, because the source handed to CreateEffectRenderer() genuinely
+        /// determines the pixels here. The default is FALSE, which means "this renderer ACCEPTS an
+        /// effect and keeps rendering with its own fixed path" -- the SOFTWARE/HEADLESS answer, and
+        /// the reason a caller is told to ask this IN ADDITION to GraphicsCapability::CustomEffects.
+        /// D3D12EffectRenderer::CompileProgram() runs a real D3DCompile() on the caller's HLSL and binds the resulting shader
+        /// objects, so a post-process pass that believes its shader ran is right.
+        [[nodiscard]] bool ExecutesShaderEffectSourceEXT() const override { return true; }
         void GetViewportSize(int& width, int& height) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
@@ -270,6 +285,18 @@ namespace CNA::Internal::Renderers::DirectX12
         /** @brief Whether CreateSwapChainResources() actually produced a usable swap chain --
          *  false on this Wine dev loop today (see class-level doc comment), by design not a throw. */
         [[nodiscard]] bool IsSwapChainAvailableEXT() const { return swapChainAvailable_; }
+        /// plans/plan_dx.md DX-201: the scissor rectangle every draw and clear actually records. D3D12 has
+        /// no ScissorEnable in D3D12_RASTERIZER_DESC -- the scissor test is always on -- so
+        /// "RasterizerState.ScissorTestEnable == false" means exactly "the rectangle is the whole
+        /// bound target", which is why this is not part of the pipeline-state key. An unset or
+        /// degenerate rectangle also falls back to the full target, byte-identical to the hardcoded
+        /// D3D12_RECT{0, 0, boundColorWidth_, boundColorHeight_} it replaces.
+        [[nodiscard]] D3D12_RECT GetEffectiveScissorEXT() const;
+        /// plans/plan_dx.md DX-207: the sample count of the currently bound colour target, read from the
+        /// resource itself rather than tracked alongside it -- a tracked copy is one more thing that
+        /// can disagree with reality, and every bind site would have to remember to set it. Returns
+        /// 1 when nothing is bound, which is what a single-sample pipeline state wants.
+        [[nodiscard]] unsigned int GetBoundColorSampleCountEXT() const;
         /// The resource this device's back buffer currently lives in: the swap chain's current
         /// buffer, or DX-241's implicit off-screen one when there is no swap chain. Null only if
         /// the device was never fully constructed.
@@ -778,7 +805,13 @@ namespace CNA::Internal::Renderers::DirectX12
         // layout, so a single cached PSO would silently reuse the previous draw's
         // VertexBufferBinding.InstanceFrequency. One entry per distinct rate (one or two in
         // practice), so alternating frequencies never build a PSO per draw.
-        std::unordered_map<UINT, ComPtr<ID3D12PipelineState>> instancedPsos_;
+        /// plans/plan_dx.md DX-239 (reconciling REMED-GFX-199): keyed on everything the instanced pipeline
+        /// state bakes in, not on the step rate alone. It bakes in the render-target format, the
+        /// depth-stencil format and (DX-207) the sample count as well, so a step rate reused against
+        /// a differently-formatted or multisampled target used to return a pipeline state built for
+        /// the previous one -- silently, because a cache hit looks like a cache hit.
+        using InstancedPsoKey = std::tuple<UINT, unsigned int, unsigned int, unsigned int>;
+        std::map<InstancedPsoKey, ComPtr<ID3D12PipelineState>> instancedPsos_;
 
         // DX-111: the currently-bound off-screen color target (see BindOffscreenColorTargetEXT's own
         // doc comment) -- non-owning, the caller/test retains ownership of the resource itself.
@@ -845,6 +878,19 @@ namespace CNA::Internal::Renderers::DirectX12
         int currentReferenceStencil_ = 0;
         int currentCullMode_ = 0;        // CullMode::None
         int currentFillMode_ = 0;        // FillMode::Solid
+        // DX-201: RasterizerState.ScissorTestEnable plus GraphicsDevice.ScissorRectangle. Not PSO
+        // state on D3D12 (see GetEffectiveScissorEXT), so no cache key entry and no PSO rebuild when
+        // a game moves the rectangle between draws.
+        bool currentScissorTestEnable_ = false;
+        bool scissorSet_ = false;
+        int scissorX_ = 0;
+        int scissorY_ = 0;
+        int scissorW_ = 0;
+        int scissorH_ = 0;
+        // DX-206: RasterizerState.DepthBias / SlopeScaleDepthBias. These ARE pipeline state
+        // (D3D12_RASTERIZER_DESC::DepthBias / SlopeScaledDepthBias), so they join the PSO key.
+        float currentDepthBias_ = 0.0f;
+        float currentSlopeScaleDepthBias_ = 0.0f;
 
         // DX-117: additional MRT targets beyond the primary (index 0, tracked by boundColor*_
         // above) -- Clear() independently transitions+clears each; draws remain single-target

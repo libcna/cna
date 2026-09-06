@@ -83,7 +83,12 @@ namespace CNA::Internal::Renderers::DirectX12
         desc.IBStripCutValue = D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
         desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
         desc.SampleMask = UINT_MAX;
-        desc.SampleDesc.Count = 1;
+        // plans/plan_dx.md DX-207: match the bound render target, or D3D12 refuses the draw. A ShaderEffect
+        // compiled while a single-sample target was bound and then used against a multisampled one
+        // is a real gap this does not close -- pso_ is built once, not per bind -- and is recorded
+        // as such rather than papered over; every other PSO in this renderer is cached per
+        // sample count.
+        desc.SampleDesc.Count = owner_ ? owner_->GetBoundColorSampleCountEXT() : 1u;
         desc.NodeMask = 0;
 
         desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;

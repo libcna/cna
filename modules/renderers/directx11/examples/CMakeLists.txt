@@ -488,6 +488,34 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
     # or wait. The defect was bgfx-local (`bgfx::reset()` discards every view's framebuffer binding,
     # including the bound target's), so this run is what establishes that D3D11 already honoured the
     # contract rather than being made to.
+    # plans/plan_dx.md DX-208: the D3D11 control for the primitive-type oracle -- D3D11 maps all five
+    # already, so its result is what the D3D12 leg is judged against.
+    cna_directx11_test(cna_test_directx11_primitivetype_validation
+                       ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_primitivetype_validation_test.cpp)
+    cna_directx11_ctest_command(_directx11_prim_valid_cmd cna_test_directx11_primitivetype_validation)
+    cna_register_renderer_test(NAME DirectX11_PrimitiveTypeValidation COMMAND ${_directx11_prim_valid_cmd}
+        TIMEOUT 60 LABELS "DIRECTX11")
+
+    # plans/plan_dx.md DX-207: the D3D11 control for the MSAA-draw oracle. D3D11 has no PSO/sample-count
+    # coupling, so this is expected to pass here and its result is what the D3D12 leg is judged
+    # against.
+    cna_directx11_test(cna_test_directx11_rendertarget2d_msaa
+                       ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_rendertarget2d_msaa_test.cpp)
+    cna_directx11_ctest_command(_directx11_rt2d_msaa_cmd cna_test_directx11_rendertarget2d_msaa)
+    cna_register_renderer_test(NAME DirectX11_RenderTarget2D_Msaa COMMAND ${_directx11_rt2d_msaa_cmd}
+        TIMEOUT 60 LABELS "DIRECTX11")
+
+    # plans/plan_dx.md DX-206: RasterizerState.DepthBias / SlopeScaleDepthBias. D3D11 has mapped both since
+    # DX-52; this registration exists so its result is a recorded control for the D3D12 leg rather
+    # than an assumption -- that row explicitly requires the D3D11 answer first, because this
+    # fixture is recorded elsewhere in the tree as producing no observable effect on some
+    # drivers, and a shared null result would be an environment finding, not a D3D12 defect.
+    cna_directx11_test(cna_test_directx11_depth_bias
+                       ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_depth_bias_test.cpp)
+    cna_directx11_ctest_command(_directx11_depth_bias_cmd cna_test_directx11_depth_bias)
+    cna_register_renderer_test(NAME DirectX11_DepthBias COMMAND ${_directx11_depth_bias_cmd}
+        TIMEOUT 60 LABELS "DIRECTX11")
+
     cna_directx11_test(cna_test_directx11_rt_first_use ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_first_use_test.cpp)
     cna_directx11_ctest_command(_directx11_rt_first_use_cmd cna_test_directx11_rt_first_use)
     cna_register_renderer_test(NAME DirectX11_RenderTarget_FirstUse

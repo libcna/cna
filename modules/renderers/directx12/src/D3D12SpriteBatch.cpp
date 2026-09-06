@@ -101,7 +101,11 @@ namespace CNA::Internal::Renderers::DirectX12
             owner_->currentColorDstBlend_, owner_->currentAlphaDstBlend_,
             owner_->currentColorBlendFunc_, owner_->currentAlphaBlendFunc_,
             owner_->currentColorWriteMask_, owner_->currentSampleMask_,
-            static_cast<unsigned int>(owner_->GetBoundColorFormatEXT())};
+            static_cast<unsigned int>(owner_->GetBoundColorFormatEXT()),
+            // plans/plan_dx.md DX-207: the sample count is baked into the pipeline state, so it belongs in
+            // the key -- otherwise a sprite batch drawn into a multisampled target after a
+            // single-sample one gets the single-sample pipeline state back.
+            owner_->GetBoundColorSampleCountEXT()};
         if (const auto it = sprite2DPsos_.find(key); it != sprite2DPsos_.end())
             return it->second.Get();
 
@@ -130,7 +134,7 @@ namespace CNA::Internal::Renderers::DirectX12
         desc.IBStripCutValue = D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
         desc.PrimitiveTopologyType = kSpriteTopologyType;
         desc.SampleMask = UINT_MAX;
-        desc.SampleDesc.Count = 1;
+        desc.SampleDesc.Count = owner_->GetBoundColorSampleCountEXT(); // plans/plan_dx.md DX-207
         desc.NodeMask = 0;
 
         desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
@@ -283,10 +287,15 @@ namespace CNA::Internal::Renderers::DirectX12
 
         // REMED-GFX-064: honor a custom GraphicsDevice.Viewport for sprite draws (the GPU viewport
         // rectangle). REMED-GFX-072: the SAME effective viewport now also drives the ViewportSize
-        // projection basis above, so sprite coordinates are viewport-relative. The scissor stays at
-        // the full bound target (sprites are clipped to the viewport by the NDC->viewport transform,
-        // matching D3D11's sprite path which sets no viewport-specific scissor).
-        D3D12_RECT scissor{0, 0, targetW, targetH};
+        // projection basis above, so sprite coordinates are viewport-relative.
+        // plans/plan_dx.md DX-201: the scissor is the device's effective one, not a hardcoded full-target
+        // rectangle. SpriteBatch::Begin(..., RasterizerState with ScissorTestEnable) is the ordinary
+        // XNA way to clip a HUD or a pane, and D3D11's sprite path gets the same clipping from its
+        // persistent RSSetScissorRects state; hardcoding the full target here is what made it a
+        // no-op on D3D12. When no scissor is set, or the test is off, GetEffectiveScissorEXT()
+        // returns exactly the full-target rectangle this replaces.
+        D3D12_RECT scissor = owner_->GetEffectiveScissorEXT();
+        (void)targetW; (void)targetH;
         cmdList->RSSetViewports(1, &effectiveViewport);
         cmdList->RSSetScissorRects(1, &scissor);
 

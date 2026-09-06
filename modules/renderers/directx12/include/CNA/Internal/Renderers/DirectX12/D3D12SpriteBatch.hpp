@@ -88,7 +88,7 @@ namespace CNA::Internal::Renderers::DirectX12
 
         D3D12VertexBufferRenderer vb_;
         D3D12IndexBufferRenderer ib_;
-        using SpritePsoKey = std::tuple<int, int, int, int, int, int, int, unsigned int, unsigned int>;
+        using SpritePsoKey = std::tuple<int, int, int, int, int, int, int, unsigned int, unsigned int, unsigned int>;
         std::map<SpritePsoKey, ComPtr<ID3D12PipelineState>> sprite2DPsos_;
         ComPtr<ID3D12Resource> perDrawConstantBuffer_;
         void* perDrawConstantBufferMapped_ = nullptr;

@@ -2340,6 +2340,13 @@ protected:
             check(effect && effect->IsValid(),
                   "DirectX11Renderer::CreateEffectRenderer(): real runtime D3DCompile() of "
                   "arbitrary HLSL source compiles successfully (plans/plan_dx.md DX-58)");
+            // plans/plan_dx.md DX-212: the query that tells a caller whether its shader SOURCE decides the
+            // pixels, as opposed to being accepted and ignored. It is asserted here, beside the
+            // D3DCompile() proof it is a claim about, rather than in isolation -- the pixel check a
+            // few lines below is what makes the answer true, and the two must not drift apart.
+            check(renderer.ExecutesShaderEffectSourceEXT(),
+                  "DirectX11Renderer::ExecutesShaderEffectSourceEXT() reports true, and the check "
+                  "below proves it: the caller's own HLSL decides the pixels (plans/plan_dx.md DX-212)");
 
             bool effIsExact = false;
             if (effect && effect->IsValid())
@@ -3759,7 +3766,8 @@ protected:
                                 + 3 /* Task 1106 BasicEffect PreferPerPixelLighting */
                                 + 3 /* Task 1107 SkinnedEffect PreferPerPixelLighting */
                                 + 9 /* REMED-GFX-077 ColorWriteChannels/MultiSampleMask */
-                                + 1 /* REMED-GFX-061 fog false->true->false */;
+                                + 1 /* REMED-GFX-061 fog false->true->false */
+                                + 1 /* plans/plan_dx.md DX-212 ExecutesShaderEffectSourceEXT */;
         std::printf("=== %d/%d PASS ===\n", passCount_, totalChecks);
         result_ = (passCount_ == totalChecks) ? 0 : 1;
         Exit();
