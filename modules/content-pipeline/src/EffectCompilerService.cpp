@@ -42,10 +42,12 @@
 #include <cstdlib>
 #include <fstream>
 #include <iterator>
+#include <map>
 #include <atomic>
 #include <random>
 #include <sstream>
 #include <system_error>
+#include <utility>
 
 #include "CNA/Internal/HostProcess.hpp"
 
@@ -153,18 +155,289 @@ namespace CNA::Content::Pipeline
             std::filesystem::path path_;
         };
 
+        /** @brief What one pass of a compiled effect disturbs, as XNA's header records it. */
+        struct EffectPassStateSummary
+        {
+            /** @brief Bit 0 blend, bit 1 depth-stencil, bit 2 rasterizer. */
+            std::uint32_t stateGroups = 0u;
+            /** @brief Bit per sampler register the pass's shaders bind. */
+            std::uint32_t samplerRegisters = 0u;
+        };
+
+        /**
+         * @brief Which of XNA's three device states a container render state belongs to.
+         *
+         * The Direct3D 9 effect container numbers the render states densely from `D3DRS_ZENABLE`,
+         * and the three sets below are measured rather than derived: three fixtures each assign
+         * every state of one group and nothing else, and the genuine build answers 1, 2 and 4 for
+         * them (`effect/fx_state_blend_wide`, `_depth_wide`, `_raster_wide` in the differential
+         * corpus, plans/plan_xnapipeline_parity.md XNAPP-191). 146 and 147 are the pass's own
+         * vertex and pixel shader assignments and belong to no device state.
+         *
+         * A state outside every set is one this repository has not measured. It answers a group
+         * of its own -- see @ref SummarizeEffectPasses, which then declines to describe the effect
+         * at all rather than describe it wrongly.
+         *
+         * @param stateType The container's dense render-state number.
+         * @return 1 blend, 2 depth-stencil, 4 rasterizer, 0 for a shader assignment, 8 for
+         *         anything unmeasured.
+         */
+        [[nodiscard]] std::uint32_t EffectStateGroupOf(const std::uint32_t stateType)
+        {
+            switch (stateType)
+            {
+            // SrcBlend, DestBlend, AlphaBlendEnable, ColorWriteEnable, BlendOp,
+            // SeparateAlphaBlendEnable, SrcBlendAlpha, DestBlendAlpha, BlendOpAlpha.
+            case 6u: case 7u: case 13u: case 73u: case 75u:
+            case 99u: case 100u: case 101u: case 102u:
+                return 1u;
+            // ZEnable, ZWriteEnable, ZFunc, StencilEnable, StencilFail, StencilZFail,
+            // StencilPass, StencilFunc, StencilRef, StencilMask, StencilWriteMask.
+            case 0u: case 3u: case 9u: case 22u: case 23u: case 24u:
+            case 25u: case 26u: case 27u: case 28u: case 29u:
+                return 2u;
+            // FillMode, CullMode, ScissorTestEnable, DepthBias, SlopeScaleDepthBias,
+            // MultiSampleAntialias.
+            case 1u: case 8u: case 68u: case 78u: case 79u: case 98u:
+                return 4u;
+            // VertexShader, PixelShader.
+            case 146u: case 147u:
+                return 0u;
+            default:
+                return 8u;
+            }
+        }
+
+        /**
+         * @brief The sampler registers one Direct3D 9 shader binds, as a bit per register.
+         *
+         * A shader declares each sampler with a `dcl` instruction whose destination names a
+         * register of type `D3DSPR_SAMPLER`, and the register type is split across two fields of
+         * that token, which is why it is reassembled rather than masked out in one go.
+         *
+         * @param bytes The whole container.
+         * @param start Offset of the shader's version token.
+         * @param end One past the shader blob's last byte.
+         * @return The mask, or zero when the stream ends or stops making sense.
+         */
+        [[nodiscard]] std::uint32_t SamplerRegistersOf(const std::vector<std::uint8_t>& bytes,
+                                                       const std::size_t start,
+                                                       const std::size_t end)
+        {
+            const auto word = [&bytes](const std::size_t at)
+            {
+                return static_cast<std::uint32_t>(bytes[at]) |
+                       (static_cast<std::uint32_t>(bytes[at + 1u]) << 8) |
+                       (static_cast<std::uint32_t>(bytes[at + 2u]) << 16) |
+                       (static_cast<std::uint32_t>(bytes[at + 3u]) << 24);
+            };
+            constexpr std::uint32_t kEndToken = 0x0000FFFFu;
+            constexpr std::uint32_t kCommentOpcode = 0xFFFEu;
+            constexpr std::uint32_t kDeclareOpcode = 0x001Fu;
+            constexpr std::uint32_t kSamplerRegisterType = 10u;
+            std::uint32_t mask = 0u;
+            std::size_t at = start + 4u;
+            while (at + 4u <= end)
+            {
+                const std::uint32_t token = word(at);
+                if (token == kEndToken) { return mask; }
+                const std::uint32_t opcode = token & 0xFFFFu;
+                if (opcode == kCommentOpcode)
+                {
+                    at += 4u + 4u * static_cast<std::size_t>((token >> 16) & 0x7FFFu);
+                    continue;
+                }
+                const std::uint32_t length = (token >> 24) & 0xFu;
+                if (opcode == kDeclareOpcode && length >= 2u && at + 12u <= end)
+                {
+                    const std::uint32_t destination = word(at + 8u);
+                    const std::uint32_t registerType =
+                        ((destination >> 28) & 0x7u) | ((destination >> 8) & 0x18u);
+                    if (registerType == kSamplerRegisterType)
+                    {
+                        const std::uint32_t index = destination & 0x7FFu;
+                        if (index < 32u) { mask |= 1u << index; }
+                    }
+                }
+                if (length == 0u) { return mask; }
+                at += 4u * (static_cast<std::size_t>(length) + 1u);
+            }
+            return mask;
+        }
+
+        /**
+         * @brief Reads one summary per pass out of a compiled Direct3D 9 effect.
+         *
+         * The container's own graph answers both halves: a pass lists the render states it
+         * assigns, and the large-object table records, for every shader blob, which technique and
+         * pass it belongs to, which is the attribution the sampler mask needs when two passes bind
+         * different samplers. Validated against fifteen effects built by the genuine pipeline: the
+         * header this reproduces is byte-identical in every one
+         * (plans/plan_xnapipeline_parity.md XNAPP-191).
+         *
+         * Every read is bounds-checked and every unexpected shape answers empty, because a
+         * summary this build is not sure of must not be written: the caller then emits the single
+         * zero pair, which is what it always emitted before.
+         *
+         * @param bytes The bare Effect Framework binary, beginning with `0xFEFF0901`.
+         * @return One summary per pass in container order, or empty when it cannot be read.
+         */
+        [[nodiscard]] std::vector<EffectPassStateSummary> SummarizeEffectPasses(
+            const std::vector<std::uint8_t>& bytes)
+        {
+            constexpr std::size_t kMaximumItems = 64u * 1024u;
+            const std::vector<EffectPassStateSummary> unreadable;
+            std::size_t cursor = 0u;
+            bool failed = false;
+            const auto read = [&bytes, &cursor, &failed]() -> std::uint32_t
+            {
+                if (failed || cursor + 4u > bytes.size()) { failed = true; return 0u; }
+                const std::uint32_t value =
+                    static_cast<std::uint32_t>(bytes[cursor]) |
+                    (static_cast<std::uint32_t>(bytes[cursor + 1u]) << 8) |
+                    (static_cast<std::uint32_t>(bytes[cursor + 2u]) << 16) |
+                    (static_cast<std::uint32_t>(bytes[cursor + 3u]) << 24);
+                cursor += 4u;
+                return value;
+            };
+            const auto skip = [&bytes, &cursor, &failed](const std::size_t count)
+            {
+                if (failed || count > bytes.size() - std::min(cursor, bytes.size()))
+                {
+                    failed = true;
+                    return;
+                }
+                cursor += count;
+            };
+
+            if (bytes.size() < 8u) { return unreadable; }
+            cursor = 4u;
+            const std::uint32_t structureOffset = read();
+            const std::size_t base = 8u;
+            if (failed || structureOffset > bytes.size() - base || (structureOffset & 3u) != 0u)
+            {
+                return unreadable;
+            }
+            cursor = base + structureOffset;
+
+            const std::uint32_t parameterCount = read();
+            const std::uint32_t techniqueCount = read();
+            static_cast<void>(read());
+            static_cast<void>(read());
+            if (failed || parameterCount > kMaximumItems || techniqueCount == 0u ||
+                techniqueCount > kMaximumItems)
+            {
+                return unreadable;
+            }
+            for (std::uint32_t index = 0u; index < parameterCount; ++index)
+            {
+                static_cast<void>(read());
+                static_cast<void>(read());
+                static_cast<void>(read());
+                const std::uint32_t annotations = read();
+                if (failed || annotations > kMaximumItems) { return unreadable; }
+                skip(static_cast<std::size_t>(annotations) * 8u);
+            }
+
+            std::vector<EffectPassStateSummary> passes;
+            std::map<std::pair<std::uint32_t, std::uint32_t>, std::size_t> located;
+            for (std::uint32_t technique = 0u; technique < techniqueCount; ++technique)
+            {
+                static_cast<void>(read());
+                const std::uint32_t annotations = read();
+                const std::uint32_t passCount = read();
+                if (failed || annotations > kMaximumItems || passCount == 0u ||
+                    passCount > kMaximumItems)
+                {
+                    return unreadable;
+                }
+                skip(static_cast<std::size_t>(annotations) * 8u);
+                for (std::uint32_t pass = 0u; pass < passCount; ++pass)
+                {
+                    static_cast<void>(read());
+                    const std::uint32_t passAnnotations = read();
+                    const std::uint32_t stateCount = read();
+                    if (failed || passAnnotations > kMaximumItems || stateCount > kMaximumItems)
+                    {
+                        return unreadable;
+                    }
+                    skip(static_cast<std::size_t>(passAnnotations) * 8u);
+                    EffectPassStateSummary summary;
+                    for (std::uint32_t state = 0u; state < stateCount; ++state)
+                    {
+                        const std::uint32_t stateType = read();
+                        static_cast<void>(read());
+                        static_cast<void>(read());
+                        static_cast<void>(read());
+                        if (failed) { return unreadable; }
+                        const std::uint32_t group = EffectStateGroupOf(stateType);
+                        // An unmeasured state: this build does not know which device state it
+                        // belongs to, and a header that guesses is worse than the zero one.
+                        if (group == 8u) { return unreadable; }
+                        summary.stateGroups |= group;
+                    }
+                    located[{technique, pass}] = passes.size();
+                    passes.push_back(summary);
+                }
+            }
+
+            const std::uint32_t smallObjects = read();
+            const std::uint32_t largeObjects = read();
+            if (failed || smallObjects > kMaximumItems || largeObjects > kMaximumItems)
+            {
+                return unreadable;
+            }
+            for (std::uint32_t index = 0u; index < smallObjects; ++index)
+            {
+                static_cast<void>(read());
+                const std::uint32_t length = read();
+                if (failed) { return unreadable; }
+                skip((static_cast<std::size_t>(length) + 3u) & ~static_cast<std::size_t>(3u));
+            }
+            for (std::uint32_t index = 0u; index < largeObjects; ++index)
+            {
+                const std::uint32_t technique = read();
+                const std::uint32_t pass = read();
+                static_cast<void>(read());
+                static_cast<void>(read());
+                static_cast<void>(read());
+                const std::uint32_t length = read();
+                if (failed) { return unreadable; }
+                const std::size_t blob = cursor;
+                skip((static_cast<std::size_t>(length) + 3u) & ~static_cast<std::size_t>(3u));
+                if (failed) { return unreadable; }
+                if (length < 4u) { continue; }
+                const std::uint32_t head =
+                    static_cast<std::uint32_t>(bytes[blob]) |
+                    (static_cast<std::uint32_t>(bytes[blob + 1u]) << 8) |
+                    (static_cast<std::uint32_t>(bytes[blob + 2u]) << 16) |
+                    (static_cast<std::uint32_t>(bytes[blob + 3u]) << 24);
+                const std::uint32_t kind = head & 0xFFFF0000u;
+                if (kind != 0xFFFE0000u && kind != 0xFFFF0000u) { continue; }
+                const auto found = located.find({technique, pass});
+                if (found == located.end()) { continue; }
+                passes[found->second].samplerRegisters |=
+                    SamplerRegistersOf(bytes, blob, blob + length);
+            }
+            return passes;
+        }
+
         /** @brief The external-process backend. */
         /**
          * @brief Puts the header XNA's own pipeline puts in front of a compiled effect.
          *
          * `fxc /T fx_2_0 /Fo` writes the bare Direct3D 9 Effect Framework binary, magic
-         * `0xFEFF0901`. XNA's `EffectProcessor` answers the same binary behind a sixteen-byte
-         * header -- magic `0xBCF00BCF`, the offset of the inner token, then two zero dwords --
-         * and that is what reaches an `.xnb` and what a game loads. Measured, not inferred:
+         * `0xFEFF0901`. XNA's `EffectProcessor` answers the same binary behind a header -- magic
+         * `0xBCF00BCF`, the offset of the inner token, then **one pair of dwords per pass** -- and
+         * that is what reaches an `.xnb` and what a game loads.
+         *
+         * The pair was recorded here as two zeros, because the two effects
          * `effectprocessor/compile_simple_digest` and `effectprocessor/compile_second_digest`
-         * record the genuine processor's bytes for two unrelated effects and the sixteen bytes
-         * are identical in both, followed in each case by the `0xFEFF0901` blob
-         * (plans/plan_xnapipeline_parity.md `XNAPP-021`).
+         * measure the processor called *directly* and both answer zero. A build answers something
+         * else: the pair says which device state that pass disturbs and which sampler registers it
+         * binds, and its length therefore follows the pass count rather than being sixteen bytes
+         * (plans/plan_xnapipeline_parity.md `XNAPP-191`, and @ref SummarizeEffectPasses for the
+         * rule and the seventeen effects it was measured on).
          *
          * Applied here rather than in the processor because this is where an *fxc result*
          * exists: a caller that supplies its own compiler is handing over finished bytes, and
@@ -176,7 +449,6 @@ namespace CNA::Content::Pipeline
         {
             constexpr std::uint32_t kEffectFrameworkToken = 0xFEFF0901u;
             constexpr std::uint32_t kXna4EffectWrapperToken = 0xBCF00BCFu;
-            constexpr std::size_t kHeaderBytes = 16u;
             if (bytecode.size() < 4u) { return; }
             const std::uint32_t leading = static_cast<std::uint32_t>(bytecode[0]) |
                                           (static_cast<std::uint32_t>(bytecode[1]) << 8) |
@@ -184,8 +456,15 @@ namespace CNA::Content::Pipeline
                                           (static_cast<std::uint32_t>(bytecode[3]) << 24);
             if (leading != kEffectFrameworkToken) { return; }
 
+            // One pair per pass, or the single zero pair when the container cannot be read. The
+            // pair is the *pass's* own summary, so a container this build cannot walk is described
+            // as disturbing nothing, which is what the header said before it was understood at all.
+            std::vector<EffectPassStateSummary> passes = SummarizeEffectPasses(bytecode);
+            if (passes.empty()) { passes.emplace_back(); }
+            const std::size_t headerBytes = 8u + 8u * passes.size();
+
             std::vector<std::uint8_t> wrapped;
-            wrapped.reserve(bytecode.size() + kHeaderBytes);
+            wrapped.reserve(bytecode.size() + headerBytes);
             const auto word32 = [&wrapped](std::uint32_t value)
             {
                 for (int shift = 0; shift < 32; shift += 8)
@@ -194,9 +473,12 @@ namespace CNA::Content::Pipeline
                 }
             };
             word32(kXna4EffectWrapperToken);
-            word32(static_cast<std::uint32_t>(kHeaderBytes));
-            word32(0u);
-            word32(0u);
+            word32(static_cast<std::uint32_t>(headerBytes));
+            for (const EffectPassStateSummary& pass : passes)
+            {
+                word32(pass.stateGroups | (pass.samplerRegisters << 3));
+                word32(pass.samplerRegisters);
+            }
             wrapped.insert(wrapped.end(), bytecode.begin(), bytecode.end());
             bytecode = std::move(wrapped);
         }

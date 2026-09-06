@@ -379,6 +379,126 @@
       "profile": "Reach"
     },
     {
+      "case": "effect/fx_minimal",
+      "source": "source/fx_minimal.fx",
+      "importer": "EffectImporter",
+      "processor": "EffectProcessor",
+      "platform": "Windows",
+      "profile": "HiDef"
+    },
+    {
+      "case": "effect/fx_initializer",
+      "source": "source/fx_initializer.fx",
+      "importer": "EffectImporter",
+      "processor": "EffectProcessor",
+      "platform": "Windows",
+      "profile": "HiDef"
+    },
+    {
+      "case": "effect/fx_sampler",
+      "source": "source/fx_sampler.fx",
+      "importer": "EffectImporter",
+      "processor": "EffectProcessor",
+      "platform": "Windows",
+      "profile": "HiDef"
+    },
+    {
+      "case": "effect/fx_two_techniques",
+      "source": "source/fx_two_techniques.fx",
+      "importer": "EffectImporter",
+      "processor": "EffectProcessor",
+      "platform": "Windows",
+      "profile": "HiDef"
+    },
+    {
+      "case": "effect/fx_two_passes",
+      "source": "source/fx_two_passes.fx",
+      "importer": "EffectImporter",
+      "processor": "EffectProcessor",
+      "platform": "Windows",
+      "profile": "HiDef"
+    },
+    {
+      "case": "effect/fx_include",
+      "source": "source/fx_include.fx",
+      "importer": "EffectImporter",
+      "processor": "EffectProcessor",
+      "platform": "Windows",
+      "profile": "HiDef"
+    },
+    {
+      "case": "effect/fx_macro",
+      "source": "source/fx_macro.fx",
+      "importer": "EffectImporter",
+      "processor": "EffectProcessor",
+      "platform": "Windows",
+      "profile": "HiDef"
+    },
+    {
+      "case": "effect/fx_state_blend",
+      "source": "source/fx_state_blend.fx",
+      "importer": "EffectImporter",
+      "processor": "EffectProcessor",
+      "platform": "Windows",
+      "profile": "HiDef"
+    },
+    {
+      "case": "effect/fx_state_depth",
+      "source": "source/fx_state_depth.fx",
+      "importer": "EffectImporter",
+      "processor": "EffectProcessor",
+      "platform": "Windows",
+      "profile": "HiDef"
+    },
+    {
+      "case": "effect/fx_state_raster",
+      "source": "source/fx_state_raster.fx",
+      "importer": "EffectImporter",
+      "processor": "EffectProcessor",
+      "platform": "Windows",
+      "profile": "HiDef"
+    },
+    {
+      "case": "effect/fx_two_samplers",
+      "source": "source/fx_two_samplers.fx",
+      "importer": "EffectImporter",
+      "processor": "EffectProcessor",
+      "platform": "Windows",
+      "profile": "HiDef"
+    },
+    {
+      "case": "effect/fx_sampler_register",
+      "source": "source/fx_sampler_register.fx",
+      "importer": "EffectImporter",
+      "processor": "EffectProcessor",
+      "platform": "Windows",
+      "profile": "HiDef"
+    },
+    {
+      "case": "effect/fx_state_blend_wide",
+      "source": "source/fx_state_blend_wide.fx",
+      "importer": "EffectImporter",
+      "processor": "EffectProcessor",
+      "platform": "Windows",
+      "profile": "HiDef"
+    },
+    {
+      "case": "effect/fx_state_depth_wide",
+      "source": "source/fx_state_depth_wide.fx",
+      "importer": "EffectImporter",
+      "processor": "EffectProcessor",
+      "platform": "Windows",
+      "profile": "HiDef"
+    },
+    {
+      "case": "effect/fx_state_raster_wide",
+      "source": "source/fx_state_raster_wide.fx",
+      "importer": "EffectImporter",
+      "processor": "EffectProcessor",
+      "platform": "Windows",
+      "profile": "HiDef"
+    },
+    {
       "case": "xml/intermediate_passthrough",
       "source": "source/probe.xml",
       "importer": "XmlImporter",

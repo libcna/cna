@@ -229,6 +229,27 @@ TEST(XnaDifferentialBuildTest, CnaAcceptsAndRefusesTheSameSourcesXnaDoes)
     for (const std::string& line : disagreements) { report += "  " + line + "\n"; }
     EXPECT_TRUE(disagreements.empty())
         << disagreements.size() << " case(s) where the two builds disagree:\n" << report;
+
+    // And the semantic comparison, here rather than in a test of its own: it reads the directory
+    // this test has just written, and two gtest cases are two processes with no ordering between
+    // them. Until this ran from the suite it ran only when somebody remembered to type it, which
+    // is the same as not running (plans/plan_xnapipeline_parity.md XNAPP-191).
+    if (!disagreements.empty()) { return; }
+    const std::filesystem::path compare =
+        Locate("tools/xna-pipeline-oracle/differential/compare.py");
+    const std::filesystem::path xnaSide = Locate("tests/reference/xna40/differential");
+    if (!std::filesystem::exists(compare, error) || !std::filesystem::exists(publishRoot, error))
+    {
+        return;
+    }
+    const std::string command = "python3 " + compare.string() + " --xna " + xnaSide.string() +
+                                " --cna " + publishRoot.string() + " > /dev/null 2>&1";
+    const int status = std::system(command.c_str());
+    EXPECT_EQ(status, 0)
+        << "the two builds produce files that do not mean the same thing. Run\n  python3 "
+        << compare.string() << " --xna " << xnaSide.string() << " --cna " << publishRoot.string()
+        << "\nfor the differences: every one is either identical, or listed in decisions.json "
+           "with the reason it is not.";
 }
 
 // The DXT rule, which is the first thing the corpus found: XNA refuses to block-compress a texture

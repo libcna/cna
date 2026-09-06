@@ -47,14 +47,14 @@
     },
     {
       "case": "effect_fx_source",
-      "reason": "XNA compiles an effect from a memory buffer through d3dx9; CNA runs the fxc command line, which embeds source information the memory path does not. The container header is byte-identical (the 0xBCF00BCF wrapper, XNAPP-191); the blob behind it is 460 bytes to fxc's 476, first differing at offset 50. Closing it needs a native helper calling D3DXCreateEffectCompiler on a buffer.",
+      "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
       "paths": [
         "root/digest"
       ]
     },
     {
       "case": "effect_fx_source_reach",
-      "reason": "The same divergence as effect_fx_source. Note that XNA's two profiles produce different bytes for the same source while CNA's produce the same bytes: CNA does not rewrite a source's own `compile vs_2_0` statements, so Reach and HiDef differ only in what the container records. Recorded rather than resolved -- what XNA varies between the two profiles has not been measured yet.",
+      "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
       "paths": [
         "root/digest"
       ]
@@ -129,6 +129,111 @@
         "root/atlas/levelDigests",
         "root/atlas/levelByteSizes",
         "root/atlas/height"
+      ]
+    },
+    {
+      "case": "effect_fx_include",
+      "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+      "paths": [
+        "root/digest"
+      ]
+    },
+    {
+      "case": "effect_fx_initializer",
+      "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+      "paths": [
+        "root/digest"
+      ]
+    },
+    {
+      "case": "effect_fx_macro",
+      "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+      "paths": [
+        "root/digest"
+      ]
+    },
+    {
+      "case": "effect_fx_minimal",
+      "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+      "paths": [
+        "root/digest"
+      ]
+    },
+    {
+      "case": "effect_fx_sampler",
+      "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+      "paths": [
+        "root/digest"
+      ]
+    },
+    {
+      "case": "effect_fx_sampler_register",
+      "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+      "paths": [
+        "root/digest"
+      ]
+    },
+    {
+      "case": "effect_fx_state_blend",
+      "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+      "paths": [
+        "root/digest"
+      ]
+    },
+    {
+      "case": "effect_fx_state_blend_wide",
+      "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+      "paths": [
+        "root/digest"
+      ]
+    },
+    {
+      "case": "effect_fx_state_depth",
+      "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+      "paths": [
+        "root/digest"
+      ]
+    },
+    {
+      "case": "effect_fx_state_depth_wide",
+      "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+      "paths": [
+        "root/digest"
+      ]
+    },
+    {
+      "case": "effect_fx_state_raster",
+      "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+      "paths": [
+        "root/digest"
+      ]
+    },
+    {
+      "case": "effect_fx_state_raster_wide",
+      "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+      "paths": [
+        "root/digest"
+      ]
+    },
+    {
+      "case": "effect_fx_two_passes",
+      "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+      "paths": [
+        "root/digest"
+      ]
+    },
+    {
+      "case": "effect_fx_two_samplers",
+      "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+      "paths": [
+        "root/digest"
+      ]
+    },
+    {
+      "case": "effect_fx_two_techniques",
+      "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+      "paths": [
+        "root/digest"
       ]
     }
   ]

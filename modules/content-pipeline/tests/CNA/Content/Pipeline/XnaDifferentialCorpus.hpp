@@ -302,6 +302,26 @@ namespace CNA::Tests::XnaDifferential
                     }
                 }
             }
+            // An effect's `#include` is resolved beside the source, so a header travels with it.
+            // Only headers: an `.fx` source's own directory holds the effects the refusal cases
+            // are made of, and `BuildContent` builds the whole source root.
+            if (sourceExtension == ".fx")
+            {
+                for (const std::filesystem::directory_entry& sibling :
+                     std::filesystem::directory_iterator(from.parent_path(), error))
+                {
+                    if (error) { break; }
+                    const std::string extension = sibling.path().extension().string();
+                    if (extension == ".fxh" || extension == ".h" || extension == ".inc")
+                    {
+                        std::error_code copyError;
+                        std::filesystem::copy_file(sibling.path(),
+                                                   Source() / sibling.path().filename(),
+                                                   std::filesystem::copy_options::overwrite_existing,
+                                                   copyError);
+                    }
+                }
+            }
             // The two sides resolve a font differently on purpose: XNA asks Windows for an
             // installed family, CNA looks for a file, so that a content build produces the same
             // bytes on every machine. The corpus names the family Wine already resolves for XNA;

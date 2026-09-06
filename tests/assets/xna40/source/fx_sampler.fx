@@ -1,0 +1,43 @@
+// SPDX-License-Identifier: MS-PL
+//
+// plans/plan_xnapipeline_parity.md XNAPP-191/192: fx_minimal.fx plus a texture and its sampler.
+float4x4 WorldViewProjection;
+texture Surface;
+
+sampler SurfaceSampler = sampler_state
+{
+    Texture = <Surface>;
+    MinFilter = Linear;
+    MagFilter = Linear;
+    MipFilter = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertexOut
+{
+    float4 Position : POSITION0;
+    float2 TexCoord : TEXCOORD0;
+};
+
+VertexOut VertexMain(float4 position : POSITION0, float2 texCoord : TEXCOORD0)
+{
+    VertexOut output;
+    output.Position = mul(position, WorldViewProjection);
+    output.TexCoord = texCoord;
+    return output;
+}
+
+float4 PixelMain(VertexOut input) : COLOR0
+{
+    return tex2D(SurfaceSampler, input.TexCoord);
+}
+
+technique Only
+{
+    pass Single
+    {
+        VertexShader = compile vs_2_0 VertexMain();
+        PixelShader = compile ps_2_0 PixelMain();
+    }
+}

@@ -54,3 +54,24 @@ and disagree on Arial. Where a rule needed a second face, Courier New, Arial and
 measured from the Wine prefix directly and the numbers written into the plan row; those runs are
 not fixtures, because CNA cannot resolve those families here and a case CNA refuses measures
 nothing.
+
+## The effect sweep
+
+`plans/plan_xnapipeline_parity.md` `XNAPP-191`/`XNAPP-192` added fifteen `.fx` files and one
+`.fxh`. `fx_minimal.fx` is the smallest effect the corpus has -- one parameter, one technique, one
+pass, shader model 2.0, nothing else -- and every other file is that one plus exactly one feature,
+which is what makes a difference in the compiled container attributable to something:
+
+* `fx_initializer.fx` gives a parameter a value; `fx_sampler.fx` adds a texture and its sampler;
+  `fx_two_samplers.fx` adds a second, and `fx_sampler_register.fx` pins one to `register(s3)`,
+  which is what tells a register mask apart from a count.
+* `fx_two_techniques.fx` and `fx_two_passes.fx` grow the technique/pass graph, the second with
+  render state on both passes.
+* `fx_include.fx` includes `fx_common.fxh`, a real build dependency; `fx_macro.fx` branches on a
+  symbol nothing defines.
+* `fx_state_blend.fx`, `fx_state_depth.fx` and `fx_state_raster.fx` assign a few states of one
+  group each; the three `*_wide.fx` files assign every state of one group and nothing else, which
+  is how the container's dense render-state numbering was read rather than assumed.
+
+`broken.fx`, `cyclic_include.fx` and `shader_model_3.fx` from `XNAPP-267` belong to the same
+family and are described above.
