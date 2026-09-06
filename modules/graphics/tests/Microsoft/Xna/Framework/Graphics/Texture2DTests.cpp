@@ -693,6 +693,19 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         // A separate flag rather than an addition to the line above, because the two renderers
         // promote DIFFERENT sets and merging them would hide exactly that.
         const bool vulkanPacked16 = CNA_RENDERER_IS(Vulkan);
+        // plan_vulkan.md VULKAN-179: Bgra4444 is the one format in this whole sweep whose
+        // promotion is a DEVICE fact rather than a renderer fact, so it is the one entry derived
+        // from the renderer instead of named. VK_FORMAT_A4R4G4B4_UNORM_PACK16 has no core-1.1
+        // spelling; CNA's Vulkan renderer enables VK_EXT_4444_formats where the device offers it
+        // and refuses the format by name where it does not. Naming it unconditionally would make
+        // this test wrong on every device without that extension, and omitting it would make it
+        // wrong on every device with one. Everything else here stays named on purpose -- deriving
+        // the WHOLE predicate from ClassifySurfaceFormatEXT would turn this sweep into a tautology
+        // against Texture2D's own gate and stop it asserting anything about the renderer.
+        const bool vulkanA4R4G4B4 =
+            CNA_RENDERER_IS(Vulkan) &&
+            gd.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(SurfaceFormat::Bgra4444)) ==
+                CNA::Internal::Renderers::RendererFormatVerdict::Supported;
         // REMED-GFX-242: this fixture's device is Reach, and a format the profile excludes is
         // refused however capable the renderer is -- so the profile is a factor of "supported",
         // not an alternative to it.
@@ -706,6 +719,7 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
                                    || format == SurfaceFormat::Bgra4444))
             || (vulkanPacked16 && (format == SurfaceFormat::Bgr565
                                    || format == SurfaceFormat::Bgra5551))
+            || (vulkanA4R4G4B4 && format == SurfaceFormat::Bgra4444)
             || (vulkanSignedNormalized && (format == SurfaceFormat::NormalizedByte2
                                            || format == SurfaceFormat::NormalizedByte4))
             // REMED-GFX-244: block-compressed content is accepted on every EasyGL profile, since

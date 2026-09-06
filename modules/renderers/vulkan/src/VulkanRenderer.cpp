@@ -395,7 +395,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // internal caller constructing an ImageData with a format ordinal nobody classified keeps
         // working exactly as it did.
         VulkanRenderer::VulkanSurfaceFormatStorageEXT storage{ VK_FORMAT_R8G8B8A8_UNORM, 4 };
-        VulkanRenderer::MapSurfaceFormatToStorageEXT(data.surfaceFormat, storage);
+        owner_->MapSurfaceFormatToStorageEXT(data.surfaceFormat, storage);
         vkFormat_      = storage.format;
         bytesPerTexel_ = storage.bytesPerTexel;
 
@@ -2172,8 +2172,8 @@ namespace CNA::Internal::Renderers::Vulkan
     // Every entry that follows Color is added by its own row -- VULKAN-172 (Dxt1/3/5),
     // VULKAN-173 (Bgr565/Bgra5551/Bgra4444), VULKAN-174 (NormalizedByte2/4) -- and the verdict is
     // never widened ahead of the storage.
-    bool VulkanRenderer::MapSurfaceFormatToStorageEXT(int surfaceFormatOrdinal,
-                                                      VulkanRenderer::VulkanSurfaceFormatStorageEXT& out)
+    bool VulkanRenderer::MapSurfaceFormatToStorageEXT(
+        int surfaceFormatOrdinal, VulkanRenderer::VulkanSurfaceFormatStorageEXT& out) const
     {
         using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
         switch (static_cast<SurfaceFormat>(surfaceFormatOrdinal))
@@ -2210,11 +2210,18 @@ namespace CNA::Internal::Renderers::Vulkan
             case SurfaceFormat::NormalizedByte4:
                 out = { VK_FORMAT_R8G8B8A8_SNORM, 4 };
                 return true;
-            // Bgra4444 is deliberately NOT here: its Vulkan spelling
-            // (VK_FORMAT_A4R4G4B4_UNORM_PACK16) arrived with VK_EXT_4444_formats and is core only
-            // in 1.3, while this renderer asks for 1.1. Claiming a format from a version the
-            // instance did not request is exactly the widening VULKAN-170's two gates exist to
-            // stop. VULKAN-179 owns it.
+            // plan_vulkan.md VULKAN-179. The third packed 16-bit format, and the only entry in this
+            // table that is CONDITIONAL: `VK_FORMAT_A4R4G4B4_UNORM_PACK16` has no core-1.1
+            // spelling, so it may be named only on a device that offered `VK_EXT_4444_formats` and
+            // whose `formatA4R4G4B4` feature was enabled at device creation. That is why this
+            // function is a member rather than a static -- what this renderer stores is a fact
+            // about the device it opened. `VK_FORMAT_B4G4R4A4_UNORM_PACK16` is core 1.0 but is a
+            // DIFFERENT layout (B 12..15, G 8..11, R 4..7, A 0..3), not a fallback for
+            // `D3DFMT_A4R4G4B4`'s A 12..15, R 8..11, G 4..7, B 0..3.
+            case SurfaceFormat::Bgra4444:
+                if (!formatA4R4G4B4Supported_) return false;
+                out = { VK_FORMAT_A4R4G4B4_UNORM_PACK16, 2 };
+                return true;
             default:
                 return false;
         }
@@ -2891,13 +2898,54 @@ namespace CNA::Internal::Renderers::Vulkan
             feat.occlusionQueryPrecise = VK_TRUE;
             occlusionQueryPreciseSupported_ = true;
         }
+        // plan_vulkan.md VULKAN-179: SurfaceFormat::Bgra4444 is D3DFMT_A4R4G4B4, whose exact
+        // Vulkan spelling VK_FORMAT_A4R4G4B4_UNORM_PACK16 came with VK_EXT_4444_formats and is core
+        // only in 1.3, while this renderer's instance asks for 1.1. Enabling the extension where
+        // the device offers it is the narrow route: it leaves the instance version, the device
+        // selection and every other renderer path untouched, and a device without the extension
+        // simply keeps refusing the format by name rather than being handed a different layout.
+        //
+        // Both halves are required and are checked separately -- the extension must be present AND
+        // its formatA4R4G4B4 feature must be reported, because an extension that is advertised but
+        // whose feature is false permits nothing.
+        std::vector<const char*> enabledDeviceExtensions(std::begin(kDeviceExtensions),
+                                                         std::end(kDeviceExtensions));
+        VkPhysicalDevice4444FormatsFeaturesEXT formats4444{};
+        formats4444.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_4444_FORMATS_FEATURES_EXT;
+        {
+            uint32_t extCount = 0;
+            vkEnumerateDeviceExtensionProperties(physicalDevice_, nullptr, &extCount, nullptr);
+            std::vector<VkExtensionProperties> available(extCount);
+            if (extCount > 0)
+                vkEnumerateDeviceExtensionProperties(physicalDevice_, nullptr, &extCount,
+                                                     available.data());
+            bool has4444 = false;
+            for (const auto& e : available)
+                if (std::strcmp(e.extensionName, VK_EXT_4444_FORMATS_EXTENSION_NAME) == 0)
+                { has4444 = true; break; }
+            if (has4444)
+            {
+                VkPhysicalDeviceFeatures2 probe{};
+                probe.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+                probe.pNext = &formats4444;
+                vkGetPhysicalDeviceFeatures2(physicalDevice_, &probe);
+                if (formats4444.formatA4R4G4B4 == VK_TRUE)
+                {
+                    formats4444.formatA4B4G4R4 = VK_FALSE;   // not a format CNA names
+                    enabledDeviceExtensions.push_back(VK_EXT_4444_FORMATS_EXTENSION_NAME);
+                    formatA4R4G4B4Supported_ = true;
+                }
+            }
+        }
+
         VkDeviceCreateInfo ci{};
         ci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
         ci.queueCreateInfoCount = static_cast<uint32_t>(qis.size());
         ci.pQueueCreateInfos = qis.data();
         ci.pEnabledFeatures = &feat;
-        ci.enabledExtensionCount = static_cast<uint32_t>(std::size(kDeviceExtensions));
-        ci.ppEnabledExtensionNames = kDeviceExtensions;
+        if (formatA4R4G4B4Supported_) ci.pNext = &formats4444;
+        ci.enabledExtensionCount = static_cast<uint32_t>(enabledDeviceExtensions.size());
+        ci.ppEnabledExtensionNames = enabledDeviceExtensions.data();
         if (sEnableValidation) {
             ci.enabledLayerCount = static_cast<uint32_t>(std::size(kValidationLayers));
             ci.ppEnabledLayerNames = kValidationLayers;

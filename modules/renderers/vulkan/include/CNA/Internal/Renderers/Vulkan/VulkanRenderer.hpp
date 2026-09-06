@@ -1479,8 +1479,11 @@ namespace CNA::Internal::Renderers::Vulkan
          * @param out Receives the native storage description when the format is known.
          * @return True when this renderer stores that format natively.
          */
-        CNAEXT static bool MapSurfaceFormatToStorageEXT(int surfaceFormatOrdinal,
-                                                        VulkanSurfaceFormatStorageEXT& out);
+        /// plan_vulkan.md VULKAN-179 made this a MEMBER: `Bgra4444`'s storage exists only when the
+        /// opened device offered `VK_EXT_4444_formats`, so "what this renderer stores" is a
+        /// property of the device it opened rather than of the build.
+        CNAEXT bool MapSurfaceFormatToStorageEXT(int surfaceFormatOrdinal,
+                                                 VulkanSurfaceFormatStorageEXT& out) const;
 
         /**
          * @brief Whether a `Texture2D` may be created with the given surface format.
@@ -3258,6 +3261,10 @@ namespace CNA::Internal::Renderers::Vulkan
         bool     scissorEnabled_            = false;
         bool     fillModeWireframe_         = false; // current XNA FillMode::WireFrame state
         bool     fillModeNonSolidSupported_ = false; // VkPhysicalDeviceFeatures.fillModeNonSolid
+        // VULKAN-179: VK_EXT_4444_formats was offered by the device and enabled, so
+        // VK_FORMAT_A4R4G4B4_UNORM_PACK16 (SurfaceFormat::Bgra4444) may be named. Optional on
+        // purpose -- the format has no core-1.1 spelling, so this is a device fact, not a build one.
+        bool     formatA4R4G4B4Supported_ = false;
         float    depthBias_                 = 0.0f;  // XNA RasterizerState.DepthBias
         float    slopeScaleDepthBias_       = 0.0f;  // XNA RasterizerState.SlopeScaleDepthBias
         int32_t  scissorX_ = 0, scissorY_ = 0;
