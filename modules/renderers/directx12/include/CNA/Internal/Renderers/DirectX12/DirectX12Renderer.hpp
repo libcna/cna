@@ -81,6 +81,11 @@ namespace CNA::Internal::Renderers::DirectX12
         /// all -- it is OMSetStencilRef() on the command list -- so setting it only records the
         /// value here and every subsequent draw applies it, with no PSO rebuild and no cache entry.
         void SetReferenceStencil(int referenceStencil) override;
+        /// plans/plan_dx.md DX-204: GraphicsDevice.BlendFactor -- the constant `Blend::BlendFactor` and
+        /// `Blend::InverseBlendFactor` sample. Like the stencil reference, it is command-list state
+        /// on D3D12 (`OMSetBlendFactor`), not part of the pipeline state, so setting it costs no PSO
+        /// rebuild and adds no cache entry; every subsequent draw records it.
+        void SetBlendFactor(float r, float g, float b, float a) override;
         /// plans/plan_dx.md DX-201: GraphicsDevice.ScissorRectangle. Stored only -- consumed at each
         /// RSSetScissorRects site through GetEffectiveScissorEXT(), for the same reason SetViewport()
         /// stores rather than applies: this renderer re-records every draw's command list from
@@ -297,6 +302,11 @@ namespace CNA::Internal::Renderers::DirectX12
         /// can disagree with reality, and every bind site would have to remember to set it. Returns
         /// 1 when nothing is bound, which is what a single-sample pipeline state wants.
         [[nodiscard]] unsigned int GetBoundColorSampleCountEXT() const;
+        /// DX-204: the four floats OMSetBlendFactor takes, for the sprite path, which records its
+        /// own command lists.
+        [[nodiscard]] const float* GetBlendFactorEXT() const { return currentBlendFactor_; }
+        /// DX-210: the value OMSetStencilRef takes, for the sprite path.
+        [[nodiscard]] int GetReferenceStencilEXT() const { return currentReferenceStencil_; }
         /// The resource this device's back buffer currently lives in: the swap chain's current
         /// buffer, or DX-241's implicit off-screen one when there is no swap chain. Null only if
         /// the device was never fully constructed.
@@ -478,6 +488,11 @@ namespace CNA::Internal::Renderers::DirectX12
         /** @brief The currently bound off-screen color target's DXGI_FORMAT (CNAEXT -- PSO creation
          *  bakes RTV format in, D3D12SpriteBatchRenderer's own PSO needs this). */
         [[nodiscard]] DXGI_FORMAT GetBoundColorFormatEXT() const { return boundColorFormat_; }
+        /// plans/plan_dx.md DX-210: the bound depth-stencil view and its format, for the sprite path,
+        /// which records its own command lists and builds its own pipeline states. Both are
+        /// zero/UNKNOWN when nothing with a depth buffer is bound.
+        [[nodiscard]] D3D12_CPU_DESCRIPTOR_HANDLE GetBoundDsvEXT() const { return boundDsv_; }
+        [[nodiscard]] DXGI_FORMAT GetBoundDsvFormatEXT() const { return boundDsvFormat_; }
         /** @brief The currently bound off-screen color target's width/height in pixels (CNAEXT --
          *  D3D12SpriteBatchRenderer uses this as sprite2d's ViewportSize, and for the D3D12_VIEWPORT/
          *  D3D12_RECT it must set up itself, exactly mirroring how DrawPrimitivesExImpl does it). */
@@ -876,6 +891,9 @@ namespace CNA::Internal::Renderers::DirectX12
         int currentCcwStencilFail_ = 0;
         int currentCcwStencilDepthFail_ = 0;
         int currentReferenceStencil_ = 0;
+        // DX-204: GraphicsDevice.BlendFactor. XNA's default is Color.White (1,1,1,1), which is also
+        // D3D12's own default blend factor, so a game that never sets it is unaffected.
+        float currentBlendFactor_[4] = {1.0f, 1.0f, 1.0f, 1.0f};
         int currentCullMode_ = 0;        // CullMode::None
         int currentFillMode_ = 0;        // FillMode::Solid
         // DX-201: RasterizerState.ScissorTestEnable plus GraphicsDevice.ScissorRectangle. Not PSO

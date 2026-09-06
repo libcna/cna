@@ -5693,6 +5693,114 @@ int main()
             return c.getRProperty() < 60 && c.getGProperty() < 60 && c.getBProperty() < 60;
         };
 
+        // ------------------------------------------------------------------------------------
+        // plans/plan_dx.md DX-210, through the PUBLIC path only: SpriteBatch must honour the active
+        // DepthStencilState. The sprite pipeline state hardcoded DepthEnable/StencilEnable to FALSE
+        // and bound no depth-stencil view at all, so SpriteSortMode::FrontToBack with
+        // DepthStencilState::Default, and stencil-masked sprite UI, silently lost both.
+        //
+        // The test is a stencil MASK, because that is the case with no other explanation: a 3D quad
+        // stamps ReferenceStencil = 1 over the left half, then one full-surface sprite is drawn with
+        // a state that only passes where the stencil equals 1. The control repeats it with
+        // DepthStencilState::None, where the same sprite must cover everything -- so "the sprite is
+        // clipped" cannot be confused with "the sprite did not draw", and a renderer that ignores
+        // the state fails BOTH halves in opposite directions.
+        //
+        // spritebatch_3d_order_test.cpp was tried as the oracle first and MEASURED not to
+        // discriminate here: it scores 83/83 with the fix and 83/83 with the sprite pipeline state
+        // forced back to depth-off/no-DSV. That is recorded in DX-210 rather than glossed.
+        // ------------------------------------------------------------------------------------
+        {
+            const int half = kW / 2;
+            XG::RenderTarget2D maskRt(dev, kW, kH, false, XG::SurfaceFormat::Color,
+                                      XG::DepthFormat::Depth24Stencil8, 0,
+                                      XG::RenderTargetUsage::PreserveContents);
+
+            // A 1x1 white texture is all a full-surface sprite needs.
+            XG::Texture2D white = XG::Texture2D::CreateFromPixels(
+                dev, 1, 1, std::vector<std::uint8_t>{255, 255, 255, 255});
+
+            auto stampAndDraw = [&](const XG::DepthStencilState& spriteState) -> std::vector<uint8_t>
+            {
+                dev.SetRenderTarget(&maskRt);
+                dev.Clear(XG::ClearOptions::Target | XG::ClearOptions::DepthBuffer |
+                              XG::ClearOptions::Stencil,
+                          X::Color(0, 0, 0, 255), 1.0f, 0);
+
+                // Stamp stencil = 1 over the LEFT half with a 3D quad. Colour is irrelevant to the
+                // check; only the stencil plane it leaves behind matters.
+                XG::DepthStencilState stamp;
+                stamp.setDepthBufferEnableProperty(false);
+                stamp.setDepthBufferWriteEnableProperty(false);
+                stamp.setStencilEnableProperty(true);
+                stamp.setStencilFunctionProperty(XG::CompareFunction::Always);
+                stamp.setStencilPassProperty(XG::StencilOperation::Replace);
+                stamp.setReferenceStencilProperty(1);
+                dev.setDepthStencilStateProperty(stamp);
+                dev.setBlendStateProperty(XG::BlendState::Opaque);
+                dev.setRasterizerStateProperty(XG::RasterizerState::CullNone);
+
+                XG::BasicEffect stampFx(dev);
+                stampFx.setWorldProperty(X::Matrix::getIdentityProperty());
+                stampFx.setViewProperty(X::Matrix::getIdentityProperty());
+                stampFx.setProjectionProperty(X::Matrix::getIdentityProperty());
+                stampFx.VertexColorEnabled = true;
+                stampFx.Apply();
+                const X::Color stampColour(0, 0, 255, 255); // blue, so a mis-stamp is visible
+                const XG::VertexPositionColor quad[6] = {
+                    { X::Vector3(-1.0f,  1.0f, 0.5f), stampColour },
+                    { X::Vector3( 0.0f,  1.0f, 0.5f), stampColour },
+                    { X::Vector3( 0.0f, -1.0f, 0.5f), stampColour },
+                    { X::Vector3(-1.0f,  1.0f, 0.5f), stampColour },
+                    { X::Vector3( 0.0f, -1.0f, 0.5f), stampColour },
+                    { X::Vector3(-1.0f, -1.0f, 0.5f), stampColour },
+                };
+                dev.DrawUserPrimitives(X::Graphics::PrimitiveType::TriangleList, quad, 0, 2);
+
+                XG::SpriteBatch maskBatch(dev);
+                maskBatch.Begin(XG::SpriteSortMode::Deferred, XG::BlendState::Opaque, nullptr,
+                                &spriteState, nullptr);
+                maskBatch.Draw(white, X::Rectangle(0, 0, kW, kH), X::Color(0, 255, 0, 255));
+                maskBatch.End();
+
+                dev.SetRenderTarget(nullptr);
+                auto* rtb = dynamic_cast<D3D12RenderTargetRenderer*>(maskRt.GetRenderTargetRenderer());
+                if (!rtb || !devRenderer) return {};
+                return ReadBackRenderTargetFull(*devRenderer, rtb->GetSampleableColorResourceEXT(), kW, kH);
+            };
+
+            XG::DepthStencilState gate;
+            gate.setDepthBufferEnableProperty(false);
+            gate.setDepthBufferWriteEnableProperty(false);
+            gate.setStencilEnableProperty(true);
+            gate.setStencilFunctionProperty(XG::CompareFunction::Equal);
+            gate.setStencilPassProperty(XG::StencilOperation::Keep);
+            gate.setReferenceStencilProperty(1);
+
+            const auto gated = stampAndDraw(gate);
+            const auto ungated = stampAndDraw(XG::DepthStencilState::None);
+
+            auto isGreen = [](const X::Color& c) {
+                return c.getRProperty() < 60 && c.getGProperty() > 200 && c.getBProperty() < 60;
+            };
+            const bool gatedOk = !gated.empty()
+                && isGreen(pixelAt(gated, half / 2, kH / 2))          // inside the stamp -> sprite passes
+                && !isGreen(pixelAt(gated, half + half / 2, kH / 2)); // outside -> sprite rejected
+            Check(gatedOk,
+                  "KK1h: a SpriteBatch drawn with a stencil-EQUAL DepthStencilState is clipped to the "
+                  "stamped half -- SpriteBatch honours the active DepthStencilState and the bound "
+                  "depth-stencil view (plans/plan_dx.md DX-210)");
+
+            const bool ungatedOk = !ungated.empty()
+                && isGreen(pixelAt(ungated, half / 2, kH / 2))
+                && isGreen(pixelAt(ungated, half + half / 2, kH / 2));
+            Check(ungatedOk,
+                  "KK1i: control -- the SAME sprite with DepthStencilState::None covers BOTH halves, "
+                  "so KK1h's clipping is the stencil test doing its job and not the sprite failing to "
+                  "draw (plans/plan_dx.md DX-210)");
+        }
+
+
         const X::Color kBlack(0, 0, 0, 255);
 
         // ---- DX-132: SpriteFont -- real glyph placement, spacing, newline, flip. ----

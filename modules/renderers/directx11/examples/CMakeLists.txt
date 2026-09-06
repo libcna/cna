@@ -488,6 +488,22 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
     # or wait. The defect was bgfx-local (`bgfx::reset()` discards every view's framebuffer binding,
     # including the bound target's), so this run is what establishes that D3D11 already honoured the
     # contract rather than being made to.
+    # plans/plan_dx.md DX-210: the D3D11 control -- its sprite path issues no depth state of its own, so
+    # whatever GraphicsDevice last applied is already in force there.
+    cna_directx11_test(cna_test_directx11_spritebatch_3d_order
+                       ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_3d_order_test.cpp)
+    cna_directx11_ctest_command(_directx11_sb3d_cmd cna_test_directx11_spritebatch_3d_order)
+    cna_register_renderer_test(NAME DirectX11_SpriteBatch_3DOrder COMMAND ${_directx11_sb3d_cmd}
+        TIMEOUT 60 LABELS "DIRECTX11")
+
+    # plans/plan_dx.md DX-204: the D3D11 control for the BlendFactor oracle -- D3D11 has tracked and
+    # re-supplied it since Task 870/319.
+    cna_directx11_test(cna_test_directx11_blendstate_blendfactor
+                       ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_blendstate_blendfactor_test.cpp)
+    cna_directx11_ctest_command(_directx11_blendfactor_cmd cna_test_directx11_blendstate_blendfactor)
+    cna_register_renderer_test(NAME DirectX11_BlendState_BlendFactor COMMAND ${_directx11_blendfactor_cmd}
+        TIMEOUT 60 LABELS "DIRECTX11")
+
     # plans/plan_dx.md DX-208: the D3D11 control for the primitive-type oracle -- D3D11 maps all five
     # already, so its result is what the D3D12 leg is judged against.
     cna_directx11_test(cna_test_directx11_primitivetype_validation

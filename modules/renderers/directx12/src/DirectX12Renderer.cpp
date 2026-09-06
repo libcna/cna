@@ -1745,6 +1745,19 @@ namespace CNA::Internal::Renderers::DirectX12
         currentReferenceStencil_ = referenceStencil;
     }
 
+    void DirectX12Renderer::SetBlendFactor(float r, float g, float b, float a)
+    {
+        // plans/plan_dx.md DX-204: stored and recorded per draw. D3DStateMapping already mapped
+        // Blend::BlendFactor/InverseBlendFactor into the pipeline state, but nothing ever supplied
+        // the operand, so a blend using the constant read whatever the command list's default
+        // happened to be. Same command-list-state discipline as DX-203's stencil reference: this is
+        // OMSetBlendFactor, not D3D12_BLEND_DESC, so it is deliberately absent from the PSO key.
+        currentBlendFactor_[0] = r;
+        currentBlendFactor_[1] = g;
+        currentBlendFactor_[2] = b;
+        currentBlendFactor_[3] = a;
+    }
+
     void DirectX12Renderer::FillPsoStateFromCurrentEXT(D3D12PipelineStateDesc& psoDesc) const
     {
         psoDesc.colorSrcBlend = currentColorSrcBlend_;
@@ -1959,6 +1972,7 @@ namespace CNA::Internal::Renderers::DirectX12
         // plans/plan_dx.md DX-203: the stencil reference is command-list state, not pipeline state, so it
         // is recorded per draw. Harmless when the PSO has StencilEnable = FALSE.
         cmdList->OMSetStencilRef(static_cast<UINT>(currentReferenceStencil_));
+        cmdList->OMSetBlendFactor(currentBlendFactor_); // plans/plan_dx.md DX-204
         cmdList->IASetPrimitiveTopology(nativeTopology);
 
         D3D12_VERTEX_BUFFER_VIEW vbView = d3dVb.GetViewEXT();
@@ -2052,6 +2066,7 @@ namespace CNA::Internal::Renderers::DirectX12
         // plans/plan_dx.md DX-203: the stencil reference is command-list state, not pipeline state, so it
         // is recorded per draw. Harmless when the PSO has StencilEnable = FALSE.
         cmdList->OMSetStencilRef(static_cast<UINT>(currentReferenceStencil_));
+        cmdList->OMSetBlendFactor(currentBlendFactor_); // plans/plan_dx.md DX-204
         cmdList->IASetPrimitiveTopology(nativeTopology);
 
         D3D12_VERTEX_BUFFER_VIEW vbView = d3dVb.GetViewEXT();
@@ -2793,6 +2808,7 @@ namespace CNA::Internal::Renderers::DirectX12
         // plans/plan_dx.md DX-203: the stencil reference is command-list state, not pipeline state, so it
         // is recorded per draw. Harmless when the PSO has StencilEnable = FALSE.
         cmdList->OMSetStencilRef(static_cast<UINT>(currentReferenceStencil_));
+        cmdList->OMSetBlendFactor(currentBlendFactor_); // plans/plan_dx.md DX-204
         cmdList->IASetPrimitiveTopology(nativeTopology);
 
         D3D12_VERTEX_BUFFER_VIEW vbView = d3dVb.GetViewEXT();
@@ -3032,6 +3048,7 @@ namespace CNA::Internal::Renderers::DirectX12
         cmdList->SetGraphicsRootSignature(rootSig.Get());
         cmdList->SetPipelineState(pso);
         cmdList->OMSetStencilRef(static_cast<UINT>(currentReferenceStencil_)); // DX-203
+        cmdList->OMSetBlendFactor(currentBlendFactor_); // DX-204
         cmdList->IASetPrimitiveTopology(nativeTopology);
 
         // REMED-GFX-123: a D3D12 vertex-buffer view has no separate offset field, so the public

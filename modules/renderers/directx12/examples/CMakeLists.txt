@@ -273,6 +273,22 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12")
     # REMED-GFX-135: the WRITE half of the same finding. `TextureCube::SetData`/`Texture3D::SetData`
     # kept the pre-REMED-GFX-127 shape -- a `void` renderer method behind `if (renderer_)` -- so an
     # upload that stored nothing, or only part of the requested region, still returned normally.
+    # plans/plan_dx.md DX-210: SpriteBatch must honour the active DepthStencilState. The sprite pipeline
+    # state hardcoded depth and stencil off and bound no depth-stencil view at all, so
+    # SpriteSortMode::FrontToBack with DepthStencilState::Default, and stencil-masked sprite UI,
+    # silently lost both.
+    cna_directx12_test(cna_test_directx12_spritebatch_3d_order
+                       ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_3d_order_test.cpp)
+    cna_directx12_register(DirectX12_SpriteBatch_3DOrder cna_test_directx12_spritebatch_3d_order 300)
+
+    # plans/plan_dx.md DX-204: GraphicsDevice.BlendFactor -- the constant Blend::BlendFactor and
+    # Blend::InverseBlendFactor sample. Mapped into the pipeline state all along; nothing supplied
+    # the operand.
+    cna_directx12_test(cna_test_directx12_blendstate_blendfactor
+                       ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_blendstate_blendfactor_test.cpp)
+    cna_directx12_register(DirectX12_BlendState_BlendFactor
+                           cna_test_directx12_blendstate_blendfactor 300)
+
     # plans/plan_dx.md DX-208: all five PrimitiveType values must reach the GPU without throwing, and an
     # out-of-enum integer must still be rejected. Three of the five used to throw here by name.
     cna_directx12_test(cna_test_directx12_primitivetype_validation

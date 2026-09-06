@@ -31,6 +31,7 @@
 //     D3D12 output merger instead of every sprite silently using Opaque.
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "D3D12PipelineStateCache.hpp"
 #include "D3D12Buffers.hpp"
 
 #include <d3d12.h>
@@ -88,7 +89,15 @@ namespace CNA::Internal::Renderers::DirectX12
 
         D3D12VertexBufferRenderer vb_;
         D3D12IndexBufferRenderer ib_;
-        using SpritePsoKey = std::tuple<int, int, int, int, int, int, int, unsigned int, unsigned int, unsigned int>;
+        /// plans/plan_dx.md DX-210: the key is the renderer's whole tracked pipeline state
+        /// (`D3D12PipelineStateDesc::AsCacheKeyEXT()`, which is the one place every such field is
+        /// listed) plus the two things only the sprite path decides -- the render-target format and
+        /// the depth-stencil format. Spelling the fields out again here is how the depth and
+        /// stencil halves came to be missing in the first place; deriving the key means a field
+        /// added to the desc cannot be forgotten by this cache.
+        using SpritePsoKey = decltype(std::tuple_cat(
+            std::declval<const CNA::Internal::Renderers::DirectX12::D3D12PipelineStateDesc&>().AsCacheKeyEXT(),
+            std::make_tuple(0u, 0u)));
         std::map<SpritePsoKey, ComPtr<ID3D12PipelineState>> sprite2DPsos_;
         ComPtr<ID3D12Resource> perDrawConstantBuffer_;
         void* perDrawConstantBufferMapped_ = nullptr;

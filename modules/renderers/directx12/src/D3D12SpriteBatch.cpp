@@ -96,16 +96,19 @@ namespace CNA::Internal::Renderers::DirectX12
 
     ID3D12PipelineState* D3D12SpriteBatchRenderer::GetOrCreateSprite2DPso(ID3D12RootSignature* rootSig)
     {
-        const SpritePsoKey key{
-            owner_->currentColorSrcBlend_, owner_->currentAlphaSrcBlend_,
-            owner_->currentColorDstBlend_, owner_->currentAlphaDstBlend_,
-            owner_->currentColorBlendFunc_, owner_->currentAlphaBlendFunc_,
-            owner_->currentColorWriteMask_, owner_->currentSampleMask_,
-            static_cast<unsigned int>(owner_->GetBoundColorFormatEXT()),
-            // plans/plan_dx.md DX-207: the sample count is baked into the pipeline state, so it belongs in
-            // the key -- otherwise a sprite batch drawn into a multisampled target after a
-            // single-sample one gets the single-sample pipeline state back.
-            owner_->GetBoundColorSampleCountEXT()};
+        // plans/plan_dx.md DX-210: the whole tracked pipeline state, not a hand-copied subset of it. This
+        // used to list blend and write-mask fields only, which is why the depth and stencil halves
+        // were silently absent from both the key AND the descriptor below.
+        D3D12PipelineStateDesc state;
+        owner_->FillPsoStateFromCurrentEXT(state);
+        state.variant = D3DShaderVariant::Sprite2d;
+        state.strideInBytes = sizeof(Sprite2DVertex);
+        state.topologyType = static_cast<int>(D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE);
+        const DXGI_FORMAT spriteDsvFormat = owner_->GetBoundDsvFormatEXT();
+        const SpritePsoKey key = std::tuple_cat(
+            state.AsCacheKeyEXT(),
+            std::make_tuple(static_cast<unsigned int>(owner_->GetBoundColorFormatEXT()),
+                            static_cast<unsigned int>(spriteDsvFormat)));
         if (const auto it = sprite2DPsos_.find(key); it != sprite2DPsos_.end())
             return it->second.Get();
 
@@ -133,8 +136,8 @@ namespace CNA::Internal::Renderers::DirectX12
         desc.InputLayout = {kElements, static_cast<UINT>(std::size(kElements))};
         desc.IBStripCutValue = D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
         desc.PrimitiveTopologyType = kSpriteTopologyType;
-        desc.SampleMask = UINT_MAX;
-        desc.SampleDesc.Count = owner_->GetBoundColorSampleCountEXT(); // plans/plan_dx.md DX-207
+        desc.SampleMask = state.sampleMask;
+        desc.SampleDesc.Count = state.sampleCount; // plans/plan_dx.md DX-207
         desc.NodeMask = 0;
 
         desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
@@ -157,12 +160,44 @@ namespace CNA::Internal::Renderers::DirectX12
         rt0.RenderTargetWriteMask = static_cast<UINT8>(owner_->currentColorWriteMask_ & 0xF);
         desc.SampleMask = owner_->currentSampleMask_;
 
-        desc.DepthStencilState.DepthEnable = FALSE;
-        desc.DepthStencilState.StencilEnable = FALSE;
+        // plans/plan_dx.md DX-210: the device's real DepthStencilState, not a hardcoded "off". XNA's
+        // SpriteBatch::Begin takes a DepthStencilState, and SpriteSortMode::FrontToBack with
+        // DepthStencilState::Default plus stencil-masked sprite UI are ordinary uses of it; both
+        // silently lost depth and stencil here. D3D11's sprite path issues no depth state of its
+        // own, so whatever GraphicsDevice last applied is in force -- this reaches the same place by
+        // building the pipeline state from the same tracked fields. SpriteBatch's own default is
+        // DepthStencilState::None, which GraphicsDevice applies before the first sprite draw, so a
+        // batch that does not ask for depth still gets none.
+        D3D12_DEPTH_STENCIL_DESC& sds = desc.DepthStencilState;
+        sds.DepthEnable = state.depthEnable ? TRUE : FALSE;
+        sds.DepthWriteMask = state.depthWriteEnable ? D3D12_DEPTH_WRITE_MASK_ALL : D3D12_DEPTH_WRITE_MASK_ZERO;
+        sds.DepthFunc = static_cast<D3D12_COMPARISON_FUNC>(CompareFunctionToD3D11(state.depthFunc));
+        sds.StencilEnable = state.stencilEnable ? TRUE : FALSE;
+        sds.StencilReadMask = static_cast<UINT8>(state.stencilMask);
+        sds.StencilWriteMask = static_cast<UINT8>(state.stencilWriteMask);
+        sds.FrontFace.StencilFunc = static_cast<D3D12_COMPARISON_FUNC>(CompareFunctionToD3D11(state.stencilFunc));
+        sds.FrontFace.StencilPassOp = static_cast<D3D12_STENCIL_OP>(StencilOperationToD3D11(state.stencilPass));
+        sds.FrontFace.StencilFailOp = static_cast<D3D12_STENCIL_OP>(StencilOperationToD3D11(state.stencilFail));
+        sds.FrontFace.StencilDepthFailOp =
+            static_cast<D3D12_STENCIL_OP>(StencilOperationToD3D11(state.stencilDepthFail));
+        if (state.twoSidedStencilMode)
+        {
+            sds.BackFace.StencilFunc = static_cast<D3D12_COMPARISON_FUNC>(CompareFunctionToD3D11(state.ccwStencilFunc));
+            sds.BackFace.StencilPassOp = static_cast<D3D12_STENCIL_OP>(StencilOperationToD3D11(state.ccwStencilPass));
+            sds.BackFace.StencilFailOp = static_cast<D3D12_STENCIL_OP>(StencilOperationToD3D11(state.ccwStencilFail));
+            sds.BackFace.StencilDepthFailOp =
+                static_cast<D3D12_STENCIL_OP>(StencilOperationToD3D11(state.ccwStencilDepthFail));
+        }
+        else
+        {
+            sds.BackFace = sds.FrontFace;
+        }
 
         desc.NumRenderTargets = 1;
         desc.RTVFormats[0] = owner_->GetBoundColorFormatEXT();
-        desc.DSVFormat = DXGI_FORMAT_UNKNOWN;
+        // DX-210: a pipeline state that uses depth or stencil must name the format of the view it
+        // will be used with; DXGI_FORMAT_UNKNOWN here is legal only when neither is enabled.
+        desc.DSVFormat = spriteDsvFormat;
 
         ComPtr<ID3D12PipelineState> pso;
         HRESULT hr = device_->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(pso.ReleaseAndGetAddressOf()));
@@ -283,7 +318,11 @@ namespace CNA::Internal::Renderers::DirectX12
         owner_->GetResourceStateTrackerEXT().TransitionTo(cmdList, owner_->GetBoundColorResourceEXT(),
                                                            D3D12_RESOURCE_STATE_RENDER_TARGET);
         D3D12_CPU_DESCRIPTOR_HANDLE rtv = owner_->GetBoundColorRtvEXT();
-        cmdList->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
+        // plans/plan_dx.md DX-210: bind the device's depth-stencil view too, so a sprite pipeline state that
+        // enables depth or stencil has something to test against. Null when nothing is bound, which
+        // is byte-identical to the previous unconditional nullptr.
+        D3D12_CPU_DESCRIPTOR_HANDLE spriteDsv = owner_->GetBoundDsvEXT();
+        cmdList->OMSetRenderTargets(1, &rtv, FALSE, spriteDsv.ptr != 0 ? &spriteDsv : nullptr);
 
         // REMED-GFX-064: honor a custom GraphicsDevice.Viewport for sprite draws (the GPU viewport
         // rectangle). REMED-GFX-072: the SAME effective viewport now also drives the ViewportSize
@@ -301,6 +340,13 @@ namespace CNA::Internal::Renderers::DirectX12
 
         cmdList->SetGraphicsRootSignature(rootSig.Get());
         cmdList->SetPipelineState(pso);
+        // plans/plan_dx.md DX-204: SpriteBatch::Begin(..., BlendState) can select Blend::BlendFactor just as
+        // a 3D draw can, so the sprite path records the same device constant.
+        cmdList->OMSetBlendFactor(owner_->GetBlendFactorEXT());
+        // plans/plan_dx.md DX-210/DX-203: and the stencil reference, for the same reason -- without it a
+        // stencil-gated sprite compares against 0 rather than the game's ReferenceStencil, so a
+        // stencil-EQUAL mask rejects the whole sprite instead of clipping it. Found exactly that way.
+        cmdList->OMSetStencilRef(static_cast<UINT>(owner_->GetReferenceStencilEXT()));
         cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
         D3D12_VERTEX_BUFFER_VIEW vbView = vb_.GetViewEXT();
