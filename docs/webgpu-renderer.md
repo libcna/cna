@@ -740,9 +740,18 @@ Emscripten, through WGSL translated from the same SPIR-V.
 **What does not, and why:**
 * **A vertex shader that samples a texture** is refused by name. Renderer-wide and CNA-wide:
   `IGraphicsRenderer` has no vertex-sampler hook (`plans/plan_fx.md` `FX-109`).
-* **`SamplerState.MipMapLevelOfDetailBias`** is discarded. `WGPUSamplerDescriptor` has no LOD-bias
-  field at all -- the string does not appear anywhere in the pinned `webgpu.h` -- so every stock
-  draw family discards it too. `MaxMipLevel` does work, through `lodMinClamp`.
+* **`SamplerState.MipMapLevelOfDetailBias`** is not applied **on this route**. A compiled effect's
+  sampling call arrives from MojoShader as a plain `textureSample`, and `SpirvToWgsl` refuses image
+  operands (bias, lod, offset) as outside the translated subset, so there is nowhere to put the
+  value. `MaxMipLevel` does work, through `lodMinClamp`.
+
+  **Corrected 2026-09-06: this bullet used to add "`WGPUSamplerDescriptor` has no LOD-bias field at
+  all … so every stock draw family discards it too", and that generalization is false.** The
+  descriptor indeed has no such field, but the stock 3D families do not discard the value: they
+  carry it in the per-draw uniform block and sample with WGSL `textureSampleBias`
+  (`plans/plan_webgpu.md` `WEBGPU-205`). See the `sampler_lod_bias` and `sprite_sampler_state` rows in *Cross-renderer parity fixtures*
+  above, and `docs/sampler-state-support.md`.
+  The limitation here is the compiled-effect route's alone.
 
 **The browser route (`plans/plan_webgpu.md` `WEBGPU-203`, 2026-09-06).** Browser WebGPU ingests WGSL
 and nothing else -- emdawnwebgpu's own `createShaderModule` has a single chained-struct case -- so
@@ -1220,6 +1229,23 @@ the full render state (blend, rasterizer/cull, viewport, scissor, depth-stencil 
 GPU-native compressed textures, and -- since 2026-08-26 -- the browser path (`WEBGPU-119`–`122`). Those
 are described in their own sections above and are no longer "limitations". What is **genuinely still
 open** in `plans/plan_webgpu.md`:
+
+**Added 2026-09-06 (closeout pass): the list this sentence promises, which the document had stopped
+carrying.** Everything after it is a *supported* feature described with its boundary, so a reader
+arriving here found no open list at all.
+
+* **`WEBGPU-1` — the only open WebGPU row.** Build/link/run verification of the Windows, macOS and
+  linux-aarch64 wgpu-native packages. Hashes pinned, Linux x86_64 verified; the other three need
+  hardware this machine does not have.
+
+Two gaps a reader will look for here are real but are **not** WebGPU's, and no WebGPU row should be
+opened for them:
+
+* `plans/plan_graphics.md` row **1119** — `SpriteBatch.Begin(samplerState)` does not propagate the
+  complete sampler state through the shared CNA graphics layer, on any renderer. Measured on WEBGPU
+  and OPENGL33 alike; see the `sprite_sampler_state` fixture above.
+* `plans/plan_fx.md` **`FX-109`** — vertex-stage sampler support is absent from the shared
+  renderer/device surface. A compiled pass that samples in the vertex stage is refused by name.
 
 (Per-target `multiSampleCount` on `RenderTarget2D` and `RenderTargetCube` was on this list until
 `WEBGPU-165`; see *Per-target MultiSampleCount* above.)
