@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/AudioProcessors.hpp"
 
+#include <filesystem>
+
+#include "Microsoft/Xna/Framework/Content/Pipeline/ContentProcessorContext.hpp"
+
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
 #include "System/ArgumentNullException.hpp"
 
@@ -87,15 +91,26 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
     std::shared_ptr<SongContent> SongProcessor::Process(const std::shared_ptr<Audio::AudioContent>& input,
                                                         ContentProcessorContext& context)
     {
-        (void)context;
         if (input == nullptr)
         {
             throw System::ArgumentNullException("input");
         }
-        // A song is Windows Media audio, and that encoder is not available here -- nor could its
-        // behaviour be measured: XNA's own never returns under the oracle's Wine prefix.
-        input->ConvertFormat(Audio::ConversionFormat::WindowsMedia, quality_, "");
-        return std::make_shared<SongContent>(std::string(), input->getDurationProperty());
+        // A song is a file the runtime streams, not a payload the .xnb carries: the asset names a
+        // Windows Media file beside it, and this is where that file is written. XNA's own encoder
+        // could not be measured (its Windows Media path never returns under the oracle's Wine
+        // prefix), so what is reproduced is the shape -- a .wma beside the output asset, named
+        // after it -- and the refusal text, rather than Microsoft's exact bytes.
+        const std::filesystem::path output(context.getOutputFilenameProperty());
+        std::filesystem::path song = output;
+        song.replace_extension(".wma");
+        std::error_code error;
+        if (!song.parent_path().empty())
+        {
+            std::filesystem::create_directories(song.parent_path(), error);
+        }
+        input->ConvertFormat(Audio::ConversionFormat::WindowsMedia, quality_, song.string());
+        context.AddOutputFile(song.string());
+        return std::make_shared<SongContent>(song.filename().string(), input->getDurationProperty());
     }
 
     const std::string& SongProcessor::GetTypeName() const

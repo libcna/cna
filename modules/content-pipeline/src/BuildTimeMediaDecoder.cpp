@@ -313,7 +313,20 @@ namespace CNA::Content::Pipeline::BuildTimeMedia
         {
             throw std::runtime_error("the Windows Media audio stream could not be created");
         }
-        encoder->sample_fmt = AV_SAMPLE_FMT_S16;
+        // The Windows Media encoder takes planar float and nothing else, so the caller's
+        // interleaved PCM16 is converted on the way in rather than being handed over as it is --
+        // which is what avcodec_open2 refuses, and the refusal is indistinguishable from "no
+        // encoder" unless it is dealt with here.
+        encoder->sample_fmt = AV_SAMPLE_FMT_FLTP;
+        for (const AVSampleFormat* supported = codec->sample_fmts;
+             supported != nullptr && *supported != AV_SAMPLE_FMT_NONE; ++supported)
+        {
+            if (*supported == AV_SAMPLE_FMT_S16)
+            {
+                encoder->sample_fmt = AV_SAMPLE_FMT_S16;
+                break;
+            }
+        }
         encoder->sample_rate = sampleRate;
         encoder->bit_rate = bitsPerSecond > 0 ? bitsPerSecond : 128000;
         av_channel_layout_default(&encoder->ch_layout, channels);
@@ -337,13 +350,28 @@ namespace CNA::Content::Pipeline::BuildTimeMedia
         const std::size_t frameBytes = static_cast<std::size_t>(frameSamples) * channels * 2u;
         Frame frame(av_frame_alloc());
         Packet packet(av_packet_alloc());
-        frame->format = AV_SAMPLE_FMT_S16;
+        frame->format = encoder->sample_fmt;
         frame->nb_samples = frameSamples;
         frame->sample_rate = sampleRate;
-        av_channel_layout_default(&frame->ch_layout, channels);
+        av_channel_layout_copy(&frame->ch_layout, &encoder->ch_layout);
         if (av_frame_get_buffer(frame.get(), 0) < 0)
         {
             throw std::runtime_error("the encoder's frame buffer could not be allocated");
+        }
+
+        Resampler toEncoderFormat;
+        if (encoder->sample_fmt != AV_SAMPLE_FMT_S16)
+        {
+            SwrContext* raw = nullptr;
+            if (swr_alloc_set_opts2(&raw, &encoder->ch_layout, encoder->sample_fmt, sampleRate,
+                                    &encoder->ch_layout, AV_SAMPLE_FMT_S16, sampleRate, 0,
+                                    nullptr) < 0 ||
+                swr_init(raw) < 0)
+            {
+                swr_free(&raw);
+                throw std::runtime_error("the samples could not be converted for the encoder");
+            }
+            toEncoderFormat.reset(raw);
         }
 
         const auto drain = [&format, &encoder, &packet, stream]()
@@ -365,12 +393,22 @@ namespace CNA::Content::Pipeline::BuildTimeMedia
                 throw std::runtime_error("the encoder's frame buffer could not be written");
             }
             const std::size_t take = std::min(frameBytes, pcm.size() - at);
-            std::memcpy(frame->data[0], pcm.data() + at, take);
-            if (take < frameBytes)
+            // A short tail is padded with silence rather than truncated, so the encoded song is
+            // as long as the source rather than a frame shorter.
+            std::vector<std::uint8_t> block(frameBytes, 0u);
+            std::memcpy(block.data(), pcm.data() + at, take);
+            if (toEncoderFormat == nullptr)
             {
-                // A short tail is padded with silence rather than truncated, so the encoded song
-                // is as long as the source rather than a frame shorter.
-                std::memset(frame->data[0] + take, 0, frameBytes - take);
+                std::memcpy(frame->data[0], block.data(), frameBytes);
+            }
+            else
+            {
+                const std::uint8_t* input = block.data();
+                if (swr_convert(toEncoderFormat.get(), frame->data, frameSamples, &input,
+                                frameSamples) < 0)
+                {
+                    throw std::runtime_error("the samples could not be converted for the encoder");
+                }
             }
             frame->pts = position;
             position += frameSamples;

@@ -113,6 +113,50 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Audio
 
     SharpRuntime::intcs AudioContent::getLoopStartProperty() const noexcept { return loopStart_; }
 
+    void AudioContent::WriteWindowsMediaAudio(const ConversionQuality quality,
+                                              const std::string& targetFileName)
+    {
+        namespace Media = CNA::Content::Pipeline::BuildTimeMedia;
+        // XNA's own message for an encode it could not do, measured through SongProcessor
+        // (tests/reference/xna40/media case songprocessor/mp3).
+        const auto refuse = [this]
+        {
+            throw InvalidContentException("Could not convert audio file " + FileNameOnly(fileName_) +
+                                          " to WindowsMedia format.");
+        };
+        if (!Media::IsAvailable() || targetFileName.empty() || format_ == nullptr)
+        {
+            refuse();
+        }
+        // The samples have to be PCM16 before they can be encoded, whatever depth they are stored
+        // in; SamplesAsPcm16 is the same conversion the ADPCM encoder uses.
+        const std::vector<std::int16_t> samples = SamplesAsPcm16();
+        std::vector<std::uint8_t> pcm(samples.size() * 2u);
+        for (std::size_t i = 0; i < samples.size(); ++i)
+        {
+            pcm[i * 2u] = static_cast<std::uint8_t>(static_cast<std::uint16_t>(samples[i]) & 0xFFu);
+            pcm[i * 2u + 1u] = static_cast<std::uint8_t>((static_cast<std::uint16_t>(samples[i]) >> 8) & 0xFFu);
+        }
+        // The three qualities are the three bit rates a song is offered at. XNA's own encoder is
+        // not measurable here (its Windows Media path never returns under the oracle's Wine
+        // prefix), so the ladder is CNA's; what is held is that a quality chooses a rate and that
+        // the file a runtime reads back is real Windows Media audio.
+        const int bitRate = quality == ConversionQuality::Best      ? 192000
+                            : quality == ConversionQuality::Medium ? 128000
+                                                                   : 96000;
+        try
+        {
+            Media::EncodeWindowsMediaAudio(pcm, format_->getChannelCountProperty(),
+                                           format_->getSampleRateProperty(), bitRate, targetFileName);
+        }
+        catch (const std::exception&)
+        {
+            refuse();
+        }
+        // The samples stay as they were: a song's payload is the file that was just written, and
+        // XNA's SongContent carries no samples of its own.
+    }
+
     void AudioContent::ReadThroughMediaDecoder(const std::string& audioFileName)
     {
         namespace Media = CNA::Content::Pipeline::BuildTimeMedia;
@@ -164,14 +208,18 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Audio
     {
         RequireNotDisposed("ConvertFormat");
         (void)targetFileName;
-        if (formatType == ConversionFormat::WindowsMedia || formatType == ConversionFormat::Xma)
+        if (formatType == ConversionFormat::Xma)
         {
-            // Neither encoder can be reached from here: Windows Media is a Windows codec and XMA
-            // an Xbox 360 one, and neither could even be measured (see the audio oracle).
+            // The one encoder that stays out of reach: XMA is an Xbox 360 codec, it exists only in
+            // the console's own toolchain, and its behaviour could not be measured either.
             throw InvalidContentException(
-                std::string("AudioContent::ConvertFormat cannot produce ") +
-                (formatType == ConversionFormat::WindowsMedia ? "Windows Media" : "XMA") +
-                " audio: that encoder is not available outside the platform that owns it.");
+                "AudioContent::ConvertFormat cannot produce XMA audio: that encoder is not "
+                "available outside the platform that owns it.");
+        }
+        if (formatType == ConversionFormat::WindowsMedia)
+        {
+            WriteWindowsMediaAudio(quality, targetFileName);
+            return;
         }
         if (format_ == nullptr)
         {

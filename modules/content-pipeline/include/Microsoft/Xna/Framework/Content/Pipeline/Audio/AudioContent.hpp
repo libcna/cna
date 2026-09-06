@@ -129,6 +129,20 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Audio
         void ReadThroughMediaDecoder(const std::string& audioFileName);
 
         /**
+         * @brief Writes the samples as Windows Media audio to a file.
+         *
+         * A song is a file rather than a payload: the `.xnb` names it and the runtime streams it.
+         * The samples this content carries are left as they are.
+         *
+         * @param quality Which bit rate to encode at.
+         * @param targetFileName Where to write the song.
+         * @throws InvalidContentException with XNA's own "Could not convert audio file X to
+         *         WindowsMedia format." when there is no encoder, no target name, or the encode
+         *         fails.
+         */
+        void WriteWindowsMediaAudio(ConversionQuality quality, const std::string& targetFileName);
+
+        /**
          * @brief The rate a quality asks for, as a fraction of the source's own.
          *
          * @param sourceRate The source sample rate.

@@ -17,6 +17,7 @@
 #include <memory>
 #include <regex>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "CNA/Content/Pipeline/BuildTimeMediaDecoder.hpp"
@@ -25,6 +26,7 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentProcessorContext.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Mp3Importer.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Processors/AudioProcessors.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/VideoProcessor.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/VideoContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/VideoImporter.hpp"
@@ -155,7 +157,7 @@ namespace
         SilentLogger logger_;
     };
 
-    class ProcessorContext final : public Xna::ContentProcessorContext
+    class ProcessorContext : public Xna::ContentProcessorContext
     {
     public:
         std::vector<std::string> dependencies;
@@ -567,4 +569,120 @@ TEST(XnaMediaImporters, EveryAttributeMatchesXna)
     EXPECT_EQ(Xna::WmaImporter::Attribute().getDisplayNameProperty(), "WMA Audio File - XNA Framework");
     EXPECT_EQ(Xna::WmaImporter::Attribute().getDefaultProcessorProperty(), "SongProcessor");
     EXPECT_FALSE(Xna::WmaImporter::Attribute().getCacheImportedDataProperty());
+}
+
+// ---- XNAPP-161, XNAPP-136: the song a SongProcessor writes ------------------------------------
+//
+// The previous handoff recorded SongProcessor as EXTERNAL_BLOCKED, because Microsoft's Windows
+// Media encoder exists only on the platform that owns it and XNA's own never returns under the
+// oracle's Wine prefix. That is true of Microsoft's encoder and not of the format: a song is a
+// Windows Media file the runtime streams, and one can be written here. What these hold is the
+// shape -- a real WMA beside the output asset, named after it, whose samples read back -- and the
+// refusal text, rather than Microsoft's exact bytes, which nothing here could compare against.
+
+TEST(XnaSongProcessor, ASongIsWrittenAsRealWindowsMediaAudioBesideTheAsset)
+{
+    if (!MediaAvailable())
+    {
+        GTEST_SKIP() << "this build has no media decoder";
+    }
+    const std::filesystem::path scratch =
+        std::filesystem::temp_directory_path() / "cna_xnapp161_song";
+    std::filesystem::remove_all(scratch);
+    std::filesystem::create_directories(scratch);
+
+    ImporterContext importing;
+    Xna::Mp3Importer importer;
+    const auto audio = importer.Import(Fixture("mp3_stereo_44100_192k.mp3").string(), importing);
+    const System::TimeSpan sourceDuration = audio->getDurationProperty();
+
+    class OutputContext final : public ProcessorContext
+    {
+    public:
+        explicit OutputContext(std::string filename) : filename_(std::move(filename)) {}
+        [[nodiscard]] std::string getOutputFilenameProperty() const override { return filename_; }
+
+    private:
+        std::string filename_;
+    };
+
+    OutputContext context((scratch / "Theme.xnb").string());
+    Processors::SongProcessor processor;
+    const auto song = processor.Process(audio, context);
+    ASSERT_NE(song, nullptr);
+
+    // The .xnb names a file beside it; the content carries the name and the duration, which is
+    // everything XNA's SongContent has (it declares no public member of its own).
+    EXPECT_EQ(song->FileName(), "Theme.wma");
+    EXPECT_EQ(song->Duration().getTicksProperty(), sourceDuration.getTicksProperty());
+    const std::filesystem::path written = scratch / "Theme.wma";
+    ASSERT_TRUE(std::filesystem::exists(written));
+    EXPECT_GT(std::filesystem::file_size(written), 0u);
+    ASSERT_EQ(context.outputFiles.size(), 1u);
+    EXPECT_EQ(context.outputFiles[0], written.string());
+
+    // And it is really Windows Media audio, not a renamed something: reading it back through the
+    // WMA route -- which refuses anything that is not WMA -- is the check that means it.
+    ImporterContext reading;
+    Xna::WmaImporter wma;
+    const auto readBack = wma.Import(written.string(), reading);
+    ASSERT_NE(readBack, nullptr);
+    EXPECT_EQ(readBack->getFormatProperty()->getChannelCountProperty(), 2);
+    EXPECT_EQ(readBack->getFormatProperty()->getSampleRateProperty(), 44100);
+    // A lossy round trip does not preserve the length to the sample, but it must not lose or
+    // invent a large part of it.
+    const std::int64_t sourceMs = sourceDuration.getTicksProperty() / 10000;
+    const std::int64_t readMs = readBack->getDurationProperty().getTicksProperty() / 10000;
+    EXPECT_NEAR(static_cast<double>(readMs), static_cast<double>(sourceMs), 200.0);
+
+    std::filesystem::remove_all(scratch);
+}
+
+TEST(XnaSongProcessor, TheQualityChoosesTheBitRate)
+{
+    if (!MediaAvailable())
+    {
+        GTEST_SKIP() << "this build has no media decoder";
+    }
+    const std::filesystem::path scratch =
+        std::filesystem::temp_directory_path() / "cna_xnapp161_song_quality";
+    std::filesystem::remove_all(scratch);
+    std::filesystem::create_directories(scratch);
+
+    class OutputContext final : public ProcessorContext
+    {
+    public:
+        explicit OutputContext(std::string filename) : filename_(std::move(filename)) {}
+        [[nodiscard]] std::string getOutputFilenameProperty() const override { return filename_; }
+
+    private:
+        std::string filename_;
+    };
+
+    std::uintmax_t previous = 0;
+    // Best, then Medium, then Low: each writes a smaller file than the one before it, which is
+    // what "quality" means for an encoder that keeps the same samples.
+    for (const auto& [label, quality] :
+         std::vector<std::pair<std::string, Xna::Audio::ConversionQuality>>{
+             {"best", Xna::Audio::ConversionQuality::Best},
+             {"medium", Xna::Audio::ConversionQuality::Medium},
+             {"low", Xna::Audio::ConversionQuality::Low}})
+    {
+        ImporterContext importing;
+        Xna::Mp3Importer importer;
+        const auto audio = importer.Import(Fixture("mp3_mono_44100_2s.mp3").string(), importing);
+        OutputContext context((scratch / (label + ".xnb")).string());
+        Processors::SongProcessor processor;
+        processor.setQualityProperty(quality);
+        const auto song = processor.Process(audio, context);
+        ASSERT_NE(song, nullptr) << label;
+        const std::uintmax_t size = std::filesystem::file_size(scratch / (label + ".wma"));
+        EXPECT_GT(size, 0u) << label;
+        if (previous != 0)
+        {
+            EXPECT_LT(size, previous) << label << " is not smaller than the quality above it";
+        }
+        previous = size;
+    }
+    std::filesystem::remove_all(scratch);
 }

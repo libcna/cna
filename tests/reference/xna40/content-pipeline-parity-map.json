@@ -5,17 +5,17 @@
    "status": "SEMANTIC_EQUIVALENT",
    "cna": "Microsoft::Xna::Framework::Content::Pipeline::Audio::AudioContent",
    "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Audio/AudioContent.hpp",
-   "note": "the samples and the format are answered by const reference and shared pointer rather than as a ReadOnlyCollection and a reference; only WAVE sources are read, an MP3 or WMA being refused with the same message XNA gives an unreadable file. ConvertFormat is XNAPP-161.",
+   "note": "the samples and the format are answered by const reference and shared pointer rather than as a ReadOnlyCollection and a reference. Every source XNA reads is read: a WAVE in its own encoding, and an MP3 or a WMA decoded to the 16-bit PCM at 44100 the genuine MP3 importer reports it will produce.",
    "members": {
     "constructor:.ctor(System.String, Microsoft.Xna.Framework.Content.Pipeline.Audio.AudioFileType)": {
      "status": "SEMANTIC_EQUIVALENT",
      "cna": "AudioContent(const std::string&, AudioFileType)",
-     "note": "only a WAVE source is read here; a named MP3 or WMA is refused with XNA's own unreadable-file message rather than decoded."
+     "note": "reads a WAVE in the encoding the file names, and an MP3 or a WMA decoded through the build-time media decoder to 16-bit PCM at 44100 with the source's channel count, which is what the genuine MP3 importer reports. Content-driven, as XNA's is: a source whose bytes are not of the named format is refused whatever its extension says."
     },
     "property:Data": {
      "status": "SEMANTIC_EQUIVALENT",
      "cna": "getDataProperty()",
-     "note": "a const std::vector<bytecs>& stands for the ReadOnlyCollection<Byte>; it throws after Dispose, as XNA's does."
+     "note": "a const std::vector<bytecs>& rather than a ReadOnlyCollection<byte>, which is what a read-only view of bytes is here; it throws after Dispose as XNA's does."
     },
     "property:Duration": {
      "status": "EXACT_EQUIVALENT",
@@ -35,7 +35,7 @@
     "property:Format": {
      "status": "SEMANTIC_EQUIVALENT",
      "cna": "getFormatProperty()",
-     "note": "the format is a shared pointer, which is the lifetime a .NET reference gives it."
+     "note": "a shared pointer, which is the lifetime a .NET reference gives it."
     },
     "property:LoopLength": {
      "status": "EXACT_EQUIVALENT",
@@ -50,15 +50,15 @@
     "method:ConvertFormat(Microsoft.Xna.Framework.Content.Pipeline.Audio.ConversionFormat, Microsoft.Xna.Framework.Content.Pipeline.Audio.ConversionQuality, System.String)": {
      "status": "HOST_SUBSTITUTION",
      "cna": "ConvertFormat(ConversionFormat, ConversionQuality, const std::string&)",
-     "note": "Pcm at Best is XNA's own answer byte for byte, and the resampled qualities match its rate, depth, byte rate, data length, loop and duration; the sample values are this host's resampler, because XNA's lives inside its native helper. Adpcm is an in-house MS-ADPCM encoder writing XNA's own block geometry -- format 2, four bits, 70 bytes per channel per block of 128 frames, and the 32-byte extension with the seven standard coefficient pairs -- at the source rate, where XNA's encoder also resamples to a rate of its own choosing. WindowsMedia and Xma are refused by name: neither encoder exists outside the platform that owns it, and neither could be measured."
+     "note": "Pcm at Best is XNA's own answer byte for byte, and the two resampled qualities match its rate, depth, channel count, byte rate, data length, loop and duration; the sample values are this host's resampler, where XNA's lives inside its native helper. Adpcm is an in-house MS-ADPCM encoder writing XNA's own block geometry. WindowsMedia writes a real Windows Media file at the target name with this host's encoder rather than Microsoft's, and refuses with XNA's own sentence when there is nowhere to write it. Xma is the one format still refused by name: its encoder ships only with the Xbox 360 tools and could not be measured."
     },
     "method:Dispose()": {
-     "status": "EXACT_EQUIVALENT",
+     "status": "SEMANTIC_EQUIVALENT",
      "cna": "Dispose()",
-     "note": ""
+     "note": "after it the samples throw while Duration, Format and FileName keep answering, and a second call is accepted, which is what the genuine one does."
     },
     "method:Finalize()": {
-     "status": "SEMANTIC_EQUIVALENT",
+     "status": "EXACT_EQUIVALENT",
      "cna": "~AudioContent()",
      "note": "a destructor stands for the finalizer: the samples are released when the object goes, without a garbage collector to wait for."
     }
@@ -3452,7 +3452,7 @@
    "status": "SEMANTIC_EQUIVALENT",
    "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::SongProcessor",
    "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/AudioProcessors.hpp",
-   "note": "the audio and the answered content are shared pointers, which is the lifetime a .NET reference gives them.",
+   "note": "the audio and the song are shared pointers, which is the lifetime a .NET reference gives them; the default Quality is the measured Best. No longer EXTERNAL_BLOCKED: Microsoft's own Windows Media encoder is unavailable, but the format is not, and a song is a Windows Media file the runtime streams rather than a payload the .xnb carries.",
    "members": {
     "constructor:.ctor()": {
      "status": "EXACT_EQUIVALENT",
@@ -3465,9 +3465,9 @@
      "note": ""
     },
     "method:Process(Microsoft.Xna.Framework.Content.Pipeline.Audio.AudioContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
-     "status": "EXTERNAL_BLOCKED",
-     "cna": "Process(const std::shared_ptr<AudioContent>&, ContentProcessorContext&)",
-     "note": "a song is Windows Media audio; that encoder exists only on the platform that owns it, and XNA's own never returns under the oracle's Wine prefix, so its behaviour could not even be measured. The null-input refusal is XNA's own."
+     "status": "HOST_SUBSTITUTION",
+     "cna": "Process(const std::shared_ptr<AudioContent>&, ContentProcessorContext&) -> std::shared_ptr<SongContent>",
+     "note": "Writes a real Windows Media audio file beside the output asset, named after it, and answers a SongContent carrying that name and the source's duration; the file is added to the context as an output. The encoder is this host's rather than Microsoft's, whose behaviour could not be measured at all -- XNA's Windows Media path never returns under the oracle's Wine prefix -- so the bytes are not Microsoft's and are not claimed to be. What is held is that the file a runtime reads back is Windows Media audio of the source's own rate and channel count, that its length survives a lossy round trip, and that each lower quality writes a smaller file. Refusals carry XNA's own \"Could not convert audio file X to WindowsMedia format.\""
     }
    }
   },

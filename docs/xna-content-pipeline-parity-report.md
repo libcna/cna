@@ -11,7 +11,7 @@
 | Quantity | Implemented (EXACT + SEMANTIC + HOST_SUBSTITUTION) | EXTERNAL_BLOCKED | MISSING |
 |---|---|---:|---:|
 | public/protected types | 122/128 (95.3%) | 0 | 6 |
-| public/protected members | 648/705 (91.9%) | 1 | 56 |
+| public/protected members | 649/705 (92.1%) | 0 | 56 |
 | enum values | 27/27 (100.0%) | 0 | 0 |
 | built-in importers | 8/10 (80.0%) | 0 | 2 |
 | built-in processors | 12/12 (100.0%) | 0 | 0 |
@@ -21,7 +21,7 @@
 Status vocabulary: EXACT_EQUIVALENT, SEMANTIC_EQUIVALENT (spelling differs, capability identical; note says how),
 HOST_SUBSTITUTION (Microsoft-host mechanism replaced; note says how), EXTERNAL_BLOCKED (note names the
 unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 45, SEMANTIC_EQUIVALENT 76, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 6.
-Member status by value: EXACT_EQUIVALENT 416, SEMANTIC_EQUIVALENT 226, HOST_SUBSTITUTION 6, EXTERNAL_BLOCKED 1, MISSING 56.
+Member status by value: EXACT_EQUIVALENT 416, SEMANTIC_EQUIVALENT 226, HOST_SUBSTITUTION 7, EXTERNAL_BLOCKED 0, MISSING 56.
 
 Rules applied mechanically: 3 delegate plumbing members are listed in section 7 and not counted; 3 exception
 serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serialization has no C++ counterpart).
@@ -42,7 +42,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 
 | Namespace | XNA type | Kind | Status | CNA type | Note |
 |---|---|---|---|---|---|
-| `….Audio` | `AudioContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Audio::AudioContent` | the samples and the format are answered by const reference and shared pointer rather than as a ReadOnlyCollection and a reference; only WAVE sources are read, an MP3 or WMA being refused with the same message XNA gives an unreadable file. ConvertFormat is XNAPP-161. |
+| `….Audio` | `AudioContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Audio::AudioContent` | the samples and the format are answered by const reference and shared pointer rather than as a ReadOnlyCollection and a reference. Every source XNA reads is read: a WAVE in its own encoding, and an MP3 or a WMA decoded to the 16-bit PCM at 44100 the genuine MP3 importer reports it will produce. |
 | `….Audio` | `AudioFileType` | enum | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Audio::AudioFileType` |  |
 | `….Audio` | `AudioFormat` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Audio::AudioFormat` | the native wave format is a std::vector<bytecs> rather than a ReadOnlyCollection<Byte>, which is what a read-only view of bytes is here. |
 | `….Audio` | `ConversionFormat` | enum | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Audio::ConversionFormat` |  |
@@ -136,7 +136,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `….Processors` | `ModelTextureProcessor` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::ModelTextureProcessor` | Mipmapped and DXT-compressed by default, which is the only difference from the texture processor (measured, processor/ModelTextureProcessor). |
 | `….Processors` | `PassThroughProcessor` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::PassThroughProcessor` | An object-to-object processor, so its carrier is the pipeline's ContentObject box. |
 | `….Processors` | `SongContent` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::SongContent` | XNA declares no public member on this type; CNA's carries the converted audio behind CNAEXT accessors so its writer can reach it. |
-| `….Processors` | `SongProcessor` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::SongProcessor` | the audio and the answered content are shared pointers, which is the lifetime a .NET reference gives them. |
+| `….Processors` | `SongProcessor` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::SongProcessor` | the audio and the song are shared pointers, which is the lifetime a .NET reference gives them; the default Quality is the measured Best. No longer EXTERNAL_BLOCKED: Microsoft's own Windows Media encoder is unavailable, but the format is not, and a song is a Windows Media file the runtime streams rather than a payload the .xnb carries. |
 | `….Processors` | `SoundEffectContent` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::SoundEffectContent` | XNA declares no public member on this type; CNA's carries the converted audio behind CNAEXT accessors so its writer can reach it. |
 | `….Processors` | `SoundEffectProcessor` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::SoundEffectProcessor` | the audio and the answered content are shared pointers, which is the lifetime a .NET reference gives them. |
 | `….Processors` | `SpriteFontContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Processors::SpriteFontContent` | XNA publishes no member of its own on this type (measured, fontprocessor/spritefont_content_members lists none), so what it holds is reachable here only through a CNAEXT accessor -- and what it holds is the canonical sprite-font data this repository already writes. |
@@ -280,17 +280,17 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 
 | XNA type | Kind | Signature | Status | CNA | Note |
 |---|---|---|---|---|---|
-| `AudioContent` | constructor | `.ctor(System.String, Microsoft.Xna.Framework.Content.Pipeline.Audio.AudioFileType)` | SEMANTIC_EQUIVALENT | `AudioContent(const std::string&, AudioFileType)` | only a WAVE source is read here; a named MP3 or WMA is refused with XNA's own unreadable-file message rather than decoded. |
-| `AudioContent` | property | `Data` | SEMANTIC_EQUIVALENT | `getDataProperty()` | a const std::vector<bytecs>& stands for the ReadOnlyCollection<Byte>; it throws after Dispose, as XNA's does. |
+| `AudioContent` | constructor | `.ctor(System.String, Microsoft.Xna.Framework.Content.Pipeline.Audio.AudioFileType)` | SEMANTIC_EQUIVALENT | `AudioContent(const std::string&, AudioFileType)` | reads a WAVE in the encoding the file names, and an MP3 or a WMA decoded through the build-time media decoder to 16-bit PCM at 44100 with the source's channel count, which is what the genuine MP3 importer reports. Content-driven, as XNA's is: a source whose bytes are not of the named format is refused whatever its extension says. |
+| `AudioContent` | property | `Data` | SEMANTIC_EQUIVALENT | `getDataProperty()` | a const std::vector<bytecs>& rather than a ReadOnlyCollection<byte>, which is what a read-only view of bytes is here; it throws after Dispose as XNA's does. |
 | `AudioContent` | property | `Duration` | EXACT_EQUIVALENT | `getDurationProperty()` |  |
 | `AudioContent` | property | `FileName` | EXACT_EQUIVALENT | `getFileNameProperty()` |  |
 | `AudioContent` | property | `FileType` | EXACT_EQUIVALENT | `getFileTypeProperty()` |  |
-| `AudioContent` | property | `Format` | SEMANTIC_EQUIVALENT | `getFormatProperty()` | the format is a shared pointer, which is the lifetime a .NET reference gives it. |
+| `AudioContent` | property | `Format` | SEMANTIC_EQUIVALENT | `getFormatProperty()` | a shared pointer, which is the lifetime a .NET reference gives it. |
 | `AudioContent` | property | `LoopLength` | EXACT_EQUIVALENT | `getLoopLengthProperty()` |  |
 | `AudioContent` | property | `LoopStart` | EXACT_EQUIVALENT | `getLoopStartProperty()` |  |
-| `AudioContent` | method | `ConvertFormat(Microsoft.Xna.Framework.Content.Pipeline.Audio.ConversionFormat, Microsoft.Xna.Framework.Content.Pipeline.Audio.ConversionQuality, System.String)` | HOST_SUBSTITUTION | `ConvertFormat(ConversionFormat, ConversionQuality, const std::string&)` | Pcm at Best is XNA's own answer byte for byte, and the resampled qualities match its rate, depth, byte rate, data length, loop and duration; the sample values are this host's resampler, because XNA's lives inside its native helper. Adpcm is an in-house MS-ADPCM encoder writing XNA's own block geometry -- format 2, four bits, 70 bytes per channel per block of 128 frames, and the 32-byte extension with the seven standard coefficient pairs -- at the source rate, where XNA's encoder also resamples to a rate of its own choosing. WindowsMedia and Xma are refused by name: neither encoder exists outside the platform that owns it, and neither could be measured. |
-| `AudioContent` | method | `Dispose()` | EXACT_EQUIVALENT | `Dispose()` |  |
-| `AudioContent` | method | `Finalize()` | SEMANTIC_EQUIVALENT | `~AudioContent()` | a destructor stands for the finalizer: the samples are released when the object goes, without a garbage collector to wait for. |
+| `AudioContent` | method | `ConvertFormat(Microsoft.Xna.Framework.Content.Pipeline.Audio.ConversionFormat, Microsoft.Xna.Framework.Content.Pipeline.Audio.ConversionQuality, System.String)` | HOST_SUBSTITUTION | `ConvertFormat(ConversionFormat, ConversionQuality, const std::string&)` | Pcm at Best is XNA's own answer byte for byte, and the two resampled qualities match its rate, depth, channel count, byte rate, data length, loop and duration; the sample values are this host's resampler, where XNA's lives inside its native helper. Adpcm is an in-house MS-ADPCM encoder writing XNA's own block geometry. WindowsMedia writes a real Windows Media file at the target name with this host's encoder rather than Microsoft's, and refuses with XNA's own sentence when there is nowhere to write it. Xma is the one format still refused by name: its encoder ships only with the Xbox 360 tools and could not be measured. |
+| `AudioContent` | method | `Dispose()` | SEMANTIC_EQUIVALENT | `Dispose()` | after it the samples throw while Duration, Format and FileName keep answering, and a second call is accepted, which is what the genuine one does. |
+| `AudioContent` | method | `Finalize()` | EXACT_EQUIVALENT | `~AudioContent()` | a destructor stands for the finalizer: the samples are released when the object goes, without a garbage collector to wait for. |
 | `AudioFileType` | enum value | `Wav = 0` | EXACT_EQUIVALENT | `AudioFileType::Wav` |  |
 | `AudioFileType` | enum value | `Mp3 = 1` | EXACT_EQUIVALENT | `AudioFileType::Mp3` |  |
 | `AudioFileType` | enum value | `Wma = 2` | EXACT_EQUIVALENT | `AudioFileType::Wma` |  |
@@ -825,7 +825,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `PassThroughProcessor` | method | `Process(System.Object, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | SEMANTIC_EQUIVALENT | `Process(const ContentObject&, ContentProcessorContext&)` | object is ContentObject. |
 | `SongProcessor` | constructor | `.ctor()` | EXACT_EQUIVALENT | `SongProcessor()` |  |
 | `SongProcessor` | property | `Quality` | EXACT_EQUIVALENT | `getQualityProperty() / setQualityProperty(ConversionQuality)` |  |
-| `SongProcessor` | method | `Process(Microsoft.Xna.Framework.Content.Pipeline.Audio.AudioContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | EXTERNAL_BLOCKED | `Process(const std::shared_ptr<AudioContent>&, ContentProcessorContext&)` | a song is Windows Media audio; that encoder exists only on the platform that owns it, and XNA's own never returns under the oracle's Wine prefix, so its behaviour could not even be measured. The null-input refusal is XNA's own. |
+| `SongProcessor` | method | `Process(Microsoft.Xna.Framework.Content.Pipeline.Audio.AudioContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | HOST_SUBSTITUTION | `Process(const std::shared_ptr<AudioContent>&, ContentProcessorContext&) -> std::shared_ptr<SongContent>` | Writes a real Windows Media audio file beside the output asset, named after it, and answers a SongContent carrying that name and the source's duration; the file is added to the context as an output. The encoder is this host's rather than Microsoft's, whose behaviour could not be measured at all -- XNA's Windows Media path never returns under the oracle's Wine prefix -- so the bytes are not Microsoft's and are not claimed to be. What is held is that the file a runtime reads back is Windows Media audio of the source's own rate and channel count, that its length survives a lossy round trip, and that each lower quality writes a smaller file. Refusals carry XNA's own "Could not convert audio file X to WindowsMedia format." |
 | `SoundEffectProcessor` | constructor | `.ctor()` | EXACT_EQUIVALENT | `SoundEffectProcessor()` |  |
 | `SoundEffectProcessor` | property | `Quality` | EXACT_EQUIVALENT | `getQualityProperty() / setQualityProperty(ConversionQuality)` |  |
 | `SoundEffectProcessor` | method | `Process(Microsoft.Xna.Framework.Content.Pipeline.Audio.AudioContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)` | SEMANTIC_EQUIVALENT | `Process(const std::shared_ptr<AudioContent>&, ContentProcessorContext&)` | the audio and the answered content are shared pointers, which is the lifetime a .NET reference gives them. The best quality leaves the source alone and the two below it compress it to ADPCM in place, which is what XNA does; the ADPCM sample values are this host's encoder (XNAPP-161). |

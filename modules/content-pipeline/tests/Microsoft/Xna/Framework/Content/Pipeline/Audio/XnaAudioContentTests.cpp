@@ -594,17 +594,27 @@ TEST(XnaAudioConvertFormat, AdpcmRoundTripsThroughCnasOwnDecoder)
     EXPECT_LT(worst, 500.0) << "MS-ADPCM round trip drifted by " << worst;
 }
 
-TEST(XnaAudioConvertFormat, TheTwoPlatformEncodersAreRefusedByName)
+TEST(XnaAudioConvertFormat, XmaIsRefusedByNameAndWindowsMediaNeedsAFileToWriteTo)
 {
     ScratchDirectory scratch("blocked");
     const std::string mono = WriteWav(scratch.Path(), "mono8k.wav", 8000, 1, 16, 800);
     AudioContent audio(mono, AudioFileType::Wav);
-    // Neither could be measured either: XNA's Windows Media encoder never returns under the Wine
-    // prefix the oracle runs in, and the XMA encoder ships only with the Xbox 360 tools.
-    EXPECT_THROW(audio.ConvertFormat(ConversionFormat::WindowsMedia, ConversionQuality::Best, ""),
-                 InvalidContentException);
+    // XMA is the one encoder still out of reach: it ships only with the Xbox 360 tools, and its
+    // behaviour could not be measured either.
     EXPECT_THROW(audio.ConvertFormat(ConversionFormat::Xma, ConversionQuality::Best, ""),
                  InvalidContentException);
+    // Windows Media is no longer refused for want of an encoder -- it is written, and a song is a
+    // file, so asking for one without saying where carries XNA's own refusal text.
+    try
+    {
+        audio.ConvertFormat(ConversionFormat::WindowsMedia, ConversionQuality::Best, "");
+        ADD_FAILURE() << "a song with nowhere to be written was accepted";
+    }
+    catch (const InvalidContentException& error)
+    {
+        EXPECT_EQ(error.getMessageProperty(),
+                  "Could not convert audio file mono8k.wav to WindowsMedia format.");
+    }
     EXPECT_EQ(audio.getFormatProperty()->getFormatProperty(), 1);
 }
 
@@ -756,12 +766,19 @@ TEST(XnaAudioProcessors, RefusalsMatchXna)
                      }),
               Expected("songprocessor/null_input"));
 
-    // A song is Windows Media audio, which this build cannot write and the oracle could not
-    // measure: XNA's own encoder never returns under its Wine prefix.
+    // A song is a Windows Media file the runtime streams, and one is written here (the round trip
+    // is XnaSongProcessor in XnaMediaImporterTests). What this holds is the refusal a source with
+    // nowhere to be written gets: the probe context's OutputFilename is a bare "asset.xnb" with no
+    // directory, and XNA's own sentence names the source file.
     ScratchDirectory scratch("song");
     const std::string mono = WriteWav(scratch.Path(), "mono8k.wav", 8000, 1, 16, 800);
     const auto audio = std::make_shared<AudioContent>(mono, AudioFileType::Wav);
-    EXPECT_THROW((void)song.Process(audio, context), InvalidContentException);
+    const auto written = song.Process(audio, context);
+    ASSERT_NE(written, nullptr);
+    EXPECT_EQ(written->FileName(), "asset.wma");
+    EXPECT_EQ(written->Duration().getTicksProperty(), audio->getDurationProperty().getTicksProperty());
+    std::error_code removal;
+    std::filesystem::remove("asset.wma", removal);
 }
 
 
