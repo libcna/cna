@@ -2371,6 +2371,26 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-434: the state goldens -- blend, depth/stencil write mask, cull mode. Vulkan bakes all three into the PIPELINE rather than setting them, so a golden is the only test that compares the RESULT of that baking against another renderer's.
+        cna_vulkan_test(cna_test_vulkan_blendstate_additive_golden
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_blendstate_additive_golden_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_BlendState_Additive_Golden
+            COMMAND cna_test_vulkan_blendstate_additive_golden
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_depthstencilstate_write_enable_golden
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_depthstencilstate_write_enable_golden_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DepthStencilState_WriteEnable_Golden
+            COMMAND cna_test_vulkan_depthstencilstate_write_enable_golden
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_rasterizerstate_cullmode_golden
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_rasterizerstate_cullmode_golden_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_RasterizerState_CullMode_Golden
+            COMMAND cna_test_vulkan_rasterizerstate_cullmode_golden
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-339: the release path that also runs vkDeviceWaitIdle and the
         # retirement lists. HasRenderer() must be false after the first Dispose and no second
         # release may be attempted.
