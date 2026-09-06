@@ -69,65 +69,16 @@ namespace CNA::Internal::Renderers::DirectX12
         /// synchronous readback discipline D3D12Buffers.cpp/D3D12Textures.cpp already establish.
         /// Returns an empty vector on any failure (honest bail-out, not a silently wrong result).
         std::vector<uint8_t> ReadbackSubresourceRGBA8(
-            DirectX12Renderer* owner, ID3D12Device* device, ID3D12Resource* resource,
+            DirectX12Renderer* owner, ID3D12Device* /*device*/, ID3D12Resource* resource,
             UINT subresource, int w, int h)
         {
-            const D3D12_RESOURCE_DESC desc = resource->GetDesc();
-            D3D12_PLACED_SUBRESOURCE_FOOTPRINT fp{};
-            UINT numRows = 0; UINT64 rowBytes = 0, totalBytes = 0;
-            device->GetCopyableFootprints(&desc, subresource, 1, 0, &fp, &numRows, &rowBytes, &totalBytes);
-            if (totalBytes == 0) return {};
-
-            D3D12_HEAP_PROPERTIES rbHeap{};
-            rbHeap.Type = D3D12_HEAP_TYPE_READBACK;
-            D3D12_RESOURCE_DESC bufDesc{};
-            bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-            bufDesc.Width = totalBytes;
-            bufDesc.Height = 1;
-            bufDesc.DepthOrArraySize = 1;
-            bufDesc.MipLevels = 1;
-            bufDesc.Format = DXGI_FORMAT_UNKNOWN;
-            bufDesc.SampleDesc.Count = 1;
-            bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-
-            ComPtr<ID3D12Resource> rb;
-            if (FAILED(device->CreateCommittedResource(&rbHeap, D3D12_HEAP_FLAG_NONE, &bufDesc,
-                                                       D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
-                                                       IID_PPV_ARGS(rb.GetAddressOf()))))
-                return {};
-
-            D3D12_TEXTURE_COPY_LOCATION dst{};
-            dst.pResource = rb.Get();
-            dst.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-            dst.PlacedFootprint = fp;
-            D3D12_TEXTURE_COPY_LOCATION src{};
-            src.pResource = resource;
-            src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-            src.SubresourceIndex = subresource;
-
-            ID3D12CommandAllocator* allocator = owner->GetCommandAllocatorEXT(0);
-            ID3D12GraphicsCommandList* cmdList = owner->GetCommandListEXT();
-            allocator->Reset();
-            cmdList->Reset(allocator, nullptr);
-            auto& tracker = owner->GetResourceStateTrackerEXT();
-            const D3D12_RESOURCE_STATES prior = tracker.GetTrackedStateEXT(resource);
-            tracker.TransitionTo(cmdList, resource, D3D12_RESOURCE_STATE_COPY_SOURCE);
-            cmdList->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
-            tracker.TransitionTo(cmdList, resource, prior);
-            if (FAILED(cmdList->Close())) return {};
-            owner->ExecuteCommandListAndWaitEXT(cmdList);
-
-            uint8_t* mapped = nullptr;
-            const D3D12_RANGE rr{0, static_cast<SIZE_T>(totalBytes)};
-            if (FAILED(rb->Map(0, &rr, reinterpret_cast<void**>(&mapped)))) return {};
-            std::vector<uint8_t> out(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4);
-            for (int row = 0; row < h; ++row)
-                std::memcpy(out.data() + static_cast<std::size_t>(row) * static_cast<std::size_t>(w) * 4,
-                            mapped + fp.Offset + static_cast<std::size_t>(row) * fp.Footprint.RowPitch,
-                            static_cast<std::size_t>(w) * 4);
-            const D3D12_RANGE wr{0, 0};
-            rb->Unmap(0, &wr);
-            return out;
+            // plans/plan_dx.md DX-205 moved the body onto the renderer, because ReadBackbuffer() needs the
+            // very same READBACK-heap CopyTextureRegion against a resource that is not a render
+            // target, and two copies of a synchronous readback are two places to get the barrier
+            // restore wrong. The renderer always owns the device this used to be handed, so the
+            // parameter is kept only to leave every call site unchanged.
+            if (!owner) return {};
+            return owner->ReadbackSubresourceRGBA8EXT(resource, subresource, w, h);
         }
 
         /// DX-144: uploads a w*h RGBA8 byte buffer into subresource `subresource` of `resource`, via

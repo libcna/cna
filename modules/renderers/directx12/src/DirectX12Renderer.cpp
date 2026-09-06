@@ -170,6 +170,10 @@ namespace CNA::Internal::Renderers::DirectX12
             if (swapChainAvailable_)
                 CreateWindowSizeDependentViews();
         }
+        // DX-241: no swap chain -- either no window at all (HeadlessEXT) or a swap chain that could
+        // not be created -- means this device still has a back buffer, just an off-screen one.
+        if (!swapChainAvailable_)
+            CreateOffscreenBackBufferResources();
 
         CNA::Logger::Info(
             "D3D12 device resources created; feature level " + FormatHr(featureLevel_) +
@@ -436,6 +440,19 @@ namespace CNA::Internal::Renderers::DirectX12
             resourceStates_.TrackResource(backBufferResources_[i].Get(), D3D12_RESOURCE_STATE_PRESENT);
         }
 
+        CreateDefaultDepthStencilResources();
+
+        // Bind the current back buffer as the default draw target -- mirrors D3D11's own
+        // CreateWindowSizeDependentViews() making the back buffer the default Clear()/draw target
+        // immediately after construction, before any custom render target is ever bound.
+        const UINT idx = swapChain_->GetCurrentBackBufferIndex();
+        BindOffscreenColorTargetEXT(backBufferResources_[idx].Get(), backBufferRtvs_[idx],
+                                    DXGI_FORMAT_R8G8B8A8_UNORM, width_, height_,
+                                    depthStencilViewEXT_, DXGI_FORMAT_D24_UNORM_S8_UINT);
+    }
+
+    void DirectX12Renderer::CreateDefaultDepthStencilResources()
+    {
         D3D12_HEAP_PROPERTIES heapProps{};
         heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
 
@@ -467,14 +484,60 @@ namespace CNA::Internal::Renderers::DirectX12
         dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
         device_->CreateDepthStencilView(depthStencilResource_.Get(), &dsvDesc, depthStencilViewEXT_);
         resourceStates_.TrackResource(depthStencilResource_.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE);
+    }
 
-        // Bind the current back buffer as the default draw target -- mirrors D3D11's own
-        // CreateWindowSizeDependentViews() making the back buffer the default Clear()/draw target
-        // immediately after construction, before any custom render target is ever bound.
-        const UINT idx = swapChain_->GetCurrentBackBufferIndex();
-        BindOffscreenColorTargetEXT(backBufferResources_[idx].Get(), backBufferRtvs_[idx],
+    void DirectX12Renderer::CreateOffscreenBackBufferResources()
+    {
+        // Same size resolution CreateSwapChainResources() uses for a real swap chain, minus the
+        // window: PresentationParameters' back-buffer size arrives as virtualWidth_/virtualHeight_
+        // (GraphicsDevice sets both from getBackBufferWidthProperty()/getBackBufferHeightProperty()).
+        width_ = virtualWidth_ > 0 ? virtualWidth_ : 1024;
+        height_ = virtualHeight_ > 0 ? virtualHeight_ : 768;
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+        D3D12_RESOURCE_DESC desc{};
+        desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        desc.Width = static_cast<UINT64>(width_);
+        desc.Height = static_cast<UINT>(height_);
+        desc.DepthOrArraySize = 1;
+        desc.MipLevels = 1;
+        // The same format a real swap chain gets (SurfaceFormat::Color -> DXGI_FORMAT_R8G8B8A8_UNORM,
+        // DX-11-fmt), so nothing downstream -- readback, resolve, PSO RTV format -- has to special-case
+        // the implicit target.
+        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        desc.SampleDesc.Count = 1;
+        desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+        D3D12_CLEAR_VALUE clearValue{};
+        clearValue.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+
+        HRESULT hr = device_->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &desc,
+            D3D12_RESOURCE_STATE_RENDER_TARGET, &clearValue,
+            IID_PPV_ARGS(offscreenBackBufferResource_.ReleaseAndGetAddressOf()));
+        if (FAILED(hr))
+            throw std::runtime_error(
+                "DirectX12Renderer: implicit off-screen back-buffer CreateCommittedResource failed, hr=" +
+                FormatHr(hr));
+
+        offscreenBackBufferRtv_ = AllocateRtvDescriptorEXT();
+        device_->CreateRenderTargetView(offscreenBackBufferResource_.Get(), nullptr, offscreenBackBufferRtv_);
+        resourceStates_.TrackResource(offscreenBackBufferResource_.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+        CreateDefaultDepthStencilResources();
+
+        BindOffscreenColorTargetEXT(offscreenBackBufferResource_.Get(), offscreenBackBufferRtv_,
                                     DXGI_FORMAT_R8G8B8A8_UNORM, width_, height_,
                                     depthStencilViewEXT_, DXGI_FORMAT_D24_UNORM_S8_UINT);
+
+        CNA::Logger::Info(
+            "D3D12: no swap chain, so this device uses an implicit off-screen back buffer (" +
+                std::to_string(width_) + "x" + std::to_string(height_) +
+                ", R8G8B8A8_UNORM + D24_UNORM_S8_UINT); Present() is a no-op on it "
+                "(plans/plan_dx.md DX-241)",
+            CNA::LogCategory::RENDER);
     }
 
     void DirectX12Renderer::ReleaseWindowSizeDependentViews()
@@ -492,6 +555,11 @@ namespace CNA::Internal::Renderers::DirectX12
         depthStencilViewEXT_ = D3D12_CPU_DESCRIPTOR_HANDLE{};
         depthStencilResource_.Reset();
         for (auto& res : backBufferResources_) res.Reset();
+        // DX-241: the implicit off-screen back buffer is exactly as device-tied as the real one,
+        // and shares the depth-stencil released just above.
+        FreeRtvDescriptorEXT(offscreenBackBufferRtv_);
+        offscreenBackBufferRtv_ = D3D12_CPU_DESCRIPTOR_HANDLE{};
+        offscreenBackBufferResource_.Reset();
     }
 
     D3D12_CPU_DESCRIPTOR_HANDLE DirectX12Renderer::AllocateRtvDescriptorEXT()
@@ -738,6 +806,8 @@ namespace CNA::Internal::Renderers::DirectX12
             if (swapChainAvailable_)
                 CreateWindowSizeDependentViews();
         }
+        if (!swapChainAvailable_)
+            CreateOffscreenBackBufferResources(); // DX-241, same rule as construction
 
         CNA::Logger::Info(
             "D3D12 device resources recreated after device removal; feature level " +
@@ -833,7 +903,16 @@ namespace CNA::Internal::Renderers::DirectX12
     {
         if (!swapChainAvailable_)
         {
+            // DX-241: SetRenderTarget2D(nullptr) returns to the back buffer, and on a device with
+            // no swap chain that is the implicit off-screen one -- not "nothing bound", which is
+            // what made Clear() and every draw throw afterwards. UnbindOffscreenColorTargetEXT()
+            // first, so extraMrtCount_/viewportSet_ are reset exactly as an ordinary target change
+            // resets them.
             UnbindOffscreenColorTargetEXT();
+            if (offscreenBackBufferResource_)
+                BindOffscreenColorTargetEXT(offscreenBackBufferResource_.Get(), offscreenBackBufferRtv_,
+                                            DXGI_FORMAT_R8G8B8A8_UNORM, width_, height_,
+                                            depthStencilViewEXT_, DXGI_FORMAT_D24_UNORM_S8_UINT);
             return;
         }
         const UINT idx = swapChain_->GetCurrentBackBufferIndex();
@@ -1162,10 +1241,18 @@ namespace CNA::Internal::Renderers::DirectX12
     {
         if (!swapChainAvailable_)
         {
-            NotYetImplemented("Present (no real swap chain available -- either an off-screen "
-                              "construction, or this dev loop's own documented Wine/vkd3d-proton "
-                              "swap-chain limitation, DX-100/DX-102; real windowed verification is "
-                              "scripts/run-proton-vkd3d.sh's job, DX-116)");
+            // DX-241: a device whose back buffer is the implicit off-screen one has nothing to
+            // present to, and PresentationParameters::HeadlessEXT's own documentation says so
+            // ("Present() is not meaningful without a swap chain"). A no-op is the honest answer
+            // and the established CNA one -- HeadlessRenderer::Present() is already exactly this --
+            // not a throw out of the ordinary Game loop, which is what a windowless device used to
+            // get from GraphicsDevice::Present(). It is not a fabricated success either: Present()
+            // returns void and promises nothing readable; what the frame drew is still there, in
+            // the target GetBackBufferData() reads (DX-205).
+            if (offscreenBackBufferResource_)
+                return;
+            NotYetImplemented("Present (no swap chain and no implicit off-screen back buffer -- "
+                              "the device was never fully constructed)");
         }
 
         // DX-116: transition the current back buffer to PRESENT before calling Present() -- D3D12's
@@ -1210,6 +1297,127 @@ namespace CNA::Internal::Renderers::DirectX12
         BindOffscreenColorTargetEXT(backBufferResources_[idx].Get(), backBufferRtvs_[idx],
                                     DXGI_FORMAT_R8G8B8A8_UNORM, width_, height_,
                                     depthStencilViewEXT_, DXGI_FORMAT_D24_UNORM_S8_UINT);
+    }
+
+    ID3D12Resource* DirectX12Renderer::GetCurrentBackBufferResourceEXT() const
+    {
+        if (swapChainAvailable_ && swapChain_)
+            return backBufferResources_[swapChain_->GetCurrentBackBufferIndex()].Get();
+        return offscreenBackBufferResource_.Get();
+    }
+
+    std::vector<std::uint8_t> DirectX12Renderer::ReadbackSubresourceRGBA8EXT(
+        ID3D12Resource* resource, UINT subresource, int w, int h)
+    {
+        if (!resource || !device_ || w <= 0 || h <= 0) return {};
+
+        const D3D12_RESOURCE_DESC desc = resource->GetDesc();
+        D3D12_PLACED_SUBRESOURCE_FOOTPRINT fp{};
+        UINT numRows = 0; UINT64 rowBytes = 0, totalBytes = 0;
+        device_->GetCopyableFootprints(&desc, subresource, 1, 0, &fp, &numRows, &rowBytes, &totalBytes);
+        if (totalBytes == 0) return {};
+
+        D3D12_HEAP_PROPERTIES rbHeap{};
+        rbHeap.Type = D3D12_HEAP_TYPE_READBACK;
+        D3D12_RESOURCE_DESC bufDesc{};
+        bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+        bufDesc.Width = totalBytes;
+        bufDesc.Height = 1;
+        bufDesc.DepthOrArraySize = 1;
+        bufDesc.MipLevels = 1;
+        bufDesc.Format = DXGI_FORMAT_UNKNOWN;
+        bufDesc.SampleDesc.Count = 1;
+        bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+        ComPtr<ID3D12Resource> rb;
+        if (FAILED(device_->CreateCommittedResource(&rbHeap, D3D12_HEAP_FLAG_NONE, &bufDesc,
+                                                    D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
+                                                    IID_PPV_ARGS(rb.GetAddressOf()))))
+            return {};
+
+        D3D12_TEXTURE_COPY_LOCATION dst{};
+        dst.pResource = rb.Get();
+        dst.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+        dst.PlacedFootprint = fp;
+        D3D12_TEXTURE_COPY_LOCATION src{};
+        src.pResource = resource;
+        src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+        src.SubresourceIndex = subresource;
+
+        ID3D12CommandAllocator* allocator = GetCommandAllocatorEXT(0);
+        ID3D12GraphicsCommandList* cmdList = GetCommandListEXT();
+        allocator->Reset();
+        cmdList->Reset(allocator, nullptr);
+        // The source goes back to whatever state it was tracked in, so a readback never changes
+        // what the next draw or Present() has to transition from.
+        const D3D12_RESOURCE_STATES prior = resourceStates_.GetTrackedStateEXT(resource);
+        resourceStates_.TransitionTo(cmdList, resource, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        cmdList->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
+        resourceStates_.TransitionTo(cmdList, resource, prior);
+        if (FAILED(cmdList->Close())) return {};
+        ExecuteCommandListAndWaitEXT(cmdList);
+
+        std::uint8_t* mapped = nullptr;
+        const D3D12_RANGE rr{0, static_cast<SIZE_T>(totalBytes)};
+        if (FAILED(rb->Map(0, &rr, reinterpret_cast<void**>(&mapped)))) return {};
+        std::vector<std::uint8_t> out(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4);
+        for (int row = 0; row < h; ++row)
+            std::memcpy(out.data() + static_cast<std::size_t>(row) * static_cast<std::size_t>(w) * 4,
+                        mapped + fp.Offset + static_cast<std::size_t>(row) * fp.Footprint.RowPitch,
+                        static_cast<std::size_t>(w) * 4);
+        const D3D12_RANGE wr{0, 0};
+        rb->Unmap(0, &wr);
+        return out;
+    }
+
+    void DirectX12Renderer::ReadBackbuffer(int x, int y, int w, int h, std::uint8_t* pixels)
+    {
+        if (!pixels || w <= 0 || h <= 0)
+            return;
+
+        ID3D12Resource* const source = GetCurrentBackBufferResourceEXT();
+        if (!source)
+        {
+            // DX-205: no swap chain AND no implicit off-screen back buffer means this device never
+            // finished constructing. Refuse by name instead of leaving GraphicsDevice's own
+            // zero-initialised scratch buffer to be handed to the caller as a uniformly
+            // transparent-black frame -- the fabricate-rather-than-refuse anti-pattern
+            // REMED-GFX-127 removed from the texture readbacks.
+            throw System::NotSupportedException(
+                "DirectX12Renderer::ReadBackbuffer: this device has neither a swap chain nor an "
+                "implicit off-screen back buffer, so there is nothing to read.");
+        }
+
+        const D3D12_RESOURCE_DESC desc = source->GetDesc();
+        const int srcW = static_cast<int>(desc.Width);
+        const int srcH = static_cast<int>(desc.Height);
+
+        const std::vector<std::uint8_t> full = ReadbackSubresourceRGBA8EXT(source, 0, srcW, srcH);
+        if (full.size() < static_cast<std::size_t>(srcW) * static_cast<std::size_t>(srcH) * 4)
+            throw std::runtime_error("DirectX12Renderer::ReadBackbuffer: back-buffer readback failed");
+
+        // Same out-of-range policy D3D11's own DX-28 override uses: a row or column outside the real
+        // resource is zero-filled rather than read from adjacent memory. GraphicsDevice has already
+        // rejected a rectangle outside the PresentationParameters bounds, so this only matters when
+        // the real resource is smaller than those parameters claim.
+        for (int row = 0; row < h; ++row)
+        {
+            std::uint8_t* dstRow = pixels + static_cast<std::size_t>(row) * static_cast<std::size_t>(w) * 4;
+            const int srcY = y + row;
+            if (srcY < 0 || srcY >= srcH || x >= srcW)
+            {
+                std::memset(dstRow, 0, static_cast<std::size_t>(w) * 4);
+                continue;
+            }
+            const int srcX = std::max(x, 0);
+            const int copyW = std::max(0, std::min(w, srcW - srcX));
+            std::memcpy(dstRow,
+                        full.data() + (static_cast<std::size_t>(srcY) * srcW + srcX) * 4,
+                        static_cast<std::size_t>(copyW) * 4);
+            if (copyW < w)
+                std::memset(dstRow + static_cast<std::size_t>(copyW) * 4, 0,
+                            static_cast<std::size_t>(w - copyW) * 4);
+        }
     }
 
     void DirectX12Renderer::SetSwapInterval(int interval)

@@ -24,6 +24,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <vector>
 #include <memory>
 #include <unordered_map>
 
@@ -73,6 +74,15 @@ namespace CNA::Internal::Renderers::DirectX12
         /// swap chain is available (e.g. off-screen construction, or this dev loop's own
         /// documented Wine/vkd3d-proton swap-chain limitation -- see DX-100/DX-102).
         void Present() override;
+        /// plans/plan_dx.md DX-205: real GPU->CPU readback of this device's back buffer, the same
+        /// contract D3D11's own DX-28 override implements. The source is the swap chain's current
+        /// back buffer when there is a swap chain, and DX-241's implicit off-screen back buffer
+        /// otherwise, so a windowless device reads what it drew instead of throwing
+        /// IGraphicsRenderer's "not implemented in this renderer". @p x / @p y are top-left in
+        /// back-buffer pixels and @p pixels must hold w*h*4 RGBA8 bytes; GraphicsDevice has already
+        /// validated the rectangle against PresentationParameters, and rows/columns that still fall
+        /// outside the real resource are zero-filled exactly as D3D11 zero-fills them.
+        void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
         void GetViewportSize(int& width, int& height) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
@@ -255,6 +265,17 @@ namespace CNA::Internal::Renderers::DirectX12
         /** @brief Whether CreateSwapChainResources() actually produced a usable swap chain --
          *  false on this Wine dev loop today (see class-level doc comment), by design not a throw. */
         [[nodiscard]] bool IsSwapChainAvailableEXT() const { return swapChainAvailable_; }
+        /// The resource this device's back buffer currently lives in: the swap chain's current
+        /// buffer, or DX-241's implicit off-screen one when there is no swap chain. Null only if
+        /// the device was never fully constructed.
+        [[nodiscard]] ID3D12Resource* GetCurrentBackBufferResourceEXT() const;
+        /// Reads one subresource of @p resource back as a tightly packed @p w x @p h RGBA8 buffer,
+        /// via a READBACK-heap CopyTextureRegion and a full GPU wait. Returns an empty vector on
+        /// any failure -- an honest bail-out, never a fabricated frame. Lives here rather than in
+        /// D3D12RenderTargets.cpp (its original home) because ReadBackbuffer() needs the same
+        /// mechanism against a resource that is not a render target.
+        [[nodiscard]] std::vector<std::uint8_t> ReadbackSubresourceRGBA8EXT(
+            ID3D12Resource* resource, UINT subresource, int w, int h);
         /** @brief Real swap chain, or null if IsSwapChainAvailableEXT() is false. */
         [[nodiscard]] IDXGISwapChain3* GetSwapChainEXT() const { return swapChain_.Get(); }
 
@@ -473,6 +494,24 @@ namespace CNA::Internal::Renderers::DirectX12
         /// after construction. Only called when CreateSwapChainResources() actually succeeded
         /// (swapChainAvailable_ == true).
         void CreateWindowSizeDependentViews();
+        /// plans/plan_dx.md DX-241: the implicit off-screen back buffer of a device that has no swap
+        /// chain -- either because no window was supplied at all
+        /// (PresentationParameters::HeadlessEXT, the mode GraphicsDevice names this renderer as the
+        /// intended user of) or because CreateSwapChainResources() downgraded to
+        /// swapChainAvailable_ = false. It is a real committed R8G8B8A8_UNORM render target plus the
+        /// same D24_UNORM_S8_UINT depth-stencil a windowed device gets, sized from the
+        /// PresentationParameters back-buffer size the renderer was constructed with, bound as the
+        /// default target exactly as CreateWindowSizeDependentViews() binds the real back buffer.
+        /// Without it, Clear() and every draw threw for a headless device until the game bound a
+        /// RenderTarget2D of its own, and SetRenderTarget2D(nullptr) put it straight back into that
+        /// state -- neither of which is what a "render off-screen and read the result back" mode can
+        /// mean. EasyGL always has framebuffer 0 and D3D11 always has a swap chain; this is D3D12's
+        /// equivalent of the target that is simply always there.
+        void CreateOffscreenBackBufferResources();
+        /// Shared by CreateWindowSizeDependentViews() and CreateOffscreenBackBufferResources():
+        /// the width_ x height_ D24_UNORM_S8_UINT depth-stencil resource plus its DSV, registered
+        /// with the resource-state tracker in D3D12_RESOURCE_STATE_DEPTH_WRITE.
+        void CreateDefaultDepthStencilResources();
         /// DX-116: releases every window-size-dependent resource CreateWindowSizeDependentViews()
         /// created -- back-buffer resources/RTV handles and the depth-stencil resource/DSV handle
         /// (RTV/DSV heap slot *indices* are not reclaimed, matching DX-103's own documented
@@ -645,6 +684,12 @@ namespace CNA::Internal::Renderers::DirectX12
         // kFramesInFlight) + a shared depth-stencil buffer, mirroring D3D11's own DX-24 group.
         ComPtr<ID3D12Resource> backBufferResources_[kFramesInFlight];
         D3D12_CPU_DESCRIPTOR_HANDLE backBufferRtvs_[kFramesInFlight]{};
+        // DX-241: the implicit off-screen back buffer, present exactly when swapChainAvailable_ is
+        // false. It is the resource ReadBackbuffer() reads (DX-205) and the one
+        // RestoreBackBufferRenderTargetEXT() rebinds, so a windowless device behaves like a device
+        // with a back buffer in every respect except putting pixels on a screen.
+        ComPtr<ID3D12Resource> offscreenBackBufferResource_;
+        D3D12_CPU_DESCRIPTOR_HANDLE offscreenBackBufferRtv_{};
         ComPtr<ID3D12Resource> depthStencilResource_;
         D3D12_CPU_DESCRIPTOR_HANDLE depthStencilViewEXT_{};
 

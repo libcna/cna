@@ -3415,11 +3415,45 @@ int main()
               "W5: DrawColoredPrimitives() paints the exact vertex color into a real bound "
               "RenderTarget2D (plans/plan_dx.md DX-117)");
 
+        // plans/plan_dx.md DX-241 replaced this row's original contract, deliberately. It used to assert
+        // that SetRenderTarget2D(nullptr) on a renderer with no swap chain leaves NOTHING bound;
+        // that was honest about the implementation but made a windowless device unusable -- the
+        // next Clear() or draw threw. A device with no swap chain now owns an implicit off-screen
+        // back buffer, so "restore the back buffer" has something to restore, and the check below
+        // is strictly stronger than the one it replaces: it proves the target is bound, that it is
+        // the back-buffer-sized one rather than the render target just unbound (kRtWidth/kRtHeight
+        // differ from the renderer's own width/height), and that it genuinely rasterizes.
         renderer.SetRenderTarget2D(nullptr);
-        Check(!renderer.HasBoundColorTargetEXT(),
-              "W6: SetRenderTarget2D(nullptr) on an off-screen (no swap chain) renderer genuinely "
-              "restores the honest 'nothing bound' state, via RestoreBackBufferRenderTargetEXT()'s "
-              "own real fallback (plans/plan_dx.md DX-117)");
+        Check(renderer.HasBoundColorTargetEXT(),
+              "W6: SetRenderTarget2D(nullptr) on an off-screen (no swap chain) renderer restores the "
+              "implicit off-screen BACK BUFFER as the bound target, not 'nothing bound' "
+              "(plans/plan_dx.md DX-241)");
+        {
+            renderer.Clear(12.0f / 255.0f, 34.0f / 255.0f, 56.0f / 255.0f, 1.0f);
+            std::vector<uint8_t> backPixels(static_cast<std::size_t>(4) * 4 * 4, 0);
+            renderer.ReadBackbuffer(0, 0, 4, 4, backPixels.data());
+            bool backMatches = true;
+            for (std::size_t i = 0; i < 16 && backMatches; ++i)
+                backMatches = backPixels[i * 4 + 0] == 12 && backPixels[i * 4 + 1] == 34 &&
+                              backPixels[i * 4 + 2] == 56 && backPixels[i * 4 + 3] == 255;
+            Check(backMatches,
+                  "W6b: Clear() on the restored implicit back buffer genuinely rasterizes, and "
+                  "ReadBackbuffer() reads the exact colour back out of it -- the whole point of "
+                  "the mode (plans/plan_dx.md DX-241/DX-205)");
+
+            // The discriminator: that Clear() must have gone to the BACK BUFFER, not to the render
+            // target that was bound a moment ago. rt0 still holds W5's exact green if, and only if,
+            // the restore really rebound something else. A same-size back buffer makes a dimension
+            // check useless here, so this compares content instead.
+            const auto rt0AfterRestore =
+                ReadBackRenderTargetFull(renderer, rt0Impl->GetColorResourceEXT(), kRtWidth, kRtHeight);
+            Check(rt0AfterRestore.size() == rt0AfterDraw.size() &&
+                  rt0AfterRestore[centerIdx + 0] == 0 && rt0AfterRestore[centerIdx + 1] == 255 &&
+                  rt0AfterRestore[centerIdx + 2] == 0 && rt0AfterRestore[centerIdx + 3] == 255,
+                  "W6c: the unbound RenderTarget2D still holds W5's green after that Clear(), so the "
+                  "restored target really is a different resource -- the back buffer -- and not the "
+                  "render target left bound (plans/plan_dx.md DX-241)");
+        }
 
         // ---- Real MRT: 2 independently-created render targets, one SetRenderTargets() bind call, ----
         // ---- Clear() genuinely writes both -- same proof shape D3D11's own DX-46 established. ----
@@ -3541,7 +3575,10 @@ int main()
               "D3D11's own RenderTargetCube coverage already has, see plans/plan_dx.md Phase DX15 DX-129)");
 
         rtCube->UnbindAsRenderTarget();
-        Check(!renderer.HasBoundColorTargetEXT(), "W13: UnbindAsRenderTarget() on RenderTargetCube restores the honest 'nothing bound' state");
+        Check(renderer.HasBoundColorTargetEXT(),
+              "W13: UnbindAsRenderTarget() on RenderTargetCube restores the implicit off-screen back "
+              "buffer, the same target SetRenderTarget2D(nullptr) restores -- not 'nothing bound' "
+              "(plans/plan_dx.md DX-241)");
 
         // ---- REMED-GFX-134: the public RenderTargetCube readback this renderer used to refuse. ----
         // The shared Game-harness suite (examples/rendertargetcube_getdata_contract_test.cpp) is
@@ -5453,6 +5490,104 @@ int main()
         auto* devRenderer = dynamic_cast<DirectX12Renderer*>(&dev.GetRenderer());
         Check(devRenderer != nullptr,
               "KK1: the windowless GraphicsDevice really is backed by a DirectX12Renderer");
+
+        // ------------------------------------------------------------------------------------
+        // plans/plan_dx.md DX-241 / DX-205, through the PUBLIC path only: a HeadlessEXT device has a
+        // real implicit back buffer, ordinary Clear()/Present() work on it, and
+        // GraphicsDevice::GetBackBufferData() reads what was drawn. Before DX-241 the first
+        // Clear() below threw ("no off-screen color target bound") and before DX-205
+        // GetBackBufferData() threw IGraphicsRenderer's "not implemented in this renderer" --
+        // which is why every existing check in this section reads through a RenderTarget2D
+        // instead. Nothing here touches the renderer: this is what a game sees.
+        // ------------------------------------------------------------------------------------
+        {
+            const X::Color kBack(21, 43, 65, 255);
+            bool clearThrew = false;
+            try { dev.Clear(kBack); } catch (const std::exception&) { clearThrew = true; }
+            Check(!clearThrew,
+                  "KK1a: GraphicsDevice::Clear() on a HeadlessEXT device with no RenderTarget2D bound "
+                  "does not throw -- it clears the implicit off-screen back buffer "
+                  "(plans/plan_dx.md DX-241)");
+
+            std::vector<X::Color> whole(static_cast<std::size_t>(kW) * kH, X::Color(0, 0, 0, 0));
+            bool wholeThrew = false;
+            try { dev.GetBackBufferData(nullptr, whole.data(), 0, static_cast<int>(whole.size())); }
+            catch (const std::exception&) { wholeThrew = true; }
+            bool wholeMatches = !wholeThrew && whole.size() == static_cast<std::size_t>(kW) * kH;
+            for (std::size_t i = 0; i < whole.size() && wholeMatches; ++i)
+                wholeMatches = whole[i].getRProperty() == 21 && whole[i].getGProperty() == 43 &&
+                               whole[i].getBProperty() == 65 && whole[i].getAProperty() == 255;
+            Check(wholeMatches,
+                  "KK1b: GetBackBufferData() with no rectangle returns the exact Clear() colour for "
+                  "every one of the 32x32 pixels of the implicit back buffer "
+                  "(plans/plan_dx.md DX-205)");
+
+            // A sub-rectangle, deliberately off-origin and non-square, so a full-surface read that
+            // ignored the rectangle would still be caught by the next check rather than by luck.
+            const X::Rectangle sub(5, 7, 3, 2);
+            std::vector<X::Color> subPixels(6, X::Color(0, 0, 0, 0));
+            bool subThrew = false;
+            try { dev.GetBackBufferData(&sub, subPixels.data(), 0, static_cast<int>(subPixels.size())); }
+            catch (const std::exception&) { subThrew = true; }
+            bool subMatches = !subThrew;
+            for (std::size_t i = 0; i < subPixels.size() && subMatches; ++i)
+                subMatches = subPixels[i].getRProperty() == 21 && subPixels[i].getGProperty() == 43 &&
+                             subPixels[i].getBProperty() == 65 && subPixels[i].getAProperty() == 255;
+            Check(subMatches,
+                  "KK1c: a 3x2 sub-rectangle read at (5,7) of the implicit back buffer returns the "
+                  "same exact colour (plans/plan_dx.md DX-205)");
+
+            // A second, DIFFERENT clear proves the read is live rather than a cached first frame.
+            dev.Clear(X::Color(200, 100, 50, 255));
+            std::vector<X::Color> second(static_cast<std::size_t>(kW) * kH, X::Color(0, 0, 0, 0));
+            dev.GetBackBufferData(nullptr, second.data(), 0, static_cast<int>(second.size()));
+            bool secondMatches = true;
+            for (std::size_t i = 0; i < second.size() && secondMatches; ++i)
+                secondMatches = second[i].getRProperty() == 200 && second[i].getGProperty() == 100 &&
+                                second[i].getBProperty() == 50;
+            Check(secondMatches,
+                  "KK1d: a second, different Clear() reads back its own colour -- the readback is "
+                  "live, not a cached or fabricated frame (plans/plan_dx.md DX-205)");
+
+            bool rejectedOutOfRange = false;
+            const X::Rectangle outside(kW - 1, kH - 1, 4, 4);
+            std::vector<X::Color> ignored(16, X::Color(0, 0, 0, 0));
+            try { dev.GetBackBufferData(&outside, ignored.data(), 0, static_cast<int>(ignored.size())); }
+            catch (const std::out_of_range&) { rejectedOutOfRange = true; }
+            catch (const std::exception&) { }
+            Check(rejectedOutOfRange,
+                  "KK1e: a rectangle that leaves the back buffer is rejected with std::out_of_range, "
+                  "not silently clamped or read out of bounds (plans/plan_dx.md DX-205)");
+
+            bool presentThrew = false;
+            try { dev.Present(); } catch (const std::exception&) { presentThrew = true; }
+            Check(!presentThrew,
+                  "KK1f: Present() on a HeadlessEXT device is a documented no-op rather than a throw, "
+                  "so an ordinary Game loop runs on one (plans/plan_dx.md DX-241)");
+
+            // SetRenderTarget(nullptr) must come back to that same implicit back buffer, which is
+            // exactly the round trip that used to leave the device unable to clear at all.
+            {
+                XG::RenderTarget2D roundTrip(dev, kW, kH);
+                dev.SetRenderTarget(&roundTrip);
+                dev.Clear(X::Color(9, 9, 9, 255));
+                dev.SetRenderTarget(nullptr);
+                bool afterThrew = false;
+                try { dev.Clear(X::Color(77, 88, 99, 255)); }
+                catch (const std::exception&) { afterThrew = true; }
+                std::vector<X::Color> after(static_cast<std::size_t>(kW) * kH, X::Color(0, 0, 0, 0));
+                if (!afterThrew)
+                    dev.GetBackBufferData(nullptr, after.data(), 0, static_cast<int>(after.size()));
+                bool afterMatches = !afterThrew;
+                for (std::size_t i = 0; i < after.size() && afterMatches; ++i)
+                    afterMatches = after[i].getRProperty() == 77 && after[i].getGProperty() == 88 &&
+                                   after[i].getBProperty() == 99;
+                Check(afterMatches,
+                      "KK1g: SetRenderTarget(nullptr) returns to the implicit back buffer -- the next "
+                      "Clear() lands there and reads back exactly, instead of throwing "
+                      "(plans/plan_dx.md DX-241)");
+            }
+        }
 
         // Renders whatever `drawFn` draws into a fresh RenderTarget2D and returns its RGBA pixels.
         auto renderToTarget = [&](const X::Color& clearColor,

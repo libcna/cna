@@ -9,6 +9,7 @@
 #include "CNA/Internal/Renderers/DirectX11/D3D11SpriteBatch.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DShaderCache.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DConstantBuffers.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -379,8 +380,23 @@ namespace CNA::Internal::Renderers::DirectX11
 
     void DirectX11Renderer::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
     {
-        if (!backBufferTexture_ || w <= 0 || h <= 0)
+        // plans/plan_dx.md DX-205: this used to be one `return` covering both conditions, which meant a
+        // device with no back buffer left GraphicsDevice's zero-initialised scratch buffer to be
+        // converted and handed to the caller -- a complete, uniformly transparent-black frame,
+        // reported as a successful read. That is the fabricate-rather-than-refuse anti-pattern
+        // REMED-GFX-127 removed from ITextureRenderer::GetData, and it is exactly the failure mode
+        // a readback oracle must never have. An empty rectangle stays a plain no-op (there is
+        // nothing to write and nothing was promised); a missing back buffer is now named.
+        if (w <= 0 || h <= 0)
             return;
+        if (!backBufferTexture_)
+        {
+            throw System::NotSupportedException(
+                "DirectX11Renderer::ReadBackbuffer: this device has no back buffer to read. D3D11 "
+                "creates its swap chain in the constructor, so reaching this means device creation "
+                "did not complete; PresentationParameters::HeadlessEXT is not supported by this "
+                "renderer (see its own documentation).");
+        }
 
         D3D11_TEXTURE2D_DESC desc{};
         backBufferTexture_->GetDesc(&desc);
