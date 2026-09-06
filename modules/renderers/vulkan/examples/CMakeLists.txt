@@ -2178,6 +2178,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_rendertargetcube_depthformat
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-257: the BasicEffect combination sweep.
+        cna_vulkan_test(cna_test_vulkan_basiceffect_combinations
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_basiceffect_combinations_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_BasicEffectCombinations
+            COMMAND cna_test_vulkan_basiceffect_combinations
+            TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-339: the release path that also runs vkDeviceWaitIdle and the
         # retirement lists. HasRenderer() must be false after the first Dispose and no second
         # release may be attempted.
