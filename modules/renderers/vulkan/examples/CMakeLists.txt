@@ -2083,6 +2083,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_bound_resource_dispose
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-052: TextureAddressMode::Mirror through the plain SpriteBatch route, which Vulkan proves only through effects.
+        cna_vulkan_test(cna_test_vulkan_texture_address_mode_mirror
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_texture_address_mode_mirror_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_TextureAddressMode_Mirror
+            COMMAND cna_test_vulkan_texture_address_mode_mirror
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-339: the release path that also runs vkDeviceWaitIdle and the
         # retirement lists. HasRenderer() must be false after the first Dispose and no second
         # release may be attempted.
