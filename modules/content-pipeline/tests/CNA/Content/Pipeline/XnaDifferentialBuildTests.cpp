@@ -141,9 +141,13 @@ TEST(XnaDifferentialBuildTest, CnaAcceptsAndRefusesTheSameSourcesXnaDoes)
     // Beside the build tree rather than in the repository: these are a comparison's inputs, not a
     // measurement to commit -- XNA's half is what is committed, because only one machine can
     // produce it.
+    // Beside the oracle's own scratch tree rather than inside it: `run-differential-oracle.sh`
+    // begins by removing `build/xna-pipeline-oracle/differential`, so a CNA side published under
+    // that directory disappears the next time the oracle runs, and the comparison then reports
+    // every case absent (plans/plan_xnapipeline_parity.md XNAPP-182).
     const std::filesystem::path publishRoot =
         Locate("tools/xna-pipeline-oracle").parent_path().parent_path() /
-        "build" / "xna-pipeline-oracle" / "differential" / "cna";
+        "build" / "xna-pipeline-oracle" / "cna-differential";
     std::filesystem::remove_all(publishRoot, error);
     const bool haveFxc = ConfigureEffectCompiler(environment);
 

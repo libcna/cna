@@ -13,7 +13,10 @@ code with CNA's writer or with CNA's reader, so agreeing with it is evidence rat
 A difference is one of three things, and the third is the only one that is a problem:
 
   * **accepted** -- listed in `decisions.json` with a reason. A deliberate divergence, or something
-    the environment cannot settle. The reason is the record; this tool only checks that one exists.
+    the environment cannot settle. The reason is the record; what this tool checks is that one
+    exists and that it still covers what it claims to. A decision may name the *paths* it explains,
+    and then it explains only those: a case accepted for its compressed pixels stays open if its
+    width changes.
   * **absent** -- one side has no file, because the corpus case is one it refuses. Reported, not
     compared.
   * **open** -- everything else. These are the rows that fail the run.
@@ -92,6 +95,9 @@ def main(argv):
         with open(arguments.decisions, "r", encoding="utf-8") as handle:
             document = json.load(handle)
         decisions = {row["case"]: row for row in document.get("accepted", [])}
+    # Which of a decision's declared paths actually matched something, so a path that has stopped
+    # explaining anything can be reported the same way an obsolete decision is.
+    matched_paths = {case: set() for case in decisions}
 
     report = {"cases": [], "accepted": 0, "absent": 0, "open": 0, "identical": 0}
     names = sorted(name for name in os.listdir(arguments.xna) if name.endswith(".xnb"))
@@ -131,10 +137,30 @@ def main(argv):
             row["outcome"] = "identical"
             report["identical"] += 1
         elif case in decisions:
-            row["outcome"] = "accepted"
-            row["reason"] = decisions[case]["reason"]
-            row["differences"] = found
-            report["accepted"] += 1
+            # A decision that names no paths covers the whole case, which is what every decision
+            # meant before paths existed. One that names them covers those and nothing else.
+            paths = decisions[case].get("paths")
+            uncovered = []
+            if paths:
+                for line in found:
+                    where = line.split(":", 1)[0]
+                    covered = next((p for p in paths if where.startswith(p)), None)
+                    if covered is None:
+                        uncovered.append(line)
+                    else:
+                        matched_paths[case].add(covered)
+            if uncovered:
+                row["outcome"] = "open"
+                row["reason"] = decisions[case]["reason"]
+                row["differences"] = uncovered
+                row["detail"] = ("accepted in decisions.json, and these differences are outside "
+                                 "the paths that decision explains")
+                report["open"] += 1
+            else:
+                row["outcome"] = "accepted"
+                row["reason"] = decisions[case]["reason"]
+                row["differences"] = found
+                report["accepted"] += 1
         else:
             row["outcome"] = "open"
             row["differences"] = found
@@ -153,7 +179,16 @@ def main(argv):
                                     "detail": "accepted in decisions.json but the two now agree; "
                                               "remove the decision"})
             report["open"] += 1
-        del decision
+        else:
+            # A path that no longer matches any difference is a reason that has outlived what it
+            # explained, exactly as a whole decision can.
+            for path in decision.get("paths", []):
+                if path not in matched_paths[case]:
+                    report["cases"].append(
+                        {"case": case, "outcome": "open",
+                         "detail": "accepted in decisions.json for '%s', which no longer differs; "
+                                   "remove that path" % path})
+                    report["open"] += 1
 
     for row in report["cases"]:
         mark = {"identical": "same    ", "accepted": "accepted", "absent": "absent  ",

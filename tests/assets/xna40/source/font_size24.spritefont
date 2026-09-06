@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    plans/plan_xnapipeline_parity.md XNAPP-182: control_font.spritefont at a larger size.
+
+    The same face and the same characters, rasterized at 24 rather than 14. What this measures is
+    the size-dependent half of the answer: line spacing, the glyph boxes, the atlas the packer
+    needs for them, and whether the two agree about what "size" means at all, which is a point
+    every font pipeline gets to decide for itself.
+-->
+<XnaContent xmlns:Graphics="Microsoft.Xna.Framework.Content.Pipeline.Graphics">
+  <Asset Type="Graphics:FontDescription">
+    <FontName>Liberation Mono</FontName>
+    <Size>24</Size>
+    <Spacing>0</Spacing>
+    <UseKerning>true</UseKerning>
+    <Style>Regular</Style>
+    <CharacterRegions>
+      <CharacterRegion>
+        <Start>&#32;</Start>
+        <End>&#126;</End>
+      </CharacterRegion>
+    </CharacterRegions>
+  </Asset>
+</XnaContent>

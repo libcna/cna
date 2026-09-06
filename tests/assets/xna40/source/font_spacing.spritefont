@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    plans/plan_xnapipeline_parity.md XNAPP-182: the same face and size as control_font.spritefont,
+    with every policy element changed.
+
+    <Spacing> is added to each advance, <UseKerning> false drops the face's kerning pairs, and
+    <DefaultCharacter> is present, which the control's is not. Nothing about the rasterization
+    changes, so a difference here is a difference in what the processor does with the metrics
+    rather than in how the glyphs were drawn.
+-->
+<XnaContent xmlns:Graphics="Microsoft.Xna.Framework.Content.Pipeline.Graphics">
+  <Asset Type="Graphics:FontDescription">
+    <FontName>Liberation Mono</FontName>
+    <Size>14</Size>
+    <Spacing>4</Spacing>
+    <UseKerning>false</UseKerning>
+    <Style>Regular</Style>
+    <DefaultCharacter>*</DefaultCharacter>
+    <CharacterRegions>
+      <CharacterRegion>
+        <Start>&#32;</Start>
+        <End>&#126;</End>
+      </CharacterRegion>
+    </CharacterRegions>
+  </Asset>
+</XnaContent>

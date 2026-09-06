@@ -11,6 +11,7 @@
 #include <stdexcept>
 
 #include "CNA/Content/Pipeline/CnjContentPipeline.hpp"
+#include "CNA/Content/Pipeline/TextureCompressionPipeline.hpp"
 #include "CNA/Internal/ContentPath.hpp"
 #include "CNA/Internal/Xml.hpp"
 
@@ -261,12 +262,21 @@ namespace CNA::Content::Pipeline
                 }
             }
         }
-        if (description.defaultCharacter.has_value() &&
-            !characters.contains(*description.defaultCharacter))
+        // A <DefaultCharacter> outside every region joins them rather than failing the build. The
+        // old refusal reasoned that such a font could never draw its own fallback, which was true
+        // only because CNA declined to put it there; XNA adds it, and the character list it writes
+        // is sorted, so the fallback lands wherever its code point belongs. Measured on
+        // font_regions.spritefont, whose regions cover 42 characters and whose font carries 43
+        // (plans/plan_xnapipeline_parity.md XNAPP-182).
+        if (description.defaultCharacter.has_value())
         {
-            throw std::runtime_error(
-                "the default character is not one of the described character regions, so a "
-                "SpriteFont built from this description could never draw it");
+            characters.insert(*description.defaultCharacter);
+            if (characters.size() > kMaximumGlyphCount)
+            {
+                throw std::runtime_error(
+                    "a SpriteFont may carry at most " + std::to_string(kMaximumGlyphCount) +
+                    " characters; the described regions and the default character ask for more");
+            }
         }
         return {characters.begin(), characters.end()};
     }
@@ -375,29 +385,40 @@ namespace CNA::Content::Pipeline
          * @return True when every glyph fits.
          */
         [[nodiscard]] bool PackGlyphs(const std::vector<RasterGlyph>& glyphs,
-                                       const std::uint32_t side,
+                                       const std::uint32_t width, const std::uint32_t maximumHeight,
                                        std::vector<PackedGlyph>& placements,
                                        std::uint32_t& usedHeight)
         {
             constexpr std::uint32_t kPadding = 1u;
             placements.assign(glyphs.size(), PackedGlyph{});
+            // Tallest first. A shelf is as tall as its tallest member, so packing in character
+            // order lets one accented capital raise the shelf every other glyph on it sits in;
+            // ordering by height keeps each shelf close to the height of what is on it. The
+            // glyphs themselves are not reordered -- only the order they are placed in -- so a
+            // glyph's rectangle still belongs to its own character.
+            std::vector<std::size_t> order(glyphs.size());
+            for (std::size_t index = 0u; index < order.size(); ++index) { order[index] = index; }
+            std::stable_sort(order.begin(), order.end(),
+                             [&glyphs](const std::size_t left, const std::size_t right)
+                             { return glyphs[left].height > glyphs[right].height; });
+
             std::uint32_t penX = kPadding;
             std::uint32_t penY = kPadding;
             std::uint32_t shelfHeight = 0u;
-            for (std::size_t index = 0u; index < glyphs.size(); ++index)
+            for (const std::size_t index : order)
             {
                 const RasterGlyph& glyph = glyphs[index];
-                if (glyph.width + kPadding > side || glyph.height + kPadding > side)
+                if (glyph.width + kPadding > width || glyph.height + kPadding > maximumHeight)
                 {
                     return false;
                 }
-                if (penX + glyph.width + kPadding > side)
+                if (penX + glyph.width + kPadding > width)
                 {
                     penX = kPadding;
                     penY += shelfHeight + kPadding;
                     shelfHeight = 0u;
                 }
-                if (penY + glyph.height + kPadding > side) { return false; }
+                if (penY + glyph.height + kPadding > maximumHeight) { return false; }
                 placements[index] = {penX, penY};
                 penX += glyph.width + kPadding;
                 shelfHeight = std::max(shelfHeight, glyph.height);
@@ -548,16 +569,59 @@ namespace CNA::Content::Pipeline
             glyphs.push_back(std::move(glyph));
         }
 
+        // The sheet is as narrow as the glyphs allow and grows downwards, which is the shape XNA's
+        // own atlases have: 128x64 at size 10, 128x128 at 14, 128x256 at 18, 256x256 at 24 and
+        // 256x512 at 32 for the same face and character set. Choosing a square first and trimming
+        // the height afterwards -- what this did before -- transposes three of those five
+        // (plans/plan_xnapipeline_parity.md XNAPP-182).
+        //
+        std::uint32_t widestGlyph = 1u;
+        for (const RasterGlyph& glyph : glyphs)
+        {
+            widestGlyph = std::max(widestGlyph, glyph.width + 1u);
+        }
+
+        // Every width the glyphs could go in, keeping the one that wastes least. Area first, then
+        // the squarer of two sheets of equal area, then the wider: a 16x1024 sheet holds the same
+        // 95 glyphs as a 128x128 one and is a poor texture on every renderer, so "smallest" alone
+        // is not the whole rule. XNA's own atlases are all within a factor of two of square.
+        const auto squareness = [](const std::uint32_t width, const std::uint32_t height)
+        {
+            std::uint32_t larger = std::max(width, height);
+            std::uint32_t smaller = std::min(width, height);
+            std::uint32_t steps = 0u;
+            while (smaller < larger) { smaller <<= 1; ++steps; }
+            return steps;
+        };
         std::vector<PackedGlyph> placements;
+        std::vector<PackedGlyph> candidatePlacements;
         std::uint32_t side = 0u;
         std::uint32_t usedHeight = 0u;
-        for (std::uint32_t candidate = 16u; candidate <= kMaximumAtlasSide; candidate <<= 1)
+        std::uint64_t bestArea = 0u;
+        std::uint32_t bestSquareness = 0u;
+        for (std::uint32_t candidate = std::max(16u, RoundUpToPowerOfTwo(widestGlyph));
+             candidate <= kMaximumAtlasSide; candidate <<= 1)
         {
-            if (PackGlyphs(glyphs, candidate, placements, usedHeight))
+            std::uint32_t candidateHeight = 0u;
+            if (!PackGlyphs(glyphs, candidate, kMaximumAtlasSide, candidatePlacements,
+                            candidateHeight))
             {
-                side = candidate;
-                break;
+                continue;
             }
+            const std::uint32_t rounded = RoundUpToPowerOfTwo(candidateHeight);
+            const std::uint64_t area = static_cast<std::uint64_t>(candidate) * rounded;
+            const std::uint32_t shape = squareness(candidate, rounded);
+            if (side != 0u &&
+                (area > bestArea ||
+                 (area == bestArea && shape >= bestSquareness)))
+            {
+                continue;
+            }
+            side = candidate;
+            usedHeight = candidateHeight;
+            bestArea = area;
+            bestSquareness = shape;
+            placements = candidatePlacements;
         }
         if (side == 0u)
         {
@@ -569,8 +633,9 @@ namespace CNA::Content::Pipeline
                 " glyph atlas. Reduce <Size> or narrow <CharacterRegions>.");
         }
         // The atlas is only as tall as it needs to be, rounded to a power of two: a font that
-        // fills two shelves should not carry a mostly-empty square.
-        const std::uint32_t atlasHeight = std::min(side, RoundUpToPowerOfTwo(usedHeight));
+        // fills two shelves should not carry a mostly-empty square. Not capped at the width any
+        // more -- a tall sheet is what a large font produces, and XNA's are 128x256 and 256x512.
+        const std::uint32_t atlasHeight = RoundUpToPowerOfTwo(usedHeight);
 
         Cnb::CnbSpriteFontData font;
         font.atlas.width = side;
@@ -586,8 +651,31 @@ namespace CNA::Content::Pipeline
 
         const int ascent = static_cast<int>(face.Handle()->size->metrics.ascender >> 6);
         const int descent = -static_cast<int>(face.Handle()->size->metrics.descender >> 6);
-        const int lineSpacing = static_cast<int>(face.Handle()->size->metrics.height >> 6);
-        const int cellHeight = ascent + descent;
+
+        // The line a SpriteFont advances by is the face's own line height -- ascender minus
+        // descender plus line gap, scaled to the requested size -- rounded *up*. FreeType's
+        // `metrics.height` is the same quantity rounded to nearest, which is a pixel short
+        // whenever the fraction is below a half, so the unrounded product is taken and ceiled
+        // here instead.
+        //
+        // Measured against XNA over eleven builds: five sizes of Liberation Mono and six of
+        // Courier New, Arial and Georgia, which is what it took to be sure. Two rules fit
+        // Liberation Mono's five sizes -- this one, and the sum of the separately rounded ascent
+        // and descent -- and they disagree on Arial, whose line height is 21.465 px at size 14
+        // where its rounded ascent and descent sum to 21 and XNA answers 22
+        // (plans/plan_xnapipeline_parity.md XNAPP-182).
+        const int lineHeight26_6 = static_cast<int>(
+            FT_MulFix(face.Handle()->height, face.Handle()->size->metrics.y_scale));
+        const int lineSpacing = (lineHeight26_6 + 63) >> 6;
+
+        // The cropping rectangle's height is what SpriteFont.MeasureString() reports as the line's
+        // height when no glyph is taller, so it is the line itself. XNA's is between one and five
+        // pixels *more* than its own line spacing, by an amount no metric in the face predicts:
+        // Courier New and Liberation Mono are metrically identical and answer 41 at size 24 where
+        // Arial, whose line height is larger, answers 40. Recorded rather than fitted -- a formula
+        // that matched one face and broke on the next is what the eleven measurements above were
+        // for (plans/plan_xnapipeline_parity.md XNAPP-182, decisions.json `font_*`).
+        const int cellHeight = lineSpacing;
 
         font.lineSpacing = lineSpacing;
         font.spacing = description.spacing;
@@ -625,27 +713,24 @@ namespace CNA::Content::Pipeline
                                           static_cast<int>(glyph.height));
 
             // The three kerning values are the ABC widths SpriteBatch::DrawString() advances by:
-            // A is the left side bearing, B the ink width, C whatever the advance has left. With
-            // <UseKerning>false</UseKerning> the bearings are folded into B, and the ink is
-            // positioned by the cropping rectangle instead -- which is exactly what that
-            // rectangle's X component is for.
+            // A is the left side bearing, B the ink width, C whatever the advance has left.
+            //
+            // <UseKerning>false</UseKerning> drops the two bearings and keeps the ink width alone,
+            // so the line advances by the glyph rather than by the font's own metrics: measured on
+            // font_spacing.spritefont, where XNA answers (0, 3, 0) for '!' against the kerned
+            // (4, 3, 4) and leaves the cropping rectangle's X at zero. This pipeline used to fold
+            // the whole advance into B and shift the ink with the cropping rectangle, which keeps
+            // the text at its metric width -- reasonable, and not what XNA does, so a description
+            // asking for tight text got loose text (plans/plan_xnapipeline_parity.md XNAPP-182).
             const int inkWidth = glyph.blank ? 1 : static_cast<int>(glyph.width);
-            int croppingX = 0;
+            const int croppingX = 0;
             float a = 0.0f;
-            float b = 0.0f;
+            const float b = static_cast<float>(inkWidth);
             float c = 0.0f;
             if (description.useKerning)
             {
                 a = static_cast<float>(glyph.leftBearing);
-                b = static_cast<float>(inkWidth);
                 c = static_cast<float>(glyph.advance - glyph.leftBearing - inkWidth);
-            }
-            else
-            {
-                a = 0.0f;
-                b = static_cast<float>(glyph.advance);
-                c = 0.0f;
-                croppingX = glyph.leftBearing;
             }
             font.kerning.emplace_back(a, b, c);
             font.cropping.emplace_back(croppingX,
@@ -889,6 +974,44 @@ namespace CNA::Content::Pipeline
         }
     }
 
+    namespace
+    {
+        /**
+         * @brief Block-compresses a glyph atlas when the build is producing an `.xnb`.
+         *
+         * XNA's own `FontDescriptionProcessor` hands the writer a DXT3 atlas: measured on four
+         * descriptions, at two sizes, and the format is `Dxt3` in every one
+         * (`tests/reference/xna40/differential/font_description*.xnb`,
+         * plans/plan_xnapipeline_parity.md XNAPP-182). DXT3 rather than DXT1 or DXT5 because a
+         * glyph is a coverage mask and DXT3's four explicit alpha bits per texel are what a mask
+         * wants; DXT5's interpolated alpha would band it. The size difference is not marginal:
+         * 16 KB against 128 KB for the same 95-glyph font.
+         *
+         * Only for `.xnb`. A `.cnb` keeps the lossless 8-bit atlas, because that container is
+         * CNA's own and nothing about it obliges a 2010 memory budget. An atlas whose side is not
+         * a multiple of four is left uncompressed, as block compression cannot take it -- the
+         * packer rounds to powers of two, so that is a case the corpus does not have and a
+         * refusal here would fail a build for a rule it could simply not apply.
+         *
+         * @param font The rasterized font, whose atlas is replaced in place.
+         * @param context The build, which says which container is being produced.
+         */
+        void CompressAtlasForXnb(Cnb::CnbSpriteFontData& font, ContentProcessorContext& context)
+        {
+            if (context.OutputFormat() != ContentOutputFormat::Xnb) { return; }
+            if (font.atlas.representations.empty()) { return; }
+            Cnb::CnbTextureRepresentation& atlas = font.atlas.representations.front();
+            if (atlas.format != Cnb::CnbTextureFormat::Rgba8 || atlas.levels.empty()) { return; }
+            if ((font.atlas.width % 4u) != 0u || (font.atlas.height % 4u) != 0u) { return; }
+
+            static const TextureBlockEncoder encoder = MakeBlockCompressionTextureEncoder();
+            atlas.levels.front() = encoder(Cnb::CnbTextureFormat::Bc2, atlas.levels.front(),
+                                           font.atlas.width, font.atlas.height);
+            atlas.format = Cnb::CnbTextureFormat::Bc2;
+            context.LogInfo("compressed the glyph atlas to DXT3, as XNA's own font processor does.");
+        }
+    }
+
     ContentValue FontDescriptionProcessor::Process(const ContentValue& input,
                                                    ContentProcessorContext& context) const
     {
@@ -900,6 +1023,7 @@ namespace CNA::Content::Pipeline
         context.LogInfo("rasterized " + std::to_string(font.characters.size()) +
                         " glyph(s) into a " + std::to_string(font.atlas.width) + "x" +
                         std::to_string(font.atlas.height) + " atlas.");
+        CompressAtlasForXnb(font, context);
         return ContentValue::Create(ProcessedSpriteFontType, std::move(font));
     }
 

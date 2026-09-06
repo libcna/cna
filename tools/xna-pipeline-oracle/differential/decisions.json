@@ -1,39 +1,135 @@
 {
   "format": "CNA.XnaDifferential.Decisions",
   "version": 1,
-  "comment": "plans/plan_xnapipeline_parity.md XNAPP-266 (§24): a difference between XNA's .xnb and CNA's is one of three things, and this file is the second of them. A case listed here differs for a reason that has been established and written down -- a deliberate divergence, or something this environment cannot settle. Everything not listed here and not identical is open, and fails the comparison. A decision whose case has since become identical also fails, so a reason cannot outlive what it explained.",
+  "comment": "plans/plan_xnapipeline_parity.md XNAPP-266 (§24): a difference between XNA's .xnb and CNA's is one of three things, and this file is the second of them. A case listed here differs for a reason that has been established and written down -- a deliberate divergence, or something this environment cannot settle. Everything not listed here and not identical is open, and fails the comparison. A decision whose case has since become identical also fails, so a reason cannot outlive what it explained. A decision may name the `paths` it explains, and then it explains only those: a case accepted for its compressed pixels stays open if its width changes, and a listed path that no longer differs fails the same way an obsolete decision does.",
   "accepted": [
     {
       "case": "texture_jpg_sprite",
-      "reason": "Two conformant JPEG decoders disagree within an IDCT's tolerance. XNA decodes through D3DX and CNA through stb_image; the pixels differ by a few units and neither is wrong. Already recorded for the per-extension differential, which compares JPEG pixels within a tolerance rather than exactly (XNAPP-167)."
+      "reason": "Two conformant JPEG decoders disagree within an IDCT's tolerance. XNA decodes through D3DX and CNA through stb_image; the pixels differ by a few units and neither is wrong. Already recorded for the per-extension differential, which compares JPEG pixels within a tolerance rather than exactly (XNAPP-167).",
+      "paths": [
+        "root/levelDigests"
+      ]
     },
     {
       "case": "texture_hdr_sprite",
-      "reason": "A Radiance picture reaches XNA's TextureImporter as a PixelBitmapContent<Vector4> and its SpriteTextureProcessor converts those floats to Color; the canonical route decodes .hdr through the shared image decoder, whose RGBE-to-LDR conversion applies its own gamma. The XNA facade's own route answers the floats (RadianceHdrDecoder, XNAPP-167); it is the canonical Rgba8 route this case exercises. Open as a *design* question rather than a defect, and recorded so the choice is visible."
+      "reason": "A Radiance picture reaches XNA's TextureImporter as a PixelBitmapContent<Vector4> and its SpriteTextureProcessor converts those floats to Color; the canonical route decodes .hdr through the shared image decoder, whose RGBE-to-LDR conversion applies its own gamma. The XNA facade's own route answers the floats (RadianceHdrDecoder, XNAPP-167); it is the canonical Rgba8 route this case exercises. Open as a *design* question rather than a defect, and recorded so the choice is visible.",
+      "paths": [
+        "root/levelDigests"
+      ]
     },
     {
       "case": "texture_png4x4_texture_dxt",
-      "reason": "Block compression is lossy and every encoder chooses its endpoints differently. XNA compresses through D3DX; CNA through its own encoder. The dimensions, mip count, format and level sizes agree -- only the compressed bytes differ, which is what two DXT encoders always do."
+      "reason": "Block compression is lossy and every encoder chooses its endpoints differently. XNA compresses through D3DX; CNA through its own encoder. The dimensions, mip count, format and level sizes agree -- only the compressed bytes differ, which is what two DXT encoders always do.",
+      "paths": [
+        "root/levelDigests"
+      ]
     },
     {
       "case": "texture_png_sprite_xbox360",
-      "reason": "The Xbox 360 stores a texture tiled, and XNA's pipeline tiles it for that target. CNA writes the untiled payload and refuses the platform by default for exactly this reason (--xnb-allow-unverified-xbox is needed to produce one at all). Lifting that refusal per type is XNAPP-252, and it needs hardware this machine does not have."
+      "reason": "The Xbox 360 stores a texture tiled, and XNA's pipeline tiles it for that target. CNA writes the untiled payload and refuses the platform by default for exactly this reason (--xnb-allow-unverified-xbox is needed to produce one at all). Lifting that refusal per type is XNAPP-252, and it needs hardware this machine does not have.",
+      "paths": [
+        "root/levelDigests"
+      ]
     },
     {
       "case": "audio_wav_soundeffect_xbox360",
-      "reason": "XNA converts a sound effect to XMA for the Xbox 360 -- format tag 0x6601, a big-endian XMA2WAVEFORMATEX, a quarter of the data. XMA is Microsoft's own codec with no public specification and no licensable encoder, so CNA answers the Windows PCM payload instead. Measured and recorded at the processor level too (soundeffectprofile/*, XNAPP-021); .wav's xbox360 row reads UNSUPPORTED."
+      "reason": "XNA converts a sound effect to XMA for the Xbox 360 -- format tag 0x6601, a big-endian XMA2WAVEFORMATEX, a quarter of the data. XMA is Microsoft's own codec with no public specification and no licensable encoder, so CNA answers the Windows PCM payload instead. Measured and recorded at the processor level too (soundeffectprofile/*, XNAPP-021); .wav's xbox360 row reads UNSUPPORTED.",
+      "paths": [
+        "root/formatTag",
+        "root/sampleRate",
+        "root/averageBytesPerSecond",
+        "root/extensionByteCount",
+        "root/sampleByteCount",
+        "root/sampleDigest",
+        "root/loopStart",
+        "root/loopLength"
+      ]
     },
     {
       "case": "effect_fx_source",
-      "reason": "XNA compiles an effect from a memory buffer through d3dx9; CNA runs the fxc command line, which embeds source information the memory path does not. The container header is byte-identical (the 0xBCF00BCF wrapper, XNAPP-191); the blob behind it is 460 bytes to fxc's 476, first differing at offset 50. Closing it needs a native helper calling D3DXCreateEffectCompiler on a buffer."
+      "reason": "XNA compiles an effect from a memory buffer through d3dx9; CNA runs the fxc command line, which embeds source information the memory path does not. The container header is byte-identical (the 0xBCF00BCF wrapper, XNAPP-191); the blob behind it is 460 bytes to fxc's 476, first differing at offset 50. Closing it needs a native helper calling D3DXCreateEffectCompiler on a buffer.",
+      "paths": [
+        "root/digest"
+      ]
     },
     {
       "case": "effect_fx_source_reach",
-      "reason": "The same divergence as effect_fx_source. Note that XNA's two profiles produce different bytes for the same source while CNA's produce the same bytes: CNA does not rewrite a source's own `compile vs_2_0` statements, so Reach and HiDef differ only in what the container records. Recorded rather than resolved -- what XNA varies between the two profiles has not been measured yet."
+      "reason": "The same divergence as effect_fx_source. Note that XNA's two profiles produce different bytes for the same source while CNA's produce the same bytes: CNA does not rewrite a source's own `compile vs_2_0` statements, so Reach and HiDef differ only in what the container records. Recorded rather than resolved -- what XNA varies between the two profiles has not been measured yet.",
+      "paths": [
+        "root/digest"
+      ]
     },
     {
       "case": "xml_intermediate_passthrough",
       "reason": "CNA has no canonical .xml route. Of the 1466 .xml assets in the public sample corpus, almost all declare game-defined types, which only a game's own pipeline assembly can build (XNAPP-260); a built-in route could cover the handful the framework itself defines and would be XNB-only. The decision to build that subset has not been taken."
+    },
+    {
+      "case": "font_description",
+      "reason": "Two rasterizers disagree about a glyph's ink by a pixel. XNA draws through GDI+ and CNA through FreeType, and over the 95 glyphs of this font 40 boxes are identical, 50 are one pixel wider, four are two wider and one is a pixel wider and taller -- never narrower. Everything derived from a glyph's box follows it: its rectangle in the sheet, the cropping rectangle's width, and the compressed pixels. The metrics that decide where text lands do not: the ABC widths are identical for all 95 characters, the cropping origin for 94 of them, and the line spacing exactly (plans/plan_xnapipeline_parity.md XNAPP-182). The cropping rectangle's height is XNA's own and is between one and five pixels more than its line spacing, by an amount no metric in the face predicts: Courier New and Liberation Mono are metrically identical and answer 41 at size 24, where Arial -- whose line height is larger -- answers 40. Eleven builds over four faces were measured and no rule fits them, so CNA writes the line spacing itself. SpriteFont.MeasureString() reports the taller of that and the tallest glyph, so a measured string is up to five pixels shorter here. The space's cropping rectangle is XNA's degenerate one: it has no ink, and XNA's cropper answers a cell at an offset past the bottom of the line (6, 35 in a 24-pixel cell) where CNA answers the origin. Nothing draws it either way.",
+      "paths": [
+        "root/glyphs",
+        "root/cropping",
+        "root/atlas/levelDigests"
+      ]
+    },
+    {
+      "case": "font_description_spacing",
+      "reason": "Two rasterizers disagree about a glyph's ink by a pixel. XNA draws through GDI+ and CNA through FreeType, and over the 95 glyphs of this font 40 boxes are identical, 50 are one pixel wider, four are two wider and one is a pixel wider and taller -- never narrower. Everything derived from a glyph's box follows it: its rectangle in the sheet, the cropping rectangle's width, and the compressed pixels. The metrics that decide where text lands do not: the ABC widths are identical for all 95 characters, the cropping origin for 94 of them, and the line spacing exactly (plans/plan_xnapipeline_parity.md XNAPP-182). The cropping rectangle's height is XNA's own and is between one and five pixels more than its line spacing, by an amount no metric in the face predicts: Courier New and Liberation Mono are metrically identical and answer 41 at size 24, where Arial -- whose line height is larger -- answers 40. Eleven builds over four faces were measured and no rule fits them, so CNA writes the line spacing itself. SpriteFont.MeasureString() reports the taller of that and the tallest glyph, so a measured string is up to five pixels shorter here. The space's cropping rectangle is XNA's degenerate one: it has no ink, and XNA's cropper answers a cell at an offset past the bottom of the line (6, 35 in a 24-pixel cell) where CNA answers the origin. Nothing draws it either way. The kerning differences are the same pixel: with <UseKerning>false</UseKerning> the B width is the ink width, so a glyph whose ink is a pixel wider advances a pixel more. 39 of the 95 are identical.",
+      "paths": [
+        "root/glyphs",
+        "root/cropping",
+        "root/kerning",
+        "root/atlas/levelDigests"
+      ]
+    },
+    {
+      "case": "font_description_regions",
+      "reason": "Two rasterizers disagree about a glyph's ink by a pixel. XNA draws through GDI+ and CNA through FreeType, and over the 95 glyphs of this font 40 boxes are identical, 50 are one pixel wider, four are two wider and one is a pixel wider and taller -- never narrower. Everything derived from a glyph's box follows it: its rectangle in the sheet, the cropping rectangle's width, and the compressed pixels. The metrics that decide where text lands do not: the ABC widths are identical for all 95 characters, the cropping origin for 94 of them, and the line spacing exactly (plans/plan_xnapipeline_parity.md XNAPP-182). The cropping rectangle's height is XNA's own and is between one and five pixels more than its line spacing, by an amount no metric in the face predicts: Courier New and Liberation Mono are metrically identical and answer 41 at size 24, where Arial -- whose line height is larger -- answers 40. Eleven builds over four faces were measured and no rule fits them, so CNA writes the line spacing itself. SpriteFont.MeasureString() reports the taller of that and the tallest glyph, so a measured string is up to five pixels shorter here.",
+      "paths": [
+        "root/glyphs",
+        "root/cropping",
+        "root/atlas/levelDigests"
+      ]
+    },
+    {
+      "case": "font_description_size10",
+      "reason": "Two rasterizers disagree about a glyph's ink by a pixel. XNA draws through GDI+ and CNA through FreeType, and over the 95 glyphs of this font 40 boxes are identical, 50 are one pixel wider, four are two wider and one is a pixel wider and taller -- never narrower. Everything derived from a glyph's box follows it: its rectangle in the sheet, the cropping rectangle's width, and the compressed pixels. The metrics that decide where text lands do not: the ABC widths are identical for all 95 characters, the cropping origin for 94 of them, and the line spacing exactly (plans/plan_xnapipeline_parity.md XNAPP-182). The cropping rectangle's height is XNA's own and is between one and five pixels more than its line spacing, by an amount no metric in the face predicts: Courier New and Liberation Mono are metrically identical and answer 41 at size 24, where Arial -- whose line height is larger -- answers 40. Eleven builds over four faces were measured and no rule fits them, so CNA writes the line spacing itself. SpriteFont.MeasureString() reports the taller of that and the tallest glyph, so a measured string is up to five pixels shorter here. The space's cropping rectangle is XNA's degenerate one: it has no ink, and XNA's cropper answers a cell at an offset past the bottom of the line (6, 35 in a 24-pixel cell) where CNA answers the origin. Nothing draws it either way. The sheet is also transposed: 128x64 against 64x128. Both hold the same glyphs in the same 8192 texels and neither is squarer, so which one a packer picks is a tie-break rather than a rule. Five of the seven font cases do agree about the sheet.",
+      "paths": [
+        "root/glyphs",
+        "root/cropping",
+        "root/atlas/levelDigests",
+        "root/atlas/width",
+        "root/atlas/height"
+      ]
+    },
+    {
+      "case": "font_description_size18",
+      "reason": "Two rasterizers disagree about a glyph's ink by a pixel. XNA draws through GDI+ and CNA through FreeType, and over the 95 glyphs of this font 40 boxes are identical, 50 are one pixel wider, four are two wider and one is a pixel wider and taller -- never narrower. Everything derived from a glyph's box follows it: its rectangle in the sheet, the cropping rectangle's width, and the compressed pixels. The metrics that decide where text lands do not: the ABC widths are identical for all 95 characters, the cropping origin for 94 of them, and the line spacing exactly (plans/plan_xnapipeline_parity.md XNAPP-182). The cropping rectangle's height is XNA's own and is between one and five pixels more than its line spacing, by an amount no metric in the face predicts: Courier New and Liberation Mono are metrically identical and answer 41 at size 24, where Arial -- whose line height is larger -- answers 40. Eleven builds over four faces were measured and no rule fits them, so CNA writes the line spacing itself. SpriteFont.MeasureString() reports the taller of that and the tallest glyph, so a measured string is up to five pixels shorter here. The space's cropping rectangle is XNA's degenerate one: it has no ink, and XNA's cropper answers a cell at an offset past the bottom of the line (6, 35 in a 24-pixel cell) where CNA answers the origin. Nothing draws it either way.",
+      "paths": [
+        "root/glyphs",
+        "root/cropping",
+        "root/atlas/levelDigests"
+      ]
+    },
+    {
+      "case": "font_description_size24",
+      "reason": "Two rasterizers disagree about a glyph's ink by a pixel. XNA draws through GDI+ and CNA through FreeType, and over the 95 glyphs of this font 40 boxes are identical, 50 are one pixel wider, four are two wider and one is a pixel wider and taller -- never narrower. Everything derived from a glyph's box follows it: its rectangle in the sheet, the cropping rectangle's width, and the compressed pixels. The metrics that decide where text lands do not: the ABC widths are identical for all 95 characters, the cropping origin for 94 of them, and the line spacing exactly (plans/plan_xnapipeline_parity.md XNAPP-182). The cropping rectangle's height is XNA's own and is between one and five pixels more than its line spacing, by an amount no metric in the face predicts: Courier New and Liberation Mono are metrically identical and answer 41 at size 24, where Arial -- whose line height is larger -- answers 40. Eleven builds over four faces were measured and no rule fits them, so CNA writes the line spacing itself. SpriteFont.MeasureString() reports the taller of that and the tallest glyph, so a measured string is up to five pixels shorter here. The space's cropping rectangle is XNA's degenerate one: it has no ink, and XNA's cropper answers a cell at an offset past the bottom of the line (6, 35 in a 24-pixel cell) where CNA answers the origin. Nothing draws it either way.",
+      "paths": [
+        "root/glyphs",
+        "root/cropping",
+        "root/atlas/levelDigests"
+      ]
+    },
+    {
+      "case": "font_description_size32",
+      "reason": "Two rasterizers disagree about a glyph's ink by a pixel. XNA draws through GDI+ and CNA through FreeType, and over the 95 glyphs of this font 40 boxes are identical, 50 are one pixel wider, four are two wider and one is a pixel wider and taller -- never narrower. Everything derived from a glyph's box follows it: its rectangle in the sheet, the cropping rectangle's width, and the compressed pixels. The metrics that decide where text lands do not: the ABC widths are identical for all 95 characters, the cropping origin for 94 of them, and the line spacing exactly (plans/plan_xnapipeline_parity.md XNAPP-182). The cropping rectangle's height is XNA's own and is between one and five pixels more than its line spacing, by an amount no metric in the face predicts: Courier New and Liberation Mono are metrically identical and answer 41 at size 24, where Arial -- whose line height is larger -- answers 40. Eleven builds over four faces were measured and no rule fits them, so CNA writes the line spacing itself. SpriteFont.MeasureString() reports the taller of that and the tallest glyph, so a measured string is up to five pixels shorter here. The space's cropping rectangle is XNA's degenerate one: it has no ink, and XNA's cropper answers a cell at an offset past the bottom of the line (6, 35 in a 24-pixel cell) where CNA answers the origin. Nothing draws it either way. The sheet is half the size: CNA packs these glyphs into 256x256 where XNA needed 256x512. Smaller is not a defect, and it is recorded rather than chased because matching it exactly would mean reproducing XNA's packer.",
+      "paths": [
+        "root/glyphs",
+        "root/cropping",
+        "root/atlas/levelDigests",
+        "root/atlas/levelByteSizes",
+        "root/atlas/height"
+      ]
     }
   ]
 }

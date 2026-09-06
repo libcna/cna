@@ -307,6 +307,62 @@
       "profile": "HiDef"
     },
     {
+      "case": "font/description",
+      "source": "source/control_font.spritefont",
+      "importer": "FontDescriptionImporter",
+      "processor": "FontDescriptionProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "font/description_spacing",
+      "source": "source/font_spacing.spritefont",
+      "importer": "FontDescriptionImporter",
+      "processor": "FontDescriptionProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "font/description_size10",
+      "source": "source/font_size10.spritefont",
+      "importer": "FontDescriptionImporter",
+      "processor": "FontDescriptionProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "font/description_size18",
+      "source": "source/font_size18.spritefont",
+      "importer": "FontDescriptionImporter",
+      "processor": "FontDescriptionProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "font/description_size32",
+      "source": "source/font_size32.spritefont",
+      "importer": "FontDescriptionImporter",
+      "processor": "FontDescriptionProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "font/description_size24",
+      "source": "source/font_size24.spritefont",
+      "importer": "FontDescriptionImporter",
+      "processor": "FontDescriptionProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "font/description_regions",
+      "source": "source/font_regions.spritefont",
+      "importer": "FontDescriptionImporter",
+      "processor": "FontDescriptionProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
       "case": "effect/fx_source",
       "source": "source/probe.fx",
       "importer": "EffectImporter",

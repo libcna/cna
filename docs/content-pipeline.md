@@ -1152,6 +1152,14 @@ is not exposed in configuration, fingerprints, CMake, CNB, or the API. If a futu
 a real output policy, its explicit parameter can use the existing typed fingerprint contract first;
 a cross-cutting profile is justified only after more than a label is shared.
 
+One route now looks at the container it is building for, and only that far: a `.spritefont`'s glyph
+atlas is block-compressed to DXT3 when the build is producing an `.xnb`, because XNA's own
+`FontDescriptionProcessor` hands the writer a DXT3 atlas -- measured over seven descriptions at
+five sizes (`plans/plan_xnapipeline_parity.md` `XNAPP-182`). A `.cnb` keeps the lossless 8-bit
+atlas: that container is CNA's own and nothing about it obliges a 2010 memory budget. The
+difference is not marginal, 16 KB against 128 KB for a 95-glyph font, which is why it is reproduced
+rather than left as a divergence.
+
 Build-graph scheduling is serial and deterministic unless `--workers` opts into bounded concurrent
 execution. Registries are configured explicitly and frozen before discovery. Built-in components
 are reentrant; custom components and custom loggers must follow the concurrency contract documented

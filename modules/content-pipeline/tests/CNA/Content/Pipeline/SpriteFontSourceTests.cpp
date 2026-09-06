@@ -222,12 +222,28 @@ TEST(FontDescriptionTest, CharacterRegionsExpandAscendingAndDeduplicated)
     EXPECT_EQ(characters, expected);
 }
 
-TEST(FontDescriptionTest, ADefaultCharacterOutsideTheRegionsIsRefused)
+// A <DefaultCharacter> the regions do not cover joins them, which is what XNA does: measured on
+// font_regions.spritefont, whose two regions cover 42 characters and whose built font carries 43
+// (plans/plan_xnapipeline_parity.md XNAPP-182). Refusing was this pipeline's own idea, and the
+// reason it gave -- that such a font could never draw its own fallback -- was true only because it
+// declined to put the glyph there.
+TEST(FontDescriptionTest, ADefaultCharacterOutsideTheRegionsJoinsThem)
 {
     Pipeline::FontDescription description;
     description.characterRegions = {{u'a', u'c'}};
     description.defaultCharacter = u'?';
-    EXPECT_THROW((void)Pipeline::ExpandCharacterRegions(description), std::runtime_error);
+    const std::vector<SharpRuntime::charcs> characters =
+        Pipeline::ExpandCharacterRegions(description);
+    // Sorted, so the fallback lands where its code point belongs rather than at either end.
+    EXPECT_EQ(characters, (std::vector<SharpRuntime::charcs>{u'?', u'a', u'b', u'c'}));
+}
+
+TEST(FontDescriptionTest, ADefaultCharacterAlreadyInTheRegionsIsNotDuplicated)
+{
+    Pipeline::FontDescription description;
+    description.characterRegions = {{u'a', u'c'}};
+    description.defaultCharacter = u'b';
+    EXPECT_EQ(Pipeline::ExpandCharacterRegions(description).size(), 3u);
 }
 
 TEST(FontDescriptionTest, AMalformedDescriptionNamesTheOffendingElement)

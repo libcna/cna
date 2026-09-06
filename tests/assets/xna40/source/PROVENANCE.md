@@ -38,3 +38,19 @@ case fails for a reason that is not XNA's.
 Nothing in an XML comment may contain two hyphens in a row. XNA's intermediate reader refuses the
 whole document when one does, which is how three of these fixtures were found to be unbuildable
 there before they measured anything.
+
+## The font metric sweep
+
+`plans/plan_xnapipeline_parity.md` `XNAPP-182` added seven more descriptions of one face:
+`control_font.spritefont` and `font_size10/18/24/32.spritefont` are the same document at five
+sizes, `font_spacing.spritefont` changes every policy element without touching the rasterization
+(`<Spacing>`, `<UseKerning>false`, a `<DefaultCharacter>`), and `font_regions.spritefont` lists two
+regions out of order with a default character neither covers.
+
+Five sizes of one face rather than one size of five faces, because CNA resolves a font *file* and
+XNA an installed *family*, and only one face is committed here. That is also the limit of what
+these fixtures can settle on their own: two different rules for line spacing fit all five of them
+and disagree on Arial. Where a rule needed a second face, Courier New, Arial and Georgia were
+measured from the Wine prefix directly and the numbers written into the plan row; those runs are
+not fixtures, because CNA cannot resolve those families here and a case CNA refuses measures
+nothing.
