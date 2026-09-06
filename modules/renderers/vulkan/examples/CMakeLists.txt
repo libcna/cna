@@ -2116,6 +2116,18 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_viewport_state
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-093: sampler component isolation and single-level anisotropy.
+        cna_vulkan_test(cna_test_vulkan_sampler_component_isolation
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/sampler_component_isolation_contract_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SamplerComponentIsolation
+            COMMAND cna_test_vulkan_sampler_component_isolation
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_texture2d_anisotropic_singlelevel
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_texture2d_anisotropic_singlelevel_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Texture2D_AnisotropicSingleLevel
+            COMMAND cna_test_vulkan_texture2d_anisotropic_singlelevel
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-339: the release path that also runs vkDeviceWaitIdle and the
         # retirement lists. HasRenderer() must be false after the first Dispose and no second
         # release may be attempted.
