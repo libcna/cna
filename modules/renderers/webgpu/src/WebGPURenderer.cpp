@@ -8574,7 +8574,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // carries no lodBias field, but WGSL's textureSampleBias applies XNA's semantic exactly, and
         // every stock 3D family does so. What this text exists for is the three routes that do NOT,
         // because the row's rule is that a route which cannot apply the state says so by name rather
-        // than ignoring it quietly.
+        // than ignoring it quietly. SpriteBatch's reason is deliberately named as a FRAMEWORK one:
+        // measuring it showed the value never reaches any renderer, so calling it a WebGPU
+        // limitation would send a reader looking for the fix in the wrong file.
         // WEBGPU-184: the decision this row asked to be made and recorded, in the place a caller
         // reads. NormalizedByte2/4 were implemented natively rather than refused; the three packed
         // 16-bit colour formats were not, and the reason is stated so the choice is auditable.
@@ -8591,11 +8593,15 @@ namespace CNA::Internal::Renderers::WebGPU
             "(BasicEffect, AlphaTestEffect, DualTextureEffect -- both samplers -- EnvironmentMapEffect "
             "and SkinnedEffect) via WGSL textureSampleBias, and WGSL clamps a sample bias to roughly "
             "[-16, +16), so a larger magnitude saturates rather than extrapolating. Three routes do "
-            "not apply it: SpriteBatch, whose stock pipeline binds no uniform buffer at all and so "
-            "has no channel to carry the value (WEBGPU-205 records the two options); a custom CNAEXT "
-            "ShaderEffect, which supplies its own WGSL and therefore its own sampling calls; and the "
-            "metallic-roughness PbrEffect/SkinnedPbrEffect families, which are the glTF route rather "
-            "than an XNA stock effect. On those three the bias is accepted and has no effect.");
+            "not apply it: SpriteBatch, which never receives the value in the first place -- "
+            "SpriteBatch::Begin forwards only the filter and the two address modes through "
+            "ISpriteBatchRenderer, so MipMapLevelOfDetailBias, MaxMipLevel, MaxAnisotropy and "
+            "AddressW are dropped in the framework on every renderer, not here (measured by the "
+            "shared parity fixture sprite_sampler_state; recorded as plan_graphics.md row 1119); a "
+            "custom CNAEXT ShaderEffect, which supplies its own WGSL and therefore its own sampling "
+            "calls; and the metallic-roughness PbrEffect/SkinnedPbrEffect families, which are the "
+            "glTF route rather than an XNA stock effect. On those three the bias is accepted and has "
+            "no effect.");
 
         // WEBGPU-201: Rgba64, the one entry here that is a platform boundary rather than a missing
         // optional feature.

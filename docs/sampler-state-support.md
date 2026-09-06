@@ -145,10 +145,24 @@ Two things a caller needs to know, and both are reported through
 * **WGSL clamps a sample bias to roughly [-16, +16)**, so a larger magnitude saturates rather than
   extrapolating. CNA clamps to that range on the way in instead of leaving the edges
   implementation-defined.
-* **Three routes do not apply it**: `SpriteBatch`, whose stock pipeline binds no uniform buffer at
-  all and so has no channel to carry the value; a custom CNAEXT `ShaderEffect`, which supplies its
-  own WGSL and therefore its own sampling calls; and the metallic-roughness
-  `PbrEffect`/`SkinnedPbrEffect` families, which are the glTF route rather than an XNA stock effect.
+* **Three routes do not apply it**: `SpriteBatch`, which never receives the value at all (see the
+  next paragraph -- this one is a framework gap, not a renderer one); a custom CNAEXT
+  `ShaderEffect`, which supplies its own WGSL and therefore its own sampling calls; and the
+  metallic-roughness `PbrEffect`/`SkinnedPbrEffect` families, which are the glTF route rather than
+  an XNA stock effect.
+
+**`SpriteBatch` drops four `SamplerState` fields before any renderer sees them**
+(`plans/plan_graphics.md` row 1119, measured 2026-09-06). `SpriteBatch::Begin` applies the blend,
+depth-stencil and rasterizer states through the `GraphicsDevice` properties exactly as FNA does, but
+routes the sampler around the device into `ISpriteBatchRenderer::SetSamplerFilter(int)` and
+`SetSamplerAddressMode(int, int)` -- the whole sampler channel that interface has. So
+`MipMapLevelOfDetailBias`, `MaxMipLevel`, `MaxAnisotropy` and `AddressW` stop in
+`modules/graphics/src/Xna/SpriteBatch.cpp`, and `GraphicsDevice.SamplerStates[0]` is left holding
+whatever the game last put there rather than the batch's own state. XNA assigns it
+(`SpriteBatch.PrepRenderState`), so all six fields apply there. The shared fixture
+`parity_sprite_sampler_state` measures this on both renderers -- four sprite columns under three
+different batch biases all read the same mip level, while the same three biases on a 3D quad move it
+by a level each -- and the two frames are byte-identical, which is what makes it a framework row.
 
 Note this makes WebGPU's coverage *broader* than the reference renderer's, which implements the bias
 only on desktop core (`GL_TEXTURE_LOD_BIAS` does not exist in OpenGL ES at all). The shared parity

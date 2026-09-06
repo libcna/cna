@@ -1037,14 +1037,23 @@ the reason), and `internal` (frames are not compared because a cross-renderer co
 inapplicable, with the reason). **A new fixture is `strict` by default**; it joins the exception
 table only with a measurement and a sentence.
 
-Verdicts as of 2026-09-06 — **29 fixtures, every one passing its own assertions under BOTH
-renderers, 23 of them byte-identical**:
+Verdicts as of 2026-09-06 — **30 fixtures, every one passing its own assertions under BOTH
+renderers, 24 of them byte-identical**:
 
 | Frame verdict | Fixtures |
 |---|---|
-| identical | `vertex_semantics`, `lit_untextured`, `lit_vertex_color`, `unlit_position_color`, `dual_texture_uv1`, `multi_stream_split`, `render_target_mip`, `hdr_render_target`, `basic_effect_light_terms`, `basic_effect_vertex_color`, `basic_effect_alpha_scale`, `alpha_test_sweep`, `alpha_test_sources`, `dual_texture_terms`, `env_map_terms`, `skinned_terms`, `sprite_state`, `sprite_font`, `blend_states`, `depth_states`, `stencil_states`, `sampler_max_mip_level`, `sampler_lod_bias`, `instanced_draw` |
+| identical | `vertex_semantics`, `lit_untextured`, `lit_vertex_color`, `unlit_position_color`, `dual_texture_uv1`, `multi_stream_split`, `render_target_mip`, `hdr_render_target`, `basic_effect_light_terms`, `basic_effect_vertex_color`, `basic_effect_alpha_scale`, `alpha_test_sweep`, `alpha_test_sources`, `dual_texture_terms`, `env_map_terms`, `skinned_terms`, `sprite_state`, `sprite_font`, `blend_states`, `depth_states`, `stencil_states`, `sampler_max_mip_level`, `sampler_lod_bias`, `sprite_sampler_state`, `instanced_draw` |
 | localized difference, measured | `sprite_geometry` 32 px (its one half-pixel-destination cell's top and left coverage edges); `rasterizer_viewport` 276 of 12800 (the triangle hypotenuses, none in the quad cells); `fill_mode_wireframe` 367 of 32768 (the drawn line pixels themselves — GL line rules against a WebGPU line list) |
 | not compared, internal oracle | `compressed_cube` (which cube FACE a reflection lands on is convention-dependent; its oracle is a BC cube against an RGBA8 cube within one renderer); `sampler_filters` (magnification lands a linear gradient half a texel apart; its claims are point-vs-linear A/Bs within one renderer) |
+
+`sprite_sampler_state` is the newest entry and the one whose *agreement* is the finding. It asks
+whether a `SamplerState` field beyond the filter and the two address modes reaches a `SpriteBatch`
+draw, and the answer on both renderers is no: `SpriteBatch::Begin` forwards only those three through
+`ISpriteBatchRenderer`, so `MipMapLevelOfDetailBias`, `MaxMipLevel`, `MaxAnisotropy` and `AddressW`
+never leave the framework, while XNA assigns the whole state to `GraphicsDevice.SamplerStates[0]`.
+The fixture's own 3D control row proves the bias channel works where the renderer does receive it.
+Recorded as `plans/plan_graphics.md` row 1119 and deliberately NOT worked around inside this
+renderer, which could only invent a value it was never given.
 
 **Every localized difference and both internal oracles have the same single cause**: the XNA
 pixel-centre convention, which `WEBGPU-187` owns and which the two renderers do not yet agree on.

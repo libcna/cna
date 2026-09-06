@@ -87,6 +87,9 @@ set(CNA_PARITY_FIXTURES
     sampler_max_mip_level
     # WEBGPU-205: SamplerState.MipMapLevelOfDetailBias shifts which mip level a sample comes from.
     sampler_lod_bias
+    # WEBGPU-205: whether a SamplerState field beyond filter/address reaches a SpriteBatch draw
+    # at all -- the sprite route measured against the 3D one on the same texture and scale.
+    sprite_sampler_state
     # WEBGPU-193: the corpus milestone's one missing entry -- an instanced draw whose instances
     # disagree about which of them is being placed and which shaded.
     instanced_draw
