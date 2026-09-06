@@ -88,6 +88,27 @@ No WebGPU graphics test regressed.
 set, and **five fewer than the intermediate run**: the `HdrRenderTargetRoundTripTest` cases that
 started running when float targets became creatable all pass. No WebGPU graphics test regressed.
 
+**FULL-SUITE BASELINE after the compiled-Effect work (2026-09-06, `cmake-build-webgpu/CnaTests`,
+`DISPLAY=:131`, one process, 711 s): 8885 tests from 840 suites — 8802 passed, 6 failed, 77
+skipped. Zero new failures, and one of the recorded seven is now green.**
+`UnsupportedFormatConstructionTest.EverySurfaceFormatEitherWorksOrThrowsClearly` passes
+(`WEBGPU-197`–`202`). The six that remain are the rest of that recorded set, unchanged:
+`CnjEffectTest.LoadsRealCnjFixture`, `CnjStockEffectTest.CustomGlslEffectStillWorks`,
+`XnbContentPipelineTest.SpriteFontRuntimeXnbAndTranscodedCnbHaveEquivalentSemantics`,
+`ContentManagerVideoXnbTest.TheObjectReferencedFormLoadsToTheSameValuesAsTheInlineOne`,
+`GameWindowPlatformTest.DelegatesStateAndGeometryToTheSelectedPlatformWindow` and
+`PacketReaderTest.ReadColorReadsSixteenBytesAsFloats`.
+
+**One thing this banner used to say about that set is now disproved and is corrected here.** It
+filed the two `Cnj*` failures as "a GLSL `ShaderEffect` handed to a WGSL-only renderer --
+`WEBGPU-166`/`203`/`204`'s territory". Those three rows are now closed and the two tests still fail,
+which settles it: they were never compiled-Effect failures. A compiled XNA Effect carries **D3D9
+bytecode**; these tests hand the renderer a **GLSL source string**, and the failure is
+`wgpuDeviceCreateShaderModule` refusing it as WGSL -- `found "#"`, i.e. the `#version` line. That is
+the CNAEXT `ShaderEffect` source path, whose dialect this renderer declares as WGSL
+(`GetShaderDialectEXT()`), and a test that hands GLSL to any renderer without asking that question
+is the thing to fix. It belongs to whoever owns those two tests, not to this plan.
+
 **Re-measured after `WEBGPU-164` (2026-09-05, same recipe, 9010 tests): 23 failed, the same
 set, in the same classes.** `WebGPU_InvalidMipLevel` and `WebGPU_BoundTargetLifetime` failed an
 intermediate run of this task and are green here -- they were two of the six stale

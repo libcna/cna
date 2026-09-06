@@ -404,4 +404,78 @@ TEST(WebGPUCompiledEffectDrawTest, AddressWSelectsADifferentVolumeSliceForEachMo
     EXPECT_FALSE(wrapped == mirrored);
 }
 
+// plans/plan_fx.md FX-112 / plans/plan_webgpu.md WEBGPU-170. The compiled SpriteBatch route leaves
+// the stock sprite pipeline entirely, so the sequence that can break is returning to a compiled
+// batch after a stock one has run between them: a pending-sprite run that survived, or batch state
+// the compiled flush skipped, would show up here and nowhere else.
+//
+// On THIS renderer it exercises one more thing than it does on Vulkan, which is why it is worth
+// carrying rather than trusting the shared suite alone: WebGPU queues every draw and replays them
+// at Present() in public call order, and a compiled batch and a stock batch land in two DIFFERENT
+// command families. So this is also the test that would catch `drawOrder_` interleaving the two
+// families wrongly -- the middle third would then be drawn over by a compiled batch, or drawn
+// before one. The three batches draw into separate thirds of one target so all three are readable
+// at once.
+TEST(WebGPUCompiledEffectDrawTest, SpriteBatchAlternatesCompiledAndStockAcrossBatches)
+{
+    using Microsoft::Xna::Framework::Vector4;
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+
+    constexpr int kSize = 12;
+    Effect effect(device, CNA::TestSupport::BuildSyntheticDrawableEffect());
+    auto& parameters = effect.getParametersProperty();
+    parameters["Transform"]->SetValue(Matrix::CreateOrthographicOffCenter(
+        0.0f, static_cast<float>(kSize), static_cast<float>(kSize), 0.0f, -1.0f, 1.0f));
+
+    // A green sprite texture, so a stock batch is unmistakable against either compiled Tint.
+    Texture2D sprite(device, 1, 1);
+    const Color green[1] = {Color(0, 255, 0, 255)};
+    sprite.SetData(green, 1);
+
+    RenderTarget2D target(device, kSize, kSize);
+    device.SetRenderTarget(&target);
+    device.Clear(Color(9, 19, 29, 255));
+
+    const auto compiledBatch = [&](const Vector4& tint, const Rectangle& where) {
+        parameters["Tint"]->SetValue(tint);
+        SpriteBatch batch(device);
+        batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, nullptr, nullptr, nullptr,
+                    &effect);
+        batch.Draw(sprite, where, Color::White);
+        batch.End();
+    };
+
+    compiledBatch(Vector4(1.0f, 0.0f, 0.0f, 1.0f), Rectangle(0, 0, kSize, 4));
+    {
+        SpriteBatch stock(device);
+        stock.Begin(SpriteSortMode::Deferred, BlendState::Opaque);
+        stock.Draw(sprite, Rectangle(0, 4, kSize, 4), Color::White);
+        stock.End();
+    }
+    compiledBatch(Vector4(0.0f, 0.0f, 1.0f, 1.0f), Rectangle(0, 8, kSize, 4));
+
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+    const auto readRow = [&](int y) {
+        Color pixel(0, 0, 0, 0);
+        const Rectangle probe(kSize / 2, y, 1, 1);
+        target.GetData(0, &probe, &pixel, 0, 1);
+        return pixel;
+    };
+    const Color first = readRow(2);
+    const Color middle = readRow(6);
+    const Color last = readRow(10);
+
+    EXPECT_NEAR(first.getRProperty(), 255, 3) << "the first compiled batch must write its Tint";
+    EXPECT_NEAR(first.getGProperty(), 0, 3);
+    EXPECT_NEAR(middle.getGProperty(), 255, 3)
+        << "the stock batch between them must sample its own texture, not run the Effect";
+    EXPECT_NEAR(middle.getRProperty(), 0, 3);
+    EXPECT_NEAR(last.getBProperty(), 255, 3)
+        << "a compiled batch after a stock one must run the Effect again, with its own Tint";
+    EXPECT_NEAR(last.getRProperty(), 0, 3);
+}
+
 #endif  // CNA_WEBGPU_COMPILED_EFFECTS
