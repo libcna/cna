@@ -748,6 +748,56 @@ namespace CNA::Content::Pipeline
             }
         }
 
+        // The graphics profile's own limits on a Texture2D, in XNA's own sentences and in XNA's
+        // own order: the size first, then the aspect ratio. Measured by building the same image
+        // under both profiles (`profile/*` in the differential corpus,
+        // plans/plan_xnapipeline_parity.md XNAPP-253) -- a 2049x1 is refused by Reach for its size
+        // and by HiDef for its shape, a 4097x1 by HiDef for its size, and a 2048x1 is fine in both.
+        //
+        // Checked after the resize, because that is the texture the profile has to hold, and only
+        // when the build is producing an `.xnb`. A `.cnb` has no target profile at all: nothing in
+        // that container records one, and refusing a 4096-wide texture because a flag defaulted to
+        // Reach would be inventing a limit CNA's own format does not have.
+        if (context.OutputFormat() == ContentOutputFormat::Xnb)
+        {
+            namespace XnaGraphics = Microsoft::Xna::Framework::Graphics;
+            const bool hiDef =
+                context.Environment().targetProfile == XnaGraphics::GraphicsProfile::HiDef;
+            const std::string sized = std::to_string(image.width) + "x" +
+                                      std::to_string(image.height);
+            const std::uint32_t maximum = hiDef ? 4096u : 2048u;
+            if (image.width > maximum || image.height > maximum)
+            {
+                throw ContentLoadException(
+                    std::string("XNA Framework ") + (hiDef ? "HiDef" : "Reach") +
+                    " profile supports a maximum Texture2D size of " + std::to_string(maximum) +
+                    ", but this Texture2D is " + sized + ".");
+            }
+            // Only HiDef: a Reach texture wide enough to break an aspect limit of 2048 is already
+            // wider than Reach's own 2048, so whether Reach has this rule cannot be observed and
+            // is not asserted here.
+            if (hiDef)
+            {
+                const std::uint32_t longer = std::max(image.width, image.height);
+                const std::uint32_t shorter = std::max(1u, std::min(image.width, image.height));
+                if (longer / shorter > 2048u)
+                {
+                    throw ContentLoadException(
+                        "XNA Framework HiDef profile supports a maximum Texture2D aspect ratio of "
+                        "2048, but this Texture2D is sized " + sized + ".");
+                }
+            }
+            if (!hiDef && ReadBooleanParameter(parameters, TextureGenerateMipmapsParameter, false) &&
+                (NextPowerOfTwoDimension(image.width) != image.width ||
+                 NextPowerOfTwoDimension(image.height) != image.height))
+            {
+                throw ContentLoadException(
+                    "XNA Framework Reach profile requires mipmapped Texture2D sizes to be powers "
+                    "of two, but this Texture2D is " + sized +
+                    ". Resize it to a power of two, or remove the mipmaps.");
+            }
+        }
+
         // XNAP-96: premultiplication defaults to on, exactly as XNA 4.0's TextureProcessor does,
         // because BlendState::AlphaBlend -- what SpriteBatch::Begin() selects when given no blend
         // state, in XNA and in CNA alike -- is the premultiplied blend. Content built without it

@@ -265,6 +265,20 @@
       "paths": [
         "root/levelDigests"
       ]
+    },
+    {
+      "case": "profile_dxt_reach",
+      "reason": "Block compression is lossy and every encoder chooses its endpoints differently. XNA compresses through D3DX; CNA through its own encoder. The dimensions, mip count, format and level sizes agree -- only the compressed bytes differ, which is what two DXT encoders always do.",
+      "paths": [
+        "root/levelDigests"
+      ]
+    },
+    {
+      "case": "profile_mipmaps_npot_hidef",
+      "reason": "Every level below the first differs, and only those: the two builds agree texel for texel on level 0 and on the whole of a 2x2 source's chain, so the source, the colour key and the premultiplication all agree and what is left is the filter that halves an image. XNA reduces a 4x4 to 2x2 as (80, 71, 17, 211) where an area average of the four texels underneath is (72, 72, 8, 207), which is what CNA writes -- so XNA's kernel reaches beyond the block it is producing, and one 4x4 image is far too little to say what it is. Identifying it needs a fixture built for the purpose (plans/plan_xnapipeline_parity.md XNAPP-254).",
+      "paths": [
+        "root/levelDigests"
+      ]
     }
   ]
 }

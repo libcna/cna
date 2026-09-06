@@ -642,6 +642,87 @@
       "profile": "HiDef"
     },
     {
+      "case": "profile/tex2049_reach",
+      "source": "texture/probe_2049x1.png",
+      "importer": "TextureImporter",
+      "processor": "TextureProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "profile/tex2049_hidef",
+      "source": "texture/probe_2049x1.png",
+      "importer": "TextureImporter",
+      "processor": "TextureProcessor",
+      "platform": "Windows",
+      "profile": "HiDef"
+    },
+    {
+      "case": "profile/tex4097_hidef",
+      "source": "texture/probe_4097x1.png",
+      "importer": "TextureImporter",
+      "processor": "TextureProcessor",
+      "platform": "Windows",
+      "profile": "HiDef"
+    },
+    {
+      "case": "profile/dxt_reach",
+      "source": "texture/probe_4x4.png",
+      "importer": "TextureImporter",
+      "processor": "TextureProcessor",
+      "parameters": {
+        "TextureFormat": "DxtCompressed"
+      },
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "profile/mipmaps_npot_reach",
+      "source": "texture/probe_3x2.png",
+      "importer": "TextureImporter",
+      "processor": "TextureProcessor",
+      "parameters": {
+        "GenerateMipmaps": "True"
+      },
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "profile/mipmaps_npot_hidef",
+      "source": "texture/probe_3x2.png",
+      "importer": "TextureImporter",
+      "processor": "TextureProcessor",
+      "parameters": {
+        "GenerateMipmaps": "True"
+      },
+      "platform": "Windows",
+      "profile": "HiDef"
+    },
+    {
+      "case": "profile/tex2048x1_reach",
+      "source": "texture/probe_2048x1.png",
+      "importer": "TextureImporter",
+      "processor": "TextureProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "profile/tex4096x1_hidef",
+      "source": "texture/probe_4096x1.png",
+      "importer": "TextureImporter",
+      "processor": "TextureProcessor",
+      "platform": "Windows",
+      "profile": "HiDef"
+    },
+    {
+      "case": "profile/npot_reach",
+      "source": "texture/probe_3x2.png",
+      "importer": "TextureImporter",
+      "processor": "TextureProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
       "case": "xml/intermediate_passthrough",
       "source": "source/probe.xml",
       "importer": "XmlImporter",
