@@ -33,6 +33,15 @@ namespace Cna.Xna40.FrameworkOracle
             return text.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", "\\r").Replace("\n", "\\n");
         }
 
+        /** A sphere printed so a tie-break shows: centre to nine digits, then the radius. */
+        private static string Describe(BoundingSphere sphere)
+        {
+            return "center=(" + sphere.Center.X.ToString("R", CultureInfo.InvariantCulture) + "," +
+                   sphere.Center.Y.ToString("R", CultureInfo.InvariantCulture) + "," +
+                   sphere.Center.Z.ToString("R", CultureInfo.InvariantCulture) + ") radius=" +
+                   sphere.Radius.ToString("R", CultureInfo.InvariantCulture);
+        }
+
         private static void Record(string name, Func<string> measurement)
         {
             try
@@ -65,6 +74,43 @@ namespace Cna.Xna40.FrameworkOracle
             // ---- Color: unit floats to bytes -----------------------------------------------------
             // 0.25 * 255 = 63.75 and 0.75 * 255 = 191.25 separate truncation (63, 191) from
             // rounding (64, 191); 0.5 * 255 = 127.5 is the tie (127 truncated, 128 rounded).
+
+            // XNAPP-266: BoundingSphere.CreateFromPoints, on point sets whose extents tie.
+            //
+            // The seed of the sphere is the widest axis, and a tie between two axes has to be
+            // broken somehow. FNA -- and CNA, which followed it -- keeps the earlier axis; the
+            // model differential says XNA keeps the later one, because the mesh bounding sphere of
+            // a right triangle came out mirrored. That is a claim about a public XNA math API, so
+            // it is measured here directly rather than inferred from a model.
+            Record("boundingsphere/tie_x_and_y", () =>
+                Describe(BoundingSphere.CreateFromPoints(new[]
+                {
+                    new Vector3(0, 0, 0), new Vector3(2, 0, 0), new Vector3(0, 2, 0),
+                })));
+            Record("boundingsphere/tie_x_and_y_reversed", () =>
+                Describe(BoundingSphere.CreateFromPoints(new[]
+                {
+                    new Vector3(0, 2, 0), new Vector3(2, 0, 0), new Vector3(0, 0, 0),
+                })));
+            Record("boundingsphere/tie_all_three_axes", () =>
+                Describe(BoundingSphere.CreateFromPoints(new[]
+                {
+                    new Vector3(0, 0, 0), new Vector3(2, 0, 0),
+                    new Vector3(0, 2, 0), new Vector3(0, 0, 2),
+                })));
+            Record("boundingsphere/x_widest", () =>
+                Describe(BoundingSphere.CreateFromPoints(new[]
+                {
+                    new Vector3(0, 0, 0), new Vector3(4, 0, 0), new Vector3(0, 2, 0),
+                })));
+            Record("boundingsphere/y_widest", () =>
+                Describe(BoundingSphere.CreateFromPoints(new[]
+                {
+                    new Vector3(0, 0, 0), new Vector3(2, 0, 0), new Vector3(0, 4, 0),
+                })));
+            Record("boundingsphere/single_point", () =>
+                Describe(BoundingSphere.CreateFromPoints(new[] { new Vector3(1, 2, 3) })));
+
             Record("color/vector4_quarters", () => Describe(new Color(new Vector4(0.25f, 0.5f, 0.75f, 1.0f))));
             Record("color/floats_quarters", () => Describe(new Color(0.25f, 0.5f, 0.75f, 1.0f)));
             Record("color/vector3_quarters", () => Describe(new Color(new Vector3(0.25f, 0.5f, 0.75f))));

@@ -514,7 +514,15 @@ namespace CNA::Internal::Xnb
             output.WriteUInt32(boneCount);
             for (const XnbModelBoneData& bone : model.bones)
             {
-                output.WriteObject(bone.name);
+                // A bone with no name is written as a null object, not as an empty string. XNA
+                // does that for a source node that carries no name -- an unnamed root frame is the
+                // ordinary case in a `.x` file -- and an empty string is a different value: it
+                // interns a StringReader and a zero-length string where XNA writes one byte
+                // (measured, tests/reference/xna40/differential/model_x_bare_mesh.xnb, whose bone 0
+                // is null while every bone of model_x_hierarchy.xnb is named;
+                // plans/plan_xnapipeline_parity.md XNAPP-266).
+                if (bone.name.empty()) { output.WriteNullObject(); }
+                else { output.WriteObject(bone.name); }
                 output.WriteMatrix(bone.transform);
             }
             for (const XnbModelBoneData& bone : model.bones)

@@ -230,12 +230,19 @@ namespace Microsoft::Xna::Framework
         Vector3 min = minx;
         Vector3 max = maxx;
 
-        if (sqDistY > sqDistX && sqDistY > sqDistZ)
+        // The comparisons are not-less-than, not greater-than: when two axes are equally wide XNA
+        // seeds the sphere from the *later* one, and the difference is visible -- a right triangle's
+        // sphere comes out mirrored otherwise. Measured on the genuine runtime
+        // (tests/reference/xna40/framework/framework-packing-oracle.json, cases boundingsphere/*),
+        // after a model's mesh bounding sphere disagreed with XNA's in the build differential.
+        // FNA uses greater-than here, and this is one of the places FNA and XNA differ
+        // (plans/plan_xnapipeline_parity.md XNAPP-266).
+        if (sqDistY >= sqDistX && sqDistY >= sqDistZ)
         {
             max = maxy;
             min = miny;
         }
-        if (sqDistZ > sqDistX && sqDistZ > sqDistY)
+        if (sqDistZ >= sqDistX && sqDistZ >= sqDistY)
         {
             max = maxz;
             min = minz;

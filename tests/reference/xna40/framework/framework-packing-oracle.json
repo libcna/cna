@@ -3,6 +3,12 @@
  "runtime": "4.0.30319.1",
  "frameworkAssembly": "Microsoft.Xna.Framework, Version=4.0.0.0, Culture=neutral, PublicKeyToken=842cf8be1de50553",
  "cases": [
+  {"case": "boundingsphere/tie_x_and_y", "result": "center=(0.5527864,0.7236068,0) radius=1.618034"},
+  {"case": "boundingsphere/tie_x_and_y_reversed", "result": "center=(1,1,0) radius=1.41421354"},
+  {"case": "boundingsphere/tie_all_three_axes", "result": "center=(0.479899734,0.263706475,0.628196955) radius=1.90778685"},
+  {"case": "boundingsphere/x_widest", "result": "center=(1.70710683,0.2928931,0) radius=2.41421366"},
+  {"case": "boundingsphere/y_widest", "result": "center=(0.2928931,1.70710683,0) radius=2.41421366"},
+  {"case": "boundingsphere/single_point", "result": "center=(1,2,3) radius=0"},
   {"case": "color/vector4_quarters", "result": "64,128,191,255 packed=FFBF8040"},
   {"case": "color/floats_quarters", "result": "64,128,191,255 packed=FFBF8040"},
   {"case": "color/vector3_quarters", "result": "64,128,191,255 packed=FFBF8040"},
