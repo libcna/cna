@@ -142,6 +142,47 @@ protected:
                   "C2 Stretch: the top edge is GEOMETRY " + Rgb(topEdge) +
                       " -- this is what stops B2 passing for a renderer that simply drew nothing");
         }
+        if (frame_ == 0)
+        {
+            // ---- legs D and E: VULKAN-331, the consumers of that rectangle ----------
+            // D: GraphicsDevice.Viewport keeps reporting the LOGICAL size while the physical
+            // rectangle differs -- the split the framework's own comment describes.
+            int px = 0, py = 0, pw = 0, ph = 0;
+            vk->GetPresentedRectEXT(px, py, pw, ph);
+            int gx = 0, gy = 0, gw = 0, gh = 0;
+            vk->GetDefaultViewportRect(gx, gy, gw, gh);
+            check(gx == px && gy == py && gw == pw && gh == ph,
+                  "D GetDefaultViewportRect reports the presented rectangle (" +
+                      std::to_string(gx) + "," + std::to_string(gy) + " " +
+                      std::to_string(gw) + "x" + std::to_string(gh) + ")");
+
+            // E: a window point at the very top maps ABOVE the logical area under Letterbox,
+            // because the bar is not part of it. With the old height-only transform it mapped to
+            // y >= 0 and a click in the bar would have been delivered as a click on the game.
+            float lx = 0.0f, ly = 0.0f;
+            const bool ok = vk->TransformWindowToLogical(
+                static_cast<float>(vp.getWidthProperty()) / 2.0f, 1.0f, lx, ly);
+            check(ok && ly < 0.0f,
+                  std::string("E a window point inside the top BAR maps outside the logical area ") +
+                      "(y=" + std::to_string(ly) +
+                      ") -- the height-only transform mapped it to y>=0, so a click on the bar "
+                      "was delivered as a click on the game");
+
+            // F: and the mapping round-trips inside the presented area.
+            float wx = 0.0f, wy = 0.0f, rx = 0.0f, ry = 0.0f;
+            if (vk->TransformLogicalToWindow(100.0f, 50.0f, wx, wy) &&
+                vk->TransformWindowToLogical(wx, wy, rx, ry))
+            {
+                check(std::abs(rx - 100.0f) < 1.0f && std::abs(ry - 50.0f) < 1.0f,
+                      "F logical->window->logical round-trips inside the presented area (" +
+                          std::to_string(rx) + "," + std::to_string(ry) + ")");
+            }
+            else
+            {
+                check(false, "F the round-trip transforms refused");
+            }
+        }
+
         ++frame_;
     }
 

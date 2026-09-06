@@ -11311,29 +11311,55 @@ namespace CNA::Internal::Renderers::Vulkan
             RecreateSwapchain();
     }
 
+    // plan_vulkan.md VULKAN-331: both transforms map through the PRESENTED RECTANGLE, mirroring
+    // EasyGLSurfaceState::WindowToLogical/LogicalToWindow. Before VULKAN-330 a height-derived
+    // scale was equivalent, because no mode produced a rectangle smaller than the drawable; with
+    // Letterbox and Overscan real, ignoring the rectangle's origin offsets every mapped coordinate
+    // by the bar -- a game would render correctly and pick wrongly.
     bool VulkanRenderer::TransformWindowToLogical(const float windowX, const float windowY,
                                                    float& logX, float& logY) const
     {
-        const int physicalHeight = surfaceInfo_.drawableSize.height;
-        if (surfaceInfo_.windowId == 0 || physicalHeight <= 0) return false;
-        const float scale = virtualHeight_ > 0
-            ? static_cast<float>(virtualHeight_) / physicalHeight : 1.0f;
-        logX = windowX * surfaceInfo_.displayScale * scale;
-        logY = windowY * surfaceInfo_.displayScale * scale;
+        if (surfaceInfo_.windowId == 0 || !(surfaceInfo_.displayScale > 0.0f)) return false;
+
+        const int logicalWidth  = virtualWidth_  > 0 ? virtualWidth_
+                                                     : static_cast<int>(swapchainExtent_.width);
+        const int logicalHeight = virtualHeight_ > 0 ? virtualHeight_
+                                                     : static_cast<int>(swapchainExtent_.height);
+        int vx = 0, vy = 0, vw = 0, vh = 0;
+        GetPresentedRectEXT(vx, vy, vw, vh);
+        if (logicalWidth <= 0 || logicalHeight <= 0 || vw <= 0 || vh <= 0) return false;
+
+        // The rectangle is in drawable pixels; window coordinates are in client units.
+        const float inverseDisplayScale = 1.0f / surfaceInfo_.displayScale;
+        const float clientX = static_cast<float>(vx) * inverseDisplayScale;
+        const float clientY = static_cast<float>(vy) * inverseDisplayScale;
+        const float clientW = static_cast<float>(vw) * inverseDisplayScale;
+        const float clientH = static_cast<float>(vh) * inverseDisplayScale;
+        logX = (windowX - clientX) * static_cast<float>(logicalWidth)  / clientW;
+        logY = (windowY - clientY) * static_cast<float>(logicalHeight) / clientH;
         return true;
     }
 
     bool VulkanRenderer::TransformLogicalToWindow(const float logX, const float logY,
                                                    float& windowX, float& windowY) const
     {
-        const int physicalHeight = surfaceInfo_.drawableSize.height;
-        if (surfaceInfo_.windowId == 0 || !(surfaceInfo_.displayScale > 0.0f)
-            || physicalHeight <= 0)
-            return false;
-        const float inverseScale = virtualHeight_ > 0
-            ? static_cast<float>(physicalHeight) / virtualHeight_ : 1.0f;
-        windowX = logX * inverseScale / surfaceInfo_.displayScale;
-        windowY = logY * inverseScale / surfaceInfo_.displayScale;
+        if (surfaceInfo_.windowId == 0 || !(surfaceInfo_.displayScale > 0.0f)) return false;
+
+        const int logicalWidth  = virtualWidth_  > 0 ? virtualWidth_
+                                                     : static_cast<int>(swapchainExtent_.width);
+        const int logicalHeight = virtualHeight_ > 0 ? virtualHeight_
+                                                     : static_cast<int>(swapchainExtent_.height);
+        int vx = 0, vy = 0, vw = 0, vh = 0;
+        GetPresentedRectEXT(vx, vy, vw, vh);
+        if (logicalWidth <= 0 || logicalHeight <= 0 || vw <= 0 || vh <= 0) return false;
+
+        const float inverseDisplayScale = 1.0f / surfaceInfo_.displayScale;
+        const float clientX = static_cast<float>(vx) * inverseDisplayScale;
+        const float clientY = static_cast<float>(vy) * inverseDisplayScale;
+        const float clientW = static_cast<float>(vw) * inverseDisplayScale;
+        const float clientH = static_cast<float>(vh) * inverseDisplayScale;
+        windowX = clientX + logX * clientW / static_cast<float>(logicalWidth);
+        windowY = clientY + logY * clientH / static_cast<float>(logicalHeight);
         return true;
     }
 

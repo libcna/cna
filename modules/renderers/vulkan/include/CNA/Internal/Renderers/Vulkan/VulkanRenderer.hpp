@@ -1504,6 +1504,23 @@ namespace CNA::Internal::Renderers::Vulkan
          * @param height Receives its height.
          */
         CNAEXT void GetPresentedRectEXT(int& x, int& y, int& width, int& height) const;
+        /**
+         * @brief Reports the physical rectangle the back buffer presents into.
+         *
+         * plans/plan_vulkan.md `VULKAN-331` (finding F-04). `GraphicsDevice::UpdateViewportFromWindow`
+         * needs the real rectangle, not `(0, 0, GetViewportSize())` — the base default is correct
+         * only while every presentation mode is a no-op, which stopped being true with
+         * `VULKAN-330`.
+         *
+         * @param x Receives the rectangle's left edge.
+         * @param y Receives its top edge.
+         * @param width Receives its width.
+         * @param height Receives its height.
+         */
+        void GetDefaultViewportRect(int& x, int& y, int& width, int& height) override
+        {
+            GetPresentedRectEXT(x, y, width, height);
+        }
 
         /**
          * @brief Applies a runtime swap-interval change by rebuilding the swapchain.
