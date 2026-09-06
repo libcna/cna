@@ -2295,6 +2295,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_device_validation
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-345: the Clear overload and ClearOptions matrix.
+        cna_vulkan_test(cna_test_vulkan_clear_overloads
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_clear_overloads_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_ClearOverloads
+            COMMAND cna_test_vulkan_clear_overloads
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-339: the release path that also runs vkDeviceWaitIdle and the
         # retirement lists. HasRenderer() must be false after the first Dispose and no second
         # release may be attempted.
