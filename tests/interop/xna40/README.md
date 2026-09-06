@@ -4,13 +4,39 @@
 
 ## Status, stated plainly
 
-**Nothing in this directory has ever been executed against a real Microsoft XNA 4.0 runtime by
-CNA's own automation.** No environment CNA builds in has XNA installed, or Windows, or Wine, or
-Mono, or .NET. Until someone runs this harness and records the result in
-`plans/plan_xnapipeline.md` `XNAP-34`, every CNA document must describe XNA compatibility as
-*unverified*, however well the fixtures parse elsewhere.
+**Executed against a genuine Microsoft XNA 4.0 runtime on 2026-09-06, and every fixture passed.**
+Six of six loaded through the real `ContentManager` and every value each expectation manifest
+declares matched:
 
-What *has* been verified, without XNA:
+```text
+graphics device: AMD Radeon 780M (RADV PHOENIX) (Reach)
+PASSED  texture2d_color_mips
+PASSED  soundeffect_pcm16_mono_22050
+         (not asserted) SoundEffect exposes no sample-rate, channel-count or PCM accessor in
+         XNA 4.0, so only Duration is asserted here.
+PASSED  spritefont_two_glyphs
+PASSED  curve_two_keys
+PASSED  list_of_strings
+PASSED  model_triangle_basiceffect
+
+fixtures: 6   failed: 0
+XNA runtime: 4.0.0.0
+```
+
+The host was not Windows. It was Debian with the XNA 4.0 Refresh runtime installed into a Wine
+prefix (`~/.wine-cna-xna40`: the GAC, `XnaNative.dll`, and Direct3D 9 through DXVK), the harness
+compiled with mono's `mcs` against the SDK reference assemblies, and run under
+`DISPLAY=:99` on Xvfb. `plans/plan_xnapipeline_parity.md` `XNAPP-280` records the exact recipe.
+
+One change to the harness itself was needed, and it is worth knowing about: `Game.RunOneFrame()`
+returns on this host with `GraphicsDeviceManager.GraphicsDevice` still **null**, so every
+`Texture2D`, `SpriteFont` and `Model` failed with `GraphicsDevice component not found` -- a
+message that says nothing about the `.xnb` and everything about the host. Calling the documented
+`((IGraphicsDeviceManager)manager).CreateDevice()` creates a real device, and the harness now does
+that first and falls back to `RunOneFrame()`. The "no usable graphics device" limitation this file
+used to describe was therefore avoidable, not inherent.
+
+What was already verified, without XNA, and still is:
 
 | Evidence | What it shows |
 |---|---|
@@ -18,9 +44,8 @@ What *has* been verified, without XNA:
 | An independent Python parser validates every fixture (`tools/xnb/xnb_conformance.py`) | the bytes satisfy the format specification, judged by code that shares nothing with CNA |
 | CNA reproduces a genuine XNA 4.0 file byte for byte (`XnbWriterTest.GoldenXna40ListOfStringsIsByteIdentical`) | for `List<string>`, CNA's container header, type-reader table spelling, 7-bit encoding, object dispatch and string encoding are *identical* to Microsoft's own Content Pipeline output |
 
-That third row is the strongest available signal short of running XNA, and it is the reason this
-harness is worth building: the remaining risk is concentrated in the per-type payloads, not in the
-container.
+What the run does **not** show: only these six roots were exercised, and only the values XNA 4.0's
+public API exposes. The `(not asserted)` lines are honest gaps, not passes.
 
 ## What you need
 
@@ -95,4 +120,6 @@ not "fix" a fixture to make the harness pass; fix the writer, regenerate, and re
 * Texture mip levels above 0 are not read back; only level 0's exact bytes are compared.
 * The harness constructs a hidden `Game` to obtain a real `GraphicsDevice`. On a machine with no
   usable graphics device, `Texture2D`, `SpriteFont` and `Model` will fail to load for reasons that
-  have nothing to do with CNA; `Curve` and `List<string>` still exercise the container.
+  have nothing to do with CNA; `Curve` and `List<string>` still exercise the container. The
+  harness now says which case it is: it prints the adapter and profile when a device was created,
+  and a line naming the host when one could not be.

@@ -370,8 +370,37 @@ namespace Cna.Xna40.Interop
             // obtain a real device from XNA 4.0.
             using (var game = new Game())
             {
-                new GraphicsDeviceManager(game);
-                game.RunOneFrame();
+                var manager = new GraphicsDeviceManager(game);
+                // RunOneFrame() is what a game does, and on some hosts it never reaches device
+                // creation: under Wine it returns with GraphicsDeviceManager.GraphicsDevice still
+                // null, and every Texture2D, SpriteFont and Model then fails with "GraphicsDevice
+                // component not found" for a reason that has nothing to do with the .xnb. The
+                // documented interface method creates the device directly, so it is tried first
+                // and RunOneFrame is the fallback.
+                try
+                {
+                    ((IGraphicsDeviceManager)manager).CreateDevice();
+                }
+                catch (Exception error)
+                {
+                    Console.Error.WriteLine("CreateDevice failed (" + error.GetType().Name + ": " +
+                                            error.Message + "); falling back to RunOneFrame");
+                }
+                if (manager.GraphicsDevice == null)
+                {
+                    game.RunOneFrame();
+                }
+                if (manager.GraphicsDevice == null)
+                {
+                    Console.Error.WriteLine(
+                        "no GraphicsDevice could be created on this host; Texture2D, SpriteFont " +
+                        "and Model will fail for that reason and not because of their .xnb");
+                }
+                else
+                {
+                    Console.WriteLine("graphics device: " + manager.GraphicsDevice.Adapter.Description +
+                                      " (" + manager.GraphicsDevice.GraphicsProfile + ")");
+                }
 
                 var content = new ContentManager(game.Services, root);
                 var outcomes = new List<Outcome>();
