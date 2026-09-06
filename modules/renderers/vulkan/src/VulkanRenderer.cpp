@@ -5771,8 +5771,42 @@ namespace CNA::Internal::Renderers::Vulkan
     {
         if (compiledEffect) return;
         const auto& vb = static_cast<const VulkanVertexBufferRenderer&>(vb_in);
+        // plan_vulkan.md VULKAN-165, opened by VULKAN-139's audit. The shared guard returns
+        // immediately for a buffer that carries NO declaration -- correctly, since there is nothing
+        // to be unfaithful to -- and that is the hole: `VertexBuffer(device, count)` +
+        // `SetDataRaw(data, count, stride)` produces exactly such a buffer, and an unlisted stride
+        // then reached the PositionColor fallback and was drawn as a 16-byte record. Measured on a
+        // 28-byte stride: accepted at upload, drawn and presented in silence, with the Khronos
+        // layer saying nothing. EasyGL refuses the same call by name (GLTF-157).
+        //
+        // The rule is narrow on purpose, and the narrowness is the whole design decision:
+        //
+        //   * only where the fallback INVENTS an attribute. The PositionColor fallback reads a
+        //     packed colour at offset 12 out of bytes that mean something else -- and out of bounds
+        //     entirely for a record shorter than 16. The PositionOnly fallback reads Position at
+        //     offset 0, which every layout in the table also puts there, so it cannot read the
+        //     wrong bytes and is left alone. That is why `positionOnlyFallback` short-circuits.
+        //   * only where the stride is genuinely unlisted. `InferredLayoutForStride(..,
+        //     RendererRefusesIt)` is the canonical "is this stride one we have a layout for"
+        //     question, asked of the shared table rather than of a list repeated here.
+        //   * only where there is no declaration. A buffer that declares its layout is judged by
+        //     the fidelity guard below exactly as before -- including the position-only stride-12
+        //     case that guard deliberately admits.
+        const int stride = static_cast<int>(vb.GetStride());
+        if (!positionOnlyFallback && vb.GetDeclarationEXT().IsEmpty() &&
+            !CNA::Internal::Graphics::InferredLayoutForStride(
+                 stride, CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt).known)
+        {
+            throw System::NotSupportedException(
+                "Vulkan: a VertexBuffer with no VertexDeclaration and an unsupported vertex stride "
+                + std::to_string(stride) + " cannot be drawn on the " + std::string(route) +
+                " route. This renderer selects its native vertex layout from the stride, and " +
+                std::to_string(stride) + " is not one it has a layout for -- the draw is refused "
+                "rather than bound as Position + packed colour and rendered from the wrong bytes. "
+                "Give the buffer a VertexDeclaration.");
+        }
         CNA::Internal::Graphics::RequireFaithfulVertexDeclaration(
-            vb.GetDeclarationEXT(), static_cast<int>(vb.GetStride()),
+            vb.GetDeclarationEXT(), stride,
             positionOnlyFallback
                 ? CNA::Internal::Graphics::UnlistedStrideLayout::PositionOnlyFallback
                 : CNA::Internal::Graphics::UnlistedStrideLayout::PositionColorFallback,

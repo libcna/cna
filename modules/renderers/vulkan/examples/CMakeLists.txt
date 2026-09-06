@@ -2323,6 +2323,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_presentation_parameters
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-165: unknown-stride rejection -- the other half of VULKAN-144's declaration-driven layout.
+        cna_vulkan_test(cna_test_vulkan_unknown_stride_rejection
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_unknown_stride_rejection_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_UnknownStride_Rejected
+            COMMAND cna_test_vulkan_unknown_stride_rejection
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-339: the release path that also runs vkDeviceWaitIdle and the
         # retirement lists. HasRenderer() must be false after the first Dispose and no second
         # release may be attempted.

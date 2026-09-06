@@ -452,8 +452,17 @@ protected:
             std::string bareHow = "accepted";
             try { (void)drawPbr(bare); }
             catch (const std::exception& e) { bareHow = e.what(); }
-            check(bareHow.find("requires vertex stride 48 or 60") != std::string::npos,
-                  "D2 the same record with no declaration is still refused by name", bareHow);
+            // plan_vulkan.md VULKAN-165 moved this refusal EARLIER and made it general: a
+            // declaration-less buffer whose stride the canonical table does not list is now
+            // refused by RequireFaithfulDeclarationEXT before the PBR route's own
+            // "requires vertex stride 48 or 60" check is reached. Both refusals are correct and
+            // both name the stride, so this leg asserts the CONTRACT -- refused, and the message
+            // says which stride -- rather than one route's wording, which is what made it a
+            // route-specific assertion of a general property.
+            check(bareHow != "accepted" &&
+                      bareHow.find(std::to_string(kPad)) != std::string::npos,
+                  "D2 the same record with no declaration is still refused, naming the stride",
+                  bareHow);
         }
 
         const auto& messages = Renderer().GetValidationMessagesEXT();
