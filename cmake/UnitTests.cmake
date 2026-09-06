@@ -41,7 +41,7 @@ if(CNA_BUILD_TESTS)
             "modules/renderers/*/tests/*.cpp"
             # The shared renderer halves (modules/renderers/common/<name>) sit one directory
             # deeper than a renderer family, and `*` does not cross a separator, so their tests
-            # need their own entry. plans/plan_fx.md FX-110 put the first suite there.
+            # need their own entry. plans/plan_fx.md FX-129 put the first suite there.
             "modules/renderers/common/*/tests/*.cpp"
             "tests/*.cpp"
     )

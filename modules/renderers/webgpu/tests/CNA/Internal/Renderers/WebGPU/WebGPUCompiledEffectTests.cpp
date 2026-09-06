@@ -163,7 +163,7 @@ TEST(WebGPUCompiledEffectTest, EveryPassOfTheRealXna4GameEffectsCreatesBothShade
     GraphicsDevice device;
     if (RendererOf(device) == nullptr)
         GTEST_SKIP() << "this build did not select the WebGPU renderer";
-    // plans/plan_fx.md FX-110. Until the two ps_1_x linker patches landed, six of the eighteen
+    // plans/plan_fx.md FX-129. Until the two ps_1_x linker patches landed, six of the eighteen
     // passes across these two fixtures produced a fragment module wgpu refused with
     // "Multiple bindings at location 1 are present" -- so this suite could claim parse and
     // reflection only. It can now claim the thing that matters: EVERY pass links and creates both

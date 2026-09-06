@@ -120,12 +120,16 @@ all. A declaration whose elements are listed in the other order gives a byte-ide
 (`WEBGPU-155`). Position from stream 0 and colour from stream 1 both reach one draw (`WEBGPU-172`). A
 custom-WGSL `ShaderEffect` compiles under the browser's **Tint** -- a different compiler from
 native's Naga, which is why this needed a run at all -- and draws. And a device loss recovers, after
-the adapter fix described above, which this page is what found. Compiled (bytecode) Effects still
-need no browser run, but the reason changed on 2026-09-06: they are now supported NATIVELY (see
-*Compiled XNA Effects* below) and refused in an Emscripten build at CONFIGURE time, because browser
-WebGPU ingests WGSL exclusively -- emdawnwebgpu's own `createShaderModule` has a single
-chained-struct case, `ShaderSourceWGSL`, and aborts on anything else. So there is no browser code
-path to exercise.
+the adapter fix described above, which this page is what found. Compiled (bytecode) Effects have
+their own page, `cna_webgpu_compiled_effect_page` (`webgpu_browser_compiled_effect_test.cpp`), which
+runs **11/11** in headless Chrome: the capability, a compiled vertex+pixel pair, uniforms, a
+Texture2D sampler, SpriteBatch with a custom compiled Effect, both passes of a multi-pass technique,
+a cube sampler, both slices of a volume sampler, and a render target as the sampled source. It
+settles two things the native suites cannot: whether **Tint** accepts the WGSL this route generates
+(native goes through Naga), and whether MojoShader's C parser and SPIR-V emitter behave compiled to
+WebAssembly. Until 2026-09-06 this paragraph said compiled Effects needed no browser run because
+`CNA_WEBGPU_COMPILED_EFFECTS` was refused at configure time under Emscripten; `WEBGPU-203` removed
+that refusal by translating the route's SPIR-V into WGSL.
 
 **Cross-backend pixel parity (`WEBGPU-123`).** `cna_diag_webgpu` builds the shared, renderer-agnostic
 `cross_renderer_diagnostic_scene` (one unlit vertex-colour triangle -> 64x64 RGBA8) for WEBGPU,
@@ -714,21 +718,39 @@ textures and samplers, per-pass render and sampler state, clone isolation, ordin
 indexed (16- and 32-bit) draws, instancing, multiple vertex streams, `SpriteBatch.Begin(...,
 effect)` including multi-pass and the sprite-texture override of slot 0, a `RenderTarget2D` as a
 sampler source, and pixel-stage cube AND volume sampling. Real XNA 4.0 game content with `ps_1_x`
-pixel shaders works too, which needed three additive MojoShader patches (`TEXCRD` in the SPIR-V
-profile, and two `ps_1_x` entry-point-interface fixes) -- all three are gaps the GLSL profile does
-not have, so they were EasyGL-parity gaps rather than WebGPU ones.
+pixel shaders works too -- **all 27 committed technique/pass pairs across all nine fixtures**, which
+needed four additive MojoShader patches carried in `cmake/patches/`: `TEXCRD` in the SPIR-V profile,
+a `Location` on `ps_1_x`'s `r0`-as-colour-output, a unique `OpEntryPoint` interface, and a
+`gl_PointCoord` patch-up guarded on the variable it belongs to rather than on the `attrib_offsets`
+slot it shares. The last two closed the six passes that used to be refused (`plans/plan_fx.md`
+`FX-129`); every one of them is a gap the GLSL profile does not have, and the shared SPIR-V linker
+means Vulkan and SDL_GPU gained them too. **And the browser**: the same effects run under
+Emscripten, through WGSL translated from the same SPIR-V.
 
 **What does not, and why:**
-
-* **The browser.** Native only. `CNA_WEBGPU_COMPILED_EFFECTS` is refused at configure time under
-  Emscripten rather than reporting a capability that build cannot execute. This is an
-  implementation gap with a named route (`plans/plan_webgpu.md` `WEBGPU-203` compares the
-  candidates), not a property of WGSL.
 * **A vertex shader that samples a texture** is refused by name. Renderer-wide and CNA-wide:
   `IGraphicsRenderer` has no vertex-sampler hook (`plans/plan_fx.md` `FX-109`).
 * **`SamplerState.MipMapLevelOfDetailBias`** is discarded. `WGPUSamplerDescriptor` has no LOD-bias
   field at all -- the string does not appear anywhere in the pinned `webgpu.h` -- so every stock
   draw family discards it too. `MaxMipLevel` does work, through `lodMinClamp`.
+
+**The browser route (`plans/plan_webgpu.md` `WEBGPU-203`, 2026-09-06).** Browser WebGPU ingests WGSL
+and nothing else -- emdawnwebgpu's own `createShaderModule` has a single chained-struct case -- so
+`GetOrCreateCompiledEffectShaderModuleEXT`, the ONE seam where the two targets differ, translates
+the finished SPIR-V into WGSL under Emscripten and hands it over as `WGPUShaderSourceWGSL`.
+Everything above that seam is the same code on both targets. The translator
+(`modules/renderers/common/mojoshader/src/SpirvToWgsl.cpp`) is a SPIR-V module parser and typed IR
+over the subset THIS pipeline emits, measured across all 27 passes before it was written: 55
+opcodes, 9 GLSL.std.450 instructions, five storage classes, seven decorations, one builtin, no
+matrices, no loops, no phi, one function per module. Anything outside that subset is refused by
+name. It adds no dependency. Bind groups, binding numbers, vertex input locations, uniform layout
+and the entry point NAME all come out as the SPIR-V carried them, so the renderer's layouts and
+pipelines are identical between routes -- which is what makes the native SPIR-V route a usable
+oracle: `SetCompiledEffectShaderLanguageEXT` re-runs 16 shared cross-renderer contracts natively
+through the browser's representation, pixel checks included. In a browser,
+`cna_webgpu_compiled_effect_page` runs 11/11 (see *Browser coverage* above). The one thing WGSL
+cannot express from this corpus is a shader that writes `gl_PointSize` or reads `gl_PointCoord`;
+WebGPU has neither, and the translator refuses such a module by name.
 
 **One trap for anyone reading the pin's headers.** `wgpuHasInstanceFeature` and
 `wgpuGetInstanceFeatures` are exported symbols that PANIC (`not implemented`) on wgpu-native
