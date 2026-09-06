@@ -276,13 +276,6 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
             LogError("BuildContent needs both RootDirectory and OutputDirectory before it can run.");
             return false;
         }
-        if (sourceAssets_.empty())
-        {
-            // Not a failure: a content project with nothing in it builds nothing, and MSBuild's
-            // own task answers true for an empty item list.
-            LogMessage("BuildContent: no source assets, so nothing was built.");
-            return true;
-        }
         if (!pipelineAssemblies_.empty())
         {
             // Refusing beats ignoring. A project naming its own pipeline assembly expects its own
@@ -294,6 +287,15 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
                      "PipelineAssemblies item has no counterpart. " +
                      std::to_string(pipelineAssemblies_.size()) + " were named.");
             return false;
+        }
+        if (sourceAssets_.empty())
+        {
+            // Not a failure: a content project with nothing in it builds nothing, and MSBuild's
+            // own task answers true for an empty item list. Checked *after* the assembly refusal,
+            // because a project that names its own pipeline assembly is wrong whether or not it
+            // also lists assets.
+            LogMessage("BuildContent: no source assets, so nothing was built.");
+            return true;
         }
 
         const std::filesystem::path root(rootDirectory_);

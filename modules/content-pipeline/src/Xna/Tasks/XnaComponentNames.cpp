@@ -29,8 +29,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
                   "XmlImporter builds whatever the document's Asset Type names, which the "
                   "canonical build graph selects from the source itself; name no importer for an "
                   ".xml asset and it is read the same way."}},
-                {"FbxImporter", {"", {}, "the .fbx route is not implemented in this build."}},
-                {"XImporter", {"", {}, "the DirectX .x route is not implemented in this build."}},
+                {"FbxImporter", {"CNA.FbxImporter", {}, ""}},
+                {"XImporter", {"CNA.XImporter", {}, ""}},
             };
             return map;
         }
