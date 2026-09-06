@@ -410,6 +410,14 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     geometry->getVerticesProperty().getChannelsProperty().Add<BoneWeightCollection>(
                         VertexChannelNames::Weights(0), channel);
                 }
+                // A file's own normals take their place among the channels the file declares; a
+                // channel the importer *generates* because the file has none is appended after
+                // them. Measured both ways: `quad_textured.x` declares MeshNormals and answers
+                // Normal, Color, TextureCoordinate, while `two_textures.x` declares none and
+                // answers TextureCoordinate, Normal (tests/reference/xna40/model, x/*). The order
+                // is not cosmetic -- it is the order of the elements in the vertex buffer
+                // (plans/plan_xnapipeline_parity.md XNAPP-266).
+                const auto addNormals = [&]
                 {
                     std::vector<Vector3> channel;
                     channel.reserve(used.size());
@@ -422,7 +430,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     }
                     geometry->getVerticesProperty().getChannelsProperty().Add<Vector3>(
                         VertexChannelNames::Normal(), channel);
-                }
+                };
+                if (!normals.empty()) { addNormals(); }
                 if (!colors.empty())
                 {
                     std::vector<Vector4> channel;
@@ -447,6 +456,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     geometry->getVerticesProperty().getChannelsProperty().Add<Vector2>(
                         VertexChannelNames::TextureCoordinate(0), channel);
                 }
+                if (normals.empty()) { addNormals(); }
             }
             return mesh;
         }

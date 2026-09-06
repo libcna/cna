@@ -21,6 +21,22 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
 {
     namespace
     {
+        /** @brief Whether two declarations describe the same elements in the same order. */
+        [[nodiscard]] bool SameDeclaration(const Processors::VertexDeclarationContent& left,
+                                           const Processors::VertexDeclarationContent& right)
+        {
+            const auto& a = static_cast<const System::Collections::ObjectModel::Collection<
+                Microsoft::Xna::Framework::Graphics::VertexElement>&>(left.getVertexElementsProperty());
+            const auto& b = static_cast<const System::Collections::ObjectModel::Collection<
+                Microsoft::Xna::Framework::Graphics::VertexElement>&>(right.getVertexElementsProperty());
+            if (a.getCountProperty() != b.getCountProperty()) { return false; }
+            for (SharpRuntime::intcs at = 0; at < a.getCountProperty(); ++at)
+            {
+                if (!(a[at] == b[at])) { return false; }
+            }
+            return true;
+        }
+
         /** @brief The children of a node, read through the collection's index. */
         [[nodiscard]] std::vector<std::shared_ptr<Graphics::NodeContent>> ChildrenOf(
             const Graphics::NodeContent& node)
@@ -247,20 +263,72 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
                 // and renumbers its vertices in the order the reversed list reaches them
                 // (measured, modelprocessor/quad_ordering and swap_winding_detail).
                 Graphics::MeshHelper::OptimizeForCache(mesh);
+                // One vertex buffer and one index buffer for the whole mesh, with each part
+                // naming its own slice: XNA merges a mesh's batches rather than giving each one a
+                // pair of buffers of its own, and a part carries the `vertexOffset` and
+                // `startIndex` that say where its slice begins. Measured on a mesh with two
+                // materials, whose single index buffer is [0,1,2,0,1,2] and whose second part is
+                // at vertexOffset 3 / startIndex 3 -- the indices stay batch-relative, which is
+                // what the vertex offset is for (tests/reference/xna40/differential,
+                // model/x_two_textures; plans/plan_xnapipeline_parity.md XNAPP-266).
+                //
+                // Batches are merged only while their declarations agree. Two batches of one mesh
+                // normally share a channel layout, and what XNA does when they do not has not been
+                // measured -- so a differing batch starts a new buffer rather than being forced
+                // into one whose stride is not its own.
+                std::shared_ptr<VertexBufferContent> vertexBuffer;
+                std::shared_ptr<Graphics::IndexCollection> indexBuffer;
+                std::vector<std::shared_ptr<ModelMeshPartContent>> pending;
                 for (const std::shared_ptr<Graphics::GeometryContent>& geometry : batches)
                 {
+                    const std::shared_ptr<VertexBufferContent> batchBuffer =
+                        geometry->getVerticesProperty().CreateVertexBuffer();
+                    const auto stride = [](const std::shared_ptr<VertexBufferContent>& buffer)
+                    {
+                        const std::shared_ptr<VertexDeclarationContent>& declaration =
+                            buffer->getVertexDeclarationProperty();
+                        return declaration == nullptr
+                                   ? SharpRuntime::intcs{0}
+                                   : declaration->getVertexStrideProperty().value_or(0);
+                    };
+                    const bool mergeable =
+                        vertexBuffer != nullptr && stride(vertexBuffer) == stride(batchBuffer) &&
+                        stride(batchBuffer) > 0 &&
+                        SameDeclaration(*vertexBuffer->getVertexDeclarationProperty(),
+                                        *batchBuffer->getVertexDeclarationProperty());
+                    if (!mergeable)
+                    {
+                        vertexBuffer = batchBuffer;
+                        indexBuffer = std::make_shared<Graphics::IndexCollection>();
+                    }
+                    const SharpRuntime::intcs vertexOffset =
+                        mergeable ? static_cast<SharpRuntime::intcs>(
+                                        vertexBuffer->getVertexDataProperty().size() /
+                                        static_cast<std::size_t>(stride(vertexBuffer)))
+                                  : 0;
+                    if (mergeable)
+                    {
+                        const std::vector<SharpRuntime::bytecs>& data =
+                            batchBuffer->getVertexDataProperty();
+                        std::vector<SharpRuntime::bytecs>& target = vertexBuffer->getVertexDataProperty();
+                        target.insert(target.end(), data.begin(), data.end());
+                    }
+                    const SharpRuntime::intcs startIndex = indexBuffer->getCountProperty();
                     const auto& indices = static_cast<const System::Collections::ObjectModel::Collection<
                         SharpRuntime::intcs>&>(geometry->getIndicesProperty());
-                    auto indexBuffer = std::make_shared<Graphics::IndexCollection>();
                     for (SharpRuntime::intcs i = 0; i < indices.getCountProperty(); ++i)
                     {
                         indexBuffer->Add(indices[i]);
                     }
                     auto part = std::make_shared<ModelMeshPartContent>(
-                        geometry->getVerticesProperty().CreateVertexBuffer(), indexBuffer, 0,
-                        geometry->getVerticesProperty().getVertexCountProperty(), 0,
-                        indexBuffer->getCountProperty() / 3);
+                        vertexBuffer, indexBuffer, vertexOffset,
+                        geometry->getVerticesProperty().getVertexCountProperty(), startIndex,
+                        indices.getCountProperty() / 3);
                     part->setMaterialProperty(geometry->getMaterialProperty());
+                    pending.push_back(part);
+                }
+                for (const std::shared_ptr<ModelMeshPartContent>& part : pending)
+                {
                     parts.push_back(part);
                 }
                 meshes.push_back(std::make_shared<ModelMeshContent>(mesh->getNameProperty(), mesh, bone,
