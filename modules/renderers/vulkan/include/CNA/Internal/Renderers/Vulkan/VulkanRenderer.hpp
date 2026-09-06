@@ -1497,6 +1497,20 @@ namespace CNA::Internal::Renderers::Vulkan
             int surfaceFormat) const override;
 
         /**
+         * @brief Whether a `Color`-shaped `GetData`/`SetData` is meaningful for a format.
+         *
+         * plan_vulkan.md VULKAN-174. `Unsupported` for the two signed-normalized byte formats,
+         * which the framework's own width rule would otherwise admit: `NormalizedByte4` is four
+         * bytes wide but those bytes are SIGNED and sample to `[-1, 1]`, so a `Color` transfer
+         * would read the wrong values while looking well-formed. `Defer` for everything else.
+         *
+         * @param surfaceFormat The `SurfaceFormat` ordinal.
+         * @return This renderer's verdict.
+         */
+        [[nodiscard]] CNA::Internal::Renderers::RendererFormatVerdict ClassifyColorTransferFormatEXT(
+            int surfaceFormat) const override;
+
+        /**
          * @brief CNAEXT. XNA's Direct3D 9 pixel-centre correction, as a clip-space translation.
          *
          * plan_vulkan.md VULKAN-097. XNA 4.0 addresses pixel CENTRES with integer coordinates;

@@ -2198,6 +2198,18 @@ namespace CNA::Internal::Renderers::Vulkan
             case SurfaceFormat::Bgra5551:
                 out = { VK_FORMAT_A1R5G5B5_UNORM_PACK16, 2 };
                 return true;
+            // plan_vulkan.md VULKAN-174. The two signed-normalized byte formats, XNA's bump-map
+            // pair. Both are core Vulkan 1.0 and their component order is the plain one -- X in R,
+            // Y in G, and for the four-channel form Z in B and W in A -- so unlike the packed 16-bit
+            // pair there is no bit-field reasoning to get wrong. What IS different from every other
+            // entry in this table is the RANGE: a SNORM texel samples to [-1, 1], not [0, 1], which
+            // is why ClassifyColorTransferFormatEXT refuses a Color-shaped transfer for them below.
+            case SurfaceFormat::NormalizedByte2:
+                out = { VK_FORMAT_R8G8_SNORM, 2 };
+                return true;
+            case SurfaceFormat::NormalizedByte4:
+                out = { VK_FORMAT_R8G8B8A8_SNORM, 4 };
+                return true;
             // Bgra4444 is deliberately NOT here: its Vulkan spelling
             // (VK_FORMAT_A4R4G4B4_UNORM_PACK16) arrived with VK_EXT_4444_formats and is core only
             // in 1.3, while this renderer asks for 1.1. Claiming a format from a version the
@@ -2236,6 +2248,23 @@ namespace CNA::Internal::Renderers::Vulkan
         return (props.optimalTilingFeatures & required) == required
             ? RendererFormatVerdict::Supported
             : RendererFormatVerdict::Unsupported;
+    }
+
+    RendererFormatVerdict VulkanRenderer::ClassifyColorTransferFormatEXT(int surfaceFormat) const
+    {
+        // plan_vulkan.md VULKAN-174, and the same answer EasyGL gives for the same reason. The
+        // framework's rule is "any format whose texel is a multiple of four bytes", which
+        // NormalizedByte4 satisfies -- it is four bytes wide. But its four bytes are SIGNED and
+        // sample to [-1, 1], so a `Color`-shaped GetData/SetData over them would read or write the
+        // wrong values while looking perfectly well-formed. Refuse the transfer rather than let the
+        // width decide. NormalizedByte2 is named alongside it because the pair stands or falls
+        // together; the framework rule already excludes it on width, and saying so explicitly costs
+        // nothing and stops a later widening of that rule from quietly admitting it.
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat);
+        if (format == SurfaceFormat::NormalizedByte2 || format == SurfaceFormat::NormalizedByte4)
+            return RendererFormatVerdict::Unsupported;
+        return RendererFormatVerdict::Defer;
     }
 
     bool VulkanRenderer::SupportsRenderTargetSurfaceFormatEXT(int surfaceFormatOrdinal) const

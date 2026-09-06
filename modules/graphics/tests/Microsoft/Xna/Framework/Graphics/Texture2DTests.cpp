@@ -406,7 +406,11 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
     // them through one branch -- NormalizedByte2 as RG8_SNORM beside NormalizedByte4's
     // RGBA8_SNORM. Both need the ES 3 class of context that has SNORM at all, so this list
     // is deliberately the same one NormalizedByte4Throws uses.
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2))
+    // plan_vulkan.md VULKAN-174: and on Vulkan, as VK_FORMAT_R8G8_SNORM -- core 1.0, plain
+    // component order. Verified by a real sampled draw including a NEGATIVE texel
+    // (Vulkan_NormalizedByteFormat), which is the only thing that distinguishes SNORM storage from
+    // UNORM storage of the same bytes.
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Vulkan))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte2));
     }
@@ -418,7 +422,8 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
 
 TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
 {
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2))
+    // plan_vulkan.md VULKAN-174: and on Vulkan, as VK_FORMAT_R8G8B8A8_SNORM.
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Vulkan))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte4));
     }
@@ -670,6 +675,11 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         const bool igl = CNA_RENDERER_IS(Igl);
         const bool easyGlSignedNormalized =
             CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2);
+        // plan_vulkan.md VULKAN-174: CNA's Vulkan renderer stores both, as VK_FORMAT_R8G8_SNORM and
+        // VK_FORMAT_R8G8B8A8_SNORM. Kept as its own flag rather than folded into the EasyGL one
+        // above for the reason vulkanPacked16 is separate: these two renderers promote different
+        // sets, and one merged predicate would stop this sweep saying which.
+        const bool vulkanSignedNormalized = CNA_RENDERER_IS(Vulkan);
         // REMED-GFX-244: the packed 16-bit formats Reach permits, promoted on the same ES 3
         // generation the signed-normalized pair needs and verified by a real sampled draw
         // (EasyGL_Packed16Format) rather than by a readback, which this renderer serves from a CPU
@@ -696,6 +706,8 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
                                    || format == SurfaceFormat::Bgra4444))
             || (vulkanPacked16 && (format == SurfaceFormat::Bgr565
                                    || format == SurfaceFormat::Bgra5551))
+            || (vulkanSignedNormalized && (format == SurfaceFormat::NormalizedByte2
+                                           || format == SurfaceFormat::NormalizedByte4))
             // REMED-GFX-244: block-compressed content is accepted on every EasyGL profile, since
             // the decode fallback needs no extension -- unlike the packed formats one line up,
             // whose sized storage is ES 3.

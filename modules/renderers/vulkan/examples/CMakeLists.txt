@@ -2048,6 +2048,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_Swapchain_Sync COMMAND cna_test_vulkan_swapchain_sync
             TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-174: the two signed-normalized byte formats, sampled in a real
+        # draw -- including a NEGATIVE texel, which is what distinguishes SNORM storage from UNORM
+        # storage of the same bytes -- plus the Color-shaped-transfer refusal the four-byte-wide
+        # NormalizedByte4 would otherwise pass on width alone.
+        cna_vulkan_test(cna_test_vulkan_snorm_format vulkan_snorm_format_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_NormalizedByteFormat
+            COMMAND cna_test_vulkan_snorm_format
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-173: the packed 16-bit formats, SAMPLED in a real draw rather than
         # merely constructed -- VULKAN-170 measured that a construct-and-read test cannot tell a
         # stored format from a claimed one, because Texture2D::GetData is served from the shared
