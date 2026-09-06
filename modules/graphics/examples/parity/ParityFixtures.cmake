@@ -87,6 +87,9 @@ set(CNA_PARITY_FIXTURES
     sampler_max_mip_level
     # WEBGPU-205: SamplerState.MipMapLevelOfDetailBias shifts which mip level a sample comes from.
     sampler_lod_bias
+    # WEBGPU-193: the corpus milestone's one missing entry -- an instanced draw whose instances
+    # disagree about which of them is being placed and which shaded.
+    instanced_draw
 )
 
 # Builds and registers every fixture for one renderer.

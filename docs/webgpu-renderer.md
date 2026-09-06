@@ -999,6 +999,36 @@ edges). All three are the same cause — the pixel-centre convention `WEBGPU-187
 fixture's assertions are internal A/B claims that hold on both renderers.
 
 
+## The EasyGL↔WebGPU parity corpus and its per-fixture verdicts (`WEBGPU-193`, 2026-09-06)
+
+`scripts/run-parity-corpus.sh` runs every fixture in `CNA_PARITY_FIXTURES` under both renderers and
+checks each against a **frame policy written down in the script itself**, so a fixture that stops
+being byte-identical fails rather than quietly acquiring a wider tolerance. Three policies exist —
+`strict` (identical at tolerance 2), `allow:N` (at most N pixels may differ, with the measurement and
+the reason), and `internal` (frames are not compared because a cross-renderer comparison is
+inapplicable, with the reason). **A new fixture is `strict` by default**; it joins the exception
+table only with a measurement and a sentence.
+
+Verdicts as of 2026-09-06 — **29 fixtures, every one passing its own assertions under BOTH
+renderers, 23 of them byte-identical**:
+
+| Frame verdict | Fixtures |
+|---|---|
+| identical | `vertex_semantics`, `lit_untextured`, `lit_vertex_color`, `unlit_position_color`, `dual_texture_uv1`, `multi_stream_split`, `render_target_mip`, `hdr_render_target`, `basic_effect_light_terms`, `basic_effect_vertex_color`, `basic_effect_alpha_scale`, `alpha_test_sweep`, `alpha_test_sources`, `dual_texture_terms`, `env_map_terms`, `skinned_terms`, `sprite_state`, `sprite_font`, `blend_states`, `depth_states`, `stencil_states`, `sampler_max_mip_level`, `sampler_lod_bias`, `instanced_draw` |
+| localized difference, measured | `sprite_geometry` 32 px (its one half-pixel-destination cell's top and left coverage edges); `rasterizer_viewport` 276 of 12800 (the triangle hypotenuses, none in the quad cells); `fill_mode_wireframe` 367 of 32768 (the drawn line pixels themselves — GL line rules against a WebGPU line list) |
+| not compared, internal oracle | `compressed_cube` (which cube FACE a reflection lands on is convention-dependent; its oracle is a BC cube against an RGBA8 cube within one renderer); `sampler_filters` (magnification lands a linear gradient half a texel apart; its claims are point-vs-linear A/Bs within one renderer) |
+
+**Every localized difference and both internal oracles have the same single cause**: the XNA
+pixel-centre convention, which `WEBGPU-187` owns and which the two renderers do not yet agree on.
+Nothing in this table is a rendering feature the two renderers disagree about — the differences are
+confined to coverage edges, and each affected fixture's own assertions pass on both.
+
+`env_map_terms` and `skinned_terms` sit in the `identical` row at tolerance 2 while carrying an
+allowance, because their worst channel difference is exactly 2: EasyGL's fragment shader is
+`precision mediump float`, so an interpolated Fresnel gradient and a specular `pow` round one unit
+differently. That is rounding, not divergence.
+
+
 ## Important limitations
 
 The desktop feature set now covers 3D (every stock effect, with FNA fog parity), real instancing,
