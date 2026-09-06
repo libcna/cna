@@ -324,8 +324,15 @@ if(CNA_BUILD_TESTS)
     set(CNA_TEST_GROUP_DEPENDENCY_input cna_input)
     set(CNA_TEST_GROUP_DEPENDENCY_integration CNA)
     # SAMPLE-066: XmlSerializationEXT.hpp opts the math value types into
-    # System::Xml::Serialization, so the group that tests it links that component too.
-    set(CNA_TEST_GROUP_DEPENDENCY_math cna_math SharpRuntime::Xml.Serialization)
+    # System::Xml::Serialization, so the group that tests it links that component too --
+    # everywhere the component exists. plans/plan_dx.md DX-250: on a Windows target it does not
+    # (see cmake/SharpRuntimeConsumption.cmake for the exact upstream reason), so the group falls
+    # back to cna_math alone there rather than naming a target CMake would reject at generate time.
+    if(CNA_SHARP_RUNTIME_HAS_XML_SERIALIZATION)
+        set(CNA_TEST_GROUP_DEPENDENCY_math cna_math SharpRuntime::Xml.Serialization)
+    else()
+        set(CNA_TEST_GROUP_DEPENDENCY_math cna_math)
+    endif()
     set(CNA_TEST_GROUP_DEPENDENCY_media cna_media)
     set(CNA_TEST_GROUP_DEPENDENCY_net CNA_Net)
     set(CNA_TEST_GROUP_DEPENDENCY_platform cna_platform)

@@ -29,12 +29,29 @@ set(CNA_SHARP_RUNTIME_DEFAULT_COMPONENTS
     Globalization
     Storage
     Security.Cryptography
-    # SAMPLE-066: modules/math's XmlSerializationEXT.hpp includes
-    # System/Xml/Serialization/detail/XmlMember.hpp, so the component has to be among the
-    # selected ones for its target to exist at all. Header-only (INTERFACE), so selecting it
-    # costs a consumer nothing until it includes that header.
-    Xml.Serialization
 )
+
+# SAMPLE-066: modules/math's XmlSerializationEXT.hpp includes
+# System/Xml/Serialization/detail/XmlMember.hpp, so the component has to be among the selected
+# ones for its target to exist at all. Header-only (INTERFACE), so selecting it costs a consumer
+# nothing until it includes that header.
+#
+# plans/plan_dx.md DX-250: it cannot be selected on a Windows target. SharpRuntime's
+# Xml.Serialization has a PUBLIC dependency on Xml, which has a PRIVATE dependency on
+# Diagnostics, whose System/Diagnostics/Process.cpp includes <poll.h> unconditionally -- outside
+# its own `#if !defined(_WIN32)` POSIX block. Neither MinGW-w64 nor the MSVC Windows SDK ships
+# that header, so selecting this component makes EVERY Windows build of CNA (the MinGW cross-build
+# this project's D3D11/D3D12 dev loop uses, and .github/workflows/d3d-windows-ci.yml's native-MSVC
+# job) fail to compile a dependency it never asked for. Excluding it here is the honest boundary:
+# the target does not exist on Windows, so the one CNA consumer of it (the math unit-test group,
+# see cmake/UnitTests.cmake) is Windows-excluded too, and nothing silently links a half-built
+# component. Remove this condition once sharp-runtime guards that include.
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    set(CNA_SHARP_RUNTIME_HAS_XML_SERIALIZATION OFF)
+else()
+    set(CNA_SHARP_RUNTIME_HAS_XML_SERIALIZATION ON)
+    list(APPEND CNA_SHARP_RUNTIME_DEFAULT_COMPONENTS Xml.Serialization)
+endif()
 
 function(cna_detect_sharp_runtime_shape)
     if(TARGET SharpRuntime::Core.Base)
