@@ -1139,11 +1139,6 @@ namespace CNA::Internal::Renderers::WebGPU
             // BlendState pointer, live renderer state, texture identity, sprite identity, or target
             // object identity participates in replay or pipeline selection.
             WebGPUSpriteBlendSnapshot blend{};
-            // REMED-GFX-072: true when the Viewport active at enqueue time was a genuine
-            // sub-region of the target, in which case the vertices above are baked VIEWPORT-LOCAL
-            // (normalized by Viewport.Width/Height) instead of target-relative. This is purely the
-            // NDC-baking decision; where the sprite LANDS is driven by the snapshot below.
-            bool viewportCustom = false;
             // REMED-GFX-116: the complete Viewport active at this sprite's own public Draw call,
             // captured unconditionally. GFX-072 captured it only for a genuine sub-region, so a
             // sprite baked target-relative was still replayed under whatever viewport was live at
@@ -1467,6 +1462,19 @@ namespace CNA::Internal::Renderers::WebGPU
         void Present() override;
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
         void GetViewportSize(int& width, int& height) override;
+        /**
+         * @brief `WEBGPU-162`: the PHYSICAL rectangle the default viewport occupies.
+         *
+         * `GetViewportSize()` answers with the LOGICAL size, which is what `GraphicsDevice.Viewport`
+         * reports to a game. This is its physical counterpart -- the rectangle
+         * `GraphicsDevice::UpdateViewportFromWindow()` pushes at the rasterizer. The inherited
+         * default returns `(0, 0, GetViewportSize())`, i.e. the logical size used as if it were
+         * physical pixels, which is correct only for a renderer that has no virtual resolution --
+         * and this one always has one, because `GraphicsDevice::Reset()` sets it to the backbuffer
+         * size on every device creation and the default presentation mode is
+         * `FixedHeightDynamicWidth`.
+         */
+        void GetDefaultViewportRect(int& x, int& y, int& width, int& height) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;

@@ -993,6 +993,21 @@ format, so accepting them would mean a texture reporting one format while the GP
 shared permissive default (`WEBGPU-195`), so it and `PickSampleCount()` are one answer instead of
 two.
 
+**The default viewport is the PRESENTATION rectangle, in device pixels** (`WEBGPU-162`).
+`GraphicsDevice.Viewport` is logical, and `GraphicsDevice::setViewportProperty` maps it into the
+presentation rectangle before it reaches the renderer, so the renderer seam is physical. That mapping
+was inert here until this row, because the inherited `GetDefaultViewportRect()` returned the logical
+size and made it the identity -- which is why a letterboxed or resized window drew the game into a
+corner while `Clear` covered the whole surface. The override now mirrors EasyGL's algorithm exactly.
+
+Two consequences a reader of the sprite path needs. A sprite is baked VIEWPORT-LOCAL, and the units
+are logical when the viewport is the presentation rectangle and physical when it is not -- because
+where the rasterizer viewport already applies the presentation scale, baking against the physical
+width applies it twice. And the distinction cannot be replaced by inverting the mapping to recover a
+single logical extent, tempting as that is: a viewport can be stale relative to the surface it is
+inverted against. Measured -- on the first frame of a 37x23 backbuffer the device viewport is already
+37x23 while the surface is still 800x480, and the inverse yields an extent of 1.8x1.1.
+
 **A device loss recovers differently in a browser than natively, and the difference is in the
 specification** (`WEBGPU-196`). Natively, `DebugRestoreContext()` requests a second device from the
 adapter it already holds -- `WEBGPU-180` measured that this works on wgpu-native v29. In a browser it

@@ -31,7 +31,16 @@
 
 #include "CNA/RendererTestGate.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
+#include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
 
 namespace
 {
@@ -45,19 +54,22 @@ namespace
     /// can differ from the whole drawable at all. A renderer with no scaling has nothing to centre,
     /// and asserting a centred rectangle there would be asserting someone else's contract.
     ///
-    /// WEBGPU IS DELIBERATELY ABSENT, and the reason is measured rather than assumed.
-    /// plans/plan_webgpu.md `WEBGPU-162` added the override and had to withdraw it: WebGPU's own
-    /// sprite and 3D paths treat `GraphicsDevice.Viewport` as a LOGICAL rectangle and project into
-    /// it directly, so returning the physical one here moves every draw. Traced on an 800x480
-    /// drawable with a 96x72 virtual resolution under `FixedHeightDynamicWidth`: the logical size is
-    /// 120x72 and the physical rectangle 800x480, and a sprite the caller placed at logical (24,15)
-    /// landed at physical (160,100) -- outside the region the test read, so
-    /// `WebGPU_SpriteBatch_CustomViewport` and `WebGPU_BackbufferFirstRead` both saw an empty frame.
-    /// The row is re-opened with that finding; adding WebGPU back here is part of closing it, not a
-    /// separate step.
+    /// WEBGPU WAS DELIBERATELY ABSENT UNTIL 2026-09-06, and the history is worth keeping because it
+    /// says what the fix had to contain. `plans/plan_webgpu.md` `WEBGPU-162` first added the override
+    /// alone and withdrew it: with only the physical rectangle returned here, WebGPU's sprite path
+    /// still classified the default viewport as a caller-supplied SUB-viewport, because its test was
+    /// "does the viewport differ from the target EXTENT" rather than "from the presentation
+    /// RECTANGLE". Under `FixedHeightDynamicWidth` on an 800x480 drawable with a 96x72 virtual
+    /// resolution the logical size is 120x72, so that test said "custom", every sprite was baked
+    /// viewport-local, and a sprite the caller placed at logical (24,15) landed somewhere the test
+    /// did not read.
+    ///
+    /// The row closed by changing BOTH: the override, and the discriminator it depends on. WebGPU is
+    /// in the set now and passes the same 5/5 the other renderers do.
     [[nodiscard]] bool HasVirtualResolution()
     {
-        return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, OpenGL2, SdlGpu);
+        return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, OpenGL2, SdlGpu,
+                               WebGPU);
     }
 
     [[nodiscard]] std::string RendererName()
@@ -309,4 +321,135 @@ TEST(PresentationRectangleTest, LogicalSizeAndPhysicalRectangleAreNotTheSameAnsw
 
     renderer.SetPresentationMode(static_cast<int>(CnaPresentationMode::NativeBackBuffer));
     renderer.SetVirtualResolution(physical.width, physical.height);
+}
+
+// ---------------------------------------------------------------------------
+// The second half of WEBGPU-162, and the half no existing test covered.
+//
+// Returning the physical rectangle from GetDefaultViewportRect() is not sufficient on its own: a
+// renderer that bakes sprite geometry against GraphicsDevice.Viewport also has to know that this
+// rectangle is its DEFAULT viewport and not a caller-supplied sub-viewport. XNA/FNA make SpriteBatch
+// coordinates viewport-local only for a sub-Viewport the game set (CreateOrthographicOffCenter over
+// Viewport.Width/Height); the presentation rectangle is not that. A renderer testing "does the
+// viewport differ from the target EXTENT" answers yes for a letterboxed backbuffer, whose default
+// viewport is a centred sub-rectangle by construction -- and then reads a sprite's logical
+// coordinates as viewport PIXELS, putting a full-screen sprite in a corner of the letterbox.
+//
+// So: a sprite covering the whole logical area must FILL the letterbox rectangle, and the bars must
+// stay clear. The bar check is what makes this more than "something rendered": a renderer that
+// ignored the presentation rectangle entirely and drew over the whole drawable would pass the first
+// assertion and fail the second.
+// ---------------------------------------------------------------------------
+TEST(PresentationRectangleTest, ALetterboxedDefaultViewportIsNotACustomSubViewport)
+{
+    if (!HasVirtualResolution())
+        GTEST_SKIP() << RendererName() << " implements no virtual resolution";
+    using Microsoft::Xna::Framework::Color;
+    using Microsoft::Xna::Framework::Rectangle;
+    using Microsoft::Xna::Framework::Graphics::BlendState;
+    using Microsoft::Xna::Framework::Graphics::SamplerState;
+    using Microsoft::Xna::Framework::Graphics::SpriteBatch;
+    using Microsoft::Xna::Framework::Graphics::SpriteSortMode;
+    using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+    using Microsoft::Xna::Framework::Graphics::Texture2D;
+
+    GraphicsDevice device;
+    IGraphicsRenderer& renderer = device.GetRenderer();
+
+    // Measure the drawable first, exactly as the tests above do, so the expectation cannot disagree
+    // with the window this test actually got.
+    renderer.SetPresentationMode(static_cast<int>(CnaPresentationMode::NativeBackBuffer));
+    const Rect physical = DefaultViewportRect(renderer);
+    ASSERT_GT(physical.width, 8);
+    ASSERT_GT(physical.height, 8);
+
+    // A virtual resolution whose aspect differs from the drawable's, so Letterbox produces REAL
+    // bars. A square one does that for any non-square window, and the shorter physical axis decides
+    // the scale.
+    const int virtualSize = std::max(8, std::min(physical.width, physical.height) / 2);
+    renderer.SetPresentationMode(static_cast<int>(CnaPresentationMode::Letterbox));
+    renderer.SetVirtualResolution(virtualSize, virtualSize);
+
+    const Rect box = DefaultViewportRect(renderer);
+    std::cout << "[WEBGPU-162] " << RendererName() << " drawable=" << physical.Describe()
+              << " virtual=" << virtualSize << 'x' << virtualSize
+              << " letterbox=" << box.Describe() << std::endl;
+    if (box.width >= physical.width && box.height >= physical.height)
+        GTEST_SKIP() << RendererName() << " produced no letterbox bars for this window, so there is "
+                                          "nothing here to distinguish";
+
+    // What GraphicsDevice::UpdateViewportFromWindow() would push: the default viewport IS the
+    // presentation rectangle. Set explicitly because the device's own mode/virtual-resolution
+    // setters are private -- this is the state under test either way, and stating it directly also
+    // says plainly what the test is about.
+    // In LOGICAL units, which is what the public Viewport is -- GraphicsDevice maps it into the
+    // presentation rectangle on the way to the renderer. Passing the physical rectangle here would
+    // map it a second time, which is a mistake worth naming: it is exactly what this test caught
+    // the first time it was written.
+    device.setViewportProperty(
+        Microsoft::Xna::Framework::Graphics::Viewport(0, 0, virtualSize, virtualSize));
+
+    const Color clear(9, 13, 17, 255);
+    const Color ink(230, 70, 40, 255);
+    device.Clear(clear);
+    Texture2D texture(device, 1, 1, false, SurfaceFormat::Color);
+    const Color white(255, 255, 255, 255);
+    texture.SetData(&white, 1);
+    {
+        const SamplerState sampler = SamplerState::PointClamp;
+        SpriteBatch batch(device);
+        batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &sampler, nullptr, nullptr);
+        batch.Draw(texture, Rectangle(0, 0, virtualSize, virtualSize), ink);
+        batch.End();
+    }
+
+    const auto read = [&device](int x, int y) {
+        const Rectangle region(x, y, 1, 1);
+        Color pixel(0, 0, 0, 0);
+        device.GetBackBufferData(&region, &pixel, 0, 1);
+        return pixel;
+    };
+    // Where the sprite ACTUALLY landed, so a failure names the transform that was applied instead
+    // of only saying the expected pixel was empty. Scanned coarsely across the whole drawable.
+    {
+        int minX = physical.width, minY = physical.height, maxX = -1, maxY = -1;
+        const int stepX = std::max(1, physical.width / 64);
+        const int stepY = std::max(1, physical.height / 64);
+        for (int y = 0; y < physical.height; y += stepY)
+            for (int x = 0; x < physical.width; x += stepX)
+            {
+                const Color p = read(x, y);
+                if (std::abs(int(p.getRProperty()) - int(clear.getRProperty())) <= 6 &&
+                    std::abs(int(p.getGProperty()) - int(clear.getGProperty())) <= 6 &&
+                    std::abs(int(p.getBProperty()) - int(clear.getBProperty())) <= 6)
+                    continue;
+                minX = std::min(minX, x); minY = std::min(minY, y);
+                maxX = std::max(maxX, x); maxY = std::max(maxY, y);
+            }
+        std::cout << "[WEBGPU-162] " << RendererName() << " sprite bounding box = "
+                  << (maxX < 0 ? std::string("EMPTY")
+                               : '(' + std::to_string(minX) + ',' + std::to_string(minY) + ")-(" +
+                                 std::to_string(maxX) + ',' + std::to_string(maxY) + ')')
+                  << "  expected to fill " << box.Describe() << std::endl;
+    }
+
+    const Color centre = read(box.x + box.width / 2, box.y + box.height / 2);
+    EXPECT_NEAR(centre.getRProperty(), ink.getRProperty(), 12)
+        << RendererName() << " did not fill the letterbox rectangle with a sprite covering the whole "
+        << "logical area -- read (" << int(centre.getRProperty()) << ','
+        << int(centre.getGProperty()) << ',' << int(centre.getBProperty())
+        << ") at the centre of " << box.Describe()
+        << ". A default viewport treated as a custom sub-viewport puts it in a corner instead.";
+
+    // The bar, on whichever axis has one.
+    const bool barsAreVertical = box.x > 2;
+    const int barX = barsAreVertical ? box.x / 2 : physical.width / 2;
+    const int barY = barsAreVertical ? physical.height / 2 : box.y / 2;
+    if (barsAreVertical ? (box.x > 2) : (box.y > 2))
+    {
+        const Color bar = read(barX, barY);
+        EXPECT_NEAR(bar.getRProperty(), clear.getRProperty(), 12)
+            << RendererName() << " drew outside the letterbox rectangle -- the bar at (" << barX
+            << ',' << barY << ") is not the clear colour";
+    }
 }
