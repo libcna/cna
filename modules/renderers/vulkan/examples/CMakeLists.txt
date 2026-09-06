@@ -222,6 +222,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 119: ShaderEffect with SPIR-V — SpriteBatch tint via custom push constants
+        # plan_vulkan.md VULKAN-253: a custom effect samples a texture it was explicitly bound,
+        # through descriptor set 1 -- the sprite's own stays at set 0.
+        cna_vulkan_test(cna_test_vulkan_effect_bound_texture
+                        vulkan_effect_bound_texture_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_ShaderEffect_BoundTexture
+            COMMAND cna_test_vulkan_effect_bound_texture
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         cna_vulkan_test(cna_test_vulkan_shader_effect
                         vulkan_shader_effect_test.cpp)
         cna_register_renderer_test(NAME Vulkan_ShaderEffect_SpirV COMMAND cna_test_vulkan_shader_effect

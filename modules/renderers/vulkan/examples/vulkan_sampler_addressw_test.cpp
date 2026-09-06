@@ -234,15 +234,21 @@ protected:
                   "C VULKAN-163: binding a Texture3D to a ShaderEffect is refused BY NAME, not "
                   "accepted and discarded", vol);
 
-            // The same missing override covered all three overloads, so all three are asserted --
-            // finding the 2D and cube holes was the point of looking, and a test that only covered
-            // the one the row named would leave the other two to be rediscovered.
+            // plan_vulkan.md VULKAN-253 changed this half deliberately, and the leg changes with
+            // it rather than being deleted. The same missing override once covered all three
+            // overloads, and finding the 2D and cube holes was the point of looking; the 2D one is
+            // now IMPLEMENTED -- a bound Texture2D reaches the shader through descriptor set 1,
+            // which `Vulkan_ShaderEffect_BoundTexture` proves by pixel. So a Texture2D must now be
+            // ACCEPTED, and asserting the old refusal would have failed the feature this project
+            // just added. What still has to hold is the pair: the volume refused by name, the flat
+            // texture taken.
             Texture2D flat(dev, 1, 1);
             const Color one = kLeft;
             flat.SetData(&one, 1);
             const std::string tex2d = refusal([&] { effect.SetTexture(0, flat); });
-            check(tex2d.find("cannot be given a Texture2D") != std::string::npos,
-                  "C and so is a Texture2D -- the same `{}` default, silently discarded until now",
+            check(tex2d == "accepted and ignored",
+                  "C and a Texture2D is now ACCEPTED (VULKAN-253), while the volume above is still "
+                  "refused -- the two overloads have different answers and both are checked",
                   tex2d);
         }
 

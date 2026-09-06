@@ -1455,6 +1455,10 @@ namespace CNA::Internal::Renderers::Vulkan
                 snapshot->hasCustomEffect = true;
                 snapshot->customPipeline  = preparedCustomPipeline;
                 snapshot->customLayout    = customEffectRenderer_->GetPipelineLayout();
+                // VULKAN-253: built here, at End(), for the same reason the push constants are
+                // copied here -- this is the last moment the effect is guaranteed alive and its
+                // bindings are guaranteed to be the ones this batch was drawn with.
+                snapshot->customBoundSet  = customEffectRenderer_->GetOrCreateBoundTextureSetEXT();
                 std::memcpy(snapshot->customPushConst, customEffectRenderer_->GetPushConst(),
                             sizeof(snapshot->customPushConst));
             }
@@ -4484,6 +4488,19 @@ namespace CNA::Internal::Renderers::Vulkan
         if (pipelineLayout_ != VK_NULL_HANDLE) { r.pipelineLayouts.push_back(pipelineLayout_); pipelineLayout_ = VK_NULL_HANDLE; }
         if (fragModule_     != VK_NULL_HANDLE) { r.shaderModules.push_back(fragModule_);      fragModule_     = VK_NULL_HANDLE; }
         if (vertModule_     != VK_NULL_HANDLE) { r.shaderModules.push_back(vertModule_);      vertModule_     = VK_NULL_HANDLE; }
+        // VULKAN-253: the set-1 descriptor set is retired the same way, for the same reason -- a
+        // batch snapshot may still name it. The layout it was allocated against outlives the set,
+        // so it is destroyed only after the retirement queue that frees the set has been handed
+        // over; retiring the set first and destroying the layout here is safe because freeing a
+        // set does not dereference its layout.
+        if (boundSet_ != VK_NULL_HANDLE && boundSetPool_ != VK_NULL_HANDLE) {
+            r.poolDescriptorSets.emplace_back(boundSetPool_, boundSet_);
+            boundSet_ = VK_NULL_HANDLE; boundSetPool_ = VK_NULL_HANDLE;
+        }
+        if (boundLayout_ != VK_NULL_HANDLE) {
+            r.descriptorSetLayouts.push_back(boundLayout_);
+            boundLayout_ = VK_NULL_HANDLE;
+        }
         owner_->RetireResources(std::move(r));
         if (owner_->activeCustomEffect_ == this) owner_->activeCustomEffect_ = nullptr;
     }
@@ -4521,10 +4538,20 @@ namespace CNA::Internal::Renderers::Vulkan
         pcRange.offset = 0;
         pcRange.size   = 128;
 
+        // plan_vulkan.md VULKAN-253: TWO sets, always. Set 0 is the SpriteBatch texture this
+        // renderer has always supplied; set 1 holds whatever `BindTexture` bound. It is declared
+        // unconditionally, even for a shader that never reads it, because the pipeline layout is
+        // built here -- at CompileProgram time -- and a game may bind its textures afterwards. A
+        // layout that grew a set later would invalidate every pipeline already made from it.
+        //
+        // Declaring a set a shader does not use costs nothing at draw time: an unbound set is only
+        // an error if something reads it.
+        EnsureBoundTextureLayoutEXT();
+        const VkDescriptorSetLayout setLayouts[] = { owner_->descriptorSetLayout_, boundLayout_ };
         VkPipelineLayoutCreateInfo pli{};
         pli.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pli.setLayoutCount         = 1;
-        pli.pSetLayouts            = &owner_->descriptorSetLayout_;
+        pli.setLayoutCount         = 2;
+        pli.pSetLayouts            = setLayouts;
         pli.pushConstantRangeCount = 1;
         pli.pPushConstantRanges    = &pcRange;
         if (vkCreatePipelineLayout(owner_->device_, &pli, nullptr, &pipelineLayout_) != VK_SUCCESS) {
@@ -4623,9 +4650,105 @@ namespace CNA::Internal::Renderers::Vulkan
     }
 
     void VulkanEffectRenderer::BindTexture(int unit,
-                                           CNA::Internal::Renderers::ITextureRenderer*)
+                                           CNA::Internal::Renderers::ITextureRenderer* texture)
     {
-        RefuseEffectTextureBindEXT("Texture2D", unit);
+        // plan_vulkan.md VULKAN-253. See the header for why the bound textures live in set 1 and
+        // the SpriteBatch's own stays in set 0.
+        if (unit < 0 || unit >= kMaxEffectBoundTextures)
+            throw System::NotSupportedException(
+                "The Vulkan renderer accepts sampler units 0.." +
+                std::to_string(kMaxEffectBoundTextures - 1) +
+                " for a ShaderEffect; unit " + std::to_string(unit) +
+                " was asked for. Refused rather than binding it somewhere else.");
+        boundTextures_[static_cast<std::size_t>(unit)] = texture;
+        boundSetDirty_ = true;
+    }
+
+    void VulkanEffectRenderer::EnsureBoundTextureLayoutEXT()
+    {
+        if (boundLayout_ != VK_NULL_HANDLE || !owner_ || owner_->device_ == VK_NULL_HANDLE) return;
+        std::array<VkDescriptorSetLayoutBinding, kMaxEffectBoundTextures> lb{};
+        for (int i = 0; i < kMaxEffectBoundTextures; ++i) {
+            lb[static_cast<std::size_t>(i)].binding         = static_cast<uint32_t>(i);
+            lb[static_cast<std::size_t>(i)].descriptorType  =
+                VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            lb[static_cast<std::size_t>(i)].descriptorCount = 1;
+            lb[static_cast<std::size_t>(i)].stageFlags      = VK_SHADER_STAGE_FRAGMENT_BIT;
+        }
+        VkDescriptorSetLayoutCreateInfo lci{};
+        lci.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        lci.bindingCount = kMaxEffectBoundTextures;
+        lci.pBindings    = lb.data();
+        if (vkCreateDescriptorSetLayout(owner_->device_, &lci, nullptr, &boundLayout_) != VK_SUCCESS)
+            throw std::runtime_error(
+                "The Vulkan renderer: could not create the ShaderEffect bound-texture descriptor "
+                "set layout. Refused rather than dropping the binding.");
+    }
+
+    VkDescriptorSet VulkanEffectRenderer::GetOrCreateBoundTextureSetEXT()
+    {
+        if (!owner_ || owner_->device_ == VK_NULL_HANDLE) return VK_NULL_HANDLE;
+        // The set is built even when the game bound NOTHING, and that is deliberate. A shader is
+        // free to declare `set = 1` and never have a texture bound to it; the pipeline then
+        // statically uses set 1, and a draw with no set bound there is invalid -- measured, while
+        // mutation-testing this row: `vkCmdDrawIndexed(): The VkPipeline ... statically uses
+        // descriptor set 1, but all sets 0 to 1 [were not bound]`, followed by a segfault. Making
+        // the set unconditional costs one descriptor set per effect and removes the whole class.
+        if (!boundSetDirty_ && boundSet_ != VK_NULL_HANDLE) return boundSet_;
+
+        EnsureBoundTextureLayoutEXT();
+
+        // VULKAN-181's growing allocator, so a game with many effects does not hit a fixed bound.
+        const VkDescriptorPoolSize sizes[] = {
+            { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+              static_cast<uint32_t>(VulkanRenderer::kEffectPoolMaxSets * kMaxEffectBoundTextures) },
+        };
+        VkDescriptorSet set = VK_NULL_HANDLE;
+        VkDescriptorPool pool = VK_NULL_HANDLE;
+        owner_->AllocateFromGrowingPoolEXT(owner_->descriptorPool_, boundLayout_, sizes, 1u,
+                                           VulkanRenderer::kEffectPoolMaxSets, set, pool);
+        if (set == VK_NULL_HANDLE)
+            throw std::runtime_error(
+                "The Vulkan renderer: no descriptor set available for a ShaderEffect's bound "
+                "textures. Refused rather than binding a null descriptor set.");
+
+        // Every binding is written, including the ones nothing was bound to: a set must be fully
+        // written before it is bound, and the renderer's own white 1x1 is the honest filler --
+        // a shader that samples a unit the game never bound gets white, not undefined memory.
+        // The filler has to EXIST before it can be written. It is created lazily, and nothing on
+        // this path had ever needed it -- measured: without this the layer reported three
+        // `pImageInfo[0].imageView is VK_NULL_HANDLE` writes per set, one per unbound unit.
+        owner_->EnsureDefaultWhiteTexture();
+        std::array<VkDescriptorImageInfo, kMaxEffectBoundTextures> infos{};
+        std::array<VkWriteDescriptorSet, kMaxEffectBoundTextures>  writes{};
+        for (int i = 0; i < kMaxEffectBoundTextures; ++i) {
+            auto* tex = boundTextures_[static_cast<std::size_t>(i)];
+            auto* vk  = dynamic_cast<VulkanTextureRenderer*>(tex);
+            const VkImageView view = (vk != nullptr) ? vk->GetVkImageView()
+                                                     : owner_->defaultWhiteView_;
+            infos[static_cast<std::size_t>(i)] = { owner_->defaultSampler_, view,
+                                                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+            auto& w = writes[static_cast<std::size_t>(i)];
+            w.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            w.dstSet          = set;
+            w.dstBinding      = static_cast<uint32_t>(i);
+            w.descriptorCount = 1;
+            w.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            w.pImageInfo      = &infos[static_cast<std::size_t>(i)];
+        }
+        vkUpdateDescriptorSets(owner_->device_, kMaxEffectBoundTextures, writes.data(), 0, nullptr);
+
+        // The previous set is retired rather than freed: a frame already recorded may still name
+        // it. REMED-GFX-076's (pool, set) queue is exactly this case.
+        if (boundSet_ != VK_NULL_HANDLE && boundSetPool_ != VK_NULL_HANDLE) {
+            VulkanRenderer::RetiredResources r;
+            r.poolDescriptorSets.emplace_back(boundSetPool_, boundSet_);
+            owner_->RetireResources(std::move(r));
+        }
+        boundSet_      = set;
+        boundSetPool_  = pool;
+        boundSetDirty_ = false;
+        return boundSet_;
     }
 
     void VulkanEffectRenderer::BindTextureCube(int unit,
@@ -10782,6 +10905,12 @@ namespace CNA::Internal::Renderers::Vulkan
                     }
                 }
 
+                // VULKAN-253: the effect's bound textures are fixed for the whole batch, so set 1
+                // is bound once here rather than per sprite. Set 0 still changes per draw below.
+                if (snapshot->hasCustomEffect && snapshot->customBoundSet != VK_NULL_HANDLE) {
+                    vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        activeLayout, 1, 1, &snapshot->customBoundSet, 0, nullptr);
+                }
                 for (const auto& d : draws) {
                     vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
                         activeLayout, 0, 1, &d.descSet, 0, nullptr);
@@ -12810,6 +12939,9 @@ namespace CNA::Internal::Renderers::Vulkan
             for (VkPipelineLayout pl : r.pipelineLayouts) if (pl != VK_NULL_HANDLE) vkDestroyPipelineLayout(device_, pl, nullptr);
             for (VkShaderModule sm : r.shaderModules) if (sm != VK_NULL_HANDLE) vkDestroyShaderModule(device_, sm, nullptr);
             for (VkQueryPool qp : r.queryPools)      if (qp != VK_NULL_HANDLE) vkDestroyQueryPool(device_, qp, nullptr);
+            // VULKAN-253: after the sets allocated from them have been freed above.
+            for (VkDescriptorSetLayout dl : r.descriptorSetLayouts)
+                if (dl != VK_NULL_HANDLE) vkDestroyDescriptorSetLayout(device_, dl, nullptr);
         };
         // GFX-095 MRT framebuffers borrow their targets' attachment views. Destroy an eligible
         // proxy before the same-generation resource bucket can free those views.

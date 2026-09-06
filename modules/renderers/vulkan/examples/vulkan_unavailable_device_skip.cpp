@@ -50,7 +50,15 @@ bool IsNoUsableDeviceMessage(const std::string& what)
            (what.find("Vulkan") != std::string::npos &&
             what.find("VK_KHR_surface") != std::string::npos) ||
            (what.find("vulkan surface") != std::string::npos &&
-            what.find("unsupported") != std::string::npos);
+            what.find("unsupported") != std::string::npos) ||
+           // plan_vulkan.md VULKAN-013, extended after VULKAN-253's own verification run: an X
+           // display that has gone away produces `AcquireSubsystem(Video) failed: x11 not
+           // available`, and 55 tests aborted with it in one run. That is the same confusion this
+           // file exists to stop -- an environment problem indistinguishable from a regression --
+           // and it is even further from "a device that WAS created" than the cases above, since
+           // no device is ever reached. The match is on the platform's own wording, and the
+           // subsystem-acquire failure cannot be raised by a renderer that got as far as drawing.
+           (what.find("AcquireSubsystem(Video) failed") != std::string::npos);
 }
 
 [[noreturn]] void OnTerminate()
@@ -63,7 +71,7 @@ bool IsNoUsableDeviceMessage(const std::string& what)
         } catch (const std::exception& e) {
             const std::string what = e.what();
             if (IsNoUsableDeviceMessage(what)) {
-                std::printf("[SKIP] no usable Vulkan device in this environment: %s\n",
+                std::printf("[SKIP] no usable Vulkan device or display in this environment: %s\n",
                             what.c_str());
                 std::fflush(stdout);
                 // _Exit rather than exit: static destructors would run against a renderer that

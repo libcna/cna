@@ -490,20 +490,25 @@ namespace CNA::Internal::Renderers::Vulkan
         void SetUniformMat4Array(const char* name, const float* matrices, int count) override;
 
         /**
-         * @brief Refuses a per-unit texture binding, by name.
+         * @brief plan_vulkan.md VULKAN-253: binds a texture this effect's shader can sample.
          *
-         * plans/plan_vulkan.md `VULKAN-163` (finding F-31). `IEffectRenderer`'s three `Bind*`
-         * methods have `{}` bodies, EasyGL overrides all three, and this renderer overrode none --
-         * so `ShaderEffect::SetTexture(unit, ...)` was accepted and silently discarded for 2D,
-         * cube AND volume textures alike, and the shader sampled whatever happened to be bound.
+         * The bound textures live in **descriptor set 1**, not set 0. Set 0 is the `SpriteBatch`
+         * texture the draw itself supplies and changes per sprite; set 1 is fixed for the batch,
+         * so the two have different lifetimes and cannot share a set without rebuilding it per
+         * draw. A shader reaches an explicitly bound texture as
+         * `layout(set = 1, binding = <unit>) uniform sampler2D`, and the sprite's own texture stays
+         * where every existing shader already expects it, at `set = 0, binding = 0`.
          *
-         * This renderer supplies a custom effect's texture from the `SpriteBatch` draw that uses
-         * it; there is no per-unit binding path. Saying so is the difference between a caller
-         * finding out now and finding out from a screenshot.
+         * That numbering differs from EasyGL's, where unit 0 IS the sprite texture. It has to:
+         * `ShaderEffect` takes renderer-specific source by contract (`VULKAN-250`), and a set-0
+         * collision would have meant rebuilding a descriptor set for every sprite in the batch.
          *
-         * @param unit    The sampler unit the caller asked for.
-         * @param texture Ignored; the call never succeeds.
-         * @throws System::NotSupportedException always.
+         * Units the shader does not use still receive a valid descriptor -- the renderer's own
+         * white 1x1 -- because a set must be fully written before it is bound.
+         *
+         * @param unit    Sampler unit, 0 .. kMaxEffectBoundTextures-1.
+         * @param texture The texture, or null to unbind that unit.
+         * @throws System::NotSupportedException if @p unit is outside that range.
          */
         void BindTexture(int unit, CNA::Internal::Renderers::ITextureRenderer* texture) override;
         /** @brief As @ref BindTexture, for a cube map. @throws System::NotSupportedException always. */
@@ -527,11 +532,40 @@ namespace CNA::Internal::Renderers::Vulkan
                                        const DepthStencilKeyParams& dsParams = {},
                                        bool depthTest = false, bool depthWrite = false);
         VkPipelineLayout GetPipelineLayout() const { return pipelineLayout_; }
+        /// VULKAN-253: how many sampler units `BindTexture` accepts, and how many bindings the
+        /// set-1 layout declares. Four, because that is what the stock effects use at most and a
+        /// wider set costs a descriptor per unit per effect for nothing.
+        static constexpr int kMaxEffectBoundTextures = 4;
+        /**
+         * @brief VULKAN-253: the set-1 descriptor set holding this effect's bound textures.
+         *
+         * Built on demand at `SpriteBatch::End()` and captured by value into the batch snapshot,
+         * so a texture unbound or disposed after `End()` cannot change what the recorded frame
+         * samples. VK_NULL_HANDLE when nothing was ever bound, in which case the replay binds
+         * nothing and a shader that reads set 1 gets whatever the pipeline layout's own default
+         * says -- which is why the layout is created with all four bindings written.
+         */
+        VkDescriptorSet GetOrCreateBoundTextureSetEXT();
+        /// VULKAN-253: creates the set-1 layout if it does not exist yet. Called from
+        /// CompileProgram, because the pipeline layout must declare the set before any
+        /// pipeline is made from it, and again from the set builder.
+        void EnsureBoundTextureLayoutEXT();
+        /// VULKAN-253: the set-1 layout, or VK_NULL_HANDLE before the first bind.
+        [[nodiscard]] VkDescriptorSetLayout GetBoundTextureLayoutEXT() const { return boundLayout_; }
         // Returns pointer to 128-byte push-constant staging area (floats 2..31 = user uniforms).
         const float*     GetPushConst()      const { return pushConst_;      }
 
     private:
         VulkanRenderer* owner_;
+        /// VULKAN-253: textures bound through BindTexture, by unit. Non-owning: the shared layer
+        /// keeps a texture alive for as long as it is bound, and the descriptor set built from
+        /// these is captured by value into the batch snapshot before the batch is recorded.
+        std::array<CNA::Internal::Renderers::ITextureRenderer*, kMaxEffectBoundTextures>
+                         boundTextures_{};
+        VkDescriptorSetLayout boundLayout_    = VK_NULL_HANDLE;
+        VkDescriptorSet       boundSet_       = VK_NULL_HANDLE;
+        VkDescriptorPool      boundSetPool_   = VK_NULL_HANDLE;
+        bool                  boundSetDirty_  = false;
         VkShaderModule   vertModule_     = VK_NULL_HANDLE;
         VkShaderModule   fragModule_     = VK_NULL_HANDLE;
         VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
@@ -680,6 +714,11 @@ namespace CNA::Internal::Renderers::Vulkan
             VkPipeline                  customPipeline  = VK_NULL_HANDLE;
             VkPipelineLayout            customLayout    = VK_NULL_HANDLE;
             float                       customPushConst[32] = {};
+            /// plan_vulkan.md VULKAN-253: the custom effect's set-1 descriptor set, captured by
+            /// value like everything else about the effect, so a texture unbound or disposed after
+            /// End() cannot change what the recorded frame samples. VK_NULL_HANDLE when the effect
+            /// bound nothing, in which case the replay binds no second set at all.
+            VkDescriptorSet             customBoundSet  = VK_NULL_HANDLE;
             // REMED-GFX-013: scissor state captured at End() so a SpriteBatch filling a render
             // target is clipped correctly regardless of later frame-global scissor changes (e.g.
             // Task 338's ScissorRectangle reset on RT unbind). enabled==false or a zero-sized rect
@@ -3375,6 +3414,11 @@ namespace CNA::Internal::Renderers::Vulkan
             std::vector<VkPipeline>        pipelines;
             std::vector<VkPipelineLayout>  pipelineLayouts;
             std::vector<VkShaderModule>    shaderModules;
+            /// plan_vulkan.md VULKAN-253: a ShaderEffect's set-1 descriptor set layout. The
+            /// pipeline layouts built from it are themselves retired, and destroying the set
+            /// layout while one of those is still named by a recorded frame is the kind of
+            /// ordering question this queue exists to stop having to reason about.
+            std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
             std::vector<VkQueryPool>       queryPools;
             std::vector<VkDescriptorSet>   descriptorSets; // all allocated from descriptorPool_
             // REMED-GFX-076: effect descriptor sets evicted from the seven per-frame effect caches
