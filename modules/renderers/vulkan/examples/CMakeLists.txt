@@ -2058,6 +2058,16 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_texture3d_partial_box
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-176: six distinct face payloads written and read back, so no face
+        # can alias another. Vulkan proves the mip and partial-rect round-trips already; what this
+        # adds is that the six ARRAY LAYERS are addressed independently -- the same axis VULKAN-406
+        # found undefined for a cube render target.
+        cna_vulkan_test(cna_test_vulkan_texturecube_faces
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_texturecube_faces_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_TextureCube_Faces
+            COMMAND cna_test_vulkan_texturecube_faces
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-172: the three block-compressed formats, uploaded as raw 4x4
         # blocks and sampled in a real draw. Two blocks side by side, so a mis-sized block (8 bytes
         # for DXT1, 16 for the other two) or a mis-walked block stream shows as a wrong half rather
