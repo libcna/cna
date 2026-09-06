@@ -48,6 +48,20 @@ namespace Microsoft::Xna::Framework::Graphics
         vertexStride_ = maxEnd;
     }
 
+    VertexDeclaration::VertexDeclaration(std::vector<VertexElement> elements)
+        : elements_(std::move(elements))
+    {
+        if (elements_.empty())
+            throw System::ArgumentNullException("elements");
+
+        int maxEnd = 0;
+        for (const auto& e : elements_) {
+            int end = e.getOffsetProperty() + GetTypeSize(e.getVertexElementFormatProperty());
+            maxEnd = std::max(maxEnd, end);
+        }
+        vertexStride_ = maxEnd;
+    }
+
     VertexDeclaration::VertexDeclaration(
         int vertexStride,
         std::initializer_list<VertexElement> elements)

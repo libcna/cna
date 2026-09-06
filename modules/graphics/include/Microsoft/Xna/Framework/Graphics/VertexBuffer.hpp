@@ -365,6 +365,28 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 
         /**
+         * @brief Reads back vertices of an application-defined XNA vertex type.
+         *
+         * The mirror of `SetData<T>` above, and the C++ equivalent of XNA's generic
+         * `GetData<T>(T[])`. A game that built its own vertex layout -- ShipGame's collision mesh
+         * reads the 56-byte position/normal/binormal/tangent vertex its own content processor
+         * writes -- has no built-in type to name, and reading the geometry back is how it builds
+         * its collision tree. Built-in XNA vertex types continue to use their dedicated
+         * unpacking overloads.
+         *
+         * @tparam TVertex Application-defined, trivially-copyable vertex type.
+         * @param data  Destination array; at least @p count elements.
+         * @param count Number of vertices to read.
+         */
+        template<typename TVertex>
+        void GetData(TVertex* data, int count)
+        {
+            static_assert(std::is_trivially_copyable_v<TVertex>,
+                          "VertexBuffer::GetData<T> requires a trivially-copyable vertex type");
+            GetDataRawEXT(0, data, count, static_cast<int>(sizeof(TVertex)));
+        }
+
+        /**
          * @brief Uploads raw vertex data with an explicit per-vertex byte stride.
          *
          * Use this overload when uploading GPU-compact vertex layouts that have no

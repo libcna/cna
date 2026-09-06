@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <gtest/gtest.h>
+
+#include <vector>
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
@@ -28,6 +30,31 @@ TEST(VertexDeclarationTest, DefaultElementsEmpty)
 }
 
 // --- Initializer-list constructor ---
+
+// SAMPLE-066: XNA's VertexDeclaration(params VertexElement[]) takes an array variable as readily
+// as an array literal, and a C++ game holding its elements in a vector -- which is what
+// GetVertexElements() hands back -- has no literal to spell. BoxCollider's debug box builds its
+// declaration from exactly that.
+TEST(VertexDeclarationTest, ElementVectorDerivesTheSameStrideAsTheInitializerList)
+{
+    const std::vector<VertexElement> elements{
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        VertexElement(12, VertexElementFormat::Color, VertexElementUsage::Color, 0)};
+
+    VertexDeclaration fromVector(elements);
+    VertexDeclaration fromLiteral{
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        VertexElement(12, VertexElementFormat::Color, VertexElementUsage::Color, 0)};
+
+    EXPECT_EQ(fromVector.getVertexStrideProperty(), 16);
+    EXPECT_EQ(fromVector.getVertexStrideProperty(), fromLiteral.getVertexStrideProperty());
+    EXPECT_EQ(fromVector.GetVertexElements(), fromLiteral.GetVertexElements());
+}
+
+TEST(VertexDeclarationTest, AnEmptyElementVectorThrowsArgumentNullException)
+{
+    EXPECT_THROW(VertexDeclaration(std::vector<VertexElement>{}), System::ArgumentNullException);
+}
 
 TEST(VertexDeclarationTest, EmptyAutoStrideElementsThrowArgumentNullException)
 {
