@@ -2273,6 +2273,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-304: skinned PBR under non-uniform joint scale.
+        cna_vulkan_test(cna_test_vulkan_gltf_skinned_pbr_nonuniform_joint
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_gltf_skinned_pbr_nonuniform_joint_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Gltf_SkinnedPbrNonUniformJoint
+            COMMAND cna_test_vulkan_gltf_skinned_pbr_nonuniform_joint
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-339: the release path that also runs vkDeviceWaitIdle and the
         # retirement lists. HasRenderer() must be false after the first Dispose and no second
         # release may be attempted.
