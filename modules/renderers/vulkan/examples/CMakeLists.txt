@@ -2238,6 +2238,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_effect_current_technique
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-300: basic Model drawing.
+        cna_vulkan_test(cna_test_vulkan_model_draw
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_model_draw_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_ModelDraw_RedQuad
+            COMMAND cna_test_vulkan_model_draw
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-339: the release path that also runs vkDeviceWaitIdle and the
         # retirement lists. HasRenderer() must be false after the first Dispose and no second
         # release may be attempted.
