@@ -18,12 +18,39 @@
 // Each case also checks that the FRAME still contains what it should, so "no errors" cannot be
 // satisfied by dropping the work altogether.
 //
-// Not covered here, and deliberately: the AddressSanitizer half of the row's acceptance. That needs
-// a sanitizer build of this configuration, which is a multi-hundred-megabyte build directory of its
-// own; the recipe is `cmake -S . -B cmake-build-webgpu-asan -DCNA_GRAPHICS_RENDERER=WEBGPU
-// -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS=-fsanitize=address` and then this same binary. The
-// uncaptured-error oracle catches the class of bug ASan would catch here -- a released handle used
-// by a queued command -- because wgpu-native validates the handle before it dereferences anything.
+// THE ADDRESSSANITIZER HALF WAS RUN, 2026-09-06, and it changed what this test claims. Recipe, in
+// the sanctioned reusable `build-asan/` rather than a new per-ticket directory:
+//
+//   cmake -S . -B build-asan -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCNA_GRAPHICS_RENDERER=WEBGPU \
+//     -DCNA_SHARP_RUNTIME_ROOT=<the same checkout the ordinary build uses> \
+//     -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+//     -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer" \
+//     -DCMAKE_C_FLAGS="-fsanitize=address -fno-omit-frame-pointer" \
+//     -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address
+//   cmake --build build-asan -j2 --target cna_test_webgpu_resource_lifetime_stress
+//
+// Result: 10/10, and **no `ERROR: AddressSanitizer` of any kind** -- no use-after-free, no overflow.
+//
+// Two things worth knowing before reading a future ASan run of this binary.
+//
+// (1) `detect_leaks=1` reports 368 bytes in 4 allocations, and none of them are CNA's. Their stacks
+//     run through `wgpu_hal::vulkan::instance::enumerate_adapters` and a driver `pthread_once`, i.e.
+//     one-time adapter enumeration; the only CNA frames present are `RequestAdapterAndDevice()` at
+//     construction. The discriminator is not the stack, though, it is the SCALE: raising the churn
+//     loop below from 32 cycles to 512 -- sixteen times the create/dispose traffic -- leaves the
+//     total at exactly 368 bytes in 4 allocations. A resource-lifetime leak would have scaled.
+//     Run with `ASAN_OPTIONS=detect_leaks=0` to see this test's own output, because LeakSanitizer's
+//     exit path does not flush stdio and the PASS lines are otherwise lost. (`stdbuf` does not help:
+//     it preloads ahead of the ASan runtime and the process refuses to start.)
+//
+// (2) ASan is NOT the instrument that would catch the bug this test defends against, and the
+//     negative control proves it rather than the argument that used to stand here. Clearing
+//     `command.texture.keepAlive` in `QueueSprite` -- removing `REMED-GFX-167` -- does not produce a
+//     heap-use-after-free under ASan. It produces
+//     `TextureView[Id(2,1)] is no longer alive` from `wgpu-core-29.0.3/src/storage.rs`, a generation
+//     -counter assertion that fires BEFORE anything is dereferenced, and then a Rust panic across
+//     the C ABI that aborts the process. So wgpu-native's own handle table is what stands between a
+//     released resource and freed memory here, and the uncaptured-error oracle is the right one.
 //
 // Exit code 0 = all checks PASS, 1 = any FAIL.
 
