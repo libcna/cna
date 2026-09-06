@@ -546,7 +546,7 @@ session on this host.
 
 | Check | Result |
 |---|---|
-| Host | `debian` on HP EliteBook 840 G9 · i7-1260P (4P+8E, 16 threads) · 15 GiB RAM · 16 GiB swapfile · LUKS root (115 G free) + `/media/robertvokac/claude` 98 G build partition (93 G free at start) |
+| Host | `debian` on HP EliteBook 840 G9 · i7-1260P (4P+8E, 16 threads) · 15 GiB RAM · 16 GiB swapfile · LUKS root (115 G free) + `/media/robertvokac/claude` 98 G build partition (93 G free at start) — external disk, no longer mounted; build trees now live in-repo under `build-probe/` and the shared ccache at `~/.cache/ccache` |
 | Toolchain | gcc 14.2.0 · clang 19.1.7 · CMake 3.31.6 · ccache 4.11.2 (cache empty at start) · git 2.47.3 · gpg 2.4.7 · Xvfb present |
 | Vulkan | Mesa 25.0.7 — Intel Iris Xe (ANV) + llvmpipe/lavapipe (the **same** Mesa+LLVM as the T14 evidence) · Khronos validation layer 1.4.309 · `optimalBufferCopyRowPitchAlignment` = 128 on both devices |
 | /rv paths | unchanged; all 14 worktrees resolve; the stale prunable `/tmp/cnaaudit-gfx098-prefix` entry left exactly as found |
@@ -558,7 +558,7 @@ session on this host.
 | Stashes | the four user stashes present, untouched ✅ |
 | GPG | signatures on both heads verify Good; signing proven non-interactively on this host before any work ✅ |
 | Dependency pins | `~/deps/WickedEngine` at `27c0df16` with exactly the six SDL3/teardown-patched files modified ✅; corrade `783e4e48` + magnum `5a742464` exact ✅ |
-| **Deviation** | **No CNA build tree survived the migration** — including `cmake-build-wicked/wicked-repro/` (the preserved WICKED-80 reproducer + raw ThinkPad evidence) and `cmake-build-noxna/preserved-logs-pre-batch2/`. The probe source was never git-tracked, so it was rebuilt from §9.1's documented specification; the ThinkPad raw measurements survive only as the figures quoted in §9.1/`plans/plan_wicked.md`. Recorded as a migration deviation, not a blocker: every git-integrity item passed and the lost artifacts are regenerable (this session regenerated them). Fresh trees live on the owner-designated build partition `/media/robertvokac/claude/tmp/cna/`; the in-repo `.sdl-prebuilt-Linux-x86_64` prebuilt survived and is reused |
+| **Deviation** | **No CNA build tree survived the migration** — including `cmake-build-wicked/wicked-repro/` (the preserved WICKED-80 reproducer + raw ThinkPad evidence) and `cmake-build-noxna/preserved-logs-pre-batch2/`. The probe source was never git-tracked, so it was rebuilt from §9.1's documented specification; the ThinkPad raw measurements survive only as the figures quoted in §9.1/`plans/plan_wicked.md`. Recorded as a migration deviation, not a blocker: every git-integrity item passed and the lost artifacts are regenerable (this session regenerated them). Fresh trees live on the owner-designated build partition `build-probe/`; the in-repo `.sdl-prebuilt-Linux-x86_64` prebuilt survived and is reused |
 
 ### 12.2 Reproduction at the unchanged HEAD
 
@@ -630,7 +630,7 @@ under-allocation and zero out-of-bounds VUIDs.
 
 | Configuration | Tree | Registered | Selected | Executed | Passed | Failed | Skipped | Not run | Aborts/Timeouts |
 |---|---|---|---|---|---|---|---|---|---|
-| WICKED (full ctest, official) | `/media/robertvokac/claude/tmp/cna/cmake-build-wicked` (**new**) | 5789 | 5789 | 5783 | 5783 | **0** | 6 | 0 | **0** (zero `***` verdicts) |
+| WICKED (full ctest, official) | `build-probe/cmake-build-wicked` (**new**) | 5789 | 5789 | 5783 | 5783 | **0** | 6 | 0 | **0** (zero `***` verdicts) |
 | MAGNUM focused controls (`ctest -R '^Magnum_'`) | `…/cmake-build-magnum` (**new**; Corrade/Magnum from the pinned `~/deps` checkouts) | 8 | 8 | 8 | 8 | **0** | 0 | 0 | 0 |
 | EASYGL continuity instrument, run 1 (`CnaTests` from repo root) | `…/cmake-build-noxna` (**new**, `CNA_NOXNA=ON`) | 5910 | 5910 | 5910 | 5903 | **1** | 6 | 0 | 0 |
 | EASYGL continuity instrument, run 2 | same binary | 5910 | 5910 | 5910 | 5904 | **0** | 6 | 0 | 0 |
@@ -698,7 +698,7 @@ Author and committer remain the maintainer alone; no prohibited attribution toke
 `git diff --check` is clean in both worktrees; `audit/` untouched; the four user stashes and all
 archive tags untouched; published history not rewritten (`origin/integration/post-audit-phase1`
 remains an ancestor). Build trees, probes, run logs and registration name lists are retained
-under `/media/robertvokac/claude/tmp/cna/` (recorded in `NEXT.md`).
+under `build-probe/` (recorded in `NEXT.md`).
 
 ---
 
@@ -762,7 +762,7 @@ sources and run logs.
 
 ### 13.4 Independence of the post-migration evidence
 
-Retained under `/media/robertvokac/claude/tmp/cna/cmake-build-wicked/wicked-repro/` and
+Retained under `build-probe/cmake-build-wicked/wicked-repro/` and
 `…/cmake-build-wicked-asan/`, re-read for this addendum:
 
 | Required element | Retained |
@@ -835,7 +835,7 @@ information this record does not carry. Batch 2 stands **ACCEPTED**; the next ac
 Batch 3 `sokol` lane.
 
 **Recurrence risk, for the owner.** The evidence that now carries `WICKED-80` lives on the
-`/media/robertvokac/claude` build partition and is not git-tracked, so it is exposed to exactly the
+`/media/robertvokac/claude` build partition (external disk, no longer mounted; build trees now live in-repo under `build-probe/` and the shared ccache at `~/.cache/ccache`) and is not git-tracked, so it is exposed to exactly the
 loss class that produced this addendum. The committed material — patch, marker gate, regression
 test — is what makes the result durable; the logs are not. Promoting any future load-bearing raw
 observation into tracked content at the time it is measured is the standing lesson.

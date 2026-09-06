@@ -186,7 +186,7 @@ resumed only after cooling, per the batch rule.
 | Ordinary builds | `-j6` after `-j4` evidence supported the increase |
 | RAM | never below **10.4 GiB available** of 15 GiB |
 | Swap | **516 MiB at start → 870 MiB peak** of 16 GiB. No sustained swapping |
-| ccache | shared `/media/robertvokac/claude/tmp/cna/ccache`, 1.2 GiB of 5 GiB at session start |
+| ccache | shared `~/.cache/ccache`, 1.2 GiB of 5 GiB at session start |
 
 ### 8.1 Build trees
 
@@ -198,7 +198,7 @@ resumed only after cooling, per the batch rule.
 | `cmake-build-diligent-sokol` | Sokol control from adapted sources (created) | — |
 | `cmake-build-diligent-easygl` | EasyGL continuity from adapted sources (created) | — |
 
-All on the owner-designated partition `/media/robertvokac/claude/tmp/cna/`. Nothing was built in the
+All on the owner-designated partition `build-probe/`. Nothing was built in the
 scratchpad, `/tmp`, `/var/tmp` or `/dev/shm`. `~/deps/DiligentCore` was reused at its exact pin and
 **not re-cloned**. No unrelated build tree was deleted and no final all-backend cleanup was
 performed.
