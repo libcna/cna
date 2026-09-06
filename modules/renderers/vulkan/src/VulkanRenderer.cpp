@@ -461,7 +461,14 @@ namespace CNA::Internal::Renderers::Vulkan
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
         if (vkAllocateMemory(dev, &allocInfo, nullptr, &memory_) != VK_SUCCESS)
             throw std::runtime_error("vkAllocateMemory (image) failed");
-        vkBindImageMemory(dev, image_, memory_, 0);
+        // VULKAN-180: the bind's result is checked here for the same reason as in the volume and
+        // cube constructors -- an allocation can SUCCEED and the bind still fail, and an unbound
+        // image then reaches every barrier and view below it looking exactly like a good one.
+        if (vkBindImageMemory(dev, image_, memory_, 0) != VK_SUCCESS) {
+            vkFreeMemory(dev, memory_, nullptr);   memory_ = VK_NULL_HANDLE;
+            vkDestroyImage(dev, image_, nullptr);  image_  = VK_NULL_HANDLE;
+            throw std::runtime_error("vkBindImageMemory (texture image) failed");
+        }
 
         // Transition UNDEFINED → TRANSFER_DST_OPTIMAL, copy, → SHADER_READ_ONLY (level 0 only --
         // the shared transition helper hardcodes a single-level range).
@@ -2917,8 +2924,11 @@ namespace CNA::Internal::Renderers::Vulkan
                 renderer->validationMessageIdNames_.emplace_back(
                     d->pMessageIdName != nullptr ? d->pMessageIdName : "");
             }
-            std::cerr << "[Vulkan Validation] "
-                      << (d != nullptr && d->pMessage != nullptr ? d->pMessage : "") << '\n';
+            // VULKAN-180: the recording above is unconditional; only the echo can be silenced,
+            // and only by a test that is provoking the layer deliberately.
+            if (renderer == nullptr || renderer->validationEcho_)
+                std::cerr << "[Vulkan Validation] "
+                          << (d != nullptr && d->pMessage != nullptr ? d->pMessage : "") << '\n';
         }
         return VK_FALSE;
     }
@@ -14325,7 +14335,17 @@ namespace CNA::Internal::Renderers::Vulkan
                                 VK_IMAGE_USAGE_SAMPLED_BIT;
         imgInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
         imgInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        if (vkCreateImage(dev, &imgInfo, nullptr, &image_) != VK_SUCCESS) return;
+        // plan_vulkan.md VULKAN-180: a bare `return` here left the caller holding a Texture3D whose
+        // renderer has no image and no error anywhere -- the same silent-discard shape VULKAN-163
+        // removed from the effect renderer. Every other resource constructor in this file throws;
+        // this one now does too, and names the extent, because the commonest reason to get here is
+        // an extent past the device's maxImageDimension3D and a message without it says nothing.
+        if (vkCreateImage(dev, &imgInfo, nullptr, &image_) != VK_SUCCESS)
+            throw std::runtime_error(
+                "VulkanTexture3DRenderer: vkCreateImage failed for a " + std::to_string(w) + "x" +
+                std::to_string(h) + "x" + std::to_string(depth) +
+                " volume (this device's maxImageDimension3D is " +
+                std::to_string(owner_->GetDeviceLimitsEXT().maxImageDimension3D) + ")");
 
         VkMemoryRequirements memReq;
         vkGetImageMemoryRequirements(dev, image_, &memReq);
@@ -14334,8 +14354,24 @@ namespace CNA::Internal::Renderers::Vulkan
         allocInfo.allocationSize  = memReq.size;
         allocInfo.memoryTypeIndex = owner_->FindMemoryType(memReq.memoryTypeBits,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-        if (vkAllocateMemory(dev, &allocInfo, nullptr, &memory_) != VK_SUCCESS) return;
-        vkBindImageMemory(dev, image_, memory_, 0);
+        // VULKAN-180: a constructor that throws leaves no destructor to run, so whatever it has
+        // already created has to go back before it does. The first version of this fix did not,
+        // and the validation gate reported the orphaned VkImage and VkDeviceMemory at
+        // vkDestroyDevice -- the same object-tracking signal VULKAN-407 was found by.
+        const auto failVolume = [&](const std::string& why) {
+            if (memory_ != VK_NULL_HANDLE) { vkFreeMemory(dev, memory_, nullptr); memory_ = VK_NULL_HANDLE; }
+            if (image_  != VK_NULL_HANDLE) { vkDestroyImage(dev, image_, nullptr); image_  = VK_NULL_HANDLE; }
+            throw std::runtime_error(
+                "VulkanTexture3DRenderer: " + why + " failed for a " + std::to_string(w) + "x" +
+                std::to_string(h) + "x" + std::to_string(depth) + " volume");
+        };
+        if (vkAllocateMemory(dev, &allocInfo, nullptr, &memory_) != VK_SUCCESS)
+            failVolume("vkAllocateMemory (" + std::to_string(memReq.size) + " bytes)");
+        // VULKAN-180: the bind's result was ignored, which is how an image with NO MEMORY BOUND
+        // reached the barrier and the view below -- the layer said exactly that, twice, and the
+        // constructor still returned an object the caller could not tell apart from a good one.
+        if (vkBindImageMemory(dev, image_, memory_, 0) != VK_SUCCESS)
+            failVolume("vkBindImageMemory");
 
         // Task 864: covers *all* levelCount_ levels (not just level 0, unlike the shared
         // single-level TransitionImageLayout helper) so SetData/GetData can address any mip
@@ -14593,7 +14629,14 @@ namespace CNA::Internal::Renderers::Vulkan
                                 VK_IMAGE_USAGE_SAMPLED_BIT;
         imgInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
         imgInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        if (vkCreateImage(dev, &imgInfo, nullptr, &image_) != VK_SUCCESS) return;
+        // plan_vulkan.md VULKAN-180: see VulkanTexture3DRenderer's twin. A silently image-less cube
+        // is the same defect, and its own limit -- maxImageDimensionCube -- is the reason to name
+        // the size in the message.
+        if (vkCreateImage(dev, &imgInfo, nullptr, &image_) != VK_SUCCESS)
+            throw std::runtime_error(
+                "VulkanTextureCubeRenderer: vkCreateImage failed for a " + std::to_string(size) +
+                "-edge cube (this device's maxImageDimensionCube is " +
+                std::to_string(owner_->GetDeviceLimitsEXT().maxImageDimensionCube) + ")");
 
         VkMemoryRequirements memReq;
         vkGetImageMemoryRequirements(dev, image_, &memReq);
@@ -14602,8 +14645,20 @@ namespace CNA::Internal::Renderers::Vulkan
         allocInfo.allocationSize  = memReq.size;
         allocInfo.memoryTypeIndex = owner_->FindMemoryType(memReq.memoryTypeBits,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-        if (vkAllocateMemory(dev, &allocInfo, nullptr, &memory_) != VK_SUCCESS) return;
-        vkBindImageMemory(dev, image_, memory_, 0);
+        // VULKAN-180: hand back what is already created before throwing -- see the volume twin.
+        const auto failCube = [&](const std::string& why) {
+            if (memory_ != VK_NULL_HANDLE) { vkFreeMemory(dev, memory_, nullptr); memory_ = VK_NULL_HANDLE; }
+            if (image_  != VK_NULL_HANDLE) { vkDestroyImage(dev, image_, nullptr); image_  = VK_NULL_HANDLE; }
+            throw std::runtime_error(
+                "VulkanTextureCubeRenderer: " + why + " failed for a " + std::to_string(size) +
+                "-edge cube");
+        };
+        if (vkAllocateMemory(dev, &allocInfo, nullptr, &memory_) != VK_SUCCESS)
+            failCube("vkAllocateMemory (" + std::to_string(memReq.size) + " bytes)");
+        // VULKAN-180: see the Texture3D twin -- an ignored bind is what let a memory-less image
+        // reach the barrier and the view.
+        if (vkBindImageMemory(dev, image_, memory_, 0) != VK_SUCCESS)
+            failCube("vkBindImageMemory");
 
         // Transition all 6 faces to shader-read-only (empty initially).
         VkCommandBuffer cb = owner_->BeginOneTimeCommands();
@@ -14954,7 +15009,12 @@ namespace CNA::Internal::Renderers::Vulkan
                                                              VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
         if (vkAllocateMemory(dev, &colorAlloc, nullptr, &memory_) != VK_SUCCESS)
             throw std::runtime_error("VulkanRenderTargetCubeRenderer: vkAllocateMemory failed");
-        vkBindImageMemory(dev, image_, memory_, 0);
+        // VULKAN-180: an allocation can succeed and the bind still fail; see the volume ctor.
+        if (vkBindImageMemory(dev, image_, memory_, 0) != VK_SUCCESS) {
+            vkFreeMemory(dev, memory_, nullptr);   memory_ = VK_NULL_HANDLE;
+            vkDestroyImage(dev, image_, nullptr);  image_  = VK_NULL_HANDLE;
+            throw std::runtime_error("VulkanRenderTargetCubeRenderer: vkBindImageMemory failed");
+        }
 
         // --- Full-cube image view for sampling (VK_IMAGE_VIEW_TYPE_CUBE, all 6 layers, full mip
         // range -- Task 907: levelCount_ levels instead of hardcoded 1, mirroring

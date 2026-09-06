@@ -26,16 +26,27 @@
 // contradicted by hardware. They are printed for the record and asserted only to be self-consistent
 // (Reach must not permit more than HiDef).
 //
+// Legs G and H come from VULKAN-180, which this file's own probe opened: a resource the device
+// cannot actually back must REPORT itself. They ask for the largest volume and the largest cube the
+// device's own limits describe -- sizes whose memory (274 GB and 25 GB here) no heap can satisfy --
+// and require an exception naming the size. Before VULKAN-180 both constructors returned a
+// perfectly ordinary-looking object: `vkAllocateMemory` succeeded, `vkBindImageMemory` failed with
+// its result ignored, and the unbound image went on to a pipeline barrier and an image view.
+//
 // Exit code 0 = all PASS, 1 = any FAIL.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 
 #include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
 
 #include <cstdio>
+#include <exception>
 #include <limits>
 #include <memory>
 #include <string>
@@ -133,6 +144,51 @@ protected:
                       Ceiling(hidef) + "; this device's maxColorAttachments=" +
                       std::to_string(lim.maxColorAttachments) +
                       " and XNA's own general ceiling is 4");
+        }
+
+        // G/H (VULKAN-180): a resource the device cannot back must say so.
+        //
+        // These two ask for something impossible on purpose, so the layer WILL complain -- and this
+        // test lives under VULKAN-393's validation gate like every other. The echo is silenced for
+        // exactly the two statements that provoke it, never the recording, and each leg then
+        // asserts that the layer did complain. Silencing without that second assertion would turn
+        // the switch into a way to hide a real message.
+        {
+            const int e = static_cast<int>(lim.maxImageDimension3D);
+            const std::size_t before = r.GetValidationMessagesEXT().size();
+            bool threw = false;
+            std::string what;
+            r.SetValidationEchoEnabledEXT(false);
+            try {
+                Texture3D huge(dev, e, e, e, false, SurfaceFormat::Color);
+                (void)huge;
+            } catch (const std::exception& ex) { threw = true; what = ex.what(); }
+            r.SetValidationEchoEnabledEXT(true);
+            const bool layerObjected = r.GetValidationMessagesEXT().size() > before ||
+                                       !VulkanRenderer::IsValidationActiveEXT();
+            check(threw && what.find(std::to_string(e)) != std::string::npos && layerObjected,
+                  "G a Texture3D at the device's own maxImageDimension3D cubed (" +
+                      std::to_string(e) + "^3) is refused with a message naming the size: threw=" +
+                      (threw ? what : std::string("NO -- the caller got an object the device "
+                                                 "cannot back")));
+        }
+        {
+            const int e = static_cast<int>(lim.maxImageDimensionCube);
+            const std::size_t before = r.GetValidationMessagesEXT().size();
+            bool threw = false;
+            std::string what;
+            r.SetValidationEchoEnabledEXT(false);
+            try {
+                TextureCube huge(dev, e, false, SurfaceFormat::Color);
+                (void)huge;
+            } catch (const std::exception& ex) { threw = true; what = ex.what(); }
+            r.SetValidationEchoEnabledEXT(true);
+            const bool layerObjected = r.GetValidationMessagesEXT().size() > before ||
+                                       !VulkanRenderer::IsValidationActiveEXT();
+            check(threw && what.find(std::to_string(e)) != std::string::npos && layerObjected,
+                  "H a TextureCube at the device's own maxImageDimensionCube (" +
+                      std::to_string(e) + ") is refused with a message naming the size: threw=" +
+                      (threw ? what : std::string("NO")));
         }
 
         // The device's own numbers, printed unconditionally so a run on different hardware carries

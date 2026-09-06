@@ -2277,6 +2277,24 @@ namespace CNA::Internal::Renderers::Vulkan
         {
             return deviceLimits_;
         }
+        /**
+         * @brief plan_vulkan.md VULKAN-180: silences the stderr ECHO of validation messages.
+         *
+         * Never the recording -- `GetValidationMessagesEXT()` keeps every message either way,
+         * so a test that turns the echo off can still assert that the layer complained, and a
+         * silent failure cannot hide behind the switch.
+         *
+         * This exists so that a test which provokes the layer ON PURPOSE -- asking the device
+         * for a resource it cannot possibly back, to prove the refusal is reported -- does not
+         * have to be exempted from `VULKAN-393`'s validation gate. An exemption would weaken the
+         * gate for that test's ordinary operations too; this narrows the silence to the two
+         * statements that mean to be loud.
+         *
+         * @param enabled False to stop echoing to stderr; true to resume. Default true.
+         */
+        CNAEXT void SetValidationEchoEnabledEXT(bool enabled) noexcept { validationEcho_ = enabled; }
+        /** @brief @copydoc SetValidationEchoEnabledEXT */
+        CNAEXT [[nodiscard]] bool IsValidationEchoEnabledEXT() const noexcept { return validationEcho_; }
         /** @brief Count of distinct swapchain image indices an acquire has returned. */
         CNAEXT [[nodiscard]] int GetDistinctAcquiredImageCountEXT() const noexcept;
         /** @brief Count of distinct frame slots a submit has used. */
@@ -2663,6 +2681,8 @@ namespace CNA::Internal::Renderers::Vulkan
         /// selection is made. `SupportsCapability` answers `MultipleRenderTargets` and (VULKAN-021)
         /// `MultiSampleAntiAliasing` from these rather than from a constant.
         VkPhysicalDeviceLimits deviceLimits_{};
+        /// VULKAN-180: see SetValidationEchoEnabledEXT. Recording is unconditional.
+        bool                   validationEcho_ = true;
         /// plan_vulkan.md VULKAN-097: clip-space multiplier for XNA's slightly-less-than-half-
         /// pixel centre correction. 63/64 in clip space is 63/128 of a viewport pixel, because
         /// clip [-1,1] spans the viewport. Reduced at device creation if the device's
