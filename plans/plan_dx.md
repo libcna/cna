@@ -21,10 +21,16 @@
 > `DX-211`'s headline premise was found stale at the public seam and the row was corrected and
 > narrowed rather than implemented.
 >
-> **Measured, not estimated:** `ctest -L DIRECTX11` **49 tests** (was unbuildable — see `DX-251`),
-> `DirectX11_Smoke` **165/165 checks**; `ctest -L DIRECTX12` **30 tests, up from 2**,
-> `D3D12_Smoke` **277/277 checks** (was 261/261). Both suites run on the real X display `:0`;
-> `DX-249` records why Xvfb cannot host them here.
+> **Measured, not estimated** (final runs of this session, both from a clean rebuild):
+> `ctest -L DIRECTX11` **49 tests, 45 passed, 4 failed** — the suite was *unbuildable* at the start
+> of the session, see `DX-251` — with `DirectX11_Smoke` at **165/165 checks**;
+> `ctest -L DIRECTX12` **30 tests, 22 passed, 8 failed**, up from **2 registered tests**, with
+> `D3D12_Smoke` at **277/277 checks** (was 261/261). Every failure on both sides is owned by a row:
+> `DX-253` (pixel centre: `DescriptorCapacity`, `PointSampling`, and D3D12's `TextureFilterOrdinal`),
+> `DX-254` (`DualTextureSlotSampler`), `DX-256` (`DepthBias`, identical on both renderers), plus
+> D3D12's `CubeVolume_GetDataContract`, `RenderTarget_EffectSource` and `Backbuffer_PassOrder`,
+> which are newly *visible* rather than newly broken — `DX-235` is what made them runnable at all.
+> Both suites run on the real X display `:0`; `DX-249` records why Xvfb cannot host them here.
 >
 > **The 87-group percentages above have NOT been recomputed**, and should not be read as current.
 > Recomputing them means redoing `DX-200`'s audit against the tree as it now stands, which is its
